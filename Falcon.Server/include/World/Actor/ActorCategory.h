@@ -2,12 +2,7 @@
 
 #include <string>
 
-enum class ActorCategory {
-    Other,
-    Passive,
-    Neutral,
-    Hostile
-};
+enum class ActorCategory { Other, Passive, Neutral, Hostile };
 
 namespace ActorCategories {
 

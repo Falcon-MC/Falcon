@@ -20,8 +20,8 @@ bool MobAttack::hit(ServerNetworkHandler &owner, MobActor &mob, Actor &target, f
 
     const float healthBefore = target.getHealth();
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
-        owner.hurt(*player, damage, ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
-                                                              mob.getPosition()));
+        owner.hurt(*player, damage,
+                   ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(), mob.getPosition()));
     } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
         owner.damageActor(*actor, damage, &mob);
     }

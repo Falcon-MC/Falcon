@@ -27,8 +27,8 @@ void PluginContentRegistry::addBlock(const Block &base, const BlockEntry &entry)
 void PluginContentRegistry::addEntity(const std::string &identifier, const EntityEntry &entry) {
     mEntities[identifier] = entry;
     const ActorClassRegistry::Registration registration(
-            identifier.c_str(), [](uint64_t runtimeId, const std::string &actorIdentifier)
-                    -> std::unique_ptr<ServerActor> {
+            identifier.c_str(),
+            [](uint64_t runtimeId, const std::string &actorIdentifier) -> std::unique_ptr<ServerActor> {
                 return std::make_unique<PluginActor>(runtimeId, actorIdentifier);
             });
     (void) registration;

@@ -14,14 +14,7 @@ namespace {
     const float SKY_LIGHT_SCALE = 11.0f;
     const float WEATHER_REDUCTION = 5.0f / 16.0f;
 
-    const int32_t NEIGHBOUR_OFFSETS[6][3] = {
-            {1,  0,  0},
-            {-1, 0,  0},
-            {0,  0,  1},
-            {0,  0,  -1},
-            {0,  -1, 0},
-            {0,  1,  0}
-    };
+    const int32_t NEIGHBOUR_OFFSETS[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}};
 
     struct LightNode {
         int32_t mX;
@@ -44,9 +37,7 @@ namespace {
 
     class ChunkLightAccess {
     public:
-        explicit ChunkLightAccess(LevelChunk &chunk)
-                : mChunk(chunk) {
-        }
+        explicit ChunkLightAccess(LevelChunk &chunk) : mChunk(chunk) {}
 
         bool contains(int32_t x, int32_t y, int32_t z) const {
             return x >= 0 && x <= 15 && z >= 0 && z <= 15 && y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y;
@@ -70,9 +61,7 @@ namespace {
 
     class LevelLightAccess {
     public:
-        explicit LevelLightAccess(Level &level)
-                : mLevel(level) {
-        }
+        explicit LevelLightAccess(Level &level) : mLevel(level) {}
 
         bool contains(int32_t x, int32_t y, int32_t z) const {
             return y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y && mLevel.peekChunkPtr(x >> 4, z >> 4) != nullptr;
@@ -96,7 +85,7 @@ namespace {
 
     // dimmer neighbours were lit by the removed level: cleared too (emitters re-seeded); brighter or equal
     // ones have another source and spread back in
-    template<typename Access>
+    template <typename Access>
     void removeBlockLight(Access &access, std::deque<LightNode> &removal, std::deque<LightNode> &spread) {
         while (!removal.empty()) {
             const LightNode node = removal.front();
@@ -129,7 +118,7 @@ namespace {
         }
     }
 
-    template<typename Access>
+    template <typename Access>
     void spreadBlockLight(Access &access, std::deque<LightNode> &spread) {
         while (!spread.empty()) {
             const LightNode node = spread.front();

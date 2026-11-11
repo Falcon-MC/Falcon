@@ -38,15 +38,27 @@ namespace MovementPhysics {
         const float squared = reduced * reduced;
         float result;
         if (octant == 1LL || octant == 2LL) {
-            result = 1.0f - 0.5f * squared + squared * squared
-                     * (((((COS_COEFFICIENTS[0] * squared + COS_COEFFICIENTS[1]) * squared + COS_COEFFICIENTS[2])
-                          * squared + COS_COEFFICIENTS[3]) * squared + COS_COEFFICIENTS[4]) * squared
-                        + COS_COEFFICIENTS[5]);
+            result = 1.0f - 0.5f * squared
+                     + squared * squared
+                               * (((((COS_COEFFICIENTS[0] * squared + COS_COEFFICIENTS[1]) * squared
+                                     + COS_COEFFICIENTS[2])
+                                            * squared
+                                    + COS_COEFFICIENTS[3])
+                                           * squared
+                                   + COS_COEFFICIENTS[4])
+                                          * squared
+                                  + COS_COEFFICIENTS[5]);
         } else {
-            result = reduced + reduced * squared
-                     * (((((SIN_COEFFICIENTS[0] * squared + SIN_COEFFICIENTS[1]) * squared + SIN_COEFFICIENTS[2])
-                          * squared + SIN_COEFFICIENTS[3]) * squared + SIN_COEFFICIENTS[4]) * squared
-                        + SIN_COEFFICIENTS[5]);
+            result = reduced
+                     + reduced * squared
+                               * (((((SIN_COEFFICIENTS[0] * squared + SIN_COEFFICIENTS[1]) * squared
+                                     + SIN_COEFFICIENTS[2])
+                                            * squared
+                                    + SIN_COEFFICIENTS[3])
+                                           * squared
+                                   + SIN_COEFFICIENTS[4])
+                                          * squared
+                                  + SIN_COEFFICIENTS[5]);
         }
         return negative ? -result : result;
     }
@@ -85,8 +97,8 @@ namespace MovementPhysics {
         return packet.hasInputFlag((int32_t) flag);
     }
 
-    bool activeState(bool previous, const PlayerAuthInputPacket &packet,
-                     PlayerAuthInputData start, PlayerAuthInputData stop) {
+    bool activeState(bool previous, const PlayerAuthInputPacket &packet, PlayerAuthInputData start,
+                     PlayerAuthInputData stop) {
         return (previous || input(packet, start)) && !input(packet, stop);
     }
 

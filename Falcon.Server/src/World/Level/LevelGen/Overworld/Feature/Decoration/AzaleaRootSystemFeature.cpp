@@ -45,12 +45,8 @@ namespace {
     }
 
     bool isRootReplaceable(const std::string &id) {
-        return id == "minecraft:stone"
-               || id == "minecraft:deepslate"
-               || id == "minecraft:tuff"
-               || id == "minecraft:dirt"
-               || id == "minecraft:clay"
-               || id == "minecraft:moss_block"
+        return id == "minecraft:stone" || id == "minecraft:deepslate" || id == "minecraft:tuff"
+               || id == "minecraft:dirt" || id == "minecraft:clay" || id == "minecraft:moss_block"
                || id == "minecraft:dirt_with_roots";
     }
 
@@ -58,10 +54,8 @@ namespace {
         if (id.empty())
             return false;
 
-        return id.find("log") != std::string::npos
-               || id.find("wood") != std::string::npos
-               || id.find("leaves") != std::string::npos
-               || id.find("azalea") != std::string::npos;
+        return id.find("log") != std::string::npos || id.find("wood") != std::string::npos
+               || id.find("leaves") != std::string::npos || id.find("azalea") != std::string::npos;
     }
 
     bool hasNearbyTree(BlockManager &manager, int32_t centerX, int32_t centerY, int32_t centerZ, int32_t radius) {

@@ -7,9 +7,7 @@
 
 class TntBlock final : public Block {
 public:
-    explicit TntBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit TntBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -18,6 +16,6 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                         const BlockState &state, ServerActor &projectile) const override;
+    bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                         ServerActor &projectile) const override;
 };

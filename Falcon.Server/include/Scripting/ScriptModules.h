@@ -4,11 +4,7 @@
 #include <vector>
 
 // 1.x and 2.x route to distinct native bindings; the beta follows 2.x with its own extra surface
-enum class ScriptApiTrack {
-    Stable1,
-    Stable2,
-    Beta
-};
+enum class ScriptApiTrack { Stable1, Stable2, Beta };
 
 struct ScriptModuleDependency {
     std::string mName;

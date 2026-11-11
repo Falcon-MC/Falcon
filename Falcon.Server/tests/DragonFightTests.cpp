@@ -216,9 +216,7 @@ namespace {
 
     void checkNodes() {
         EnderDragon dragon(1, EnderDragon::IDENTIFIER);
-        dragon.buildNodes([](int32_t, int32_t) {
-            return 60;
-        }, 32);
+        dragon.buildNodes([](int32_t, int32_t) { return 60; }, 32);
 
         const std::vector<Vector3i> &nodes = dragon.getNodes();
         require(nodes.size() == (size_t) EnderDragon::NODE_COUNT, "The dragon flies over 24 nodes");
@@ -295,7 +293,8 @@ namespace {
     }
 
     void checkDyingDragonRecord() {
-        const std::filesystem::path directory = std::filesystem::temp_directory_path()
+        const std::filesystem::path directory =
+                std::filesystem::temp_directory_path()
                 / ("falcon-dragon-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         {
             ArenaFixture arena;

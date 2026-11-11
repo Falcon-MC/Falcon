@@ -26,7 +26,8 @@ void PlayerFlightSystem::tick(PlayerMovementContext &context) {
         const bool descendSlow = controls
                                  && MovementPhysics::input(input.getPacket(), PlayerAuthInputData::WantDownSlow);
         if (state.onGround) {
-            const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH, state.start.z);
+            const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH,
+                                          state.start.z);
             travel.friction *= ground == nullptr ? DEFAULT_BLOCK_FRICTION : ground->getFrictionFactor();
         }
         // VerticalFlySpeedControlSystem also sets FrictionModifierComponent for idle flight
@@ -39,8 +40,9 @@ void PlayerFlightSystem::tick(PlayerMovementContext &context) {
         if (ascend && descend) {
             state.velocity.y = 0.0f;
         } else {
-            state.velocity.y += VERTICAL_FLY_SPEED * ((ascend ? 0.15f : 0.0f) + (ascendSlow ? 0.05f : 0.0f)
-                          - (descend ? 0.22f : 0.0f) - (descendSlow ? 0.15f : 0.0f));
+            state.velocity.y += VERTICAL_FLY_SPEED
+                                * ((ascend ? 0.15f : 0.0f) + (ascendSlow ? 0.05f : 0.0f) - (descend ? 0.22f : 0.0f)
+                                   - (descendSlow ? 0.15f : 0.0f));
         }
     }
 }

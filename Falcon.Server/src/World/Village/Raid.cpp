@@ -63,8 +63,7 @@ namespace {
              {"minecraft:witch", 1, 1, "minecraft:spawn_for_raid"},
              {"minecraft:evocation_illager", 2, 2, "minecraft:spawn_for_raid"},
              {"minecraft:ravager", 1, 1, "minecraft:spawn_for_raid_with_pillager_rider"},
-             {"minecraft:ravager", 1, 1, "minecraft:spawn_for_raid_with_evoker_rider"}}
-    };
+             {"minecraft:ravager", 1, 1, "minecraft:spawn_for_raid_with_evoker_rider"}}};
 
     std::mt19937 &raidRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -231,8 +230,8 @@ namespace {
             }
 
             Vector3f standing;
-            if (!findStandingPosition(level, candidate, SPAWN_SEARCH_ATTEMPTS, VILLAGE_SPAWN_RANGE,
-                                      VILLAGE_SPAWN_RANGE, standing))
+            if (!findStandingPosition(level, candidate, SPAWN_SEARCH_ATTEMPTS, VILLAGE_SPAWN_RANGE, VILLAGE_SPAWN_RANGE,
+                                      standing))
                 continue;
 
             if (closestPlayer(owner, level, standing, SPAWN_PLAYER_RANGE) == nullptr)
@@ -327,8 +326,9 @@ namespace {
             for (int32_t index = 0; index < count; ++index) {
                 Vector3f at(std::floor(position.x), std::floor(position.y) + 1.0f, std::floor(position.z));
                 Vector3f standing;
-                if (scatter && findStandingPosition(level, at, SPAWN_SEARCH_ATTEMPTS, GROUP_SCATTER_RANGE,
-                                                    GROUP_SCATTER_RANGE, standing))
+                if (scatter
+                    && findStandingPosition(level, at, SPAWN_SEARCH_ATTEMPTS, GROUP_SCATTER_RANGE, GROUP_SCATTER_RANGE,
+                                            standing))
                     at = standing;
 
                 MobActor *mob = dynamic_cast<MobActor *>(owner.spawnActor(level, member.mIdentifier, at));
@@ -368,8 +368,7 @@ namespace {
     }
 }
 
-Raid::Raid(uint8_t waveCount) : mWaveCount(waveCount) {
-}
+Raid::Raid(uint8_t waveCount) : mWaveCount(waveCount) {}
 
 void Raid::tick(ServerNetworkHandler &owner, Level &level, Village &village, int64_t currentTick) {
     if (mLastTick != -1 && mLastTick >= currentTick)

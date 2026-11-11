@@ -6,8 +6,7 @@
 #include <memory>
 
 CartographyContainerManagerModel::CartographyContainerManagerModel()
-        : ContainerManagerModel(ContainerType::Cartography, std::make_unique<CartographyContainerScreenValidator>()) {
-}
+        : ContainerManagerModel(ContainerType::Cartography, std::make_unique<CartographyContainerScreenValidator>()) {}
 
 bool CartographyContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
                                                   const Vector3i &position) {

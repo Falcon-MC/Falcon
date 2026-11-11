@@ -1,5 +1,6 @@
 #include "Server/Commands/ExecuteCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
@@ -15,8 +16,8 @@
 #include <string>
 
 namespace {
-    const std::vector<std::string> SUBCOMMANDS = {"align", "anchored", "as", "at", "facing", "if",
-                                                  "in", "positioned", "rotated", "run", "unless"};
+    const std::vector<std::string> SUBCOMMANDS = {"align", "anchored",   "as",      "at",  "facing", "if",
+                                                  "in",    "positioned", "rotated", "run", "unless"};
 
     const float PLAYER_EYE_HEIGHT = 1.62f;
 
@@ -98,15 +99,14 @@ Level &ExecuteCommand::resolveLevel(const Context &context) const {
     return context.mLevel == nullptr ? mHandler.getLevel() : *context.mLevel;
 }
 
-bool ExecuteCommand::runChain(CommandOrigin &sender, const Context &context,
-                              const std::vector<std::string> &arguments, size_t index, int32_t &successes) {
+bool ExecuteCommand::runChain(CommandOrigin &sender, const Context &context, const std::vector<std::string> &arguments,
+                              size_t index, int32_t &successes) {
     Context copy = context;
     return run(sender, copy, arguments, index, successes);
 }
 
-bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context,
-                               const std::vector<std::string> &arguments, size_t index, size_t &next,
-                               bool &matched) {
+bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context, const std::vector<std::string> &arguments,
+                               size_t index, size_t &next, bool &matched) {
     if (arguments.size() < index + 4) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
@@ -121,7 +121,7 @@ bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context,
     }
 
     BlockState expected;
-    if (!SetBlockCommand::resolveBlock(arguments[index + 3], expected)) {
+    if (!CommandEnums::parseBlock(arguments[index + 3], expected)) {
         sender.sendTranslation("commands.setblock.notFound", {arguments[index + 3]});
         return false;
     }
@@ -137,8 +137,8 @@ bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context,
 }
 
 bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
-                                const std::vector<std::string> &arguments, size_t index, size_t &next,
-                                bool &matched, int32_t &count) {
+                                const std::vector<std::string> &arguments, size_t index, size_t &next, bool &matched,
+                                int32_t &count) {
     if (arguments.size() < index + 9) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
@@ -151,8 +151,7 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
     Vector3i end = origin;
     Vector3i destination = origin;
 
-    if (!parseBlockPosition(arguments, index, origin, begin)
-        || !parseBlockPosition(arguments, index + 3, origin, end)
+    if (!parseBlockPosition(arguments, index, origin, begin) || !parseBlockPosition(arguments, index + 3, origin, end)
         || !parseBlockPosition(arguments, index + 6, origin, destination)) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
@@ -180,8 +179,8 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
         return false;
     }
 
-    if (minimum.y < level.getMinY() || maximum.y > level.getMaxY()
-        || destination.y < level.getMinY() || destination.y + height - 1 > level.getMaxY()) {
+    if (minimum.y < level.getMinY() || maximum.y > level.getMaxY() || destination.y < level.getMinY()
+        || destination.y + height - 1 > level.getMaxY()) {
         sender.sendTranslation("commands.testforblock.outOfWorld", {});
         return false;
     }
@@ -233,8 +232,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
 
         ++mExecuted;
 
-        ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation,
-                                    context.mLevel);
+        ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation, context.mLevel);
 
         const std::string chained = joinArguments(arguments, index + 1);
 
@@ -285,11 +283,15 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         }
 
         std::string name = arguments[index + 1];
+        bool custom = false;
+        const DimensionType customDimension = Dimension::findCustom(name, custom);
         if (name.find(':') != std::string::npos)
             name = name.substr(name.find(':') + 1);
 
         World &world = mHandler.getWorldOf(context.mLevel);
-        if (name == "overworld")
+        if (custom && world.hasLevel(customDimension))
+            context.mLevel = &world.getLevel(customDimension);
+        else if (name == "overworld")
             context.mLevel = &world.getLevel(DimensionType::Overworld);
         else if (name == "nether")
             context.mLevel = &world.getLevel(DimensionType::Nether);
@@ -329,8 +331,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         }
 
         Vector3f position = context.mPosition;
-        if (arguments.size() < index + 4
-            || !parseCoordinate(arguments[index + 1], context.mPosition.x, position.x)
+        if (arguments.size() < index + 4 || !parseCoordinate(arguments[index + 1], context.mPosition.x, position.x)
             || !parseCoordinate(arguments[index + 2], context.mPosition.y, position.y)
             || !parseCoordinate(arguments[index + 3], context.mPosition.z, position.z)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
@@ -367,8 +368,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         }
 
         Vector3f rotation = context.mRotation;
-        if (arguments.size() < index + 3
-            || !parseRotation(arguments[index + 1], context.mRotation.y, rotation.y)
+        if (arguments.size() < index + 3 || !parseRotation(arguments[index + 1], context.mRotation.y, rotation.y)
             || !parseRotation(arguments[index + 2], context.mRotation.x, rotation.x)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
@@ -410,8 +410,7 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
         }
 
         Vector3f destination = context.mPosition;
-        if (arguments.size() < index + 4
-            || !parseCoordinate(arguments[index + 1], context.mPosition.x, destination.x)
+        if (arguments.size() < index + 4 || !parseCoordinate(arguments[index + 1], context.mPosition.x, destination.x)
             || !parseCoordinate(arguments[index + 2], context.mPosition.y, destination.y)
             || !parseCoordinate(arguments[index + 3], context.mPosition.z, destination.z)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});

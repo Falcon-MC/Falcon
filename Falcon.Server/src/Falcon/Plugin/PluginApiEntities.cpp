@@ -144,8 +144,8 @@ namespace {
                 return owner().hurt(*playerValue, amount, damage) == DamageResult::Dealt ? 1 : 0;
             }
 
-            const ActorDamageSource damage = ActorDamageSource::attack(key, playerValue->getName(), *source, source->getName(),
-                                                             source->getPosition());
+            const ActorDamageSource damage = ActorDamageSource::attack(key, playerValue->getName(), *source,
+                                                                       source->getName(), source->getPosition());
             return owner().hurt(*playerValue, amount, damage) == DamageResult::Dealt ? 1 : 0;
         }
 
@@ -175,9 +175,7 @@ namespace {
             return;
 
         const int64_t id = actorValue->getUniqueId();
-        owner().postToMainThread([id] {
-            owner().removeActor(id);
-        });
+        owner().postToMainThread([id] { owner().removeActor(id); });
     }
 
     const char *entityNameTag(FalconEntity *target) {

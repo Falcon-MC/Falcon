@@ -33,8 +33,8 @@ int32_t TickingArea::getRadius() const {
 
 bool TickingArea::containsChunk(int32_t chunkX, int32_t chunkZ) const {
     if (!mCircle)
-        return chunkX >= (mMinX >> CHUNK_SHIFT) && chunkX <= (mMaxX >> CHUNK_SHIFT)
-               && chunkZ >= (mMinZ >> CHUNK_SHIFT) && chunkZ <= (mMaxZ >> CHUNK_SHIFT);
+        return chunkX >= (mMinX >> CHUNK_SHIFT) && chunkX <= (mMaxX >> CHUNK_SHIFT) && chunkZ >= (mMinZ >> CHUNK_SHIFT)
+               && chunkZ <= (mMaxZ >> CHUNK_SHIFT);
 
     const int32_t dx = chunkX - getCenterChunkX();
     const int32_t dz = chunkZ - getCenterChunkZ();
@@ -115,9 +115,7 @@ void TickingAreaManager::load(World &world) {
 }
 
 bool TickingAreaManager::hasName(const std::string &name) const {
-    return std::any_of(mAreas.begin(), mAreas.end(), [&name](const TickingArea &area) {
-        return area.mName == name;
-    });
+    return std::any_of(mAreas.begin(), mAreas.end(), [&name](const TickingArea &area) { return area.mName == name; });
 }
 
 std::string TickingAreaManager::nextDefaultName() const {
@@ -155,9 +153,8 @@ std::vector<TickingArea> TickingAreaManager::remove(World &world,
     return removed;
 }
 
-std::vector<TickingArea> TickingAreaManager::setPreload(World &world,
-                                                        const std::function<bool(const TickingArea &)> &match,
-                                                        bool preload) {
+std::vector<TickingArea>
+TickingAreaManager::setPreload(World &world, const std::function<bool(const TickingArea &)> &match, bool preload) {
     std::vector<TickingArea> updated;
     for (TickingArea &area: mAreas) {
         if (!match(area))

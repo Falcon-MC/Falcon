@@ -6,9 +6,7 @@
 
 class FacingMachineBlock : public Block {
 public:
-    explicit FacingMachineBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit FacingMachineBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

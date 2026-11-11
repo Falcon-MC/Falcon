@@ -142,11 +142,9 @@ namespace PlacementOrientation {
 
     inline const char *leverDirection(int face, int playerFacing) {
         if (face == FACE_DOWN)
-            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "down_east_west"
-                                                                          : "down_north_south";
+            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "down_east_west" : "down_north_south";
         if (face == FACE_UP)
-            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "up_east_west"
-                                                                          : "up_north_south";
+            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "up_east_west" : "up_north_south";
         return faceName(face);
     }
 

@@ -26,8 +26,10 @@ enum class LevelDbTag : unsigned char {
     SubChunkPrefix = '/',
     LegacyTerrain = '0',
     BlockEntities = '1',
+    PendingTicks = '3',
     LegacyEntities = '2',
     FinalizedState = '6',
+    RandomTicks = ':',
     LegacyVersion = 'v'
 };
 
@@ -60,7 +62,9 @@ public:
 
     void compact();
 
-    bool isOpen() const { return mDb != nullptr; }
+    bool isOpen() const {
+        return mDb != nullptr;
+    }
 
     uint64_t getWriteFailures() const {
         return mWriteFailures.load();
@@ -114,17 +118,18 @@ public:
     bool saveGameRules(const Tag &rules);
 
     /** Data the game saves under a plain key, such as "TheEnd", as {"data": compound}. */
-    bool saveSavedData(const std::string &key, const Tag &data);
+    // wrapped: under a "data" compound, as SavedData stores it; world clocks store the tag itself
+    bool saveSavedData(const std::string &key, const Tag &data, bool wrapped = true);
 
-    bool loadSavedData(const std::string &key, Tag &data);
+    bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
 
     bool loadGameRules(Tag &rules);
 
     // display name, game mode, difficulty and the game's own options are kept from the file;
     // the arguments only fill them in when missing
-    void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                       int32_t gameType, int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled,
-                       bool bonusChestSpawned, int64_t worldStartCount) const;
+    void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ, int32_t gameType,
+                       int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled, bool bonusChestSpawned,
+                       int64_t worldStartCount) const;
 
     bool readLevelDat(Tag &out) const;
 

@@ -14,11 +14,12 @@
 
 namespace {
     void require(bool condition, const char *message) {
-        if (!condition) throw std::runtime_error(message);
+        if (!condition)
+            throw std::runtime_error(message);
     }
-    template<class T> T await(std::future<T> future) {
-        require(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready,
-                "Request did not complete");
+    template <class T>
+    T await(std::future<T> future) {
+        require(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready, "Request did not complete");
         return future.get();
     }
     int64_t savedTime(const std::filesystem::path &directory) {
@@ -32,7 +33,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-embedded-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-embedded-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto originalRoot = ServerPaths::getRoot();
     try {
         std::atomic<unsigned int> logCalls{0};
@@ -55,8 +57,12 @@ int main() {
         require(ServerPaths::getRoot() == originalRoot, "Failed start changed root");
 
         config.dataDirectory = directory / "new-directory";
-        config.properties = {{"view-distance", "5"}, {"tick-distance", "4"},
-                             {"level-seed", "1"}, {"auto-compaction-interval", "0"}};
+        // the client dialled below is the server's own, not the game
+        config.properties = {{"view-distance", "5"},
+                             {"tick-distance", "4"},
+                             {"level-seed", "1"},
+                             {"auto-compaction-interval", "0"},
+                             {"allow-unofficial-clients", "true"}};
         config.log = [&logCalls](LogLevel, const std::string &) {
             logCalls.fetch_add(1);
             throw std::runtime_error("Host logger failure");
@@ -118,8 +124,7 @@ int main() {
         server.setPaused(false);
         server.requestStop();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
-        while (server.getState() == EmbeddedServer::State::Stopping
-               && std::chrono::steady_clock::now() < deadline)
+        while (server.getState() == EmbeddedServer::State::Stopping && std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         require(server.getState() == EmbeddedServer::State::Stopped, "Asynchronous stop did not finish");
         require(!server.isRunning() && server.getPort() == 0, "Stop did not clear state");
@@ -165,8 +170,7 @@ int main() {
         std::filesystem::remove(playerData);
         std::filesystem::create_directory(playerData);
         server.stop();
-        require(server.getState() == EmbeddedServer::State::Failed,
-                "Player save failure reported a clean shutdown");
+        require(server.getState() == EmbeddedServer::State::Failed, "Player save failure reported a clean shutdown");
         require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
                 "Player save failure did not report Shutdown");
         shutdownConnection.mConnection->disconnect("Done");

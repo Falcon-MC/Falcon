@@ -6,6 +6,7 @@
 #include "Core/Event/EventBus.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockPaletteRegistry.h"
 
 #include <cmath>
 
@@ -23,18 +24,13 @@ namespace {
         JS_DefinePropertyValueStr(ctx, getter, "name", JS_NewString(ctx, name), JS_PROP_CONFIGURABLE);
         return getter;
     }
-
-    JSValue makeDamageSource(JSContext *ctx, const std::string &cause) {
-        JSValue source = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, source, "cause", string(ctx, cause));
-        return source;
-    }
 }
 
 void ScriptApi::install() {
     _bindEntity();
     _bindPlayer();
     _bindComponents();
+    _bindEntityComponents();
     _bindBlock();
     _bindItemStack();
     _bindDimension();
@@ -42,6 +38,7 @@ void ScriptApi::install() {
     _bindRegistries();
     _bindSystem();
     _bindWorld();
+    _bindClocks();
     _installBootstraps();
     _defineEnums();
     _registerModules();
@@ -50,6 +47,8 @@ void ScriptApi::install() {
 
 void ScriptApi::tick(int64_t currentTick) {
     mScheduler.tick(currentTick);
+    if (!mPendingTickingAreas.empty())
+        resolveTickingAreas();
     _emitInventoryChanges();
 }
 
@@ -107,11 +106,57 @@ void ScriptApi::_resolveForm(uint32_t formId, const std::string &response, bool 
     JS_FreeValue(mContext, resolve);
 }
 
-JSValue ScriptApi::_makeBlockEvent(const Level &level, const Vector3i &position) {
-    JSValue event = JS_NewObject(mContext);
-    JS_SetPropertyStr(mContext, event, "block", makeBlock(level, position.x, position.y, position.z));
-    JS_SetPropertyStr(mContext, event, "dimension", makeDimension(level));
-    return event;
+JSValue ScriptApi::makePermutation(const BlockState &state) {
+    for (const auto &entry: mServerExports) {
+        if (entry.first != "BlockPermutation")
+            continue;
+
+        JSValue resolve = JS_GetPropertyStr(mContext, entry.second, "resolve");
+        JSValue args[2] = {string(mContext, state.mName), statesToJs(mContext, state.mStates)};
+        JSValue permutation = JS_Call(mContext, resolve, entry.second, 2, args);
+        for (JSValue arg: args)
+            JS_FreeValue(mContext, arg);
+        JS_FreeValue(mContext, resolve);
+        if (!JS_IsException(permutation))
+            return permutation;
+        JS_FreeValue(mContext, JS_GetException(mContext));
+        break;
+    }
+    return JS_UNDEFINED;
+}
+
+bool ScriptApi::readPermutation(JSValueConst permutation, BlockState &state) {
+    if (!JS_IsObject(permutation))
+        return false;
+
+    JSValue type = JS_GetPropertyStr(mContext, permutation, "type");
+    JSValue id = JS_IsObject(type) ? JS_GetPropertyStr(mContext, type, "id") : JS_UNDEFINED;
+    const bool named = JS_IsString(id);
+    const std::string identifier = named ? toString(mContext, id) : std::string();
+    JS_FreeValue(mContext, id);
+    JS_FreeValue(mContext, type);
+    if (!named)
+        return false;
+
+    JSValue getAll = JS_GetPropertyStr(mContext, permutation, "getAllStates");
+    JSValue states = JS_IsFunction(mContext, getAll) ? JS_Call(mContext, getAll, permutation, 0, nullptr)
+                                                     : JS_UNDEFINED;
+    if (JS_IsException(states)) {
+        JS_FreeValue(mContext, JS_GetException(mContext));
+        states = JS_UNDEFINED;
+    }
+    state = BlockState(identifier, statesFromJs(mContext, states));
+    JS_FreeValue(mContext, states);
+    JS_FreeValue(mContext, getAll);
+    return true;
+}
+
+BlockState ScriptApi::defaultBlockState(const std::string &identifier) {
+    const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(identifier);
+    if (custom != nullptr)
+        return BlockState(identifier, CustomContentRegistry::defaultStatesOf(*custom));
+    const Tag *states = BlockPaletteRegistry::getInstance().getDefaultStates(identifier);
+    return states == nullptr ? BlockState(identifier) : BlockState(identifier, *states);
 }
 
 JSValue ScriptApi::makePermutation(const std::string &identifier) {
@@ -174,65 +219,61 @@ void ScriptApi::emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32
 }
 
 void ScriptApi::emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z) {
+    if (!hasSubscribers("before.itemUseOn"))
+        return;
+
     const ItemStack &held = player.getInventory().getItemInHand();
     if (held.isAir() || held.mDefinition == nullptr)
         return;
 
     const std::string typeId = held.mDefinition->getIdentifier();
-    JSValue event = JS_NewObject(mContext);
-    JS_SetPropertyStr(mContext, event, "source", makePlayer(player));
-    JS_SetPropertyStr(mContext, event, "block", makeBlock(mHost.getLevelFor(player), x, y, z));
-    JS_SetPropertyStr(mContext, event, "itemStack", makeHeldItemStack(player, typeId));
+    JSValue before = makeEvent("WorldBeforeEvents.itemUseOn");
+    JS_SetPropertyStr(mContext, before, "source", makePlayer(player));
+    JS_SetPropertyStr(mContext, before, "block", makeBlock(mHost.getLevelFor(player), x, y, z));
+    JS_SetPropertyStr(mContext, before, "itemStack", makeHeldItemStack(player, typeId));
+    JS_SetPropertyStr(mContext, before, "cancel", JS_FALSE);
+    emit("before.itemUseOn", before);
+}
 
-    if (hasSubscribers("before.itemUseOn")) {
-        JSValue before = makeEvent("WorldBeforeEvents.itemUseOn");
-        JS_SetPropertyStr(mContext, before, "source", makePlayer(player));
-        JS_SetPropertyStr(mContext, before, "block", makeBlock(mHost.getLevelFor(player), x, y, z));
-        JS_SetPropertyStr(mContext, before, "itemStack", makeHeldItemStack(player, typeId));
-        JS_SetPropertyStr(mContext, before, "cancel", JS_FALSE);
-        emit("before.itemUseOn", before);
+void ScriptApi::_fireStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position,
+                          const char *hook, const char *eventClass) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
+    if (block == nullptr)
+        return;
+    const BlockState *state = const_cast<Level &>(level).peekBlockPtr(position.x, position.y, position.z);
+    const std::vector<CustomComponentUse> uses = CustomContentRegistry::componentsFor(
+            *block, state != nullptr && state->mName == blockId ? state->mStates
+                                                                : CustomContentRegistry::defaultStatesOf(*block));
+    if (!handlesHook(true, uses, hook))
+        return;
+
+    JSValue event = makeComponentEvent(eventClass);
+    if (JS_IsUndefined(event))
+        return;
+    fillBlockEvent(event, level, position);
+    JS_SetPropertyStr(mContext, event, "entity", makeEntity(actor));
+    fireComponents(true, uses, hook, event);
+    JS_FreeValue(mContext, event);
+}
+
+void ScriptApi::emitBlockStep(Actor &actor, const Level &level, const CustomBlockDefinition *block,
+                              const Vector3i &position) {
+    const auto previous = mStepping.find(actor.getUniqueId());
+    if (previous != mStepping.end() && block != nullptr && previous->second.mIdentifier == block->mIdentifier
+        && previous->second.mPosition.x == position.x && previous->second.mPosition.y == position.y
+        && previous->second.mPosition.z == position.z)
+        return;
+
+    if (previous != mStepping.end()) {
+        const SteppedBlock left = previous->second;
+        mStepping.erase(previous);
+        _fireStep(actor, level, left.mIdentifier, left.mPosition, "onStepOff", "BlockComponentStepOffEvent");
     }
 
-    fireHeldItemComponents(player, "onUseOn", event);
-}
-
-void ScriptApi::emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
-                                  const char *face) {
-    JSValue event = _makeBlockEvent(mHost.getLevelFor(player), position);
-    JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
-    JS_SetPropertyStr(mContext, event, "face", string(mContext, face));
-    fireBlockComponents(blockId, "onPlayerInteract", event);
-}
-
-void ScriptApi::emitBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
-    fireBlockComponents(blockId, "onTick", _makeBlockEvent(level, position));
-}
-
-void ScriptApi::emitBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position) {
-    const auto previous = mStepping.find(actor.getUniqueId());
-    if (previous != mStepping.end() && previous->second.mPosition.x == position.x
-        && previous->second.mPosition.y == position.y && previous->second.mPosition.z == position.z)
+    if (block == nullptr)
         return;
-
-    emitBlockStepOff(actor, level);
-    mStepping[actor.getUniqueId()] = {blockId, position};
-
-    JSValue event = _makeBlockEvent(level, position);
-    JS_SetPropertyStr(mContext, event, "entity", makeEntity(actor));
-    fireBlockComponents(blockId, "onStepOn", event);
-}
-
-void ScriptApi::emitBlockStepOff(Actor &actor, const Level &level) {
-    const auto previous = mStepping.find(actor.getUniqueId());
-    if (previous == mStepping.end())
-        return;
-
-    const SteppedBlock left = previous->second;
-    mStepping.erase(previous);
-
-    JSValue event = _makeBlockEvent(level, left.mPosition);
-    JS_SetPropertyStr(mContext, event, "entity", makeEntity(actor));
-    fireBlockComponents(left.mIdentifier, "onStepOff", event);
+    mStepping[actor.getUniqueId()] = {block->mIdentifier, position};
+    _fireStep(actor, level, block->mIdentifier, position, "onStepOn", "BlockComponentStepOnEvent");
 }
 
 void ScriptApi::_subscribeGameEvents() {
@@ -243,27 +284,53 @@ void ScriptApi::_subscribeGameEvents() {
         if (hasSubscribers("after.playerBreakBlock")) {
             JSValue object = makeEvent("WorldAfterEvents.playerBreakBlock");
             JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
-            JS_SetPropertyStr(mContext, object, "block", makeBlock(level, event.mBlockPosition.x,
-                                                                    event.mBlockPosition.y, event.mBlockPosition.z));
+            JS_SetPropertyStr(mContext, object, "block",
+                              makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
             JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
             JS_SetPropertyStr(mContext, object, "brokenBlockPermutation",
                               makePermutation(event.mBrokenBlockIdentifier));
             emit("after.playerBreakBlock", object);
         }
 
-        JSValue mineEvent = JS_NewObject(mContext);
-        JS_SetPropertyStr(mContext, mineEvent, "source", makePlayer(event.mPlayer));
-        JS_SetPropertyStr(mContext, mineEvent, "block", makeBlock(level, event.mBlockPosition.x,
-                                                                   event.mBlockPosition.y, event.mBlockPosition.z));
-        JS_SetPropertyStr(mContext, mineEvent, "minedBlockPermutation", makePermutation(event.mBrokenBlockIdentifier));
-        fireHeldItemComponents(event.mPlayer, "onMineBlock", mineEvent);
+        const ItemStack &held = event.mPlayer.getInventory().getItemInHand();
+        const CustomItemDefinition *item = held.isAir() || held.mDefinition == nullptr
+                                                   ? nullptr
+                                                   : CustomContentRegistry::getInstance().findItem(
+                                                             held.mDefinition->getIdentifier());
+        if (item != nullptr && handlesHook(false, item->mCustomComponents, "onMineBlock")) {
+            JSValue mine = makeComponentEvent("ItemComponentMineBlockEvent");
+            if (!JS_IsUndefined(mine)) {
+                JS_SetPropertyStr(mContext, mine, "source", makePlayer(event.mPlayer));
+                JS_SetPropertyStr(
+                        mContext, mine, "block",
+                        makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
+                JS_SetPropertyStr(mContext, mine, "itemStack", makeItem(held));
+                JS_SetPropertyStr(mContext, mine, "minedBlockPermutation",
+                                  makePermutation(event.mBrokenBlockIdentifier));
+                fireComponents(false, item->mCustomComponents, "onMineBlock", mine);
+                JS_FreeValue(mContext, mine);
+            }
+        }
 
-        // the hook was renamed with the 2.0 module
-        JSValue breakEvent = _makeBlockEvent(level, event.mBlockPosition);
-        JS_SetPropertyStr(mContext, breakEvent, "player", makePlayer(event.mPlayer));
-        JS_SetPropertyStr(mContext, breakEvent, "brokenBlockPermutation", makePermutation(event.mBrokenBlockIdentifier));
-        fireBlockComponents(event.mBrokenBlockIdentifier, isStable1() ? "onPlayerDestroy" : "onPlayerBreak",
-                            breakEvent);
+        const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(
+                event.mBrokenBlockIdentifier);
+        if (block == nullptr)
+            return;
+
+        // the hook was renamed with the 2.0 module, its permutation field too
+        const char *hook = isStable1() ? "onPlayerDestroy" : "onPlayerBreak";
+        if (!handlesHook(true, block->mCustomComponents, hook))
+            return;
+        JSValue broken = makeComponentEvent(isStable1() ? "BlockComponentPlayerDestroyEvent"
+                                                        : "BlockComponentPlayerBreakEvent");
+        if (JS_IsUndefined(broken))
+            return;
+        fillBlockEvent(broken, level, event.mBlockPosition);
+        JS_SetPropertyStr(mContext, broken, "player", makePlayer(event.mPlayer));
+        JS_SetPropertyStr(mContext, broken, isStable1() ? "destroyedBlockPermutation" : "brokenBlockPermutation",
+                          makePermutation(event.mBrokenBlockIdentifier));
+        fireComponents(true, block->mCustomComponents, hook, broken);
+        JS_FreeValue(mContext, broken);
     });
 
     bus.after().mPlayerPlaceBlock.subscribe([this](PlayerPlaceBlockAfterEvent &event) {
@@ -271,13 +338,11 @@ void ScriptApi::_subscribeGameEvents() {
         if (hasSubscribers("after.playerPlaceBlock")) {
             JSValue object = makeEvent("WorldAfterEvents.playerPlaceBlock");
             JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
-            JS_SetPropertyStr(mContext, object, "block", makeBlock(level, event.mBlockPosition.x,
-                                                                    event.mBlockPosition.y, event.mBlockPosition.z));
+            JS_SetPropertyStr(mContext, object, "block",
+                              makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
             JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
             emit("after.playerPlaceBlock", object);
         }
-
-        fireBlockComponents(event.mBlockIdentifier, "onPlace", _makeBlockEvent(level, event.mBlockPosition));
     });
 
     bus.after().mPlayerSpawn.subscribe([this](PlayerSpawnAfterEvent &event) {
@@ -320,25 +385,6 @@ void ScriptApi::_subscribeGameEvents() {
         emit("after.chatSend", object);
     });
 
-    bus.after().mEntityHurt.subscribe([this](EntityHurtAfterEvent &event) {
-        if (!hasSubscribers("after.entityHurt"))
-            return;
-        JSValue object = makeEvent("WorldAfterEvents.entityHurt");
-        JS_SetPropertyStr(mContext, object, "hurtEntity", makePlayer(event.mHurtEntity));
-        JS_SetPropertyStr(mContext, object, "damage", JS_NewFloat64(mContext, event.mDamage));
-        JS_SetPropertyStr(mContext, object, "damageSource", makeDamageSource(mContext, event.mCause));
-        emit("after.entityHurt", object);
-    });
-
-    bus.after().mEntityDie.subscribe([this](EntityDieAfterEvent &event) {
-        if (!hasSubscribers("after.entityDie"))
-            return;
-        JSValue object = makeEvent("WorldAfterEvents.entityDie");
-        JS_SetPropertyStr(mContext, object, "deadEntity", makePlayer(event.mDeadEntity));
-        JS_SetPropertyStr(mContext, object, "damageSource", makeDamageSource(mContext, event.mCause));
-        emit("after.entityDie", object);
-    });
-
     bus.after().mItemUse.subscribe([this](ItemUseAfterEvent &event) {
         if (!hasSubscribers("after.itemUse"))
             return;
@@ -365,8 +411,8 @@ void ScriptApi::_subscribeGameEvents() {
         Level &level = mHost.getLevelFor(event.mPlayer);
         JSValue object = makeEvent("WorldBeforeEvents.playerBreakBlock");
         JS_SetPropertyStr(mContext, object, "player", makePlayer(event.mPlayer));
-        JS_SetPropertyStr(mContext, object, "block", makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y,
-                                                                event.mBlockPosition.z));
+        JS_SetPropertyStr(mContext, object, "block",
+                          makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
         JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
         JS_SetPropertyStr(mContext, object, "cancel", JS_FALSE);
         if (emit("before.playerBreakBlock", object))

@@ -17,8 +17,8 @@ namespace {
 }
 
 GameModeCommand::GameModeCommand(ServerNetworkHandler &handler)
-        : Command("gamemode", "commands.gamemode.description", "/gamemode <mode> [player]", {"gm"}),
-          mHandler(handler) {}
+        : Command("gamemode", "commands.gamemode.description", "/gamemode <mode> [player]", {"gm"}), mHandler(handler) {
+}
 
 std::vector<CommandOverloadData> GameModeCommand::getOverloads() const {
     CommandParamData playerParameter = makePlayerParameter("player");

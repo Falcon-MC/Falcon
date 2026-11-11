@@ -73,8 +73,10 @@ double NoiseMath::lerp2(double deltaX, double deltaY, double val00, double val10
     return lerp(deltaY, lerp(deltaX, val00, val10), lerp(deltaX, val01, val11));
 }
 
-double NoiseMath::lerp3(double deltaX, double deltaY, double deltaZ, double val000, double val100, double val010, double val110, double val001, double val101, double val011, double val111) {
-    return lerp(deltaZ, lerp2(deltaX, deltaY, val000, val100, val010, val110), lerp2(deltaX, deltaY, val001, val101, val011, val111));
+double NoiseMath::lerp3(double deltaX, double deltaY, double deltaZ, double val000, double val100, double val010,
+                        double val110, double val001, double val101, double val011, double val111) {
+    return lerp(deltaZ, lerp2(deltaX, deltaY, val000, val100, val010, val110),
+                lerp2(deltaX, deltaY, val001, val101, val011, val111));
 }
 
 double NoiseMath::smoothStep(double d) {

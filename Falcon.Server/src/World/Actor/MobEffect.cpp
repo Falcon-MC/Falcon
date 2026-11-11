@@ -31,39 +31,72 @@ namespace {
 
 const char *getMobEffectName(MobEffectId id) {
     switch (id) {
-        case MobEffectId::Speed: return "speed";
-        case MobEffectId::Slowness: return "slowness";
-        case MobEffectId::Haste: return "haste";
-        case MobEffectId::MiningFatigue: return "mining_fatigue";
-        case MobEffectId::Strength: return "strength";
-        case MobEffectId::InstantHealth: return "instant_health";
-        case MobEffectId::InstantDamage: return "instant_damage";
-        case MobEffectId::JumpBoost: return "jump_boost";
-        case MobEffectId::Nausea: return "nausea";
-        case MobEffectId::Regeneration: return "regeneration";
-        case MobEffectId::Resistance: return "resistance";
-        case MobEffectId::FireResistance: return "fire_resistance";
-        case MobEffectId::WaterBreathing: return "water_breathing";
-        case MobEffectId::Invisibility: return "invisibility";
-        case MobEffectId::Blindness: return "blindness";
-        case MobEffectId::NightVision: return "night_vision";
-        case MobEffectId::Hunger: return "hunger";
-        case MobEffectId::Weakness: return "weakness";
-        case MobEffectId::Poison: return "poison";
-        case MobEffectId::Wither: return "wither";
-        case MobEffectId::HealthBoost: return "health_boost";
-        case MobEffectId::Absorption: return "absorption";
-        case MobEffectId::Saturation: return "saturation";
-        case MobEffectId::Levitation: return "levitation";
-        case MobEffectId::FatalPoison: return "fatal_poison";
-        case MobEffectId::ConduitPower: return "conduit_power";
-        case MobEffectId::SlowFalling: return "slow_falling";
-        case MobEffectId::BadOmen: return "bad_omen";
-        case MobEffectId::VillageHero: return "village_hero";
-        case MobEffectId::Darkness: return "darkness";
-        case MobEffectId::Weaving: return "weaving";
-        case MobEffectId::RaidOmen: return "raid_omen";
-        case MobEffectId::Freezing: return "freezing";
+        case MobEffectId::Speed:
+            return "speed";
+        case MobEffectId::Slowness:
+            return "slowness";
+        case MobEffectId::Haste:
+            return "haste";
+        case MobEffectId::MiningFatigue:
+            return "mining_fatigue";
+        case MobEffectId::Strength:
+            return "strength";
+        case MobEffectId::InstantHealth:
+            return "instant_health";
+        case MobEffectId::InstantDamage:
+            return "instant_damage";
+        case MobEffectId::JumpBoost:
+            return "jump_boost";
+        case MobEffectId::Nausea:
+            return "nausea";
+        case MobEffectId::Regeneration:
+            return "regeneration";
+        case MobEffectId::Resistance:
+            return "resistance";
+        case MobEffectId::FireResistance:
+            return "fire_resistance";
+        case MobEffectId::WaterBreathing:
+            return "water_breathing";
+        case MobEffectId::Invisibility:
+            return "invisibility";
+        case MobEffectId::Blindness:
+            return "blindness";
+        case MobEffectId::NightVision:
+            return "night_vision";
+        case MobEffectId::Hunger:
+            return "hunger";
+        case MobEffectId::Weakness:
+            return "weakness";
+        case MobEffectId::Poison:
+            return "poison";
+        case MobEffectId::Wither:
+            return "wither";
+        case MobEffectId::HealthBoost:
+            return "health_boost";
+        case MobEffectId::Absorption:
+            return "absorption";
+        case MobEffectId::Saturation:
+            return "saturation";
+        case MobEffectId::Levitation:
+            return "levitation";
+        case MobEffectId::FatalPoison:
+            return "fatal_poison";
+        case MobEffectId::ConduitPower:
+            return "conduit_power";
+        case MobEffectId::SlowFalling:
+            return "slow_falling";
+        case MobEffectId::BadOmen:
+            return "bad_omen";
+        case MobEffectId::VillageHero:
+            return "village_hero";
+        case MobEffectId::Darkness:
+            return "darkness";
+        case MobEffectId::Weaving:
+            return "weaving";
+        case MobEffectId::RaidOmen:
+            return "raid_omen";
+        case MobEffectId::Freezing:
+            return "freezing";
     }
     return "unknown";
 }
@@ -90,7 +123,8 @@ bool parseMobEffect(const std::string &value, MobEffectId &id) {
             id = (MobEffectId) raw;
             return true;
         }
-    } catch (...) {}
+    } catch (...) {
+    }
     return false;
 }
 
@@ -197,7 +231,7 @@ int32_t RegenerationMobEffect::getApplyInterval(const MobEffectInstance &instanc
 
 void RegenerationMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
     if (actor.getHealth() < actor.getMaxHealth())
-        actor.heal(1.0f);
+        actor.heal(1.0f, HealCause::Regeneration);
 }
 
 void SaturationMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
@@ -215,25 +249,44 @@ void WitherMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
 
 std::unique_ptr<MobEffect> MobEffectManager::create(MobEffectId id) {
     switch (id) {
-        case MobEffectId::Absorption: return std::make_unique<AbsorptionMobEffect>();
-        case MobEffectId::HealthBoost: return std::make_unique<HealthBoostMobEffect>();
-        case MobEffectId::Hunger: return std::make_unique<HungerMobEffect>();
-        case MobEffectId::InstantHealth: return std::make_unique<InstantHealthMobEffect>();
-        case MobEffectId::InstantDamage: return std::make_unique<InstantDamageMobEffect>();
-        case MobEffectId::Invisibility: return std::make_unique<InvisibilityMobEffect>();
-        case MobEffectId::Levitation: return std::make_unique<LevitationMobEffect>();
-        case MobEffectId::Poison: return std::make_unique<PoisonMobEffect>();
-        case MobEffectId::FatalPoison: return std::make_unique<PoisonMobEffect>(true);
-        case MobEffectId::Regeneration: return std::make_unique<RegenerationMobEffect>();
-        case MobEffectId::Saturation: return std::make_unique<SaturationMobEffect>();
-        case MobEffectId::Slowness: return std::make_unique<SlownessMobEffect>();
-        case MobEffectId::Speed: return std::make_unique<SpeedMobEffect>();
-        case MobEffectId::Wither: return std::make_unique<WitherMobEffect>();
-        case MobEffectId::Strength: return std::make_unique<AttackDamageMobEffect>();
-        case MobEffectId::RaidOmen: return std::make_unique<RaidOmenMobEffect>();
-        case MobEffectId::Weaving: return std::make_unique<WeavingMobEffect>();
-        case MobEffectId::Freezing: return std::make_unique<FreezingMobEffect>();
-        default: return std::make_unique<MobEffect>();
+        case MobEffectId::Absorption:
+            return std::make_unique<AbsorptionMobEffect>();
+        case MobEffectId::HealthBoost:
+            return std::make_unique<HealthBoostMobEffect>();
+        case MobEffectId::Hunger:
+            return std::make_unique<HungerMobEffect>();
+        case MobEffectId::InstantHealth:
+            return std::make_unique<InstantHealthMobEffect>();
+        case MobEffectId::InstantDamage:
+            return std::make_unique<InstantDamageMobEffect>();
+        case MobEffectId::Invisibility:
+            return std::make_unique<InvisibilityMobEffect>();
+        case MobEffectId::Levitation:
+            return std::make_unique<LevitationMobEffect>();
+        case MobEffectId::Poison:
+            return std::make_unique<PoisonMobEffect>();
+        case MobEffectId::FatalPoison:
+            return std::make_unique<PoisonMobEffect>(true);
+        case MobEffectId::Regeneration:
+            return std::make_unique<RegenerationMobEffect>();
+        case MobEffectId::Saturation:
+            return std::make_unique<SaturationMobEffect>();
+        case MobEffectId::Slowness:
+            return std::make_unique<SlownessMobEffect>();
+        case MobEffectId::Speed:
+            return std::make_unique<SpeedMobEffect>();
+        case MobEffectId::Wither:
+            return std::make_unique<WitherMobEffect>();
+        case MobEffectId::Strength:
+            return std::make_unique<AttackDamageMobEffect>();
+        case MobEffectId::RaidOmen:
+            return std::make_unique<RaidOmenMobEffect>();
+        case MobEffectId::Weaving:
+            return std::make_unique<WeavingMobEffect>();
+        case MobEffectId::Freezing:
+            return std::make_unique<FreezingMobEffect>();
+        default:
+            return std::make_unique<MobEffect>();
     }
 }
 
@@ -257,23 +310,27 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
     if (input.mDuration == 0 && !input.mInfinite)
         return false;
 
-    if (sAddFilter && !sAddFilter(mActor, input))
+    MobEffectInstance instance = input;
+    if (sAddFilter && !sAddFilter(mActor, instance))
+        return false;
+    if (instance.mDuration == 0 && !instance.mInfinite)
         return false;
 
-    MobEffectInstance instance = input;
     instance.mAmplifier = std::clamp(instance.mAmplifier, 0, 255);
     const int32_t key = (int32_t) instance.mId;
     auto existing = mEffects.find(key);
     if (existing != mEffects.end()) {
         if (instance.mAmplifier < existing->second.mAmplifier
-            || (instance.mAmplifier == existing->second.mAmplifier
-                && !instance.mInfinite && instance.mDuration <= existing->second.mDuration))
+            || (instance.mAmplifier == existing->second.mAmplifier && !instance.mInfinite
+                && instance.mDuration <= existing->second.mDuration))
             return false;
         const MobEffectInstance previous = existing->second;
         existing->second = instance;
         effect(instance.mId).onRefresh(mActor, previous, instance);
         refreshDerivedAttributes();
         emit(instance, MobEffectEvent::Modify);
+        if (sAddListener)
+            sAddListener(mActor, instance);
         return true;
     }
 
@@ -281,6 +338,8 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
     effect(instance.mId).onAdd(mActor, instance);
     refreshDerivedAttributes();
     emit(instance, MobEffectEvent::Add);
+    if (sAddListener)
+        sAddListener(mActor, instance);
     return true;
 }
 
@@ -341,14 +400,10 @@ bool MobEffectManager::tick(int32_t tickDiff) {
     }
     for (MobEffectId id: expired)
         remove(id);
-    return oldHealth != mActor.getHealth()
-           || oldFood != mActor.getFood()
-           || oldSaturation != mActor.getSaturation()
-           || oldExhaustion != mActor.getExhaustion()
-           || oldMaxHealth != mActor.getMaxHealth()
+    return oldHealth != mActor.getHealth() || oldFood != mActor.getFood() || oldSaturation != mActor.getSaturation()
+           || oldExhaustion != mActor.getExhaustion() || oldMaxHealth != mActor.getMaxHealth()
            || oldMovement != mActor.getAttributes().get("minecraft:movement")
-           || oldFlags != mActor.getFlags().getLowBits()
-           || oldFlags2 != mActor.getFlags().getHighBits();
+           || oldFlags != mActor.getFlags().getLowBits() || oldFlags2 != mActor.getFlags().getHighBits();
 }
 
 bool MobEffectManager::has(MobEffectId id) const {
@@ -400,10 +455,8 @@ float MobEffectManager::advanceFreezing(bool rising) {
 }
 
 bool FreezingMobEffect::isImmune(const Actor &actor) {
-    return dynamic_cast<const ZombieActor *>(&actor) != nullptr
-           || dynamic_cast<const DrownedActor *>(&actor) != nullptr
-           || dynamic_cast<const HuskActor *>(&actor) != nullptr
-           || dynamic_cast<const WitherActor *>(&actor) != nullptr
+    return dynamic_cast<const ZombieActor *>(&actor) != nullptr || dynamic_cast<const DrownedActor *>(&actor) != nullptr
+           || dynamic_cast<const HuskActor *>(&actor) != nullptr || dynamic_cast<const WitherActor *>(&actor) != nullptr
            || dynamic_cast<const EnderDragon *>(&actor) != nullptr
            || std::string(actor.getIdentifier()) == "minecraft:frostbite";
 }

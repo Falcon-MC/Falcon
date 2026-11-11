@@ -47,10 +47,8 @@ namespace {
         const char *mEffect;
     };
 
-    const InteractParticle INTERACT_PARTICLES[] = {
-            {"smoke", "minecraft:basic_smoke_particle"},
-            {"largeexplode", "minecraft:large_explosion"}
-    };
+    const InteractParticle INTERACT_PARTICLES[] = {{"smoke", "minecraft:basic_smoke_particle"},
+                                                   {"largeexplode", "minecraft:large_explosion"}};
 
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const char *const BORN_EVENT = "minecraft:entity_born";
@@ -58,6 +56,7 @@ namespace {
     const char *const TAG_DEFINITIONS = "definitions";
     const std::string DEFINITION_ADDED_PREFIX = "+";
     const char *const TAG_AGE = "AgeTicks";
+    const char *const TAG_ACTOR_VERSION = "ActorVersion";
     const char *const TAG_BREED_COOLDOWN = "BreedCooldown";
     const char *const TAG_TAMED_BY = "TamedBy";
     const char *const TAG_OWNER = "OwnerNew";
@@ -133,8 +132,7 @@ namespace {
     const MovementAttribute MOVEMENT_ATTRIBUTES[] = {
             {"minecraft:friction_modifier", "minecraft:friction_modifier", 0.0f, 256.0f, 1.0f},
             {"minecraft:bounciness", "minecraft:bounciness", 0.0f, 1.0f, 0.0f},
-            {"minecraft:air_drag_modifier", "minecraft:air_drag_modifier", 0.0f, 256.0f, 1.0f}
-    };
+            {"minecraft:air_drag_modifier", "minecraft:air_drag_modifier", 0.0f, 256.0f, 1.0f}};
     const char *const LEGACY_ZOMBIE_PIGMAN = "minecraft:pig_zombie";
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
@@ -147,9 +145,9 @@ namespace {
     const float TARGET_NEARBY_DEFAULT_OUTSIDE = 5.0f;
     const float INACTIVITY_PLAYER_RANGE_SQUARED = 32.0f * 32.0f;
     const char *const MOVEMENT_COMPONENTS[] = {"minecraft:movement.basic", "minecraft:movement.amphibious",
-                                               "minecraft:movement.fly", "minecraft:movement.generic",
+                                               "minecraft:movement.fly",   "minecraft:movement.generic",
                                                "minecraft:movement.hover", "minecraft:movement.jump",
-                                               "minecraft:movement.skip", "minecraft:movement.sway"};
+                                               "minecraft:movement.skip",  "minecraft:movement.sway"};
     const char *const STATIC_JUMP_COMPONENT = "minecraft:jump.static";
     const float DEFAULT_MAX_TURN = 30.0f;
     const float DEFAULT_JUMP_POWER = 0.42f;
@@ -286,8 +284,7 @@ bool MobActor::canStandOnPowderSnow() const {
     return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
 }
 
-MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
-}
+MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {}
 
 void MobActor::startDefinition(ServerNetworkHandler &owner) {
     if (mDefinitionStarted)
@@ -302,6 +299,10 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
         if (!mEquipmentInherited)
             mEquipment.equipFromTable(owner, *this);
     }
+}
+
+void MobActor::upgradeDefinition(ServerNetworkHandler &owner, bool loaded) {
+    mActorVersion = EntityEvents::upgrade(owner, *this, loaded ? mActorVersion : INT32_MAX);
 }
 
 void MobActor::tick(ServerNetworkHandler &owner) {
@@ -495,7 +496,7 @@ void MobActor::_tickEntitySensor(ServerNetworkHandler &owner) {
 }
 
 int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::Value &subsensor, bool playersOnly,
-                                      bool relativeRange) {
+                                       bool relativeRange) {
     float horizontal = ENTITY_SENSOR_DEFAULT_RANGE;
     float vertical = ENTITY_SENSOR_DEFAULT_RANGE;
     const json::Value *range = subsensor.get("range");
@@ -691,7 +692,8 @@ void MobActor::causeFallDamage(ServerNetworkHandler &owner, float distance) {
     if (!hurt(owner, damage, ActorDamageSource::environment("death.fell.accident.generic", getName())))
         return;
 
-    owner.playLevelSound(level, damage > FALL_BIG_DAMAGE ? FALL_BIG_SOUND : FALL_SMALL_SOUND, position, getIdentifier());
+    owner.playLevelSound(level, damage > FALL_BIG_DAMAGE ? FALL_BIG_SOUND : FALL_SMALL_SOUND, position,
+                         getIdentifier());
     if (landedOn != nullptr)
         owner.playBlockSound(level, FALL_SOUND, position, BlockStateHasher::hash(landedOn->mName, landedOn->mStates),
                              getIdentifier());
@@ -742,7 +744,7 @@ bool MobActor::_senseDamage(ServerNetworkHandler &owner, float &amount, const Ac
             continue;
 
         amount = std::max(0.0f, amount * numberIn(trigger, "damage_multiplier", 1.0f)
-                                + numberIn(trigger, "damage_modifier", 0.0f));
+                                        + numberIn(trigger, "damage_modifier", 0.0f));
 
         const json::Value *deals = trigger->get("deals_damage");
         if (deals != nullptr && (deals->isString() ? deals->mString != "yes" : !deals->boolean(true)))
@@ -964,9 +966,8 @@ void MobActor::_tickCelebration(ServerNetworkHandler &owner) {
     const json::Value *interval = mCelebrationComponent->get("sound_interval");
     const float minimum = numberIn(interval, "range_min", 0.0f);
     const float maximum = numberIn(interval, "range_max", minimum);
-    mCelebrationSoundTicks = secondsToTicks(maximum > minimum
-                                            ? std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom())
-                                            : minimum);
+    mCelebrationSoundTicks = secondsToTicks(
+            maximum > minimum ? std::uniform_real_distribution<float>(minimum, maximum)(lifecycleRandom()) : minimum);
 }
 
 ServerPlayer *MobActor::getOwner(ServerNetworkHandler &owner) const {
@@ -1135,8 +1136,8 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
     const size_t eventStart = identifier.find('<');
     if (eventStart != std::string::npos) {
         const size_t eventEnd = identifier.find('>', eventStart);
-        spawnEvent = identifier.substr(eventStart + 1, eventEnd == std::string::npos ? std::string::npos
-                                                                                     : eventEnd - eventStart - 1);
+        spawnEvent = identifier.substr(eventStart + 1,
+                                       eventEnd == std::string::npos ? std::string::npos : eventEnd - eventStart - 1);
         identifier.resize(eventStart);
     }
 
@@ -1161,6 +1162,7 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
         }
     };
 
+    owner.setSpawnCause("Transformed");
     ServerActor *result = owner.spawnActor(level, identifier, getPosition(), configure);
     if (result == nullptr) {
         mTransformationTicks = transformationTicks(transformation);
@@ -1201,9 +1203,8 @@ void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::strin
 bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryNameTag(owner, player, held) || _tryLeash(owner, player, held) || _tryInteract(owner, player)
-        || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
-        || _tryStartLove(owner, player, held) || _trySit(owner, player) || _tryFeedMount(owner, player, held)
-        || _tryMount(owner, player))
+        || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
+        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
@@ -1218,9 +1219,10 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (renaming != nullptr && !renaming->boolean(true))
         return false;
 
-    const Tag *display = held.mTag.get(ITEM_DISPLAY_TAG);
+    const Tag *display = held.mTag.isCompound() ? held.mTag.get(ITEM_DISPLAY_TAG) : nullptr;
     const std::string name = display == nullptr || !display->isCompound()
-                             ? std::string() : display->getString(ITEM_DISPLAY_NAME_TAG, std::string());
+                                     ? std::string()
+                                     : display->getString(ITEM_DISPLAY_NAME_TAG, std::string());
     if (name.empty())
         return false;
 
@@ -1431,13 +1433,7 @@ void MobActor::attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider
 
     const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
     if (maximum > 0 && std::uniform_int_distribution<int32_t>(0, maximum - 1)(lifecycleRandom()) < mTemper) {
-        mOwnerId = rider.getUniqueId();
-        mLegacyOwnerName.clear();
-        setPersistent(true);
-        _setFlag(owner, ActorFlag::Tamed, true);
-        _syncOwner(owner);
-        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
-        EntityEvents::fireTrigger(owner, *this, tamemount->get("tame_event"), &rider);
+        tameTo(owner, rider, TAMEMOUNT_COMPONENT, true);
         return;
     }
 
@@ -1699,8 +1695,7 @@ void MobActor::_givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player
     PlayerInventory &inventory = player.getInventory();
     if (inventory.getItemInHand().isAir()) {
         inventory.setItemInHand(std::move(item));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
         return;
     }
 
@@ -1727,14 +1722,39 @@ bool MobActor::_tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const
         return true;
     }
 
-    mOwnerId = player.getUniqueId();
+    tameTo(owner, player, "minecraft:tameable", true);
+    return true;
+}
+
+bool MobActor::tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects) {
+    const json::Value *settings = getComponent(component);
+    if (settings == nullptr || isTamed() || owner.getScriptEngine().beforeEntityTamed(*this, tamer))
+        return false;
+
+    mOwnerId = tamer.getUniqueId();
     mLegacyOwnerName.clear();
     setPersistent(true);
     _setFlag(owner, ActorFlag::Tamed, true);
     _syncOwner(owner);
-    owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
+    if (showEffects)
+        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
 
-    EntityEvents::fireTrigger(owner, *this, tameable->get("tame_event"), &player);
+    EntityEvents::fireTrigger(owner, *this, settings->get("tame_event"), &tamer);
+    owner.getScriptEngine().onEntityTamed(*this, tamer);
+    return true;
+}
+
+bool MobActor::tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects) {
+    const json::Value *settings = getComponent(component);
+    if (settings == nullptr || isTamed())
+        return false;
+
+    mOwnerless = true;
+    setPersistent(true);
+    _setFlag(owner, ActorFlag::Tamed, true);
+    if (showEffects)
+        owner.broadcastActorEvent(*this, EntityEventType::TamingSucceeded);
+    EntityEvents::fireTrigger(owner, *this, settings->get("tame_event"), nullptr);
     return true;
 }
 
@@ -1880,8 +1900,7 @@ bool MobActor::_syncHealthComponent() {
     const json::Value *maximum = health == nullptr ? nullptr : health->get("max");
     const json::Value *value = health == nullptr ? nullptr : health->get("value");
     // a rolled health keeps what spawning rolled: only a fixed health follows the group
-    if (maximum == nullptr || value == nullptr || !value->isNumber()
-        || (float) maximum->number(0.0) == getMaxHealth())
+    if (maximum == nullptr || value == nullptr || !value->isNumber() || (float) maximum->number(0.0) == getMaxHealth())
         return false;
 
     setMaxHealth((float) maximum->number(0.0));
@@ -1958,15 +1977,22 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
 }
 
 void MobActor::fillSpawnMetadata(EntityDataMap &metadata) const {
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits(),
+                                   getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
         entry.mLongValue = flagValues[index];
         metadata.mEntries.push_back(entry);
     }
+
+    EntityDataEntry nameplateDistance;
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+    nameplateDistance.mFloatValue = getNameplateRenderDistance();
+    metadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry scale;
     scale.mId = ActorFlags::SCALE_DATA_ID;
@@ -2219,6 +2245,9 @@ Tag MobActor::saveNbt() const {
         definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + group));
     data.put(TAG_DEFINITIONS, Tag::ofList(Tag::Type::String, std::move(definitions)));
     data.putInt(TAG_AGE, mAgeTicks);
+    // written only when set (sub_140BB77E0)
+    if (mActorVersion != 0)
+        data.putInt(TAG_ACTOR_VERSION, mActorVersion);
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
     data.putLong(TAG_OWNER, mOwnerId);
     if (!mLegacyOwnerName.empty())
@@ -2230,7 +2259,7 @@ Tag MobActor::saveNbt() const {
     data.putByte("Color", (int8_t) numberIn(getComponent("minecraft:color"), "value", 0.0f));
     data.putByte("Color2", (int8_t) numberIn(getComponent("minecraft:color2"), "value", 0.0f));
     data.putByte("IsBaby", getComponent("minecraft:is_baby") != nullptr ? 1 : 0);
-    data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr ? 1 : 0);
+    data.putByte("IsTamed", getComponent("minecraft:is_tamed") != nullptr || mOwnerless ? 1 : 0);
     data.putByte("Saddled", getComponent("minecraft:is_saddled") != nullptr ? 1 : 0);
     data.putByte("Chested", getComponent("minecraft:is_chested") != nullptr ? 1 : 0);
     data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
@@ -2261,10 +2290,15 @@ Tag MobActor::saveNbt() const {
 void MobActor::loadNbt(const Tag &data) {
     ServerActor::loadNbt(data);
 
+    mSpawnEvent = data.getString(TAG_SPAWN_EVENT, mSpawnEvent);
+
     mAgeTicks = data.getInt(TAG_AGE, 0);
+    mActorVersion = data.getInt(TAG_ACTOR_VERSION, 0);
     mBreedCooldown = data.getInt(TAG_BREED_COOLDOWN, 0);
     mOwnerId = data.getLong(TAG_OWNER, NO_OWNER);
     mLegacyOwnerName = mOwnerId == NO_OWNER ? data.getString(TAG_TAMED_BY, std::string()) : std::string();
+    // the game keeps an ownerless tame only as IsTamed
+    mOwnerless = mOwnerId == NO_OWNER && mLegacyOwnerName.empty() && data.getByte("IsTamed", 0) != 0;
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
@@ -2369,8 +2403,8 @@ Actor *MobActor::getTarget(ServerNetworkHandler &owner) const {
         return nullptr;
 
     Actor *target = findActor(owner, mTargetRuntimeId);
-    if (owner.getProperties().getDifficulty() == Difficulty::Peaceful &&
-        dynamic_cast<const ServerPlayer *>(target) != nullptr)
+    if (owner.getProperties().getDifficulty() == Difficulty::Peaceful
+        && dynamic_cast<const ServerPlayer *>(target) != nullptr)
         return nullptr;
 
     return target != nullptr && canTarget(*target) ? target : nullptr;
@@ -2385,8 +2419,7 @@ bool MobActor::canTarget(const Actor &actor) const {
         return true;
 
     const int32_t gameType = player->getGameType();
-    return player->isSpawned() && gameType != (int32_t) GameType::Creative
-           && gameType != (int32_t) GameType::Spectator;
+    return player->isSpawned() && gameType != (int32_t) GameType::Creative && gameType != (int32_t) GameType::Spectator;
 }
 
 Actor *MobActor::findActor(ServerNetworkHandler &owner, uint64_t runtimeId) {

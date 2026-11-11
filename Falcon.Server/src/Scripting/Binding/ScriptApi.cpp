@@ -20,6 +20,7 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -67,7 +68,7 @@ namespace {
         JS_FreeValue(ctx, exception);
     }
 
-    template<typename T>
+    template <typename T>
     bool accepts(const ScriptNative *native) {
         return dynamic_cast<const T *>(native) != nullptr;
     }
@@ -84,6 +85,7 @@ namespace {
     bool acceptsAny(const ScriptNative *) {
         return true;
     }
+
 
     bool hasSuffix(const std::string &text, const char *suffix) {
         const size_t length = std::strlen(suffix);
@@ -107,13 +109,20 @@ namespace {
             return acceptsComponent;
         if (cls == "ItemStack" || cls.compare(0, 4, "Item") == 0)
             return accepts<ScriptItemRef>;
-        if (cls == "EntityAttributeComponent" || cls == "EntityHealthComponent" || cls == "EntityTypeFamilyComponent"
-            || cls == "EntityProjectileComponent")
-            return accepts<ScriptEntityPart>;
         if (cls == "ScreenDisplay" || cls == "Camera" || cls == "PlayerInputPermissions" || cls == "LocatorBar"
             || cls == "Container" || cls == "ContainerSlot" || cls == "EntityInventoryComponent"
             || cls == "EntityEquippableComponent")
             return accepts<ScriptPlayerPart>;
+        if (cls == "EntityComponent")
+            return acceptsComponent;
+        if (cls.compare(0, 6, "Entity") == 0 && hasSuffix(cls, "Component"))
+            return accepts<ScriptEntityPart>;
+        if (cls == "Effect")
+            return accepts<ScriptEffectRef>;
+        if (cls == "EffectType" || cls == "EntityType" || cls == "EntityHealSource")
+            return accepts<ScriptNamedRef>;
+        if (cls == "InputInfo")
+            return accepts<ScriptInputInfoRef>;
         return acceptsAny;
     }
 
@@ -138,7 +147,7 @@ namespace {
             return binding.mFunction(ctx, thisVal, argc, argv);
 
         const ScriptNative *native = api->native<ScriptNative>(thisVal);
-        if (native == nullptr || !binding.mAccepts(native))
+        if (!binding.mStatic && (native == nullptr || !binding.mAccepts(native)))
             return JS_ThrowReferenceError(ctx, "%s [%s] object bound to prototype does not exist.", label,
                                           binding.mName.c_str());
 
@@ -161,6 +170,32 @@ namespace {
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         api->addSubscriber(signal->mKey, JS_DupValue(ctx, argv[0]));
+        if (signal->mKey == ScriptApi::SCRIPT_EVENT_KEY && argc >= 2 && JS_IsObject(argv[1])) {
+            JSValue list = JS_GetPropertyStr(ctx, argv[1], "namespaces");
+            if (JS_IsArray(list)) {
+                std::vector<std::string> namespaces;
+                uint32_t length = 0;
+                JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+                JS_ToUint32(ctx, &length, lengthValue);
+                JS_FreeValue(ctx, lengthValue);
+                for (uint32_t index = 0; index < length; ++index) {
+                    JSValue item = JS_GetPropertyUint32(ctx, list, index);
+                    namespaces.push_back(toString(ctx, item));
+                    JS_FreeValue(ctx, item);
+                }
+                api->filterScriptEvents(argv[0], std::move(namespaces));
+            }
+            JS_FreeValue(ctx, list);
+        }
+        // WorldClockEventOptions and WorldClockTimeMarkerEventOptions
+        if (signal->mKey.find(".worldClock") != std::string::npos && argc >= 2 && JS_IsObject(argv[1])) {
+            JSValue clock = JS_GetPropertyStr(ctx, argv[1], "clock");
+            JSValue marker = JS_GetPropertyStr(ctx, argv[1], "timeMarker");
+            api->filterClockEvents(argv[0], JS_IsString(clock) ? toString(ctx, clock) : std::string(),
+                                   JS_IsString(marker) ? toString(ctx, marker) : std::string());
+            JS_FreeValue(ctx, clock);
+            JS_FreeValue(ctx, marker);
+        }
         return JS_DupValue(ctx, argv[0]);
     }
 
@@ -175,29 +210,15 @@ namespace {
     JSValue registryRegister(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptRegistryRef *registry = api->native<ScriptRegistryRef>(thisVal);
-        if (registry == nullptr || argc < 2)
+        if (registry == nullptr || argc < 2 || !JS_IsString(argv[0]) || !JS_IsObject(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-
-        // ScriptBlockComponentRegistry: registration closes with the startup event
-        if (!api->registerCustomComponent(registry->mBlocks, toString(ctx, argv[0]), argv[1]))
-            return api->throwError("CustomComponentInvalidRegistryError",
-                                   "Cannot register custom component outside of the ModuleStartup event.");
-        return JS_UNDEFINED;
+        return api->registerCustomComponent(registry->mBlocks, toString(ctx, argv[0]), argv[1]);
     }
 
-    JSValue stateValueToJs(JSContext *ctx, const Tag &value) {
-        switch (value.getType()) {
-            case Tag::Type::Byte:
-                return JS_NewBool(ctx, value.asByte() != 0);
-            case Tag::Type::Short:
-                return JS_NewInt32(ctx, value.asShort());
-            case Tag::Type::Int:
-                return JS_NewInt32(ctx, value.asInt());
-            case Tag::Type::String:
-                return string(ctx, value.asString());
-            default:
-                return JS_UNDEFINED;
-        }
+    JSValue registryRegisterDimension(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return ScriptApi::fromContext(ctx)->registerCustomDimension(toString(ctx, argv[0]));
     }
 
     JSValue paletteBlockNames(JSContext *ctx, JSValueConst, int, JSValueConst *) {
@@ -205,6 +226,8 @@ namespace {
         uint32_t index = 0;
         for (const std::string &name: BlockPaletteRegistry::getInstance().getBlockNames())
             JS_SetPropertyUint32(ctx, names, index++, string(ctx, name));
+        for (const CustomBlockDefinition &block: CustomContentRegistry::getInstance().getBlocks())
+            JS_SetPropertyUint32(ctx, names, index++, string(ctx, block.mIdentifier));
         return names;
     }
 
@@ -212,21 +235,20 @@ namespace {
         if (argc < 1)
             return JS_UNDEFINED;
 
-        const std::vector<Tag> *permutations =
-                BlockPaletteRegistry::getInstance().getPermutations(toString(ctx, argv[0]));
-        if (permutations == nullptr)
+        const std::string identifier = toString(ctx, argv[0]);
+        const std::vector<Tag> *palette = BlockPaletteRegistry::getInstance().getPermutations(identifier);
+        const CustomBlockDefinition *custom = palette == nullptr
+                                                      ? CustomContentRegistry::getInstance().findBlock(identifier)
+                                                      : nullptr;
+        if (palette == nullptr && custom == nullptr)
             return JS_UNDEFINED;
 
+        const std::vector<Tag> permutations = palette != nullptr ? *palette
+                                                                 : CustomContentRegistry::permutationsOf(*custom);
         JSValue list = JS_NewArray(ctx);
         uint32_t index = 0;
-        for (const Tag &states: *permutations) {
-            JSValue object = JS_NewObject(ctx);
-            const std::vector<std::string> &keys = states.getKeys();
-            const std::vector<Tag> &values = states.getValues();
-            for (size_t key = 0; key < keys.size(); ++key)
-                JS_SetPropertyStr(ctx, object, keys[key].c_str(), stateValueToJs(ctx, values[key]));
-            JS_SetPropertyUint32(ctx, list, index++, object);
-        }
+        for (const Tag &states: permutations)
+            JS_SetPropertyUint32(ctx, list, index++, statesToJs(ctx, states));
         return list;
     }
 
@@ -311,17 +333,61 @@ namespace {
 
     int moduleInit(JSContext *ctx, JSModuleDef *module);
 
-    const char *const SERVER_ENUMS[] = {
-            "EquipmentSlot", "GameMode", "InputPermissionCategory", "Direction", "PlayerInventoryType",
-            "EntityComponentTypes", "ItemComponentTypes", "BlockComponentTypes"
-    };
+    const char *const SERVER_ENUMS[] = {"EntityDamageCause",
+                                        "EntityInitializationCause",
+                                        "EntityHealCause",
+                                        "EntitySwingSource",
+                                        "InputButton",
+                                        "ButtonState",
+                                        "InputMode",
+                                        "CommandPermissionLevel",
+                                        "PlayerPermissionLevel",
+                                        "TickingAreaErrorReason",
+                                        "PaletteColor",
+                                        "EquipmentSlot",
+                                        "GameMode",
+                                        "InputPermissionCategory",
+                                        "Direction",
+                                        "PlayerInventoryType",
+                                        "EntityComponentTypes",
+                                        "ItemComponentTypes",
+                                        "BlockComponentTypes",
+                                        "Difficulty",
+                                        "TimeOfDay",
+                                        "MoonPhase",
+                                        "WeatherType",
+                                        "ScriptEventSource",
+                                        "GameRule",
+                                        "MemoryTier",
+                                        "CustomComponentNameErrorReason",
+                                        "NamespaceNameErrorReason"};
+
+    const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
+                                                    "BlockComponentBlockBreakEvent",
+                                                    "BlockComponentBlockStateChangeEvent",
+                                                    "BlockComponentEntityEvent",
+                                                    "BlockComponentEntityFallOnEvent",
+                                                    "BlockComponentNamedTickEvent",
+                                                    "BlockComponentNeighborChangedAfterEvent",
+                                                    "BlockComponentOnPlaceEvent",
+                                                    "BlockComponentPlayerBreakEvent",
+                                                    "BlockComponentPlayerDestroyEvent",
+                                                    "BlockComponentPlayerInteractEvent",
+                                                    "BlockComponentPlayerPlaceBeforeEvent",
+                                                    "BlockComponentRandomTickEvent",
+                                                    "BlockComponentRedstoneUpdateEvent",
+                                                    "BlockComponentStepOffEvent",
+                                                    "BlockComponentStepOnEvent",
+                                                    "BlockComponentTickEvent",
+                                                    "ItemComponentBeforeDurabilityDamageEvent",
+                                                    "ItemComponentCompleteUseEvent",
+                                                    "ItemComponentConsumeEvent",
+                                                    "ItemComponentHitEntityEvent",
+                                                    "ItemComponentMineBlockEvent",
+                                                    "ItemComponentUseEvent",
+                                                    "ItemComponentUseOnEvent"};
 
     const char *const COMPONENT_IDS[][2] = {
-            {"EntityInventoryComponent", "minecraft:inventory"},
-            {"EntityEquippableComponent", "minecraft:equippable"},
-            {"EntityHealthComponent", "minecraft:health"},
-            {"EntityTypeFamilyComponent", "minecraft:type_family"},
-            {"EntityProjectileComponent", "minecraft:projectile"},
             {"ItemDurabilityComponent", "minecraft:durability"},
             {"ItemEnchantableComponent", "minecraft:enchantable"},
             {"ItemCooldownComponent", "minecraft:cooldown"},
@@ -359,8 +425,8 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mTrack(moduleOrDefault(mModules, "@minecraft/server").mTrack),
           mSurface("@minecraft/server", moduleOrDefault(mModules, "@minecraft/server")),
           mUiSurface("@minecraft/server-ui", moduleOrDefault(mModules, "@minecraft/server-ui")),
-          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")),
-          mScheduler(context), mPlayers(players) {
+          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")), mScheduler(context),
+          mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
 }
 
@@ -377,11 +443,17 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mFormResolvers)
         JS_FreeValue(mContext, entry.second);
+    for (PendingTickingArea &pending: mPendingTickingAreas) {
+        JS_FreeValue(mContext, pending.mResolve);
+        JS_FreeValue(mContext, pending.mReject);
+    }
     for (auto &entry: mActorObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mPlayerObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mDimensionObjects)
+        JS_FreeValue(mContext, entry.second);
+    for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports}) {
         for (auto &entry: *exports)
@@ -393,7 +465,8 @@ ScriptApi::~ScriptApi() {
     }
 
     for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
-                         mScoreboard, mTickingAreas, mErrors, mBlockRegistry, mItemRegistry})
+                         mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
+                         mClockRegistry, mDimensionRegistry})
         JS_FreeValue(mContext, value);
 }
 
@@ -411,9 +484,15 @@ bool ScriptApi::method(JSValueConst target, const char *cls, const char *name, J
     if (!mSurface.has(key))
         return false;
 
+    // the definitions list statics as "static name": they live on the constructor and bind no object
+    const bool isStatic = std::strncmp(name, "static ", 7) == 0;
+    if (isStatic)
+        name += 7;
+
     Binding binding;
     binding.mName = std::string(cls) + "::" + name;
     binding.mAccepts = acceptorFor(cls);
+    binding.mStatic = isStatic;
     binding.mFunction = function;
     binding.mEarly = mSurface.isEarly(key);
     binding.mBlocked = mSurface.isBlocked(key);
@@ -495,7 +574,7 @@ bool ScriptApi::property(JSValueConst target, const char *cls, const char *name,
 }
 
 bool ScriptApi::propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter,
-                              int magic) {
+                              int magic, JSCFunctionMagic *setter) {
     const std::string key = std::string(cls) + "." + name;
     if (!mSurface.has(key))
         return false;
@@ -511,8 +590,19 @@ bool ScriptApi::propertyMagic(JSValueConst target, const char *cls, const char *
     JSValue getterValue = JS_NewCFunctionMagic(mContext, bindingTrampoline, name, 0, JS_CFUNC_generic_magic,
                                                _addBinding(read));
 
+    JSValue setterValue = JS_UNDEFINED;
+    if (setter != nullptr) {
+        Binding write = read;
+        write.mKind = Binding::Kind::Setter;
+        write.mMagicFunction = setter;
+        write.mEarly = false;
+        write.mBlocked = mSurface.isBlocked(key);
+        setterValue = JS_NewCFunctionMagic(mContext, bindingTrampoline, name, 1, JS_CFUNC_generic_magic,
+                                           _addBinding(write));
+    }
+
     JSAtom atom = JS_NewAtom(mContext, name);
-    JS_DefinePropertyGetSet(mContext, target, atom, getterValue, JS_UNDEFINED,
+    JS_DefinePropertyGetSet(mContext, target, atom, getterValue, setterValue,
                             JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
     JS_FreeAtom(mContext, atom);
     return true;
@@ -585,12 +675,12 @@ JSValue ScriptApi::makeEvent(const std::string &signalKey) {
     return JS_NewObjectProto(mContext, prototype);
 }
 
-JSValue ScriptApi::throwError(const std::string &errorClass, const std::string &message) {
+JSValue ScriptApi::throwError(const std::string &errorClass, const std::string &message, JSValue fields) {
     JSValue make = JS_GetPropertyStr(mContext, mErrors, "make");
-    JSValue args[2] = {string(mContext, errorClass), string(mContext, message)};
-    JSValue error = JS_Call(mContext, make, JS_UNDEFINED, 2, args);
-    JS_FreeValue(mContext, args[0]);
-    JS_FreeValue(mContext, args[1]);
+    JSValue args[3] = {string(mContext, errorClass), string(mContext, message), fields};
+    JSValue error = JS_Call(mContext, make, JS_UNDEFINED, 3, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
     JS_FreeValue(mContext, make);
     if (JS_IsException(error))
         return JS_EXCEPTION;
@@ -635,23 +725,30 @@ ServerActor *ScriptApi::resolveActor(JSValueConst value) {
     const ScriptEntityRef *ref = native<ScriptEntityRef>(value);
     if (ref == nullptr || ref->mKind != ScriptEntityRef::Kind::Actor)
         return nullptr;
-    return mHost.getActor(ref->mId);
+    return mHost.getActorByRuntimeId((uint64_t) ref->mId);
 }
 
 Actor *ScriptApi::resolveEntity(const ScriptEntityRef &ref) {
+    Actor *actor = nullptr;
     switch (ref.mKind) {
         case ScriptEntityRef::Kind::Player:
-            return resolvePlayerByHandle((uint32_t) ref.mId);
+            actor = resolvePlayerByHandle((uint32_t) ref.mId);
+            break;
         case ScriptEntityRef::Kind::Actor:
-            return mHost.getActor(ref.mId);
+            actor = mHost.getActorByRuntimeId((uint64_t) ref.mId);
+            break;
         case ScriptEntityRef::Kind::Item:
             for (const std::unique_ptr<ItemActor> &item: mHost.getItemEntities()) {
-                if ((int64_t) item->getRuntimeId() == ref.mId && !item->isRemoved())
-                    return item.get();
+                if ((int64_t) item->getRuntimeId() == ref.mId && !item->isRemoved()) {
+                    actor = item.get();
+                    break;
+                }
             }
-            return nullptr;
+            break;
     }
-    return nullptr;
+    if (actor != nullptr)
+        ref.mEntityId = std::to_string(actor->getUniqueId());
+    return actor;
 }
 
 Actor *ScriptApi::resolveEntity(JSValueConst value) {
@@ -676,17 +773,18 @@ JSValue ScriptApi::makePlayer(ServerPlayer &player) {
 }
 
 JSValue ScriptApi::makeActor(ServerActor &actor) {
-    const auto cached = mActorObjects.find(actor.getUniqueId());
+    const int64_t runtimeId = (int64_t) actor.getRuntimeId();
+    const auto cached = mActorObjects.find(runtimeId);
     if (cached != mActorObjects.end())
         return JS_DupValue(mContext, cached->second);
 
     ScriptEntityRef *ref = new ScriptEntityRef();
     ref->mKind = ScriptEntityRef::Kind::Actor;
-    ref->mId = actor.getUniqueId();
+    ref->mId = runtimeId;
     ref->mEntityId = std::to_string(actor.getUniqueId());
     ref->mTypeId = actor.getTypeId();
     JSValue object = makeInstance("Entity", ref);
-    mActorObjects[actor.getUniqueId()] = JS_DupValue(mContext, object);
+    mActorObjects[runtimeId] = JS_DupValue(mContext, object);
     return object;
 }
 
@@ -711,8 +809,8 @@ JSValue ScriptApi::makeEntity(Actor &actor) {
     return makeInstance("Entity", ref);
 }
 
-void ScriptApi::forgetEntity(int64_t uniqueId) {
-    const auto it = mActorObjects.find(uniqueId);
+void ScriptApi::forgetEntity(uint64_t runtimeId) {
+    const auto it = mActorObjects.find((int64_t) runtimeId);
     if (it == mActorObjects.end())
         return;
     JS_FreeValue(mContext, it->second);
@@ -741,7 +839,7 @@ Level &ScriptApi::levelOf(JSValueConst dimension) {
 }
 
 JSValue ScriptApi::makeDimension(const Level &level) {
-    const uint64_t key = ((uint64_t) level.getWorldId() << 8) | (uint64_t) level.getDimensionType();
+    const uint64_t key = ((uint64_t) level.getWorldId() << 32) | (uint32_t) level.getDimensionType();
     const auto cached = mDimensionObjects.find(key);
     if (cached != mDimensionObjects.end())
         return JS_DupValue(mContext, cached->second);
@@ -798,19 +896,30 @@ JSValue ScriptApi::makeHeldItemStack(ServerPlayer &player, const std::string &id
     return jsItem;
 }
 
-bool ScriptApi::giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount) {
+bool ScriptApi::toItemStack(const ScriptItemData &data, ItemStack &stack) {
     Item item;
-    if (!StringToItemParser::getInstance().parse(typeId, item))
+    if (!StringToItemParser::getInstance().parse(data.mTypeId, item))
         return false;
 
     std::shared_ptr<ItemDefinition> definition = mHost.getItemDefinitions().getDefinition(item.getIdentifier());
     if (definition == nullptr)
         return false;
 
-    ItemStack stack;
+    stack = ItemStack();
     stack.mDefinition = definition;
     stack.mBlockDefinition = mHost.getBlockDefinitions().getDefinition(item.getIdentifier());
-    stack.mCount = amount < 1 ? 1 : amount;
+    stack.mCount = data.mAmount < 1 ? 1 : data.mAmount;
+    stack.mDamage = data.mDamage;
+    return true;
+}
+
+bool ScriptApi::giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount) {
+    ScriptItemData data;
+    data.mTypeId = typeId;
+    data.mAmount = amount;
+    ItemStack stack;
+    if (!toItemStack(data, stack))
+        return false;
 
     std::vector<int> touchedSlots;
     const int remaining = player.getInventory().addItemPartial(stack, touchedSlots);
@@ -824,17 +933,27 @@ bool ScriptApi::setBlockType(Level &level, int32_t x, int32_t y, int32_t z, cons
     std::string identifier = typeId;
     if (identifier.find(':') == std::string::npos)
         identifier = "minecraft:" + identifier;
+    return setBlock(level, x, y, z, defaultBlockState(identifier));
+}
 
-    level.setBlockState(x, y, z, BlockState(identifier));
+bool ScriptApi::setBlock(Level &level, int32_t x, int32_t y, int32_t z, const BlockState &state) {
+    const BlockState previous = level.getBlockState(x, y, z);
+    level.setBlockState(x, y, z, state);
 
-    const BlockState state = level.getBlockState(x, y, z);
+    const BlockState placed = level.getBlockState(x, y, z);
     UpdateBlockPacket update;
     update.mBlockPosition = Vector3i(x, y, z);
-    update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
+    update.mRuntimeId = (uint32_t) BlockStateHasher::hash(placed.mName, placed.mStates);
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = 0;
-    BlockActionHandler::broadcastToViewers(mHost, level,
-                                           Vector3f((float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f), update);
+    BlockActionHandler::broadcastToViewers(mHost, level, Vector3f((float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f),
+                                           update);
+
+    ScriptEngine &engine = mHost.getScriptEngine();
+    if (previous.mName != placed.mName)
+        engine.onCustomBlockPlaced(level, Vector3i(x, y, z), placed, previous);
+    else if (!(previous.mStates == placed.mStates))
+        engine.onCustomBlockStateChange(level, Vector3i(x, y, z), placed, previous);
     return true;
 }
 
@@ -872,6 +991,8 @@ void ScriptApi::removeSubscriber(const std::string &key, JSValueConst callback) 
     std::vector<JSValue> &list = it->second;
     for (auto entry = list.begin(); entry != list.end(); ++entry) {
         if (JS_VALUE_GET_PTR(*entry) == JS_VALUE_GET_PTR(callback)) {
+            if (key == SCRIPT_EVENT_KEY)
+                mScriptEventNamespaces.erase(JS_VALUE_GET_PTR(callback));
             JS_FreeValue(mContext, *entry);
             list.erase(entry);
             return;
@@ -882,6 +1003,40 @@ void ScriptApi::removeSubscriber(const std::string &key, JSValueConst callback) 
 bool ScriptApi::hasSubscribers(const std::string &key) const {
     auto it = mSubscribers.find(key);
     return it != mSubscribers.end() && !it->second.empty();
+}
+
+void ScriptApi::filterScriptEvents(JSValueConst callback, std::vector<std::string> namespaces) {
+    mScriptEventNamespaces[JS_VALUE_GET_PTR(callback)] = std::move(namespaces);
+}
+
+void ScriptApi::filterClockEvents(JSValueConst callback, std::string clock, std::string marker) {
+    mClockFilters[JS_VALUE_GET_PTR(callback)] = {std::move(clock), std::move(marker)};
+}
+
+bool ScriptApi::emitClockEvent(const std::string &key, JSValue eventObject, const std::string &clock,
+                               const std::string &marker) {
+    mEmitClock = clock;
+    mEmitMarker = marker;
+    const bool cancelled = emit(key, eventObject);
+    mEmitClock.clear();
+    mEmitMarker.clear();
+    return cancelled;
+}
+
+bool ScriptApi::_acceptsClockEvent(JSValueConst callback) const {
+    const auto filter = mClockFilters.find(JS_VALUE_GET_PTR(callback));
+    if (filter == mClockFilters.end())
+        return true;
+    if (!filter->second.first.empty() && filter->second.first != mEmitClock)
+        return false;
+    return filter->second.second.empty() || filter->second.second == mEmitMarker;
+}
+
+bool ScriptApi::_acceptsScriptEvent(JSValueConst callback, const std::string &eventNamespace) const {
+    const auto filter = mScriptEventNamespaces.find(JS_VALUE_GET_PTR(callback));
+    if (filter == mScriptEventNamespaces.end())
+        return true;
+    return std::find(filter->second.begin(), filter->second.end(), eventNamespace) != filter->second.end();
 }
 
 bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
@@ -904,8 +1059,22 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
     const ScriptPrivilege previous = mPrivilege;
     mPrivilege = privilege;
 
+    std::string eventNamespace;
+    const bool filtered = key == SCRIPT_EVENT_KEY;
+    if (filtered) {
+        JSValue id = JS_GetPropertyStr(mContext, eventObject, "id");
+        const std::string text = toString(mContext, id);
+        JS_FreeValue(mContext, id);
+        eventNamespace = text.substr(0, text.find(':'));
+    }
+
     const std::vector<JSValue> snapshot = it->second;
     for (JSValue callback: snapshot) {
+        if (filtered && !_acceptsScriptEvent(callback, eventNamespace))
+            continue;
+        if (!mEmitClock.empty() && !_acceptsClockEvent(callback))
+            continue;
+
         JSValue result = JS_Call(mContext, callback, JS_UNDEFINED, 1, &eventObject);
         if (JS_IsException(result))
             logException(mContext, mPackName, "event handler (" + key + ")");
@@ -921,63 +1090,144 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
     return cancelled;
 }
 
-bool ScriptApi::registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers) {
+JSValue ScriptApi::registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers) {
+    // sub_14B4F5CB0: only the startup event's registries accept components
     if (!mRegistrationOpen)
-        return false;
+        return throwError("CustomComponentInvalidRegistryError",
+                          "Cannot register custom component outside of the ModuleStartup event.");
 
-    std::unordered_map<std::string, JSValue> &registry = blocks ? mBlockComponents : mItemComponents;
-    const auto existing = registry.find(name);
-    if (existing != registry.end())
-        JS_FreeValue(mContext, existing->second);
-    registry[name] = JS_DupValue(mContext, handlers);
-    return true;
-}
-
-void ScriptApi::_fireComponents(std::unordered_map<std::string, JSValue> &handlers,
-                                const std::vector<std::string> *components, const char *hook, JSValue event) {
-    if (components == nullptr || components->empty()) {
-        JS_FreeValue(mContext, event);
-        return;
+    const size_t colon = name.find(':');
+    const char *reason = nullptr;
+    if (colon == std::string::npos || colon == 0 || colon + 1 >= name.size())
+        reason = "NoNamespace";
+    else if (name.compare(0, colon, "minecraft") == 0)
+        reason = "DisallowedNamespace";
+    if (reason != nullptr) {
+        // 1.x throws CustomComponentNameError with a numeric reason, 2.x the shared NamespaceNameError
+        const bool legacy = isStable1();
+        JSValue fields = JS_NewObject(mContext);
+        for (const auto &value:
+             mSurface.enumValues(legacy ? "CustomComponentNameErrorReason" : "NamespaceNameErrorReason")) {
+            if (value.first == reason)
+                JS_SetPropertyStr(mContext, fields, "reason",
+                                  legacy ? JS_NewInt32(mContext, std::atoi(value.second.c_str()))
+                                         : string(mContext, value.second));
+        }
+        return throwError(legacy ? "CustomComponentNameError" : "NamespaceNameError", "", fields);
     }
 
-    for (const std::string &id: *components) {
-        const auto handler = handlers.find(id);
-        if (handler == handlers.end())
+    // one registry per game: a name another pack took is taken
+    if (mHost.getScriptEngine().isCustomComponentRegistered(blocks, name))
+        return throwError(
+                blocks ? "BlockCustomComponentAlreadyRegisteredError" : "ItemCustomComponentAlreadyRegisteredError",
+                std::string(blocks ? "Block" : "Item") + " custom component '" + name + "' was already registered.");
+
+    (blocks ? mBlockComponents : mItemComponents)[name] = JS_DupValue(mContext, handlers);
+    return JS_UNDEFINED;
+}
+
+JSValue ScriptApi::registerCustomDimension(const std::string &name) {
+    // sub_14C846B40
+    if (!mRegistrationOpen)
+        return throwError("CustomDimensionInvalidRegistryError",
+                          "Cannot register custom dimension '" + name + "' outside of StartupEvent.");
+
+    const size_t colon = name.find(':');
+    const char *reason = nullptr;
+    if (colon == std::string::npos || colon == 0 || colon + 1 >= name.size())
+        reason = "NoNamespace";
+    else if (name.compare(0, colon, "minecraft") == 0)
+        reason = "DisallowedNamespace";
+    if (reason != nullptr) {
+        JSValue fields = JS_NewObject(mContext);
+        JS_SetPropertyStr(mContext, fields, "reason", JS_NewString(mContext, reason));
+        return throwError("NamespaceNameError", "", fields);
+    }
+
+    // sub_142CA2AF0, sub_1403ED180: one colon, no space, tab, cr or lf
+    if (name.find(':', colon + 1) != std::string::npos || name.find_first_of(" \t\n\r") != std::string::npos)
+        return throwError("CustomDimensionNameError", "Custom dimension '" + name + "' has invalid characters.");
+
+    bool taken = mHost.getScriptEngine().isDimensionPending(name);
+    for (const auto &entry: Dimension::customDimensions())
+        taken = taken || entry.second == name;
+    if (taken)
+        return throwError("CustomDimensionAlreadyRegisteredError",
+                          "Custom dimension '" + name + "' was already registered.");
+
+    mPendingDimensions.push_back(name);
+    return JS_UNDEFINED;
+}
+
+bool ScriptApi::hasCustomComponent(bool blocks, const std::string &name) const {
+    const std::unordered_map<std::string, JSValue> &registry = blocks ? mBlockComponents : mItemComponents;
+    return registry.find(name) != registry.end();
+}
+
+bool ScriptApi::handlesHook(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook) const {
+    const std::unordered_map<std::string, JSValue> &registry = blocks ? mBlockComponents : mItemComponents;
+    for (const CustomComponentUse &use: uses) {
+        const auto handler = registry.find(use.mName);
+        if (handler == registry.end())
             continue;
 
         JSValue function = JS_GetPropertyStr(mContext, handler->second, hook);
-        if (JS_IsFunction(mContext, function)) {
-            JSValue result = JS_Call(mContext, function, handler->second, 1, &event);
-            if (JS_IsException(result))
-                logException(mContext, mPackName, "custom component " + id + "." + hook);
-            JS_FreeValue(mContext, result);
+        const bool callable = JS_IsFunction(mContext, function);
+        JS_FreeValue(mContext, function);
+        if (callable)
+            return true;
+    }
+    return false;
+}
+
+JSValue ScriptApi::makeComponentEvent(const char *eventClass) {
+    if (!mSurface.has(eventClass))
+        return JS_UNDEFINED;
+    return JS_NewObjectProto(mContext, defineClass(eventClass));
+}
+
+void ScriptApi::fillBlockEvent(JSValueConst event, const Level &level, const Vector3i &position) {
+    JS_SetPropertyStr(mContext, event, "block", makeBlock(level, position.x, position.y, position.z));
+    JS_SetPropertyStr(mContext, event, "dimension", makeDimension(level));
+}
+
+void ScriptApi::fireComponents(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook,
+                               JSValueConst event) {
+    std::unordered_map<std::string, JSValue> &registry = blocks ? mBlockComponents : mItemComponents;
+    const bool withParams = mSurface.has("CustomComponentParameters");
+    for (const CustomComponentUse &use: uses) {
+        const auto handler = registry.find(use.mName);
+        if (handler == registry.end())
+            continue;
+
+        JSValue function = JS_GetPropertyStr(mContext, handler->second, hook);
+        if (!JS_IsFunction(mContext, function)) {
+            JS_FreeValue(mContext, function);
+            continue;
         }
+
+        JSValue args[2] = {JS_DupValue(mContext, event), JS_UNDEFINED};
+        if (withParams) {
+            JSValue params = JS_UNDEFINED;
+            if (!use.mParams.empty()) {
+                params = JS_ParseJSON(mContext, use.mParams.c_str(), use.mParams.size(), "<params>");
+                if (JS_IsException(params)) {
+                    JS_FreeValue(mContext, JS_GetException(mContext));
+                    params = JS_UNDEFINED;
+                }
+            }
+            args[1] = makeInstance("CustomComponentParameters", new ScriptNative());
+            JS_DefinePropertyValueStr(mContext, args[1], "params", params, JS_PROP_ENUMERABLE);
+        }
+
+        JSValue result = JS_Call(mContext, function, handler->second, withParams ? 2 : 1, args);
+        if (JS_IsException(result))
+            logException(mContext, mPackName, "custom component " + use.mName + "." + hook);
+        JS_FreeValue(mContext, result);
+        for (JSValue arg: args)
+            JS_FreeValue(mContext, arg);
         JS_FreeValue(mContext, function);
     }
-    JS_FreeValue(mContext, event);
-}
-
-void ScriptApi::fireBlockComponents(const std::string &blockId, const char *hook, JSValue event) {
-    const std::vector<std::string> *components = nullptr;
-    for (const CustomBlockDefinition &definition: CustomContentRegistry::getInstance().getBlocks()) {
-        if (definition.mIdentifier == blockId) {
-            components = &definition.mCustomComponents;
-            break;
-        }
-    }
-    _fireComponents(mBlockComponents, components, hook, event);
-}
-
-void ScriptApi::fireHeldItemComponents(ServerPlayer &player, const char *hook, JSValue event) {
-    const ItemStack &held = player.getInventory().getItemInHand();
-    const std::vector<std::string> *components = nullptr;
-    if (!held.isAir() && held.mDefinition != nullptr) {
-        const CustomItemDefinition *definition =
-                CustomContentRegistry::getInstance().findItem(held.mDefinition->getIdentifier());
-        if (definition != nullptr)
-            components = &definition->mCustomComponents;
-    }
-    _fireComponents(mItemComponents, components, hook, event);
 }
 
 void ScriptApi::startup() {
@@ -1002,12 +1252,19 @@ void ScriptApi::startup() {
         JSValue event = makeEvent("SystemBeforeEvents.startup");
         JS_SetPropertyStr(mContext, event, "blockComponentRegistry", JS_DupValue(mContext, mBlockRegistry));
         JS_SetPropertyStr(mContext, event, "itemComponentRegistry", JS_DupValue(mContext, mItemRegistry));
+        if (!JS_IsUndefined(mClockRegistry))
+            JS_SetPropertyStr(mContext, event, "worldClockRegistry", JS_DupValue(mContext, mClockRegistry));
+        if (!JS_IsUndefined(mDimensionRegistry))
+            JS_SetPropertyStr(mContext, event, "dimensionRegistry", JS_DupValue(mContext, mDimensionRegistry));
         emit("system.before.startup", event);
     }
     mRegistrationOpen = false;
     mPrivilege = ScriptPrivilege::Normal;
+}
 
-    emit("after.worldLoad", makeEvent("WorldAfterEvents.worldLoad"));
+void ScriptApi::worldLoad() {
+    if (!isStable1())
+        emit("after.worldLoad", makeEvent("WorldAfterEvents.worldLoad"));
 }
 
 void ScriptApi::shutdown() {
@@ -1018,16 +1275,10 @@ JSValue ScriptApi::_makeSignalHolder(const char *className, const char *signalOw
     JSValue holder = makeInstance(className, new ScriptNative());
     const std::string prefix = std::string(signalOwner) + ".";
 
-    for (const char *property: {"playerBreakBlock", "playerPlaceBlock", "playerSpawn", "playerJoin", "playerLeave",
-                                "chatSend", "entityHurt", "entityDie", "itemUse", "projectileHitBlock",
-                                "projectileHitEntity", "entityHitBlock", "entityHitEntity", "entityItemDrop",
-                                "playerHotbarSelectedSlotChange", "playerInventoryItemChange",
-                                "playerInteractWithBlock", "entitySpawn", "entityRemove", "entityLoad", "worldLoad",
-                                "worldInitialize", "effectAdd", "playerInteractWithEntity", "itemUseOn", "startup",
-                                "shutdown"}) {
-        const std::string key = prefix + property;
-        const ScriptSignalEntry *signal = ScriptSurface::findSignal(key);
-        if (signal == nullptr || !mSurface.has(key))
+    for (const ScriptSignalEntry *signal: ScriptSurface::signalsOf(signalOwner)) {
+        const std::string key = signal->mProperty;
+        const char *property = signal->mProperty + prefix.size();
+        if (!mSurface.has(key))
             continue;
 
         if (JS_IsUndefined(prototypeOf(signal->mSignalClass))) {
@@ -1067,6 +1318,16 @@ void ScriptApi::_bindRegistries() {
         ref->mBlocks = std::strcmp(name, "BlockComponentRegistry") == 0;
         (ref->mBlocks ? mBlockRegistry : mItemRegistry) = makeInstance(name, ref);
     }
+    if (mSurface.has("DimensionRegistry")) {
+        JSValue prototype = defineClass("DimensionRegistry");
+        method(prototype, "DimensionRegistry", "registerCustomDimension", registryRegisterDimension, 1);
+        mDimensionRegistry = makeInstance("DimensionRegistry", new ScriptRegistryRef());
+    }
+    // exported classes: packs import them for instanceof
+    for (const char *name: CUSTOM_COMPONENT_CLASSES) {
+        if (mSurface.has(name))
+            defineClass(name);
+    }
     if (mSurface.has("StartupEvent"))
         defineClass("StartupEvent");
     if (mSurface.has("ShutdownEvent"))
@@ -1096,8 +1357,8 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, data, "permutations", palettePermutations, 1);
     addFunction(mContext, data, "itemTypeNames", itemTypeNames, 0);
     JSValue dataExports = runBootstrap(mContext, mPackName, ScriptBootstraps::data(), "<data>", data);
-    for (const char *name: {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates",
-                            "ItemType", "ItemTypes"}) {
+    for (const char *name:
+         {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates", "ItemType", "ItemTypes"}) {
         if (mSurface.has(name))
             mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, dataExports, name));
     }
@@ -1116,12 +1377,11 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, world, "clearDisplay", scoreboardClearDisplay, 1);
     addFunction(mContext, world, "removeObjective", scoreboardRemoveObjective, 1);
     JSValue worldExports = runBootstrap(mContext, mPackName, ScriptBootstraps::world(), "<world>", world);
-    for (const char *name: {"Scoreboard", "ScoreboardObjective", "TickingAreaManager"}) {
+    for (const char *name: {"Scoreboard", "ScoreboardObjective"}) {
         if (mSurface.has(name))
             mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, worldExports, name));
     }
     mScoreboard = JS_GetPropertyStr(mContext, worldExports, "scoreboard");
-    mTickingAreas = JS_GetPropertyStr(mContext, worldExports, "tickingAreaManager");
     JS_FreeValue(mContext, worldExports);
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
@@ -1159,10 +1419,16 @@ void ScriptApi::_defineEnums() {
         mCommonExports.emplace_back("InvalidArgumentErrorType", object);
     }
 
-    for (const auto &component: COMPONENT_IDS) {
-        JSValue constructor = constructorOf(component[0]);
-        if (!JS_IsUndefined(constructor) && mSurface.has(std::string(component[0]) + ".static componentId"))
-            JS_DefinePropertyValueStr(mContext, constructor, "componentId", string(mContext, component[1]),
+    std::vector<std::pair<std::string, std::string>> components;
+    for (const auto &component: COMPONENT_IDS)
+        components.emplace_back(component[0], component[1]);
+    // EntityComponentTypes.Health is EntityHealthComponent.componentId
+    for (const auto &value: mSurface.enumValues("EntityComponentTypes"))
+        components.emplace_back("Entity" + value.first + "Component", value.second);
+    for (const auto &component: components) {
+        JSValue constructor = constructorOf(component.first);
+        if (!JS_IsUndefined(constructor) && mSurface.has(component.first + ".static componentId"))
+            JS_DefinePropertyValueStr(mContext, constructor, "componentId", string(mContext, component.second),
                                       JS_PROP_ENUMERABLE);
     }
 }

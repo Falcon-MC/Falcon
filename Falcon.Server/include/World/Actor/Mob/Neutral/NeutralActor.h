@@ -10,7 +10,9 @@ public:
 
     using MobActor::MobActor;
 
-    ActorCategory getCategory() const override { return ActorCategory::Neutral; }
+    ActorCategory getCategory() const override {
+        return ActorCategory::Neutral;
+    }
 
     int getExperienceDrop() const override {
         return randomRange(MINIMUM_EXPERIENCE, MAXIMUM_EXPERIENCE);

@@ -1,20 +1,24 @@
 #include "Server/Commands/FillCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/SetBlockCommand.h"
+#include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
     const std::vector<std::string> MODES = {"replace", "destroy", "keep", "hollow", "outline"};
 
     bool isShell(const Vector3i &position, const Vector3i &minimum, const Vector3i &maximum) {
-        return position.x == minimum.x || position.x == maximum.x
-               || position.y == minimum.y || position.y == maximum.y
+        return position.x == minimum.x || position.x == maximum.x || position.y == minimum.y || position.y == maximum.y
                || position.z == minimum.z || position.z == maximum.z;
     }
 }
@@ -35,10 +39,7 @@ std::vector<CommandOverloadData> FillCommand::getOverloads() const {
     to.mHasType = true;
     to.mType = CommandParamType::BlockPosition;
 
-    CommandParamData block;
-    block.mName = "block";
-    block.mHasType = true;
-    block.mType = CommandParamType::String;
+    const CommandParamData block = makeEnumParameter("block", "Block", CommandEnums::blockValues());
 
     CommandParamData mode;
     mode.mName = "mode";
@@ -80,7 +81,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     BlockState state;
-    if (!SetBlockCommand::resolveBlock(arguments[6], state)) {
+    if (!CommandEnums::parseBlock(arguments[6], state)) {
         sender.sendTranslation("commands.setblock.notFound", {arguments[6]});
         return false;
     }
@@ -105,37 +106,53 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     const int64_t volume = width * height * depth;
 
     if (volume > MAX_BLOCKS) {
-        sender.sendTranslation("commands.fill.tooManyBlocks",
-                               {std::to_string(volume), std::to_string(MAX_BLOCKS)});
+        sender.sendTranslation("commands.fill.tooManyBlocks", {std::to_string(volume), std::to_string(MAX_BLOCKS)});
         return false;
     }
 
     const BlockState air("minecraft:air");
     const std::string placementMode = mode == "destroy" ? "destroy" : (mode == "keep" ? "keep" : "replace");
 
-    int32_t placed = 0;
-    for (int32_t x = minimum.x; x <= maximum.x; ++x) {
-        for (int32_t y = minimum.y; y <= maximum.y; ++y) {
-            for (int32_t z = minimum.z; z <= maximum.z; ++z) {
-                const Vector3i position(x, y, z);
-                const bool shell = isShell(position, minimum, maximum);
+    // every block first, then the neighbours of each in placing order (sub_14BE6B770); a block that ticks at
+    // random gets a tick one later, so still lava starts flowing at once
+    std::vector<std::pair<Vector3i, bool>> placed;
+    LiquidPhysicsSystem &liquids = level->getLiquidPhysics();
+    {
+        const LiquidPhysicsSystem::QuietWrites quiet(liquids);
+        for (int32_t x = minimum.x; x <= maximum.x; ++x) {
+            for (int32_t y = minimum.y; y <= maximum.y; ++y) {
+                for (int32_t z = minimum.z; z <= maximum.z; ++z) {
+                    const Vector3i position(x, y, z);
+                    const bool shell = isShell(position, minimum, maximum);
 
-                if (mode == "outline" && !shell)
-                    continue;
+                    if (mode == "outline" && !shell)
+                        continue;
 
-                const BlockState &target = mode == "hollow" && !shell ? air : state;
+                    const BlockState &target = mode == "hollow" && !shell ? air : state;
+                    // an unchanged block neither counts nor updates its neighbours
+                    if (level->getBlockState(x, y, z) == target)
+                        continue;
+                    const Block *block = VanillaBlocks::fromIdentifier(target.mName);
+                    const bool randomTick = block != nullptr && block->hasRandomTick();
 
-                if (SetBlockCommand::placeBlock(mHandler, *level, position, target, placementMode))
-                    ++placed;
+                    if (SetBlockCommand::placeBlock(mHandler, *level, position, target, placementMode, false))
+                        placed.emplace_back(position, randomTick);
+                }
             }
         }
     }
+    for (const std::pair<Vector3i, bool> &entry: placed) {
+        liquids.updateNeighbours(entry.first);
+        level->updateAround(entry.first);
+        if (entry.second)
+            level->scheduleFluidTick(entry.first, 1);
+    }
 
-    if (placed == 0) {
+    if (placed.empty()) {
         sender.sendTranslation("commands.fill.failed", {});
         return false;
     }
 
-    sender.sendTranslation("commands.fill.success", {std::to_string(placed)});
+    sender.sendTranslation("commands.fill.success", {std::to_string(placed.size())});
     return true;
 }

@@ -7,9 +7,7 @@
 
 class Particle {
 public:
-    explicit Particle(const Vector3f &position)
-            : mPosition(position) {
-    }
+    explicit Particle(const Vector3f &position) : mPosition(position) {}
 
     virtual ~Particle() = default;
 

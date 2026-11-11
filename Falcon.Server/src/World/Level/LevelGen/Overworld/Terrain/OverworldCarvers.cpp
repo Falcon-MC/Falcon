@@ -36,48 +36,111 @@ namespace {
 
     // the cave carver's replaceable blocks (sub_14D1F5960); glazed terracotta stands where terracotta is expected
     const BlockStateSet &caveReplaceable() {
-        static const BlockStateSet names = {
-                "minecraft:stone", "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol",
-                "minecraft:grass_block", "minecraft:white_glazed_terracotta", "minecraft:orange_glazed_terracotta",
-                "minecraft:magenta_glazed_terracotta", "minecraft:light_blue_glazed_terracotta",
-                "minecraft:yellow_glazed_terracotta", "minecraft:lime_glazed_terracotta",
-                "minecraft:pink_glazed_terracotta", "minecraft:gray_glazed_terracotta",
-                "minecraft:silver_glazed_terracotta", "minecraft:cyan_glazed_terracotta",
-                "minecraft:purple_glazed_terracotta", "minecraft:blue_glazed_terracotta",
-                "minecraft:brown_glazed_terracotta", "minecraft:green_glazed_terracotta",
-                "minecraft:red_glazed_terracotta", "minecraft:black_glazed_terracotta", "minecraft:sandstone",
-                "minecraft:chiseled_sandstone", "minecraft:cut_sandstone", "minecraft:smooth_sandstone",
-                "minecraft:red_sandstone", "minecraft:chiseled_red_sandstone", "minecraft:cut_red_sandstone",
-                "minecraft:smooth_red_sandstone", "minecraft:mycelium", "minecraft:snow_layer", "minecraft:packed_ice",
-                "minecraft:deepslate", "minecraft:calcite", "minecraft:sand", "minecraft:red_sand",
-                "minecraft:suspicious_sand", "minecraft:gravel", "minecraft:dirt_with_roots", "minecraft:tuff",
-                "minecraft:iron_ore", "minecraft:deepslate_iron_ore", "minecraft:raw_iron_block",
-                "minecraft:copper_ore", "minecraft:deepslate_copper_ore", "minecraft:raw_copper_block"
-        };
+        static const BlockStateSet names = {"minecraft:stone",
+                                            "minecraft:dirt",
+                                            "minecraft:coarse_dirt",
+                                            "minecraft:podzol",
+                                            "minecraft:grass_block",
+                                            "minecraft:white_glazed_terracotta",
+                                            "minecraft:orange_glazed_terracotta",
+                                            "minecraft:magenta_glazed_terracotta",
+                                            "minecraft:light_blue_glazed_terracotta",
+                                            "minecraft:yellow_glazed_terracotta",
+                                            "minecraft:lime_glazed_terracotta",
+                                            "minecraft:pink_glazed_terracotta",
+                                            "minecraft:gray_glazed_terracotta",
+                                            "minecraft:silver_glazed_terracotta",
+                                            "minecraft:cyan_glazed_terracotta",
+                                            "minecraft:purple_glazed_terracotta",
+                                            "minecraft:blue_glazed_terracotta",
+                                            "minecraft:brown_glazed_terracotta",
+                                            "minecraft:green_glazed_terracotta",
+                                            "minecraft:red_glazed_terracotta",
+                                            "minecraft:black_glazed_terracotta",
+                                            "minecraft:sandstone",
+                                            "minecraft:chiseled_sandstone",
+                                            "minecraft:cut_sandstone",
+                                            "minecraft:smooth_sandstone",
+                                            "minecraft:red_sandstone",
+                                            "minecraft:chiseled_red_sandstone",
+                                            "minecraft:cut_red_sandstone",
+                                            "minecraft:smooth_red_sandstone",
+                                            "minecraft:mycelium",
+                                            "minecraft:snow_layer",
+                                            "minecraft:packed_ice",
+                                            "minecraft:deepslate",
+                                            "minecraft:calcite",
+                                            "minecraft:sand",
+                                            "minecraft:red_sand",
+                                            "minecraft:suspicious_sand",
+                                            "minecraft:gravel",
+                                            "minecraft:dirt_with_roots",
+                                            "minecraft:tuff",
+                                            "minecraft:iron_ore",
+                                            "minecraft:deepslate_iron_ore",
+                                            "minecraft:raw_iron_block",
+                                            "minecraft:copper_ore",
+                                            "minecraft:deepslate_copper_ore",
+                                            "minecraft:raw_copper_block"};
         return names;
     }
 
     // the canyon's carvable blocks (list at 0x1529AA8D0, filled from 0x14F1F6CA8)
     const BlockStateSet &canyonReplaceable() {
-        static const BlockStateSet names = {
-                "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite", "minecraft:tuff",
-                "minecraft:deepslate", "minecraft:calcite", "minecraft:dirt", "minecraft:coarse_dirt",
-                "minecraft:mud", "minecraft:podzol", "minecraft:mycelium", "minecraft:grass_block",
-                "minecraft:dirt_with_roots", "minecraft:hardened_clay", "minecraft:white_terracotta",
-                "minecraft:orange_terracotta", "minecraft:magenta_terracotta", "minecraft:light_blue_terracotta",
-                "minecraft:yellow_terracotta", "minecraft:lime_terracotta", "minecraft:pink_terracotta",
-                "minecraft:gray_terracotta", "minecraft:light_gray_terracotta", "minecraft:cyan_terracotta",
-                "minecraft:purple_terracotta", "minecraft:blue_terracotta", "minecraft:brown_terracotta",
-                "minecraft:green_terracotta", "minecraft:red_terracotta", "minecraft:black_terracotta",
-                "minecraft:sandstone", "minecraft:chiseled_sandstone", "minecraft:cut_sandstone",
-                "minecraft:smooth_sandstone", "minecraft:red_sandstone", "minecraft:chiseled_red_sandstone",
-                "minecraft:cut_red_sandstone", "minecraft:smooth_red_sandstone", "minecraft:sand",
-                "minecraft:red_sand", "minecraft:suspicious_sand", "minecraft:iron_ore",
-                "minecraft:deepslate_iron_ore", "minecraft:raw_iron_block", "minecraft:copper_ore",
-                "minecraft:deepslate_copper_ore", "minecraft:raw_copper_block", "minecraft:snow",
-                "minecraft:snow_layer", "minecraft:packed_ice", "minecraft:gravel", "minecraft:sulfur",
-                "minecraft:cinnabar"
-        };
+        static const BlockStateSet names = {"minecraft:stone",
+                                            "minecraft:granite",
+                                            "minecraft:diorite",
+                                            "minecraft:andesite",
+                                            "minecraft:tuff",
+                                            "minecraft:deepslate",
+                                            "minecraft:calcite",
+                                            "minecraft:dirt",
+                                            "minecraft:coarse_dirt",
+                                            "minecraft:mud",
+                                            "minecraft:podzol",
+                                            "minecraft:mycelium",
+                                            "minecraft:grass_block",
+                                            "minecraft:dirt_with_roots",
+                                            "minecraft:hardened_clay",
+                                            "minecraft:white_terracotta",
+                                            "minecraft:orange_terracotta",
+                                            "minecraft:magenta_terracotta",
+                                            "minecraft:light_blue_terracotta",
+                                            "minecraft:yellow_terracotta",
+                                            "minecraft:lime_terracotta",
+                                            "minecraft:pink_terracotta",
+                                            "minecraft:gray_terracotta",
+                                            "minecraft:light_gray_terracotta",
+                                            "minecraft:cyan_terracotta",
+                                            "minecraft:purple_terracotta",
+                                            "minecraft:blue_terracotta",
+                                            "minecraft:brown_terracotta",
+                                            "minecraft:green_terracotta",
+                                            "minecraft:red_terracotta",
+                                            "minecraft:black_terracotta",
+                                            "minecraft:sandstone",
+                                            "minecraft:chiseled_sandstone",
+                                            "minecraft:cut_sandstone",
+                                            "minecraft:smooth_sandstone",
+                                            "minecraft:red_sandstone",
+                                            "minecraft:chiseled_red_sandstone",
+                                            "minecraft:cut_red_sandstone",
+                                            "minecraft:smooth_red_sandstone",
+                                            "minecraft:sand",
+                                            "minecraft:red_sand",
+                                            "minecraft:suspicious_sand",
+                                            "minecraft:iron_ore",
+                                            "minecraft:deepslate_iron_ore",
+                                            "minecraft:raw_iron_block",
+                                            "minecraft:copper_ore",
+                                            "minecraft:deepslate_copper_ore",
+                                            "minecraft:raw_copper_block",
+                                            "minecraft:snow",
+                                            "minecraft:snow_layer",
+                                            "minecraft:packed_ice",
+                                            "minecraft:gravel",
+                                            "minecraft:sulfur",
+                                            "minecraft:cinnabar"};
         return names;
     }
 
@@ -145,9 +208,9 @@ namespace {
     }
 
     // CanyonFeature's carve (sub_14D1F4CC0); rows count from the bottom of the world
-    void carveCanyonBox(LevelChunk &chunk, OverworldAquifer &aquifer, const float *widths, float centerX,
-                        float centerY, float centerZ, float horizontalRadius, float verticalRadius, int32_t minX,
-                        int32_t maxX, int32_t minRow, int32_t maxRow, int32_t minZ, int32_t maxZ) {
+    void carveCanyonBox(LevelChunk &chunk, OverworldAquifer &aquifer, const float *widths, float centerX, float centerY,
+                        float centerZ, float horizontalRadius, float verticalRadius, int32_t minX, int32_t maxX,
+                        int32_t minRow, int32_t maxRow, int32_t minZ, int32_t maxZ) {
         if (minX >= maxX || minZ >= maxZ || maxRow <= minRow)
             return;
 
@@ -183,16 +246,13 @@ namespace {
     }
 }
 
-OverworldCarvers::OverworldCarvers(int64_t seed) : mSeed(static_cast<uint32_t>(seed)) {
-}
+OverworldCarvers::OverworldCarvers(int64_t seed) : mSeed(static_cast<uint32_t>(seed)) {}
 
 void OverworldCarvers::carve(LevelChunk &chunk, OverworldAquifer &aquifer) const {
     // underground_extra_cave_carver_feature then underground_cave_carver_feature: every overworld biome places
     // both, in this order, in its pregeneration_pass (sub_14CDABBD0, sub_14A22E5F0)
-    static const CaveSettings FEATURES[2] = {
-            {66, 103, {0.1f, 0.9f}, {0.7f, 1.4f}, {0.8f, 1.3f}, {-1.0f, -0.4f}},
-            {33, 236, {0.1f, 0.9f}, {0.7f, 1.4f}, {0.8f, 1.3f}, {-1.0f, -0.4f}}
-    };
+    static const CaveSettings FEATURES[2] = {{66, 103, {0.1f, 0.9f}, {0.7f, 1.4f}, {0.8f, 1.3f}, {-1.0f, -0.4f}},
+                                             {33, 236, {0.1f, 0.9f}, {0.7f, 1.4f}, {0.8f, 1.3f}, {-1.0f, -0.4f}}};
     _carveCaves(FEATURES[0], chunk, aquifer);
     _carveCaves(FEATURES[1], chunk, aquifer);
     _carveCanyons(chunk, aquifer);
@@ -214,8 +274,9 @@ void OverworldCarvers::_carveCaves(const CaveSettings &settings, LevelChunk &chu
     std::vector<CaveSegment> segments;
     for (int32_t sourceX = chunkX - RANGE; sourceX <= chunkX + RANGE; sourceX++) {
         for (int32_t sourceZ = chunkZ - RANGE; sourceZ <= chunkZ + RANGE; sourceZ++) {
-            random.seed(mSeed ^ (multiplierX * static_cast<uint32_t>(sourceX)
-                                 + multiplierZ * static_cast<uint32_t>(sourceZ)));
+            random.seed(
+                    mSeed
+                    ^ (multiplierX * static_cast<uint32_t>(sourceX) + multiplierZ * static_cast<uint32_t>(sourceZ)));
             segments.clear();
             _addCaves(settings, random, sourceX, sourceZ, segments);
 
@@ -242,8 +303,8 @@ void OverworldCarvers::_carveCaves(const CaveSettings &settings, LevelChunk &chu
     }
 }
 
-void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &random, int32_t sourceX,
-                                 int32_t sourceZ, std::vector<CaveSegment> &segments) {
+void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &random, int32_t sourceX, int32_t sourceZ,
+                                 std::vector<CaveSegment> &segments) {
     // CaveFeature::addFeature (sub_14D1F8E30)
     const int32_t count = nextInt(random, nextInt(random, nextInt(random, 40) + 1) + 1);
     const int32_t skip = nextInt(random, settings.mSkipCarveChance);
@@ -472,8 +533,9 @@ void OverworldCarvers::_carveCanyons(LevelChunk &chunk, OverworldAquifer &aquife
 
     for (int32_t sourceX = chunk.getX() - RANGE; sourceX <= chunk.getX() + RANGE; sourceX++) {
         for (int32_t sourceZ = chunk.getZ() - RANGE; sourceZ <= chunk.getZ() + RANGE; sourceZ++) {
-            random.seed(mSeed ^ (multiplierX * static_cast<uint32_t>(sourceX)
-                                 + multiplierZ * static_cast<uint32_t>(sourceZ)));
+            random.seed(
+                    mSeed
+                    ^ (multiplierX * static_cast<uint32_t>(sourceX) + multiplierZ * static_cast<uint32_t>(sourceZ)));
             _addCanyon(random, sourceX, sourceZ, chunk, aquifer);
         }
     }

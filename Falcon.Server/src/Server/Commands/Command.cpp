@@ -86,8 +86,8 @@ bool Command::parseBlockCoordinate(const std::string &value, int32_t origin, int
     return true;
 }
 
-bool Command::parseBlockPosition(const std::vector<std::string> &arguments, size_t first,
-                                 const Vector3i &origin, Vector3i &out) {
+bool Command::parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3i &origin,
+                                 Vector3i &out) {
     if (arguments.size() < first + 3)
         return false;
 

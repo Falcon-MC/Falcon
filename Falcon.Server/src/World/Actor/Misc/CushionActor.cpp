@@ -4,7 +4,7 @@
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockState.h"
-#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/BlockShape.h"
 #include "Core/Color/DyeColor.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -26,21 +26,23 @@ namespace {
     constexpr const char *ITEM_SUFFIX = "_cushion";
 
     constexpr const char *WOOL_SUFFIX = "_wool";
+
+    constexpr float SUPPORT_PROBE_DEPTH = 0.015625f;
 }
 
-CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier)
-        : ServerActor(runtimeId, identifier) {
+CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
     getFlags().set(ActorFlag::HasGravity, false);
 }
 
+// the block 1/64 under the cushion must have a collision shape: a slab or a fence holds it (sub_142DCA020)
 bool CushionActor::hasSupportingBlock(ServerNetworkHandler &owner) const {
     Level &level = owner.getLevelFor(*this);
     const Vector3f position = getPosition();
     const int32_t x = (int32_t) std::floor(position.x);
-    const int32_t y = (int32_t) std::floor(position.y) - 1;
+    const int32_t y = (int32_t) std::floor(position.y - SUPPORT_PROBE_DEPTH);
     const int32_t z = (int32_t) std::floor(position.z);
 
-    return BlockSupport::isSolidOrCauldron(level.getBlockState(x, y, z));
+    return BlockShape::hasCollision(level.getBlockState(x, y, z), this);
 }
 
 void CushionActor::tick(ServerNetworkHandler &owner) {
@@ -105,6 +107,27 @@ void CushionActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
+
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry variant;
     variant.mId = ACTOR_DATA_VARIANT;

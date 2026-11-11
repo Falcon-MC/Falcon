@@ -28,9 +28,13 @@ public:
         return Vector3f(position.x, position.y + getSize().mHeight, position.z);
     }
 
-    void setColor(uint8_t color) { mColor = color; }
+    void setColor(uint8_t color) {
+        mColor = color;
+    }
 
-    uint8_t getColor() const { return mColor; }
+    uint8_t getColor() const {
+        return mColor;
+    }
 
     void tick(ServerNetworkHandler &owner) override;
 
@@ -38,7 +42,9 @@ public:
 
     bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) override;
 
-    bool isExpired() const override { return mExpired; }
+    bool isExpired() const override {
+        return mExpired;
+    }
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 

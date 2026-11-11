@@ -45,11 +45,9 @@ namespace MovementPhysics {
     inline constexpr float HONEY_MAX_FALL = -0.12f;
     inline constexpr const char *const LEATHER_BOOTS = "minecraft:leather_boots";
     inline constexpr float MOJANG_PI = 3.1415927f;
-    inline constexpr float SIN_COEFFICIENTS[] = {
-            1.5896230e-10f, -2.5050748e-8f, 2.7557314e-6f, -1.9841270e-4f, 8.333334e-3f, -1.6666667e-1f
-    };
-    inline constexpr float COS_COEFFICIENTS[] = {
-            -1.1358537e-11f, 2.0875701e-9f, -2.7557314e-7f, 2.4801588e-5f, -1.3888889e-3f, 4.1666668e-2f
-    };
+    inline constexpr float SIN_COEFFICIENTS[] = {1.5896230e-10f, -2.5050748e-8f, 2.7557314e-6f,
+                                                 -1.9841270e-4f, 8.333334e-3f,   -1.6666667e-1f};
+    inline constexpr float COS_COEFFICIENTS[] = {-1.1358537e-11f, 2.0875701e-9f,  -2.7557314e-7f,
+                                                 2.4801588e-5f,   -1.3888889e-3f, 4.1666668e-2f};
 
 }

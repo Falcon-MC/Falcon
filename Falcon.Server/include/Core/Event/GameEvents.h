@@ -11,16 +11,14 @@ struct PlayerChatBeforeEvent : public CancellableEvent {
     ServerPlayer &mSender;
     std::string mMessage;
 
-    PlayerChatBeforeEvent(ServerPlayer &sender, std::string message)
-            : mSender(sender), mMessage(std::move(message)) {}
+    PlayerChatBeforeEvent(ServerPlayer &sender, std::string message) : mSender(sender), mMessage(std::move(message)) {}
 };
 
 struct PlayerChatAfterEvent : public Event {
     ServerPlayer &mSender;
     std::string mMessage;
 
-    PlayerChatAfterEvent(ServerPlayer &sender, std::string message)
-            : mSender(sender), mMessage(std::move(message)) {}
+    PlayerChatAfterEvent(ServerPlayer &sender, std::string message) : mSender(sender), mMessage(std::move(message)) {}
 };
 
 struct PlayerBreakBlockBeforeEvent : public CancellableEvent {
@@ -44,8 +42,7 @@ struct PlayerSpawnAfterEvent : public Event {
     ServerPlayer &mPlayer;
     bool mInitialSpawn;
 
-    PlayerSpawnAfterEvent(ServerPlayer &player, bool initialSpawn)
-            : mPlayer(player), mInitialSpawn(initialSpawn) {}
+    PlayerSpawnAfterEvent(ServerPlayer &player, bool initialSpawn) : mPlayer(player), mInitialSpawn(initialSpawn) {}
 };
 
 struct PlayerJoinAfterEvent : public Event {

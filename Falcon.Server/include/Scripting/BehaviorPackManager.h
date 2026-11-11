@@ -5,6 +5,17 @@
 #include <string>
 #include <vector>
 
+// a manifest setting at its default: the server has no settings screen to change it
+struct PackSetting {
+    enum class Type { Boolean, Number, String };
+
+    std::string mName;
+    Type mType = Type::Boolean;
+    bool mBoolean = false;
+    double mNumber = 0.0;
+    std::string mString;
+};
+
 struct BehaviorPack {
     std::string mName;
     std::string mUuid;
@@ -13,19 +24,28 @@ struct BehaviorPack {
     std::string mScriptModuleUuid;
     std::vector<ScriptModuleDependency> mScriptModules;
     std::vector<std::string> mDependencyUuids;
+    std::vector<PackSetting> mSettings;
 
-    bool hasScript() const { return !mScriptEntry.empty(); }
+    bool hasScript() const {
+        return !mScriptEntry.empty();
+    }
 
-    std::string scriptPath() const { return mPath + "/" + mScriptEntry; }
+    std::string scriptPath() const {
+        return mPath + "/" + mScriptEntry;
+    }
 };
 
 class BehaviorPackManager {
 public:
     void discover(const std::string &directory);
 
-    const std::vector<BehaviorPack> &getPacks() const { return mPacks; }
+    const std::vector<BehaviorPack> &getPacks() const {
+        return mPacks;
+    }
 
-    size_t getPackCount() const { return mPacks.size(); }
+    size_t getPackCount() const {
+        return mPacks.size();
+    }
 
     std::vector<std::string> getLoadedUuids() const;
 

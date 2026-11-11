@@ -15,29 +15,9 @@ class BlockManager;
 // (VanillaTreeFeature, place sub_14A2C9A20); every draw comes from the placement twister it is given
 class OverworldTreePlacer {
 public:
-    enum class Trunk {
-        Simple,
-        Fancy,
-        Fallen,
-        Mega,
-        Acacia,
-        Mangrove,
-        Cherry
-    };
+    enum class Trunk { Simple, Fancy, Fallen, Mega, Acacia, Mangrove, Cherry, Poplar };
 
-    enum class Canopy {
-        None,
-        Simple,
-        Fancy,
-        Spruce,
-        Pine,
-        MegaPine,
-        Mega,
-        Roofed,
-        Acacia,
-        Mangrove,
-        Cherry
-    };
+    enum class Canopy { None, Simple, Fancy, Spruce, Pine, MegaPine, Mega, Roofed, Acacia, Mangrove, Cherry };
 
     // a range of the feature's JSON, its maximum excluded
     struct Range {
@@ -96,6 +76,16 @@ public:
         float mHangingExtensionChance;
     };
 
+    // poplar_trunk and poplar_canopy; the inclusive ranges keep their maximum
+    struct Poplar {
+        Range mRemainingHeight;
+        Range mSupportBranches;
+        // radius values and their weights
+        std::vector<std::pair<int32_t, int32_t>> mRadius;
+        Range mCanopyHeight;
+        float mSideHoleChance;
+    };
+
     struct Definition {
         const char *mIdentifier;
         Trunk mTrunk;
@@ -129,6 +119,7 @@ public:
         const SimpleCanopy *mSimpleCanopy = nullptr;
         const Mangrove *mMangrove = nullptr;
         const Cherry *mCherry = nullptr;
+        const Poplar *mPoplar = nullptr;
     };
 
     // fancy_trunk and fancy_canopy of fancy_oak_tree_feature
@@ -272,6 +263,16 @@ private:
     static void _cherryRow(BlockManager &blocks, const Definition &tree, const Cherry &cherry, int32_t x, int32_t y,
                            int32_t z, int32_t offsetY, int32_t radius, bool hanging, std::mt19937 &random);
 
+    static bool _poplarTrunk(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x, int32_t y,
+                             int32_t z, int32_t height, std::mt19937 &random, const Decorate &decorate);
+
+    static void _poplarCanopy(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x, int32_t y,
+                              int32_t z, std::mt19937 &random);
+
+    static void _poplarLayer(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x, int32_t y,
+                             int32_t z, int32_t height, int32_t radius, int32_t offsetY, bool flip,
+                             std::mt19937 &random);
+
     static void _hangVine(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t bits, int32_t steps);
 
     static bool _diagonalAcaciaTrunk(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x,
@@ -280,8 +281,8 @@ private:
     static void _decorateLog(BlockManager &blocks, uint32_t numerator, uint32_t denominator, int32_t x, int32_t y,
                              int32_t z, const bool sides[4], std::mt19937 &random);
 
-    static void _roofedCanopy(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x,
-                              int32_t y, int32_t z, std::mt19937 &random);
+    static void _roofedCanopy(BlockManager &blocks, const Definition &tree, const Acacia &acacia, int32_t x, int32_t y,
+                              int32_t z, std::mt19937 &random);
 
     static void _acaciaCanopy(BlockManager &blocks, const Definition &tree, int32_t size, bool simplified, int32_t x,
                               int32_t y, int32_t z);

@@ -5,12 +5,7 @@
 
 class MobActor;
 
-enum class NavigationMode {
-    Walk,
-    Climb,
-    Swim,
-    Fly
-};
+enum class NavigationMode { Walk, Climb, Swim, Fly };
 
 // from the active minecraft:navigation.* component; defaults match the component's
 struct PathOptions {

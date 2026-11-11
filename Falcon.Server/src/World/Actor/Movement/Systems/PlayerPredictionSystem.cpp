@@ -2,9 +2,11 @@
 #include "World/Actor/Movement/PlayerMovementContext.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/MovementHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Protocol/Packets/CorrectPlayerMovePredictionPacket.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Core/Debug/BedrockLog.h"
 
 using namespace MovementPhysics;
@@ -36,7 +38,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     frame.reported = *prediction.feetPosition;
     frame.predicted = state.simulated;
     frame.previousVelocity = context.player.hasSimulatedVelocity() ? context.player.getSimulatedVelocity()
-                                                                  : context.player.getMotion();
+                                                                   : context.player.getMotion();
     frame.physicalVelocity = state.velocity;
     frame.accepted = context.travel.accepted;
     frame.acceptanceBudget = prediction.validator->clientAcceptance().mBudget;
@@ -48,14 +50,34 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     frame.movementSpeed = context.player.getAttributes().get("minecraft:movement");
     frame.state = (uint32_t) state.onGround | ((uint32_t) context.waterTravel.active << 1)
                   | ((uint32_t) context.liquidTravel.lava << 2) | ((uint32_t) abilitiesBeforeCorrection.flying << 3)
-                  | ((uint32_t) abilitiesBeforeCorrection.sprinting << 4) | ((uint32_t) abilitiesBeforeCorrection.swimming << 5)
-                  | ((uint32_t) input.jumpHeld << 6) | ((uint32_t) context.contact.liquid.eyeSubmerged << 7);
+                  | ((uint32_t) abilitiesBeforeCorrection.sprinting << 4)
+                  | ((uint32_t) abilitiesBeforeCorrection.swimming << 5) | ((uint32_t) input.jumpHeld << 6)
+                  | ((uint32_t) context.contact.liquid.eyeSubmerged << 7);
     prediction.validator->trace().record(frame);
 
     const Vector3f reported = *prediction.feetPosition;
     // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
-    if (prediction.validator->takeDismountPosition(state.simulated, reported))
+    if (prediction.validator->stillSeated(state.start, reported)) {
         state.simulated = reported;
+        state.velocity = Vector3f(0.0f, 0.0f, 0.0f);
+    } else if (prediction.validator->takeDismountPosition(state.simulated, reported)) {
+        state.simulated = reported;
+        // jumping off a seat: the client lifts off on the exit input itself (0.42, then 0.333, 0.248...); the
+        // replay skipped that tick while riding, so it starts the fall with the jump's next-tick velocity
+        if (input.jumpHeld) {
+            const MobEffectInstance *jumpBoost = context.player.getEffects().get(MobEffectId::JumpBoost);
+            const float jumpBonus = jumpBoost == nullptr ? 0.0f : JUMP_BOOST_PER_LEVEL * (float) jumpBoost->level();
+            // a ground jump: only from a floor out of liquid; off a boat on water or a minecart in the air the
+            // client swims or falls
+            const Vector3f takeOff(reported.x, reported.y - (JUMP_VELOCITY + jumpBonus), reported.z);
+            const LiquidContact liquid = LiquidBlocksFetch::at(context.level, takeOff);
+            if (!liquid.water && !liquid.lava
+                && MovementHandler::checkGroundState(context.level, takeOff, &context.player)) {
+                state.velocity.y = (JUMP_VELOCITY + jumpBonus - GRAVITY) * GRAVITY_MULTIPLIER;
+                state.jumpDelay = JUMP_DELAY_TICKS;
+            }
+        }
+    }
     // measured on every input: the validator skips its comparison right after a correction and corrections are
     // spaced: most inputs of a dropped correction would look fine
     const float errorX = reported.x - state.simulated.x;
@@ -80,12 +102,13 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     context.player.setMotion(state.velocity);
 
     // still diverging after acking a correction: the client dropped it (movement "disabler"); it can't be moved back
-    if (prediction.validator->noteInputAfterCorrection(input.getPacket().mTick, diverging) >= MAX_IGNORED_CORRECTIONS) {
+    if (prediction.validator->noteInputAfterCorrection(input.getPacket().mTick, diverging, reported)
+        >= MAX_IGNORED_CORRECTIONS) {
         context.owner._disconnect(context.id, DisconnectReason::KickedForExploit,
                                   context.player.localize("falcon.disconnect.kicked"));
         return;
     }
-    if (needsCorrection && diverging && prediction.validator->armCorrectionCheck()) {
+    if (needsCorrection && diverging && prediction.validator->armCorrectionCheck(state.simulated, reported)) {
         ServerPlayer &player = context.player;
         player.getAcknowledgements().add([&player]() {
             player.getMovementValidator().acknowledgeCorrection(player.getMovementInputs().lastReceivedTick());
@@ -113,25 +136,21 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
              "accepted=(%.9g,%.9g,%.9g) acceptance_budget=%.9g acceptance_cooldown=%u",
              context.player.getName().c_str(), details.reason, (unsigned long long) input.getPacket().mTick,
              (long long) context.owner.getCurrentTick(), (unsigned long long) details.previousCorrectionTick,
-             prediction.strict, details.error.x, details.error.y, details.error.z,
-             details.distanceSquared, details.threshold, details.fineThreshold, (unsigned int) details.adjustments,
-             state.start.x, state.start.y, state.start.z, reported.x, reported.y, reported.z,
-             state.simulated.x, state.simulated.y, state.simulated.z,
-             state.velocity.x, state.velocity.y, state.velocity.z,
-             input.getPacket().mDelta.x, input.getPacket().mDelta.y, input.getPacket().mDelta.z,
-             input.getPacket().mMotionX, input.getPacket().mMotionY, input.getPacket().mRotation.y, input.getPacket().mRotation.x,
+             prediction.strict, details.error.x, details.error.y, details.error.z, details.distanceSquared,
+             details.threshold, details.fineThreshold, (unsigned int) details.adjustments, state.start.x, state.start.y,
+             state.start.z, reported.x, reported.y, reported.z, state.simulated.x, state.simulated.y, state.simulated.z,
+             state.velocity.x, state.velocity.y, state.velocity.z, input.getPacket().mDelta.x,
+             input.getPacket().mDelta.y, input.getPacket().mDelta.z, input.getPacket().mMotionX,
+             input.getPacket().mMotionY, input.getPacket().mRotation.y, input.getPacket().mRotation.x,
              (int) input.getPacket().mInputMode, (unsigned long long) flagsHigh, (unsigned long long) flagsLow,
              state.onGround, context.waterTravel.active, context.liquidTravel.lava, contact.liquid.feetInWater,
-             contact.liquid.eyeInWater, contact.liquid.swimProbeInWater,
-             abilities.flying, abilities.sprinting, abilities.swimming, abilities.gliding,
-             input.jumpHeld, input.pressingSneak, context.pose.mHeight,
-             travel.moved.mCollidedX, travel.moved.mCollidedY, travel.moved.mCollidedZ,
-             travel.moved.mRequested.x, travel.moved.mRequested.y, travel.moved.mRequested.z,
-             travel.moved.mMoved.x, travel.moved.mMoved.y, travel.moved.mMoved.z,
-             travel.acceleration, travel.friction, travel.frictionModifier,
-             timeline.pendingCount(), (unsigned long long) timeline.credits(),
-             travel.accepted.x, travel.accepted.y, travel.accepted.z,
-             prediction.validator->clientAcceptance().mBudget,
+             contact.liquid.eyeInWater, contact.liquid.swimProbeInWater, abilities.flying, abilities.sprinting,
+             abilities.swimming, abilities.gliding, input.jumpHeld, input.pressingSneak, context.pose.mHeight,
+             travel.moved.mCollidedX, travel.moved.mCollidedY, travel.moved.mCollidedZ, travel.moved.mRequested.x,
+             travel.moved.mRequested.y, travel.moved.mRequested.z, travel.moved.mMoved.x, travel.moved.mMoved.y,
+             travel.moved.mMoved.z, travel.acceleration, travel.friction, travel.frictionModifier,
+             timeline.pendingCount(), (unsigned long long) timeline.credits(), travel.accepted.x, travel.accepted.y,
+             travel.accepted.z, prediction.validator->clientAcceptance().mBudget,
              (unsigned int) prediction.validator->clientAcceptance().mCooldown);
 
     const auto &trace = prediction.validator->trace();
@@ -144,24 +163,22 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
                  "client_delta=(%.9g,%.9g,%.9g) input=(%.9g,%.9g) yaw=%.9g pitch=%.9g "
                  "accepted=(%.9g,%.9g,%.9g) acceptance_budget=%.9g swim_amount=%.9g movement_speed=%.9g",
                  context.player.getName().c_str(), (unsigned long long) input.getPacket().mTick,
-                 (unsigned long long) entry.tick, entry.state,
-                 (unsigned long long) entry.flagsHigh, (unsigned long long) entry.flagsLow,
-                 entry.start.x, entry.start.y, entry.start.z,
-                 entry.reported.x, entry.reported.y, entry.reported.z,
-                 entry.predicted.x, entry.predicted.y, entry.predicted.z,
-                 entry.previousVelocity.x, entry.previousVelocity.y, entry.previousVelocity.z,
-                 entry.physicalVelocity.x, entry.physicalVelocity.y, entry.physicalVelocity.z,
-                 entry.clientDelta.x, entry.clientDelta.y, entry.clientDelta.z,
-                 entry.motionX, entry.motionY, entry.rotation.y, entry.rotation.x,
-                 entry.accepted.x, entry.accepted.y, entry.accepted.z, entry.acceptanceBudget,
-                 entry.swimAmount, entry.movementSpeed);
+                 (unsigned long long) entry.tick, entry.state, (unsigned long long) entry.flagsHigh,
+                 (unsigned long long) entry.flagsLow, entry.start.x, entry.start.y, entry.start.z, entry.reported.x,
+                 entry.reported.y, entry.reported.z, entry.predicted.x, entry.predicted.y, entry.predicted.z,
+                 entry.previousVelocity.x, entry.previousVelocity.y, entry.previousVelocity.z, entry.physicalVelocity.x,
+                 entry.physicalVelocity.y, entry.physicalVelocity.z, entry.clientDelta.x, entry.clientDelta.y,
+                 entry.clientDelta.z, entry.motionX, entry.motionY, entry.rotation.y, entry.rotation.x,
+                 entry.accepted.x, entry.accepted.y, entry.accepted.z, entry.acceptanceBudget, entry.swimAmount,
+                 entry.movementSpeed);
     }
 
     // the client rewinds to the correction's tick and replays from the server's position and velocity;
     // position at eye level like other player positions
     CorrectPlayerMovePredictionPacket correction;
     correction.mPredictionType = PredictionType::Player;
-    correction.mPosition = Vector3f(state.simulated.x, state.simulated.y + PlayerMovementSimulator::PLAYER_BASE_OFFSET, state.simulated.z);
+    correction.mPosition = Vector3f(state.simulated.x, state.simulated.y + PlayerMovementSimulator::PLAYER_BASE_OFFSET,
+                                    state.simulated.z);
     correction.mDelta = state.velocity;
     correction.mVehicleRotation = Vector2f(input.getPacket().mRotation.x, input.getPacket().mRotation.y);
     correction.mHasVehicleAngularVelocity = false;

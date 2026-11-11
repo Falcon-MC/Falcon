@@ -30,7 +30,8 @@ std::vector<CommandOverloadData> BanIpCommand::getOverloads() const {
                              makeTypedParameter("reason", CommandParamType::Message, true)};
 
     CommandOverloadData byPlayer;
-    byPlayer.mParameters = {makePlayerParameter("player"), makeTypedParameter("reason", CommandParamType::Message, true)};
+    byPlayer.mParameters = {makePlayerParameter("player"),
+                            makeTypedParameter("reason", CommandParamType::Message, true)};
 
     return {byPlayer, byAddress};
 }

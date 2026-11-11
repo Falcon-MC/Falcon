@@ -6,9 +6,7 @@
 
 class RedStoneWireBlock final : public Block {
 public:
-    explicit RedStoneWireBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit RedStoneWireBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

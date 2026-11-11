@@ -37,7 +37,8 @@ bool LookAtEntityGoal::_accepts(ServerNetworkHandler &owner, const MobActor &mob
 
     const Vector3f position = mob.getPosition();
     const Vector3f other = candidate.getPosition();
-    const float towards = std::atan2(-(other.x - position.x), other.z - position.z) / MathConstants::DEGREES_TO_RADIANS_F;
+    const float towards = std::atan2(-(other.x - position.x), other.z - position.z)
+                          / MathConstants::DEGREES_TO_RADIANS_F;
     const float difference = std::fabs(std::remainder(towards - mob.getRotation().y, FULL_TURN));
     return difference <= mSettings.mHorizontalAngle * 0.5f;
 }
@@ -88,7 +89,7 @@ bool LookAtEntityGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &m
 void LookAtEntityGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
     mRemainingTicks = std::uniform_int_distribution<int32_t>(mSettings.mMinLookTicks,
-                                                            mSettings.mMaxLookTicks)(lookEntityRandom());
+                                                             mSettings.mMaxLookTicks)(lookEntityRandom());
     mob.getLookControl().setPitchEnabled(true);
 }
 

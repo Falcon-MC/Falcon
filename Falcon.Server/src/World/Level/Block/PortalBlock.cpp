@@ -35,14 +35,12 @@ bool PortalBlock::matches(const std::string &identifier) {
 bool PortalBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     const bool alongX = stateText(state, "portal_axis") != "z";
 
-    const Vector3i sides[4] = {
-            Vector3i(position.x, position.y - 1, position.z),
-            Vector3i(position.x, position.y + 1, position.z),
-            alongX ? Vector3i(position.x - 1, position.y, position.z)
-                   : Vector3i(position.x, position.y, position.z - 1),
-            alongX ? Vector3i(position.x + 1, position.y, position.z)
-                   : Vector3i(position.x, position.y, position.z + 1)
-    };
+    const Vector3i sides[4] = {Vector3i(position.x, position.y - 1, position.z),
+                               Vector3i(position.x, position.y + 1, position.z),
+                               alongX ? Vector3i(position.x - 1, position.y, position.z)
+                                      : Vector3i(position.x, position.y, position.z - 1),
+                               alongX ? Vector3i(position.x + 1, position.y, position.z)
+                                      : Vector3i(position.x, position.y, position.z + 1)};
 
     for (const Vector3i &side: sides) {
         const std::string identifier = identifierAt(level, side.x, side.y, side.z);
@@ -86,15 +84,12 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
     if (current != DimensionType::Overworld && current != DimensionType::Nether)
         return;
 
-    const DimensionType target = current == DimensionType::Overworld
-                                 ? DimensionType::Nether
-                                 : DimensionType::Overworld;
+    const DimensionType target = current == DimensionType::Overworld ? DimensionType::Nether : DimensionType::Overworld;
 
     Level &destination = owner.getWorldOf(level).getLevel(target);
 
     const Vector3f actorPosition = actor.getPosition();
-    const Vector3i source((int32_t) std::floor(actorPosition.x),
-                          (int32_t) std::floor(actorPosition.y),
+    const Vector3i source((int32_t) std::floor(actorPosition.x), (int32_t) std::floor(actorPosition.y),
                           (int32_t) std::floor(actorPosition.z));
 
     Vector3i landing(0, 0, 0);
@@ -222,8 +217,7 @@ bool PortalBlock::findNearestPortal(Level &level, const Vector3i &origin, Vector
                         const int64_t deltaY = (int64_t) origin.y - (int64_t) y;
                         const int64_t height = deltaY * deltaY;
 
-                        if (!found || distance < bestDistance
-                            || (distance == bestDistance && height < bestHeight)) {
+                        if (!found || distance < bestDistance || (distance == bestDistance && height < bestHeight)) {
                             found = true;
                             bestDistance = distance;
                             bestHeight = height;
@@ -262,10 +256,8 @@ bool PortalBlock::findDestination(Level &destination, const Vector3i &source, Ve
     for (int32_t i = y; i > destination.getMinY() + 2; --i) {
         const std::string ground = identifierAt(destination, x, i - 1, z);
 
-        const bool space = isAirAt(destination, x, i, z)
-                           && isAirAt(destination, x, i + 1, z)
-                           && isAirAt(destination, x, i + 2, z)
-                           && isAirAt(destination, x, i + 3, z)
+        const bool space = isAirAt(destination, x, i, z) && isAirAt(destination, x, i + 1, z)
+                           && isAirAt(destination, x, i + 2, z) && isAirAt(destination, x, i + 3, z)
                            && isAirAt(destination, x, i + 4, z);
 
         if (!space || !BlockSupport::isSolid(BlockState(ground)))

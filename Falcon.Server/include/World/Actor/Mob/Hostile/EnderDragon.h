@@ -24,22 +24,11 @@ public:
 
     static constexpr float DEFAULT_FLY_SPEED = 0.6f;
 
-    enum class Part {
-        Head,
-        Neck,
-        Body,
-        Tail1,
-        Tail2,
-        Tail3,
-        Wing1,
-        Wing2,
-        Count
-    };
+    enum class Part { Head, Neck, Body, Tail1, Tail2, Tail3, Wing1, Wing2, Count };
 
     class Path {
     public:
-        explicit Path(std::vector<Vector3i> nodes) : mNodes(std::move(nodes)) {
-        }
+        explicit Path(std::vector<Vector3i> nodes) : mNodes(std::move(nodes)) {}
 
         bool isDone() const {
             return mIndex >= mNodes.size();

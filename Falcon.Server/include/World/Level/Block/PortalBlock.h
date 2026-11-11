@@ -16,9 +16,7 @@ public:
 
     static constexpr int32_t NETHER_ROOF_LIMIT = 115;
 
-    explicit PortalBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit PortalBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

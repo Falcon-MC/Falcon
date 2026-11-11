@@ -6,9 +6,7 @@
 
 class ScaffoldingBlock final : public Block {
 public:
-    explicit ScaffoldingBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit ScaffoldingBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

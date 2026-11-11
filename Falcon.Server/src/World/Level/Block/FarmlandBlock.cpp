@@ -14,6 +14,14 @@
 
 FALCON_REGISTER_BLOCK(FarmlandBlock, 245);
 
+// 15/16 high, like a dirt path
+bool FarmlandBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    (void) state;
+    (void) actor;
+    shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 0.9375f, 1.0f);
+    return true;
+}
+
 namespace {
     const char *MOISTURE_STATE = "moisturized_amount";
     const int32_t MAX_MOISTURE = 7;

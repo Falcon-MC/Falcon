@@ -27,13 +27,11 @@ namespace {
         const char *mHead;
     };
 
-    const HeadDrop HEAD_DROPS[] = {
-            {"minecraft:zombie", "minecraft:zombie_head"},
-            {"minecraft:skeleton", "minecraft:skeleton_skull"},
-            {"minecraft:creeper", "minecraft:creeper_head"},
-            {"minecraft:wither_skeleton", "minecraft:wither_skeleton_skull"},
-            {"minecraft:piglin", "minecraft:piglin_head"}
-    };
+    const HeadDrop HEAD_DROPS[] = {{"minecraft:zombie", "minecraft:zombie_head"},
+                                   {"minecraft:skeleton", "minecraft:skeleton_skull"},
+                                   {"minecraft:creeper", "minecraft:creeper_head"},
+                                   {"minecraft:wither_skeleton", "minecraft:wither_skeleton_skull"},
+                                   {"minecraft:piglin", "minecraft:piglin_head"}};
 
     const char *headOf(const std::string &identifier) {
         for (const HeadDrop &drop: HEAD_DROPS) {
@@ -123,8 +121,7 @@ void CreeperActor::_dropChargedHead(ServerNetworkHandler &owner, const std::vect
 
 bool CreeperActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack &held = player.getInventory().getItemInHand();
-    if (mIgnited || held.isAir() || held.mDefinition == nullptr
-        || held.mDefinition->getIdentifier() != FLINT_AND_STEEL)
+    if (mIgnited || held.isAir() || held.mDefinition == nullptr || held.mDefinition->getIdentifier() != FLINT_AND_STEEL)
         return HostileActor::onInteract(owner, player);
 
     mIgnited = true;
@@ -154,6 +151,27 @@ void CreeperActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
+
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry fuse;
     fuse.mId = ActorFlags::FUSE_LENGTH_DATA_ID;

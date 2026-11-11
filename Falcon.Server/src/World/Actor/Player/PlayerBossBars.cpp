@@ -41,9 +41,7 @@ bool PlayerBossBars::update(uint32_t id, const std::string &title, float percent
 
 bool PlayerBossBars::remove(uint32_t id) {
     const std::lock_guard<std::mutex> lock(mMutex);
-    const auto found = std::find_if(mBars.begin(), mBars.end(), [id](const Bar &bar) {
-        return bar.mId == id;
-    });
+    const auto found = std::find_if(mBars.begin(), mBars.end(), [id](const Bar &bar) { return bar.mId == id; });
     if (found == mBars.end())
         return false;
 

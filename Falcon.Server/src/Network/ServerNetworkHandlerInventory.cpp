@@ -40,9 +40,8 @@ ItemStack ServerNetworkHandler::createItemStack(const std::string &identifier, i
     return stack;
 }
 
-void ServerNetworkHandler::setPlayerEquipment(ServerPlayer &player, const std::string &slot,
-                                              const std::string &typeId, int32_t amount, int32_t damage,
-                                              const Tag &dynamicProperties) {
+void ServerNetworkHandler::setPlayerEquipment(ServerPlayer &player, const std::string &slot, const std::string &typeId,
+                                              int32_t amount, int32_t damage, const Tag &dynamicProperties) {
     ItemStack stack = createItemStack(typeId, amount);
     if (!stack.isAir()) {
         stack.mDamage = damage < 0 ? 0 : damage;

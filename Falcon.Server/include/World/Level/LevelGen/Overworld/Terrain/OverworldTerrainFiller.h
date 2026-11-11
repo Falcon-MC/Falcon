@@ -10,6 +10,7 @@
 
 class LevelChunk;
 class OverworldClimate;
+class TerrainBeard;
 
 // stone, deepslate, ore veins and aquifer fluids from densities at cell corners (sub_14CDEE380, sub_14CDF0330)
 class OverworldTerrainFiller {
@@ -20,7 +21,10 @@ public:
     OverworldAquifer createAquifer() const;
 
     // heightMap is indexed (x << 4) | z and receives the highest non-air y of each column
-    void fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer) const;
+    // beard: density of the structure pieces near the chunk, left out for the preliminary heights as the
+    // game does (sub_14CDF0330, seventh argument)
+    void fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer,
+              const TerrainBeard *beard = nullptr) const;
 
 private:
     // corners per chunk: 5 x 41 x 5, y varying fastest

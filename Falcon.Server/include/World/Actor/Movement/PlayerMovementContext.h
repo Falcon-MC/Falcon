@@ -26,8 +26,8 @@ struct PlayerMovementContext {
     WaterTravelFlagComponent &waterTravel;
     LiquidTravelFlagComponent &liquidTravel;
 
-    PlayerMovementContext(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
-                          Level &level, PlayerMovementRegistry &registry, PlayerMovementRegistry::Entity entity)
+    PlayerMovementContext(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player, Level &level,
+                          PlayerMovementRegistry &registry, PlayerMovementRegistry::Entity entity)
             : owner(owner), id(id), player(player), level(level), registry(registry), entity(entity),
               state(registry.get<StateVectorComponent>(entity)), input(registry.get<MoveInputComponent>(entity)),
               abilities(registry.get<MovementAbilitiesComponent>(entity)),

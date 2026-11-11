@@ -39,7 +39,8 @@ namespace {
 
 EffectCommand::EffectCommand(ServerNetworkHandler &handler)
         : Command("effect", "commands.effect.description",
-                  "/effect <player> <effect> [seconds] [amplifier] [hideParticles]"), mHandler(handler) {}
+                  "/effect <player> <effect> [seconds] [amplifier] [hideParticles]"),
+          mHandler(handler) {}
 
 std::vector<CommandOverloadData> EffectCommand::getOverloads() const {
     CommandParamData effect;
@@ -109,15 +110,15 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
             }
         }
         if (removed == 0) {
-            sender.sendTranslation(clearOne ? "commands.effect.failure.notActive" :
-                                               "commands.effect.failure.notActive.all",
-                                   clearOne ? std::vector<std::string>{getMobEffectName(only), targets.front()->getName()} :
-                                              std::vector<std::string>{targets.front()->getName()});
+            sender.sendTranslation(
+                    clearOne ? "commands.effect.failure.notActive" : "commands.effect.failure.notActive.all",
+                    clearOne ? std::vector<std::string>{getMobEffectName(only), targets.front()->getName()}
+                             : std::vector<std::string>{targets.front()->getName()});
         } else {
-            sender.sendTranslation(clearOne ? "commands.effect.success.removed" :
-                                               "commands.effect.success.removed.all",
-                                   clearOne ? std::vector<std::string>{getMobEffectName(only), targets.front()->getName()} :
-                                              std::vector<std::string>{targets.front()->getName()});
+            sender.sendTranslation(
+                    clearOne ? "commands.effect.success.removed" : "commands.effect.success.removed.all",
+                    clearOne ? std::vector<std::string>{getMobEffectName(only), targets.front()->getName()}
+                             : std::vector<std::string>{targets.front()->getName()});
         }
         return removed != 0;
     }
@@ -167,9 +168,8 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
         sender.sendTranslation("commands.effect.success.infinite",
                                {getMobEffectName(id), std::to_string(amplifier), targets.front()->getName()});
     } else {
-        sender.sendTranslation("commands.effect.success",
-                               {getMobEffectName(id), std::to_string(amplifier), targets.front()->getName(),
-                                std::to_string(seconds)});
+        sender.sendTranslation("commands.effect.success", {getMobEffectName(id), std::to_string(amplifier),
+                                                           targets.front()->getName(), std::to_string(seconds)});
     }
     return applied != 0;
 }

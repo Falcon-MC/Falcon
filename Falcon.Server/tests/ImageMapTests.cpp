@@ -34,8 +34,8 @@ namespace {
         image.mPixels.resize((size_t) width * (size_t) height);
         for (int32_t y = 0; y < height; ++y) {
             for (int32_t x = 0; x < width; ++x)
-                image.mPixels[(size_t) (x + y * width)] = ImageMap::pack((uint8_t) x, (uint8_t) y,
-                                                                         (uint8_t) (x >> 8), 255);
+                image.mPixels[(size_t) (x + y * width)] = ImageMap::pack((uint8_t) x, (uint8_t) y, (uint8_t) (x >> 8),
+                                                                         255);
         }
         return image;
     }
@@ -203,8 +203,7 @@ namespace {
         require((covered.mPixels[0] & 0xff) > 100, "fill crops the left of a wide image");
 
         const ImageMapImage stretched = ImageMap::fitTo(wide, 128, 128, ImageMapFit::Stretch);
-        require((stretched.mPixels[0] & 0xff) < 4 && (stretched.mPixels[127] & 0xff) > 140,
-                "stretch keeps both edges");
+        require((stretched.mPixels[0] & 0xff) < 4 && (stretched.mPixels[127] & 0xff) > 140, "stretch keeps both edges");
     }
 
     void wallOrder() {
@@ -341,7 +340,8 @@ namespace {
         const std::vector<uint8_t> small = encodePng(2, 2, pixels);
         require(ImageMap::decodePng(small.data(), small.size(), image, error), "a real png decodes");
         require(image.mWidth == 2 && image.mPixels[0] == ImageMap::pack(255, 0, 0, 255)
-                && image.mPixels[3] == ImageMap::pack(1, 2, 3, 0), "rgba comes through, alpha included");
+                        && image.mPixels[3] == ImageMap::pack(1, 2, 3, 0),
+                "rgba comes through, alpha included");
 
         std::vector<uint8_t> odd(5 * 3 * 4);
         for (size_t index = 0; index < odd.size(); ++index)
@@ -349,8 +349,7 @@ namespace {
         const std::vector<uint8_t> interlaced = encodePng(5, 3, odd, true);
         require(ImageMap::decodePng(interlaced.data(), interlaced.size(), image, error),
                 "an interlaced png fits its announced size");
-        require(image.mPixels[14] == ImageMap::pack(odd[56], odd[57], odd[58], odd[59]),
-                "adam7 pixels land in place");
+        require(image.mPixels[14] == ImageMap::pack(odd[56], odd[57], odd[58], odd[59]), "adam7 pixels land in place");
     }
 
     void removal(const std::filesystem::path &directory) {
@@ -389,8 +388,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-image-map-test-"
-               + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-image-map-test-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         gridCutting();
         fitting();

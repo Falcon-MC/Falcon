@@ -29,7 +29,9 @@ public:
 
     void setClamped(const std::string &name, float value);
 
-    const std::vector<AttributeData> &getAll() const { return mAttributes; }
+    const std::vector<AttributeData> &getAll() const {
+        return mAttributes;
+    }
 
     std::vector<AttributeData> getPlayerUpdate(bool sprinting) const;
 

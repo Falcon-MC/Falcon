@@ -7,12 +7,7 @@
 #include <vector>
 
 struct ActorPropertyDescription {
-    enum class Type {
-        Int,
-        Float,
-        Bool,
-        Enum
-    };
+    enum class Type { Int, Float, Bool, Enum };
 
     std::string mName;
     Type mType = Type::Int;

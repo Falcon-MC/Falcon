@@ -244,6 +244,5 @@ private:
 class DragonGoals {
 public:
     // nullptr for another behavior or mob
-    static std::unique_ptr<Goal> create(const MobActor &mob, const std::string &behavior,
-                                        const json::Value &component);
+    static std::unique_ptr<Goal> create(const MobActor &mob, const std::string &behavior, const json::Value &component);
 };

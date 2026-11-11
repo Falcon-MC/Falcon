@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(MaceItem, 30,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:mace";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<MaceItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        MaceItem, 30, [](const std::string &identifier) { return identifier == "minecraft:mace"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<MaceItem>(item); });
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -40,8 +36,8 @@ namespace {
     void gustActor(ServerNetworkHandler &owner, Actor &target, const Vector3f &origin, int32_t level) {
         const Vector3f position = target.getPosition();
         Vector3f direction(position.x - origin.x, position.y - origin.y, position.z - origin.z);
-        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y +
-                                       direction.z * direction.z);
+        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
+                                       + direction.z * direction.z);
         if (length <= 0.0f || length > WIND_BURST_RADIUS)
             return;
 
@@ -63,8 +59,7 @@ namespace {
     }
 }
 
-MaceItem::MaceItem(const Item &base) : Item(base) {
-}
+MaceItem::MaceItem(const Item &base) : Item(base) {}
 
 int32_t MaceItem::computeSmashDamage(int32_t fallHeight) {
     if ((float) fallHeight < SMASH_MINIMUM_FALL)
@@ -165,8 +160,7 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &target = entry.second;
-        if (&target == &attacker || !target.isSpawned() || target.isDead() ||
-            !target.sharesLevelWith(attacker))
+        if (&target == &attacker || !target.isSpawned() || target.isDead() || !target.sharesLevelWith(attacker))
             continue;
 
         gustActor(owner, target, origin, level);

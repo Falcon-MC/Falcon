@@ -29,8 +29,7 @@ namespace {
 
     class LevelMapSource final : public MapRenderSource {
     public:
-        LevelMapSource(Level &level, BiomeRegistry &biomes) : mLevel(level), mBiomes(biomes) {
-        }
+        LevelMapSource(Level &level, BiomeRegistry &biomes) : mLevel(level), mBiomes(biomes) {}
 
         bool hasChunk(int32_t chunkX, int32_t chunkZ) override {
             LevelChunk *chunk = mLevel.peekChunkPtr(chunkX, chunkZ);
@@ -68,8 +67,8 @@ namespace {
             if (chunk == nullptr)
                 return MapBiomeColors();
 
-            return _colorsOf(chunk->getBiomeAt(x & 15, std::max(LevelChunk::MIN_Y, std::min(y, LevelChunk::MAX_Y)),
-                                               z & 15));
+            return _colorsOf(
+                    chunk->getBiomeAt(x & 15, std::max(LevelChunk::MIN_Y, std::min(y, LevelChunk::MAX_Y)), z & 15));
         }
 
         int32_t getMinY() const override {
@@ -141,8 +140,7 @@ namespace {
     }
 }
 
-MapItem::MapItem(const Item &base) : Item(base) {
-}
+MapItem::MapItem(const Item &base) : Item(base) {}
 
 bool MapItem::matches(const std::string &identifier) {
     return identifier == IDENTIFIER;
@@ -240,8 +238,9 @@ bool MapItem::updateTrackedDecoration(ServerNetworkHandler &owner, World &world,
 
             // a player who does not carry the map hides from it while invisible or spectating
             MapDecorationType type = MapDecorationType::MarkerWhite;
-            if (!holding && (player->getFlags().get(ActorFlag::Invisible)
-                             || player->getGameType() == (int32_t) GameType::Spectator))
+            if (!holding
+                && (player->getFlags().get(ActorFlag::Invisible)
+                    || player->getGameType() == (int32_t) GameType::Spectator))
                 type = MapDecorationType::NoDraw;
 
             if (holding || dimension != mapDimension) {
@@ -268,8 +267,7 @@ void MapItem::updateTrackedDecorations(ServerNetworkHandler &owner, World &world
     });
 }
 
-void MapItem::tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data,
-                            const ItemStack *item) {
+void MapItem::tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data, const ItemStack *item) {
     // GameplayUserManager::_addTrackedMapPlayers: every player of the world follows the map
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
@@ -327,9 +325,7 @@ bool MapItem::inventoryTick(ServerNetworkHandler &owner, ServerPlayer &player, I
     if (mapId == MapItemSavedData::INVALID_ID) {
         const Vector3i position = floorPosition(player.getPosition());
         MapItemSavedData &created = maps.createMapSavedData(
-                [&owner]() {
-                    return owner.allocateActorUniqueId();
-                },
+                [&owner]() { return owner.allocateActorUniqueId(); },
                 Vector3f((float) position.x, (float) position.y, (float) position.z),
                 Dimension::toId(player.getDimension()), 0);
         setMapId(item, created);

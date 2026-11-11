@@ -35,8 +35,8 @@ bool PluginBlock::interactAt(ServerPlayer &player, const Vector3i &position, uin
         return false;
 
     try {
-        return entry->mOnInteract(PluginApiHelpers::toHandle(&player), toBlockPos(position), face,
-                                  entry->mUserData) != 0;
+        return entry->mOnInteract(PluginApiHelpers::toHandle(&player), toBlockPos(position), face, entry->mUserData)
+               != 0;
     } catch (...) {
         LOG_ERROR(LogAreaID::Server, "[%s] onInteract of %s threw an exception",
                   entry->mPlugin->mDescription.mName.c_str(), identifier.c_str());

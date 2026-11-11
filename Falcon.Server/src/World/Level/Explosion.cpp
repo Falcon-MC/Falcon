@@ -54,8 +54,8 @@ namespace {
 
     AxisAlignedBB boundingBoxOf(const Vector3f &position, const ActorSize &size) {
         const float halfWidth = size.mWidth * 0.5f;
-        return AxisAlignedBB(position.x - halfWidth, position.y, position.z - halfWidth,
-                             position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);
+        return AxisAlignedBB(position.x - halfWidth, position.y, position.z - halfWidth, position.x + halfWidth,
+                             position.y + size.mHeight, position.z + halfWidth);
     }
 
     AxisAlignedBB boundingBoxOf(const Vector3f &position, const std::string &identifier) {
@@ -81,8 +81,7 @@ namespace {
 Explosion::Explosion(ServerNetworkHandler &owner, Level &level, const Vector3f &center, double size,
                      const ServerActor *sourceActor, bool fromTnt)
         : mOwner(owner), mLevel(level), mSource(center), mSize(std::max(size, 0.0)), mSourceActor(sourceActor),
-          mFromTnt(fromTnt) {
-}
+          mFromTnt(fromTnt) {}
 
 void Explosion::setIncendiary(bool incendiary) {
     if (!incendiary)
@@ -139,8 +138,11 @@ bool Explosion::_allowByPlugins() {
 }
 
 bool Explosion::_findAffectedBlocks() {
-    // an actor exploding in water still hurts entities, breaks no blocks
-    if (mSourceActor != nullptr) {
+    // an explosion in water still hurts entities, breaks no blocks
+    if (mInWater.has_value()) {
+        if (*mInWater)
+            return true;
+    } else if (mSourceActor != nullptr) {
         const Vector3i floor((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
                              (int32_t) std::floor(mSource.z));
         const BlockState layer0 = mLevel.getBlockState(floor.x, floor.y, floor.z);
@@ -247,18 +249,19 @@ void Explosion::_damageEntities() {
             continue;
 
         const Vector3f position = player.getPosition();
-        const Vector3f motion = normalized(Vector3f(position.x - mSource.x, position.y - mSource.y,
-                                                    position.z - mSource.z));
+        const Vector3f motion = normalized(
+                Vector3f(position.x - mSource.x, position.y - mSource.y, position.z - mSource.z));
         const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, "minecraft:player"));
         const double impact = (1.0 - distance) * density;
         const float damage = _scaleDamageForDifficulty(_calculateEntityDamage(explosionSize, impact));
 
         mOwner.hurt(player, damage, ActorDamageSource::environment(DEATH_KEY, player.getName()).fromOrigin(mSource));
 
-        const Vector3f current = player.getMotion();
-        player.setMotion(Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
-                                  current.z + motion.z * (float) impact));
-        mOwner.sendActorMotion(player);
+        // pushes the replayed velocity, not the last reported delta; tick-stamped so both sides take it on the same input
+        const Vector3f current = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
+        player.applyServerMotion(mOwner,
+                                 Vector3f(current.x + motion.x * (float) impact, current.y + motion.y * (float) impact,
+                                          current.z + motion.z * (float) impact));
     }
 
     const DimensionType dimension = mLevel.getDimensionType();
@@ -276,8 +279,8 @@ void Explosion::_damageEntities() {
             continue;
 
         const Vector3f position = actor->getPosition();
-        const Vector3f motion = normalized(Vector3f(position.x - mSource.x, position.y - mSource.y,
-                                                    position.z - mSource.z));
+        const Vector3f motion = normalized(
+                Vector3f(position.x - mSource.x, position.y - mSource.y, position.z - mSource.z));
         const float density = getBlockDensity(mLevel, mSource, boundingBoxOf(position, actor->getSize()));
         const double impact = (1.0 - distance) * density;
 
@@ -322,8 +325,8 @@ bool Explosion::_isInsideWater(const Vector3f &position) const {
 }
 
 void Explosion::_destroyBlocks() {
-    const double yield = mFromTnt && !mLevel.getGameRules().getBool("tntexplosiondropdecay")
-                         ? 100.0 : (1.0 / mSize) * 100.0;
+    const double yield = mFromTnt && !mLevel.getGameRules().getBool("tntexplosiondropdecay") ? 100.0
+                                                                                             : (1.0 / mSize) * 100.0;
     const ItemStack noTool;
 
     for (const Vector3i &position: mAffectedBlocks) {
@@ -344,8 +347,8 @@ void Explosion::_destroyBlocks() {
 
         const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName);
         const bool keepsContents = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
-        BlockActionHandler::destroyBlock(mOwner, mLevel, position, state,
-                                         keepsContents || nextDouble() * 100.0 < yield, noTool);
+        BlockActionHandler::destroyBlock(mOwner, mLevel, position, state, keepsContents || nextDouble() * 100.0 < yield,
+                                         noTool, mSourceActor);
     }
 }
 
@@ -357,9 +360,9 @@ void Explosion::_ignite() {
         if (!isAir(state) || below == nullptr || !below->mSolid)
             continue;
 
-        const BlockState fire("minecraft:fire");
-        mLevel.setBlockState(position.x, position.y, position.z, fire);
-        BlockActionHandler::broadcastBlockUpdate(mOwner, mLevel, position, fire);
+        Tag states = Tag::ofCompound();
+        states.putInt("age", 0);
+        mLevel.setBlock(position, BlockState("minecraft:fire", states), false);
     }
 }
 
@@ -408,8 +411,8 @@ float Explosion::getBlockDensity(Level &level, const Vector3f &source, const Axi
     return (float) visibleBlocks / (float) totalBlocks;
 }
 
-bool Explosion::isRayCollidingWithBlocks(Level &level, double srcX, double srcY, double srcZ, double dstX,
-                                         double dstY, double dstZ, double stepSize) {
+bool Explosion::isRayCollidingWithBlocks(Level &level, double srcX, double srcY, double srcZ, double dstX, double dstY,
+                                         double dstZ, double stepSize) {
     const double directionX = dstX - srcX;
     const double directionY = dstY - srcY;
     const double directionZ = dstZ - srcZ;
@@ -433,8 +436,7 @@ bool Explosion::isRayCollidingWithBlocks(Level &level, double srcX, double srcY,
             continue;
 
         const BlockState *state = level.peekBlockPtr(x, y, z);
-        if (state != nullptr
-            && BlockShape::isPositionInside(*state, x, y, z, (float) rayX, (float) rayY, (float) rayZ))
+        if (state != nullptr && BlockShape::isPositionInside(*state, x, y, z, (float) rayX, (float) rayY, (float) rayZ))
             return true;
     }
 

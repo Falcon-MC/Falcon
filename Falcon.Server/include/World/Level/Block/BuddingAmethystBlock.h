@@ -4,8 +4,7 @@
 
 class BuddingAmethystBlock : public Block {
 public:
-    explicit BuddingAmethystBlock(const Block &block) : Block(block) {
-    }
+    explicit BuddingAmethystBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

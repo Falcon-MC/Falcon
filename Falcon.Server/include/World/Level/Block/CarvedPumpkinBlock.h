@@ -6,9 +6,7 @@
 
 class CarvedPumpkinBlock final : public Block {
 public:
-    explicit CarvedPumpkinBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit CarvedPumpkinBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

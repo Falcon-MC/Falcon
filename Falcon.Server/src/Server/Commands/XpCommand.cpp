@@ -82,8 +82,7 @@ bool XpCommand::execute(CommandOrigin &sender, const std::vector<std::string> &a
         if (!levels)
             sender.sendTranslation("commands.xp.success", {std::to_string(amount), target->getName()});
         else if (amount < 0)
-            sender.sendTranslation("commands.xp.success.negative.levels",
-                                   {std::to_string(-amount), target->getName()});
+            sender.sendTranslation("commands.xp.success.negative.levels", {std::to_string(-amount), target->getName()});
         else
             sender.sendTranslation("commands.xp.success.levels", {std::to_string(amount), target->getName()});
     }

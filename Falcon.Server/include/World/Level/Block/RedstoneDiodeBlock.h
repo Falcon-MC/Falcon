@@ -10,9 +10,7 @@ class ServerPlayer;
 
 class RedstoneDiodeBlock : public Block {
 public:
-    explicit RedstoneDiodeBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit RedstoneDiodeBlock(const Block &block) : Block(block) {}
 
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 

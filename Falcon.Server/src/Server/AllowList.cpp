@@ -65,9 +65,8 @@ std::vector<AllowListEntry>::iterator AllowList::_findByName(const std::string &
 
 std::vector<AllowListEntry>::iterator AllowList::_findPlayer(const std::string &name, const std::string &xuid) {
     if (!xuid.empty()) {
-        const auto byXuid = std::find_if(mEntries.begin(), mEntries.end(), [&xuid](const AllowListEntry &entry) {
-            return entry.mXuid == xuid;
-        });
+        const auto byXuid = std::find_if(mEntries.begin(), mEntries.end(),
+                                         [&xuid](const AllowListEntry &entry) { return entry.mXuid == xuid; });
         if (byXuid != mEntries.end())
             return byXuid;
     }

@@ -46,8 +46,7 @@ namespace {
     const std::string MAP_PREFIX = "map_";
 
     int64_t packBlockPosition(int32_t x, int32_t y, int32_t z) {
-        return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37)
-               | (((int64_t) (z + 30000000) & 0x3FFFFFFLL) << 11)
+        return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37) | (((int64_t) (z + 30000000) & 0x3FFFFFFLL) << 11)
                | (((int64_t) (y + 400) & 0x3FFLL) << 1);
     }
 
@@ -199,7 +198,9 @@ std::string LevelStorage::_makeDataVersionKey(int32_t chunkX, int32_t chunkZ) co
 }
 
 int LevelStorage::_firstBiomeSection() const {
-    return mDimensionId == static_cast<int>(DimensionType::Overworld) ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
+    const bool overworldRange = mDimensionId == static_cast<int>(DimensionType::Overworld)
+                                || Dimension::isCustom(static_cast<DimensionType>(mDimensionId));
+    return overworldRange ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
 }
 
 int LevelStorage::_biomeSectionCount() const {
@@ -325,6 +326,14 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     std::string finalized;
     _appendLInt(finalized, chunk.isPopulated() ? FINALIZED_STATE_DONE : FINALIZED_STATE_NEEDS_POPULATION);
     batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::FinalizedState), finalized);
+    if (chunk.getPendingTicks().empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks), chunk.getPendingTicks());
+    if (chunk.getRandomTicks().empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), chunk.getRandomTicks());
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const SubChunk &subChunk = chunk.getSubChunk(i);
@@ -374,12 +383,11 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         return false;
 
     std::string version;
-    leveldb::Status status = mDb->Get(_readOptions(),
-                                      _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Version), &version);
+    leveldb::Status status = mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Version),
+                                      &version);
 
     if (!status.ok()) {
-        status = mDb->Get(_readOptions(),
-                          _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::LegacyVersion), &version);
+        status = mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::LegacyVersion), &version);
     }
 
     if (!status.ok())
@@ -402,14 +410,13 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
             if (chunk.getSubChunk(i).readPersistent(stream, &replacedUnknown))
                 loadedAny = true;
         } catch (const BinaryDataException &exception) {
-            LOG_WARN(LogAreaID::Server, "Malformed sub chunk %d %d %d: %s", chunk.getX(), chunk.getZ(),
-                     (int) subY, exception.what());
+            LOG_WARN(LogAreaID::Server, "Malformed sub chunk %d %d %d: %s", chunk.getX(), chunk.getZ(), (int) subY,
+                     exception.what());
         }
     }
 
     std::string heightAndBiomes;
-    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Data3D),
-                 &heightAndBiomes).ok()) {
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Data3D), &heightAndBiomes).ok()) {
         ReadOnlyBinaryStream stream(heightAndBiomes);
 
         try {
@@ -424,13 +431,29 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     }
 
     std::string finalized;
-    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::FinalizedState),
-                 &finalized).ok() && finalized.size() >= 4) {
-        const int32_t state = (int32_t) ((unsigned char) finalized[0]
-                                         | ((unsigned char) finalized[1] << 8)
-                                         | ((unsigned char) finalized[2] << 16)
-                                         | ((unsigned char) finalized[3] << 24));
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::FinalizedState), &finalized).ok()
+        && finalized.size() >= 4) {
+        const int32_t state = (int32_t) ((unsigned char) finalized[0] | ((unsigned char) finalized[1] << 8)
+                                         | ((unsigned char) finalized[2] << 16) | ((unsigned char) finalized[3] << 24));
         chunk.setPopulated(state >= FINALIZED_STATE_DONE);
+    }
+
+    std::string pendingTicks;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::PendingTicks), &pendingTicks).ok())
+        chunk.setPendingTicks(std::move(pendingTicks));
+
+    std::string randomTicks;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), &randomTicks).ok())
+        chunk.setRandomTicks(std::move(randomTicks));
+
+    // no version: written by the game, never migrated
+    std::string dataVersion;
+    if (mDb->Get(_readOptions(), _makeDataVersionKey(chunk.getX(), chunk.getZ()), &dataVersion).ok()
+        && dataVersion.size() >= 8) {
+        uint64_t value = 0;
+        for (int i = 7; i >= 0; --i)
+            value = value << 8 | (unsigned char) dataVersion[(size_t) i];
+        chunk.setNeedsLiquidMigration((int64_t) value < FalconDataVersion::STILL_LIQUIDS);
     }
 
     chunk.clearDirty();
@@ -598,8 +621,7 @@ bool LevelStorage::erasePendingBlockChanges(int32_t chunkX, int32_t chunkZ) {
     if (mDb == nullptr)
         return false;
 
-    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(),
-                                               _makePendingChangesKey(chunkX, chunkZ));
+    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), _makePendingChangesKey(chunkX, chunkZ));
     return _recordWrite(status.ok() || status.IsNotFound());
 }
 
@@ -712,8 +734,7 @@ std::vector<Tag> LevelStorage::loadEntities(int32_t chunkX, int32_t chunkZ) {
         while (!stream.feof())
             entities.push_back(NbtIo::readTag(stream, NbtVariant::LittleEndian));
     } catch (const std::exception &exception) {
-        LOG_WARN(LogAreaID::Server, "Malformed legacy entities for chunk %d %d: %s", chunkX, chunkZ,
-                 exception.what());
+        LOG_WARN(LogAreaID::Server, "Malformed legacy entities for chunk %d %d: %s", chunkX, chunkZ, exception.what());
     }
 
     return entities;
@@ -752,8 +773,7 @@ std::vector<Tag> LevelStorage::loadBlockEntities(int32_t chunkX, int32_t chunkZ)
         return blockEntities;
 
     std::string data;
-    const leveldb::Status status = mDb->Get(_readOptions(),
-                                            _makeKey(chunkX, chunkZ, LevelDbTag::BlockEntities), &data);
+    const leveldb::Status status = mDb->Get(_readOptions(), _makeKey(chunkX, chunkZ, LevelDbTag::BlockEntities), &data);
 
     if (!status.ok())
         return blockEntities;
@@ -765,8 +785,7 @@ std::vector<Tag> LevelStorage::loadBlockEntities(int32_t chunkX, int32_t chunkZ)
         while (!stream.feof())
             blockEntities.push_back(NbtIo::readTag(stream, NbtVariant::LittleEndian));
     } catch (const std::exception &exception) {
-        LOG_WARN(LogAreaID::Server, "Malformed block entities for chunk %d %d: %s", chunkX, chunkZ,
-                 exception.what());
+        LOG_WARN(LogAreaID::Server, "Malformed block entities for chunk %d %d: %s", chunkX, chunkZ, exception.what());
     }
 
     return blockEntities;
@@ -857,7 +876,8 @@ std::vector<std::pair<std::string, Tag>> LevelStorage::loadTickingAreas() {
 
         ReadOnlyBinaryStream stream(iterator->value().ToString());
         try {
-            areas.emplace_back(key.substr(TICKING_AREA_PREFIX.size()), NbtIo::readTag(stream, NbtVariant::LittleEndian));
+            areas.emplace_back(key.substr(TICKING_AREA_PREFIX.size()),
+                               NbtIo::readTag(stream, NbtVariant::LittleEndian));
         } catch (const std::exception &exception) {
             LOG_WARN(LogAreaID::Server, "Malformed ticking area %s: %s", key.c_str(), exception.what());
         }
@@ -930,12 +950,15 @@ bool LevelStorage::saveGameRules(const Tag &rules) {
     return true;
 }
 
-bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
+bool LevelStorage::saveSavedData(const std::string &key, const Tag &data, bool wrapped) {
     if (mDb == nullptr)
         return false;
 
-    Tag root = Tag::ofCompound();
-    root.put("data", data);
+    Tag root = data;
+    if (wrapped) {
+        root = Tag::ofCompound();
+        root.put("data", data);
+    }
 
     BinaryStream stream;
     NbtIo::writeTag(stream, root, NbtVariant::LittleEndian);
@@ -950,7 +973,7 @@ bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
     return true;
 }
 
-bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
+bool LevelStorage::loadSavedData(const std::string &key, Tag &data, bool wrapped) {
     if (mDb == nullptr)
         return false;
 
@@ -962,7 +985,7 @@ bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
 
     try {
         const Tag root = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        const Tag *stored = root.get("data");
+        const Tag *stored = wrapped ? root.get("data") : &root;
         if (stored == nullptr || !stored->isCompound())
             return false;
 

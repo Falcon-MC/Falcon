@@ -8,11 +8,7 @@
 
 class Actor;
 
-enum class DamageResult {
-    Ignored,
-    Blocked,
-    Dealt
-};
+enum class DamageResult { Ignored, Blocked, Dealt };
 
 class ActorDamageSource {
 public:
@@ -23,8 +19,8 @@ public:
         return source;
     }
 
-    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName,
-                               Actor &attacker, const std::string &attackerName, const Vector3f &origin) {
+    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName, Actor &attacker,
+                                    const std::string &attackerName, const Vector3f &origin) {
         ActorDamageSource source;
         source.mDeathMessageKey = deathMessageKey;
         source.mDeathMessageParameters = {victimName, attackerName};

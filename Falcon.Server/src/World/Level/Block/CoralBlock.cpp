@@ -17,14 +17,11 @@ namespace {
     const int32_t MIN_DEATH_DELAY = 60;
     const int32_t DEATH_DELAY_SPREAD = 40;
 
-    const Vector3i NEIGHBOUR_OFFSETS[] = {
-            Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1),
-            Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)
-    };
+    const Vector3i NEIGHBOUR_OFFSETS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                          Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
 
     bool endsWith(const std::string &value, const std::string &suffix) {
-        return value.size() >= suffix.size()
-               && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+        return value.size() >= suffix.size() && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
     }
 
     bool isCoralBlock(const std::string &identifier) {
@@ -37,8 +34,8 @@ bool CoralBlock::isLiveCoral(const std::string &identifier) {
         || identifier.compare(0, DEAD_PREFIX.size(), DEAD_PREFIX) == 0)
         return false;
 
-    return endsWith(identifier, "_coral") || endsWith(identifier, "_coral_block")
-           || endsWith(identifier, "_coral_fan") || endsWith(identifier, "_coral_wall_fan");
+    return endsWith(identifier, "_coral") || endsWith(identifier, "_coral_block") || endsWith(identifier, "_coral_fan")
+           || endsWith(identifier, "_coral_wall_fan");
 }
 
 bool CoralBlock::matches(const std::string &identifier) {

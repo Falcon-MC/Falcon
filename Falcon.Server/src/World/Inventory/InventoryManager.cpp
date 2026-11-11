@@ -72,9 +72,13 @@ namespace {
         PlayerInventoryView(const PlayerInventory &inventory, InventoryManager::InventoryId id, int size)
                 : mInventory(inventory), mId(id), mSize(size) {}
 
-        int getContainerSize() const override { return mSize; }
+        int getContainerSize() const override {
+            return mSize;
+        }
 
-        const ItemStack &getContainerItem(int slot) const override { return itemAt(mInventory, mId, slot); }
+        const ItemStack &getContainerItem(int slot) const override {
+            return itemAt(mInventory, mId, slot);
+        }
 
         void setContainerItem(int slot, ItemStack item) override {
             (void) slot;
@@ -97,11 +101,10 @@ InventoryManager::InventoryManager()
         : mPlayer(nullptr), mSender(nullptr), mLastInventoryNetworkId(CONTAINER_ID_FIRST),
           mCurrentWindowType(ContainerType::Container), mMainInventoryWindowId(CONTAINER_ID_NONE),
           mCraftingTableWindowId(CONTAINER_ID_NONE), mCraftingTablePosition(0, 0, 0),
-          mFurnaceWindowId(CONTAINER_ID_NONE), mFurnacePosition(0, 0, 0),
-          mFurnaceKind(FurnaceKind::Furnace), mFurnaceContainerType(ContainerType::Furnace),
-          mFurnaceBurnTime(0), mFurnaceMaxBurnTime(0), mFurnaceCookTime(0),
-          mClientSelectedHotbarSlot(-1), mHasPendingCloseWindow(false), mPendingCloseWindowId(CONTAINER_ID_NONE),
-          mHasPendingOpenMainInventory(false) {}
+          mFurnaceWindowId(CONTAINER_ID_NONE), mFurnacePosition(0, 0, 0), mFurnaceKind(FurnaceKind::Furnace),
+          mFurnaceContainerType(ContainerType::Furnace), mFurnaceBurnTime(0), mFurnaceMaxBurnTime(0),
+          mFurnaceCookTime(0), mClientSelectedHotbarSlot(-1), mHasPendingCloseWindow(false),
+          mPendingCloseWindowId(CONTAINER_ID_NONE), mHasPendingOpenMainInventory(false) {}
 
 void InventoryManager::attach(ServerPlayer *player, ServerNetworkHandler *owner) {
     mPlayer = player;
@@ -193,8 +196,7 @@ void InventoryManager::_sendContentPackets(int containerId, const Container &con
 }
 
 void InventoryManager::_sendContentPackets(int containerId, InventoryId inventory) {
-    _sendContentPackets(containerId, PlayerInventoryView(mPlayer->getInventory(), inventory,
-                                                         _getSize(inventory)));
+    _sendContentPackets(containerId, PlayerInventoryView(mPlayer->getInventory(), inventory, _getSize(inventory)));
 }
 
 void InventoryManager::_sendSlotPackets(int containerId, int netSlot, InventoryId inventory, int slot) {
@@ -285,8 +287,7 @@ void InventoryManager::syncSlot(InventoryId inventory, int slot) {
     _sendSlotPackets(_getWindowId(inventory), slot, inventory, slot);
 }
 
-void InventoryManager::syncBundle(const ItemStack &bundle, int32_t bundleId,
-                                  const std::vector<ItemStack> &contents) {
+void InventoryManager::syncBundle(const ItemStack &bundle, int32_t bundleId, const std::vector<ItemStack> &contents) {
     if (mPlayer == nullptr || mSender == nullptr || bundleId < 0) {
         return;
     }
@@ -399,8 +400,9 @@ void InventoryManager::_releaseFurnaceExperience(ServerNetworkHandler &owner, Fu
         return;
 
     const Vector3i &position = furnace.getPosition();
-    owner.spawnExperienceOrbs(*level, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                               (float) position.z + 0.5f), experience);
+    owner.spawnExperienceOrbs(*level,
+                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
+                              experience);
 }
 
 namespace {
@@ -421,39 +423,56 @@ namespace {
             return 0;
         }
         const std::string id = item.mDefinition->getIdentifier();
-        if (id == "minecraft:lava_bucket") return 20000;
-        if (id == "minecraft:coal_block") return 16000;
-        if (id == "minecraft:coal" || id == "minecraft:charcoal") return 1600;
-        if (id == "minecraft:blaze_rod") return 2400;
-        if (id == "minecraft:dried_kelp_block") return 4000;
-        if (id == "minecraft:bamboo") return 50;
-        if (id == "minecraft:stick") return 100;
-        if (id == "minecraft:bowl" || id == "minecraft:bow") return 200;
-        if (id.find("_boat") != std::string::npos) return 1200;
-        if (id == "minecraft:wooden_sword" || id == "minecraft:wooden_pickaxe"
-            || id == "minecraft:wooden_axe" || id == "minecraft:wooden_shovel"
-            || id == "minecraft:wooden_hoe") return 200;
-        if (isWoodLike(id) && VanillaBlocks::getAs<SlabBlock>(id) != nullptr) return 300;
-        if (isWoodLike(id) && (id.find("_planks") != std::string::npos || id.find("_log") != std::string::npos
-            || id.find("_wood") != std::string::npos || id.find("_stem") != std::string::npos
-            || id.find("_hyphae") != std::string::npos || id.find("_mosaic") != std::string::npos
-            || id == "minecraft:wood")) return 300;
-        if (isWoodLike(id) && id.find("_sign") != std::string::npos) return 200;
-        if (isWoodLike(id) && id.find("_door") != std::string::npos) return 200;
-        if (isWoodLike(id) && id.find("_button") != std::string::npos) return 100;
-        if (isWoodLike(id) && (id.find("_trapdoor") != std::string::npos
-            || VanillaBlocks::getAs<FenceBlock>(id) != nullptr
-            || VanillaBlocks::getAs<FenceGateBlock>(id) != nullptr
-            || id.find("_pressure_plate") != std::string::npos
-            || id.find("_stairs") != std::string::npos)) return 300;
-        if (id.find("wooden_") != std::string::npos) return 200;
-        if (id.find("_sapling") != std::string::npos) return 100;
+        if (id == "minecraft:lava_bucket")
+            return 20000;
+        if (id == "minecraft:coal_block")
+            return 16000;
+        if (id == "minecraft:coal" || id == "minecraft:charcoal")
+            return 1600;
+        if (id == "minecraft:blaze_rod")
+            return 2400;
+        if (id == "minecraft:dried_kelp_block")
+            return 4000;
+        if (id == "minecraft:bamboo")
+            return 50;
+        if (id == "minecraft:stick")
+            return 100;
+        if (id == "minecraft:bowl" || id == "minecraft:bow")
+            return 200;
+        if (id.find("_boat") != std::string::npos)
+            return 1200;
+        if (id == "minecraft:wooden_sword" || id == "minecraft:wooden_pickaxe" || id == "minecraft:wooden_axe"
+            || id == "minecraft:wooden_shovel" || id == "minecraft:wooden_hoe")
+            return 200;
+        if (isWoodLike(id) && VanillaBlocks::getAs<SlabBlock>(id) != nullptr)
+            return 300;
+        if (isWoodLike(id)
+            && (id.find("_planks") != std::string::npos || id.find("_log") != std::string::npos
+                || id.find("_wood") != std::string::npos || id.find("_stem") != std::string::npos
+                || id.find("_hyphae") != std::string::npos || id.find("_mosaic") != std::string::npos
+                || id == "minecraft:wood"))
+            return 300;
+        if (isWoodLike(id) && id.find("_sign") != std::string::npos)
+            return 200;
+        if (isWoodLike(id) && id.find("_door") != std::string::npos)
+            return 200;
+        if (isWoodLike(id) && id.find("_button") != std::string::npos)
+            return 100;
+        if (isWoodLike(id)
+            && (id.find("_trapdoor") != std::string::npos || VanillaBlocks::getAs<FenceBlock>(id) != nullptr
+                || VanillaBlocks::getAs<FenceGateBlock>(id) != nullptr
+                || id.find("_pressure_plate") != std::string::npos || id.find("_stairs") != std::string::npos))
+            return 300;
+        if (id.find("wooden_") != std::string::npos)
+            return 200;
+        if (id.find("_sapling") != std::string::npos)
+            return 100;
         if (id == "minecraft:bookshelf" || id == "minecraft:crafting_table" || id == "minecraft:cartography_table"
             || id == "minecraft:fletching_table" || id == "minecraft:smithing_table" || id == "minecraft:chest"
             || id == "minecraft:trapped_chest" || id == "minecraft:barrel" || id == "minecraft:jukebox"
-            || id == "minecraft:note_block" || id == "minecraft:daylight_detector"
-            || id == "minecraft:banner" || id.find("_banner") != std::string::npos
-            || id.find("_hanging_sign") != std::string::npos) return 300;
+            || id == "minecraft:note_block" || id == "minecraft:daylight_detector" || id == "minecraft:banner"
+            || id.find("_banner") != std::string::npos || id.find("_hanging_sign") != std::string::npos)
+            return 300;
         return 0;
     }
 
@@ -487,11 +506,9 @@ namespace {
         packet.mRuntimeId = (uint32_t) BlockStateHasher::hash(updated.mName, updated.mStates);
         packet.mFlags = UpdateBlockPacket::Flag::All;
         packet.mDataLayer = 0;
-        BlockActionHandler::broadcastToViewers(owner, level,
-                                               Vector3f((float) position.x + 0.5f,
-                                                        (float) position.y + 0.5f,
-                                                        (float) position.z + 0.5f),
-                                               packet);
+        BlockActionHandler::broadcastToViewers(
+                owner, level, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
+                packet);
     }
 
     const FurnaceRecipeData *findFurnaceRecipe(const ItemStack &input) {
@@ -538,10 +555,11 @@ namespace {
 
         const ItemStack &input = state.mInventory.mItems[FurnaceInventory::SLOT_INPUT];
         const ItemStack &currentOutput = state.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT];
-        const bool canSmelt = recipe != nullptr && !result.isAir() && (currentOutput.isAir()
-                             || (stackMatches(currentOutput, result)
-                                 && currentOutput.mCount + result.mCount
-                                    <= PlayerInventory::getMaxStackSize(currentOutput)));
+        const bool canSmelt = recipe != nullptr && !result.isAir()
+                              && (currentOutput.isAir()
+                                  || (stackMatches(currentOutput, result)
+                                      && currentOutput.mCount + result.mCount
+                                                 <= PlayerInventory::getMaxStackSize(currentOutput)));
         const int previousBurn = state.mBurnTime;
         const int previousCook = state.mCookTime;
         const int previousMaxBurn = state.mMaxBurnTime;
@@ -569,8 +587,7 @@ namespace {
                 state.mMaxBurnTime = duration;
                 --fuel.mCount;
                 if (fuel.mCount <= 0) {
-                    if (fuel.mDefinition != nullptr
-                        && fuel.mDefinition->getIdentifier() == "minecraft:lava_bucket") {
+                    if (fuel.mDefinition != nullptr && fuel.mDefinition->getIdentifier() == "minecraft:lava_bucket") {
                         fuel = ItemStack::air();
                         fuel.mDefinition = owner.getItemDefinitions().getDefinition("minecraft:bucket");
                         fuel.mBlockDefinition = owner.getBlockDefinitions().getDefinition("minecraft:bucket");
@@ -673,10 +690,9 @@ void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
     const int previousMaxBurn = mFurnaceMaxBurnTime;
     const int previousCook = mFurnaceCookTime;
     const std::array<ItemStack, FurnaceInventory::SIZE> previousItems = {
-        inventory.getFurnaceItem(FurnaceInventory::SLOT_INPUT),
-        inventory.getFurnaceItem(FurnaceInventory::SLOT_FUEL),
-        inventory.getFurnaceItem(FurnaceInventory::SLOT_OUTPUT)
-    };
+            inventory.getFurnaceItem(FurnaceInventory::SLOT_INPUT),
+            inventory.getFurnaceItem(FurnaceInventory::SLOT_FUEL),
+            inventory.getFurnaceItem(FurnaceInventory::SLOT_OUTPUT)};
     mFurnaceBurnTime = state.mBurnTime;
     mFurnaceMaxBurnTime = state.mMaxBurnTime;
     mFurnaceCookTime = state.mCookTime;
@@ -763,8 +779,7 @@ void InventoryManager::onFurnaceBroken(ServerNetworkHandler &owner, Level &level
     if (furnace == nullptr)
         return;
 
-    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                (float) position.z + 0.5f);
+    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     for (const ItemStack &item: furnace->mInventory.mItems) {
         if (!item.isAir() && item.mCount > 0)
             owner.dropItem(level, dropPosition, item, Vector3f(0.0f, 0.2f, 0.0f), ItemActor::DEFAULT_PICKUP_DELAY);
@@ -782,7 +797,7 @@ void InventoryManager::_sendOutputPacket(const ItemStack &item) {
 }
 
 void InventoryManager::syncCraftingTableState(const std::vector<ItemStack> &recipeOutputs,
-                                               const std::vector<uint32_t> &recipeSourceIndices) {
+                                              const std::vector<uint32_t> &recipeSourceIndices) {
     if (mPlayer == nullptr || mSender == nullptr || !isCraftingTableOpen()) {
         return;
     }
@@ -794,17 +809,15 @@ void InventoryManager::syncCraftingTableState(const std::vector<ItemStack> &reci
 }
 
 void InventoryManager::syncCraftingPreview(const std::vector<ItemStack> &recipeOutputs,
-                                            const std::vector<uint32_t> &recipeSourceIndices) {
+                                           const std::vector<uint32_t> &recipeSourceIndices) {
     if (mPlayer == nullptr || mSender == nullptr) {
         return;
     }
 
-    const std::vector<ItemStack> &contents = isCraftingTableOpen()
-                                             ? mPlayer->getInventory().getCraftingTableContents()
-                                             : mPlayer->getInventory().getCraftingContents();
+    const std::vector<ItemStack> &contents = isCraftingTableOpen() ? mPlayer->getInventory().getCraftingTableContents()
+                                                                   : mPlayer->getInventory().getCraftingContents();
     const int gridWidth = isCraftingTableOpen() ? 3 : 2;
-    const ItemStack result = CraftingManager::findResult(contents, gridWidth,
-                                                         recipeOutputs, recipeSourceIndices);
+    const ItemStack result = CraftingManager::findResult(contents, gridWidth, recipeOutputs, recipeSourceIndices);
     _sendOutputPacket(result);
 }
 
@@ -840,14 +853,14 @@ void InventoryManager::onCurrentWindowRemove() {
     }
 
     const int currentWindowId = mFurnaceWindowId != CONTAINER_ID_NONE
-                                ? mFurnaceWindowId
-                                : (mCraftingTableWindowId != CONTAINER_ID_NONE
-                                   ? mCraftingTableWindowId
-                                   : (mAnvilWindowId != CONTAINER_ID_NONE
-                                      ? mAnvilWindowId
-                                      : (mContainerWindowId != CONTAINER_ID_NONE
-                                         ? mContainerWindowId
-                                         : mMainInventoryWindowId)));
+                                        ? mFurnaceWindowId
+                                        : (mCraftingTableWindowId != CONTAINER_ID_NONE
+                                                   ? mCraftingTableWindowId
+                                                   : (mAnvilWindowId != CONTAINER_ID_NONE
+                                                              ? mAnvilWindowId
+                                                              : (mContainerWindowId != CONTAINER_ID_NONE
+                                                                         ? mContainerWindowId
+                                                                         : mMainInventoryWindowId)));
     if (currentWindowId == CONTAINER_ID_NONE) {
         return;
     }
@@ -917,8 +930,8 @@ void InventoryManager::dispatchPluginClose() {
     closeEvent.mPlayer = mPlayer;
     closeEvent.mLevel = &level;
     closeEvent.mBlockPosition = mPluginOpenPosition;
-    closeEvent.mBlockName = level.getBlockState(mPluginOpenPosition.x, mPluginOpenPosition.y,
-                                                mPluginOpenPosition.z).mName;
+    closeEvent.mBlockName =
+            level.getBlockState(mPluginOpenPosition.x, mPluginOpenPosition.y, mPluginOpenPosition.z).mName;
     mOwner->getPluginManager().dispatch(closeEvent);
 }
 
@@ -1050,11 +1063,10 @@ bool InventoryManager::openContainer(ContainerType type, const Vector3i &positio
 
 bool InventoryManager::refreshEnchantInput(const ItemStack &current, int32_t newSeed) {
     const std::string identifier = current.isAir() || current.mDefinition == nullptr
-                                   ? std::string()
-                                   : current.mDefinition->getIdentifier();
+                                           ? std::string()
+                                           : current.mDefinition->getIdentifier();
 
-    if (identifier == mEnchantInputId && current.mCount == mEnchantInputCount
-        && current.mDamage == mEnchantInputDamage)
+    if (identifier == mEnchantInputId && current.mCount == mEnchantInputCount && current.mDamage == mEnchantInputDamage)
         return false;
 
     mEnchantInputId = identifier;
@@ -1137,8 +1149,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
             _animateBlockContainer(position, true, LevelSoundEvent::SHULKER_BOX_OPEN,
                                    LevelSoundEvent::SHULKER_BOX_CLOSED);
     } else if (dynamic_cast<EnderChestBlockActor *>(blockActor) != nullptr) {
-        _animateBlockContainer(position, true, LevelSoundEvent::ENDER_CHEST_OPEN,
-                               LevelSoundEvent::ENDER_CHEST_CLOSED);
+        _animateBlockContainer(position, true, LevelSoundEvent::ENDER_CHEST_OPEN, LevelSoundEvent::ENDER_CHEST_CLOSED);
     }
 
     RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), position);
@@ -1217,15 +1228,14 @@ void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
     pairEvent.mBlockPosition = pairPosition;
     pairEvent.mEventType = CHEST_ANIMATION_EVENT_TYPE;
     pairEvent.mEventData = open ? 1 : 0;
-    BlockActionHandler::broadcastToViewers(*mOwner, *level,
-                                           Vector3f((float) pairPosition.x + 0.5f,
-                                                    (float) pairPosition.y + 0.5f,
-                                                    (float) pairPosition.z + 0.5f),
-                                           pairEvent);
+    BlockActionHandler::broadcastToViewers(
+            *mOwner, *level,
+            Vector3f((float) pairPosition.x + 0.5f, (float) pairPosition.y + 0.5f, (float) pairPosition.z + 0.5f),
+            pairEvent);
 }
 
 void InventoryManager::_animateBlockContainer(const Vector3i &position, bool open, const char *openSound,
-                                               const char *closeSound) {
+                                              const char *closeSound) {
     if (mOwner == nullptr || mPlayer == nullptr)
         return;
 
@@ -1250,8 +1260,7 @@ void InventoryManager::_animateBarrel(const Vector3i &position, bool open) {
         return;
 
     const Tag *current = state.mStates.get("open_bit");
-    const bool currentlyOpen = current != nullptr && current->getType() == Tag::Type::Byte
-                               && current->asByte() != 0;
+    const bool currentlyOpen = current != nullptr && current->getType() == Tag::Type::Byte && current->asByte() != 0;
     if (currentlyOpen == open)
         return;
 

@@ -53,6 +53,18 @@ void ChunkWorker::start(size_t threadCount) {
     mSources.clear();
     mSources.reserve(count);
     mTerrainCache.reset(new TerrainCache(mGenerator));
+    mTerrainCache->setStoredLoader([this](LevelChunk &chunk) {
+        if (!mStorage.isOpen() || !mStorage.loadChunk(chunk) || !chunk.isPopulated())
+            return false;
+        // spills parked in storage belong to it: the chunk applies them on load
+        for (const GeneratedBlockChange &change: mStorage.loadPendingBlockChanges(chunk.getX(), chunk.getZ())) {
+            if (change.mY >= LevelChunk::MIN_Y && change.mY <= LevelChunk::MAX_Y)
+                chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, change.mLayer, *change.mState);
+        }
+        if (!chunk.hasHeightmap())
+            LightSystem::computeHeightmap(chunk);
+        return true;
+    });
     for (size_t i = 0; i < count; ++i)
         mSources.push_back(std::unique_ptr<GeneratorChunkSource>(
                 new GeneratorChunkSource(mGenerator.getSeed(), mGenerator.getDimensionType(), *mTerrainCache)));
@@ -196,8 +208,8 @@ bool ChunkWorker::requestPopulate(std::unique_ptr<LevelChunk> chunk) {
     return true;
 }
 
-std::future<std::vector<GeneratedBlockChange>> ChunkWorker::requestPersistChanges(
-        int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes) {
+std::future<std::vector<GeneratedBlockChange>>
+ChunkWorker::requestPersistChanges(int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes) {
     ChunkTask task;
     task.mKind = ChunkTask::Kind::PersistChanges;
     task.mX = chunkX;
@@ -309,7 +321,7 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
         if (generated) {
             uint64_t base = 0;
             const uint64_t own = mSources[sourceIndex]->populateGenerated(*chunk, spilled, overflow, blockActors,
-                                                                           entities, base);
+                                                                          entities, base);
             chunk->setDecorationSequence(base, own);
         } else {
             applySpilled();

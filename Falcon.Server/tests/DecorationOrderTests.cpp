@@ -111,10 +111,34 @@ namespace {
                 "raw terrain picked up a decoration");
     }
 
+    // a neighbour decorated in another session comes from storage, not as raw terrain under its plants
+    void storedNeighbour() {
+        const std::unique_ptr<ChunkGenerator> generator = flatGenerator();
+        TerrainCache cache(*generator);
+        size_t loads = 0;
+        cache.setStoredLoader([&loads](LevelChunk &chunk) {
+            ++loads;
+            if (chunk.getX() != 3 || chunk.getZ() != 0)
+                return false;
+            chunk.setBlock(0, 140, 0, BlockState("minecraft:gold_block"));
+            chunk.setPopulated(true);
+            return true;
+        });
+        require(cache.neighbour(3, 0).getBlock(0, 140, 0).mName == "minecraft:gold_block",
+                "a stored neighbour came back as raw terrain");
+        require(cache.neighbour(4, 0).getBlock(0, 140, 0).mName != "minecraft:gold_block",
+                "an absent neighbour took another chunk's blocks");
+        cache.neighbour(3, 0);
+        cache.neighbour(4, 0);
+        require(loads == 2, "storage was read again for a chunk already checked");
+        require(cache.terrain(3, 0).getBlock(0, 140, 0).mName != "minecraft:gold_block",
+                "raw terrain picked up a stored decoration");
+    }
+
     // sub_1432CE930: a decoration writes into its generated neighbours at once, the next one reads it
     void writesReachNeighbours() {
-        const std::unique_ptr<ChunkGenerator> generator =
-                DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
+                                                                                            42);
         TerrainCache cache(*generator);
         GeneratorChunkSource source(42, DimensionType::Overworld, cache);
 
@@ -145,7 +169,8 @@ namespace {
                     continue;
 
                 const LevelChunk target = cache.neighbour(change.mX >> 4, change.mZ >> 4);
-                require(target.getBlock(change.mX & 15, change.mY, change.mZ & 15).getHash() == change.mState->getHash(),
+                require(target.getBlock(change.mX & 15, change.mY, change.mZ & 15).getHash()
+                                == change.mState->getHash(),
                         "a neighbour's cached copy misses a block written into it");
                 checked++;
             }
@@ -174,6 +199,7 @@ int main() {
     check("a chunk keeps the blocks of decorations it already holds", holdsRule);
     check("a later class waits for an expected earlier neighbour", neighboursWait);
     check("neighbours never decorate at once", areaLock);
+    check("stored neighbours are read from storage", storedNeighbour);
     check("a generated chunk starts from what decorations left", baseSequence);
     check("decorations write into their neighbours", writesReachNeighbours);
 

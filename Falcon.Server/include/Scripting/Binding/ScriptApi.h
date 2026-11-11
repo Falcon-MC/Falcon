@@ -1,8 +1,12 @@
 #pragma once
 
 #include "Core/Math/Vector3i.h"
+#include "World/Actor/MobEffect.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
+#include "Scripting/BehaviorPackManager.h"
+#include "World/Level/Block/BlockState.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/Binding/ScriptNatives.h"
 #include "Scripting/Binding/ScriptSurface.h"
@@ -18,6 +22,7 @@
 #include <quickjs.h>
 
 class Actor;
+class ActorDamageSource;
 class ItemActor;
 class Level;
 class ServerNetworkHandler;
@@ -25,15 +30,13 @@ class ServerPlayer;
 class ServerActor;
 
 // what the running script may touch: early execution before startup ends, restricted inside before events
-enum class ScriptPrivilege {
-    Normal,
-    Early,
-    Restricted
-};
+enum class ScriptPrivilege { Normal, Early, Restricted };
 
 // one behavior pack's scripts: its own context, module versions and official surface
 class ScriptApi {
 public:
+    static constexpr const char *SCRIPT_EVENT_KEY = "system.after.scriptEventReceive";
+
     // players share handles across packs: projectile owners store them
     ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandleRegistry &players, JSClassID nativeClassId,
               std::string packName, std::string packRoot, ScriptModuleSet modules);
@@ -74,6 +77,10 @@ public:
         return mModules;
     }
 
+    const ScriptSurface &surface() const {
+        return mSurface;
+    }
+
     bool isStable1() const {
         return mTrack == ScriptApiTrack::Stable1;
     }
@@ -86,7 +93,7 @@ public:
         mPrivilege = privilege;
     }
 
-    template<typename T>
+    template <typename T>
     T *native(JSValueConst value) const {
         return dynamic_cast<T *>((ScriptNative *) JS_GetOpaque(value, mNativeClassId));
     }
@@ -97,7 +104,8 @@ public:
     // an event object of the class the signal fires
     JSValue makeEvent(const std::string &signalKey);
 
-    JSValue throwError(const std::string &errorClass, const std::string &message);
+    // fields: extra properties of the error object, taken
+    JSValue throwError(const std::string &errorClass, const std::string &message, JSValue fields = JS_UNDEFINED);
 
     JSValue throwInvalidEntity(const char *action, const std::string &member, const ScriptEntityRef &entity);
 
@@ -106,6 +114,14 @@ public:
     JSValue makeActor(ServerActor &actor);
 
     JSValue makeEntity(Actor &actor);
+
+    // undefined when the entity lacks the component or the pack's version lacks its class
+    JSValue makeEntityComponent(Actor &actor, const ScriptEntityRef &ref, const std::string &componentId);
+
+    std::vector<std::string> entityComponentIds(Actor &actor);
+
+    // minecraft:type_family of the active definition
+    static std::vector<std::string> entityFamilies(Actor &actor);
 
     ServerPlayer *resolvePlayer(JSValueConst value);
 
@@ -119,6 +135,28 @@ public:
 
     JSValue makeItem(const ItemStack &item);
 
+    // the effect's name as scripts see it, without namespace
+    static std::string effectTypeId(MobEffectId id);
+
+    JSValue makeEffect(Actor &actor, MobEffectId id);
+
+    // an EntityDamageSource: cause, damagingEntity and damagingProjectile
+    JSValue makeDamageSource(const ActorDamageSource &source);
+
+    // the EntityDamageCause of a source
+    static std::string damageCauseName(const ActorDamageSource &source);
+
+    JSValue makeHealSource(const char *cause);
+
+    // getModifiers of a data driven trigger: one DefinitionModifier
+    JSValue makeModifiersGetter(const std::vector<std::string> &added, const std::vector<std::string> &removed);
+
+    // a wire game type as this pack's GameMode value
+    const char *gameModeName(int32_t gameType) const;
+
+    // -1 for a name this pack's GameMode lacks
+    int32_t parseGameMode(const std::string &name) const;
+
     JSValue makeItemStack(const std::string &typeId, int32_t amount);
 
     JSValue makeHeldItemStack(ServerPlayer &player, const std::string &identifier);
@@ -128,6 +166,17 @@ public:
     // default states: the events only carry the block name
     JSValue makePermutation(const std::string &identifier);
 
+    JSValue makePermutation(const BlockState &state);
+
+    // a BlockPermutation's type and states; false when the value is not one
+    bool readPermutation(JSValueConst permutation, BlockState &state);
+
+    // the type's default states, from the palette or the pack block
+    static BlockState defaultBlockState(const std::string &identifier);
+
+    // sets and broadcasts the block, then the custom block onPlace or onBlockStateChange hooks
+    bool setBlock(Level &level, int32_t x, int32_t y, int32_t z, const BlockState &state);
+
     JSValue makeDimension(const Level &level);
 
     Level &levelOf(JSValueConst dimension);
@@ -136,6 +185,9 @@ public:
     Level &resolveLevel(uint32_t worldId, DimensionType dimension);
 
     bool giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount);
+
+    // false for an unknown item type
+    bool toItemStack(const ScriptItemData &item, ItemStack &stack);
 
     bool setBlockType(Level &level, int32_t x, int32_t y, int32_t z, const std::string &typeId);
 
@@ -151,20 +203,72 @@ public:
 
     bool hasSubscribers(const std::string &key) const;
 
+    // the namespaces option of scriptEventReceive.subscribe; the callback must already be subscribed
+    void filterScriptEvents(JSValueConst callback, std::vector<std::string> namespaces);
+
+    // clock and marker: the subscribe options a callback must match, empty for any
+    void filterClockEvents(JSValueConst callback, std::string clock, std::string marker);
+
+    // emit for a world clock signal: callbacks whose options name another clock or marker are skipped
+    bool emitClockEvent(const std::string &key, JSValue eventObject, const std::string &clock,
+                        const std::string &marker);
+
+    // the WorldClock object of a registered clock, the same one each time
+    JSValue makeClock(const std::string &name);
+
+    JSValue makeTimeMarker(const std::string &clock, const std::string &marker);
+
     // before events run restricted, startup early; true when a subscriber set cancel
     bool emit(const std::string &key, JSValue eventObject);
 
-    bool registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers);
+    // throws the official error and returns JS_EXCEPTION when the registration is refused
+    JSValue registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers);
 
-    void fireBlockComponents(const std::string &blockId, const char *hook, JSValue event);
+    bool hasCustomComponent(bool blocks, const std::string &name) const;
 
-    void fireHeldItemComponents(ServerPlayer &player, const char *hook, JSValue event);
+    // names registerCustomDimension accepted during startup, created once it ends
+    const std::vector<std::string> &pendingDimensions() const {
+        return mPendingDimensions;
+    }
+
+    JSValue registerCustomDimension(const std::string &name);
+
+    // the startup event's registries accept entries only while it runs
+    bool registrationOpen() const {
+        return mRegistrationOpen;
+    }
+
+    // false when no component this pack registered for the uses defines hook
+    bool handlesHook(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook) const;
+
+    // an instance of a hook payload class; undefined when the pack's module version lacks it
+    JSValue makeComponentEvent(const char *eventClass);
+
+    // calls hook(event, params) on each registered component of uses; 1.x hooks take the event alone
+    void fireComponents(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook, JSValueConst event);
+
+    void fillBlockEvent(JSValueConst event, const Level &level, const Vector3i &position);
 
     void startup();
 
+    // after every pack's startup and the custom dimensions it registered
+    void worldLoad();
+
     void shutdown();
 
-    void forgetEntity(int64_t uniqueId);
+
+    // EntityQueryOptions over spawned players and, unless playersOnly, live actors; null level: every dimension
+    JSValue queryEntities(JSValueConst options, const Level *level, bool playersOnly);
+
+    void setPackSettings(std::vector<PackSetting> settings) {
+        mPackSettings = std::move(settings);
+    }
+
+    const std::vector<PackSetting> &packSettings() const {
+        return mPackSettings;
+    }
+
+    void forgetEntity(uint64_t runtimeId);
 
     void forgetPlayer(ServerPlayer &player);
 
@@ -172,14 +276,8 @@ public:
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
 
-    void emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
-                           const char *face);
-
-    void emitBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
-
-    void emitBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position);
-
-    void emitBlockStepOff(Actor &actor, const Level &level);
+    // the custom block the actor now stands on, or an empty id: fires onStepOff then onStepOn on a change
+    void emitBlockStep(Actor &actor, const Level &level, const CustomBlockDefinition *block, const Vector3i &position);
 
     bool hasSteppingActors() const {
         return !mStepping.empty();
@@ -191,6 +289,31 @@ public:
 
     JSValue moduleTickingAreas() const {
         return mTickingAreas;
+    }
+
+    // the ticking areas this pack's manager added, by identifier
+    std::vector<std::string> &tickingAreaNames() {
+        return mTickingAreaNames;
+    }
+
+    struct PendingTickingArea {
+        std::string mName;
+        JSValue mResolve;
+        JSValue mReject;
+    };
+
+    std::vector<PendingTickingArea> &pendingTickingAreas() {
+        return mPendingTickingAreas;
+    }
+
+    void resolveTickingAreas();
+
+    JSValue gameRules() const {
+        return mGameRules;
+    }
+
+    JSValue serverSystemInfo() const {
+        return mSystemInfo;
     }
 
     JSValue worldAfterEvents() const {
@@ -210,12 +333,7 @@ public:
     }
 
     struct Binding {
-        enum class Kind {
-            Function,
-            Getter,
-            Setter,
-            Constructor
-        };
+        enum class Kind { Function, Getter, Setter, Constructor };
 
         std::string mName;
         Kind mKind = Kind::Function;
@@ -226,6 +344,8 @@ public:
         bool mBlocked = false;
         // Entity and Player members check the entity still exists first
         bool mEntity = false;
+        // on the constructor: no bound object
+        bool mStatic = false;
         // the opaque type the native reads: a script can graft any object onto any prototype
         bool (*mAccepts)(const ScriptNative *) = nullptr;
     };
@@ -240,14 +360,14 @@ public:
     // every signal has subscribe and unsubscribe, even where the definitions put them on a base interface
     void signalMethod(JSValueConst target, const char *cls, const char *name, JSCFunction *function);
 
-    bool methodMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *function,
-                     int length, int magic);
+    bool methodMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *function, int length,
+                     int magic);
 
     bool property(JSValueConst target, const char *cls, const char *name, JSCFunction *getter,
                   JSCFunction *setter = nullptr);
 
-    bool propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter,
-                       int magic);
+    bool propertyMagic(JSValueConst target, const char *cls, const char *name, JSCFunctionMagic *getter, int magic,
+                       JSCFunctionMagic *setter = nullptr);
 
     // constructor and prototype of an official class; constructors throw unless a native constructor is given
     JSValue defineClass(const std::string &name, JSCFunction *constructor = nullptr, int length = 0);
@@ -268,6 +388,8 @@ private:
 
     void _bindWorld();
 
+    void _bindTickingAreas();
+
     void _bindSystem();
 
     void _bindEntity();
@@ -275,6 +397,8 @@ private:
     void _bindPlayer();
 
     void _bindComponents();
+
+    void _bindEntityComponents();
 
     void _bindBlock();
 
@@ -298,12 +422,16 @@ private:
 
     void _resolveForm(uint32_t formId, const std::string &response, bool cancelled);
 
-    JSValue _makeBlockEvent(const Level &level, const Vector3i &position);
-
-    void _fireComponents(std::unordered_map<std::string, JSValue> &handlers,
-                         const std::vector<std::string> *components, const char *hook, JSValue event);
+    void _fireStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position,
+                   const char *hook, const char *eventClass);
 
     JSValue _makeSignalHolder(const char *className, const char *signalOwner, const char *keyPrefix);
+
+    bool _acceptsScriptEvent(JSValueConst callback, const std::string &eventNamespace) const;
+
+    bool _acceptsClockEvent(JSValueConst callback) const;
+
+    void _bindClocks();
 
     JSContext *mContext;
     ServerNetworkHandler &mHost;
@@ -347,11 +475,24 @@ private:
     JSValue mSystemBeforeEvents = JS_UNDEFINED;
     JSValue mScoreboard = JS_UNDEFINED;
     JSValue mTickingAreas = JS_UNDEFINED;
+    std::vector<std::string> mTickingAreaNames;
+    std::vector<PendingTickingArea> mPendingTickingAreas;
+    JSValue mGameRules = JS_UNDEFINED;
+    JSValue mSystemInfo = JS_UNDEFINED;
+    std::vector<PackSetting> mPackSettings;
     JSValue mErrors = JS_UNDEFINED;
     JSValue mBlockRegistry = JS_UNDEFINED;
     JSValue mItemRegistry = JS_UNDEFINED;
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
+    std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;
+    std::unordered_map<void *, std::pair<std::string, std::string>> mClockFilters;
+    std::string mEmitClock;
+    std::string mEmitMarker;
+    std::unordered_map<std::string, JSValue> mClockObjects;
+    JSValue mClockRegistry = JS_UNDEFINED;
+    JSValue mDimensionRegistry = JS_UNDEFINED;
+    std::vector<std::string> mPendingDimensions;
     std::unordered_map<std::string, JSValue> mBlockComponents;
     std::unordered_map<std::string, JSValue> mItemComponents;
     bool mRegistrationOpen = false;

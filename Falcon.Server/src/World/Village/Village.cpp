@@ -134,9 +134,9 @@ void Village::removeDweller(DwellerRole role, int64_t id) {
         return;
 
     auto &entries = mRoles[(size_t) role];
-    entries.erase(std::remove_if(entries.begin(), entries.end(),
-                                 [id](const DwellerEntry &entry) { return entry.mId == id; }),
-                  entries.end());
+    entries.erase(
+            std::remove_if(entries.begin(), entries.end(), [id](const DwellerEntry &entry) { return entry.mId == id; }),
+            entries.end());
 
     if (role == DwellerRole::Inhabitant)
         _releaseInhabitant(id);
@@ -453,9 +453,8 @@ void Village::_recalculateBounds() {
                 continue;
             }
 
-            mBounds = AxisAlignedBB(std::min(mBounds.mMinX, x), std::min(mBounds.mMinY, y),
-                                    std::min(mBounds.mMinZ, z), std::max(mBounds.mMaxX, x),
-                                    std::max(mBounds.mMaxY, y), std::max(mBounds.mMaxZ, z));
+            mBounds = AxisAlignedBB(std::min(mBounds.mMinX, x), std::min(mBounds.mMinY, y), std::min(mBounds.mMinZ, z),
+                                    std::max(mBounds.mMaxX, x), std::max(mBounds.mMaxY, y), std::max(mBounds.mMaxZ, z));
         }
     }
 }

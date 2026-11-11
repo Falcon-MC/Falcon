@@ -97,8 +97,8 @@ namespace {
     }
 
     uint32_t mapCreateImageGrid(FalconLevel *handle, const uint8_t *rgba, uint32_t length, uint32_t width,
-                                uint32_t height, uint32_t columns, uint32_t rows, FalconImageFit fit,
-                                int64_t *mapIds, uint32_t capacity, uint32_t *outColumns, uint32_t *outRows) {
+                                uint32_t height, uint32_t columns, uint32_t rows, FalconImageFit fit, int64_t *mapIds,
+                                uint32_t capacity, uint32_t *outColumns, uint32_t *outRows) {
         ImageMapImage image;
         std::string error;
         if (width > (uint32_t) ImageMap::MAX_IMAGE_SIDE || height > (uint32_t) ImageMap::MAX_IMAGE_SIDE) {
@@ -141,8 +141,7 @@ namespace {
         const std::vector<int64_t> ids(mapIds, mapIds + count);
         std::string error;
         if (!ImageMapHandler::place(owner(), *level(handle), Vector3i(topLeft.x, topLeft.y, topLeft.z),
-                                    (int32_t) facing, ids, (int32_t) columns, (int32_t) rows, glowing != 0,
-                                    error)) {
+                                    (int32_t) facing, ids, (int32_t) columns, (int32_t) rows, glowing != 0, error)) {
             fail(error);
             return 0;
         }

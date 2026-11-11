@@ -6,21 +6,19 @@
 #include <cstring>
 
 namespace {
-    const char *DIRT_BLOCKS[] = {
-            "minecraft:dirt",
-            "minecraft:grass_block",
-            "minecraft:podzol",
-            "minecraft:coarse_dirt",
-            "minecraft:mycelium",
-            "minecraft:rooted_dirt",
-            "minecraft:moss_block",
-            "minecraft:pale_moss_block",
-            "minecraft:mud",
-            "minecraft:muddy_mangrove_roots",
-            "minecraft:dirt_with_roots",
-            "minecraft:farmland",
-            "minecraft:grass_path"
-    };
+    const char *DIRT_BLOCKS[] = {"minecraft:dirt",
+                                 "minecraft:grass_block",
+                                 "minecraft:podzol",
+                                 "minecraft:coarse_dirt",
+                                 "minecraft:mycelium",
+                                 "minecraft:rooted_dirt",
+                                 "minecraft:moss_block",
+                                 "minecraft:pale_moss_block",
+                                 "minecraft:mud",
+                                 "minecraft:muddy_mangrove_roots",
+                                 "minecraft:dirt_with_roots",
+                                 "minecraft:farmland",
+                                 "minecraft:grass_path"};
 }
 
 const char *IFeature::identifier() const {

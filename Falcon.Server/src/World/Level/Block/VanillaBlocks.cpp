@@ -6014,8 +6014,7 @@ const Block *VanillaBlocks::fromIdentifier(const std::string &identifier) {
     }
 
     const auto match = byIdentifier.find(std::string_view(identifier));
-    return match == byIdentifier.end() ? PluginContentRegistry::getInstance().getBlockType(identifier)
-                                       : match->second;
+    return match == byIdentifier.end() ? PluginContentRegistry::getInstance().getBlockType(identifier) : match->second;
 }
 
 const Block *VanillaBlocks::fromState(const BlockState &state) {

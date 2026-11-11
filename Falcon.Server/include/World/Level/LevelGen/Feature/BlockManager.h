@@ -40,7 +40,9 @@ public:
 
     int32_t getHeightAt(int32_t x, int32_t z);
 
-    Level &getLevel() const { return *mLevel; }
+    Level &getLevel() const {
+        return *mLevel;
+    }
 
     static int64_t hashXYZ(int32_t x, int32_t y, int32_t z);
 

@@ -126,9 +126,8 @@ namespace {
                || state.mName == "minecraft:warped_fungus";
     }
 
-    void placeHat(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t row, int32_t height,
-                  int32_t hatBottom, int32_t radius, int32_t dx, int32_t dz, const BlockState &hat, bool vines,
-                  std::mt19937 &random) {
+    void placeHat(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t row, int32_t height, int32_t hatBottom,
+                  int32_t radius, int32_t dx, int32_t dz, const BlockState &hat, bool vines, std::mt19937 &random) {
         const BlockState &here = blocks.getBlockAt(x, y, z);
         if (BlockSupport::isSolid(here) || !BlockSupport::isReplaceable(here))
             return;

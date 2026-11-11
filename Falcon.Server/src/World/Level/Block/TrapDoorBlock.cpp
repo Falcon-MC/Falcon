@@ -16,7 +16,7 @@ bool TrapDoorBlock::matches(const std::string &identifier) {
 }
 
 BlockState TrapDoorBlock::applyPlacementOrientation(const BlockState &state,
-                                                               const BlockPlacementContext &context) const {
+                                                    const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;
 
     BlockState result = Block::applyPlacementOrientation(state, context);
@@ -26,14 +26,13 @@ BlockState TrapDoorBlock::applyPlacementOrientation(const BlockState &state,
     return BlockState(result.mName, states);
 }
 
-bool TrapDoorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
-                                          const Vector3i &position, const BlockState &state) const {
+bool TrapDoorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                               const BlockState &state) const {
     return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state);
 }
 
-void TrapDoorBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
-                                        const Vector3i &position, const BlockState &state,
-                                        const ItemStack &usedItem, int blockFace) const {
+void TrapDoorBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                             const BlockState &state, const ItemStack &usedItem, int blockFace) const {
     (void) usedItem;
     (void) blockFace;
 

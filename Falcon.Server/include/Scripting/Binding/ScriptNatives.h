@@ -2,6 +2,7 @@
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "Core/NBT/Tag.h"
 
 #include <cstdint>
 #include <memory>
@@ -17,17 +18,13 @@ struct ScriptNative {
 };
 
 struct ScriptEntityRef : ScriptNative {
-    enum class Kind {
-        Player,
-        Actor,
-        Item
-    };
+    enum class Kind { Player, Actor, Item };
 
     Kind mKind = Kind::Actor;
-    // player handle, actor unique id or item entity runtime id
+    // player handle or runtime id: a unique id can still change once the object exists
     int64_t mId = 0;
-    // kept for InvalidEntityError once the entity is gone
-    std::string mEntityId;
+    // refreshed on every resolve, kept for InvalidEntityError once the entity is gone
+    mutable std::string mEntityId;
     std::string mTypeId;
 };
 
@@ -71,12 +68,32 @@ struct ScriptDimensionRef : ScriptNative {
     uint32_t mWorldId = 0;
 };
 
+struct ScriptEffectRef : ScriptNative {
+    ScriptEntityRef mEntity;
+    int32_t mEffectId = 0;
+};
+
+// EffectType, EntityType and EntityHealSource: one name each
+struct ScriptNamedRef : ScriptNative {
+    std::string mName;
+};
+
+struct ScriptInputInfoRef : ScriptNative {
+    uint32_t mHandle = 0;
+};
+
 struct ScriptSignalRef : ScriptNative {
     std::string mKey;
 };
 
 struct ScriptRegistryRef : ScriptNative {
     bool mBlocks = true;
+};
+
+// a world clock, or one of its time markers when mMarker is set; both read the clock system on access
+struct ScriptClockRef : ScriptNative {
+    std::string mClock;
+    std::string mMarker;
 };
 
 namespace ScriptValues {
@@ -98,5 +115,16 @@ namespace ScriptValues {
 
     JSValue dynamicPropertyIds(JSContext *ctx, const std::unordered_map<std::string, DynamicPropertyValue> &store);
 
+    // setDynamicProperties: false with a pending exception
+    bool dynamicPropertySetAll(JSContext *ctx, std::unordered_map<std::string, DynamicPropertyValue> &store,
+                               JSValueConst values);
+
+    int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store);
+
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
+
+    // block states: bytes are booleans, as the palette stores them
+    JSValue statesToJs(JSContext *ctx, const Tag &states);
+
+    Tag statesFromJs(JSContext *ctx, JSValueConst object);
 }

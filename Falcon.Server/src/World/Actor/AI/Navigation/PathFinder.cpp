@@ -75,8 +75,7 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
     mTargetY = (int32_t) std::floor(target.y);
     mTargetZ = (int32_t) std::floor(target.z);
 
-    _offer((int32_t) std::floor(position.x), (int32_t) std::floor(position.y), (int32_t) std::floor(position.z), 0,
-           -1);
+    _offer((int32_t) std::floor(position.x), (int32_t) std::floor(position.y), (int32_t) std::floor(position.z), 0, -1);
     int32_t current = _heapPop();
     mNodes[current].mClosed = true;
 
@@ -120,15 +119,15 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
     return !path.isEmpty();
 }
 
-bool PathFinder::findDirectPath(Level &level, const MobActor &mob, const Vector3f &target,
-                                const PathOptions &options, Path &path) {
+bool PathFinder::findDirectPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
+                                Path &path) {
     if (!options.isVolumetric())
         return false;
 
     const Vector3f position = mob.getPosition();
     const ActorSize size = mob.getSize();
-    mEvaluator.prepare(level, mob, size.mWidth, size.mHeight, position,
-                       LiquidBlocksFetch::at(level, position).water, options);
+    mEvaluator.prepare(level, mob, size.mWidth, size.mHeight, position, LiquidBlocksFetch::at(level, position).water,
+                       options);
     if (mEvaluator.hasBarrier(position, target))
         return false;
 
@@ -257,9 +256,10 @@ void PathFinder::_expandVolume(int32_t nodeIndex, bool swimming) {
                 if (!mEvaluator.isOpen(x, y, z, swimming))
                     continue;
 
-                if (axes == 2 && ((dx != 0 && !mEvaluator.isOpen(node.mX + dx, node.mY, node.mZ, swimming))
-                                  || (dy != 0 && !mEvaluator.isOpen(node.mX, node.mY + dy, node.mZ, swimming))
-                                  || (dz != 0 && !mEvaluator.isOpen(node.mX, node.mY, node.mZ + dz, swimming))))
+                if (axes == 2
+                    && ((dx != 0 && !mEvaluator.isOpen(node.mX + dx, node.mY, node.mZ, swimming))
+                        || (dy != 0 && !mEvaluator.isOpen(node.mX, node.mY + dy, node.mZ, swimming))
+                        || (dz != 0 && !mEvaluator.isOpen(node.mX, node.mY, node.mZ + dz, swimming))))
                     continue;
 
                 const int32_t cost = axes == 1 ? DIRECT_MOVE_COST : OBLIQUE_MOVE_COST;

@@ -42,28 +42,25 @@ namespace {
         else
             maxZ += (float) footOffset.z;
 
-        return position.x > minX && position.x < maxX
-               && position.y > (float) head.y - 5.5f && position.y < (float) head.y + 2.5f
-               && position.z > minZ && position.z < maxZ;
+        return position.x > minX && position.x < maxX && position.y > (float) head.y - 5.5f
+               && position.y < (float) head.y + 2.5f && position.z > minZ && position.z < maxZ;
     }
 
-    bool isMonsterNearby(ServerNetworkHandler &owner, Level &level, const Vector3i &head,
-                         const Vector3i &footOffset) {
+    bool isMonsterNearby(ServerNetworkHandler &owner, Level &level, const Vector3i &head, const Vector3i &footOffset) {
         const AxisAlignedBB area = AxisAlignedBB((float) head.x - 8.0f, (float) head.y - 6.5f, (float) head.z - 8.0f,
                                                  (float) head.x + 9.0f, (float) head.y + 5.5f, (float) head.z + 9.0f)
-                .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
+                                           .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
 
         for (const auto &entry: owner.getActors()) {
             const MobActor *actor = dynamic_cast<const MobActor *>(entry.second.get());
-            if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() ||
-                !actor->isIn(level))
+            if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() || !actor->isIn(level))
                 continue;
 
             const Vector3f position = actor->getPosition();
             const ActorSize size = actor->getSize();
             const float halfWidth = size.mWidth * 0.5f;
-            const AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
-                                    position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);
+            const AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth, position.x + halfWidth,
+                                    position.y + size.mHeight, position.z + halfWidth);
             if (box.intersectsWith(area))
                 return true;
         }
@@ -100,8 +97,7 @@ bool BedBlock::findHead(Level &level, const Vector3i &position, const BlockState
 
     head = RedstoneFace::relative(position, headFace(state));
     const BlockState headState = level.getBlockState(head.x, head.y, head.z);
-    return headState.mName == state.mName && isHeadPiece(headState)
-           && headFace(headState) == headFace(state);
+    return headState.mName == state.mName && isHeadPiece(headState) && headFace(headState) == headFace(state);
 }
 
 bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
@@ -111,8 +107,7 @@ bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
 
     const Vector3i foot = RedstoneFace::relative(head, RedstoneFace::opposite(headFace(headState)));
     const BlockState footState = level.getBlockState(foot.x, foot.y, foot.z);
-    return footState.mName == headState.mName && !isHeadPiece(footState)
-           && headFace(footState) == headFace(headState);
+    return footState.mName == headState.mName && !isHeadPiece(footState) && headFace(footState) == headFace(headState);
 }
 
 void BedBlock::setOccupied(ServerNetworkHandler &owner, Level &level, const Vector3i &head, bool occupied) {
@@ -178,7 +173,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
-    player.setSpawnPoint(head, level.getName());
+    player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(), level.getName());
     player.sendTranslation("§7%tile.bed.respawnSet", {});
 
     if (!level.isNight() && !level.isThundering()) {

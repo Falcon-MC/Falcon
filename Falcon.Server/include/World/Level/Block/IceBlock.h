@@ -4,8 +4,7 @@
 
 class IceBlock : public Block {
 public:
-    explicit IceBlock(const Block &block) : Block(block) {
-    }
+    explicit IceBlock(const Block &block) : Block(block) {}
 
     static constexpr const char *IDENTIFIER = "minecraft:ice";
 
@@ -15,6 +14,10 @@ public:
                       const BlockState &state) const override;
 
     bool hasRandomTick() const override {
+        return true;
+    }
+
+    bool isIceMaterial() const override {
         return true;
     }
 };

@@ -62,14 +62,18 @@ namespace {
 
     // may_replace of the mangroves adds water, vines, moss carpets and propagules
     bool isMangroveCover(const BlockState &state) {
-        static const BlockStateSet COVER = {
-                VanillaBlocks::VINE().getIdentifier(), VanillaBlocks::MOSS_CARPET().getIdentifier(),
-                VanillaBlocks::MANGROVE_PROPAGULE().getIdentifier()
-        };
+        static const BlockStateSet COVER = {VanillaBlocks::VINE().getIdentifier(),
+                                            VanillaBlocks::MOSS_CARPET().getIdentifier(),
+                                            VanillaBlocks::MANGROVE_PROPAGULE().getIdentifier()};
         return isWater(state) || COVER.contains(state);
     }
 
     bool replaces(const OverworldTreePlacer::Definition &tree, const BlockState &state) {
+        static const BlockStateSet POPLAR_COVER = {VanillaBlocks::BROWN_MUSHROOM().getIdentifier(),
+                                                   VanillaBlocks::RED_SHRUB().getIdentifier(),
+                                                   VanillaBlocks::SHELF_MUSHROOM().getIdentifier()};
+        if (tree.mPoplar != nullptr && POPLAR_COVER.contains(state))
+            return true;
         if (tree.mAirAndLeaves)
             return isAir(state) || isLeaves(state);
         if (tree.mMangrove != nullptr && isMangroveCover(state))
@@ -81,8 +85,7 @@ namespace {
     bool rootPasses(const BlockState &state) {
         static const BlockStateSet THROUGH = {
                 VanillaBlocks::SNOW_LAYER().getIdentifier(), VanillaBlocks::MUD().getIdentifier(),
-                VanillaBlocks::MANGROVE_ROOTS().getIdentifier(), VanillaBlocks::MUDDY_MANGROVE_ROOTS().getIdentifier()
-        };
+                VanillaBlocks::MANGROVE_ROOTS().getIdentifier(), VanillaBlocks::MUDDY_MANGROVE_ROOTS().getIdentifier()};
         return THROUGH.contains(state) || isMangroveCover(state) || isAir(state) || isLeaves(state)
                || (PlantBlock::matches(state.mName) && BlockSupport::isReplaceable(state));
     }
@@ -95,18 +98,16 @@ namespace {
     // the leaves of the simple and spruce canopies go into air, leaves (material types 0 and 7) and replaceable
     // plants (type 8), vines among them
     bool canopyReplaces(const BlockState &state) {
-        static const BlockStateSet VINES = BlockStateSet::ofBlocks([](const Block &block) {
-            return dynamic_cast<const VineBlock *>(&block) != nullptr;
-        });
+        static const BlockStateSet VINES = BlockStateSet::ofBlocks(
+                [](const Block &block) { return dynamic_cast<const VineBlock *>(&block) != nullptr; });
         return isAir(state) || isLeaves(state) || VINES.contains(state)
                || (PlantBlock::matches(state.mName) && BlockSupport::isReplaceable(state));
     }
 
     // the trunk's base blocks, left as they are under it
     bool isBaseBlock(const BlockState &state) {
-        static const BlockStateSet BASE = {
-                VanillaBlocks::DIRT().getIdentifier(), VanillaBlocks::COARSE_DIRT().getIdentifier()
-        };
+        static const BlockStateSet BASE = {VanillaBlocks::DIRT().getIdentifier(),
+                                           VanillaBlocks::COARSE_DIRT().getIdentifier()};
         return BASE.contains(state);
     }
 
@@ -115,8 +116,7 @@ namespace {
     const OverworldTreePlacer::SimpleCanopy &vanillaCanopy(int32_t minWidth) {
         static const std::vector<std::pair<uint32_t, uint32_t>> VARIATION = {{1, 2}, {1, 2}, {1, 2}, {1, 1}};
         static const OverworldTreePlacer::SimpleCanopy WIDTHS[3] = {
-                {-3, 0, 0, 0.5f, VARIATION}, {-3, 0, 1, 0.5f, VARIATION}, {-3, 0, 2, 0.5f, VARIATION}
-        };
+                {-3, 0, 0, 0.5f, VARIATION}, {-3, 0, 1, 0.5f, VARIATION}, {-3, 0, 2, 0.5f, VARIATION}};
         return WIDTHS[std::min(std::max(minWidth, 0), 2)];
     }
 
@@ -206,6 +206,8 @@ bool OverworldTreePlacer::place(BlockManager &blocks, const Definition &tree, co
     }
 
     const int32_t height = drawRange(random, tree.mHeight);
+    if (tree.mTrunk == Trunk::Poplar)
+        return _poplarTrunk(blocks, tree, *tree.mPoplar, x, y, z, height, random, decorate);
     if (tree.mTrunk == Trunk::Fallen)
         return _fallenTrunk(blocks, tree, x, y, z, height, random, decorate);
     return _simpleTrunk(blocks, tree, x, y, z, height, random, placedAt);
@@ -354,8 +356,7 @@ bool OverworldTreePlacer::_fancyTrunk(BlockManager &blocks, const Definition &tr
             const int32_t awayX = x - clusterX;
             const int32_t awayZ = z - clusterZ;
             const auto distance = static_cast<int32_t>(std::sqrt(static_cast<double>(awayX * awayX + awayZ * awayZ)));
-            const float branch = static_cast<float>(clusterY)
-                                 - static_cast<float>(distance) * fancy.mBranchSlope;
+            const float branch = static_cast<float>(clusterY) - static_cast<float>(distance) * fancy.mBranchSlope;
             const int32_t branchY = branch > static_cast<float>(trunkTop) ? trunkTop : static_cast<int32_t>(branch);
             // the cluster's foliage column, then the branch from the trunk to it
             if (!clear(clusterX, clusterY, clusterZ, 0, foliageHeight, 0)
@@ -511,8 +512,8 @@ bool OverworldTreePlacer::_megaTrunk(BlockManager &blocks, const Definition &tre
 
     // the canopy goes first, from the top of the trunk, then the branches
     bool placed = tree.mCanopy == Canopy::Mega
-                  ? _megaCanopy(blocks, tree, mega.mCanopy, width, x, y + height, z, random)
-                  : _megaPineCanopy(blocks, tree, mega, x, y + height, z, random);
+                          ? _megaCanopy(blocks, tree, mega.mCanopy, width, x, y + height, z, random)
+                          : _megaPineCanopy(blocks, tree, mega, x, y + height, z, random);
     if (mega.mBranchLength > 0 && _megaBranches(blocks, tree, mega, x, y, z, height, random))
         placed = true;
 
@@ -538,8 +539,8 @@ bool OverworldTreePlacer::_megaTrunk(BlockManager &blocks, const Definition &tre
 
                 const bool sides[4] = {offsetX == 0, offsetX != 0 && offsetX == width - 1, offsetZ == 0,
                                        offsetZ != 0 && offsetZ == width - 1};
-                _decorateLog(blocks, mega.mVineNumerator, mega.mVineDenominator, x + offsetX, at, z + offsetZ,
-                             sides, random);
+                _decorateLog(blocks, mega.mVineNumerator, mega.mVineDenominator, x + offsetX, at, z + offsetZ, sides,
+                             random);
             }
         }
     }
@@ -590,7 +591,8 @@ bool OverworldTreePlacer::_megaBranches(BlockManager &blocks, const Definition &
     // of logs set over whatever is there and a canopy at the branch height above its last log
     const auto size = static_cast<float>(height);
     const int32_t lowest = y + static_cast<int32_t>(mega.mBranchAltitudeMin * size);
-    int32_t branchY = static_cast<int32_t>(mega.mBranchAltitudeMax * size) + y - drawRange(random, mega.mBranchInterval);
+    int32_t branchY = static_cast<int32_t>(mega.mBranchAltitudeMax * size) + y
+                      - drawRange(random, mega.mBranchInterval);
     const BlockState log = tree.mLog().toBlockState();
     bool placed = false;
     while (branchY > lowest) {
@@ -636,9 +638,9 @@ bool OverworldTreePlacer::_megaCanopy(BlockManager &blocks, const Definition &tr
                 const int32_t alongZ = offsetZ * offsetZ;
                 const int32_t besideZ = (offsetZ - 1) * (offsetZ - 1);
                 const bool inside = canopy.mSimplify
-                                    ? alongX + alongZ <= limit
-                                    : alongZ + alongX <= limit || besideZ + besideX <= limit
-                                      || alongX + besideZ <= limit || besideX + alongZ <= limit;
+                                            ? alongX + alongZ <= limit
+                                            : alongZ + alongX <= limit || besideZ + besideX <= limit
+                                                      || alongX + besideZ <= limit || besideX + alongZ <= limit;
                 if (!inside || !mayReplace(blocks.getBlockAt(x + offsetX, y + offsetY, z + offsetZ)))
                     continue;
 
@@ -722,7 +724,8 @@ bool OverworldTreePlacer::_simpleCanopy(BlockManager &blocks, const Definition &
                                         std::mt19937 &random) {
     // SimpleTreeCanopy::place (sub_1471CB0F0): each layer's radius from its offset and the slope; a corner, the
     // centre of a layer of radius 0 among them, is skipped at its layer's variation chance
-    const SimpleCanopy &shape = tree.mSimpleCanopy != nullptr ? *tree.mSimpleCanopy : vanillaCanopy(tree.mCanopyMinWidth);
+    const SimpleCanopy &shape = tree.mSimpleCanopy != nullptr ? *tree.mSimpleCanopy
+                                                              : vanillaCanopy(tree.mCanopyMinWidth);
     const BlockState leaves = tree.mLeaves().toBlockState();
     const int32_t base = shape.mMinWidth + static_cast<int32_t>(static_cast<float>(shape.mMaxOffset) * shape.mSlope);
     bool placed = false;
@@ -731,8 +734,10 @@ bool OverworldTreePlacer::_simpleCanopy(BlockManager &blocks, const Definition &
         for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
             for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
                 if (std::abs(offsetX) == radius && std::abs(offsetZ) == radius) {
-                    const std::pair<uint32_t, uint32_t> &chance = shape.mVariation[(size_t) (offsetY - shape.mMinOffset)];
-                    if (chance.second != 0 && (chance.first == chance.second || random() % chance.second < chance.first))
+                    const std::pair<uint32_t, uint32_t> &chance =
+                            shape.mVariation[(size_t) (offsetY - shape.mMinOffset)];
+                    if (chance.second != 0
+                        && (chance.first == chance.second || random() % chance.second < chance.first))
                         continue;
                 }
 
@@ -780,8 +785,8 @@ void OverworldTreePlacer::_hangCanopyVines(BlockManager &blocks, const Definitio
                     states.putInt("vine_direction_bits", side[2]);
                     const BlockState hanging(vine.mName, states);
                     int32_t vineY = leafY;
-                    for (int32_t step = 0; step < tree.mCanopyVineSteps && isAir(blocks.getBlockAt(vineX, vineY, vineZ));
-                         step++)
+                    for (int32_t step = 0;
+                         step < tree.mCanopyVineSteps && isAir(blocks.getBlockAt(vineX, vineY, vineZ)); step++)
                         blocks.setBlockStateAt(vineX, vineY--, vineZ, hanging);
                 }
             }
@@ -1227,9 +1232,11 @@ void OverworldTreePlacer::_cherryTrunk(BlockManager &blocks, const Definition &t
     }
 
     const Range &start = cherry.mBranchStart;
-    const int32_t first = std::max(height - 1 + (start.mMax > start.mMin
-                                                         ? start.mMin + nextInt(random, start.mMax - start.mMin + 1)
-                                                         : start.mMin), 0);
+    const int32_t first = std::max(height - 1
+                                           + (start.mMax > start.mMin
+                                                      ? start.mMin + nextInt(random, start.mMax - start.mMin + 1)
+                                                      : start.mMin),
+                                   0);
     // the second start draws with its maximum excluded
     int32_t second = std::max(height - 1 + drawRange(random, start), 0);
     second += first <= second ? 1 : 0;
@@ -1613,6 +1620,131 @@ void OverworldTreePlacer::_acaciaCanopy(BlockManager &blocks, const Definition &
         for (int32_t offsetZ = -size; offsetZ <= size; offsetZ++) {
             if (std::abs(offsetX) != size || std::abs(offsetZ) != size)
                 leaf(x + offsetX, y, z + offsetZ);
+        }
+    }
+}
+
+namespace {
+    // the poplar's ranges draw their maximum too, only when they hold more than one value
+    int32_t drawInclusive(std::mt19937 &random, const OverworldTreePlacer::Range &range) {
+        return range.mMax > range.mMin ? range.mMin + nextInt(random, range.mMax - range.mMin + 1) : range.mMin;
+    }
+}
+
+bool OverworldTreePlacer::_poplarTrunk(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x,
+                                       int32_t y, int32_t z, int32_t height, std::mt19937 &random,
+                                       const Decorate &decorate) {
+    // PoplarTreeTrunk::place (sub_1471C9990, vtable 0x14F2F5D20)
+    if (!_canPlace(blocks, tree, x, y, z, height) || y >= LevelChunk::MAX_Y + 1 - height - 1)
+        return false;
+
+    if (!isBaseBlock(blocks.getBlockAt(x, y - 1, z)))
+        blocks.setBlockStateAt(x, y - 1, z, VanillaBlocks::DIRT().toBlockState());
+
+    const int32_t remaining = drawInclusive(random, poplar.mRemainingHeight);
+    const BlockState log = tree.mLog().toBlockState();
+    for (int32_t step = 0; step < height; step++) {
+        if (replaces(tree, blocks.getBlockAt(x, y + step, z)))
+            blocks.setBlockStateAt(x, y + step, z, log);
+        // the log decoration runs on every step, placed or not
+        if (tree.mLogDecoration)
+            decorate(x, y + step, z);
+    }
+
+    // the branch directions, 2 north, 3 south, 4 west, 5 east, shuffled by three raw draws
+    uint8_t directions[4] = {2, 5, 3, 4};
+    if ((random() & 1u) == 0) {
+        directions[0] = 5;
+        directions[1] = 2;
+    }
+    const uint32_t third = random() % 3u;
+    if (third != 2) {
+        directions[2] = directions[third];
+        directions[third] = 3;
+    }
+    const uint32_t fourth = random() & 3u;
+    if (fourth != 3) {
+        directions[3] = directions[fourth];
+        directions[fourth] = 4;
+    }
+
+    const int32_t branches = std::min(drawInclusive(random, poplar.mSupportBranches), 4);
+    const int32_t canopyY = y + height - remaining;
+    for (int32_t branch = 0; branch < branches; branch++) {
+        const uint8_t direction = directions[branch];
+        const int32_t branchX = x + (direction == 4 ? -1 : direction == 5 ? 1 : 0);
+        const int32_t branchZ = z + (direction == 2 ? -1 : direction == 3 ? 1 : 0);
+        if (!replaces(tree, blocks.getBlockAt(branchX, canopyY - 1, branchZ)))
+            continue;
+        blocks.setBlockStateAt(branchX, canopyY - 1, branchZ, withAxis(log, direction <= 3 ? "z" : "x"));
+    }
+
+    _poplarCanopy(blocks, tree, poplar, x, canopyY, z, random);
+    return true;
+}
+
+void OverworldTreePlacer::_poplarCanopy(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x,
+                                        int32_t y, int32_t z, std::mt19937 &random) {
+    // PoplarTreeCanopy::place (sub_1471C8BD0): the radius by weight, the height, then which diagonal quadrants
+    // reach one further
+    int32_t total = 0;
+    for (const std::pair<int32_t, int32_t> &entry: poplar.mRadius)
+        total += entry.second;
+    size_t picked = 0;
+    if (total != 0) {
+        int32_t draw = nextInt(random, total) - poplar.mRadius[0].second;
+        while (draw >= 0 && picked + 1 < poplar.mRadius.size())
+            draw -= poplar.mRadius[++picked].second;
+    }
+    const int32_t radius = poplar.mRadius.empty() ? 0 : poplar.mRadius[picked].first - 1;
+    const int32_t height = drawInclusive(random, poplar.mCanopyHeight);
+    const bool flip = nextBoolean(random);
+
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 2, height - 1, flip, random);
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 1, height - 2, flip, random);
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 1, height - 3, flip, random);
+    for (int32_t offsetY = height - 4; offsetY >= 1; offsetY--)
+        _poplarLayer(blocks, tree, poplar, x, y, z, height, radius, offsetY, flip, random);
+
+    // the support branches crossing under the top, along x and z where the canopy reaches 4 further
+    const BlockState branch = tree.mLog().toBlockState();
+    for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
+        for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
+            if ((radius - std::abs(offsetZ) < 4 || offsetX != 0) && (radius - std::abs(offsetX) < 4 || offsetZ != 0))
+                continue;
+            const int32_t branchY = y + height - 4;
+            if (!replaces(tree, blocks.getBlockAt(x + offsetX, branchY, z + offsetZ)))
+                continue;
+            blocks.setBlockStateAt(x + offsetX, branchY, z + offsetZ, withAxis(branch, offsetZ == 0 ? "x" : "z"));
+        }
+    }
+
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, radius - 1, 0, flip, random);
+    const int32_t bottom = radius >= 5 ? 2 : (radius >= 3 ? radius - 2 : 1);
+    _poplarLayer(blocks, tree, poplar, x, y, z, height, bottom, -1, flip, random);
+}
+
+void OverworldTreePlacer::_poplarLayer(BlockManager &blocks, const Definition &tree, const Poplar &poplar, int32_t x,
+                                       int32_t y, int32_t z, int32_t height, int32_t radius, int32_t offsetY, bool flip,
+                                       std::mt19937 &random) {
+    // sub_1471C9450: a diamond, the two top layers without their edge rows and one smaller; a cell reaches one
+    // further past the side hole chance and in its two quadrants
+    const BlockState leaves = tree.mLeaves().toBlockState();
+    const bool top = offsetY == height - 1 || offsetY == height - 2;
+    for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
+        for (int32_t offsetZ = -radius; offsetZ <= radius; offsetZ++) {
+            if (top && (std::abs(offsetZ) == radius || std::abs(offsetX) == radius))
+                continue;
+
+            const bool reaches = flip ? (offsetX < 0 && offsetZ < 0) || (offsetX > 0 && offsetZ > 0)
+                                      : (offsetX < 0 && offsetZ > 0) || (offsetX > 0 && offsetZ < 0);
+            const int32_t bonus = reaches ? 1 : (top ? -1 : 0);
+            const int32_t hole = poplar.mSideHoleChance < nextFloat(random) ? 1 : 0;
+            if (std::abs(offsetX) + std::abs(offsetZ) > hole + radius + bonus - 1)
+                continue;
+            if (!replaces(tree, blocks.getBlockAt(x + offsetX, y + offsetY, z + offsetZ)))
+                continue;
+            blocks.setBlockStateAt(x + offsetX, y + offsetY, z + offsetZ, leaves);
         }
     }
 }

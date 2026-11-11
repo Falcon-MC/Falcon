@@ -2,14 +2,7 @@
 
 #include <cstdint>
 
-enum class TreeBlockFace : int32_t {
-    DOWN = 0,
-    UP = 1,
-    NORTH = 2,
-    SOUTH = 3,
-    WEST = 4,
-    EAST = 5
-};
+enum class TreeBlockFace : int32_t { DOWN = 0, UP = 1, NORTH = 2, SOUTH = 3, WEST = 4, EAST = 5 };
 
 class TreeBlockFaces {
 public:

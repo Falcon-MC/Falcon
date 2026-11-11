@@ -21,8 +21,9 @@ void ServerPlayerMovementComponent::beginTick(int64_t serverTick, int maxCredits
 
     mBatchSize = batchSize < 0 ? MAX_PENDING_INPUTS : (size_t) batchSize;
     const uint64_t limit = maxCredits < 0 ? std::numeric_limits<uint64_t>::max() : (uint64_t) maxCredits;
-    const uint64_t elapsed = mLastServerTick < 0 ? 1
-                             : serverTick > mLastServerTick ? (uint64_t) (serverTick - mLastServerTick) : 0;
+    const uint64_t elapsed = mLastServerTick < 0            ? 1
+                             : serverTick > mLastServerTick ? (uint64_t) (serverTick - mLastServerTick)
+                                                            : 0;
     mCredits = std::min(mCredits, limit);
     mCredits += std::min(elapsed, limit - mCredits);
     mLastServerTick = std::max(mLastServerTick, serverTick);

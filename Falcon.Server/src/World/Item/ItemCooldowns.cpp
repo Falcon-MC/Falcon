@@ -7,13 +7,11 @@ namespace {
         int mDuration;
     };
 
-    const CooldownDefinition DEFINITIONS[] = {
-        {"minecraft:chorus_fruit", "minecraft:chorus_fruit", 20},
-        {"minecraft:ender_pearl", "minecraft:ender_pearl", 20},
-        {"minecraft:goat_horn", "minecraft:goat_horn", 140},
-        {"minecraft:ice_bomb", "minecraft:ice_bomb", 10},
-        {"minecraft:wind_charge", "minecraft:wind_charge", 10}
-    };
+    const CooldownDefinition DEFINITIONS[] = {{"minecraft:chorus_fruit", "minecraft:chorus_fruit", 20},
+                                              {"minecraft:ender_pearl", "minecraft:ender_pearl", 20},
+                                              {"minecraft:goat_horn", "minecraft:goat_horn", 140},
+                                              {"minecraft:ice_bomb", "minecraft:ice_bomb", 10},
+                                              {"minecraft:wind_charge", "minecraft:wind_charge", 10}};
 
     const CooldownDefinition *find(const std::string &identifier) {
         for (const CooldownDefinition &definition: DEFINITIONS) {

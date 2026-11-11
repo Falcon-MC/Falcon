@@ -15,12 +15,8 @@ namespace {
     }
 
     bool isReplaceable(const std::string &id) {
-        return id == "minecraft:snow"
-               || id == "minecraft:snow_layer"
-               || id == "minecraft:ice"
-               || id == "minecraft:packed_ice"
-               || id == "minecraft:dirt"
-               || id == "minecraft:grass_block";
+        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:ice"
+               || id == "minecraft:packed_ice" || id == "minecraft:dirt" || id == "minecraft:grass_block";
     }
 
 }

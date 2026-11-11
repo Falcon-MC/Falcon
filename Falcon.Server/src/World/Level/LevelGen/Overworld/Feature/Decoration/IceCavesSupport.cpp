@@ -75,8 +75,7 @@ namespace IceCavesSupport {
     }
 
     bool isIceCaves(LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
-        if ((x >> 4) != chunk.getX() || (z >> 4) != chunk.getZ() || y <= LevelChunk::MIN_Y
-            || y >= LevelChunk::MAX_Y)
+        if ((x >> 4) != chunk.getX() || (z >> 4) != chunk.getZ() || y <= LevelChunk::MIN_Y || y >= LevelChunk::MAX_Y)
             return false;
 
         return (int32_t) chunk.getBiomeAt(x & 0x0f, y, z & 0x0f) == BiomeIds::ICE_CAVES;

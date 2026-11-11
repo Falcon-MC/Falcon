@@ -8,8 +8,7 @@
 #include <cstdlib>
 
 TimeCommand::TimeCommand(ServerNetworkHandler &handler)
-        : Command("time", "commands.time.description", "/time <add|set|query|start|stop> ..."),
-          mHandler(handler) {}
+        : Command("time", "commands.time.description", "/time <add|set|query|start|stop> ..."), mHandler(handler) {}
 
 bool TimeCommand::parseInteger(const std::string &value, int64_t &out) {
     if (value.empty())
@@ -78,9 +77,9 @@ std::vector<CommandOverloadData> TimeCommand::getOverloads() const {
     setAmount.mParameters = {enumParameter("mode", "TimeModeSet", {"set"}), amount};
 
     CommandOverloadData setTime;
-    setTime.mParameters = {enumParameter("mode", "TimeModeSet", {"set"}),
-                           enumParameter("time", "TimeSpec",
-                                         {"day", "night", "midnight", "noon", "sunrise", "sunset"})};
+    setTime.mParameters = {
+            enumParameter("mode", "TimeModeSet", {"set"}),
+            enumParameter("time", "TimeSpec", {"day", "night", "midnight", "noon", "sunrise", "sunset"})};
 
     CommandOverloadData query;
     query.mParameters = {enumParameter("mode", "TimeModeQuery", {"query"}),

@@ -46,14 +46,23 @@ std::vector<CommandOverloadData> TeleportCommand::getOverloads() const {
     return {toPlayer, toPosition, victimToPlayer, victimToPosition};
 }
 
-bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first,
-                                    const Vector3f &origin, Vector3f &out) {
+bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                                    Vector3f &out) {
     if (arguments.size() != first + 3)
         return false;
 
-    return parseCoordinate(arguments[first], origin.x, out.x)
-           && parseCoordinate(arguments[first + 1], origin.y, out.y)
-           && parseCoordinate(arguments[first + 2], origin.z, out.z);
+    if (!parseCoordinate(arguments[first], origin.x, out.x) || !parseCoordinate(arguments[first + 1], origin.y, out.y)
+        || !parseCoordinate(arguments[first + 2], origin.z, out.z))
+        return false;
+    // the game centers an absolute whole x or z on its block, as CommandPosition does; y stays
+    const auto whole = [](const std::string &value) {
+        return !value.empty() && value[0] != '~' && value[0] != '^' && value.find('.') == std::string::npos;
+    };
+    if (whole(arguments[first]))
+        out.x += 0.5f;
+    if (whole(arguments[first + 2]))
+        out.z += 0.5f;
+    return true;
 }
 
 bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<ServerPlayer *> &victims,

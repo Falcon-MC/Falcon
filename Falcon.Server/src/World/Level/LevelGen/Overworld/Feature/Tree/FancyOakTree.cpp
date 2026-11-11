@@ -24,12 +24,10 @@ namespace {
 
 }
 
-FancyOakTree::FancyOakTree() : mBaseHeight(3), mHeightRandA(11), mHeightRandB(0) {
-}
+FancyOakTree::FancyOakTree() : mBaseHeight(3), mHeightRandA(11), mHeightRandB(0) {}
 
 FancyOakTree::FancyOakTree(int32_t baseHeight, int32_t heightRandA, int32_t heightRandB)
-        : mBaseHeight(baseHeight), mHeightRandA(heightRandA), mHeightRandB(heightRandB) {
-}
+        : mBaseHeight(baseHeight), mHeightRandA(heightRandA), mHeightRandB(heightRandB) {}
 
 bool FancyOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     const Coordinate origin{x, y, z};
@@ -68,8 +66,7 @@ bool FancyOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, i
             if (_makeLimb(manager, checkStart, checkEnd, false)) {
                 const int32_t dx = origin.mX - checkStart.mX;
                 const int32_t dz = origin.mZ - checkStart.mZ;
-                const double branchHeight =
-                        checkStart.mY - std::sqrt((double) (dx * dx + dz * dz)) * BRANCH_SLOPE;
+                const double branchHeight = checkStart.mY - std::sqrt((double) (dx * dx + dz * dz)) * BRANCH_SLOPE;
                 const int32_t branchTop = branchHeight > trunkTop ? trunkTop : (int32_t) branchHeight;
                 const Coordinate checkBranchBase{origin.mX, branchTop, origin.mZ};
                 if (_makeLimb(manager, checkBranchBase, checkStart, false))
@@ -107,11 +104,9 @@ bool FancyOakTree::_makeLimb(BlockManager &manager, const Coordinate &startPos, 
     const float stepZ = (float) deltaZ / (float) steps;
 
     for (int32_t i = 0; i <= steps; i++) {
-        const Coordinate blockPos{
-                startPos.mX + floorToInt(0.5f + i * stepX),
-                startPos.mY + floorToInt(0.5f + i * stepY),
-                startPos.mZ + floorToInt(0.5f + i * stepZ)
-        };
+        const Coordinate blockPos{startPos.mX + floorToInt(0.5f + i * stepX),
+                                  startPos.mY + floorToInt(0.5f + i * stepY),
+                                  startPos.mZ + floorToInt(0.5f + i * stepZ)};
 
         if (doPlace)
             _placeLogAt(manager, blockPos, _getLogAxis(startPos, blockPos));
@@ -154,8 +149,8 @@ void FancyOakTree::_makeBranches(BlockManager &manager, int32_t height, const Co
 
 void FancyOakTree::_createFoliage(BlockManager &manager, const Coordinate &foliagePos) {
     for (int32_t yo = FOLIAGE_OFFSET; yo >= FOLIAGE_OFFSET - FOLIAGE_HEIGHT; yo--) {
-        const int32_t currentRadius =
-                FOLIAGE_RADIUS + (yo != FOLIAGE_OFFSET && yo != FOLIAGE_OFFSET - FOLIAGE_HEIGHT ? 1 : 0);
+        const int32_t currentRadius = FOLIAGE_RADIUS
+                                      + (yo != FOLIAGE_OFFSET && yo != FOLIAGE_OFFSET - FOLIAGE_HEIGHT ? 1 : 0);
         _placeLeavesRow(manager, foliagePos, currentRadius, yo);
     }
 }
@@ -197,8 +192,7 @@ bool FancyOakTree::_isFree(BlockManager &manager, const Coordinate &pos) {
 
 void FancyOakTree::_placeLogAt(BlockManager &manager, const Coordinate &pos, const char *axis) {
     if (_isFree(manager, pos))
-        manager.setBlockStateAt(pos.mX, pos.mY, pos.mZ,
-                                withPillarAxis(VanillaBlocks::OAK_LOG().toBlockState(), axis));
+        manager.setBlockStateAt(pos.mX, pos.mY, pos.mZ, withPillarAxis(VanillaBlocks::OAK_LOG().toBlockState(), axis));
 }
 
 void FancyOakTree::_placeLeafAt(BlockManager &manager, int32_t x, int32_t y, int32_t z) {

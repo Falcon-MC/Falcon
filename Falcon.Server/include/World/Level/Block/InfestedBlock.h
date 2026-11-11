@@ -6,8 +6,7 @@
 
 class InfestedBlock final : public Block {
 public:
-    explicit InfestedBlock(const Block &block) : Block(block) {
-    }
+    explicit InfestedBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

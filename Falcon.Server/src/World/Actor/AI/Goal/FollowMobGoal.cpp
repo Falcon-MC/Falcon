@@ -13,8 +13,7 @@ namespace {
     const int32_t REPATH_INTERVAL = 10;
 }
 
-FollowMobGoal::FollowMobGoal(float speed, float searchRange, float stopDistance,
-                             std::shared_ptr<json::Value> filters)
+FollowMobGoal::FollowMobGoal(float speed, float searchRange, float stopDistance, std::shared_ptr<json::Value> filters)
         : mSpeed(speed), mSearchRange(searchRange), mStopDistance(stopDistance), mFilters(std::move(filters)) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }

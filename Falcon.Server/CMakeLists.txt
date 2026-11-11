@@ -12,7 +12,14 @@ falcon_bedrock_data_file(item_tags.json FALCON_ITEM_TAGS_JSON)
 falcon_bedrock_data_file(biome_definitions.nbt FALCON_BIOME_DEFINITIONS_NBT)
 falcon_bedrock_data_file(block_palette.nbt FALCON_BLOCK_PALETTE_NBT)
 falcon_bedrock_data_file(voxel_shapes.json FALCON_VOXEL_SHAPES_JSON)
+falcon_bedrock_data_file(block_collision_shapes.json FALCON_BLOCK_COLLISION_SHAPES_JSON)
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
+falcon_bedrock_data_embed_text(FILE block_tags.json NAMESPACE FalconBlockTagsData SYMBOL kBlockTagsJson
+        DELIMITER falcontags OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockTagsJson.h")
+falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson
+        DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenItemsJson.h")
+falcon_bedrock_data_embed_text(FILE command_hidden_blocks.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenBlocksJson
+        DELIMITER falconblocks OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/CommandHiddenBlocksJson.h")
 falcon_bedrock_data_embed_text(FILE loot_tables.json NAMESPACE FalconLootData SYMBOL kLootTablesJson
         DELIMITER falconloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LootTablesJson.h")
 falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData SYMBOL kItemPaletteJson
@@ -76,6 +83,9 @@ configure_file(cmake/CraftingRecipeJson.h.in "${FALCON_GENERATED_DIR}/CraftingRe
 file(READ "${FALCON_VOXEL_SHAPES_JSON}" FALCON_VOXEL_SHAPES_JSON_CONTENT)
 configure_file(cmake/VoxelShapesJson.h.in "${FALCON_GENERATED_DIR}/VoxelShapesJson.h" @ONLY)
 
+file(READ "${FALCON_BLOCK_COLLISION_SHAPES_JSON}" FALCON_BLOCK_COLLISION_SHAPES_JSON_CONTENT)
+configure_file(cmake/BlockCollisionShapesJson.h.in "${FALCON_GENERATED_DIR}/BlockCollisionShapesJson.h" @ONLY)
+
 file(READ "${FALCON_CREATIVE_ITEMS_JSON}" FALCON_CREATIVE_ITEMS_JSON_CONTENT)
 configure_file(cmake/CreativeItemsJson.h.in "${FALCON_GENERATED_DIR}/CreativeItemsJson.h" @ONLY)
 
@@ -105,6 +115,38 @@ foreach(schemaFile IN LISTS FALCON_BLOCK_UPGRADE_SCHEMA_FILES)
     string(APPEND FALCON_BLOCK_UPGRADE_SCHEMAS "        {${schemaId}, R\"falconschema(${schemaContent})falconschema\"},\n")
 endforeach()
 configure_file(cmake/BlockUpgradeSchemas.h.in "${FALCON_GENERATED_DIR}/BlockUpgradeSchemas.h" @ONLY)
+
+# the tables worlds before 1.12 need: numeric ids and meta values to block states
+configure_file(cmake/LegacyBlockTables.h.in "${FALCON_GENERATED_DIR}/LegacyBlockTables.h" @ONLY)
+set(FALCON_LEGACY_ID_MAP "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/block_legacy_id_map.json")
+set(FALCON_LEGACY_ID_META "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/id_meta_1.12.0.bin")
+set(FALCON_LEGACY_ITEM_IDS "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/item_legacy_id_map.json")
+set(FALCON_LEGACY_ENTITY_IDS "${FALCON_BLOCK_UPGRADE_LEGACY_DIR}/entity_id_map.json")
+set(FALCON_LEGACY_TABLES_SOURCE "${FALCON_GENERATED_DIR}/LegacyBlockTables.cpp")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FALCON_LEGACY_ID_MAP}" "${FALCON_LEGACY_ID_META}"
+        "${FALCON_LEGACY_ITEM_IDS}" "${FALCON_LEGACY_ENTITY_IDS}")
+file(READ "${FALCON_LEGACY_ID_MAP}" FALCON_LEGACY_ID_MAP_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ID_MAP_BYTES "${FALCON_LEGACY_ID_MAP_HEX}")
+file(READ "${FALCON_LEGACY_ID_META}" FALCON_LEGACY_ID_META_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ID_META_BYTES "${FALCON_LEGACY_ID_META_HEX}")
+file(READ "${FALCON_LEGACY_ITEM_IDS}" FALCON_LEGACY_ITEM_IDS_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ITEM_IDS_BYTES "${FALCON_LEGACY_ITEM_IDS_HEX}")
+file(READ "${FALCON_LEGACY_ENTITY_IDS}" FALCON_LEGACY_ENTITY_IDS_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," FALCON_LEGACY_ENTITY_IDS_BYTES "${FALCON_LEGACY_ENTITY_IDS_HEX}")
+file(WRITE "${FALCON_LEGACY_TABLES_SOURCE}.new"
+        "#include \"LegacyBlockTables.h\"\n"
+        "namespace FalconLegacyBlockData {\n"
+        "extern const char kIdMap[] = {${FALCON_LEGACY_ID_MAP_BYTES}};\n"
+        "extern const size_t kIdMapSize = sizeof(kIdMap);\n"
+        "extern const unsigned char kIdMeta[] = {${FALCON_LEGACY_ID_META_BYTES}};\n"
+        "extern const size_t kIdMetaSize = sizeof(kIdMeta);\n"
+        "extern const char kItemIds[] = {${FALCON_LEGACY_ITEM_IDS_BYTES}};\n"
+        "extern const size_t kItemIdsSize = sizeof(kItemIds);\n"
+        "extern const char kEntityIds[] = {${FALCON_LEGACY_ENTITY_IDS_BYTES}};\n"
+        "extern const size_t kEntityIdsSize = sizeof(kEntityIds);\n"
+        "}\n")
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${FALCON_LEGACY_TABLES_SOURCE}.new"
+        "${FALCON_LEGACY_TABLES_SOURCE}")
 
 file(GLOB FALCON_LANGUAGE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Languages/*.lang")
 list(SORT FALCON_LANGUAGE_SOURCES)
@@ -154,10 +196,13 @@ set(FALCON_EXECUTABLE_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/SetupWizard.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/Server/VersionChecker.cpp")
 list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_EXECUTABLE_SOURCES})
+# built as its own library further down: the transport library links against it
+set(FALCON_TRANSPORT_TRANSCRIPT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/Network/TransportTranscript.cpp")
+list(REMOVE_ITEM FALCON_CORE_SOURCES ${FALCON_TRANSPORT_TRANSCRIPT_SOURCE})
 
 # An object library rather than a static one: blocks, items and actors register themselves from static
 # initialisers, and a static library would let the linker drop every object nothing references by name.
-add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES})
+add_library(FalconCore OBJECT ${FALCON_CORE_SOURCES} ${FALCON_LEGACY_TABLES_SOURCE})
 
 # no fused multiply-adds anywhere in generation: the game rounds every float step, fma changes the terrain
 file(GLOB_RECURSE FALCON_LEVELGEN_SOURCES CONFIGURE_DEPENDS
@@ -188,6 +233,21 @@ if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 else()
     target_link_libraries(FalconCore PUBLIC ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)
 endif()
+
+# the transport library keeps its secure contexts to itself: it is built to pass them through this
+# small library, which keeps what a peer sent while its session was set up
+add_library(FalconTransportTranscript STATIC ${FALCON_TRANSPORT_TRANSCRIPT_SOURCE})
+target_compile_features(FalconTransportTranscript PRIVATE cxx_std_17)
+target_include_directories(FalconTransportTranscript PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${OPENSSL_INCLUDE_DIR})
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_link_libraries(FalconTransportTranscript PUBLIC ssl crypto)
+else()
+    target_link_libraries(FalconTransportTranscript PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+target_compile_definitions(datachannel-static PRIVATE SSL_CTX_set_info_callback=falcon_transport_install)
+target_link_libraries(datachannel-static PUBLIC FalconTransportTranscript)
+target_link_libraries(FalconCore PUBLIC FalconTransportTranscript)
 
 option(FALCON_BUILD_SERVER_EXECUTABLE "Build the dedicated server executable" ON)
 
@@ -220,6 +280,8 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     target_link_libraries(FalconHostileMeleeTests PRIVATE FalconCore)
     add_executable(FalconRangedMobTests tests/RangedMobTests.cpp)
     target_link_libraries(FalconRangedMobTests PRIVATE FalconCore)
+    add_executable(FalconStructureTests tests/StructureTests.cpp)
+    target_link_libraries(FalconStructureTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_link_options(FalconMovementInputTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconBlockBreakingTests PRIVATE -static -fuse-ld=lld)
@@ -234,6 +296,7 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
         target_link_options(FalconScriptApiTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconHostileMeleeTests PRIVATE -static -fuse-ld=lld)
         target_link_options(FalconRangedMobTests PRIVATE -static -fuse-ld=lld)
+        target_link_options(FalconStructureTests PRIVATE -static -fuse-ld=lld)
     endif()
     add_test(NAME movement-input-timeline COMMAND FalconMovementInputTests)
     set_tests_properties(movement-input-timeline PROPERTIES TIMEOUT 60)
@@ -260,6 +323,27 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME maps COMMAND FalconMapTests)
     set_tests_properties(maps PROPERTIES TIMEOUT 60)
+    add_executable(FalconAccountBindingTests tests/AccountBindingTests.cpp)
+    target_link_libraries(FalconAccountBindingTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconAccountBindingTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME account-binding COMMAND FalconAccountBindingTests)
+    set_tests_properties(account-binding PROPERTIES TIMEOUT 60)
+    add_executable(FalconLegacyWorldTests tests/LegacyWorldTests.cpp)
+    target_link_libraries(FalconLegacyWorldTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconLegacyWorldTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME legacy-world COMMAND FalconLegacyWorldTests)
+    set_tests_properties(legacy-world PROPERTIES TIMEOUT 60)
+    add_executable(FalconClientProbeTests tests/ClientProbeTests.cpp)
+    target_link_libraries(FalconClientProbeTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconClientProbeTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME client-probes COMMAND FalconClientProbeTests)
+    set_tests_properties(client-probes PROPERTIES TIMEOUT 60)
     add_executable(FalconImageMapTests tests/ImageMapTests.cpp)
     target_link_libraries(FalconImageMapTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -289,6 +373,15 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME tree-generation COMMAND FalconTreeGenerationTests)
     set_tests_properties(tree-generation PROPERTIES TIMEOUT 60)
+    add_executable(FalconRespawnAnchorTests tests/RespawnAnchorTests.cpp)
+    target_link_libraries(FalconRespawnAnchorTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconRespawnAnchorTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME respawn-anchor COMMAND FalconRespawnAnchorTests)
+    set_tests_properties(respawn-anchor PROPERTIES TIMEOUT 60)
+    add_test(NAME structure-generation COMMAND FalconStructureTests)
+    set_tests_properties(structure-generation PROPERTIES TIMEOUT 120)
     add_executable(FalconOptimizationTests tests/OptimizationTests.cpp)
     target_link_libraries(FalconOptimizationTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -303,6 +396,39 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME decoration-order COMMAND FalconDecorationOrderTests)
     set_tests_properties(decoration-order PROPERTIES TIMEOUT 120)
+    add_executable(FalconBlockPlacementFilterTests tests/BlockPlacementFilterTests.cpp)
+    target_link_libraries(FalconBlockPlacementFilterTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconBlockPlacementFilterTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME block-placement-filter COMMAND FalconBlockPlacementFilterTests)
+    set_tests_properties(block-placement-filter PROPERTIES TIMEOUT 60)
+    add_executable(FalconBlockTickingQueueTests tests/BlockTickingQueueTests.cpp)
+    target_link_libraries(FalconBlockTickingQueueTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconBlockTickingQueueTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME block-ticking-queue COMMAND FalconBlockTickingQueueTests)
+    set_tests_properties(block-ticking-queue PROPERTIES TIMEOUT 60)
+    add_executable(FalconSignalingPropertiesTests tests/SignalingPropertiesTests.cpp)
+    target_link_libraries(FalconSignalingPropertiesTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconSignalingPropertiesTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME signaling-properties COMMAND FalconSignalingPropertiesTests)
+    set_tests_properties(signaling-properties PROPERTIES TIMEOUT 60)
+    add_executable(FalconFluidParityTests tests/FluidParityTests.cpp)
+    target_link_libraries(FalconFluidParityTests PRIVATE FalconCore)
+    target_compile_definitions(FalconFluidParityTests PRIVATE
+            FALCON_FLUID_TRACE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data/fluids")
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconFluidParityTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME fluid-parity COMMAND FalconFluidParityTests
+            platform drain stairs twosrc twosrcair hole hole2 holefar waterfall ledge still placeflow
+            lavaplat lavawater basalt drops waterlog waterlogout waterlogslab sourceabove netherlava
+            ~sponge@41 concrete lavafall waterfalllava)
+    set_tests_properties(fluid-parity PROPERTIES TIMEOUT 300)
     add_executable(FalconFastJoinTests tests/FastJoinTests.cpp)
     target_link_libraries(FalconFastJoinTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

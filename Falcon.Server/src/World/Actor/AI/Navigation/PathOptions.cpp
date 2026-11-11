@@ -9,15 +9,13 @@ namespace {
         NavigationMode mMode;
     };
 
-    const NavigationComponent NAVIGATION_COMPONENTS[] = {
-            {"minecraft:navigation.walk", NavigationMode::Walk},
-            {"minecraft:navigation.generic", NavigationMode::Walk},
-            {"minecraft:navigation.climb", NavigationMode::Climb},
-            {"minecraft:navigation.swim", NavigationMode::Swim},
-            {"minecraft:navigation.fly", NavigationMode::Fly},
-            {"minecraft:navigation.hover", NavigationMode::Fly},
-            {"minecraft:navigation.float", NavigationMode::Fly}
-    };
+    const NavigationComponent NAVIGATION_COMPONENTS[] = {{"minecraft:navigation.walk", NavigationMode::Walk},
+                                                         {"minecraft:navigation.generic", NavigationMode::Walk},
+                                                         {"minecraft:navigation.climb", NavigationMode::Climb},
+                                                         {"minecraft:navigation.swim", NavigationMode::Swim},
+                                                         {"minecraft:navigation.fly", NavigationMode::Fly},
+                                                         {"minecraft:navigation.hover", NavigationMode::Fly},
+                                                         {"minecraft:navigation.float", NavigationMode::Fly}};
 
     const char *const GLIDE_MOVEMENT_COMPONENT = "minecraft:movement.glide";
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";

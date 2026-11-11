@@ -28,11 +28,17 @@ public:
 
     void tick(const UpdateHandler &handler, const std::function<bool(int32_t, int32_t)> &isActive);
 
-    int64_t getCurrentTick() const { return mTick; }
+    int64_t getCurrentTick() const {
+        return mTick;
+    }
 
-    size_t getScheduledCount() const { return mSchedule.size(); }
+    size_t getScheduledCount() const {
+        return mSchedule.size();
+    }
 
-    size_t getLastProcessedCount() const { return mLastProcessed; }
+    size_t getLastProcessedCount() const {
+        return mLastProcessed;
+    }
 
 private:
     struct Position {

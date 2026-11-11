@@ -32,9 +32,8 @@ namespace {
         return result;
     }
 
-    void resample(const ImageMapImage &source, double sourceX, double sourceY, double sourceWidth,
-                  double sourceHeight, ImageMapImage &target, int32_t targetX, int32_t targetY, int32_t targetWidth,
-                  int32_t targetHeight) {
+    void resample(const ImageMapImage &source, double sourceX, double sourceY, double sourceWidth, double sourceHeight,
+                  ImageMapImage &target, int32_t targetX, int32_t targetY, int32_t targetWidth, int32_t targetHeight) {
         const std::vector<std::vector<Tap>> columns = taps(sourceX, sourceWidth, source.mWidth, targetWidth);
         const std::vector<std::vector<Tap>> rows = taps(sourceY, sourceHeight, source.mHeight, targetHeight);
 
@@ -47,8 +46,8 @@ namespace {
                 float alpha = 0.0f;
                 for (const Tap &row: rows[(size_t) y]) {
                     for (const Tap &column: columns[(size_t) x]) {
-                        const uint32_t pixel = source.mPixels[(size_t) column.mIndex
-                                                              + (size_t) row.mIndex * (size_t) source.mWidth];
+                        const uint32_t pixel =
+                                source.mPixels[(size_t) column.mIndex + (size_t) row.mIndex * (size_t) source.mWidth];
                         const float weight = row.mWeight * column.mWeight;
                         const float pixelAlpha = (float) (pixel >> 24) * weight;
                         red += (float) (pixel & 0xff) * pixelAlpha;

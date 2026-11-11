@@ -4,6 +4,7 @@
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 
 #include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/DoublePlantBlock.h"
 #include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
@@ -27,6 +28,8 @@
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Feature/Tree/BeeNestGenerator.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/BlockPileFeature.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/CactusFeature.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldTreePlacer.h"
@@ -44,6 +47,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -54,11 +58,17 @@ namespace {
     constexpr const char *AFTER_SURFACE_PASS = "after_surface_pass";
 
     // the passes the game places after the carvers, in order (sub_1471CE3F0)
-    const char *const PASSES[] = {
-            FIRST_PASS, "before_underground_pass", UNDERGROUND_PASS, "after_underground_pass",
-            "before_surface_pass", SURFACE_PASS, "after_surface_pass", "before_sky_pass", "sky_pass",
-            "after_sky_pass", "final_pass"
-    };
+    const char *const PASSES[] = {FIRST_PASS,
+                                  "before_underground_pass",
+                                  UNDERGROUND_PASS,
+                                  "after_underground_pass",
+                                  "before_surface_pass",
+                                  SURFACE_PASS,
+                                  "after_surface_pass",
+                                  "before_sky_pass",
+                                  "sky_pass",
+                                  "after_sky_pass",
+                                  "final_pass"};
 
     struct ReplaceRule {
         Block (*mPlaces)();
@@ -158,9 +168,7 @@ namespace {
         return chunk->getHeight(x & 15, z & 15) + 1;
     }
     // axis visiting order of each coordinate_eval_order (sub_1437FD990)
-    const int32_t EVAL_ORDERS[6][3] = {
-            {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}
-    };
+    const int32_t EVAL_ORDERS[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
 
     struct Sphere {
         float mX;
@@ -258,7 +266,7 @@ namespace {
 
     // sub_14A290200: from a start that passes, along the step while the blocks pass, at most range - 1 of them,
     // then the block it stopped at is tested as the surface
-    template<typename Continues, typename Ends>
+    template <typename Continues, typename Ends>
     ColumnEnd walkColumn(int32_t x, int32_t y, int32_t z, const int32_t step[3], int32_t range,
                          const Continues &continues, const Ends &ends) {
         ColumnEnd end;
@@ -403,9 +411,8 @@ namespace {
     }
 
     bool isKelp(const BlockState &state) {
-        static const BlockStateSet KELP = BlockStateSet::ofBlocks([](const Block &block) {
-            return dynamic_cast<const KelpBlock *>(&block) != nullptr;
-        });
+        static const BlockStateSet KELP = BlockStateSet::ofBlocks(
+                [](const Block &block) { return dynamic_cast<const KelpBlock *>(&block) != nullptr; });
         return KELP.contains(state);
     }
 
@@ -457,11 +464,10 @@ namespace {
     // a geode point may not land in air, a liquid, ice, bedrock, packed or blue ice (qword_1529B1E50,
     // qword_1529BAF38, qword_1529BAF08, materials of xmmword_152B18A30)
     bool refusesGeodePoint(const BlockState &state) {
-        static const BlockStateSet REFUSED = {
-                "minecraft:air", "minecraft:bedrock", "minecraft:packed_ice", "minecraft:blue_ice"
-        };
-        return REFUSED.contains(state) || isWater(state)
-               || LavaBlock::matches(state.mName) || IceBlock::matches(state.mName);
+        static const BlockStateSet REFUSED = {"minecraft:air", "minecraft:bedrock", "minecraft:packed_ice",
+                                              "minecraft:blue_ice"};
+        return REFUSED.contains(state) || isWater(state) || LavaBlock::matches(state.mName)
+               || IceBlock::matches(state.mName);
     }
 
     // the two (sub_140391CC0 & 7) differences of the kelp and seagrass jitter, z drawn first
@@ -491,9 +497,10 @@ namespace {
 
     // xmmword_1529AA840
     const DripstoneBlocks &dripstoneBlocks() {
-        static const DripstoneBlocks blocks = {
-                &VanillaBlocks::DRIPSTONE_BLOCK, &VanillaBlocks::POINTED_DRIPSTONE,
-                {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:stone", "minecraft:tuff", "minecraft:deepslate"}};
+        static const DripstoneBlocks blocks = {&VanillaBlocks::DRIPSTONE_BLOCK,
+                                               &VanillaBlocks::POINTED_DRIPSTONE,
+                                               {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:stone",
+                                                "minecraft:tuff", "minecraft:deepslate"}};
         return blocks;
     }
 
@@ -622,6 +629,38 @@ namespace {
         return true;
     }
 
+    // HorizontalTreeDecorationFeature::place (sub_14D2136C0, vtable 0x14F2F67C0) of shelf_mushroom_feature:
+    // bark_side_only, allow_adjacent false; a side of the log by a draw, the growth by a second once it fits
+    bool placeShelfMushroom(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+        static const int32_t SIDES[4][3] = {{0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+        static const char *const CARDINALS[4] = {"north", "south", "west", "east"};
+        const std::string shelf = VanillaBlocks::SHELF_MUSHROOM().getIdentifier();
+        const int32_t side = nextInt(random, 4);
+        const int32_t toX = x + SIDES[side][0];
+        const int32_t toZ = z + SIDES[side][2];
+        if (!DecorationSupport::isAir(blocks.getBlockAt(toX, y, toZ)))
+            return false;
+
+        const auto isShelf = [&](int32_t atX, int32_t atY, int32_t atZ) {
+            return blocks.getBlockAt(atX, atY, atZ).mName == shelf;
+        };
+        if (isShelf(x, y, z - 1) || isShelf(x + 1, y, z) || isShelf(x, y, z + 1) || isShelf(x - 1, y, z)
+            || isShelf(toX, y + 1, toZ) || isShelf(toX, y - 1, toZ) || isShelf(toX, y, toZ - 1)
+            || isShelf(toX, y, toZ + 1) || isShelf(toX - 1, y, toZ) || isShelf(toX + 1, y, toZ))
+            return false;
+
+        // never on the ends of a lying log
+        const std::string axis = blocks.getBlockAt(x, y, z).mStates.getString("pillar_axis", "y");
+        if ((side >= 2 && axis == "x") || (side < 2 && axis == "z"))
+            return false;
+
+        Tag states = VanillaBlocks::SHELF_MUSHROOM().toBlockState().mStates;
+        states.putInt("growth", nextInt(random, 2));
+        states.putString("minecraft:cardinal_direction", CARDINALS[side]);
+        blocks.setBlockStateAt(toX, y, toZ, BlockState(shelf, states));
+        return true;
+    }
+
     // BambooFeature::place (vtable 0x14F2F70E0, sub_147171FC0): thick stalks up from an air block over dirt, sand or
     // gravel, 5 plus nextInt of 8 to 12 by a hash of the column; from 3 tall one more block on top, large leaves on
     // the two highest and small ones under them
@@ -629,7 +668,8 @@ namespace {
         static const BlockStateSet GROUND = BlockStateSet::ofBlocks([](const Block &block) {
             const std::string &name = block.getIdentifier();
             return IFeature::isSupportDirt(block.toBlockState()) || name == VanillaBlocks::SAND().getIdentifier()
-                   || name == VanillaBlocks::RED_SAND().getIdentifier() || name == VanillaBlocks::GRAVEL().getIdentifier();
+                   || name == VanillaBlocks::RED_SAND().getIdentifier()
+                   || name == VanillaBlocks::GRAVEL().getIdentifier();
         });
         if (!DecorationSupport::isAir(blocks.getBlockAt(x, y, z)) || !GROUND.contains(blocks.getBlockAt(x, y - 1, z)))
             return false;
@@ -751,6 +791,8 @@ struct OverworldRulePlacer::SingleBlockDefinition {
     int32_t mAge = 0;
     // may_not_attach_to bottom podzol, tested before the weight is drawn
     bool mNotOnPodzol = false;
+    // survives on sand and hardened clay besides the blocks of PlantSupport::Dirt
+    bool mSandAndClay = false;
 };
 
 // a minecraft:sequence_feature: each feature at the position the one before hands on
@@ -952,77 +994,124 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     static const std::vector<OreDefinition> ORES = {
             {"minecraft:andesite_feature", 64, 0.0f, {{&VanillaBlocks::ANDESITE, {"minecraft:stone"}}}},
             {"minecraft:clay_ore_feature", 33, 0.0f, {{&VanillaBlocks::CLAY, {"minecraft:stone"}}}},
-            {"minecraft:coal_ore_feature", 17, 0.5f, {{&VanillaBlocks::COAL_ORE, {"minecraft:stone"}},
-                                                      {&VanillaBlocks::DEEPSLATE_COAL_ORE, {"minecraft:deepslate"}}}},
-            {"minecraft:coal_ore_upper_feature", 17, 0.0f, {{&VanillaBlocks::COAL_ORE, {"minecraft:stone"}},
-                                                            {&VanillaBlocks::DEEPSLATE_COAL_ORE,
-                                                             {"minecraft:deepslate"}}}},
-            {"minecraft:copper_ore_feature", 10, 0.0f, {{&VanillaBlocks::COPPER_ORE, {"minecraft:stone"}},
-                                                        {&VanillaBlocks::DEEPSLATE_COPPER_ORE,
-                                                         {"minecraft:deepslate"}}}},
-            {"minecraft:diamond_ore_buried_feature", 8, 1.0f, {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
-                                                               {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE,
-                                                                {"minecraft:deepslate"}}}},
-            {"minecraft:diamond_ore_feature", 4, 0.5f, {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
-                                                        {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE,
-                                                         {"minecraft:deepslate"}}}},
-            {"minecraft:diamond_ore_large_feature", 12, 0.7f, {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
-                                                               {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE,
-                                                                {"minecraft:deepslate"}}}},
+            {"minecraft:coal_ore_feature",
+             17,
+             0.5f,
+             {{&VanillaBlocks::COAL_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_COAL_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:coal_ore_upper_feature",
+             17,
+             0.0f,
+             {{&VanillaBlocks::COAL_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_COAL_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:copper_ore_feature",
+             10,
+             0.0f,
+             {{&VanillaBlocks::COPPER_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_COPPER_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:diamond_ore_buried_feature",
+             8,
+             1.0f,
+             {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:diamond_ore_feature",
+             4,
+             0.5f,
+             {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:diamond_ore_large_feature",
+             12,
+             0.7f,
+             {{&VanillaBlocks::DIAMOND_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_DIAMOND_ORE, {"minecraft:deepslate"}}}},
             // not in the packs, only in the game's definitions/features/dirt_feature.json
             {"minecraft:dirt_feature", 33, 0.0f, {{&VanillaBlocks::DIRT, {"minecraft:stone"}}}},
             {"minecraft:diorite_feature", 64, 0.0f, {{&VanillaBlocks::DIORITE, {"minecraft:stone"}}}},
-            {"minecraft:dripstone_caves_copper_ore_feature", 20, 0.0f,
+            {"minecraft:dripstone_caves_copper_ore_feature",
+             20,
+             0.0f,
              {{&VanillaBlocks::COPPER_ORE, {"minecraft:stone"}},
               {&VanillaBlocks::DEEPSLATE_COPPER_ORE, {"minecraft:deepslate"}}}},
-            {"minecraft:emerald_ore_feature", 3, 0.0f, {{&VanillaBlocks::EMERALD_ORE, {"minecraft:stone"}},
-                                                        {&VanillaBlocks::DEEPSLATE_EMERALD_ORE,
-                                                         {"minecraft:deepslate"}}}},
-            {"minecraft:gold_ore_extra_feature", 9, 0.0f, {{&VanillaBlocks::GOLD_ORE, {"minecraft:stone"}},
-                                                           {&VanillaBlocks::DEEPSLATE_GOLD_ORE,
-                                                            {"minecraft:deepslate"}}}},
-            {"minecraft:gold_ore_feature", 9, 0.5f, {{&VanillaBlocks::GOLD_ORE, {"minecraft:stone"}},
-                                                     {&VanillaBlocks::DEEPSLATE_GOLD_ORE, {"minecraft:deepslate"}}}},
-            {"minecraft:gold_ore_lower_feature", 9, 0.5f, {{&VanillaBlocks::GOLD_ORE, {"minecraft:stone"}},
-                                                           {&VanillaBlocks::DEEPSLATE_GOLD_ORE,
-                                                            {"minecraft:deepslate"}}}},
+            {"minecraft:emerald_ore_feature",
+             3,
+             0.0f,
+             {{&VanillaBlocks::EMERALD_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_EMERALD_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:gold_ore_extra_feature",
+             9,
+             0.0f,
+             {{&VanillaBlocks::GOLD_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_GOLD_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:gold_ore_feature",
+             9,
+             0.5f,
+             {{&VanillaBlocks::GOLD_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_GOLD_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:gold_ore_lower_feature",
+             9,
+             0.5f,
+             {{&VanillaBlocks::GOLD_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_GOLD_ORE, {"minecraft:deepslate"}}}},
             {"minecraft:granite_feature", 64, 0.0f, {{&VanillaBlocks::GRANITE, {"minecraft:stone"}}}},
-            {"minecraft:gravel_ore_feature", 33, 0.0f, {{&VanillaBlocks::GRAVEL,
-                                                         {"minecraft:stone", "minecraft:deepslate"}}}},
-            {"minecraft:iron_ore_feature", 10, 0.0f, {{&VanillaBlocks::IRON_ORE, {"minecraft:stone"}},
-                                                      {&VanillaBlocks::DEEPSLATE_IRON_ORE, {"minecraft:deepslate"}}}},
-            {"minecraft:iron_ore_small_feature", 4, 0.0f, {{&VanillaBlocks::IRON_ORE, {"minecraft:stone"}},
-                                                           {&VanillaBlocks::DEEPSLATE_IRON_ORE,
-                                                            {"minecraft:deepslate"}}}},
-            {"minecraft:lapis_ore_buried_feature", 7, 1.0f, {{&VanillaBlocks::LAPIS_ORE, {"minecraft:stone"}},
-                                                             {&VanillaBlocks::DEEPSLATE_LAPIS_ORE,
-                                                              {"minecraft:deepslate"}}}},
-            {"minecraft:lapis_ore_feature", 7, 0.0f, {{&VanillaBlocks::LAPIS_ORE, {"minecraft:stone"}},
-                                                      {&VanillaBlocks::DEEPSLATE_LAPIS_ORE, {"minecraft:deepslate"}}}},
-            {"minecraft:redstone_ore_feature", 8, 0.0f, {{&VanillaBlocks::REDSTONE_ORE, {"minecraft:stone"}},
-                                                         {&VanillaBlocks::DEEPSLATE_REDSTONE_ORE,
-                                                          {"minecraft:deepslate"}}}},
+            {"minecraft:gravel_ore_feature",
+             33,
+             0.0f,
+             {{&VanillaBlocks::GRAVEL, {"minecraft:stone", "minecraft:deepslate"}}}},
+            {"minecraft:iron_ore_feature",
+             10,
+             0.0f,
+             {{&VanillaBlocks::IRON_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_IRON_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:iron_ore_small_feature",
+             4,
+             0.0f,
+             {{&VanillaBlocks::IRON_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_IRON_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:lapis_ore_buried_feature",
+             7,
+             1.0f,
+             {{&VanillaBlocks::LAPIS_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_LAPIS_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:lapis_ore_feature",
+             7,
+             0.0f,
+             {{&VanillaBlocks::LAPIS_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_LAPIS_ORE, {"minecraft:deepslate"}}}},
+            {"minecraft:redstone_ore_feature",
+             8,
+             0.0f,
+             {{&VanillaBlocks::REDSTONE_ORE, {"minecraft:stone"}},
+              {&VanillaBlocks::DEEPSLATE_REDSTONE_ORE, {"minecraft:deepslate"}}}},
             {"minecraft:tuff_feature", 64, 0.0f, {{&VanillaBlocks::TUFF, {"minecraft:stone", "minecraft:deepslate"}}}},
-            {"minecraft:nether_soul_sand_underground_feature", 12, 0.0f,
-             {{&VanillaBlocks::SOUL_SAND, {"minecraft:netherrack"}}}}
-    };
+            {"minecraft:nether_soul_sand_underground_feature",
+             12,
+             0.0f,
+             {{&VanillaBlocks::SOUL_SAND, {"minecraft:netherrack"}}}}};
 
     // vtables 0x14F4A0DC0 (clay, place sub_14D1FBFA0) and 0x14F4A1710 (sand and gravel, place sub_14D22F1B0)
-    static const DiskDefinition DISKS[] = {
-            {"minecraft:sand_feature", &VanillaBlocks::SAND, 7, 2,
-             {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:grass_block"}, false},
-            {"minecraft:gravel_feature", &VanillaBlocks::GRAVEL, 6, 2,
-             {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:grass_block"}, false},
-            {"minecraft:clay_feature", &VanillaBlocks::CLAY, 4, 1,
-             {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:mud"}, true}
-    };
+    static const DiskDefinition DISKS[] = {{"minecraft:sand_feature",
+                                            &VanillaBlocks::SAND,
+                                            7,
+                                            2,
+                                            {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:grass_block"},
+                                            false},
+                                           {"minecraft:gravel_feature",
+                                            &VanillaBlocks::GRAVEL,
+                                            6,
+                                            2,
+                                            {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:grass_block"},
+                                            false},
+                                           {"minecraft:clay_feature",
+                                            &VanillaBlocks::CLAY,
+                                            4,
+                                            1,
+                                            {"minecraft:dirt", "minecraft:coarse_dirt", "minecraft:mud"},
+                                            true}};
 
-    static const SeagrassDefinition SEAGRASS[] = {
-            {"minecraft:shortest_seagrass_feature", 1, 0.3f},
-            {"minecraft:shorter_seagrass_feature", 1, 0.4f},
-            {"minecraft:taller_seagrass_feature", 1, 0.8f},
-            {"minecraft:seagrass_feature", 1, 0.6f}
-    };
+    static const SeagrassDefinition SEAGRASS[] = {{"minecraft:shortest_seagrass_feature", 1, 0.3f},
+                                                  {"minecraft:shorter_seagrass_feature", 1, 0.4f},
+                                                  {"minecraft:taller_seagrass_feature", 1, 0.8f},
+                                                  {"minecraft:seagrass_feature", 1, 0.6f}};
 
     // the game's definitions/features: tall_grass_feature and fern_feature place minecraft:tallgrass, upgraded to
     // these blocks
@@ -1041,8 +1130,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:nether_sprouts_feature", &VanillaBlocks::NETHER_SPROUTS, true, false, -1, false, true},
             {"minecraft:jungle_tall_grass_feature", &VanillaBlocks::SHORT_GRASS, true, false, -1, false, false, nullptr,
              0, true},
-            {"minecraft:jungle_fern_feature", &VanillaBlocks::FERN, true, false, -1, false, false, nullptr, 0, true}
-    };
+            {"minecraft:jungle_fern_feature", &VanillaBlocks::FERN, true, false, -1, false, false, nullptr, 0, true},
+            // vanilla_1.26.50 features/red_shrub_single_block_feature.json
+            {"minecraft:red_shrub_single_block_feature", &VanillaBlocks::RED_SHRUB, true, false, -1, false, false,
+             nullptr, 0, false, true}};
 
     static const auto single = [](size_t index) {
         Placed placed;
@@ -1058,8 +1149,7 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     // BDS 1.26.61 behavior packs, features/select_taiga_plant_feature.json
     static const WeightedDefinition WEIGHTED[] = {
             {"minecraft:select_taiga_plant_feature", {{single(1), 4}, {single(0), 1}}},
-            {"minecraft:select_jungle_plant_feature", {{single(13), 1}, {single(12), 3}}}
-    };
+            {"minecraft:select_jungle_plant_feature", {{single(13), 1}, {single(12), 3}}}};
 
     static const auto weighted = [](size_t index) {
         Placed placed;
@@ -1076,50 +1166,95 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     // BDS 1.26.61 behavior packs, features/scatter_*.json; eval order 4 is zxy, 5 zyx
     static const ScatterDefinition SCATTERS[] = {
             {"minecraft:scatter_jungle_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(1)},
-            {"minecraft:crimson_fungus_scatter_feature", "24", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(7)},
-            {"minecraft:warped_fungus_scatter_feature", "24", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(8)},
-            {"minecraft:crimson_roots_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(9)},
-            {"minecraft:warped_roots_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(10)},
-            {"minecraft:nether_sprouts_scatter_feature", "64", {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}}, 5, single(11)},
-            {"minecraft:scatter_cold_ocean_seagrass_feature", "32", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+            {"minecraft:crimson_fungus_scatter_feature",
+             "24",
+             {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}},
+             5,
+             single(7)},
+            {"minecraft:warped_fungus_scatter_feature",
+             "24",
+             {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}},
+             5,
+             single(8)},
+            {"minecraft:crimson_roots_scatter_feature",
+             "64",
+             {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}},
+             5,
+             single(9)},
+            {"minecraft:warped_roots_scatter_feature",
+             "64",
+             {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}},
+             5,
+             single(10)},
+            {"minecraft:nether_sprouts_scatter_feature",
+             "64",
+             {{2, "-8", "8"}, {2, "-4", "4"}, {2, "-8", "8"}},
+             5,
+             single(11)},
+            {"minecraft:scatter_cold_ocean_seagrass_feature",
+             "32",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
              seagrass(0)},
-            {"minecraft:scatter_deep_cold_ocean_seagrass_feature", "40", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
-             4, seagrass(2)},
-            {"minecraft:scatter_deep_ocean_seagrass_feature", "48", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+            {"minecraft:scatter_deep_cold_ocean_seagrass_feature",
+             "40",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
              seagrass(2)},
-            {"minecraft:scatter_deep_warm_ocean_seagrass_feature", "80", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
-             4, seagrass(2)},
-            {"minecraft:scatter_ocean_seagrass_feature", "48", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+            {"minecraft:scatter_deep_ocean_seagrass_feature",
+             "48",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
+             seagrass(2)},
+            {"minecraft:scatter_deep_warm_ocean_seagrass_feature",
+             "80",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
+             seagrass(2)},
+            {"minecraft:scatter_ocean_seagrass_feature",
+             "48",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
              seagrass(0)},
-            {"minecraft:scatter_river_seagrass_feature", "48", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+            {"minecraft:scatter_river_seagrass_feature",
+             "48",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
              seagrass(1)},
-            {"minecraft:scatter_swamp_seagrass_feature", "64", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+            {"minecraft:scatter_swamp_seagrass_feature",
+             "64",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
              seagrass(3)},
-            {"minecraft:scatter_warm_ocean_seagrass_feature", "80", {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE}, 4,
+            {"minecraft:scatter_warm_ocean_seagrass_feature",
+             "80",
+             {SEAGRASS_SIDE, SEAGRASS_HEIGHT, SEAGRASS_SIDE},
+             4,
              seagrass(0)},
             {"minecraft:scatter_tall_grass_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, single(0)},
             {"minecraft:scatter_meadow_tall_grass_feature", "16", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, single(0)},
             {"minecraft:scatter_taiga_plant_feature", "32", {GRASS_SIDE, GRASS_HEIGHT, GRASS_SIDE}, 5, weighted(0)},
-            {"minecraft:scatter_bush_feature", "24", {{6, "-5", "5"}, {6, "-3", "3"}, {6, "-5", "5"}}, 5, single(6)}
-    };
+            {"minecraft:scatter_bush_feature", "24", {{6, "-5", "5"}, {6, "-3", "3"}, {6, "-5", "5"}}, 5, single(6)}};
 
     // registered in sub_14726F340
-    static const LegacyFlowerDefinition LEGACY_FLOWERS[] = {
-            {"minecraft:legacy:overworld_flower_feature", 2},
-            {"minecraft:legacy:plains_flower_feature", 3}
-    };
+    static const LegacyFlowerDefinition LEGACY_FLOWERS[] = {{"minecraft:legacy:overworld_flower_feature", 2},
+                                                            {"minecraft:legacy:plains_flower_feature", 3}};
     static const auto legacyFlower = [](size_t index) {
         Placed placed;
         placed.mLegacyFlower = &LEGACY_FLOWERS[index];
         return placed;
     };
     // BDS 1.26.61 behavior packs, features/scatter_overworld_flower_feature.json and scatter_plains_flower_feature.json
-    static const ScatterDefinition FLOWER_SCATTERS[] = {
-            {"minecraft:scatter_overworld_flower_feature", "64", {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}}, 5,
-             legacyFlower(0)},
-            {"minecraft:scatter_plains_flower_feature", "64", {{6, "-6", "6"}, {6, "-2", "2"}, {6, "-6", "6"}}, 5,
-             legacyFlower(1)}
-    };
+    static const ScatterDefinition FLOWER_SCATTERS[] = {{"minecraft:scatter_overworld_flower_feature",
+                                                         "64",
+                                                         {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}},
+                                                         5,
+                                                         legacyFlower(0)},
+                                                        {"minecraft:scatter_plains_flower_feature",
+                                                         "64",
+                                                         {{6, "-6", "6"}, {6, "-2", "2"}, {6, "-6", "6"}},
+                                                         5,
+                                                         legacyFlower(1)}};
 
     static const auto scatter = [](const ScatterDefinition &definition) {
         Placed placed;
@@ -1169,53 +1304,202 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 
     // BDS 1.26.61 definitions/features and behavior packs, features/*.json
     static const AxisText ZERO = {0, "0", ""};
-    static const ScatterDefinition LOG_BROWN_MUSHROOM = {
-            "minecraft:optional_log_brown_mushroom_feature", "1", {ZERO, ZERO, ZERO}, 0,
-            mushroom(&VanillaBlocks::BROWN_MUSHROOM), 0, 0, "50.0"};
+    static const ScatterDefinition LOG_BROWN_MUSHROOM = {"minecraft:optional_log_brown_mushroom_feature",
+                                                         "1",
+                                                         {ZERO, ZERO, ZERO},
+                                                         0,
+                                                         mushroom(&VanillaBlocks::BROWN_MUSHROOM),
+                                                         0,
+                                                         0,
+                                                         "50.0"};
     static const AggregateDefinition SELECT_LOG_MUSHROOM = {
             "minecraft:select_log_mushroom_feature",
-            {scatter(LOG_BROWN_MUSHROOM), mushroom(&VanillaBlocks::RED_MUSHROOM)}, 2};
-    static const ScatterDefinition LOG_MUSHROOMS = {
-            "minecraft:optional_log_mushrooms_feature", "1", {ZERO, {0, "1", ""}, ZERO}, 0,
-            aggregate(SELECT_LOG_MUSHROOM), 1, 10};
+            {scatter(LOG_BROWN_MUSHROOM), mushroom(&VanillaBlocks::RED_MUSHROOM)},
+            2};
+    static const ScatterDefinition LOG_MUSHROOMS = {"minecraft:optional_log_mushrooms_feature",
+                                                    "1",
+                                                    {ZERO, {0, "1", ""}, ZERO},
+                                                    0,
+                                                    aggregate(SELECT_LOG_MUSHROOM),
+                                                    1,
+                                                    10};
 
     using Tree = OverworldTreePlacer;
     static const Tree::Fancy FANCY_OAK = {5, 12, 0.618f, 1, 0.381f, 1.0f, 0.2f, 1.0f, 0.3f, 4, 3};
-    static const TreeDefinition TREES[] = {
-            {{"minecraft:oak_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::OAK_LOG, {4, 7}, {0, 0},
-              Tree::Canopy::Simple, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {}},
-            {{"minecraft:oak_tree_with_vines_feature", Tree::Trunk::Simple, &VanillaBlocks::OAK_LOG, {4, 7}, {0, 0},
-              Tree::Canopy::Simple, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 100.0f, false}, nullptr,
-             {}},
-            {{"minecraft:fancy_oak_tree_feature", Tree::Trunk::Fancy, &VanillaBlocks::OAK_LOG, {0, 0}, {0, 0},
-              Tree::Canopy::Fancy, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, &FANCY_OAK,
-             {}},
-            {{"minecraft:fallen_oak_tree_feature", Tree::Trunk::Fallen, &VanillaBlocks::OAK_LOG, {4, 7}, {0, 0},
-              Tree::Canopy::None, nullptr, {0, 0}, {0, 0}, {0, 0}, 0, 75.0f, true}, nullptr, scatter(LOG_MUSHROOMS)},
-            {{"minecraft:birch_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::BIRCH_LOG, {5, 8}, {0, 0},
-              Tree::Canopy::Simple, &VanillaBlocks::BIRCH_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr,
-             {}},
-            {{"minecraft:fallen_birch_tree_feature", Tree::Trunk::Fallen, &VanillaBlocks::BIRCH_LOG, {5, 8}, {0, 0},
-              Tree::Canopy::None, nullptr, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, true}, nullptr, scatter(LOG_MUSHROOMS)},
-            {{"minecraft:spruce_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::SPRUCE_LOG, {6, 10}, {-2, 1},
-              Tree::Canopy::Spruce, &VanillaBlocks::SPRUCE_LEAVES, {1, 3}, {0, 3}, {2, 4}, 0, 0.0f, false}, nullptr,
-             {}},
-            {{"minecraft:spruce_tree_with_vines_feature", Tree::Trunk::Simple, &VanillaBlocks::SPRUCE_LOG, {6, 10},
-              {-2, 1}, Tree::Canopy::Spruce, &VanillaBlocks::SPRUCE_LEAVES, {1, 3}, {0, 3}, {2, 4}, 0, 100.0f, false},
-             nullptr, {}},
-            {{"minecraft:fallen_spruce_tree_feature", Tree::Trunk::Fallen, &VanillaBlocks::SPRUCE_LOG, {6, 10},
-              {0, 0}, Tree::Canopy::None, nullptr, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, true}, nullptr,
-             scatter(LOG_MUSHROOMS)},
-            // the pine canopy height takes the upper offset's place
-            {{"minecraft:pine_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::SPRUCE_LOG, {7, 12}, {0, 0},
-              Tree::Canopy::Pine, &VanillaBlocks::SPRUCE_LEAVES, {0, 0}, {3, 5}, {0, 0}, 1, 0.0f, false}, nullptr, {}}
-    };
+    static const TreeDefinition TREES[] = {{{"minecraft:oak_tree_feature",
+                                             Tree::Trunk::Simple,
+                                             &VanillaBlocks::OAK_LOG,
+                                             {4, 7},
+                                             {0, 0},
+                                             Tree::Canopy::Simple,
+                                             &VanillaBlocks::OAK_LEAVES,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             0.0f,
+                                             false},
+                                            nullptr,
+                                            {}},
+                                           {{"minecraft:oak_tree_with_vines_feature",
+                                             Tree::Trunk::Simple,
+                                             &VanillaBlocks::OAK_LOG,
+                                             {4, 7},
+                                             {0, 0},
+                                             Tree::Canopy::Simple,
+                                             &VanillaBlocks::OAK_LEAVES,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             100.0f,
+                                             false},
+                                            nullptr,
+                                            {}},
+                                           {{"minecraft:fancy_oak_tree_feature",
+                                             Tree::Trunk::Fancy,
+                                             &VanillaBlocks::OAK_LOG,
+                                             {0, 0},
+                                             {0, 0},
+                                             Tree::Canopy::Fancy,
+                                             &VanillaBlocks::OAK_LEAVES,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             0.0f,
+                                             false},
+                                            &FANCY_OAK,
+                                            {}},
+                                           {{"minecraft:fallen_oak_tree_feature",
+                                             Tree::Trunk::Fallen,
+                                             &VanillaBlocks::OAK_LOG,
+                                             {4, 7},
+                                             {0, 0},
+                                             Tree::Canopy::None,
+                                             nullptr,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             75.0f,
+                                             true},
+                                            nullptr,
+                                            scatter(LOG_MUSHROOMS)},
+                                           {{"minecraft:birch_tree_feature",
+                                             Tree::Trunk::Simple,
+                                             &VanillaBlocks::BIRCH_LOG,
+                                             {5, 8},
+                                             {0, 0},
+                                             Tree::Canopy::Simple,
+                                             &VanillaBlocks::BIRCH_LEAVES,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             0.0f,
+                                             false},
+                                            nullptr,
+                                            {}},
+                                           {{"minecraft:fallen_birch_tree_feature",
+                                             Tree::Trunk::Fallen,
+                                             &VanillaBlocks::BIRCH_LOG,
+                                             {5, 8},
+                                             {0, 0},
+                                             Tree::Canopy::None,
+                                             nullptr,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             0.0f,
+                                             true},
+                                            nullptr,
+                                            scatter(LOG_MUSHROOMS)},
+                                           {{"minecraft:spruce_tree_feature",
+                                             Tree::Trunk::Simple,
+                                             &VanillaBlocks::SPRUCE_LOG,
+                                             {6, 10},
+                                             {-2, 1},
+                                             Tree::Canopy::Spruce,
+                                             &VanillaBlocks::SPRUCE_LEAVES,
+                                             {1, 3},
+                                             {0, 3},
+                                             {2, 4},
+                                             0,
+                                             0.0f,
+                                             false},
+                                            nullptr,
+                                            {}},
+                                           {{"minecraft:spruce_tree_with_vines_feature",
+                                             Tree::Trunk::Simple,
+                                             &VanillaBlocks::SPRUCE_LOG,
+                                             {6, 10},
+                                             {-2, 1},
+                                             Tree::Canopy::Spruce,
+                                             &VanillaBlocks::SPRUCE_LEAVES,
+                                             {1, 3},
+                                             {0, 3},
+                                             {2, 4},
+                                             0,
+                                             100.0f,
+                                             false},
+                                            nullptr,
+                                            {}},
+                                           {{"minecraft:fallen_spruce_tree_feature",
+                                             Tree::Trunk::Fallen,
+                                             &VanillaBlocks::SPRUCE_LOG,
+                                             {6, 10},
+                                             {0, 0},
+                                             Tree::Canopy::None,
+                                             nullptr,
+                                             {0, 0},
+                                             {0, 0},
+                                             {0, 0},
+                                             0,
+                                             0.0f,
+                                             true},
+                                            nullptr,
+                                            scatter(LOG_MUSHROOMS)},
+                                           // the pine canopy height takes the upper offset's place
+                                           {{"minecraft:pine_tree_feature",
+                                             Tree::Trunk::Simple,
+                                             &VanillaBlocks::SPRUCE_LOG,
+                                             {7, 12},
+                                             {0, 0},
+                                             Tree::Canopy::Pine,
+                                             &VanillaBlocks::SPRUCE_LEAVES,
+                                             {0, 0},
+                                             {3, 5},
+                                             {0, 0},
+                                             1,
+                                             0.0f,
+                                             false},
+                                            nullptr,
+                                            {}}};
 
     // BDS 1.26.61 behavior packs, features/swamp_tree_feature.json
-    static const TreeDefinition SWAMP_TREE = {
-            {"minecraft:swamp_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::OAK_LOG, {5, 9}, {0, 0},
-             Tree::Canopy::Simple, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 2, 2, 1, 4, 4,
-             true}, nullptr, {}};
+    static const TreeDefinition SWAMP_TREE = {{"minecraft:swamp_tree_feature",
+                                               Tree::Trunk::Simple,
+                                               &VanillaBlocks::OAK_LOG,
+                                               {5, 9},
+                                               {0, 0},
+                                               Tree::Canopy::Simple,
+                                               &VanillaBlocks::OAK_LEAVES,
+                                               {0, 0},
+                                               {0, 0},
+                                               {0, 0},
+                                               0,
+                                               0.0f,
+                                               false,
+                                               2,
+                                               2,
+                                               1,
+                                               4,
+                                               4,
+                                               true},
+                                              nullptr,
+                                              {}};
     static const Placed HUGE_MUSHROOM = [] {
         Placed placed;
         placed.mHugeMushroom = true;
@@ -1225,14 +1509,38 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     // BDS 1.26.61 behavior packs, features/mega_spruce_tree_feature.json and mega_pine_tree_feature.json
     static const Tree::Mega MEGA_SPRUCE = {2, 13, {3, 15}, {13, 18}, 0, 3.5f, 2, &VanillaBlocks::PODZOL, 5, 2};
     static const Tree::Mega MEGA_PINE = {2, 13, {3, 15}, {3, 8}, 0, 3.5f, 2, &VanillaBlocks::PODZOL, 5, 2};
-    static const TreeDefinition MEGA_TREES[] = {
-            {{"minecraft:mega_spruce_tree_feature", Tree::Trunk::Mega, &VanillaBlocks::SPRUCE_LOG, {0, 0}, {0, 0},
-              Tree::Canopy::MegaPine, &VanillaBlocks::SPRUCE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr,
-             {}, &MEGA_SPRUCE},
-            {{"minecraft:mega_pine_tree_feature", Tree::Trunk::Mega, &VanillaBlocks::SPRUCE_LOG, {0, 0}, {0, 0},
-              Tree::Canopy::MegaPine, &VanillaBlocks::SPRUCE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr,
-             {}, &MEGA_PINE}
-    };
+    static const TreeDefinition MEGA_TREES[] = {{{"minecraft:mega_spruce_tree_feature",
+                                                  Tree::Trunk::Mega,
+                                                  &VanillaBlocks::SPRUCE_LOG,
+                                                  {0, 0},
+                                                  {0, 0},
+                                                  Tree::Canopy::MegaPine,
+                                                  &VanillaBlocks::SPRUCE_LEAVES,
+                                                  {0, 0},
+                                                  {0, 0},
+                                                  {0, 0},
+                                                  0,
+                                                  0.0f,
+                                                  false},
+                                                 nullptr,
+                                                 {},
+                                                 &MEGA_SPRUCE},
+                                                {{"minecraft:mega_pine_tree_feature",
+                                                  Tree::Trunk::Mega,
+                                                  &VanillaBlocks::SPRUCE_LOG,
+                                                  {0, 0},
+                                                  {0, 0},
+                                                  Tree::Canopy::MegaPine,
+                                                  &VanillaBlocks::SPRUCE_LEAVES,
+                                                  {0, 0},
+                                                  {0, 0},
+                                                  {0, 0},
+                                                  0,
+                                                  0.0f,
+                                                  false},
+                                                 nullptr,
+                                                 {},
+                                                 &MEGA_PINE}};
 
     static const auto optional = [](const char *identifier, const Placed &places, int32_t denominator) {
         return ScatterDefinition{identifier, "1", {ZERO, ZERO, ZERO}, 0, places, 1, denominator};
@@ -1242,18 +1550,25 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             optional("minecraft:optional_oak_tree_with_vines_feature", tree(TREES[1]), 12),
             optional("minecraft:optional_fallen_birch_tree_feature", tree(TREES[5]), 80),
             optional("minecraft:optional_fallen_spruce_tree_feature", tree(TREES[8]), 80),
-            optional("minecraft:optional_spruce_tree_with_vines_feature", tree(TREES[7]), 12)
-    };
+            optional("minecraft:optional_spruce_tree_with_vines_feature", tree(TREES[7]), 12)};
     static const ScatterDefinition OPTIONAL_BEEHIVE = {
-            "minecraft:optional_beehive_feature", "1", {ZERO, ZERO, ZERO}, 0, BEEHIVE_SEARCH, 0, 0,
+            "minecraft:optional_beehive_feature",
+            "1",
+            {ZERO, ZERO, ZERO},
+            0,
+            BEEHIVE_SEARCH,
+            0,
+            0,
             "query.has_biome_tag('bee_habitat') ? (query.has_biome_tag('plains') || "
             "query.has_biome_tag('sunflower_plains') ? 5.0 : (query.has_biome_tag('flower_forest') ? 3.0 : "
             "(query.has_biome_tag('birch_forest') || query.has_biome_tag('birch_forest_hills') || "
             "query.has_biome_tag('birch_forest_mutated') || query.has_biome_tag('forest') || "
             "query.has_biome_tag('forest_mutated') ? 0.035 : 0.0))) : 0.0"};
-    static const ScatterDefinition LEAF_LITTER_SCATTER = {
-            "minecraft:scatter_leaf_litter_feature", "96", {{2, "-4", "4"}, {2, "-2", "2"}, {2, "-4", "4"}}, 4,
-            LEAF_LITTER};
+    static const ScatterDefinition LEAF_LITTER_SCATTER = {"minecraft:scatter_leaf_litter_feature",
+                                                          "96",
+                                                          {{2, "-4", "4"}, {2, "-2", "2"}, {2, "-4", "4"}},
+                                                          4,
+                                                          LEAF_LITTER};
     static const AggregateDefinition OAK_WITH_BEEHIVE = {
             "minecraft:oak_tree_with_optional_beehive_feature", {tree(TREES[0]), scatter(OPTIONAL_BEEHIVE)}, 1};
     static const AggregateDefinition STANDING_OAK = {
@@ -1272,50 +1587,126 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             "minecraft:select_spruce_tree_feature", {scatter(OPTIONAL_TREES[3]), aggregate(STANDING_SPRUCE)}, 2};
     static const AggregateDefinition WITH_LEAF_LITTER[] = {
             {"minecraft:select_birch_tree_with_leaf_litter_feature",
-             {aggregate(SELECT_BIRCH), scatter(LEAF_LITTER_SCATTER)}, 1},
+             {aggregate(SELECT_BIRCH), scatter(LEAF_LITTER_SCATTER)},
+             1},
             {"minecraft:fancy_oak_tree_with_leaf_litter_and_optional_beehive",
-             {aggregate(FANCY_WITH_BEEHIVE), scatter(LEAF_LITTER_SCATTER)}, 1},
+             {aggregate(FANCY_WITH_BEEHIVE), scatter(LEAF_LITTER_SCATTER)},
+             1},
             {"minecraft:select_oak_tree_with_leaf_litter_feature",
-             {aggregate(SELECT_OAK), scatter(LEAF_LITTER_SCATTER)}, 1}
-    };
+             {aggregate(SELECT_OAK), scatter(LEAF_LITTER_SCATTER)},
+             1}};
 
     // the 1.26.61 features the game loads: the jungle trees, their cocoa and the jungle bush
-    static const TreeDefinition JUNGLE_TREES[] = {
-            {{"minecraft:jungle_tree_feature", Tree::Trunk::Simple, &VanillaBlocks::JUNGLE_LOG, {4, 11}, {0, 0},
-              Tree::Canopy::Simple, &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 33.33f, false, 0, 1, 1, 4,
-              4}, nullptr, {}},
-            {{"minecraft:fallen_jungle_tree_feature", Tree::Trunk::Fallen, &VanillaBlocks::JUNGLE_LOG, {4, 11}, {0, 0},
-              Tree::Canopy::None, nullptr, {0, 0}, {0, 0}, {0, 0}, 0, 75.0f, true}, nullptr, scatter(LOG_MUSHROOMS)}
-    };
+    static const TreeDefinition JUNGLE_TREES[] = {{{"minecraft:jungle_tree_feature",
+                                                    Tree::Trunk::Simple,
+                                                    &VanillaBlocks::JUNGLE_LOG,
+                                                    {4, 11},
+                                                    {0, 0},
+                                                    Tree::Canopy::Simple,
+                                                    &VanillaBlocks::JUNGLE_LEAVES,
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    0,
+                                                    33.33f,
+                                                    false,
+                                                    0,
+                                                    1,
+                                                    1,
+                                                    4,
+                                                    4},
+                                                   nullptr,
+                                                   {}},
+                                                  {{"minecraft:fallen_jungle_tree_feature",
+                                                    Tree::Trunk::Fallen,
+                                                    &VanillaBlocks::JUNGLE_LOG,
+                                                    {4, 11},
+                                                    {0, 0},
+                                                    Tree::Canopy::None,
+                                                    nullptr,
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    0,
+                                                    75.0f,
+                                                    true},
+                                                   nullptr,
+                                                   scatter(LOG_MUSHROOMS)}};
     // the bush's leaves are oak leaves; a single variation_chance stands for every layer
     static const Tree::SimpleCanopy BUSH_CANOPY = {-1, 1, 0, 1.0f, {{1, 2}, {1, 2}, {1, 2}}};
-    static const TreeDefinition JUNGLE_BUSH = {
-            {"minecraft:jungle_bush_feature", Tree::Trunk::Simple, &VanillaBlocks::JUNGLE_LOG, {1, 1}, {0, 0},
-             Tree::Canopy::Simple, &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 0, 0, 0, 0, 0,
-             false, false, &BUSH_CANOPY}, nullptr, {}};
-    static const Tree::Mega MEGA_JUNGLE = {2, 10, {3, 20}, {0, 0}, 0, 0.0f, 0, &VanillaBlocks::DIRT, 0, 0,
-                                           {{3, 3}, 2, 2, false}, 5, 0.5f, {2, 6}, 0.5f, 1.0f, {{2, 4}, 1, 0, true}, 1, 3};
-    static const TreeDefinition MEGA_JUNGLE_TREE = {
-            {"minecraft:mega_jungle_tree_feature", Tree::Trunk::Mega, &VanillaBlocks::JUNGLE_LOG, {0, 0}, {0, 0},
-             Tree::Canopy::Mega, &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {},
-            &MEGA_JUNGLE};
-    static const SingleBlockDefinition COCOA[] = {
-            {"minecraft:cocoa_age_0_feature", &VanillaBlocks::COCOA, false, false, -1, false, false,
-             &VanillaBlocks::JUNGLE_LOG, 0},
-            {"minecraft:cocoa_age_1_feature", &VanillaBlocks::COCOA, false, false, -1, false, false,
-             &VanillaBlocks::JUNGLE_LOG, 1},
-            {"minecraft:cocoa_age_2_feature", &VanillaBlocks::COCOA, false, false, -1, false, false,
-             &VanillaBlocks::JUNGLE_LOG, 2}
-    };
+    static const TreeDefinition JUNGLE_BUSH = {{"minecraft:jungle_bush_feature",
+                                                Tree::Trunk::Simple,
+                                                &VanillaBlocks::JUNGLE_LOG,
+                                                {1, 1},
+                                                {0, 0},
+                                                Tree::Canopy::Simple,
+                                                &VanillaBlocks::OAK_LEAVES,
+                                                {0, 0},
+                                                {0, 0},
+                                                {0, 0},
+                                                0,
+                                                0.0f,
+                                                false,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                0,
+                                                false,
+                                                false,
+                                                &BUSH_CANOPY},
+                                               nullptr,
+                                               {}};
+    static const Tree::Mega MEGA_JUNGLE = {2,
+                                           10,
+                                           {3, 20},
+                                           {0, 0},
+                                           0,
+                                           0.0f,
+                                           0,
+                                           &VanillaBlocks::DIRT,
+                                           0,
+                                           0,
+                                           {{3, 3}, 2, 2, false},
+                                           5,
+                                           0.5f,
+                                           {2, 6},
+                                           0.5f,
+                                           1.0f,
+                                           {{2, 4}, 1, 0, true},
+                                           1,
+                                           3};
+    static const TreeDefinition MEGA_JUNGLE_TREE = {{"minecraft:mega_jungle_tree_feature",
+                                                     Tree::Trunk::Mega,
+                                                     &VanillaBlocks::JUNGLE_LOG,
+                                                     {0, 0},
+                                                     {0, 0},
+                                                     Tree::Canopy::Mega,
+                                                     &VanillaBlocks::JUNGLE_LEAVES,
+                                                     {0, 0},
+                                                     {0, 0},
+                                                     {0, 0},
+                                                     0,
+                                                     0.0f,
+                                                     false},
+                                                    nullptr,
+                                                    {},
+                                                    &MEGA_JUNGLE};
+    static const SingleBlockDefinition COCOA[] = {{"minecraft:cocoa_age_0_feature", &VanillaBlocks::COCOA, false, false,
+                                                   -1, false, false, &VanillaBlocks::JUNGLE_LOG, 0},
+                                                  {"minecraft:cocoa_age_1_feature", &VanillaBlocks::COCOA, false, false,
+                                                   -1, false, false, &VanillaBlocks::JUNGLE_LOG, 1},
+                                                  {"minecraft:cocoa_age_2_feature", &VanillaBlocks::COCOA, false, false,
+                                                   -1, false, false, &VanillaBlocks::JUNGLE_LOG, 2}};
     static const WeightedDefinition SELECT_COCOA = {"minecraft:select_cocoa_feature", [] {
-        std::vector<std::pair<Placed, int32_t>> features;
-        for (const SingleBlockDefinition &cocoa: COCOA) {
-            Placed placed;
-            placed.mSingleBlock = &cocoa;
-            features.emplace_back(placed, 1);
-        }
-        return features;
-    }()};
+                                                        std::vector<std::pair<Placed, int32_t>> features;
+                                                        for (const SingleBlockDefinition &cocoa: COCOA) {
+                                                            Placed placed;
+                                                            placed.mSingleBlock = &cocoa;
+                                                            features.emplace_back(placed, 1);
+                                                        }
+                                                        return features;
+                                                    }()};
     static const Placed COCOA_PICK = [] {
         Placed placed;
         placed.mWeighted = &SELECT_COCOA;
@@ -1323,84 +1714,128 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     }();
     static const ScatterDefinition OPTIONAL_COCOA[] = {
             optional("minecraft:optional_lower_cocoa_feature", COCOA_PICK, 4),
-            optional("minecraft:optional_upper_cocoa_feature", COCOA_PICK, 3)
-    };
+            optional("minecraft:optional_upper_cocoa_feature", COCOA_PICK, 3)};
     // the grid walks x over 0, 1, 2, 0 and z over 1, 0, 0, -1 from the position the tree hands on
     static const ScatterDefinition::AxisText COCOA_X = {FIXED_GRID, "-1", "1", 2, 1};
     static const ScatterDefinition::AxisText COCOA_Z = {FIXED_GRID, "-1", "1", 1, 0};
-    static const ScatterDefinition COCOA_SCATTERS[] = {
-            {"minecraft:scatter_jungle_tree_lower_cocoa_feature", "4", {COCOA_X, {0, "-5", ""}, COCOA_Z}, 0,
-             scatter(OPTIONAL_COCOA[0]), 0, 0, "100.0"},
-            {"minecraft:scatter_jungle_tree_upper_cocoa_feature", "4", {COCOA_X, {0, "-4", ""}, COCOA_Z}, 0,
-             scatter(OPTIONAL_COCOA[1]), 0, 0, "100.0"}
-    };
+    static const ScatterDefinition COCOA_SCATTERS[] = {{"minecraft:scatter_jungle_tree_lower_cocoa_feature",
+                                                        "4",
+                                                        {COCOA_X, {0, "-5", ""}, COCOA_Z},
+                                                        0,
+                                                        scatter(OPTIONAL_COCOA[0]),
+                                                        0,
+                                                        0,
+                                                        "100.0"},
+                                                       {"minecraft:scatter_jungle_tree_upper_cocoa_feature",
+                                                        "4",
+                                                        {COCOA_X, {0, "-4", ""}, COCOA_Z},
+                                                        0,
+                                                        scatter(OPTIONAL_COCOA[1]),
+                                                        0,
+                                                        0,
+                                                        "100.0"}};
     static const AggregateDefinition SCATTER_COCOA = {
             "minecraft:scatter_jungle_tree_cocoa_feature", {scatter(COCOA_SCATTERS[0]), scatter(COCOA_SCATTERS[1])}, 0};
     static const ScatterDefinition OPTIONAL_JUNGLE[] = {
             optional("minecraft:optional_fallen_jungle_tree_feature", tree(JUNGLE_TREES[1]), 80),
-            optional("minecraft:optional_jungle_tree_cocoa_feature", aggregate(SCATTER_COCOA), 5)
-    };
-    static const SequenceDefinition JUNGLE_WITH_COCOA = {
-            "minecraft:jungle_tree_with_cocoa_feature", {tree(JUNGLE_TREES[0]), scatter(OPTIONAL_JUNGLE[1])}};
+            optional("minecraft:optional_jungle_tree_cocoa_feature", aggregate(SCATTER_COCOA), 5)};
+    static const SequenceDefinition JUNGLE_WITH_COCOA = {"minecraft:jungle_tree_with_cocoa_feature",
+                                                         {tree(JUNGLE_TREES[0]), scatter(OPTIONAL_JUNGLE[1])}};
     // its third feature, noop_undecorated_jungle_tree_feature, has 0 iterations and draws nothing
-    static const AggregateDefinition SELECT_JUNGLE = {
-            "minecraft:select_jungle_tree_feature", {scatter(OPTIONAL_JUNGLE[0]), [] {
-                Placed placed;
-                placed.mSequence = &JUNGLE_WITH_COCOA;
-                return placed;
-            }()}, 2};
+    static const AggregateDefinition SELECT_JUNGLE = {"minecraft:select_jungle_tree_feature",
+                                                      {scatter(OPTIONAL_JUNGLE[0]),
+                                                       [] {
+                                                           Placed placed;
+                                                           placed.mSequence = &JUNGLE_WITH_COCOA;
+                                                           return placed;
+                                                       }()},
+                                                      2};
     // 0 iterations in the features the game loads
-    static const ScatterDefinition TALL_GRASS_AROUND_TREE = {
-            "minecraft:scatter_tall_grass_around_tree_feature", "0",
-            {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}}, 5, single(0)};
+    static const ScatterDefinition TALL_GRASS_AROUND_TREE = {"minecraft:scatter_tall_grass_around_tree_feature",
+                                                             "0",
+                                                             {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}},
+                                                             5,
+                                                             single(0)};
 
     // savanna_tree_feature: a diagonal acacia trunk of 5 plus up to 2 plus up to 2, its acacia_canopy of 3 and one
     // branch with a simplified canopy of 2
-    static const Tree::Acacia SAVANNA = {1, 5, {3, 3}, 0, {1, 5}, {1, 4}, {0, 0}, true, {1, 4}, {1, 3}, 1, 1, 2, true,
-                                         0, 0, 0, 0, 0, 0, 3};
-    static const TreeDefinition SAVANNA_TREE = {
-            {"minecraft:savanna_tree_feature", Tree::Trunk::Acacia, &VanillaBlocks::ACACIA_LOG, {0, 0}, {0, 0},
-             Tree::Canopy::Acacia, &VanillaBlocks::ACACIA_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {},
-            nullptr, &SAVANNA};
+    static const Tree::Acacia SAVANNA = {1, 5, {3, 3}, 0, {1, 5}, {1, 4}, {0, 0}, true, {1, 4}, {1, 3}, 1,
+                                         1, 2, true,   0, 0,      0,      0,      0,    0,      3};
+    static const TreeDefinition SAVANNA_TREE = {{"minecraft:savanna_tree_feature",
+                                                 Tree::Trunk::Acacia,
+                                                 &VanillaBlocks::ACACIA_LOG,
+                                                 {0, 0},
+                                                 {0, 0},
+                                                 Tree::Canopy::Acacia,
+                                                 &VanillaBlocks::ACACIA_LEAVES,
+                                                 {0, 0},
+                                                 {0, 0},
+                                                 {0, 0},
+                                                 0,
+                                                 0.0f,
+                                                 false},
+                                                nullptr,
+                                                {},
+                                                nullptr,
+                                                &SAVANNA};
 
     // mangrove_tree_feature and tall_mangrove_tree_feature, their random pick and their beenest aggregates
     static const Tree::Mangrove MANGROVES[] = {
             {8, 15, {1, 4}, 1, 2, 2, 1, 4, {0, 1}, {1, 4}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 4},
-            {8, 15, {5, 8}, 1, 2, 4, 1, 9, {0, 1}, {1, 6}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 7}
-    };
+            {8, 15, {5, 8}, 1, 2, 4, 1, 9, {0, 1}, {1, 6}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 7}};
     static const auto mangrove = [](const char *identifier, const Tree::Mangrove &shape) {
-        TreeDefinition definition = {
-                {identifier, Tree::Trunk::Mangrove, &VanillaBlocks::MANGROVE_LOG, {0, 0}, {0, 0}, Tree::Canopy::Mangrove,
-                 &VanillaBlocks::MANGROVE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr, {}};
+        TreeDefinition definition = {{identifier,
+                                      Tree::Trunk::Mangrove,
+                                      &VanillaBlocks::MANGROVE_LOG,
+                                      {0, 0},
+                                      {0, 0},
+                                      Tree::Canopy::Mangrove,
+                                      &VanillaBlocks::MANGROVE_LEAVES,
+                                      {0, 0},
+                                      {0, 0},
+                                      {0, 0},
+                                      0,
+                                      0.0f,
+                                      false},
+                                     nullptr,
+                                     {}};
         definition.mTree.mMangrove = &shape;
         return definition;
     };
-    static const TreeDefinition MANGROVE_TREES[] = {
-            mangrove("minecraft:mangrove_tree_feature", MANGROVES[0]),
-            mangrove("minecraft:tall_mangrove_tree_feature", MANGROVES[1])
-    };
-    static const WeightedDefinition RANDOM_MANGROVE = {
-            "minecraft:random_mangrove_tree_feature", {{tree(MANGROVE_TREES[1]), 85}, {tree(MANGROVE_TREES[0]), 15}}};
+    static const TreeDefinition MANGROVE_TREES[] = {mangrove("minecraft:mangrove_tree_feature", MANGROVES[0]),
+                                                    mangrove("minecraft:tall_mangrove_tree_feature", MANGROVES[1])};
+    static const WeightedDefinition RANDOM_MANGROVE = {"minecraft:random_mangrove_tree_feature",
+                                                       {{tree(MANGROVE_TREES[1]), 85}, {tree(MANGROVE_TREES[0]), 15}}};
     static const AggregateDefinition MANGROVES_WITH_BEENEST[] = {
             {"minecraft:mangrove_tree_with_beenest_feature", {tree(MANGROVE_TREES[0]), BEEHIVE_SEARCH}, 1},
-            {"minecraft:tall_mangrove_tree_with_beenest_feature", {tree(MANGROVE_TREES[1]), BEEHIVE_SEARCH}, 1}
-    };
+            {"minecraft:tall_mangrove_tree_with_beenest_feature", {tree(MANGROVE_TREES[1]), BEEHIVE_SEARCH}, 1}};
 
     // cherry_tree_feature, alone 19 times in 20 and otherwise with its beehive search
-    static const Tree::Cherry CHERRY = {
-            7, {1}, {10, 10, 10}, {-4, -3}, {-1, 0}, {2, 4}, {5, 5}, {4, 4}, 25.0f, 50.0f, 16.6666f, 33.3333f};
+    static const Tree::Cherry CHERRY = {7,      {1},    {10, 10, 10}, {-4, -3}, {-1, 0},  {2, 4},
+                                        {5, 5}, {4, 4}, 25.0f,        50.0f,    16.6666f, 33.3333f};
     static const TreeDefinition CHERRY_TREE = [] {
-        TreeDefinition definition = {
-                {"minecraft:cherry_tree_feature", Tree::Trunk::Cherry, &VanillaBlocks::CHERRY_LOG, {0, 0}, {0, 0},
-                 Tree::Canopy::Cherry, &VanillaBlocks::CHERRY_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false},
-                nullptr, {}};
+        TreeDefinition definition = {{"minecraft:cherry_tree_feature",
+                                      Tree::Trunk::Cherry,
+                                      &VanillaBlocks::CHERRY_LOG,
+                                      {0, 0},
+                                      {0, 0},
+                                      Tree::Canopy::Cherry,
+                                      &VanillaBlocks::CHERRY_LEAVES,
+                                      {0, 0},
+                                      {0, 0},
+                                      {0, 0},
+                                      0,
+                                      0.0f,
+                                      false},
+                                     nullptr,
+                                     {}};
         definition.mTree.mCherry = &CHERRY;
         return definition;
     }();
     static const AggregateDefinition CHERRY_WITH_BEEHIVE = {
             "minecraft:cherry_tree_with_beehive_feature", {tree(CHERRY_TREE), BEEHIVE_SEARCH}, 1};
-    static const WeightedDefinition RANDOM_CHERRY = {
-            "minecraft:random_cherry_tree_feature", {{tree(CHERRY_TREE), 19}, {aggregate(CHERRY_WITH_BEEHIVE), 1}}};
+    static const WeightedDefinition RANDOM_CHERRY = {"minecraft:random_cherry_tree_feature",
+                                                     {{tree(CHERRY_TREE), 19}, {aggregate(CHERRY_WITH_BEEHIVE), 1}}};
 
     static const ScatterDefinition FIXUP_VINES = {
             "minecraft:fixup_vines_position_feature", "1", {{0, "8", ""}, ZERO, {0, "8", ""}}, 0, [] {
@@ -1411,73 +1846,108 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
 
     using Pick = LegacyTreeDefinition::Pick;
     static const LegacyTreeDefinition LEGACY_TREES[] = {
-            {"minecraft:legacy:forest_tree_feature", 10.0f, Pick::Forest,
+            {"minecraft:legacy:forest_tree_feature",
+             10.0f,
+             Pick::Forest,
              {aggregate(WITH_LEAF_LITTER[0]), aggregate(WITH_LEAF_LITTER[1]), aggregate(WITH_LEAF_LITTER[2])}},
             {"minecraft:legacy:ice_tree_feature", 0.1f, Pick::First, {aggregate(SELECT_SPRUCE)}},
             // types 1 and 2 of the constructor; the mutated forest's second feature, select_super_birch_tree_feature,
             // is in none of the game's packs and places nothing
             {"minecraft:legacy:birch_forest_tree_feature", 10.0f, Pick::First, {aggregate(SELECT_BIRCH)}},
-            {"minecraft:legacy:birch_forest_mutated_tree_feature", 10.0f, Pick::BirchMutated, {aggregate(SELECT_BIRCH)}},
-            {"minecraft:legacy:plains_tree_feature", 0.05f, Pick::OneInThree,
+            {"minecraft:legacy:birch_forest_mutated_tree_feature",
+             10.0f,
+             Pick::BirchMutated,
+             {aggregate(SELECT_BIRCH)}},
+            {"minecraft:legacy:plains_tree_feature",
+             0.05f,
+             Pick::OneInThree,
              {aggregate(FANCY_WITH_BEEHIVE), aggregate(SELECT_OAK)}},
-            {"minecraft:legacy:taiga_tree_feature", 10.0f, Pick::OneInThree,
+            {"minecraft:legacy:taiga_tree_feature",
+             10.0f,
+             Pick::OneInThree,
              {tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
-            {"minecraft:legacy:mega_taiga_tree_feature", 10.0f, Pick::MegaTaiga,
+            {"minecraft:legacy:mega_taiga_tree_feature",
+             10.0f,
+             Pick::MegaTaiga,
              {tree(MEGA_TREES[0]), tree(MEGA_TREES[1]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             // type 16 of the constructor
-            {"minecraft:legacy:redwood_taiga_mutated_tree_feature", 10.0f, Pick::RedwoodMutated,
+            {"minecraft:legacy:redwood_taiga_mutated_tree_feature",
+             10.0f,
+             Pick::RedwoodMutated,
              {tree(MEGA_TREES[0]), tree(TREES[9]), aggregate(SELECT_SPRUCE)}},
             // the swamp foliage feature (constructor sub_14D21E9F0, place sub_14D21F070) counts its trees like a
             // legacy tree feature of density 2
-            {"minecraft:legacy:swamp_foliage_feature", 2.0f, Pick::Swamp, {HUGE_MUSHROOM, tree(SWAMP_TREE)},
+            {"minecraft:legacy:swamp_foliage_feature",
+             2.0f,
+             Pick::Swamp,
+             {HUGE_MUSHROOM, tree(SWAMP_TREE)},
              &SEAGRASS[3]},
             // types 8, 9 and 0 of the constructor
-            {"minecraft:legacy:jungle_tree_feature", 50.0f, Pick::Jungle,
+            {"minecraft:legacy:jungle_tree_feature",
+             50.0f,
+             Pick::Jungle,
              {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), aggregate(SELECT_JUNGLE)}},
-            {"minecraft:legacy:jungle_edge_tree_feature", 2.0f, Pick::JungleEdge,
+            {"minecraft:legacy:jungle_edge_tree_feature",
+             2.0f,
+             Pick::JungleEdge,
              {aggregate(FANCY_WITH_BEEHIVE), tree(JUNGLE_BUSH), aggregate(SELECT_JUNGLE)}},
             // types 12 and 13
             {"minecraft:legacy:savanna_tree_feature", 1.0f, Pick::Savanna, {tree(SAVANNA_TREE), aggregate(SELECT_OAK)}},
-            {"minecraft:legacy:savanna_mutated_tree_feature", 2.0f, Pick::Savanna,
+            {"minecraft:legacy:savanna_mutated_tree_feature",
+             2.0f,
+             Pick::Savanna,
              {tree(SAVANNA_TREE), aggregate(SELECT_OAK)}},
-            {"minecraft:legacy:bamboo_jungle_tree_feature", 30.0f, Pick::BambooJungle,
-             {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), scatter(TALL_GRASS_AROUND_TREE)}}
-    };
+            {"minecraft:legacy:bamboo_jungle_tree_feature",
+             30.0f,
+             Pick::BambooJungle,
+             {tree(TREES[2]), tree(JUNGLE_BUSH), tree(MEGA_JUNGLE_TREE), scatter(TALL_GRASS_AROUND_TREE)}}};
 
     // the double plant patches: a lower half, then the upper one placed one block above it
     static const AxisText UP = {0, "1", ""};
     static const ScatterDefinition UPPER_HALVES[] = {
             {"minecraft:fixup_fern_double_plant_upper_position_feature", "1", {ZERO, UP, ZERO}, 0, single(3)},
-            {"minecraft:fixup_grass_double_plant_upper_position_feature", "1", {ZERO, UP, ZERO}, 0, single(5)}
-    };
+            {"minecraft:fixup_grass_double_plant_upper_position_feature", "1", {ZERO, UP, ZERO}, 0, single(5)}};
     static const AggregateDefinition DOUBLE_PLANTS[] = {
             {"minecraft:fern_double_plant_feature", {single(2), scatter(UPPER_HALVES[0])}, 1},
-            {"minecraft:grass_double_plant_feature", {single(4), scatter(UPPER_HALVES[1])}, 1}
-    };
-    static const ScatterDefinition DOUBLE_PLANT_PATCHES[] = {
-            {"minecraft:fern_double_plant_patch_feature", "64", {{6, "-8", "8"}, {6, "-4", "4"}, {6, "-8", "8"}}, 5,
-             aggregate(DOUBLE_PLANTS[0])},
-            {"minecraft:grass_double_plant_patch_feature", "32", {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}}, 5,
-             aggregate(DOUBLE_PLANTS[1])}
-    };
+            {"minecraft:grass_double_plant_feature", {single(4), scatter(UPPER_HALVES[1])}, 1}};
+    static const ScatterDefinition DOUBLE_PLANT_PATCHES[] = {{"minecraft:fern_double_plant_patch_feature",
+                                                              "64",
+                                                              {{6, "-8", "8"}, {6, "-4", "4"}, {6, "-8", "8"}},
+                                                              5,
+                                                              aggregate(DOUBLE_PLANTS[0])},
+                                                             {"minecraft:grass_double_plant_patch_feature",
+                                                              "32",
+                                                              {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}},
+                                                              5,
+                                                              aggregate(DOUBLE_PLANTS[1])}};
 
     // BDS 1.26.61 behavior packs, features/underwater_magma_*.json
-    static const BlobDefinition UNDERWATER_MAGMA = {
-            "minecraft:underwater_magma_feature", &VanillaBlocks::MAGMA, 1, 0.5f, 1};
-    static const SnapDefinition UNDERWATER_MAGMA_SNAP = {
-            "minecraft:underwater_magma_snap_to_surface_feature", blob(UNDERWATER_MAGMA), 5, 1, false, false, true,
-            false, {}};
-    static const ThresholdDefinition UNDERWATER_MAGMA_UNDERGROUND = {
-            "minecraft:underwater_magma_underground_feature", snap(UNDERWATER_MAGMA_SNAP), 2};
+    static const BlobDefinition UNDERWATER_MAGMA = {"minecraft:underwater_magma_feature", &VanillaBlocks::MAGMA, 1,
+                                                    0.5f, 1};
+    static const SnapDefinition UNDERWATER_MAGMA_SNAP = {"minecraft:underwater_magma_snap_to_surface_feature",
+                                                         blob(UNDERWATER_MAGMA),
+                                                         5,
+                                                         1,
+                                                         false,
+                                                         false,
+                                                         true,
+                                                         false,
+                                                         {}};
+    static const ThresholdDefinition UNDERWATER_MAGMA_UNDERGROUND = {"minecraft:underwater_magma_underground_feature",
+                                                                     snap(UNDERWATER_MAGMA_SNAP), 2};
 
     // BDS 1.26.61 behavior packs, features/*glow_lichen_feature.json: the ceiling and the four walls
-    static const MultifaceDefinition GLOW_LICHEN = {
-            "minecraft:glow_lichen_feature", &VanillaBlocks::GLOW_LICHEN, 20, {1, 2, 3, 4, 5}, 0.5f,
-            {"minecraft:stone", "minecraft:andesite", "minecraft:diorite", "minecraft:granite",
-             "minecraft:dripstone_block", "minecraft:calcite", "minecraft:tuff", "minecraft:deepslate",
-             "minecraft:sulfur", "minecraft:cinnabar"}};
-    static const ThresholdDefinition UNDERGROUND_GLOW_LICHEN = {
-            "minecraft:underground_glow_lichen_feature", multiface(GLOW_LICHEN), 2};
+    static const MultifaceDefinition GLOW_LICHEN = {"minecraft:glow_lichen_feature",
+                                                    &VanillaBlocks::GLOW_LICHEN,
+                                                    20,
+                                                    {1, 2, 3, 4, 5},
+                                                    0.5f,
+                                                    {"minecraft:stone", "minecraft:andesite", "minecraft:diorite",
+                                                     "minecraft:granite", "minecraft:dripstone_block",
+                                                     "minecraft:calcite", "minecraft:tuff", "minecraft:deepslate",
+                                                     "minecraft:sulfur", "minecraft:cinnabar"}};
+    static const ThresholdDefinition UNDERGROUND_GLOW_LICHEN = {"minecraft:underground_glow_lichen_feature",
+                                                                multiface(GLOW_LICHEN), 2};
 
     // BDS 1.26.61 behavior packs, features/small_dripstone*.json; the scatter keeps the default xyz order
     // sub_14728CE10
@@ -1488,21 +1958,43 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         placed.mPointedDripstone = &DRIPSTONE;
         return placed;
     }();
-    static const SnapDefinition SMALL_DRIPSTONE_SNAP = {
-            "minecraft:small_dripstone_snap_to_surface_feature", POINTED_DRIPSTONE, 12, 3, true, false, true, false,
-            {}};
-    static const ScatterDefinition SMALL_DRIPSTONE = {
-            "minecraft:small_dripstone_feature", "Math.Random(1, 5)",
-            {{2, "-10", "10"}, {2, "-2", "2"}, {2, "-10", "10"}}, 0, snap(SMALL_DRIPSTONE_SNAP)};
+    static const SnapDefinition SMALL_DRIPSTONE_SNAP = {"minecraft:small_dripstone_snap_to_surface_feature",
+                                                        POINTED_DRIPSTONE,
+                                                        12,
+                                                        3,
+                                                        true,
+                                                        false,
+                                                        true,
+                                                        false,
+                                                        {}};
+    static const ScatterDefinition SMALL_DRIPSTONE = {"minecraft:small_dripstone_feature",
+                                                      "Math.Random(1, 5)",
+                                                      {{2, "-10", "10"}, {2, "-2", "2"}, {2, "-10", "10"}},
+                                                      0,
+                                                      snap(SMALL_DRIPSTONE_SNAP)};
 
     // BDS 1.26.61 behavior packs, features/amethyst_geode_feature.json
-    static const GeodeDefinition GEODES[] = {
-            {"minecraft:amethyst_geode_feature", &VanillaBlocks::AIR, &VanillaBlocks::AMETHYST_BLOCK,
-             &VanillaBlocks::BUDDING_AMETHYST, &VanillaBlocks::CALCITE, &VanillaBlocks::SMOOTH_BASALT,
-             {&VanillaBlocks::AMETHYST_CLUSTER, &VanillaBlocks::LARGE_AMETHYST_BUD, &VanillaBlocks::MEDIUM_AMETHYST_BUD,
-              &VanillaBlocks::SMALL_AMETHYST_BUD},
-             4, 7, 3, 5, 1, 3, 16, 2, 0.025f, 0.35f, 0.083f, true, 1}
-    };
+    static const GeodeDefinition GEODES[] = {{"minecraft:amethyst_geode_feature",
+                                              &VanillaBlocks::AIR,
+                                              &VanillaBlocks::AMETHYST_BLOCK,
+                                              &VanillaBlocks::BUDDING_AMETHYST,
+                                              &VanillaBlocks::CALCITE,
+                                              &VanillaBlocks::SMOOTH_BASALT,
+                                              {&VanillaBlocks::AMETHYST_CLUSTER, &VanillaBlocks::LARGE_AMETHYST_BUD,
+                                               &VanillaBlocks::MEDIUM_AMETHYST_BUD, &VanillaBlocks::SMALL_AMETHYST_BUD},
+                                              4,
+                                              7,
+                                              3,
+                                              5,
+                                              1,
+                                              3,
+                                              16,
+                                              2,
+                                              0.025f,
+                                              0.35f,
+                                              0.083f,
+                                              true,
+                                              1}};
 
     // BDS 1.26.61 behavior packs, features/moss_patch_feature.json, clay_*_with_dripleaves_feature.json and
     // cave_vine_feature.json; the floor rules run in after_surface_pass
@@ -1516,51 +2008,120 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         placed.mGrowingPlant = &definition;
         return placed;
     };
-    static const std::vector<std::string> MOSS_REPLACEABLE = {
-            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots",
-            "minecraft:grass_block", "minecraft:mycelium", "minecraft:stone", "minecraft:granite",
-            "minecraft:diorite", "minecraft:andesite", "minecraft:deepslate", "minecraft:tuff",
-            "minecraft:moss_block", "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
-            "minecraft:cave_vines_head_with_berries"};
+    static const std::vector<std::string> MOSS_REPLACEABLE = {"minecraft:dirt",
+                                                              "minecraft:coarse_dirt",
+                                                              "minecraft:podzol",
+                                                              "minecraft:dirt_with_roots",
+                                                              "minecraft:grass_block",
+                                                              "minecraft:mycelium",
+                                                              "minecraft:stone",
+                                                              "minecraft:granite",
+                                                              "minecraft:diorite",
+                                                              "minecraft:andesite",
+                                                              "minecraft:deepslate",
+                                                              "minecraft:tuff",
+                                                              "minecraft:moss_block",
+                                                              "minecraft:cave_vines",
+                                                              "minecraft:cave_vines_body_with_berries",
+                                                              "minecraft:cave_vines_head_with_berries"};
     // moss_vegetation_feature, the weighted blocks built in the registrar sub_14738C180 (total 96)
-    static const std::vector<std::pair<Block (*)(), int32_t>> MOSS_VEGETATION = {
-            {&VanillaBlocks::FLOWERING_AZALEA, 4}, {&VanillaBlocks::AZALEA, 7}, {&VanillaBlocks::MOSS_CARPET, 25},
-            {&VanillaBlocks::SHORT_GRASS, 50}, {&VanillaBlocks::TALL_GRASS, 10}};
-    static const VegetationPatchDefinition MOSS_PATCH = {
-            "minecraft:moss_patch_feature", &VanillaBlocks::MOSS_BLOCK, MOSS_REPLACEABLE, 1, 2, 5, 0.0f, 0.3f, 4, 8,
-            true, MOSS_VEGETATION, {}, 0.8f, false};
-    static const SnapDefinition MOSS_PATCH_SNAP = {
-            "minecraft:moss_patch_snap_to_floor_feature", vegetationPatch(MOSS_PATCH), 12, 1, true, false, false,
-            false, {}};
-    static const std::vector<std::string> CLAY_REPLACEABLE = {
-            "minecraft:clay", "minecraft:sand", "minecraft:gravel", "minecraft:dirt", "minecraft:coarse_dirt",
-            "minecraft:podzol", "minecraft:dirt_with_roots", "minecraft:grass_block", "minecraft:mycelium",
-            "minecraft:stone", "minecraft:deepslate", "minecraft:tuff", "minecraft:moss_block",
-            "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
-            "minecraft:cave_vines_head_with_berries"};
+    static const std::vector<std::pair<Block (*)(), int32_t>> MOSS_VEGETATION = {{&VanillaBlocks::FLOWERING_AZALEA, 4},
+                                                                                 {&VanillaBlocks::AZALEA, 7},
+                                                                                 {&VanillaBlocks::MOSS_CARPET, 25},
+                                                                                 {&VanillaBlocks::SHORT_GRASS, 50},
+                                                                                 {&VanillaBlocks::TALL_GRASS, 10}};
+    static const VegetationPatchDefinition MOSS_PATCH = {"minecraft:moss_patch_feature",
+                                                         &VanillaBlocks::MOSS_BLOCK,
+                                                         MOSS_REPLACEABLE,
+                                                         1,
+                                                         2,
+                                                         5,
+                                                         0.0f,
+                                                         0.3f,
+                                                         4,
+                                                         8,
+                                                         true,
+                                                         MOSS_VEGETATION,
+                                                         {},
+                                                         0.8f,
+                                                         false};
+    static const SnapDefinition MOSS_PATCH_SNAP = {"minecraft:moss_patch_snap_to_floor_feature",
+                                                   vegetationPatch(MOSS_PATCH),
+                                                   12,
+                                                   1,
+                                                   true,
+                                                   false,
+                                                   false,
+                                                   false,
+                                                   {}};
+    static const std::vector<std::string> CLAY_REPLACEABLE = {"minecraft:clay",
+                                                              "minecraft:sand",
+                                                              "minecraft:gravel",
+                                                              "minecraft:dirt",
+                                                              "minecraft:coarse_dirt",
+                                                              "minecraft:podzol",
+                                                              "minecraft:dirt_with_roots",
+                                                              "minecraft:grass_block",
+                                                              "minecraft:mycelium",
+                                                              "minecraft:stone",
+                                                              "minecraft:deepslate",
+                                                              "minecraft:tuff",
+                                                              "minecraft:moss_block",
+                                                              "minecraft:cave_vines",
+                                                              "minecraft:cave_vines_body_with_berries",
+                                                              "minecraft:cave_vines_head_with_berries"};
     // dripleaf_feature is the game's own DripleafFeature (sub_14D208A20), not a data feature
     static const auto dripleaf = [] {
         Placed placed;
         placed.mFunction = &OverworldRulePlacer::_placeDripleaf;
         return placed;
     };
-    static const VegetationPatchDefinition CLAY_PATCH = {
-            "minecraft:clay_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 2, 0.8f, 0.7f, 4,
-            8, true, {}, dripleaf(), 0.05f, false};
-    static const VegetationPatchDefinition CLAY_POOL = {
-            "minecraft:clay_pool_with_dripleaves_feature", &VanillaBlocks::CLAY, CLAY_REPLACEABLE, 3, 3, 5, 0.8f, 0.7f,
-            4, 8, true, {}, dripleaf(), 0.1f, true};
-    static const WeightedDefinition RANDOM_CLAY = {
-            "minecraft:random_clay_with_dripleaves_feature",
-            {{vegetationPatch(CLAY_PATCH), 1}, {vegetationPatch(CLAY_POOL), 1}}};
+    static const VegetationPatchDefinition CLAY_PATCH = {"minecraft:clay_with_dripleaves_feature",
+                                                         &VanillaBlocks::CLAY,
+                                                         CLAY_REPLACEABLE,
+                                                         3,
+                                                         3,
+                                                         2,
+                                                         0.8f,
+                                                         0.7f,
+                                                         4,
+                                                         8,
+                                                         true,
+                                                         {},
+                                                         dripleaf(),
+                                                         0.05f,
+                                                         false};
+    static const VegetationPatchDefinition CLAY_POOL = {"minecraft:clay_pool_with_dripleaves_feature",
+                                                        &VanillaBlocks::CLAY,
+                                                        CLAY_REPLACEABLE,
+                                                        3,
+                                                        3,
+                                                        5,
+                                                        0.8f,
+                                                        0.7f,
+                                                        4,
+                                                        8,
+                                                        true,
+                                                        {},
+                                                        dripleaf(),
+                                                        0.1f,
+                                                        true};
+    static const WeightedDefinition RANDOM_CLAY = {"minecraft:random_clay_with_dripleaves_feature",
+                                                   {{vegetationPatch(CLAY_PATCH), 1}, {vegetationPatch(CLAY_POOL), 1}}};
     static const auto weightedOf = [](const WeightedDefinition &definition) {
         Placed placed;
         placed.mWeighted = &definition;
         return placed;
     };
-    static const SnapDefinition CLAY_SNAP = {
-            "minecraft:random_clay_with_dripleaves_snap_to_floor_feature", weightedOf(RANDOM_CLAY), 12, 1, true,
-            false, false, false, {}};
+    static const SnapDefinition CLAY_SNAP = {"minecraft:random_clay_with_dripleaves_snap_to_floor_feature",
+                                             weightedOf(RANDOM_CLAY),
+                                             12,
+                                             1,
+                                             true,
+                                             false,
+                                             false,
+                                             false,
+                                             {}};
 
     // cave_vine_feature and cave_vine_in_moss_feature (growing_plant), the weighted body and head built from
     // cave_vine_feature.json; both grow down and age 17..25
@@ -1570,28 +2131,74 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     static const std::vector<GrowingPlantDefinition::BlockWeight> CAVE_VINE_HEAD = {
             {VanillaBlocks::CAVE_VINES().toBlockState(), 4},
             {VanillaBlocks::CAVE_VINES_HEAD_WITH_BERRIES().toBlockState(), 1}};
-    static const GrowingPlantDefinition CAVE_VINE = {
-            "minecraft:cave_vine_feature", {{1, 13, 2}, {1, 2, 3}, {1, 7, 10}}, true, 17, 26, CAVE_VINE_BODY,
-            CAVE_VINE_HEAD, false};
-    static const GrowingPlantDefinition CAVE_VINE_IN_MOSS = {
-            "minecraft:cave_vine_in_moss_feature", {{1, 4, 5}, {2, 7, 1}}, true, 17, 26, CAVE_VINE_BODY,
-            CAVE_VINE_HEAD, false};
-    static const SnapDefinition CAVE_VINE_SNAP = {
-            "minecraft:cave_vine_snap_to_ceiling_feature", growingPlant(CAVE_VINE), 12, 0, true, false, false, false,
-            {}};
-    static const std::vector<std::string> MOSS_CEILING_REPLACEABLE = {
-            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:podzol", "minecraft:dirt_with_roots",
-            "minecraft:grass_block", "minecraft:mycelium", "minecraft:stone", "minecraft:granite",
-            "minecraft:polished_granite", "minecraft:diorite", "minecraft:polished_diorite", "minecraft:andesite",
-            "minecraft:polished_andesite", "minecraft:deepslate", "minecraft:tuff", "minecraft:moss_block",
-            "minecraft:cave_vines", "minecraft:cave_vines_body_with_berries",
-            "minecraft:cave_vines_head_with_berries"};
-    static const VegetationPatchDefinition MOSS_CEILING = {
-            "minecraft:moss_ceiling_feature", &VanillaBlocks::MOSS_BLOCK, MOSS_CEILING_REPLACEABLE, 1, 3, 5, 0.0f, 0.3f,
-            4, 8, false, {}, growingPlant(CAVE_VINE_IN_MOSS), 0.08f, false};
-    static const SnapDefinition MOSS_CEILING_SNAP = {
-            "minecraft:moss_ceiling_snap_to_ceiling_feature", vegetationPatch(MOSS_CEILING), 12, 0, true, false, false,
-            false, {}};
+    static const GrowingPlantDefinition CAVE_VINE = {"minecraft:cave_vine_feature",
+                                                     {{1, 13, 2}, {1, 2, 3}, {1, 7, 10}},
+                                                     true,
+                                                     17,
+                                                     26,
+                                                     CAVE_VINE_BODY,
+                                                     CAVE_VINE_HEAD,
+                                                     false};
+    static const GrowingPlantDefinition CAVE_VINE_IN_MOSS = {"minecraft:cave_vine_in_moss_feature",
+                                                             {{1, 4, 5}, {2, 7, 1}},
+                                                             true,
+                                                             17,
+                                                             26,
+                                                             CAVE_VINE_BODY,
+                                                             CAVE_VINE_HEAD,
+                                                             false};
+    static const SnapDefinition CAVE_VINE_SNAP = {"minecraft:cave_vine_snap_to_ceiling_feature",
+                                                  growingPlant(CAVE_VINE),
+                                                  12,
+                                                  0,
+                                                  true,
+                                                  false,
+                                                  false,
+                                                  false,
+                                                  {}};
+    static const std::vector<std::string> MOSS_CEILING_REPLACEABLE = {"minecraft:dirt",
+                                                                      "minecraft:coarse_dirt",
+                                                                      "minecraft:podzol",
+                                                                      "minecraft:dirt_with_roots",
+                                                                      "minecraft:grass_block",
+                                                                      "minecraft:mycelium",
+                                                                      "minecraft:stone",
+                                                                      "minecraft:granite",
+                                                                      "minecraft:polished_granite",
+                                                                      "minecraft:diorite",
+                                                                      "minecraft:polished_diorite",
+                                                                      "minecraft:andesite",
+                                                                      "minecraft:polished_andesite",
+                                                                      "minecraft:deepslate",
+                                                                      "minecraft:tuff",
+                                                                      "minecraft:moss_block",
+                                                                      "minecraft:cave_vines",
+                                                                      "minecraft:cave_vines_body_with_berries",
+                                                                      "minecraft:cave_vines_head_with_berries"};
+    static const VegetationPatchDefinition MOSS_CEILING = {"minecraft:moss_ceiling_feature",
+                                                           &VanillaBlocks::MOSS_BLOCK,
+                                                           MOSS_CEILING_REPLACEABLE,
+                                                           1,
+                                                           3,
+                                                           5,
+                                                           0.0f,
+                                                           0.3f,
+                                                           4,
+                                                           8,
+                                                           false,
+                                                           {},
+                                                           growingPlant(CAVE_VINE_IN_MOSS),
+                                                           0.08f,
+                                                           false};
+    static const SnapDefinition MOSS_CEILING_SNAP = {"minecraft:moss_ceiling_snap_to_ceiling_feature",
+                                                     vegetationPatch(MOSS_CEILING),
+                                                     12,
+                                                     0,
+                                                     true,
+                                                     false,
+                                                     false,
+                                                     false,
+                                                     {}};
 
     // features/sulfur_pool_with_potent_sulfur*.json; sulfur_pool is internal
     static const auto function = [](bool (*place)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &)) {
@@ -1602,41 +2209,164 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
     static const AggregateDefinition SULFUR_POOL_WITH_POTENT_SULFUR = {
             "minecraft:sulfur_pool_with_potent_sulfur",
             {function(&OverworldRulePlacer::_placeSulfurPool),
-             function(&OverworldRulePlacer::_placePotentSulfurSearch)}, 1};
-    static const SnapDefinition SULFUR_POOL_SNAP = {
-            "minecraft:sulfur_pool_with_potent_sulfur_snap_to_surface_feature",
-            aggregate(SULFUR_POOL_WITH_POTENT_SULFUR), 32, 1, true, false, true, true, {"minecraft:sulfur"}};
+             function(&OverworldRulePlacer::_placePotentSulfurSearch)},
+            1};
+    static const SnapDefinition SULFUR_POOL_SNAP = {"minecraft:sulfur_pool_with_potent_sulfur_snap_to_surface_feature",
+                                                    aggregate(SULFUR_POOL_WITH_POTENT_SULFUR),
+                                                    32,
+                                                    1,
+                                                    true,
+                                                    false,
+                                                    true,
+                                                    true,
+                                                    {"minecraft:sulfur"}};
     // BDS 1.26.61 behavior packs and definitions/features: roofed_tree_feature, roofed_tree_with_vines_feature and
     // the dark forest's random_roofed_forest_feature
-    static const Tree::Acacia ROOFED = {2, 6, {3, 2}, 3, {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1}, 1, 3, 2, true,
-                                        0, 0, 4, 2, 2, 3};
-    static const Tree::Acacia ROOFED_WITH_VINES = {2, 6, {3, 2}, 3, {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1}, 1,
-                                                   3, 2, true, 6, 7, 4, 2, 2, 3};
-    static const TreeDefinition ROOFED_TREES[] = {
-            {{"minecraft:roofed_tree_feature", Tree::Trunk::Acacia, &VanillaBlocks::DARK_OAK_LOG, {0, 0}, {0, 0},
-              Tree::Canopy::Roofed, &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false}, nullptr,
-             {}, nullptr, &ROOFED},
-            {{"minecraft:roofed_tree_with_vines_feature", Tree::Trunk::Acacia, &VanillaBlocks::DARK_OAK_LOG, {0, 0},
-              {0, 0}, Tree::Canopy::Roofed, &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 0,
-              1, 0, 0, 0, false, true}, nullptr, {}, nullptr, &ROOFED_WITH_VINES}
-    };
-    static const ScatterDefinition OPTIONAL_ROOFED_WITH_VINES =
-            optional("minecraft:optional_roofed_tree_with_vines_feature", tree(ROOFED_TREES[1]), 6);
+    static const Tree::Acacia ROOFED = {2, 6, {3, 2}, 3,    {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1},
+                                        1, 3, 2,      true, 0,      0,      4,      2,     2,      3};
+    static const Tree::Acacia ROOFED_WITH_VINES = {2, 6, {3, 2}, 3,    {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1},
+                                                   1, 3, 2,      true, 6,      7,      4,      2,     2,      3};
+    static const TreeDefinition ROOFED_TREES[] = {{{"minecraft:roofed_tree_feature",
+                                                    Tree::Trunk::Acacia,
+                                                    &VanillaBlocks::DARK_OAK_LOG,
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    Tree::Canopy::Roofed,
+                                                    &VanillaBlocks::DARK_OAK_LEAVES,
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    0,
+                                                    0.0f,
+                                                    false},
+                                                   nullptr,
+                                                   {},
+                                                   nullptr,
+                                                   &ROOFED},
+                                                  {{"minecraft:roofed_tree_with_vines_feature",
+                                                    Tree::Trunk::Acacia,
+                                                    &VanillaBlocks::DARK_OAK_LOG,
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    Tree::Canopy::Roofed,
+                                                    &VanillaBlocks::DARK_OAK_LEAVES,
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    {0, 0},
+                                                    0,
+                                                    0.0f,
+                                                    false,
+                                                    0,
+                                                    1,
+                                                    0,
+                                                    0,
+                                                    0,
+                                                    false,
+                                                    true},
+                                                   nullptr,
+                                                   {},
+                                                   nullptr,
+                                                   &ROOFED_WITH_VINES}};
+    static const ScatterDefinition OPTIONAL_ROOFED_WITH_VINES = optional(
+            "minecraft:optional_roofed_tree_with_vines_feature", tree(ROOFED_TREES[1]), 6);
     static const AggregateDefinition SELECT_ROOFED = {
             "minecraft:select_roofed_tree_feature", {scatter(OPTIONAL_ROOFED_WITH_VINES), tree(ROOFED_TREES[0])}, 2};
-    static const WeightedDefinition RANDOM_ROOFED = {
-            "minecraft:random_roofed_forest_feature",
-            {{HUGE_MUSHROOM, 75}, {aggregate(SELECT_ROOFED), 630}, {aggregate(SELECT_BIRCH), 70}, {tree(TREES[2]), 30},
-             {aggregate(SELECT_OAK), 195}}};
+    static const WeightedDefinition RANDOM_ROOFED = {"minecraft:random_roofed_forest_feature",
+                                                     {{HUGE_MUSHROOM, 75},
+                                                      {aggregate(SELECT_ROOFED), 630},
+                                                      {aggregate(SELECT_BIRCH), 70},
+                                                      {tree(TREES[2]), 30},
+                                                      {aggregate(SELECT_OAK), 195}}};
     static const AggregateDefinition ROOFED_WITH_LEAF_LITTER = {
             "minecraft:random_roofed_forest_feature_with_leaf_litter_feature",
-            {weightedOf(RANDOM_ROOFED), scatter(LEAF_LITTER_SCATTER)}, 1};
+            {weightedOf(RANDOM_ROOFED), scatter(LEAF_LITTER_SCATTER)},
+            1};
     static const ScatterDefinition TALL_GRASS_AROUND_FOLIAGE = {
-            "minecraft:scatter_tall_grass_around_forest_foliage_feature", "20",
-            {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}}, 5, single(0)};
+            "minecraft:scatter_tall_grass_around_forest_foliage_feature",
+            "20",
+            {{6, "-3", "3"}, {6, "-4", "4"}, {6, "-3", "3"}},
+            5,
+            single(0)};
     static const AggregateDefinition ROOFED_FOREST = {
             "minecraft:random_roofed_forest_feature_with_decoration_feature",
-            {aggregate(ROOFED_WITH_LEAF_LITTER), scatter(TALL_GRASS_AROUND_FOLIAGE)}, 0};
+            {aggregate(ROOFED_WITH_LEAF_LITTER), scatter(TALL_GRASS_AROUND_FOLIAGE)},
+            0};
+
+    // vanilla_1.26.50 features: the dappled forest's poplars, their shelf mushrooms and the forest's picks
+    static const ScatterDefinition OPTIONAL_SHELF_MUSHROOM = {"minecraft:optional_shelf_mushroom_feature",
+                                                              "1",
+                                                              {ZERO, ZERO, ZERO},
+                                                              0,
+                                                              function(&placeShelfMushroom),
+                                                              1,
+                                                              4};
+    static const WeightedDefinition DAPPLED_FALLEN_DECORATION = {
+            "minecraft:select_dappled_forest_fallen_tree_decoration",
+            {{scatter(OPTIONAL_SHELF_MUSHROOM), 1}, {scatter(LOG_BROWN_MUSHROOM), 1}}};
+    static const Tree::Poplar POPLAR = {{4, 4}, {1, 4}, {{5, 5}, {6, 5}, {7, 1}, {8, 1}}, {5, 6}, 0.15f};
+    static const auto poplar = [](const char *identifier, Block (*leaves)()) {
+        Tree::Definition definition = {identifier,
+                                       Tree::Trunk::Poplar,
+                                       &VanillaBlocks::POPLAR_LOG,
+                                       {7, 11},
+                                       {0, 0},
+                                       Tree::Canopy::None,
+                                       leaves,
+                                       {0, 0},
+                                       {0, 0},
+                                       {0, 0},
+                                       0,
+                                       0.0f,
+                                       true};
+        definition.mPoplar = &POPLAR;
+        return TreeDefinition{definition, nullptr, scatter(OPTIONAL_SHELF_MUSHROOM)};
+    };
+    static const TreeDefinition POPLAR_TREES[] = {
+            poplar("minecraft:red_poplar_tree_feature", &VanillaBlocks::RED_POPLAR_LEAVES),
+            poplar("minecraft:orange_poplar_tree_feature", &VanillaBlocks::ORANGE_POPLAR_LEAVES),
+            poplar("minecraft:yellow_poplar_tree_feature", &VanillaBlocks::YELLOW_POPLAR_LEAVES),
+            {{"minecraft:fallen_poplar_tree_feature",
+              Tree::Trunk::Fallen,
+              &VanillaBlocks::POPLAR_LOG,
+              {4, 7},
+              {0, 0},
+              Tree::Canopy::None,
+              nullptr,
+              {0, 0},
+              {0, 0},
+              {0, 0},
+              0,
+              0.0f,
+              true},
+             nullptr,
+             weightedOf(DAPPLED_FALLEN_DECORATION)}};
+    static const AggregateDefinition POPLARS_WITH_LEAF_LITTER[] = {
+            {"minecraft:red_poplar_tree_with_leaf_litter_feature",
+             {tree(POPLAR_TREES[0]), scatter(LEAF_LITTER_SCATTER)},
+             1},
+            {"minecraft:orange_poplar_tree_with_leaf_litter_feature",
+             {tree(POPLAR_TREES[1]), scatter(LEAF_LITTER_SCATTER)},
+             1},
+            {"minecraft:yellow_poplar_tree_with_leaf_litter_feature",
+             {tree(POPLAR_TREES[2]), scatter(LEAF_LITTER_SCATTER)},
+             1}};
+    static const WeightedDefinition DAPPLED_FOREST_TREES = {"minecraft:select_tree_dappled_forest_feature",
+                                                            {{aggregate(POPLARS_WITH_LEAF_LITTER[0]), 200},
+                                                             {aggregate(POPLARS_WITH_LEAF_LITTER[1]), 240},
+                                                             {aggregate(POPLARS_WITH_LEAF_LITTER[2]), 90},
+                                                             {aggregate(STANDING_SPRUCE), 27},
+                                                             {tree(POPLAR_TREES[3]), 120}}};
+    // no coordinate_eval_order: xzy
+    static const ScatterDefinition RED_SHRUBS = {"minecraft:scatter_red_shrub_bush_feature",
+                                                 "8",
+                                                 {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}},
+                                                 1,
+                                                 single(14)};
+    static const ScatterDefinition BROWN_MUSHROOMS = {"minecraft:scatter_brown_mushroom_feature",
+                                                      "96",
+                                                      {{6, "-7", "7"}, {6, "-3", "3"}, {6, "-7", "7"}},
+                                                      5,
+                                                      mushroom(&VanillaBlocks::BROWN_MUSHROOM)};
 
     struct NetherPlaced {
         const char *mIdentifier;
@@ -1649,14 +2379,12 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:_twisting_vines_cluster_feature", &NetherFeatures::placeTwistingVines},
             {"minecraft:_basalt_pillar_feature", &NetherFeatures::placeBasaltPillar},
             {"minecraft:delta_feature", &NetherFeatures::placeDelta},
-            {"minecraft:basalt_columns_feature", &NetherFeatures::placeBasaltColumns}
-    };
+            {"minecraft:basalt_columns_feature", &NetherFeatures::placeBasaltColumns}};
 
     // BDS 1.26.61 behavior packs, features/*fossil_feature.json
     static const std::vector<FossilDefinition> FOSSILS = {
             {"minecraft:fossil_feature", "minecraft:coal_ore", 4},
-            {"minecraft:deepslate_diamond_fossil_feature", "minecraft:deepslate_diamond_ore", 4}
-    };
+            {"minecraft:deepslate_diamond_fossil_feature", "minecraft:deepslate_diamond_ore", 4}};
 
     Feature feature;
     if (entry.mPass == AFTER_SURFACE_PASS) {
@@ -1709,6 +2437,10 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mSprings = entry.mFeature == "minecraft:legacy:springs_feature";
         if (entry.mFeature == ROOFED_FOREST.mIdentifier)
             feature.mPlaced.mAggregate = &ROOFED_FOREST;
+        if (entry.mFeature == DAPPLED_FOREST_TREES.mIdentifier)
+            feature.mPlaced.mWeighted = &DAPPLED_FOREST_TREES;
+        if (entry.mFeature == RED_SHRUBS.mIdentifier)
+            feature.mPlaced.mScatter = &RED_SHRUBS;
         if (entry.mFeature == RANDOM_MANGROVE.mIdentifier)
             feature.mPlaced.mWeighted = &RANDOM_MANGROVE;
         for (const AggregateDefinition &withBeenest: MANGROVES_WITH_BEENEST) {
@@ -1736,12 +2468,38 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mPlaced.mWeighted = &RANDOM_CHERRY;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == FIXUP_VINES.mIdentifier)
         feature.mPlaced.mScatter = &FIXUP_VINES;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == BROWN_MUSHROOMS.mIdentifier)
+        feature.mPlaced.mScatter = &BROWN_MUSHROOMS;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:bamboo_feature")
         feature.mPlaced.mFunction = &placeBamboo;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:melon_feature")
         feature.mPlaced.mFunction = &placeMelon;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == SINGLE_BLOCKS[12].mIdentifier)
         feature.mPlaced.mSingleBlock = &SINGLE_BLOCKS[12];
+    // jigsaw feature pieces (sub_1469B1230), drawn from the post process random of their chunk
+    if (entry.mPass.empty()) {
+        static const auto function = [](bool (*place)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &)) {
+            Placed placed;
+            placed.mFunction = place;
+            return placed;
+        };
+        static const std::pair<const char *, Placed> JIGSAW_FEATURES[] = {
+                {"minecraft:select_oak_tree_feature", aggregate(SELECT_OAK)},
+                {"minecraft:select_spruce_tree_feature", aggregate(SELECT_SPRUCE)},
+                {"minecraft:pine_tree_feature", tree(TREES[9])},
+                {"minecraft:fern_feature", single(1)},
+                {"minecraft:savanna_tree_feature", tree(SAVANNA_TREE)},
+                {"minecraft:cactus_feature", function(&CactusFeature::placeCluster)},
+                {"minecraft:hay_pile_feature", function(&BlockPileFeature::placeHay)},
+                {"minecraft:melon_pile_feature", function(&BlockPileFeature::placeMelon)},
+                {"minecraft:pumpkin_pile_feature", function(&BlockPileFeature::placePumpkin)},
+                {"minecraft:snow_pile_feature", function(&BlockPileFeature::placeSnow)},
+                {"minecraft:ice_pile_feature", function(&BlockPileFeature::placeIce)}};
+        for (const auto &jigsaw: JIGSAW_FEATURES) {
+            if (entry.mFeature == jigsaw.first)
+                feature.mPlaced = jigsaw.second;
+        }
+    }
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
         for (const ScatterDefinition &scatter: SCATTERS) {
             if (entry.mFeature == scatter.mIdentifier)
@@ -1753,6 +2511,22 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         }
     }
     return feature;
+}
+
+bool OverworldRulePlacer::placeFeature(BlockManager &blocks, const std::string &feature, int32_t x, int32_t y,
+                                       int32_t z, std::mt19937 &random) {
+    BiomeFeatureEntry entry;
+    entry.mFeature = feature;
+    const Feature found = _find(entry);
+    if (found.mLegacyTree != nullptr) {
+        _placeLegacyTrees(blocks, *found.mLegacyTree, x, y, z, random);
+        return true;
+    }
+    if (!found.mPlaced.isSet())
+        return false;
+
+    _place(blocks, found.mPlaced, x, y, z, random);
+    return true;
 }
 
 bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
@@ -1775,24 +2549,24 @@ bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
 }
 
 void OverworldRulePlacer::apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate &climate,
-                               uint32_t levelSeed, const std::vector<int32_t> &biomes) {
+                                uint32_t levelSeed, const std::vector<int32_t> &biomes) {
     _apply(blocks, chunk, &climate, levelSeed, biomes, nullptr);
 }
 
-void OverworldRulePlacer::applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed,
-                                     int32_t biome, std::mt19937 &decoration) {
+void OverworldRulePlacer::applyBiome(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed, int32_t biome,
+                                     std::mt19937 &decoration) {
     _apply(blocks, chunk, nullptr, levelSeed, {biome}, &decoration);
 }
 
 void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, const OverworldClimate *climate,
-                                 uint32_t levelSeed, const std::vector<int32_t> &biomes,
-                                 std::mt19937 *decoration) {
+                                 uint32_t levelSeed, const std::vector<int32_t> &biomes, std::mt19937 *decoration) {
     // the decoration seed of sub_14CDD4880, from the level seed and the chunk position
     std::mt19937 random(levelSeed);
     const uint32_t multiplierX = (random() >> 1) | 1u;
     const uint32_t multiplierZ = (random() >> 1) | 1u;
     const uint32_t decorationSeed = (multiplierZ * static_cast<uint32_t>(chunk.getZ())
-                                     + multiplierX * static_cast<uint32_t>(chunk.getX())) ^ levelSeed;
+                                     + multiplierX * static_cast<uint32_t>(chunk.getX()))
+                                    ^ levelSeed;
 
     std::mt19937 ownDecoration(decorationSeed);
     placementContext.mDecoration = decoration != nullptr ? decoration : &ownDecoration;
@@ -1910,8 +2684,8 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
     std::mt19937 scatter(seed);
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
     ScatterVariables variables(blocks, origin);
-    int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator, percent,
-                                      iterationsExpression, variables, scatter);
+    int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator, percent, iterationsExpression,
+                                      variables, scatter);
     if (!coordinatesDraw)
         return;
 
@@ -1986,10 +2760,10 @@ bool OverworldRulePlacer::placeOreVein(BlockManager &blocks, int32_t count, Bloc
 bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinition &fossil, int32_t x, int32_t y,
                                        int32_t z, std::mt19937 &random, uint32_t integritySeed) {
     // FossilFeature::place (sub_14D209B60); the game first gives up inside a structure's bounds, not tracked yet
-    static const char *const TEMPLATES[] = {
-            "fossils/fossil_spine_01.nbt", "fossils/fossil_spine_02.nbt", "fossils/fossil_spine_03.nbt",
-            "fossils/fossil_spine_04.nbt", "fossils/fossil_skull_01.nbt", "fossils/fossil_skull_02.nbt",
-            "fossils/fossil_skull_03.nbt", "fossils/fossil_skull_04.nbt"};
+    static const char *const TEMPLATES[] = {"fossils/fossil_spine_01.nbt", "fossils/fossil_spine_02.nbt",
+                                            "fossils/fossil_spine_03.nbt", "fossils/fossil_spine_04.nbt",
+                                            "fossils/fossil_skull_01.nbt", "fossils/fossil_skull_02.nbt",
+                                            "fossils/fossil_skull_03.nbt", "fossils/fossil_skull_04.nbt"};
     constexpr float BONE_INTEGRITY = 0.9f;
     constexpr float ORE_INTEGRITY = 0.1f;
 
@@ -2041,7 +2815,8 @@ bool OverworldRulePlacer::_placeFossil(BlockManager &blocks, const FossilDefinit
     for (const StructureTemplate::BlockEntry &entry: piece->getBlocks()) {
         BlockState bone;
         if (!StructureBlockTable::translate(piece->getPalette()[static_cast<size_t>(entry.mPaletteIndex)], rotation,
-                                            bone) || DecorationSupport::isAir(bone))
+                                            bone)
+            || DecorationSupport::isAir(bone))
             continue;
 
         const float draw = nextFloat(integrity);
@@ -2302,9 +3077,8 @@ bool OverworldRulePlacer::_placeHugeMushroom(BlockManager &blocks, int32_t x, in
 
     // air or leaves (material types 0 and 7) over the stem and, from 4 above the ground, the cap's 7 by 7; a small
     // mushroom may stand at the position itself
-    static const BlockStateSet SMALL = {
-            VanillaBlocks::BROWN_MUSHROOM().getIdentifier(), VanillaBlocks::RED_MUSHROOM().getIdentifier()
-    };
+    static const BlockStateSet SMALL = {VanillaBlocks::BROWN_MUSHROOM().getIdentifier(),
+                                        VanillaBlocks::RED_MUSHROOM().getIdentifier()};
     for (int32_t at = y; at <= y + height + 1; at++) {
         const int32_t radius = at > y + 3 ? 3 : 0;
         for (int32_t offsetX = -radius; offsetX <= radius; offsetX++) {
@@ -2324,18 +3098,17 @@ bool OverworldRulePlacer::_placeHugeMushroom(BlockManager &blocks, int32_t x, in
     // the lists at xmmword_1529B3B88 and xmmword_1529B0A98 (sub_14A2C96E0), grass and dirt with roots; the game also
     // grows it from water in some biomes, a case not ported
     static const BlockStateSet GROUND = {
-            VanillaBlocks::DIRT().getIdentifier(), VanillaBlocks::COARSE_DIRT().getIdentifier(),
-            VanillaBlocks::MYCELIUM().getIdentifier(), VanillaBlocks::CRIMSON_NYLIUM().getIdentifier(),
+            VanillaBlocks::DIRT().getIdentifier(),          VanillaBlocks::COARSE_DIRT().getIdentifier(),
+            VanillaBlocks::MYCELIUM().getIdentifier(),      VanillaBlocks::CRIMSON_NYLIUM().getIdentifier(),
             VanillaBlocks::WARPED_NYLIUM().getIdentifier(), VanillaBlocks::PODZOL().getIdentifier(),
-            VanillaBlocks::GRASS_BLOCK().getIdentifier(), VanillaBlocks::DIRT_WITH_ROOTS().getIdentifier()
-    };
+            VanillaBlocks::GRASS_BLOCK().getIdentifier(),   VanillaBlocks::DIRT_WITH_ROOTS().getIdentifier()};
     if (!GROUND.contains(blocks.getBlockAt(x, y - 1, z)))
         return false;
 
     // the cap: a red one hangs three layers of radius 2 below a top of radius 1, a brown one is a single layer of
     // radius 3; huge_mushroom_bits 1 to 9 face the cell's side of the square, 5 the top, 0 the inside
-    const BlockState cap = (red ? VanillaBlocks::RED_MUSHROOM_BLOCK() : VanillaBlocks::BROWN_MUSHROOM_BLOCK())
-            .toBlockState();
+    const BlockState cap =
+            (red ? VanillaBlocks::RED_MUSHROOM_BLOCK() : VanillaBlocks::BROWN_MUSHROOM_BLOCK()).toBlockState();
     const int32_t top = y + height;
     for (int32_t layer = red ? top - 3 : top; layer <= top; layer++) {
         const int32_t radius = red ? (layer < top ? 2 : 1) : 3;
@@ -2438,8 +3211,7 @@ bool OverworldRulePlacer::_placeDripstoneCluster(BlockManager &blocks, const Dri
     const auto holdsWater = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
         static const BlockStateSet WALLS = {"minecraft:stone", "minecraft:deepslate", "minecraft:tuff"};
         const BlockState &state = blocks.getBlockAt(blockX, blockY, blockZ);
-        return WALLS.contains(state) || isWater(state)
-               || isWater(blocks.getExtraBlockAt(blockX, blockY, blockZ));
+        return WALLS.contains(state) || isWater(state) || isWater(blocks.getExtraBlockAt(blockX, blockY, blockZ));
     };
     // DripstoneUtils' biased height: a gaussian of deviation 3 around half the height, lowered away from the
     // centre over 8 blocks
@@ -2867,9 +3639,8 @@ bool OverworldRulePlacer::_placeLargeDripstone(BlockManager &blocks, int32_t x, 
                     int32_t blockX = columnX;
                     int32_t blockZ = columnZ;
                     blown(blockX, blockY, blockZ);
-                    static const BlockStateSet SPIKES = {
-                            "minecraft:pointed_dripstone", "minecraft:sulfur_spike", "minecraft:icicle"
-                    };
+                    static const BlockStateSet SPIKES = {"minecraft:pointed_dripstone", "minecraft:sulfur_spike",
+                                                         "minecraft:icicle"};
                     if (openOrLava(blockX, blockY, blockZ)
                         || SPIKES.contains(blocks.getBlockAt(blockX, blockY, blockZ))) {
                         blocks.setBlockStateAt(blockX, blockY, blockZ, dripstoneBlock);
@@ -2891,13 +3662,11 @@ bool OverworldRulePlacer::_placeLargeDripstone(BlockManager &blocks, int32_t x, 
     const bool hangingFits = settle(hanging);
     const bool standingFits = settle(standing);
     bool placed = false;
-    if (hangingFits
-        && hanging.mY - static_cast<int32_t>(hanging.heightAt(0.0f)) > LevelChunk::MIN_Y) {
+    if (hangingFits && hanging.mY - static_cast<int32_t>(hanging.heightAt(0.0f)) > LevelChunk::MIN_Y) {
         placeBlocks(hanging);
         placed = true;
     }
-    if (standingFits
-        && standing.mY + static_cast<int32_t>(standing.heightAt(0.0f)) < LevelChunk::MAX_Y + 1) {
+    if (standingFits && standing.mY + static_cast<int32_t>(standing.heightAt(0.0f)) < LevelChunk::MAX_Y + 1) {
         placeBlocks(standing);
         placed = true;
     }
@@ -2945,8 +3714,8 @@ bool OverworldRulePlacer::_growMultiface(BlockManager &blocks, const MultifaceDe
     static const int32_t BITS[6] = {1, 2, 16, 4, 8, 32};
     int32_t chosen = -1;
     for (int32_t face: faces) {
-        if (contains(multiface.mCanPlaceOn, blocks.getBlockAt(x + FACE_STEPS[face][0], y + FACE_STEPS[face][1],
-                                                               z + FACE_STEPS[face][2]))) {
+        if (contains(multiface.mCanPlaceOn,
+                     blocks.getBlockAt(x + FACE_STEPS[face][0], y + FACE_STEPS[face][1], z + FACE_STEPS[face][2]))) {
             chosen = face;
             break;
         }
@@ -2956,8 +3725,8 @@ bool OverworldRulePlacer::_growMultiface(BlockManager &blocks, const MultifaceDe
 
     const BlockState placedState = multiface.mPlaces().toBlockState();
     const BlockState &current = blocks.getBlockAt(x, y, z);
-    const int32_t bits = current.mName == placedState.mName
-                         ? current.mStates.getInt("multi_face_direction_bits", 0) : 0;
+    const int32_t bits = current.mName == placedState.mName ? current.mStates.getInt("multi_face_direction_bits", 0)
+                                                            : 0;
     if ((bits | BITS[chosen]) == bits)
         return false;
 
@@ -3069,8 +3838,8 @@ bool OverworldRulePlacer::_snapAlong(BlockManager &blocks, const SnapDefinition 
     return true;
 }
 
-bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const VegetationPatchDefinition &patch,
-                                                int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+bool OverworldRulePlacer::_placeVegetationPatch(BlockManager &blocks, const VegetationPatchDefinition &patch, int32_t x,
+                                                int32_t y, int32_t z, std::mt19937 &random) {
     // sub_14A282710: two radii, then a disk of columns, corners dropped and edges kept by chance; each column
     // snaps to its own floor and the ground is laid there before any vegetation draws
     const int32_t radiusRange = patch.mRadiusMax - patch.mRadiusMin;
@@ -3237,8 +4006,9 @@ bool OverworldRulePlacer::_placeGrowingPlant(BlockManager &blocks, const Growing
 
     const int32_t length = picked->mMin < picked->mMax - 1 ? picked->mMin + nextInt(random, picked->mMax - picked->mMin)
                                                            : picked->mMin;
-    const int32_t age = plant.mAgeMin < plant.mAgeMax - 1 ? plant.mAgeMin + nextInt(random, plant.mAgeMax - plant.mAgeMin)
-                                                          : plant.mAgeMin;
+    const int32_t age = plant.mAgeMin < plant.mAgeMax - 1
+                                ? plant.mAgeMin + nextInt(random, plant.mAgeMax - plant.mAgeMin)
+                                : plant.mAgeMin;
     if (length <= 0)
         return false;
 
@@ -3257,8 +4027,9 @@ bool OverworldRulePlacer::_placeGrowingPlant(BlockManager &blocks, const Growing
     for (int32_t i = 0; i < length; i++) {
         const int32_t columnY = y + step * i;
         const bool open = DecorationSupport::isAir(blocks.getBlockAt(x, columnY, z))
-                          || (plant.mAllowWater && (isWater(blocks.getBlockAt(x, columnY, z))
-                                                    || isWater(blocks.getExtraBlockAt(x, columnY, z))));
+                          || (plant.mAllowWater
+                              && (isWater(blocks.getBlockAt(x, columnY, z))
+                                  || isWater(blocks.getExtraBlockAt(x, columnY, z))));
         if (!open)
             continue;
 
@@ -3275,8 +4046,7 @@ bool OverworldRulePlacer::_placeGrowingPlant(BlockManager &blocks, const Growing
     return false;
 }
 
-bool OverworldRulePlacer::_placeDripleaf(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
-                                         std::mt19937 &random) {
+bool OverworldRulePlacer::_placeDripleaf(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
     // DripleafFeature::place (sub_14D208A20): a small dripleaf when nextFloat < 0.2, else the big dripleaf feature
     // of a direction; both draw the direction with nextInt(4), 0 south, 1 west, 2 north, 3 east
     static const char *const DIRECTIONS[4] = {"south", "west", "north", "east"};
@@ -3298,10 +4068,12 @@ bool OverworldRulePlacer::_placeDripleaf(BlockManager &blocks, int32_t x, int32_
         // mayPlaceOn (sub_148F8EE70): clay or moss anywhere, the dirt-like blocks of xmmword_1529B3258 only under
         // water
         static const BlockStateSet ANYWHERE = {"minecraft:clay", "minecraft:moss_block"};
-        static const BlockStateSet UNDER_WATER = {
-                "minecraft:dirt", "minecraft:grass_block", "minecraft:podzol", "minecraft:coarse_dirt",
-                "minecraft:mycelium", "minecraft:dirt_with_roots", "minecraft:moss_block",
-                "minecraft:pale_moss_block", "minecraft:mud", "minecraft:muddy_mangrove_roots", "minecraft:farmland"};
+        static const BlockStateSet UNDER_WATER = {"minecraft:dirt",       "minecraft:grass_block",
+                                                  "minecraft:podzol",     "minecraft:coarse_dirt",
+                                                  "minecraft:mycelium",   "minecraft:dirt_with_roots",
+                                                  "minecraft:moss_block", "minecraft:pale_moss_block",
+                                                  "minecraft:mud",        "minecraft:muddy_mangrove_roots",
+                                                  "minecraft:farmland"};
         const BlockState &below = blocks.getBlockAt(x, y - 1, z);
         const bool inWater = isWater(at) || isWater(blocks.getExtraBlockAt(x, y, z));
         if (!ANYWHERE.contains(below) && !(inWater && UNDER_WATER.contains(below)))
@@ -3322,14 +4094,19 @@ bool OverworldRulePlacer::_placeDripleaf(BlockManager &blocks, int32_t x, int32_
             return DecorationSupport::withState(state, "big_dripleaf_tilt", "none");
         };
         const auto feature = [&](const char *identifier, const char *direction) {
-            return GrowingPlantDefinition{identifier, {{1, 6, 2}, {1, 2, 1}}, false, 0, 0,
-                                          {{part(direction, false), 1}}, {{part(direction, true), 1}}, true};
+            return GrowingPlantDefinition{identifier,
+                                          {{1, 6, 2}, {1, 2, 1}},
+                                          false,
+                                          0,
+                                          0,
+                                          {{part(direction, false), 1}},
+                                          {{part(direction, true), 1}},
+                                          true};
         };
-        return std::array<GrowingPlantDefinition, 4>{
-                feature("minecraft:big_dripleaf_south_feature", DIRECTIONS[0]),
-                feature("minecraft:big_dripleaf_west_feature", DIRECTIONS[1]),
-                feature("minecraft:big_dripleaf_north_feature", DIRECTIONS[2]),
-                feature("minecraft:big_dripleaf_east_feature", DIRECTIONS[3])};
+        return std::array<GrowingPlantDefinition, 4>{feature("minecraft:big_dripleaf_south_feature", DIRECTIONS[0]),
+                                                     feature("minecraft:big_dripleaf_west_feature", DIRECTIONS[1]),
+                                                     feature("minecraft:big_dripleaf_north_feature", DIRECTIONS[2]),
+                                                     feature("minecraft:big_dripleaf_east_feature", DIRECTIONS[3])};
     }();
     return _placeGrowingPlant(blocks, BIG_DRIPLEAF[nextInt(random, 4)], x, y, z, random);
 }
@@ -3390,8 +4167,8 @@ bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefin
     // rule's placement twister
     const int32_t origin[3] = {x, y, z};
     ScatterVariables variables(blocks, origin);
-    const int32_t iterations = iterationsOf(scatter.mChanceNumerator, scatter.mChanceDenominator,
-                                            scatter.mParsedChance, scatter.mParsedIterations, variables, random);
+    const int32_t iterations = iterationsOf(scatter.mChanceNumerator, scatter.mChanceDenominator, scatter.mParsedChance,
+                                            scatter.mParsedIterations, variables, random);
     bool placed = false;
     for (int32_t iteration = 0; iteration < iterations; iteration++) {
         int32_t position[3] = {0, 0, 0};
@@ -3414,10 +4191,15 @@ bool OverworldRulePlacer::_placeSingleBlock(BlockManager &blocks, const SingleBl
         return _placeAttached(blocks, single, x, y, z);
 
     const BlockState &support = blocks.getBlockAt(x, y - 1, z);
+    const bool hardenedClay = support.mName == "minecraft:hardened_clay"
+                              || (BlockIdentifier::endsWith(support.mName, "_terracotta")
+                                  && !BlockIdentifier::endsWith(support.mName, "_glazed_terracotta"));
     const bool supported = IFeature::isSupportDirt(support)
-                           || (single.mNetherPlant && (support.mName == "minecraft:crimson_nylium"
-                                                       || support.mName == "minecraft:warped_nylium"
-                                                       || support.mName == "minecraft:soul_soil"));
+                           || (single.mSandAndClay && (DecorationSupport::isSand(support) || hardenedClay))
+                           || (single.mNetherPlant
+                               && (support.mName == "minecraft:crimson_nylium"
+                                   || support.mName == "minecraft:warped_nylium"
+                                   || support.mName == "minecraft:soul_soil"));
     if (single.mSurvival && !supported)
         return false;
     if (single.mDoublePlant && (!supported || !DecorationSupport::isAir(blocks.getBlockAt(x, y + 1, z))))
@@ -3462,8 +4244,8 @@ bool OverworldRulePlacer::_placeAttached(BlockManager &blocks, const SingleBlock
     return true;
 }
 
-bool OverworldRulePlacer::_placeWeighted(BlockManager &blocks, const WeightedDefinition &weighted, int32_t x,
-                                         int32_t y, int32_t z, std::mt19937 &random) {
+bool OverworldRulePlacer::_placeWeighted(BlockManager &blocks, const WeightedDefinition &weighted, int32_t x, int32_t y,
+                                         int32_t z, std::mt19937 &random) {
     // WeightedRandomFeature::place (sub_14A28A040)
     int32_t total = 0;
     for (const std::pair<Placed, int32_t> &feature: weighted.mFeatures)
@@ -3478,8 +4260,8 @@ bool OverworldRulePlacer::_placeWeighted(BlockManager &blocks, const WeightedDef
     return false;
 }
 
-bool OverworldRulePlacer::_placeSeagrass(BlockManager &blocks, const SeagrassDefinition &seagrass, int32_t x,
-                                         int32_t y, int32_t z, std::mt19937 &random) {
+bool OverworldRulePlacer::_placeSeagrass(BlockManager &blocks, const SeagrassDefinition &seagrass, int32_t x, int32_t y,
+                                         int32_t z, std::mt19937 &random) {
     // SeagrassFeature::place (sub_1471E5DC0): down to the floor, then up through the water, a single or tall plant,
     // and a jitter around the floor block for the next one
     int32_t floorY = y;
@@ -3560,8 +4342,7 @@ bool OverworldRulePlacer::_placeKelp(BlockManager &blocks, int32_t x, int32_t y,
             plantY++;
 
         const BlockState &at = blocks.getBlockAt(plantX, plantY, plantZ);
-        if (DecorationSupport::isAir(at) || isWater(blocks.getBlockAt(plantX, plantY - 1, plantZ))
-            || isKelp(at))
+        if (DecorationSupport::isAir(at) || isWater(blocks.getBlockAt(plantX, plantY - 1, plantZ)) || isKelp(at))
             continue;
 
         int32_t water = 0;
@@ -3775,8 +4556,9 @@ bool OverworldRulePlacer::_placeGeode(BlockManager &blocks, const GeodeDefinitio
         return placed;
 
     for (const std::array<int32_t, 3> &position: potentials) {
-        const BlockState bud = geode.mInnerPlacements[(size_t) nextInt(
-                random, (int32_t) geode.mInnerPlacements.size())]().toBlockState();
+        const BlockState bud =
+                geode.mInnerPlacements[(size_t) nextInt(random, (int32_t) geode.mInnerPlacements.size())]()
+                        .toBlockState();
         for (size_t face = 0; face < 6; face++) {
             const int32_t budX = position[0] + FACES[face][0];
             const int32_t budY = position[1] + FACES[face][1];
@@ -3869,16 +4651,18 @@ bool OverworldRulePlacer::_placeAggregate(BlockManager &blocks, const AggregateD
     return placed;
 }
 
-bool OverworldRulePlacer::_placeTree(BlockManager &blocks, const TreeDefinition &tree, int32_t x, int32_t y,
-                                     int32_t z, std::mt19937 &random, int32_t *placedAt) {
-    return OverworldTreePlacer::place(blocks, tree.mTree, tree.mFancy, tree.mMega, tree.mAcacia, x, y, z, random,
-                                      [&](int32_t logX, int32_t logY, int32_t logZ) {
-                                          _place(blocks, tree.mLogDecoration, logX, logY, logZ, random);
-                                      }, placedAt);
+bool OverworldRulePlacer::_placeTree(BlockManager &blocks, const TreeDefinition &tree, int32_t x, int32_t y, int32_t z,
+                                     std::mt19937 &random, int32_t *placedAt) {
+    return OverworldTreePlacer::place(
+            blocks, tree.mTree, tree.mFancy, tree.mMega, tree.mAcacia, x, y, z, random,
+            [&](int32_t logX, int32_t logY, int32_t logZ) {
+                _place(blocks, tree.mLogDecoration, logX, logY, logZ, random);
+            },
+            placedAt);
 }
 
-bool OverworldRulePlacer::_placeSequence(BlockManager &blocks, const SequenceDefinition &sequence, int32_t x,
-                                         int32_t y, int32_t z, std::mt19937 &random) {
+bool OverworldRulePlacer::_placeSequence(BlockManager &blocks, const SequenceDefinition &sequence, int32_t x, int32_t y,
+                                         int32_t z, std::mt19937 &random) {
     // SequenceFeature: each feature from the position the one before handed on, stopping at the first that places
     // nothing, measured on the jungle trees: a failed tree draws no cocoa chance; only the trees move the position
     int32_t position[3] = {x, y, z};
@@ -3929,12 +4713,10 @@ bool OverworldRulePlacer::_placeBeehiveSearch(BlockManager &blocks, int32_t x, i
     static const int32_t WEST[2] = {-1, 0};
     static const int32_t *const ORDERS[3][3] = {{EAST, SOUTH, WEST}, {SOUTH, WEST, EAST}, {WEST, EAST, SOUTH}};
     // the may_attach_to blocks of beehive_feature
-    static const BlockStateSet TRUNKS = {
-            "minecraft:oak_log", "minecraft:birch_log", "minecraft:mangrove_roots", "minecraft:cherry_log"
-    };
-    static const BlockStateSet LEAVES = {
-            "minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:mangrove_leaves", "minecraft:cherry_leaves"
-    };
+    static const BlockStateSet TRUNKS = {"minecraft:oak_log", "minecraft:birch_log", "minecraft:mangrove_roots",
+                                         "minecraft:cherry_log"};
+    static const BlockStateSet LEAVES = {"minecraft:oak_leaves", "minecraft:birch_leaves", "minecraft:mangrove_leaves",
+                                         "minecraft:cherry_leaves"};
     const auto isTrunk = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
         return TRUNKS.contains(blocks.getBlockAt(blockX, blockY, blockZ));
     };
@@ -3997,9 +4779,9 @@ void OverworldRulePlacer::_placeSpring(BlockManager &blocks, int32_t x, int32_t 
     const auto isRock = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
         // sub_1471E9FF0 for worlds of the 1.18 terrain
         static const std::vector<std::string> ROCK = {
-                "minecraft:stone", "minecraft:deepslate", "minecraft:tuff", "minecraft:calcite", "minecraft:snow",
-                "minecraft:powder_snow", "minecraft:packed_ice", "minecraft:dirt", "minecraft:coarse_dirt"
-        };
+                "minecraft:stone",      "minecraft:deepslate", "minecraft:tuff",
+                "minecraft:calcite",    "minecraft:snow",      "minecraft:powder_snow",
+                "minecraft:packed_ice", "minecraft:dirt",      "minecraft:coarse_dirt"};
         return contains(ROCK, blocks.getBlockAt(blockX, blockY, blockZ));
     };
     const auto isAir = [&](int32_t blockX, int32_t blockY, int32_t blockZ) {
@@ -4047,9 +4829,7 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
 
     static const BlockStateSet ICEBERG = {"minecraft:packed_ice", "minecraft:snow", "minecraft:blue_ice"};
     static const BlockStateSet SNOW_LAYER = {VanillaBlocks::SNOW_LAYER().getIdentifier()};
-    const auto isIceberg = [](const BlockState &state) {
-        return ICEBERG.contains(state);
-    };
+    const auto isIceberg = [](const BlockState &state) { return ICEBERG.contains(state); };
 
     const int32_t widthDraw = nextInt(random, 5);
     const int32_t depthDraw = nextInt(random, 3);
@@ -4111,9 +4891,8 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
     };
     // only in air, snow, ice or water; snow near the top when the iceberg carries some
     const auto setIcebergBlock = [&](int32_t blockX, int32_t blockY, int32_t blockZ, int32_t fromTop, int32_t total) {
-        static const BlockStateSet TAKES_ICEBERG = {
-                "minecraft:air", "minecraft:snow", "minecraft:ice", "minecraft:water", "minecraft:flowing_water"
-        };
+        static const BlockStateSet TAKES_ICEBERG = {"minecraft:air", "minecraft:snow", "minecraft:ice",
+                                                    "minecraft:water", "minecraft:flowing_water"};
         static const BlockStateSet STILL_WATER = {VanillaBlocks::WATER().getIdentifier()};
         const BlockState &replaced = blocks.getBlockAt(blockX, blockY, blockZ);
         if (!TAKES_ICEBERG.contains(replaced))
@@ -4156,8 +4935,8 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
                         threshold = -6.0f - static_cast<float>(nextInt(random, 3));
                     } else {
                         distance = ellipseDistance(static_cast<float>(dx), static_cast<float>(dz),
-                                                   static_cast<float>(width), static_cast<float>(ellipseDepth),
-                                                   cosine, sine);
+                                                   static_cast<float>(width), static_cast<float>(ellipseDepth), cosine,
+                                                   sine);
                         if (distance >= -7.006492321624085e-46)
                             continue;
                     }
@@ -4211,8 +4990,8 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
                     int32_t ringWidth = width;
                     if (ellipse) {
                         const auto dySquared = static_cast<double>(below) * static_cast<double>(below);
-                        ringWidth = ceilOf(static_cast<float>(
-                                (1.0 - dySquared / static_cast<double>(8.0f * depthF)) * static_cast<double>(width)));
+                        ringWidth = ceilOf(static_cast<float>((1.0 - dySquared / static_cast<double>(8.0f * depthF))
+                                                              * static_cast<double>(width)));
                     }
 
                     const int32_t radius = steepRadius(below, depthF);
@@ -4281,7 +5060,8 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
         for (int32_t dx = -extent; dx < extent; dx++) {
             for (int32_t dz = -extent; dz < extent; dz++) {
                 if (ellipseDistance(static_cast<float>(dx - centreX), static_cast<float>(dz - centreZ), a, b, cutCos,
-                                    cutSin) >= -7.006492321624085e-46)
+                                    cutSin)
+                    >= -7.006492321624085e-46)
                     continue;
 
                 const int32_t blockX = x + dx;
@@ -4316,8 +5096,7 @@ void OverworldRulePlacer::_placeIceberg(BlockManager &blocks, int32_t x, int32_t
     }
 }
 
-bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t y, int32_t z,
-                                        std::mt19937 &random) {
+bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
     // the game's blue ice feature (sub_147174460): under the sea, in or over water and next to packed ice, then 200
     // tries around it keeping one to four blue ice neighbours
     static const BlockState blueIce = VanillaBlocks::BLUE_ICE().toBlockState();
@@ -4326,9 +5105,8 @@ bool OverworldRulePlacer::_placeBlueIce(BlockManager &blocks, int32_t x, int32_t
     static const BlockStateSet STILL_WATER = {VanillaBlocks::WATER().getIdentifier()};
     static const BlockStateSet PACKED_ICE = {VanillaBlocks::PACKED_ICE().getIdentifier()};
     static const BlockStateSet BLUE_ICE = {VanillaBlocks::BLUE_ICE().getIdentifier()};
-    static const BlockStateSet TAKES_BLUE_ICE = {
-            "minecraft:air", "minecraft:water", "minecraft:packed_ice", "minecraft:ice"
-    };
+    static const BlockStateSet TAKES_BLUE_ICE = {"minecraft:air", "minecraft:water", "minecraft:packed_ice",
+                                                 "minecraft:ice"};
     if (!STILL_WATER.contains(blocks.getBlockAt(x, y, z)) && !STILL_WATER.contains(blocks.getBlockAt(x, y - 1, z)))
         return false;
 
@@ -4399,10 +5177,9 @@ void OverworldRulePlacer::_placeForestRock(BlockManager &blocks, int32_t x, int3
                                            std::mt19937 &random) {
     // the game's forest_rock_feature (vtable 0x14F2F01A0, sub_147173640) with a start radius of 0: down to a block
     // of its list, then three blobs of mossy cobblestone, each one step aside and maybe one lower than the last
-    static const BlockStateSet SUPPORT = {
-            VanillaBlocks::GRASS_BLOCK().getIdentifier(), VanillaBlocks::STONE().getIdentifier(),
-            VanillaBlocks::DIRT().getIdentifier(), VanillaBlocks::COARSE_DIRT().getIdentifier()
-    };
+    static const BlockStateSet SUPPORT = {VanillaBlocks::GRASS_BLOCK().getIdentifier(),
+                                          VanillaBlocks::STONE().getIdentifier(), VanillaBlocks::DIRT().getIdentifier(),
+                                          VanillaBlocks::COARSE_DIRT().getIdentifier()};
     int32_t rockY = y;
     while (rockY > LevelChunk::MIN_Y + 3 && !SUPPORT.contains(blocks.getBlockAt(x, rockY - 1, z)))
         rockY--;

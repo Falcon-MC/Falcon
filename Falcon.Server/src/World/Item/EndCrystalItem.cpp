@@ -21,14 +21,14 @@ namespace {
     const float FULL_TURN_DEGREES = 360.0f;
 
     AxisAlignedBB crystalArea(const Vector3i &position) {
-        return AxisAlignedBB((float) position.x, (float) position.y, (float) position.z,
-                             (float) position.x + 1.0f, (float) position.y + 2.0f, (float) position.z + 1.0f);
+        return AxisAlignedBB((float) position.x, (float) position.y, (float) position.z, (float) position.x + 1.0f,
+                             (float) position.y + 2.0f, (float) position.z + 1.0f);
     }
 
     AxisAlignedBB actorBox(const Vector3f &position, const ActorSize &size) {
         const float half = size.mWidth * 0.5f;
-        return AxisAlignedBB(position.x - half, position.y, position.z - half,
-                             position.x + half, position.y + size.mHeight, position.z + half);
+        return AxisAlignedBB(position.x - half, position.y, position.z - half, position.x + half,
+                             position.y + size.mHeight, position.z + half);
     }
 
     bool isAreaFree(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -65,8 +65,7 @@ bool EndCrystalItem::matches(const std::string &identifier) {
 }
 
 bool EndCrystalItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                  const Vector3i &blockPosition, int32_t face,
-                                  const Vector3f &clickPosition) const {
+                                  const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) face;
     (void) clickPosition;
 
@@ -113,8 +112,7 @@ bool EndCrystalItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
 
         PlayerInventory &inventory = player.getInventory();
         inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     return true;

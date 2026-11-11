@@ -4,8 +4,7 @@
 
 class CaveVinesBlock : public Block {
 public:
-    explicit CaveVinesBlock(const Block &block) : Block(block) {
-    }
+    explicit CaveVinesBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

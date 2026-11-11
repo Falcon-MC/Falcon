@@ -6,9 +6,8 @@
 namespace {
     std::string toLower(const std::string &value) {
         std::string result = value;
-        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char character) {
-            return (char) std::tolower(character);
-        });
+        std::transform(result.begin(), result.end(), result.begin(),
+                       [](unsigned char character) { return (char) std::tolower(character); });
         return result;
     }
 

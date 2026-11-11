@@ -6,9 +6,7 @@
 
 class SnowLayerBlock final : public Block {
 public:
-    explicit SnowLayerBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit SnowLayerBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

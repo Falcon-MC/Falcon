@@ -4,8 +4,7 @@
 
 class HoneyBlock : public Block {
 public:
-    explicit HoneyBlock(const Block &block) : Block(block) {
-    }
+    explicit HoneyBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

@@ -35,8 +35,7 @@ namespace {
 
     class OrePlacementManager : public BlockManager {
     public:
-        explicit OrePlacementManager(Level &level) : BlockManager(level) {
-        }
+        explicit OrePlacementManager(Level &level) : BlockManager(level) {}
 
         void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state) override {
             if (y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y) {
@@ -182,9 +181,11 @@ void OreFeature::spawn(BlockManager &manager, IRandom &random, int32_t x, int32_
         const double scaleZ = scaleMaxZ + (scaleMinZ - scaleMaxZ) * (double) sizeIncr;
         const double randSizeOffset = random.nextDouble() * (double) clusterSize / 16.0;
         const double randVec1 = (double) (FeatureMath::sinLookup(MathConstants::PI_F * sizeIncr) + 1.0f)
-                                * randSizeOffset + 1.0;
+                                        * randSizeOffset
+                                + 1.0;
         const double randVec2 = (double) (FeatureMath::sinLookup(MathConstants::PI_F * sizeIncr) + 1.0f)
-                                * randSizeOffset + 1.0;
+                                        * randSizeOffset
+                                + 1.0;
 
         const int32_t minX = FeatureMath::floorDouble(scaleX - randVec1 / 2.0);
         const int32_t minY = FeatureMath::floorDouble(scaleY - randVec2 / 2.0);

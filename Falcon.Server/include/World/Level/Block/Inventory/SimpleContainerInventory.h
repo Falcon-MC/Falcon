@@ -11,7 +11,9 @@ class SimpleContainerInventory : public Container {
 public:
     explicit SimpleContainerInventory(int size);
 
-    int getContainerSize() const override { return (int) mItems.size(); }
+    int getContainerSize() const override {
+        return (int) mItems.size();
+    }
 
     const ItemStack &getContainerItem(int slot) const override;
 

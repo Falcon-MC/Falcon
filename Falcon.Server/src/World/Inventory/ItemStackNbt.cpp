@@ -92,8 +92,8 @@ Tag ItemStackNbt::write(const ItemStack &item) {
     }
 
     if (item.mBlockDefinition != nullptr) {
-        data.put(TAG_BLOCK, BlockState(item.mBlockDefinition->getIdentifier(),
-                                       item.mBlockDefinition->getState()).toNbt());
+        data.put(TAG_BLOCK,
+                 BlockState(item.mBlockDefinition->getIdentifier(), item.mBlockDefinition->getState()).toNbt());
     }
 
     if (!item.mCanPlace.empty()) {

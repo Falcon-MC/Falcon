@@ -4,24 +4,10 @@
 
 namespace {
 
-    const float GRADIENTS[16][3] = {
-            {1.0f,  1.0f,  0.0f},
-            {-1.0f, 1.0f,  0.0f},
-            {1.0f,  -1.0f, 0.0f},
-            {-1.0f, -1.0f, 0.0f},
-            {1.0f,  0.0f,  1.0f},
-            {-1.0f, 0.0f,  1.0f},
-            {1.0f,  0.0f,  -1.0f},
-            {-1.0f, 0.0f,  -1.0f},
-            {0.0f,  1.0f,  1.0f},
-            {0.0f,  -1.0f, 1.0f},
-            {0.0f,  1.0f,  -1.0f},
-            {0.0f,  -1.0f, -1.0f},
-            {1.0f,  1.0f,  0.0f},
-            {0.0f,  -1.0f, 1.0f},
-            {-1.0f, 1.0f,  0.0f},
-            {0.0f,  -1.0f, -1.0f}
-    };
+    const float GRADIENTS[16][3] = {{1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
+                                    {1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 1.0f}, {1.0f, 0.0f, -1.0f}, {-1.0f, 0.0f, -1.0f},
+                                    {0.0f, 1.0f, 1.0f}, {0.0f, -1.0f, 1.0f}, {0.0f, 1.0f, -1.0f}, {0.0f, -1.0f, -1.0f},
+                                    {1.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, 0.0f}, {0.0f, -1.0f, -1.0f}};
 
     float nextUnit(std::mt19937 &random) {
         return static_cast<float>(static_cast<double>(random()) * 2.3283064365386963e-10);
@@ -113,10 +99,9 @@ void TheEndImprovedNoise::addOctave(float *noiseArray, const float *position, in
                                           grad(p[(size_t) aa + 1], fractionX, gradientY, z1),
                                           grad(p[(size_t) aa], fractionX, gradientY, fractionZ),
                                           grad(p[(size_t) ab + 1], fractionX, y1, z1)};
-                    const float high[4] = {grad(p[(size_t) bb], x1, y1, fractionZ),
-                                           grad(p[(size_t) ba + 1], x1, gradientY, z1),
-                                           grad(p[(size_t) ba], x1, gradientY, fractionZ),
-                                           grad(p[(size_t) bb + 1], x1, y1, z1)};
+                    const float high[4] = {
+                            grad(p[(size_t) bb], x1, y1, fractionZ), grad(p[(size_t) ba + 1], x1, gradientY, z1),
+                            grad(p[(size_t) ba], x1, gradientY, fractionZ), grad(p[(size_t) bb + 1], x1, y1, z1)};
                     for (int32_t lane = 0; lane < 4; lane++)
                         lanes[lane] = (high[lane] - low[lane]) * fadeX + low[lane];
                 }

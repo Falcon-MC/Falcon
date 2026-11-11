@@ -43,8 +43,8 @@ AvoidMobTypeGoal::AvoidMobTypeGoal(std::vector<Entry> entries, Options options)
 }
 
 int32_t AvoidMobTypeGoal::_nextSound() const {
-    return std::uniform_int_distribution<int32_t>(mOptions.mMinSoundInterval, mOptions.mMaxSoundInterval)(
-            avoidMobRandom());
+    return std::uniform_int_distribution<int32_t>(mOptions.mMinSoundInterval,
+                                                  mOptions.mMaxSoundInterval)(avoidMobRandom());
 }
 
 bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob, const Entry &entry) const {
@@ -59,7 +59,8 @@ bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob
 
     const json::Value *groupSize = mob.getComponent("minecraft:group_size");
     const json::Value *radiusValue = groupSize == nullptr ? nullptr : groupSize->get("radius");
-    const float radius = radiusValue == nullptr ? DEFAULT_GROUP_RADIUS : (float) radiusValue->number(DEFAULT_GROUP_RADIUS);
+    const float radius = radiusValue == nullptr ? DEFAULT_GROUP_RADIUS
+                                                : (float) radiusValue->number(DEFAULT_GROUP_RADIUS);
     const json::Value *groupFilters = groupSize == nullptr ? nullptr : groupSize->get("filters");
 
     int32_t allies = 0;

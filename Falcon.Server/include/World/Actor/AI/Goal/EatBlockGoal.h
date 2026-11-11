@@ -26,8 +26,7 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    const std::pair<std::string, std::string> *_findPair(Level &level, const MobActor &mob,
-                                                           Vector3i &position) const;
+    const std::pair<std::string, std::string> *_findPair(Level &level, const MobActor &mob, Vector3i &position) const;
 
     float _chance(const MobActor &mob) const;
 

@@ -384,7 +384,8 @@ const char *WasmPlugin::runService(Binding &binding, const char *request) {
 
     size_t size = 0;
     uint8_t *memory = memoryData(size);
-    if (trap == nullptr && ((uint64_t) nameAddress + name.size() > size || (uint64_t) requestAddress + requestLength > size))
+    if (trap == nullptr
+        && ((uint64_t) nameAddress + name.size() > size || (uint64_t) requestAddress + requestLength > size))
         trap = wasmtime_trap_new("cabi_realloc returned memory out of bounds",
                                  std::strlen("cabi_realloc returned memory out of bounds"));
     if (trap != nullptr) {
@@ -427,8 +428,7 @@ const char *WasmPlugin::runService(Binding &binding, const char *request) {
         wasmtime_val_raw_t postValues[1];
         postValues[0].i32 = (int32_t) result;
         wasm_trap_t *postTrap = nullptr;
-        wasmtime_error_t *error = wasmtime_func_call_unchecked(mContext, &mServicePostReturn, postValues, 1,
-                                                               &postTrap);
+        wasmtime_error_t *error = wasmtime_func_call_unchecked(mContext, &mServicePostReturn, postValues, 1, &postTrap);
         if (error != nullptr || postTrap != nullptr) {
             _fault(messageOf(error, postTrap));
             return nullptr;

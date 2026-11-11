@@ -3,9 +3,9 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 
-void PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsComponent &physics,
-                                         const AxisAlignedBB &box, Vector3f motion, const ActorMoveResult &result,
-                                         const LiquidContact &feet, float &landingFallDistance) {
+void PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsComponent &physics, const AxisAlignedBB &box,
+                                         Vector3f motion, const ActorMoveResult &result, const LiquidContact &feet,
+                                         float &landingFallDistance) {
     landingFallDistance = 0.0f;
     actor.setPosition(Vector3f((box.mMinX + box.mMaxX) * 0.5f, box.mMinY, (box.mMinZ + box.mMaxZ) * 0.5f));
 

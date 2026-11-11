@@ -49,9 +49,7 @@ namespace {
 
 }
 
-EndPodiumObject::EndPodiumObject(bool active)
-        : mActive(active) {
-}
+EndPodiumObject::EndPodiumObject(bool active) : mActive(active) {}
 
 bool EndPodiumObject::generate(BlockManager &manager, IRandom &, int32_t originX, int32_t originY, int32_t originZ) {
     for (int32_t x = -4; x <= 4; x++) {
@@ -69,8 +67,7 @@ bool EndPodiumObject::generate(BlockManager &manager, IRandom &, int32_t originX
                 } else if (distanceSquared >= 7) {
                     manager.setBlockStateAt(originX + x, originY, originZ + z, bedrockState());
                 } else {
-                    manager.setBlockStateAt(originX + x, originY, originZ + z,
-                                            mActive ? endPortalState() : airState());
+                    manager.setBlockStateAt(originX + x, originY, originZ + z, mActive ? endPortalState() : airState());
                 }
             }
         }

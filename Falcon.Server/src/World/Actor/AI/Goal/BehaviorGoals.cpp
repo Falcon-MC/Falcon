@@ -76,9 +76,6 @@
 namespace {
     const char *const BEHAVIOR_PREFIX = "minecraft:behavior.";
 
-    const int32_t PANIC_RANGE = 12;
-    const int32_t PANIC_INTERVAL = 40;
-    const int32_t PANIC_DURATION = 100;
     const int32_t WATER_RETRIES = 10;
 
     const float STROLL_DEFAULT_RANGE = 10.0f;
@@ -573,8 +570,29 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "float")
         return std::make_unique<FloatGoal>();
 
-    if (behavior == "panic")
-        return std::make_unique<PanicGoal>(speed, PANIC_RANGE, PANIC_INTERVAL, PANIC_DURATION, true, WATER_RETRIES);
+    if (behavior == "panic") {
+        PanicGoal::Settings settings;
+        settings.mSpeed = speed;
+        const auto flag = [&component](const char *key) {
+            const json::Value *value = component.get(key);
+            return value != nullptr && value->boolean(false);
+        };
+        settings.mIgnoreMobDamage = flag("ignore_mob_damage");
+        settings.mForce = flag("force");
+        settings.mPreferWater = flag("prefer_water");
+        if (const json::Value *sources = component.get("damage_sources")) {
+            settings.mDamageSources.clear();
+            if (sources->isString())
+                settings.mDamageSources.push_back(sources->mString);
+            else if (sources->isArray()) {
+                for (const auto &source: sources->mArray) {
+                    if (source != nullptr && source->isString())
+                        settings.mDamageSources.push_back(source->mString);
+                }
+            }
+        }
+        return std::make_unique<PanicGoal>(std::move(settings));
+    }
 
     if (behavior == "random_stroll") {
         const int32_t range = (int32_t) numberOf(component, "xz_dist", STROLL_DEFAULT_RANGE);
@@ -639,11 +657,10 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     }
 
     if (behavior == "swoop_attack")
-        return std::make_unique<SwoopAttackGoal>(speed, numberOf(component, "damage_reach", SWOOP_DEFAULT_DAMAGE_REACH),
-                                                 secondsToTicks(rangeValue(component, "delay_range", "min",
-                                                                           SWOOP_DEFAULT_MIN_DELAY)),
-                                                 secondsToTicks(rangeValue(component, "delay_range", "max",
-                                                                           SWOOP_DEFAULT_MAX_DELAY)));
+        return std::make_unique<SwoopAttackGoal>(
+                speed, numberOf(component, "damage_reach", SWOOP_DEFAULT_DAMAGE_REACH),
+                secondsToTicks(rangeValue(component, "delay_range", "min", SWOOP_DEFAULT_MIN_DELAY)),
+                secondsToTicks(rangeValue(component, "delay_range", "max", SWOOP_DEFAULT_MAX_DELAY)));
 
     if (behavior == "ram_attack") {
         RamAttackGoal::Settings settings;
@@ -670,10 +687,10 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mMinimumDistance = numberOf(component, "minimum_distance", JUMP_DEFAULT_MINIMUM_DISTANCE);
         settings.mMaxVelocity = numberOf(component, "max_velocity", JUMP_DEFAULT_MAX_VELOCITY);
         settings.mScaleFactor = numberOf(component, "scale_factor", JUMP_DEFAULT_SCALE_FACTOR);
-        settings.mMinCooldownTicks = secondsToTicks(rangeValue(component, "cooldown_range", "min",
-                                                               JUMP_DEFAULT_MIN_COOLDOWN));
-        settings.mMaxCooldownTicks = secondsToTicks(rangeValue(component, "cooldown_range", "max",
-                                                               JUMP_DEFAULT_MAX_COOLDOWN));
+        settings.mMinCooldownTicks = secondsToTicks(
+                rangeValue(component, "cooldown_range", "min", JUMP_DEFAULT_MIN_COOLDOWN));
+        settings.mMaxCooldownTicks = secondsToTicks(
+                rangeValue(component, "cooldown_range", "max", JUMP_DEFAULT_MAX_COOLDOWN));
         settings.mPreferredBlocks = blockNames(component.get("preferred_blocks"));
         settings.mPreferredBlocksChance = numberOf(component, "preferred_blocks_chance", 1.0f);
         settings.mForbiddenBlocks = blockNames(component.get("forbidden_blocks"));
@@ -687,18 +704,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         return std::make_unique<SilverfishWakeUpFriendsGoal>();
 
     if (behavior == "beg")
-        return std::make_unique<BegGoal>(BehaviorItems(component.get("items")),
-                                         numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE),
-                                         (int32_t) rangeValue(component, "look_time", "min", BEG_DEFAULT_MIN_LOOK_TICKS),
-                                         (int32_t) rangeValue(component, "look_time", "max",
-                                                              BEG_DEFAULT_MAX_LOOK_TICKS));
+        return std::make_unique<BegGoal>(
+                BehaviorItems(component.get("items")), numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE),
+                (int32_t) rangeValue(component, "look_time", "min", BEG_DEFAULT_MIN_LOOK_TICKS),
+                (int32_t) rangeValue(component, "look_time", "max", BEG_DEFAULT_MAX_LOOK_TICKS));
 
     if (behavior == "follow_caravan")
-        return std::make_unique<FollowCaravanGoal>(mob.getMovementSpeed(),
-                                                   numberOf(component, "speed_multiplier", 1.0f),
-                                                   (int32_t) numberOf(component, "entity_count",
-                                                                      CARAVAN_DEFAULT_ENTITY_COUNT),
-                                                   firstFilters(component));
+        return std::make_unique<FollowCaravanGoal>(
+                mob.getMovementSpeed(), numberOf(component, "speed_multiplier", 1.0f),
+                (int32_t) numberOf(component, "entity_count", CARAVAN_DEFAULT_ENTITY_COUNT), firstFilters(component));
 
     if (behavior == "take_block") {
         TakeBlockGoal::Settings settings;
@@ -778,20 +792,18 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     }
 
     if (behavior == "admire_item")
-        return std::make_unique<AdmireItemGoal>(stringOf(component, "admire_item_sound"),
-                                                soundIntervalTicks(component, true),
-                                                soundIntervalTicks(component, false),
-                                                cloneOf(component.get("on_admire_item_start")),
-                                                cloneOf(component.get("on_admire_item_stop")));
+        return std::make_unique<AdmireItemGoal>(
+                stringOf(component, "admire_item_sound"), soundIntervalTicks(component, true),
+                soundIntervalTicks(component, false), cloneOf(component.get("on_admire_item_start")),
+                cloneOf(component.get("on_admire_item_stop")));
 
     if (behavior == "pickup_items")
-        return std::make_unique<PickupItemsGoal>(speed, numberOf(component, "max_dist", 0.0f),
-                                                 numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
-                                                 secondsToTicks(numberOf(component, "cooldown_after_being_attacked",
-                                                                         0.0f)),
-                                                 isFlagSet(component, "stop_if_holding_item"),
-                                                 cloneOf(component.get("on_pickup_item_start")),
-                                                 cloneOf(component.get("on_pickup_item_end")));
+        return std::make_unique<PickupItemsGoal>(
+                speed, numberOf(component, "max_dist", 0.0f),
+                numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
+                secondsToTicks(numberOf(component, "cooldown_after_being_attacked", 0.0f)),
+                isFlagSet(component, "stop_if_holding_item"), cloneOf(component.get("on_pickup_item_start")),
+                cloneOf(component.get("on_pickup_item_end")));
 
     if (behavior == "charge_held_item")
         return std::make_unique<ChargeHeldItemGoal>();
@@ -822,8 +834,10 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         LookAtEntityGoal::Settings settings;
         settings.mRange = numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE);
         settings.mProbability = numberOf(component, "probability", LOOK_DEFAULT_PROBABILITY);
-        settings.mMinLookTicks = secondsToTicks(rangeValue(component, "look_time", "min", LOOK_ENTITY_DEFAULT_MIN_TIME));
-        settings.mMaxLookTicks = secondsToTicks(rangeValue(component, "look_time", "max", LOOK_ENTITY_DEFAULT_MAX_TIME));
+        settings.mMinLookTicks = secondsToTicks(
+                rangeValue(component, "look_time", "min", LOOK_ENTITY_DEFAULT_MIN_TIME));
+        settings.mMaxLookTicks = secondsToTicks(
+                rangeValue(component, "look_time", "max", LOOK_ENTITY_DEFAULT_MAX_TIME));
         settings.mHorizontalAngle = numberOf(component, "angle_of_view_horizontal", LOOK_ENTITY_FULL_ANGLE);
         settings.mFilters = cloneOf(component.get("filters"));
         return std::make_unique<LookAtEntityGoal>(settings);
@@ -842,10 +856,9 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "swim_wander") {
         const float chance = numberOf(component, "interval", SWIM_WANDER_DEFAULT_CHANCE);
-        return std::make_unique<RandomSwimGoal>(speed, (int32_t) numberOf(component, "look_ahead",
-                                                                          SWIM_WANDER_DEFAULT_LOOK_AHEAD),
-                                                SWIM_WANDER_VERTICAL_RANGE,
-                                                chance > 0.0f ? (int32_t) std::lround(1.0f / chance) : 1);
+        return std::make_unique<RandomSwimGoal>(
+                speed, (int32_t) numberOf(component, "look_ahead", SWIM_WANDER_DEFAULT_LOOK_AHEAD),
+                SWIM_WANDER_VERTICAL_RANGE, chance > 0.0f ? (int32_t) std::lround(1.0f / chance) : 1);
     }
 
     if (behavior == "swim_idle")
@@ -877,8 +890,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mMaxCooldownDistance = rangeValue(component, "cooldown_distance", "max",
                                                    settings.mMinCooldownDistance);
         settings.mReachMultiplier = numberOf(component, "weapon_reach_multiplier", settings.mReachMultiplier);
-        settings.mMinSpeedMultiplier = numberOf(component, "weapon_min_speed_multiplier",
-                                                settings.mMinSpeedMultiplier);
+        settings.mMinSpeedMultiplier = numberOf(component, "weapon_min_speed_multiplier", settings.mMinSpeedMultiplier);
         settings.mHijackMountNavigation = isFlagSet(component, "hijack_mount_navigation");
         return std::make_unique<UseKineticWeaponGoal>(settings);
     }
@@ -911,10 +923,10 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         std::vector<std::pair<std::string, std::string>> pairs = eatPairs(component);
         if (pairs.empty())
             return nullptr;
-        return std::make_unique<EatBlockGoal>(std::move(pairs), chanceText(component),
-                                              secondsToTicks(numberOf(component, "time_until_eat",
-                                                                      EAT_DEFAULT_SECONDS)),
-                                              eventName(component.get("on_eat")));
+        return std::make_unique<EatBlockGoal>(
+                std::move(pairs), chanceText(component),
+                secondsToTicks(numberOf(component, "time_until_eat", EAT_DEFAULT_SECONDS)),
+                eventName(component.get("on_eat")));
     }
 
     if (behavior == "place_block")
@@ -968,8 +980,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     const int32_t timerFlag = timerFlagIndex(behavior);
     if (timerFlag >= 0) {
         return std::make_unique<TimerFlagGoal>(
-                TIMER_FLAGS[timerFlag],
-                rangeTicks(component, "duration_range", "min", TIMER_FLAG_DEFAULT_DURATION),
+                TIMER_FLAGS[timerFlag], rangeTicks(component, "duration_range", "min", TIMER_FLAG_DEFAULT_DURATION),
                 rangeTicks(component, "duration_range", "max", TIMER_FLAG_DEFAULT_DURATION),
                 rangeTicks(component, "cooldown_range", "min", TIMER_FLAG_DEFAULT_COOLDOWN),
                 rangeTicks(component, "cooldown_range", "max", TIMER_FLAG_DEFAULT_COOLDOWN),

@@ -5,11 +5,7 @@
 #include <cstdint>
 #include <string>
 
-enum class ItemLockMode : uint8_t {
-    None = 0,
-    LockInSlot = 1,
-    LockInInventory = 2
-};
+enum class ItemLockMode : uint8_t { None = 0, LockInSlot = 1, LockInInventory = 2 };
 
 class ItemProperties {
 public:

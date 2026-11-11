@@ -257,8 +257,7 @@ namespace {
         if (inserted)
             owner.playLevelSound(level, LevelSoundEvent::BUNDLE_INSERT, player.getPosition(), "minecraft:player");
         else
-            owner.playLevelSound(level, LevelSoundEvent::BUNDLE_REMOVE_ONE, player.getPosition(),
-                                 "minecraft:player");
+            owner.playLevelSound(level, LevelSoundEvent::BUNDLE_REMOVE_ONE, player.getPosition(), "minecraft:player");
     }
 }
 
@@ -365,8 +364,7 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
         const ItemStack &held = inventory.getItemInHand();
         const std::string identifier = held.mDefinition == nullptr ? "minecraft:air"
                                                                    : held.mDefinition->getIdentifier();
-        PlayerHotbarSelectedSlotChangeAfterEvent event(player, inventory.getSelectedSlot(), previousSlot,
-                                                       identifier);
+        PlayerHotbarSelectedSlotChangeAfterEvent event(player, inventory.getSelectedSlot(), previousSlot, identifier);
         owner.getEventBus().after().mPlayerHotbarSelectedSlotChange.emit(event);
     }
 
@@ -435,9 +433,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     Level &mapLevel = MapItem::getMapLevel(owner, player);
     CartographyRecipes::Maps cartographyMaps;
-    cartographyMaps.mGetMap = [&mapLevel](int64_t mapId) {
-        return mapLevel.getMapData(mapId);
-    };
+    cartographyMaps.mGetMap = [&mapLevel](int64_t mapId) { return mapLevel.getMapData(mapId); };
     cartographyMaps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
         return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
     };
@@ -457,20 +453,24 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     for (const ItemStackRequest &request: packet.mRequests) {
         const bool anvilOpen = manager.isAnvilOpen()
-                               && AnvilBlock::matches(level.getBlockState(anvilPosition.x, anvilPosition.y,
-                                                                          anvilPosition.z));
+                               && AnvilBlock::matches(
+                                       level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z));
         const int32_t gameType = player.getGameType();
-        const bool creativeMode = gameType == (int32_t) GameType::Creative
-                                  || gameType == (int32_t) GameType::Spectator;
+        const bool creativeMode = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
         int32_t enchantLevelsConsumed = 0;
         int32_t anvilLevelsConsumed = 0;
         bool anvilUsed = false;
         CartographyLock cartographyLock;
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
-                                        == CartographyTableBlock::IDENTIFIER;
+                                                == CartographyTableBlock::IDENTIFIER;
 
-        if (!allowRequest(owner, player, request)) {
+        // creative only: the spectator shares the creative flag below but has no creative inventory
+        bool creativeCraft = false;
+        for (const ItemStackRequestAction &action: request.mActions)
+            creativeCraft = creativeCraft || action.mType == ItemStackRequestActionType::CraftCreative;
+
+        if ((creativeCraft && gameType != (int32_t) GameType::Creative) || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
             rejected.mRequestId = request.mRequestId;
             rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
@@ -479,29 +479,19 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             continue;
         }
 
-        ItemStackResponseEntry entry = ItemStackRequestHandler::execute(inventory, request, owner.getCreativeItems(),
-                                                                       owner.getRecipeOutputs(),
-                                                                       owner.getRecipeSourceIndices(),
-                                                                       player.getInventoryManager().isCraftingTableOpen(),
-                                                                       player.getInventoryManager().isFurnaceOpen(),
-                                                                       player.getInventoryManager().getContainer(),
-                                                                       &droppedItems,
-                                                                       &owner.getCodecContext(),
-                                                                       &bundles,
-                                                                       player.getExperience().getXpLevel(),
-                                                                       creativeMode,
-                                                                       &enchantLevelsConsumed,
-                                                                       anvilOpen,
-                                                                       &anvilLevelsConsumed,
-                                                                       &anvilUsed,
-                                                                       cartographyOpen ? &cartographyMaps : nullptr,
-                                                                       &cartographyLock);
+        ItemStackResponseEntry entry = ItemStackRequestHandler::execute(
+                inventory, request, owner.getCreativeItems(), owner.getRecipeOutputs(), owner.getRecipeSourceIndices(),
+                player.getInventoryManager().isCraftingTableOpen(), player.getInventoryManager().isFurnaceOpen(),
+                player.getInventoryManager().getContainer(), &droppedItems, &owner.getCodecContext(), &bundles,
+                player.getExperience().getXpLevel(), creativeMode, &enchantLevelsConsumed, anvilOpen,
+                &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock);
 
         // the copy waits for the request to hold: a rejected one would leave an orphan map behind
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK
             && cartographyLock.mCopyId != MapItemSavedData::INVALID_ID
             && mapLevel.getMaps().copyAndLockMap(mapLevel.getMapStorage(), cartographyLock.mOriginalId,
-                                                 cartographyLock.mCopyId) != nullptr)
+                                                 cartographyLock.mCopyId)
+                       != nullptr)
             manager.setClientMapLock(CartographyLock());
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && enchantLevelsConsumed > 0) {
@@ -611,8 +601,8 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
 
     PlayerEnchantOptionsPacket packet;
     if (!current.isAir())
-        packet.mOptions = EnchantmentHelper::getEnchantOptions(owner.getLevelFor(player), manager.getContainerPosition(),
-                                                               current, manager.getEnchantSeed());
+        packet.mOptions = EnchantmentHelper::getEnchantOptions(
+                owner.getLevelFor(player), manager.getContainerPosition(), current, manager.getEnchantSeed());
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
 }
@@ -654,8 +644,14 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
                     return;
 
                 target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                if (target != nullptr)
-                    target->onInteractAt(owner, player, packet.mClickPosition);
+                if (target != nullptr) {
+                    const ItemStack before = player.getInventory().getItemInHand();
+                    if (target->onInteractAt(owner, player, packet.mClickPosition)) {
+                        target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
+                        if (target != nullptr)
+                            owner.getScriptEngine().onPlayerInteractWithEntity(player, *target, before);
+                    }
+                }
             }
         }
         return;
@@ -776,18 +772,19 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
     if (windowId == InventoryManager::CONTAINER_ID_NONE) {
         windowId = manager.getCurrentWindowId();
     }
-    const bool craftingTable = manager.isCraftingTableOpen()
-                               && windowId == manager.getCraftingTableWindowId();
+    const bool craftingTable = manager.isCraftingTableOpen() && windowId == manager.getCraftingTableWindowId();
     const bool furnace = manager.isFurnaceOpen() && windowId == manager.getFurnaceWindowId();
     const int gridSize = craftingTable ? CraftingTableInventory::SIZE
-                       : furnace ? FurnaceInventory::SIZE : PlayerInventory::CRAFTING_SIZE;
+                         : furnace     ? FurnaceInventory::SIZE
+                                       : PlayerInventory::CRAFTING_SIZE;
 
     for (int slot = 0; slot < gridSize; slot++) {
         if (furnace) {
             continue;
         }
         ItemStack item = craftingTable ? inventory.getCraftingTableItem(slot)
-                         : furnace ? inventory.getFurnaceItem(slot) : inventory.getCraftingItem(slot);
+                         : furnace     ? inventory.getFurnaceItem(slot)
+                                       : inventory.getCraftingItem(slot);
         if (item.isAir()) {
             continue;
         }
@@ -802,8 +799,9 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
         }
 
         manager.syncSlot(craftingTable ? InventoryManager::InventoryId::CraftingTableInput
-                       : furnace ? InventoryManager::InventoryId::FurnaceInput
-                                 : InventoryManager::InventoryId::CraftingInput, slot);
+                         : furnace     ? InventoryManager::InventoryId::FurnaceInput
+                                       : InventoryManager::InventoryId::CraftingInput,
+                         slot);
     }
 
     if (!inventory.getCursor().isAir()) {
@@ -865,8 +863,7 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
 
     const int gridWidth = table ? 3 : 2;
     const PlayerInventory &inventory = player.getInventory();
-    const std::vector<ItemStack> &grid = table ? inventory.getCraftingTableContents()
-                                               : inventory.getCraftingContents();
+    const std::vector<ItemStack> &grid = table ? inventory.getCraftingTableContents() : inventory.getCraftingContents();
     if (packet.mOutputs.empty()) {
         return;
     }
@@ -875,8 +872,8 @@ void InventoryHandler::handleCraftingEvent(ServerNetworkHandler &owner, ServerPl
     ItemStack output = ItemStack::air();
     const std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputs();
     const std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndices();
-    if (!CraftingManager::matchResult(grid, gridWidth, packet.mOutputs.front(), recipeOutputs,
-                                      recipeSourceIndices, match, output)) {
+    if (!CraftingManager::matchResult(grid, gridWidth, packet.mOutputs.front(), recipeOutputs, recipeSourceIndices,
+                                      match, output)) {
         return;
     }
 

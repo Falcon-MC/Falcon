@@ -2,35 +2,31 @@
 
 namespace {
 
-bool isPowerOf2(int64_t value) {
-    return (value & -value) == value;
-}
-
-int32_t numberOfTrailingZeros(int64_t value) {
-    if (value == 0) {
-        return 64;
+    bool isPowerOf2(int64_t value) {
+        return (value & -value) == value;
     }
 
-    int32_t count = 0;
-    uint64_t bits = static_cast<uint64_t>(value);
+    int32_t numberOfTrailingZeros(int64_t value) {
+        if (value == 0) {
+            return 64;
+        }
 
-    while ((bits & 1ULL) == 0ULL) {
-        bits >>= 1;
-        ++count;
+        int32_t count = 0;
+        uint64_t bits = static_cast<uint64_t>(value);
+
+        while ((bits & 1ULL) == 0ULL) {
+            bits >>= 1;
+            ++count;
+        }
+
+        return count;
     }
-
-    return count;
-}
 
 }
 
 LinearCongruentialGenerator::LinearCongruentialGenerator(int64_t multiplier, int64_t addend, int64_t modulus)
-    : mMultiplier(multiplier),
-      mAddend(addend),
-      mModulus(modulus),
-      mIsPowerOf2(isPowerOf2(modulus)),
-      mTrailingZeros(isPowerOf2(modulus) ? numberOfTrailingZeros(modulus) : -1) {
-}
+        : mMultiplier(multiplier), mAddend(addend), mModulus(modulus), mIsPowerOf2(isPowerOf2(modulus)),
+          mTrailingZeros(isPowerOf2(modulus) ? numberOfTrailingZeros(modulus) : -1) {}
 
 const LinearCongruentialGenerator &LinearCongruentialGenerator::java() {
     static const LinearCongruentialGenerator instance(25214903917LL, 11LL, 1LL << 48);

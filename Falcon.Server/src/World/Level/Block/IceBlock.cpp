@@ -25,6 +25,6 @@ void IceBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vec
         return;
 
     const BlockState melted = level.getDimensionType() == DimensionType::Nether ? BlockState("minecraft:air")
-                                                                               : WaterBlock::source();
+                                                                                : WaterBlock::source();
     BlockChangeSystem::change(level, position, melted, BlockChangeCause::Fade, true);
 }

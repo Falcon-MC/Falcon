@@ -3,8 +3,12 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 
+#include <cstdint>
+#include <string>
+
 class ServerNetworkHandler;
 class ServerPlayer;
+class Actor;
 class ItemStack;
 class ItemUseTransaction;
 class Level;
@@ -16,6 +20,22 @@ class PlayerAuthInputPacket;
 
 class BlockActionHandler {
 public:
+    // why a server-authoritative break was refused, for diagnostics plugins
+    struct BreakRejection {
+        const char *mReason = "";
+        std::string mBlock;
+        bool mBreaking = false;
+        Vector3i mBreakingPosition;
+        int64_t mElapsedTicks = 0;
+        int64_t mExpectedTicks = 0;
+        double mProgress = 0.0;
+        double mSpeed = 0.0;
+    };
+    using BreakRejectionHook = void (*)(ServerPlayer &player, const Vector3i &position,
+                                        const BreakRejection &rejection);
+
+    static void setBreakRejectionHook(BreakRejectionHook hook);
+
     static void broadcastToViewers(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                    const Packet &packet, const ServerPlayer *except = nullptr);
 
@@ -28,8 +48,10 @@ public:
 
     static void breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
+    // entitySource: who broke it, for the custom block onBreak hook
     static void destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                             const BlockState &brokenState, bool dropItems, const ItemStack &tool);
+                             const BlockState &brokenState, bool dropItems, const ItemStack &tool,
+                             const Actor *entitySource = nullptr);
 
     static void spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 const BlockState &brokenState, const ItemStack &tool);
@@ -62,12 +84,11 @@ private:
 
     static constexpr float MAX_SYNC_DISTANCE_SQUARED = 10000.0f;
 
-    static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
-                              const ItemUseTransaction &transaction, bool selectedSlotChanged);
+    static bool interactBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction,
+                              bool selectedSlotChanged);
 
     // compares as the client sees them: an item it only knows under another one still matches
-    static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
-                                       const ItemStack &sent);
+    static bool matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held, const ItemStack &sent);
 
     static bool isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player);
 

@@ -29,7 +29,9 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
     // the client already scales its move vector by the item-use slowdown (0.35 squared eating or drawing a bow):
     // don't apply it twice
     float maxImpulse = 1.0f;
-    const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling ? context.player.getSlowdownTicks() + 1 : 0;
+    const int32_t slowdownTicks = context.pose.mSneaking || context.pose.mCrawling
+                                          ? context.player.getSlowdownTicks() + 1
+                                          : 0;
     context.player.setSlowdownTicks(slowdownTicks);
     if (!abilities.flying && !abilities.swimming && (context.pose.mSneaking || context.pose.mCrawling)) {
         float sneakMultiplier = SNEAK_INPUT;
@@ -40,10 +42,13 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
         }
         maxImpulse *= std::clamp(sneakMultiplier, 0.0f, 1.0f);
     }
-    // 0x140E70890 normalizes the raw 2D input before pose slowdown and damping
-    const float length = std::sqrt(input.getPacket().mMotionX * input.getPacket().mMotionX
-                                   + input.getPacket().mMotionY * input.getPacket().mMotionY);
-    const float scale = maxImpulse * IMPULSE_SCALE / std::max(1.0f, length);
-    input.sideways = input.getPacket().mMotionX * scale;
-    input.forward = input.getPacket().mMotionY * scale;
+    // the wire move vector is already pose-scaled (sneaking sends 0.3): the pose only bounds it, scaling again
+    // would slow a sneaking player to 0.09
+    const float sideways = std::clamp(input.getPacket().mMotionX, -maxImpulse, maxImpulse);
+    const float forward = std::clamp(input.getPacket().mMotionY, -maxImpulse, maxImpulse);
+    // 0x140E70890 normalizes the 2D input before damping
+    const float length = std::sqrt(sideways * sideways + forward * forward);
+    const float scale = IMPULSE_SCALE / std::max(1.0f, length);
+    input.sideways = sideways * scale;
+    input.forward = forward * scale;
 }

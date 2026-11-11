@@ -1,5 +1,6 @@
 #pragma once
 
+#include "World/Level/Block/BlockPlacementFilter.h"
 #include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -18,6 +19,12 @@ struct CustomRepairEntry {
     std::string mAmount;
 };
 
+// a custom component bound in the JSON; params is its JSON text, empty in the 1.x list form
+struct CustomComponentUse {
+    std::string mName;
+    std::string mParams;
+};
+
 struct CustomItemDefinition {
     std::string mIdentifier;
     std::string mDisplayName;
@@ -33,13 +40,27 @@ struct CustomItemDefinition {
     bool mCanAlwaysEat = false;
     int32_t mMaxDurability = 0;
     bool mHandEquipped = false;
-    std::vector<std::string> mCustomComponents;
+    std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;
     int32_t mDiggerToolSpeed = 0;
     std::unordered_map<std::string, int32_t> mDiggerBlockSpeeds;
     std::vector<CustomRepairEntry> mRepairItems;
     int32_t mNetworkId = 0;
+};
+
+// a description.states entry: its values in declaration order, the first is the default
+struct CustomBlockStateValues {
+    std::string mName;
+    std::vector<Tag> mValues;
+};
+
+// a permutations[] entry: its Molang condition and the custom components it adds
+struct CustomBlockPermutation {
+    std::string mCondition;
+    std::vector<CustomComponentUse> mCustomComponents;
+    // its components as declared, overlaid on the block's when sent to the client
+    std::string mComponents;
 };
 
 struct CustomBlockBox {
@@ -53,6 +74,7 @@ struct CustomBlockDefinition {
     std::string mDisplayName;
     std::string mTexture;
     std::string mRenderMethod = "opaque";
+    std::string mGeometry = "minecraft:geometry.full_block";
     std::string mMenuCategory = "construction";
     std::string mCreativeGroup;
     int32_t mNetworkHash = 0;
@@ -67,11 +89,18 @@ struct CustomBlockDefinition {
     bool mHasFriction = false;
     CustomBlockBox mCollision;
     CustomBlockBox mSelection;
-    std::vector<std::string> mCustomComponents;
+    BlockPlacementFilter mPlacementFilter;
+    std::vector<CustomComponentUse> mCustomComponents;
+    std::vector<CustomBlockStateValues> mStates;
+    std::vector<CustomBlockPermutation> mPermutations;
     bool mHasTick = false;
     bool mTickLooping = true;
     int32_t mTickMin = 10;
     int32_t mTickMax = 10;
+    bool mRedstoneConsumer = false;
+    int32_t mRedstoneMinPower = 0;
+    bool mEntityFallOn = false;
+    float mMinFallDistance = 0.0f;
 };
 
 struct CustomActorDefinition {
@@ -109,15 +138,25 @@ class CustomContentRegistry {
 public:
     void load(const BehaviorPackManager &packs, ItemDefinitionRegistry &items, BlockDefinitionRegistry &blocks);
 
-    const std::vector<BlockPropertyData> &getBlockProperties() const { return mBlockProperties; }
+    const std::vector<BlockPropertyData> &getBlockProperties() const {
+        return mBlockProperties;
+    }
 
-    const std::vector<CustomItemDefinition> &getItems() const { return mItems; }
+    const std::vector<CustomItemDefinition> &getItems() const {
+        return mItems;
+    }
 
-    const std::vector<CustomBlockDefinition> &getBlocks() const { return mBlocks; }
+    const std::vector<CustomBlockDefinition> &getBlocks() const {
+        return mBlocks;
+    }
 
-    const std::vector<CustomActorDefinition> &getActors() const { return mActors; }
+    const std::vector<CustomActorDefinition> &getActors() const {
+        return mActors;
+    }
 
-    const std::vector<CustomRecipe> &getRecipes() const { return mRecipes; }
+    const std::vector<CustomRecipe> &getRecipes() const {
+        return mRecipes;
+    }
 
     const CustomActorDefinition *getActorDefinition(const std::string &identifier) const;
 
@@ -129,6 +168,16 @@ public:
                            bool &useEfficiency) const;
 
     bool isCustomBlock(const std::string &identifier) const;
+
+    const CustomBlockDefinition *findBlock(const std::string &identifier) const;
+
+    // every combination of the block's states; one empty compound for a block without states
+    static std::vector<Tag> permutationsOf(const CustomBlockDefinition &block);
+
+    static Tag defaultStatesOf(const CustomBlockDefinition &block);
+
+    // the block's components, then those of each permutation whose condition holds; a later one replaces
+    static std::vector<CustomComponentUse> componentsFor(const CustomBlockDefinition &block, const Tag &states);
 
     bool hasIdentifier(const std::string &identifier) const;
 

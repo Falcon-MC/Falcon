@@ -29,22 +29,16 @@ namespace {
 
     const std::unordered_map<std::string, std::string> &smeltingResults() {
         static const std::unordered_map<std::string, std::string> results = {
-                {"minecraft:beef", "minecraft:cooked_beef"},
-                {"minecraft:chicken", "minecraft:cooked_chicken"},
-                {"minecraft:porkchop", "minecraft:cooked_porkchop"},
-                {"minecraft:mutton", "minecraft:cooked_mutton"},
-                {"minecraft:rabbit", "minecraft:cooked_rabbit"},
-                {"minecraft:cod", "minecraft:cooked_cod"},
-                {"minecraft:salmon", "minecraft:cooked_salmon"},
-                {"minecraft:potato", "minecraft:baked_potato"}
-        };
+                {"minecraft:beef", "minecraft:cooked_beef"},         {"minecraft:chicken", "minecraft:cooked_chicken"},
+                {"minecraft:porkchop", "minecraft:cooked_porkchop"}, {"minecraft:mutton", "minecraft:cooked_mutton"},
+                {"minecraft:rabbit", "minecraft:cooked_rabbit"},     {"minecraft:cod", "minecraft:cooked_cod"},
+                {"minecraft:salmon", "minecraft:cooked_salmon"},     {"minecraft:potato", "minecraft:baked_potato"}};
         return results;
     }
 }
 
 LootFunction::LootFunction(const json::Value &definition)
-        : mConditions(LootCondition::createAll(definition.get("conditions"))) {
-}
+        : mConditions(LootCondition::createAll(definition.get("conditions"))) {}
 
 void LootFunction::run(LootDrop &drop, const LootContext &context) const {
     if (LootCondition::testAll(mConditions, context))
@@ -102,8 +96,7 @@ std::vector<std::unique_ptr<LootFunction>> LootFunction::createAll(const json::V
 }
 
 SetCountFunction::SetCountFunction(const json::Value &definition)
-        : LootFunction(definition), mCount(LootRange::parse(definition.get("count"), 1.0f)) {
-}
+        : LootFunction(definition), mCount(LootRange::parse(definition.get("count"), 1.0f)) {}
 
 void SetCountFunction::apply(LootDrop &drop, const LootContext &context) const {
     drop.mCount = mCount.rollInt(context.mRandom);
@@ -112,24 +105,21 @@ void SetCountFunction::apply(LootDrop &drop, const LootContext &context) const {
 SetDataFunction::SetDataFunction(const json::Value &definition)
         : LootFunction(definition),
           mData(LootRange::parse(definition.get("data") != nullptr ? definition.get("data") : definition.get("values"),
-                                 0.0f)) {
-}
+                                 0.0f)) {}
 
 void SetDataFunction::apply(LootDrop &drop, const LootContext &context) const {
     drop.mData = mData.rollInt(context.mRandom);
 }
 
 SetDamageFunction::SetDamageFunction(const json::Value &definition)
-        : LootFunction(definition), mDamage(LootRange::parse(definition.get("damage"), 1.0f)) {
-}
+        : LootFunction(definition), mDamage(LootRange::parse(definition.get("damage"), 1.0f)) {}
 
 void SetDamageFunction::apply(LootDrop &drop, const LootContext &context) const {
     drop.mDurabilityFraction = std::clamp(mDamage.rollFloat(context.mRandom), 0.0f, 1.0f);
 }
 
 LootingEnchantFunction::LootingEnchantFunction(const json::Value &definition)
-        : LootFunction(definition), mCount(LootRange::parse(definition.get("count"), 0.0f)) {
-}
+        : LootFunction(definition), mCount(LootRange::parse(definition.get("count"), 0.0f)) {}
 
 void LootingEnchantFunction::apply(LootDrop &drop, const LootContext &context) const {
     if (context.mLootingLevel <= 0)
@@ -138,8 +128,7 @@ void LootingEnchantFunction::apply(LootDrop &drop, const LootContext &context) c
     drop.mCount += (int32_t) std::lround(mCount.rollFloat(context.mRandom) * (float) context.mLootingLevel);
 }
 
-FurnaceSmeltFunction::FurnaceSmeltFunction(const json::Value &definition) : LootFunction(definition) {
-}
+FurnaceSmeltFunction::FurnaceSmeltFunction(const json::Value &definition) : LootFunction(definition) {}
 
 void FurnaceSmeltFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;
@@ -151,19 +140,17 @@ void FurnaceSmeltFunction::apply(LootDrop &drop, const LootContext &context) con
 
 EnchantWithLevelsFunction::EnchantWithLevelsFunction(const json::Value &definition)
         : LootFunction(definition), mLevels(LootRange::parse(definition.get("levels"), 1.0f)),
-          mTreasure(definition.get("treasure") != nullptr && definition.get("treasure")->boolean(false)) {
-}
+          mTreasure(definition.get("treasure") != nullptr && definition.get("treasure")->boolean(false)) {}
 
 void EnchantWithLevelsFunction::apply(LootDrop &drop, const LootContext &context) const {
     const std::string identifier = LegacyItemMapper::getInstance().resolve(drop.mIdentifier, drop.mData);
     drop.mEnchantments = EnchantmentHelper::enchantWithLevels(identifier, mLevels.rollInt(context.mRandom), mTreasure,
-                                                             randomSeed(context));
+                                                              randomSeed(context));
 }
 
 EnchantRandomlyFunction::EnchantRandomlyFunction(const json::Value &definition)
         : LootFunction(definition),
-          mTreasure(definition.get("treasure") != nullptr && definition.get("treasure")->boolean(false)) {
-}
+          mTreasure(definition.get("treasure") != nullptr && definition.get("treasure")->boolean(false)) {}
 
 void EnchantRandomlyFunction::apply(LootDrop &drop, const LootContext &context) const {
     const std::string identifier = LegacyItemMapper::getInstance().resolve(drop.mIdentifier, drop.mData);
@@ -172,8 +159,7 @@ void EnchantRandomlyFunction::apply(LootDrop &drop, const LootContext &context) 
 
 EnchantRandomGearFunction::EnchantRandomGearFunction(const json::Value &definition)
         : LootFunction(definition),
-          mChance(definition.get("chance") == nullptr ? 1.0f : (float) definition.get("chance")->number(1.0)) {
-}
+          mChance(definition.get("chance") == nullptr ? 1.0f : (float) definition.get("chance")->number(1.0)) {}
 
 void EnchantRandomGearFunction::apply(LootDrop &drop, const LootContext &context) const {
     const float regional = std::clamp(context.mRegionalDifficulty, 0.0f, 1.0f);
@@ -181,16 +167,15 @@ void EnchantRandomGearFunction::apply(LootDrop &drop, const LootContext &context
         return;
 
     const int32_t levels = GEAR_BASE_LEVELS
-                           + (int32_t) (regional * (float) std::uniform_int_distribution<int32_t>(
-                                   0, GEAR_EXTRA_LEVELS - 1)(context.mRandom));
+                           + (int32_t) (regional
+                                        * (float) std::uniform_int_distribution<int32_t>(0, GEAR_EXTRA_LEVELS - 1)(
+                                                context.mRandom));
     const std::string identifier = LegacyItemMapper::getInstance().resolve(drop.mIdentifier, drop.mData);
     drop.mEnchantments = EnchantmentHelper::enchantWithLevels(identifier, levels, false, randomSeed(context));
 }
 
 SetBannerDetailsFunction::SetBannerDetailsFunction(const json::Value &definition)
-        : LootFunction(definition),
-          mType(definition.get("type") == nullptr ? 0 : definition.get("type")->integer(0)) {
-}
+        : LootFunction(definition), mType(definition.get("type") == nullptr ? 0 : definition.get("type")->integer(0)) {}
 
 void SetBannerDetailsFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;
@@ -201,8 +186,7 @@ void SetBannerDetailsFunction::apply(LootDrop &drop, const LootContext &context)
 }
 
 SetDataFromColorIndexFunction::SetDataFromColorIndexFunction(const json::Value &definition)
-        : LootFunction(definition) {
-}
+        : LootFunction(definition) {}
 
 void SetDataFromColorIndexFunction::apply(LootDrop &drop, const LootContext &context) const {
     drop.mData = context.mColorIndex;
@@ -219,20 +203,20 @@ SpecificEnchantsFunction::SpecificEnchantsFunction(const json::Value &definition
         if (data == nullptr)
             continue;
 
-        mEnchants.push_back(Entry{data->mId, LootRange::parse(enchant->isString() ? nullptr : enchant->get("level"),
-                                                              1.0f)});
+        mEnchants.push_back(
+                Entry{data->mId, LootRange::parse(enchant->isString() ? nullptr : enchant->get("level"), 1.0f)});
     }
 }
 
 void SpecificEnchantsFunction::apply(LootDrop &drop, const LootContext &context) const {
     for (const Entry &entry: mEnchants)
-        drop.mEnchantments.push_back(EnchantmentInstance{entry.mId, std::max(1, entry.mLevel.rollInt(context.mRandom))});
+        drop.mEnchantments.push_back(
+                EnchantmentInstance{entry.mId, std::max(1, entry.mLevel.rollInt(context.mRandom))});
 }
 
 SetPotionFunction::SetPotionFunction(const json::Value &definition)
         : LootFunction(definition),
-          mPotionId(definition.get("id") == nullptr ? -1 : findPotionId(definition.get("id")->string())) {
-}
+          mPotionId(definition.get("id") == nullptr ? -1 : findPotionId(definition.get("id")->string())) {}
 
 void SetPotionFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;
@@ -243,8 +227,7 @@ void SetPotionFunction::apply(LootDrop &drop, const LootContext &context) const 
 ExplorationMapFunction::ExplorationMapFunction(const json::Value &definition)
         : LootFunction(definition),
           mDestination(definition.get("destination") == nullptr ? std::string()
-                                                                 : definition.get("destination")->string()) {
-}
+                                                                : definition.get("destination")->string()) {}
 
 void ExplorationMapFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;

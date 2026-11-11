@@ -15,11 +15,17 @@ public:
 
     float sample(float x, float y, float z) const;
 
-    float getXCoord() const { return mXCoord; }
+    float getXCoord() const {
+        return mXCoord;
+    }
 
-    float getYCoord() const { return mYCoord; }
+    float getYCoord() const {
+        return mYCoord;
+    }
 
-    float getZCoord() const { return mZCoord; }
+    float getZCoord() const {
+        return mZCoord;
+    }
 
 private:
     std::array<int32_t, 512> mPermutations;

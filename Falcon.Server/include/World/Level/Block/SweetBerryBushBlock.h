@@ -4,8 +4,7 @@
 
 class SweetBerryBushBlock : public Block {
 public:
-    explicit SweetBerryBushBlock(const Block &block) : Block(block) {
-    }
+    explicit SweetBerryBushBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

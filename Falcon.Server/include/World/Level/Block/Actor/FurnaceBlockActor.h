@@ -7,19 +7,30 @@ class FurnaceBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Furnace";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    // the game's own ids for the other kinds
+    static constexpr const char *BLAST_FURNACE_ID = "BlastFurnace";
+
+    static constexpr const char *SMOKER_ID = "Smoker";
+
+    const char *getBlockActorId() const override;
 
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    Container *getContainer() override { return &mInventory; }
+    Container *getContainer() override {
+        return &mInventory;
+    }
 
     bool tick(ServerNetworkHandler &owner) override;
 
-    FurnaceInventory &getInventory() { return mInventory; }
+    FurnaceInventory &getInventory() {
+        return mInventory;
+    }
 
-    const FurnaceInventory &getInventory() const { return mInventory; }
+    const FurnaceInventory &getInventory() const {
+        return mInventory;
+    }
 
     int32_t takeStoredExperience();
 

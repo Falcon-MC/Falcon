@@ -4,13 +4,7 @@
 #include <string>
 
 struct DynamicPropertyValue {
-    enum class Type {
-        Undefined,
-        Boolean,
-        Number,
-        String,
-        Vector
-    };
+    enum class Type { Undefined, Boolean, Number, String, Vector };
 
     Type mType = Type::Undefined;
     bool mBoolean = false;

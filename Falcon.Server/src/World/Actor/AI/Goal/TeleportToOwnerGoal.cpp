@@ -35,8 +35,7 @@ namespace {
     }
 }
 
-TeleportToOwnerGoal::TeleportToOwnerGoal(std::shared_ptr<json::Value> filters) : mFilters(std::move(filters)) {
-}
+TeleportToOwnerGoal::TeleportToOwnerGoal(std::shared_ptr<json::Value> filters) : mFilters(std::move(filters)) {}
 
 bool TeleportToOwnerGoal::_isSafe(Level &level, int32_t x, int32_t y, int32_t z) {
     if (level.peekBlockPtr(x, y, z) == nullptr || !isSolid(level, x, y - 1, z))

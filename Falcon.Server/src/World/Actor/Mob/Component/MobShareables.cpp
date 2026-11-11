@@ -119,8 +119,8 @@ bool MobShareables::take(ServerNetworkHandler &owner, MobActor &mob, const ItemS
         return true;
     }
 
-    return flagIn(*entry, "stored_in_inventory") && mob.getEquipment().addInventoryItem(item,
-                                                                                         mob.getInventoryCapacity());
+    return flagIn(*entry, "stored_in_inventory")
+           && mob.getEquipment().addInventoryItem(item, mob.getInventoryCapacity());
 }
 
 int MobShareables::findEquippableInventorySlot(const MobActor &mob) {

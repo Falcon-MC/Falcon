@@ -103,8 +103,7 @@ PlaceBlockGoal::PlaceBlockGoal(std::vector<Entry> entries, std::shared_ptr<json:
                                Range xzRange, Range yRange, bool affectedByGriefingRule,
                                std::shared_ptr<json::Value> onPlace)
         : mEntries(std::move(entries)), mCanPlace(std::move(canPlace)), mChance(chance), mXzRange(xzRange),
-          mYRange(yRange), mAffectedByGriefingRule(affectedByGriefingRule), mOnPlace(std::move(onPlace)) {
-}
+          mYRange(yRange), mAffectedByGriefingRule(affectedByGriefingRule), mOnPlace(std::move(onPlace)) {}
 
 std::unique_ptr<Goal> PlaceBlockGoal::create(const json::Value &component) {
     std::vector<Entry> entries;
@@ -125,8 +124,7 @@ std::unique_ptr<Goal> PlaceBlockGoal::create(const json::Value &component) {
     const json::Value *chance = component.get("chance");
     const json::Value *griefing = component.get("affected_by_griefing_rule");
     return std::make_unique<PlaceBlockGoal>(std::move(entries), cloneOf(component.get("can_place")),
-                                            chance == nullptr ? DEFAULT_CHANCE
-                                                              : (float) chance->number(DEFAULT_CHANCE),
+                                            chance == nullptr ? DEFAULT_CHANCE : (float) chance->number(DEFAULT_CHANCE),
                                             rangeOf(component.get("xz_range")), rangeOf(component.get("y_range")),
                                             griefing == nullptr || griefing->boolean(true),
                                             cloneOf(component.get("on_place")));

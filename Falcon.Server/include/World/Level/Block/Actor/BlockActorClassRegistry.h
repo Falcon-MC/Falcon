@@ -20,9 +20,6 @@ public:
     static void remove(const void *owner);
 };
 
-#define FALCON_REGISTER_BLOCK_ACTOR(type)                                                \
-    static const BlockActorClassRegistry::Registration gBlockActorRegistration##type(    \
-            type::BLOCK_ACTOR_ID,                                                        \
-            []() -> std::unique_ptr<BlockActor> {                                        \
-                return std::make_unique<type>();                                         \
-            })
+#define FALCON_REGISTER_BLOCK_ACTOR(type)                                                                              \
+    static const BlockActorClassRegistry::Registration gBlockActorRegistration##type(                                  \
+            type::BLOCK_ACTOR_ID, []() -> std::unique_ptr<BlockActor> { return std::make_unique<type>(); })

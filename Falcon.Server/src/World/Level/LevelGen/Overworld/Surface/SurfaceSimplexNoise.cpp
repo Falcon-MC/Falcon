@@ -13,11 +13,9 @@ namespace {
     const float UNSKEW = 0.21132487058639526f;
 
     // gradients copied from 0x14F279F40, only x and y are read in 2D
-    const float GRADIENTS[12][2] = {
-            {1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f},
-            {1.0f, 0.0f}, {-1.0f, 0.0f}, {1.0f, 0.0f}, {-1.0f, 0.0f},
-            {0.0f, 1.0f}, {0.0f, -1.0f}, {0.0f, 1.0f}, {0.0f, -1.0f}
-    };
+    const float GRADIENTS[12][2] = {{1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f},
+                                    {1.0f, 0.0f}, {-1.0f, 0.0f}, {1.0f, 0.0f},  {-1.0f, 0.0f},
+                                    {0.0f, 1.0f}, {0.0f, -1.0f}, {0.0f, 1.0f},  {0.0f, -1.0f}};
 
     // the game subtracts one from every value not above zero, integers included
     int32_t gameFloor(float value) {
@@ -92,11 +90,10 @@ float SurfaceSimplexNoise::getValue(float x, float y) const {
 }
 
 float SurfaceSimplexNoise::getValue3D(float x, float y, float z) const {
-    static const float GRADIENTS_3D[12][3] = {
-            {1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 0.0f},
-            {1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, 1.0f}, {1.0f, 0.0f, -1.0f}, {-1.0f, 0.0f, -1.0f},
-            {0.0f, 1.0f, 1.0f}, {0.0f, -1.0f, 1.0f}, {0.0f, 1.0f, -1.0f}, {0.0f, -1.0f, -1.0f}
-    };
+    static const float GRADIENTS_3D[12][3] = {{1.0f, 1.0f, 0.0f},   {-1.0f, 1.0f, 0.0f},  {1.0f, -1.0f, 0.0f},
+                                              {-1.0f, -1.0f, 0.0f}, {1.0f, 0.0f, 1.0f},   {-1.0f, 0.0f, 1.0f},
+                                              {1.0f, 0.0f, -1.0f},  {-1.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 1.0f},
+                                              {0.0f, -1.0f, 1.0f},  {0.0f, 1.0f, -1.0f},  {0.0f, -1.0f, -1.0f}};
 
     const float skew = (z + (x + y)) * 0.33333334f;
     const int32_t i = gameFloor(x + skew);

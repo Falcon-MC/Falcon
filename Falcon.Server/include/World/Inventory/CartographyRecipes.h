@@ -39,8 +39,8 @@ public:
     };
 
     // name is the text typed in the table, nullptr when the request leaves the name alone
-    static CartographyResult createResult(const ItemStack &input, const ItemStack &additional,
-                                          const std::string *name, const Maps &maps);
+    static CartographyResult createResult(const ItemStack &input, const ItemStack &additional, const std::string *name,
+                                          const Maps &maps);
 
     // the table slots a MapCreateLockedCopyPacket can stand for: the original map with a glass pane
     static bool isLocking(const ItemStack &input, const ItemStack &additional, int64_t originalId);

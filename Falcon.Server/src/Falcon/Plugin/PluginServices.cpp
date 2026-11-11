@@ -52,8 +52,8 @@ std::optional<std::string> PluginServices::call(const std::string &name, const s
         if (result != nullptr)
             response = result;
     } catch (...) {
-        LOG_ERROR(LogAreaID::Server, "[%s] Service %s threw an exception",
-                  service.mPlugin->mDescription.mName.c_str(), name.c_str());
+        LOG_ERROR(LogAreaID::Server, "[%s] Service %s threw an exception", service.mPlugin->mDescription.mName.c_str(),
+                  name.c_str());
     }
     depth--;
 

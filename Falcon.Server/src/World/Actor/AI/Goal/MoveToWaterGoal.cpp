@@ -30,8 +30,9 @@ namespace {
             return false;
 
         const LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
-        return chunk != nullptr && chunk->getSubChunk(LevelChunk::subChunkIndexFor(y))
-                .paletteMatches(SubChunk::PaletteQuery::Water, holdsWater);
+        return chunk != nullptr
+               && chunk->getSubChunk(LevelChunk::subChunkIndexFor(y))
+                          .paletteMatches(SubChunk::PaletteQuery::Water, holdsWater);
     }
 
     // as LiquidPhysicsSystem reads it: layer 0, or layer 1's water when layer 0 can be waterlogged;
@@ -54,8 +55,8 @@ namespace {
 
     bool isOpen(Level &level, int32_t x, int32_t y, int32_t z) {
         const BlockState *state = level.peekBlockPtr(x, y, z);
-        return state != nullptr && !isSolid(level, x, y, z)
-               && !holdsWaterAt(level, x, y, z) && !holdsWaterAt(level, x, y + 1, z);
+        return state != nullptr && !isSolid(level, x, y, z) && !holdsWaterAt(level, x, y, z)
+               && !holdsWaterAt(level, x, y + 1, z);
     }
 }
 
@@ -88,9 +89,9 @@ bool MoveToWaterGoal::_findTarget(ServerNetworkHandler &owner, const MobActor &m
                 // LiquidBlocksFetch::at(candidate).water, for a body 1.8 blocks tall centred on the block:
                 // water in the block or the one above
                 const Vector3f candidate((float) x + 0.5f, (float) y, (float) z + 0.5f);
-                const bool matches = mTowardsWater
-                                     ? holdsWaterAt(level, x, y, z) || holdsWaterAt(level, x, y + 1, z)
-                                     : isSolid(level, x, y - 1, z) && isOpen(level, x, y, z) && isOpen(level, x, y + 1, z);
+                const bool matches = mTowardsWater ? holdsWaterAt(level, x, y, z) || holdsWaterAt(level, x, y + 1, z)
+                                                   : isSolid(level, x, y - 1, z) && isOpen(level, x, y, z)
+                                                             && isOpen(level, x, y + 1, z);
                 if (!matches)
                     continue;
 

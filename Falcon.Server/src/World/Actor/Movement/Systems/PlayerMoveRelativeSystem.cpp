@@ -11,6 +11,5 @@ void PlayerMoveRelativeSystem::tick(PlayerMovementContext &context) {
     auto &travel = context.travel;
 
     if (!abilities.gliding || context.waterTravel.active || context.liquidTravel.lava)
-        moveRelative(state.velocity, input.sideways, input.forward,
-                     travel.acceleration, input.getPacket().mRotation.y);
+        moveRelative(state.velocity, input.sideways, input.forward, travel.acceleration, input.getPacket().mRotation.y);
 }

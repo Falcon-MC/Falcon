@@ -11,9 +11,8 @@
 namespace {
     const int32_t MAX_SPAWN_DISTANCE = 1024;
 
-    const std::vector<std::string> UNSUPPORTED_COMPONENTS = {
-            "minecraft:delay_filter", "minecraft:mob_event_filter", "minecraft:player_in_village_filter"
-    };
+    const std::vector<std::string> UNSUPPORTED_COMPONENTS = {"minecraft:delay_filter", "minecraft:mob_event_filter",
+                                                             "minecraft:player_in_village_filter"};
 
     int32_t difficultyOf(const std::string &name, int32_t fallback) {
         if (name == "peaceful")
@@ -73,7 +72,8 @@ namespace {
         result.mNoBubbles = condition.get("minecraft:disallow_spawns_in_bubble") != nullptr;
 
         if (const json::Value *weight = condition.get("minecraft:weight")) {
-            result.mWeight = std::max(0, weight->get("default") != nullptr ? weight->get("default")->integer(100) : 100);
+            result.mWeight = std::max(0,
+                                      weight->get("default") != nullptr ? weight->get("default")->integer(100) : 100);
             if (const json::Value *rarity = weight->get("rarity"))
                 result.mRarity = rarity->integer(5);
         }

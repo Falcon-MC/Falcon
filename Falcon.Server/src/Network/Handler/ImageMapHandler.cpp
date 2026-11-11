@@ -81,8 +81,8 @@ std::vector<int64_t> ImageMapHandler::createMaps(ServerNetworkHandler &owner, Wo
     return ids;
 }
 
-bool ImageMapHandler::canPlace(Level &level, const Vector3i &topLeft, int32_t facing, int32_t columns,
-                               int32_t rows, std::string &error) {
+bool ImageMapHandler::canPlace(Level &level, const Vector3i &topLeft, int32_t facing, int32_t columns, int32_t rows,
+                               std::string &error) {
     std::vector<Vector3i> positions;
     if (!ImageMap::wallPositions(topLeft, facing, columns, rows, positions)) {
         error = "a wall needs a facing from 2 to 5 and at most " + std::to_string(ImageMap::MAX_GRID_SIDE)

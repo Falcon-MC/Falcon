@@ -4,20 +4,17 @@
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/Tree/VanillaTreeObject.h"
 
-HugeMushroom::HugeMushroom() : mMushroomType(MushroomType::RANDOM) {
-}
+HugeMushroom::HugeMushroom() : mMushroomType(MushroomType::RANDOM) {}
 
-HugeMushroom::HugeMushroom(MushroomType mushroomType) : mMushroomType(mushroomType) {
-}
+HugeMushroom::HugeMushroom(MushroomType mushroomType) : mMushroomType(mushroomType) {}
 
 bool HugeMushroom::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     MushroomType block = mMushroomType;
     if (block == MushroomType::RANDOM)
         block = random.nextBoolean() ? MushroomType::RED : MushroomType::BROWN;
 
-    const BlockState mushroom = block == MushroomType::BROWN
-                                ? VanillaBlocks::BROWN_MUSHROOM_BLOCK().toBlockState()
-                                : VanillaBlocks::RED_MUSHROOM_BLOCK().toBlockState();
+    const BlockState mushroom = block == MushroomType::BROWN ? VanillaBlocks::BROWN_MUSHROOM_BLOCK().toBlockState()
+                                                             : VanillaBlocks::RED_MUSHROOM_BLOCK().toBlockState();
 
     int32_t i = random.nextInt(3) + 4;
 

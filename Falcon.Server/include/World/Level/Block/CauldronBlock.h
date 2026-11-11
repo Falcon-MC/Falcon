@@ -2,15 +2,17 @@
 
 #include "World/Level/Block/Block.h"
 
+#include <string>
+
 class CauldronBlock final : public Block {
 public:
-    enum class Liquid {
-        Empty,
-        Water,
-        Lava
-    };
+    enum class Liquid { Empty, Water, Lava };
 
     explicit CauldronBlock(const BlockState &state) : Block(state) {}
+
+    explicit CauldronBlock(const Block &block) : Block(block) {}
+
+    static bool matches(const std::string &identifier);
 
     int getFillLevel() const;
 

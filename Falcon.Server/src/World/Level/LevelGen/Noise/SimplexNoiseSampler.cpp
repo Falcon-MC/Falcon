@@ -6,17 +6,15 @@
 
 namespace {
 
-const double SQRT_3 = std::sqrt(3.0);
-const double SKEW_FACTOR_2D = 0.5 * (SQRT_3 - 1.0);
-const double UNSKEW_FACTOR_2D = (3.0 - SQRT_3) / 6.0;
-constexpr double F3 = 0.3333333333333333;
-constexpr double G3 = 0.16666666666666666;
+    const double SQRT_3 = std::sqrt(3.0);
+    const double SKEW_FACTOR_2D = 0.5 * (SQRT_3 - 1.0);
+    const double UNSKEW_FACTOR_2D = (3.0 - SQRT_3) / 6.0;
+    constexpr double F3 = 0.3333333333333333;
+    constexpr double G3 = 0.16666666666666666;
 
 }
 
-SimplexNoiseSampler::SimplexNoiseSampler(IRandom &rand)
-    : Noise(rand) {
-}
+SimplexNoiseSampler::SimplexNoiseSampler(IRandom &rand) : Noise(rand) {}
 
 double SimplexNoiseSampler::sample2D(double x, double y) const {
     const double hairyFactor = (x + y) * SKEW_FACTOR_2D;
@@ -47,7 +45,9 @@ double SimplexNoiseSampler::sample2D(double x, double y) const {
     const int32_t ii = hairyX & 255;
     const int32_t jj = hairyZ & 255;
     const int32_t gi0 = lookup(ii + lookup(jj)) % 12;
-    const int32_t gi1 = lookup(ii + static_cast<int32_t>(offsetSecondCornerX) + lookup(jj + static_cast<int32_t>(offsetSecondCornerZ))) % 12;
+    const int32_t gi1 = lookup(ii + static_cast<int32_t>(offsetSecondCornerX)
+                               + lookup(jj + static_cast<int32_t>(offsetSecondCornerZ)))
+                        % 12;
     const int32_t gi2 = lookup(ii + 1 + lookup(jj + 1)) % 12;
 
     const double t0 = _cornerNoise3d(gi0, x0, y0, 0.0, 0.5);
@@ -139,8 +139,12 @@ double SimplexNoiseSampler::sample3D(double x, double y, double z) const {
     const int32_t kk = k & 255;
 
     const int32_t gi0 = lookup(ii + lookup(jj + lookup(kk))) % 12;
-    const int32_t gi1 = lookup(ii + static_cast<int32_t>(i1) + lookup(jj + static_cast<int32_t>(j1) + lookup(kk + static_cast<int32_t>(k1)))) % 12;
-    const int32_t gi2 = lookup(ii + static_cast<int32_t>(i2) + lookup(jj + static_cast<int32_t>(j2) + lookup(kk + static_cast<int32_t>(k2)))) % 12;
+    const int32_t gi1 = lookup(ii + static_cast<int32_t>(i1)
+                               + lookup(jj + static_cast<int32_t>(j1) + lookup(kk + static_cast<int32_t>(k1))))
+                        % 12;
+    const int32_t gi2 = lookup(ii + static_cast<int32_t>(i2)
+                               + lookup(jj + static_cast<int32_t>(j2) + lookup(kk + static_cast<int32_t>(k2))))
+                        % 12;
     const int32_t gi3 = lookup(ii + 1 + lookup(jj + 1 + lookup(kk + 1))) % 12;
 
     const double t0 = _cornerNoise3d(gi0, x0, y0, z0, 0.6);

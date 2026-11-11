@@ -7,20 +7,9 @@ namespace {
     const float F2 = (float) (0.5 * (std::sqrt(3.0) - 1.0));
     const float G2 = (float) ((3.0 - std::sqrt(3.0)) / 6.0);
 
-    const float GRADIENTS[12][2] = {
-            {1.0f,  1.0f},
-            {-1.0f, 1.0f},
-            {1.0f,  -1.0f},
-            {-1.0f, -1.0f},
-            {1.0f,  0.0f},
-            {-1.0f, 0.0f},
-            {1.0f,  0.0f},
-            {-1.0f, 0.0f},
-            {0.0f,  1.0f},
-            {0.0f,  -1.0f},
-            {0.0f,  1.0f},
-            {0.0f,  -1.0f}
-    };
+    const float GRADIENTS[12][2] = {{1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f},
+                                    {1.0f, 0.0f}, {-1.0f, 0.0f}, {1.0f, 0.0f},  {-1.0f, 0.0f},
+                                    {0.0f, 1.0f}, {0.0f, -1.0f}, {0.0f, 1.0f},  {0.0f, -1.0f}};
 
     int32_t fastFloor(float value) {
         return value > 0.0f ? (int32_t) value : (int32_t) value - 1;
@@ -37,8 +26,7 @@ namespace {
 
 }
 
-TheEndSimplexNoise::TheEndSimplexNoise(std::mt19937 &random)
-        : mPermutations() {
+TheEndSimplexNoise::TheEndSimplexNoise(std::mt19937 &random) : mPermutations() {
     for (int32_t i = 0; i < 3; i++)
         random();
 

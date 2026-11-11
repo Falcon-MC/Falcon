@@ -13,8 +13,8 @@ namespace RangedWeaponHelpers {
 
     namespace {
         bool isArrowStack(const ItemStack &stack) {
-            return !stack.isAir() && stack.mDefinition != nullptr &&
-                   stack.mDefinition->getIdentifier() == ARROW_IDENTIFIER;
+            return !stack.isAir() && stack.mDefinition != nullptr
+                   && stack.mDefinition->getIdentifier() == ARROW_IDENTIFIER;
         }
     }
 

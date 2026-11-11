@@ -31,14 +31,14 @@ namespace {
         const std::string identifier = value;
         const size_t colon = identifier.find(':');
         if (colon == std::string::npos || colon == 0 || colon + 1 >= identifier.size()) {
-            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the identifier needs a namespace",
-                      name, kind, value);
+            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the identifier needs a namespace", name,
+                      kind, value);
             return false;
         }
 
         if (identifier.compare(0, colon, "minecraft") == 0) {
-            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the minecraft namespace is reserved",
-                      name, kind, value);
+            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the minecraft namespace is reserved", name,
+                      kind, value);
             return false;
         }
 

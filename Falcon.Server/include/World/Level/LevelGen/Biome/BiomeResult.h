@@ -11,8 +11,7 @@ public:
     }
 
 protected:
-    explicit BiomeResult(int32_t biomeId) : mBiomeId(biomeId) {
-    }
+    explicit BiomeResult(int32_t biomeId) : mBiomeId(biomeId) {}
 
 public:
     int32_t mBiomeId;

@@ -2973,7 +2973,7 @@ public:
 
     static const Block *fromIdentifier(const std::string &identifier);
 
-    template<typename T>
+    template <typename T>
     static const T *getAs(const std::string &identifier) {
         return dynamic_cast<const T *>(fromIdentifier(identifier));
     }

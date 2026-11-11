@@ -93,8 +93,8 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
         const int64_t chunkZ64 = (int64_t) packet.mSubChunkPosition.z + offset.z;
         const int64_t index64 = subChunkY64 - LevelChunk::LOWEST_SUB_CHUNK_Y;
 
-        if (chunkX64 < INT32_MIN || chunkX64 > INT32_MAX || chunkZ64 < INT32_MIN || chunkZ64 > INT32_MAX
-            || index64 < 0 || index64 >= LevelChunk::SUB_CHUNK_COUNT) {
+        if (chunkX64 < INT32_MIN || chunkX64 > INT32_MAX || chunkZ64 < INT32_MIN || chunkZ64 > INT32_MAX || index64 < 0
+            || index64 >= LevelChunk::SUB_CHUNK_COUNT) {
             entry.mResult = SubChunkRequestResult::IndexOutOfBounds;
             entry.mHeightMapType = HeightMapDataType::NoData;
             entry.mRenderHeightMapType = entry.mHeightMapType;
@@ -148,7 +148,8 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
         entry.mHasData = true;
         const BlockNetworkIdMap *blockIds = owner.getCodecContext(id).getBlockNetworkIds();
         entry.mData = (blockIds == nullptr ? chunk->encodeSubChunkNetwork(index)
-                                           : chunk->encodeSubChunkNetwork(index, *blockIds)) + blockEntities;
+                                           : chunk->encodeSubChunkNetwork(index, *blockIds))
+                      + blockEntities;
         entries.push_back(entry);
     }
 

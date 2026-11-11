@@ -11,20 +11,30 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    Container *getContainer() override { return &mInventory; }
+    Container *getContainer() override {
+        return &mInventory;
+    }
 
-    SimpleContainerInventory &getInventory() { return mInventory; }
+    SimpleContainerInventory &getInventory() {
+        return mInventory;
+    }
 
-    const SimpleContainerInventory &getInventory() const { return mInventory; }
+    const SimpleContainerInventory &getInventory() const {
+        return mInventory;
+    }
 
-    void addViewer() { ++mViewers; }
+    void addViewer() {
+        ++mViewers;
+    }
 
     void removeViewer() {
         if (mViewers > 0)
             --mViewers;
     }
 
-    int getViewerCount() const { return mViewers; }
+    int getViewerCount() const {
+        return mViewers;
+    }
 
 protected:
     SimpleContainerInventory mInventory;
@@ -41,7 +51,9 @@ public:
 
     BarrelBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class ShulkerBoxBlockActor final : public ContainerBlockActor {
@@ -54,7 +66,9 @@ public:
         mInventory.setRejectsShulkerBoxes(true);
     }
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -62,9 +76,13 @@ public:
 
     Tag getSpawnCompound() const override;
 
-    void setFacing(int8_t facing) { mFacing = facing; }
+    void setFacing(int8_t facing) {
+        mFacing = facing;
+    }
 
-    int8_t getFacing() const { return mFacing; }
+    int8_t getFacing() const {
+        return mFacing;
+    }
 
 private:
     int8_t mFacing = 1;
@@ -78,7 +96,9 @@ public:
 
     DispenserBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class DropperBlockActor final : public ContainerBlockActor {
@@ -89,7 +109,9 @@ public:
 
     DropperBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class BrewingStandBlockActor final : public ContainerBlockActor {
@@ -107,7 +129,9 @@ public:
 
     BrewingStandBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -143,7 +167,9 @@ public:
 
     BeaconBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -161,7 +187,9 @@ public:
 
     CrafterBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class CampfireBlockActor final : public ContainerBlockActor {
@@ -173,7 +201,9 @@ public:
 
     CampfireBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -199,7 +229,9 @@ public:
 
     ShelfBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class ChiseledBookshelfBlockActor final : public ContainerBlockActor {
@@ -210,7 +242,9 @@ public:
 
     ChiseledBookshelfBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class DecoratedPotBlockActor final : public ContainerBlockActor {
@@ -221,7 +255,9 @@ public:
 
     DecoratedPotBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class JukeboxBlockActor final : public ContainerBlockActor {
@@ -232,7 +268,9 @@ public:
 
     JukeboxBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class LecternBlockActor final : public ContainerBlockActor {
@@ -243,7 +281,9 @@ public:
 
     LecternBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -261,5 +301,7 @@ public:
 
     EnchantTableBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };

@@ -15,37 +15,30 @@ namespace {
     const size_t BUTTON_SUFFIX_LENGTH = 7;
 }
 
-bool ButtonBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const
-{
+bool ButtonBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
     const Vector3i supportPosition = BlockSupport::supportOf(position, blockFace);
     const BlockState support = level.getBlockState(supportPosition.x, supportPosition.y, supportPosition.z);
     return BlockSupport::isAttachable(support, blockFace);
 }
 
-bool ButtonBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const
-{
-    const int facing = std::clamp(state.mStates.getInt("facing_direction", PlacementOrientation::FACE_UP),
-                                  0, 5);
+bool ButtonBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
+    const int facing = std::clamp(state.mStates.getInt("facing_direction", PlacementOrientation::FACE_UP), 0, 5);
     return canPlaceAt(level, position, facing);
 }
 
-bool ButtonBlock::matches(const std::string &identifier)
-{
+bool ButtonBlock::matches(const std::string &identifier) {
     if (identifier.size() < BUTTON_SUFFIX_LENGTH)
         return false;
 
-    return identifier.compare(identifier.size() - BUTTON_SUFFIX_LENGTH, BUTTON_SUFFIX_LENGTH,
-                              BUTTON_SUFFIX) == 0;
+    return identifier.compare(identifier.size() - BUTTON_SUFFIX_LENGTH, BUTTON_SUFFIX_LENGTH, BUTTON_SUFFIX) == 0;
 }
 
-bool ButtonBlock::isSignalSource() const
-{
+bool ButtonBlock::isSignalSource() const {
     return true;
 }
 
 bool ButtonBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                             const BlockState &state) const
-{
+                             const BlockState &state) const {
     RedstoneSystem::onButtonActivated(owner, owner.getLevelFor(player), position, state);
     return true;
 }

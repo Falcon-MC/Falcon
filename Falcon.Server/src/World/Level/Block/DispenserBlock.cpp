@@ -22,14 +22,7 @@ namespace {
     const int32_t LEVEL_EVENT_PARTICLE_SHOOT = 2000;
 
     // facing order: down, up, north, south, west, east
-    const int32_t FACE_OFFSETS[6][3] = {
-            {0,  -1, 0},
-            {0,  1,  0},
-            {0,  0,  -1},
-            {0,  0,  1},
-            {-1, 0,  0},
-            {1,  0,  0}
-    };
+    const int32_t FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     const float EJECT_DISTANCE = 0.7f;
     const float EJECT_BASE_HEIGHT = 0.3f;
@@ -130,8 +123,8 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     // a dropper facing a container only feeds it; keeps the item when it is full
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     BlockActor *targetActor = definition != nullptr && definition->mKind == ContainerBlockKind::Dropper
-                              ? level.getBlockActors().find(target)
-                              : nullptr;
+                                      ? level.getBlockActors().find(target)
+                                      : nullptr;
     Container *targetContainer = targetActor != nullptr ? targetActor->getContainer() : nullptr;
     if (targetContainer != nullptr) {
         if (!HopperBlockActor::addOne(*targetContainer, item))

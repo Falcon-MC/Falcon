@@ -16,11 +16,19 @@ public:
     }
 
 protected:
-    virtual const char *getGrowthState() const { return "growth"; }
+    virtual const char *getGrowthState() const {
+        return "growth";
+    }
 
-    virtual int getMaxGrowth() const { return 7; }
+    virtual int getMaxGrowth() const {
+        return 7;
+    }
 
-    virtual int getGrowthChance() const { return 2; }
+    virtual int getGrowthChance() const {
+        return 2;
+    }
 
-    virtual bool needsLight() const { return true; }
+    virtual bool needsLight() const {
+        return true;
+    }
 };

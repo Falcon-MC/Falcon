@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Actor/ActorDamageSource.h"
+
 #include "World/Actor/AI/Control/BodyControl.h"
 #include "World/Actor/AI/Control/JumpControl.h"
 #include "World/Actor/AI/Control/LookControl.h"
@@ -45,6 +47,9 @@ public:
         return true;
     }
 
+    // generated mobs only: the event their first tick fires, like villager_v2's minecraft:spawn_from_village
+    static constexpr const char *TAG_SPAWN_EVENT = "SpawnEvent";
+
     MobActor(uint64_t runtimeId, const std::string &identifier);
 
     bool canStandOnPowderSnow() const override;
@@ -68,7 +73,9 @@ public:
 
     virtual float getDefaultMaxHealth() const = 0;
 
-    virtual int getExperienceDrop() const { return 0; }
+    virtual int getExperienceDrop() const {
+        return 0;
+    }
 
     // a class with its own contact attack, explosion or rolled health keeps it over the definition component
     virtual bool hasOwnAreaAttack() const {
@@ -102,8 +109,7 @@ public:
 
     virtual float resolveMaxHealth(Difficulty difficulty) const;
 
-    virtual void finalizeSpawn() {
-    }
+    virtual void finalizeSpawn() {}
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 
@@ -111,6 +117,9 @@ public:
     void startDefinition(ServerNetworkHandler &owner);
 
     void applyDefaults(Difficulty difficulty);
+
+    // only a loaded actor runs its pending upgrades; any other cause takes the current version (sub_140B938D0)
+    void upgradeDefinition(ServerNetworkHandler &owner, bool loaded);
 
     static int randomRange(int minimum, int maximum);
 
@@ -201,6 +210,10 @@ public:
         mSpawnEvent = event;
     }
 
+    const std::string &getSpawnEvent() const {
+        return mSpawnEvent;
+    }
+
     void setHomePosition(const Vector3f &position) {
         mHomePosition = position;
         mHasHome = true;
@@ -258,7 +271,7 @@ public:
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
 
     bool isTamed() const {
-        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty();
+        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty() || mOwnerless;
     }
 
     int64_t getOwnerId() const {
@@ -303,6 +316,17 @@ public:
 
     int64_t getLastHurtTick() const {
         return mLastHurtTick;
+    }
+
+    // the death message key and cause of the last hurt, no actors kept
+    const ActorDamageSource &getLastHurtSource() const {
+        return mLastHurtSource;
+    }
+
+    void setLastHurtSource(const ActorDamageSource &source) {
+        mLastHurtSource = ActorDamageSource();
+        mLastHurtSource.mDeathMessageKey = source.mDeathMessageKey;
+        mLastHurtSource.mCause = source.mCause;
     }
 
     uint64_t getLastHurtBy() const {
@@ -397,6 +421,12 @@ public:
     bool isMountTaming() const;
 
     void attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider);
+
+    // the success of minecraft:tameable or minecraft:tamemount; false when untameable, tamed or cancelled
+    bool tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects);
+
+    // tamed with no owner, as a script's EntityTameMountComponent.tame does (sub_143C9C590)
+    bool tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects);
 
     float getJumpStrength() const;
 
@@ -575,6 +605,7 @@ private:
     int32_t mAgeTicks = 0;
     int64_t mOwnerId = NO_OWNER;
     std::string mLegacyOwnerName;
+    bool mOwnerless = false;
     int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
     bool mGoalsRegistered = false;
@@ -583,6 +614,7 @@ private:
     float mScale = 1.0f;
     bool mDefinitionStarted = false;
     bool mBorn = false;
+    int32_t mActorVersion = 0;
     std::string mSpawnEvent;
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
@@ -625,6 +657,7 @@ private:
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
+    ActorDamageSource mLastHurtSource;
     uint32_t mHurtCount = 0;
     uint64_t mTargetRuntimeId = 0;
     uint64_t mSyncedTargetRuntimeId = 0;

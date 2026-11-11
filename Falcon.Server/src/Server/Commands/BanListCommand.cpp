@@ -19,8 +19,7 @@ bool BanListCommand::execute(CommandOrigin &sender, const std::vector<std::strin
         return false;
     }
 
-    const std::vector<std::string> names = ips ? mHandler.getIpBanList().getNames()
-                                               : mHandler.getBanList().getNames();
+    const std::vector<std::string> names = ips ? mHandler.getIpBanList().getNames() : mHandler.getBanList().getNames();
 
     std::string joined;
     for (const std::string &name: names) {

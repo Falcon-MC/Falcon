@@ -33,7 +33,11 @@ namespace {
 }
 
 void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool checked) {
-    if (mPlayerData.saveData(player.getName(), player.saveNbt(getWorldFor(player).getName())))
+    Tag data = player.saveNbt(getWorldFor(player).getName());
+    if (!player.getXuid().empty())
+        data.putString(PlayerDataProvider::TAG_OWNER_XUID, player.getXuid());
+
+    if (mPlayerData.saveData(player.getName(), data))
         LOG_INFO(LogAreaID::Server, "Saved player data for %s", player.getName().c_str());
     else {
         LOG_WARN(LogAreaID::Server, "Could not save player data for %s", player.getName().c_str());
@@ -46,7 +50,8 @@ void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
     World &defaultWorld = mWorlds.getDefault();
     player.moveToLevel(defaultWorld.getOverworld());
     player.setPosition(defaultWorld.getOverworld().getSpawnPositionForPlayer());
-    player.setOp(mOps.isOp(player.getName()));
+    mOps.bindXuid(player.getName(), player.getXuid());
+    player.setOp(mOps.isOp(player.getName(), player.getXuid()));
 
     player.setUniqueId(allocateActorUniqueId());
 
@@ -138,6 +143,9 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         ServerActor *result = _registerActor(std::move(actor));
 
         broadcastActorSpawn(*result);
+        if (MobActor *loaded = dynamic_cast<MobActor *>(result))
+            loaded->upgradeDefinition(*this, true);
+        mScriptEngine.onEntitySpawn(*result, "Loaded");
         mScriptEngine.onEntityLoad(*result);
     }
 
@@ -236,6 +244,7 @@ void ServerNetworkHandler::autoSave(bool wait) {
     }
 
     saveWorldDynamicProperties(wait);
+    mScriptEngine.saveWorldClocks();
     saveAllActors();
 
     for (World *world: mWorlds.getWorlds())
@@ -245,8 +254,8 @@ void ServerNetworkHandler::autoSave(bool wait) {
             throw std::runtime_error("Could not save level: " + entry.first->getName());
     }
 
-    const long long elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start).count();
+    const long long elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
     LOG_INFO(LogAreaID::Server, "Auto-saved the world in %lld ms", elapsed);
 }
 

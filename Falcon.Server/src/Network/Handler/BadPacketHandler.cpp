@@ -47,9 +47,7 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
         player.markNonZeroClientTickSeen();
 
     const bool jumpBoost = player.hasEffect(MobEffectId::JumpBoost);
-    const bool validVerticalMotion = jumpBoost
-                                     ? std::isfinite(packet.mMotionY)
-                                     : validMoveComponent(packet.mMotionY);
+    const bool validVerticalMotion = jumpBoost ? std::isfinite(packet.mMotionY) : validMoveComponent(packet.mMotionY);
     if (!validMoveComponent(packet.mMotionX) || !validVerticalMotion) {
         outReason = "invalid move vector";
         return true;
@@ -74,14 +72,14 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     }
 
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
-        if (action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock &&
-            player.getGameType() != (int32_t) GameType::Creative) {
+        if (action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock
+            && player.getGameType() != (int32_t) GameType::Creative) {
             outReason = "creative destroy outside creative";
             return true;
         }
 
-        if (action.mAction != PlayerActionType::AbortBreak && action.mAction != PlayerActionType::StopBreak &&
-            !validFace(action.mFace)) {
+        if (action.mAction != PlayerActionType::AbortBreak && action.mAction != PlayerActionType::StopBreak
+            && !validFace(action.mFace)) {
             outReason = "invalid block action face";
             return true;
         }
@@ -90,8 +88,7 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     return false;
 }
 
-bool BadPacketHandler::inspect(ServerPlayer &player, const InventoryTransactionPacket &packet,
-                             std::string &outReason) {
+bool BadPacketHandler::inspect(ServerPlayer &player, const InventoryTransactionPacket &packet, std::string &outReason) {
     if (packet.mTransactionType == InventoryTransactionType::ItemUseOnEntity) {
         if (!hotbarSlot(packet.mHotbarSlot)) {
             outReason = "invalid hotbar slot";
@@ -125,8 +122,8 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const InventoryTransactionP
 bool BadPacketHandler::inspect(ServerPlayer &player, const ItemStackRequestPacket &packet, std::string &outReason) {
     for (const ItemStackRequest &request: packet.mRequests) {
         for (const ItemStackRequestAction &action: request.mActions) {
-            if (action.mType == ItemStackRequestActionType::CraftCreative &&
-                player.getGameType() != (int32_t) GameType::Creative) {
+            if (action.mType == ItemStackRequestActionType::CraftCreative
+                && player.getGameType() != (int32_t) GameType::Creative) {
                 outReason = "creative craft outside creative";
                 return true;
             }

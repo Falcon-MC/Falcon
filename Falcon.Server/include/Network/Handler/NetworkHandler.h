@@ -9,10 +9,12 @@
 #include "Server/Profiler.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -28,17 +30,25 @@ public:
     public:
         Connection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer);
 
-        const NetworkIdentifier &getId() const { return mId; }
+        const NetworkIdentifier &getId() const {
+            return mId;
+        }
 
-        NetworkPeer *getPeer() const { return mPeer.get(); }
+        NetworkPeer *getPeer() const {
+            return mPeer.get();
+        }
 
         EncryptedNetworkPeer *getEncryptedPeer() const {
             return mEncryptedPeer.get();
         }
 
-        CompressedNetworkPeer *getCompressedPeer() const { return mCompressedPeer.get(); }
+        CompressedNetworkPeer *getCompressedPeer() const {
+            return mCompressedPeer.get();
+        }
 
-        BatchedNetworkPeer *getBatchedPeer() const { return mBatchedPeer.get(); }
+        BatchedNetworkPeer *getBatchedPeer() const {
+            return mBatchedPeer.get();
+        }
 
         bool isFailureReported() const {
             return mFailureReported;
@@ -61,7 +71,9 @@ public:
     public:
         virtual ~Listener() = default;
 
-        virtual bool onValidateIncomingConnection(const NetworkIdentifier &) { return true; }
+        virtual bool onValidateIncomingConnection(const NetworkIdentifier &) {
+            return true;
+        }
 
         virtual void onNewIncomingConnection(const NetworkIdentifier &) {}
 
@@ -78,12 +90,7 @@ public:
     };
 
     struct InboundEvent {
-        enum class Kind : int {
-            Data = 0,
-            Opened = 1,
-            Closed = 2,
-            Failed = 3
-        };
+        enum class Kind : int { Data = 0, Opened = 1, Closed = 2, Failed = 3 };
 
         Kind mKind = Kind::Data;
         NetworkIdentifier mId;
@@ -138,7 +145,9 @@ public:
 
     void stopIoThread();
 
-    bool isIoThreadRunning() const { return mIoRunning.load(); }
+    bool isIoThreadRunning() const {
+        return mIoRunning.load();
+    }
 
     void runEvents();
 
@@ -150,7 +159,9 @@ public:
     // not yet batched by the IO shard: lets bulk senders hold back; main thread only, like every send
     size_t getPendingOutboundBytes(const NetworkIdentifier &id) const;
 
-    size_t getPendingInboundCount() const { return mInbound.size(); }
+    size_t getPendingInboundCount() const {
+        return mInbound.size();
+    }
 
     void send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context);
 
@@ -180,13 +191,22 @@ public:
     // sends nothing, then reports the connection closed
     void closeConnection(const NetworkIdentifier &id);
 
-    size_t getConnectionCount() const { return mConnectionCount.load(); }
+    size_t getConnectionCount() const {
+        return mConnectionCount.load();
+    }
 
-    Connector &getConnector() { return *mConnectors.front(); }
+    // the transport's average round trip in milliseconds, refreshed about once a second; -1 when unknown
+    int getAveragePing(const NetworkIdentifier &id) const;
+
+    Connector &getConnector() {
+        return *mConnectors.front();
+    }
 
     void addConnector(std::unique_ptr<Connector> connector);
 
-    void setProfiler(Profiler *profiler) { mProfiler = profiler; }
+    void setProfiler(Profiler *profiler) {
+        mProfiler = profiler;
+    }
 
     void setOutboundFilter(OutboundFilter filter);
 
@@ -215,6 +235,10 @@ private:
         std::deque<OutboundCommand> mBacklog;
         std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;
         std::thread mThread;
+        // written by the shard's io thread, read by the game thread
+        mutable std::mutex mPingMutex;
+        std::unordered_map<NetworkIdentifier, int, NetworkIdentifier::Hasher> mPings;
+        std::chrono::steady_clock::time_point mPingRefresh;
     };
 
     Shard &_shardFor(const NetworkIdentifier &id);
@@ -256,7 +280,8 @@ private:
     std::vector<InboundEvent> mDeferred;
     std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mDeferredIds;
     // main thread view: from the Opened event to the Closed one
-    std::unordered_map<NetworkIdentifier, std::shared_ptr<std::atomic<size_t>>, NetworkIdentifier::Hasher> mPendingBytes;
+    std::unordered_map<NetworkIdentifier, std::shared_ptr<std::atomic<size_t>>, NetworkIdentifier::Hasher>
+            mPendingBytes;
 
     std::atomic<bool> mIoRunning;
     std::atomic<size_t> mConnectionCount;

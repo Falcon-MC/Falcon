@@ -80,7 +80,8 @@ NetherDecoration::NetherDecoration(BlockManager &blocks, const LevelChunk &chunk
     const uint32_t multiplierX = static_cast<uint32_t>(nextInt(mRandom)) | 1u;
     const uint32_t multiplierZ = static_cast<uint32_t>(nextInt(mRandom)) | 1u;
     mDecorationSeed = (multiplierZ * static_cast<uint32_t>(chunk.getZ())
-                       + multiplierX * static_cast<uint32_t>(chunk.getX())) ^ levelSeed;
+                       + multiplierX * static_cast<uint32_t>(chunk.getX()))
+                      ^ levelSeed;
     mRandom.seed(mDecorationSeed);
 }
 
@@ -293,8 +294,9 @@ void NetherDecoration::_placeDebris(int32_t x, int32_t y, int32_t z, int32_t max
 
         bool exposed = false;
         for (const auto &facing: FACINGS)
-            exposed = exposed || same(mBlocks.getBlockAt(blockX + facing[0], blockY + facing[1], blockZ + facing[2]),
-                                      airState());
+            exposed = exposed
+                      || same(mBlocks.getBlockAt(blockX + facing[0], blockY + facing[1], blockZ + facing[2]),
+                              airState());
 
         if (!exposed)
             mBlocks.setBlockStateAt(blockX, blockY, blockZ, debrisState());

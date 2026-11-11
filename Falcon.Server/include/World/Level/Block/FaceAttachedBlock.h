@@ -6,9 +6,7 @@
 
 class FaceAttachedBlock : public Block {
 public:
-    explicit FaceAttachedBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit FaceAttachedBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

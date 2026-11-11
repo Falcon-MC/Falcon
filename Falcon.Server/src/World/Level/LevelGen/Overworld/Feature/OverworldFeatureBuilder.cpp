@@ -85,8 +85,7 @@ void OverworldFeatureBuilder::apply(Level &level, LevelChunk &chunk, const Overw
     std::vector<BiomeFeatureEntry> sortedFeatures;
 
     for (int32_t biomeId: biomes) {
-        const std::vector<BiomeFeatureEntry> *features =
-                BiomeChunkGenDataRegistry::getConsolidatedFeatures(biomeId);
+        const std::vector<BiomeFeatureEntry> *features = BiomeChunkGenDataRegistry::getConsolidatedFeatures(biomeId);
         if (features == nullptr)
             continue;
 

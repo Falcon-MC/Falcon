@@ -25,11 +25,7 @@ namespace {
     // gaussian spread per uncertainty unit: sub_143CB38D0
     const float SPREAD_PER_UNCERTAINTY = 0.0075f;
 
-    enum class Anchor {
-        Feet,
-        EyeHeight,
-        Middle
-    };
+    enum class Anchor { Feet, EyeHeight, Middle };
 
     struct ProjectileSettings {
         bool mFound = false;
@@ -68,7 +64,8 @@ namespace {
         const json::Value *anchor = component.get("anchor");
         const std::string anchorName = anchor == nullptr ? std::string() : anchor->string();
         settings.mAnchor = anchorName == "eye_height" ? Anchor::EyeHeight
-                                                      : anchorName == "middle" ? Anchor::Middle : Anchor::Feet;
+                           : anchorName == "middle"   ? Anchor::Middle
+                                                      : Anchor::Feet;
         settings.mPower = numberOf(component, "power", settings.mPower);
         settings.mGravity = numberOf(component, "gravity", settings.mGravity);
         settings.mUncertaintyBase = numberOf(component, "uncertainty_base", settings.mUncertaintyBase);
@@ -172,8 +169,7 @@ namespace {
         const float pitchRadians = pitch * DEGREES_TO_RADIANS;
         const float yawRadians = yaw * DEGREES_TO_RADIANS;
         const float horizontal = std::cos(pitchRadians);
-        return Vector3f(-std::sin(yawRadians) * horizontal, -std::sin(pitchRadians),
-                        std::cos(yawRadians) * horizontal);
+        return Vector3f(-std::sin(yawRadians) * horizontal, -std::sin(pitchRadians), std::cos(yawRadians) * horizontal);
     }
 
     void applyAux(ServerNetworkHandler &owner, ServerActor &projectile, int32_t auxValue) {
@@ -238,9 +234,9 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
     const float yaw = std::atan2(dz, dx) * RADIANS_TO_DEGREES - 90.0f;
     Vector3f direction = directionOf(aimPitch(horizontal, dy, power, settings.mGravity), yaw);
 
-    const float spread = SPREAD_PER_UNCERTAINTY * uncertainty(settings.mUncertaintyBase,
-                                                              settings.mUncertaintyMultiplier,
-                                                              (int32_t) owner.getProperties().getDifficulty());
+    const float spread = SPREAD_PER_UNCERTAINTY
+                         * uncertainty(settings.mUncertaintyBase, settings.mUncertaintyMultiplier,
+                                       (int32_t) owner.getProperties().getDifficulty());
     std::normal_distribution<float> gaussian(0.0f, 1.0f);
     direction.x += gaussian(shooterRandom()) * spread;
     direction.y += gaussian(shooterRandom()) * spread;
@@ -282,8 +278,8 @@ float MobShooter::aimPitch(float horizontal, float height, float power, float gr
         return -std::atan2(height, horizontal) * RADIANS_TO_DEGREES;
 
     const float squared = power * power;
-    const float discriminant = squared * squared - gravity * (2.0f * height * squared
-                                                               + horizontal * horizontal * gravity);
+    const float discriminant = squared * squared
+                               - gravity * (2.0f * height * squared + horizontal * horizontal * gravity);
     if (discriminant < 0.0f)
         return UNREACHABLE_PITCH;
 

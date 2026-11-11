@@ -200,8 +200,7 @@ MobActor *VillageManager::findMob(ServerNetworkHandler &owner, int64_t uniqueId)
 void VillageManager::_removeVillages() {
     for (auto it = mVillages.begin(); it != mVillages.end();) {
         const Village &village = **it;
-        const bool neverInhabited = !village.isInitialized()
-                                    && village.getTickCount() >= UNINITIALIZED_REMOVAL_TICKS
+        const bool neverInhabited = !village.isInitialized() && village.getTickCount() >= UNINITIALIZED_REMOVAL_TICKS
                                     && village.getInhabitantCount() == 0;
         // a village under raid is kept until the raid is over: it can still be lost (0x1439e55a2)
         const Raid *raid = village.getRaid();

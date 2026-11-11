@@ -32,6 +32,7 @@
 #include "Protocol/Packets/RemoveObjectivePacket.h"
 #include "Protocol/Packets/SetDisplayObjectivePacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
+#include "Protocol/Packets/TakeItemActorPacket.h"
 #include "Protocol/Packets/SetScorePacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
 #include "Protocol/Packets/TextPacket.h"
@@ -65,8 +66,8 @@ namespace {
     const char *const UNDEAD_FAMILY = "undead";
 
     // a snow layer stops it inside its shape only; other blocks across the whole cell
-    bool blocksProjectile(Level &level, const ServerActor &projectile, const Vector3f &position, int32_t x,
-                          int32_t y, int32_t z) {
+    bool blocksProjectile(Level &level, const ServerActor &projectile, const Vector3f &position, int32_t x, int32_t y,
+                          int32_t z) {
         if (!level.isSolidAt(x, y, z))
             return false;
 
@@ -124,6 +125,13 @@ namespace {
     const float FIREWORK_VERTICAL_ACCELERATION = 0.04f;
     const int32_t FIREWORK_ITEM_DATA_ID = 16;
     const int32_t PROJECTILE_MAX_LIFETIME = 1200;
+    const int32_t STUCK_ARROW_LIFETIME = 1200;
+    // the player box grown by (1, 0.5, 1) picks up a planted arrow
+    const float ARROW_PICKUP_REACH_XZ = 1.0f;
+    const float ARROW_PICKUP_REACH_Y = 0.5f;
+    // ActorEvent shake, with 7 as its data: the arrow quivers where it lands
+    const uint8_t ACTOR_EVENT_SHAKE = 39;
+    const int32_t ARROW_SHAKE_TIME = 7;
     const float ACTOR_SUFFOCATION_DAMAGE = 1.0f;
     const int32_t LINGERING_CLOUD_WAIT_TIME = 10;
     const int32_t LINGERING_CLOUD_DURATION = 600;
@@ -147,8 +155,8 @@ namespace {
         const float minZ = actorPosition.z - halfWidth;
         const float maxZ = actorPosition.z + halfWidth;
 
-        return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY &&
-               point.z >= minZ && point.z <= maxZ;
+        return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY && point.z >= minZ
+               && point.z <= maxZ;
     }
 
     EntityProperties buildActorProperties(ServerActor &actor) {
@@ -178,6 +186,10 @@ namespace {
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
+    // taken first: configure may spawn another actor
+    const bool spawned = mSpawnCause == nullptr;
+    const char *cause = spawned ? "Spawned" : mSpawnCause;
+    mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
@@ -193,6 +205,10 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     if (configure)
         configure(*actor);
+
+    // an identifier carrying its own spawn event makes the cause Event (sub_143708AF0)
+    if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
+        cause = "Event";
 
     if (mob != nullptr)
         mob->applyDefaults(mProperties.getDifficulty());
@@ -223,12 +239,15 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    mScriptEngine.onEntitySpawn(*result);
+    if (mob != nullptr)
+        mob->upgradeDefinition(*this, false);
+    mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
 
-ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier,
-                                                  const Vector3f &position, float scale) {
+ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
+                                                  float scale) {
+    mSpawnCause = "Born";
     ServerActor *baby = spawnActor(level, identifier, position);
     if (baby == nullptr)
         return nullptr;
@@ -239,9 +258,10 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     baby->getFlags().set(ActorFlag::Baby, true);
 
     EntityDataMap metadata;
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits(),
+                                  baby->getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
@@ -259,8 +279,7 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     return baby;
 }
 
-FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
-                                                           const Vector3f &position) {
+FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
 
     std::unique_ptr<FallingBlock> actor(new FallingBlock(runtimeId, state));
@@ -309,8 +328,7 @@ void ServerNetworkHandler::spawnExperienceOrbs(Level &level, const Vector3f &pos
 
         orb->setExperienceValue(value);
         orb->setPickupDelay(EXPERIENCE_ORB_PICKUP_DELAY);
-        orb->setMotion(Vector3f((unit(orbRandom) * 0.2f - 0.1f) * 2.0f,
-                                unit(orbRandom) * 0.4f,
+        orb->setMotion(Vector3f((unit(orbRandom) * 0.2f - 0.1f) * 2.0f, unit(orbRandom) * 0.4f,
                                 (unit(orbRandom) * 0.2f - 0.1f) * 2.0f));
     }
 }
@@ -406,6 +424,19 @@ void ServerNetworkHandler::_resolvePendingRides() {
         mVehiclesWithPendingPassengers.erase(vehicleId);
 }
 
+namespace {
+    // the client draws a projectile along its rotation, the reverse of the shooter's (yaw = -yaw, pitch = -pitch);
+    // head yaw follows yaw, or the arrow keeps pointing its spawn way
+    void faceMotion(ServerActor &actor, const Vector3f &motion) {
+        const float horizontal = std::sqrt(motion.x * motion.x + motion.z * motion.z);
+        if (horizontal < 1.0e-6f && std::fabs(motion.y) < 1.0e-6f)
+            return;
+        const float yaw = std::atan2(motion.x, motion.z) / MathConstants::DEGREES_TO_RADIANS_F;
+        const float pitch = std::atan2(motion.y, horizontal) / MathConstants::DEGREES_TO_RADIANS_F;
+        actor.setRotation(Vector3f(pitch, yaw, yaw));
+    }
+}
+
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                                    float verticalOffset) {
     const Vector3f &rotation = player.getRotation();
@@ -423,9 +454,12 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
 
     projectile->setProjectile(true);
     projectile->setOwnerUniqueId((int64_t) player.getRuntimeId());
-    projectile->getProjectileData().mLootingLevel =
-            ItemEnchantments::getLevel(player.getInventory().getItemInHand(), EnchantmentIds::LOOTING);
+    projectile->getProjectileData().mLootingLevel = ItemEnchantments::getLevel(player.getInventory().getItemInHand(),
+                                                                               EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
+    faceMotion(*projectile, projectile->getMotion());
+    // the spawn packet went out before the motion was known
+    broadcastActorMove(*projectile);
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
@@ -457,8 +491,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         ProjectileData &data = projectile.getProjectileData();
         const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
-        playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT,
-                       hitPosition);
+        playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT, hitPosition);
 
         if (isTrident && data.mLoyaltyLevel > 0) {
             data.mReturning = true;
@@ -466,7 +499,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             return false;
         }
 
-        dropProjectileItem(projectile, hitPosition);
+        data.mStuck = true;
         return true;
     }
 
@@ -553,8 +586,7 @@ ServerActor *ServerNetworkHandler::spawnAreaEffectCloud(Level &level, const Vect
     return cloud;
 }
 
-void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position,
-                                               int32_t data) {
+void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position, int32_t data) {
     LevelEventPacket event;
     event.mEventId = eventId;
     event.mPosition = position;
@@ -569,6 +601,87 @@ void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vec
 
     ItemActorHandler::dropItem(*this, getLevelFor(projectile), position, data.mPickupItem,
                                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
+}
+
+// stops at the last free point of this tick's path, so the arrow shows half sunk in the face it hit
+void ServerNetworkHandler::plantProjectile(ServerActor &projectile, Level &level, const Vector3f &from,
+                                           const Vector3i &block) {
+    ProjectileData &data = projectile.getProjectileData();
+    const Vector3f to = projectile.getPosition();
+    Vector3f resting = from;
+    const int32_t steps = 16;
+    for (int32_t step = 1; step <= steps; ++step) {
+        const float progress = (float) step / (float) steps;
+        const Vector3f sample(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress,
+                              from.z + (to.z - from.z) * progress);
+        if (blocksProjectile(level, projectile, sample, (int32_t) std::floor(sample.x), (int32_t) std::floor(sample.y),
+                             (int32_t) std::floor(sample.z)))
+            break;
+        resting = sample;
+    }
+
+    data.mStuckBlock = block;
+    data.mStuckTicks = 0;
+    data.mCritical = false;
+    projectile.setMotion(Vector3f());
+    projectile.setPosition(resting);
+    broadcastActorMove(projectile);
+
+    ActorEventPacket shake;
+    shake.mRuntimeActorId = projectile.getRuntimeId();
+    shake.mEventId = ACTOR_EVENT_SHAKE;
+    shake.mEventData = ARROW_SHAKE_TIME;
+    shake.mHasFirePosition = false;
+    _sendToViewers(projectile, shake);
+}
+
+// true once the planted projectile is gone: picked up or expired
+bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level &level) {
+    ProjectileData &data = projectile.getProjectileData();
+    if (++data.mStuckTicks >= STUCK_ARROW_LIFETIME)
+        return true;
+
+    const Vector3i &block = data.mStuckBlock;
+    if (!level.isSolidAt(block.x, block.y, block.z)) {
+        // the block went: the arrow falls again
+        data.mStuck = false;
+        return false;
+    }
+
+    const Vector3f &position = projectile.getPosition();
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(projectile)
+            || player.getGameType() == (int32_t) GameType::Spectator)
+            continue;
+
+        const Vector3f &feet = player.getPosition();
+        const float halfWidth = PLAYER_WIDTH * 0.5f + ARROW_PICKUP_REACH_XZ;
+        if (std::fabs(position.x - feet.x) > halfWidth || std::fabs(position.z - feet.z) > halfWidth
+            || position.y < feet.y - ARROW_PICKUP_REACH_Y || position.y > feet.y + PLAYER_HEIGHT + ARROW_PICKUP_REACH_Y)
+            continue;
+
+        // nothing to give outside creative: the arrow stays until it expires
+        const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+        if (!creative && (data.mPickupCreativeOnly || data.mPickupItem.isAir()))
+            continue;
+
+        if (!creative) {
+            std::vector<int> touched;
+            if (!player.getInventory().addItem(data.mPickupItem, touched))
+                continue;
+            for (int touchedSlot: touched)
+                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, touchedSlot);
+        }
+
+        TakeItemActorPacket take;
+        take.mItemRuntimeActorId = projectile.getRuntimeId();
+        take.mRuntimeActorId = player.getRuntimeId();
+        _sendToViewers(projectile, take);
+        return true;
+    }
+
+    return false;
 }
 
 void ServerNetworkHandler::returnProjectileToOwner(ServerPlayer &player, ServerActor &projectile) {
@@ -633,7 +746,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
-        source.fromOrigin(origin).asProjectile();
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
 
         const DamageResult result = hurt(*victimPlayer, damage, source);
         applyArrowEffect = result == DamageResult::Dealt;
@@ -655,8 +768,10 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
         if (victimActor != nullptr) {
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
-            source.mAttacker = shooter != nullptr ? (Actor *) shooter : (Actor *) getActor(projectile.getOwnerUniqueId());
-            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            source.mAttacker = shooter != nullptr ? (Actor *) shooter
+                                                  : (Actor *) getActor(projectile.getOwnerUniqueId());
+            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile().withDamager(&projectile),
+                                           data.mLootingLevel);
             if (!isTrident && victimActor->stopsProjectiles())
                 return true;
         }
@@ -719,6 +834,9 @@ bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, c
     if (hitActor.isProjectile()) {
         const bool handled = onThrownProjectileHit(projectile, hitPosition, nullptr);
         const bool otherHandled = onThrownProjectileHit(hitActor, hitActor.getPosition(), nullptr);
+        // an arrow knocked out of the air is removed, not planted: its item drops
+        if (hitActor.getProjectileData().mStuck)
+            dropProjectileItem(hitActor, hitActor.getPosition());
         removeActor(hitActor.getUniqueId());
         return handled || otherHandled;
     }
@@ -799,9 +917,14 @@ bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &
     if (!ChunkStreamHandler::isInActorRange(player.getPosition(), position))
         return false;
 
+    const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+    const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+    // an actor goes out with its chunk: one in a chunk this client has not received floats in the void
+    if (player.getSentChunks().count(ChunkStreamHandler::packChunk(chunkX, chunkZ)) == 0)
+        return false;
+
     // only chunks the server holds fully loaded hand out their actors (sub_14294B4A0)
-    return getLevelFor(actor).isChunkPopulated((int32_t) std::floor(position.x) >> 4,
-                                               (int32_t) std::floor(position.z) >> 4);
+    return getLevelFor(actor).isChunkPopulated(chunkX, chunkZ);
 }
 
 void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &actor) {
@@ -1011,6 +1134,27 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
     flags2.mLongValue = actor.getFlags().getHighBits();
     packet.mMetadata.mEntries.push_back(flags2);
 
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = actor.getFlags().getExtendedBits();
+    packet.mMetadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = actor.getNameplateRenderDistance();
+
+    packet.mMetadata.mEntries.push_back(nameplateDistance);
+
     EntityDataEntry visibleEffects;
     visibleEffects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;
     visibleEffects.mFormat = EntityDataFormat::Long;
@@ -1198,8 +1342,7 @@ void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::str
     }
 }
 
-void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier,
-                                               const Vector3f &position) {
+void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position) {
     SpawnParticleEffectPacket packet;
     packet.mDimensionId = level.getDimensionId();
     packet.mUniqueActorId = -1;
@@ -1428,7 +1571,6 @@ void ServerNetworkHandler::playPlayerAnimation(ServerPlayer &player, const std::
 }
 
 
-
 void ServerNetworkHandler::loadWorldDynamicProperties() {
     Tag data;
     if (!mPlayerData.loadData("world_dynamic_properties", data))
@@ -1505,8 +1647,7 @@ void ServerNetworkHandler::tickActors() {
                 syncActorFlags(actor);
         }
 
-        ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles,
-                                                actor.isProjectile());
+        ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles, actor.isProjectile());
 
         if (dynamic_cast<FireworksRocketActor *>(&actor) != nullptr) {
             ProjectileData &firework = actor.getProjectileData();
@@ -1514,8 +1655,8 @@ void ServerNetworkHandler::tickActors() {
             ServerPlayer *rider = nullptr;
             if (firework.mFireworkAttached) {
                 for (auto &playerEntry: mPlayers) {
-                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId() &&
-                        playerEntry.second.isSpawned())
+                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId()
+                        && playerEntry.second.isSpawned())
                         rider = &playerEntry.second;
                 }
             }
@@ -1554,6 +1695,12 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
+        if (actor.isProjectile() && actor.getProjectileData().mStuck) {
+            if (tickPlantedProjectile(actor, level))
+                expired.push_back(actorId);
+            continue;
+        }
+
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
             const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
@@ -1564,8 +1711,8 @@ void ServerNetworkHandler::tickActors() {
             if (arrowLike && actor.getProjectileData().mReturning) {
                 ServerPlayer *shooter = nullptr;
                 for (auto &playerEntry: mPlayers) {
-                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId() &&
-                        playerEntry.second.isSpawned() && !playerEntry.second.isDead())
+                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId()
+                        && playerEntry.second.isSpawned() && !playerEntry.second.isDead())
                         shooter = &playerEntry.second;
                 }
 
@@ -1608,6 +1755,7 @@ void ServerNetworkHandler::tickActors() {
 
             actor.setMotion(motion);
             actor.setPosition(position);
+            faceMotion(actor, motion);
 
             const int32_t blockX = (int32_t) std::floor(position.x);
             const int32_t blockY = (int32_t) std::floor(position.y);
@@ -1636,6 +1784,11 @@ void ServerNetworkHandler::tickActors() {
 
                 if (!onThrownProjectileHit(actor, hitPosition, nullptr))
                     mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ);
+
+                if (actor.getProjectileData().mStuck) {
+                    plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));
+                    continue;
+                }
 
                 if (!actor.getProjectileData().mReturning) {
                     expired.push_back(actorId);
@@ -1670,12 +1823,11 @@ void ServerNetworkHandler::tickActors() {
                         ServerPlayer &candidate = playerEntry.second;
                         if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
                             continue;
-                        if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() &&
-                            actor.getLifetimeTicks() < 8)
+                        if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId()
+                            && actor.getLifetimeTicks() < 8)
                             continue;
 
-                        if (intersectsActorBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT,
-                                               samplePosition)) {
+                        if (intersectsActorBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT, samplePosition)) {
                             hitPlayer = &candidate;
                             contactPosition = samplePosition;
                             break;
@@ -1687,21 +1839,21 @@ void ServerNetworkHandler::tickActors() {
 
                     for (auto &actorEntry: mActors) {
                         ServerActor &candidate = *actorEntry.second;
-                        if (&candidate == &actor || !candidate.isAlive() ||
-                            !candidate.sharesLevelWith(actor))
+                        if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
                             continue;
 
                         const bool candidateIsProjectile = candidate.isProjectile();
-                        if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId() &&
-                            candidate.getLifetimeTicks() < 8)
+                        if (candidateIsProjectile && candidate.getProjectileData().mStuck)
+                            continue;
+                        if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId()
+                            && candidate.getLifetimeTicks() < 8)
                             continue;
                         if (projectile != nullptr && projectile->passesThroughOwner()
                             && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
                             continue;
 
                         const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
-                        if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight,
-                                               samplePosition)) {
+                        if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight, samplePosition)) {
                             hitActor = &candidate;
                             contactPosition = samplePosition;
                             break;
@@ -1797,8 +1949,8 @@ void ServerNetworkHandler::tickActors() {
 
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
-                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead() ||
-                    nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
+                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
+                    || nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
                     || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
                     continue;
 

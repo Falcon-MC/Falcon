@@ -88,8 +88,7 @@ bool BreedGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
 bool BreedGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const MobActor *partner = _partner(owner);
-    return mob.isInLove() && partner != nullptr && partner->isAlive() && partner->isInLove()
-           && mLoveTime < BREED_TICKS;
+    return mob.isInLove() && partner != nullptr && partner->isAlive() && partner->isInLove() && mLoveTime < BREED_TICKS;
 }
 
 void BreedGoal::start(ServerNetworkHandler &owner, MobActor &mob) {

@@ -10,21 +10,13 @@ namespace {
 
     const std::vector<BlockState> &places() {
         static const std::vector<BlockState> states = {
-                VanillaBlocks::SHORT_GRASS().toBlockState(),
-                VanillaBlocks::TALL_GRASS().toBlockState(),
-                VanillaBlocks::DANDELION().toBlockState(),
-                VanillaBlocks::POPPY().toBlockState(),
-                VanillaBlocks::AZURE_BLUET().toBlockState(),
-                VanillaBlocks::OXEYE_DAISY().toBlockState(),
-                VanillaBlocks::ALLIUM().toBlockState(),
-                VanillaBlocks::CORNFLOWER().toBlockState(),
-                VanillaBlocks::BLUE_ORCHID().toBlockState(),
-                VanillaBlocks::LILY_OF_THE_VALLEY().toBlockState(),
-                VanillaBlocks::RED_TULIP().toBlockState(),
-                VanillaBlocks::ORANGE_TULIP().toBlockState(),
-                VanillaBlocks::PINK_TULIP().toBlockState(),
-                VanillaBlocks::WHITE_TULIP().toBlockState()
-        };
+                VanillaBlocks::SHORT_GRASS().toBlockState(), VanillaBlocks::TALL_GRASS().toBlockState(),
+                VanillaBlocks::DANDELION().toBlockState(),   VanillaBlocks::POPPY().toBlockState(),
+                VanillaBlocks::AZURE_BLUET().toBlockState(), VanillaBlocks::OXEYE_DAISY().toBlockState(),
+                VanillaBlocks::ALLIUM().toBlockState(),      VanillaBlocks::CORNFLOWER().toBlockState(),
+                VanillaBlocks::BLUE_ORCHID().toBlockState(), VanillaBlocks::LILY_OF_THE_VALLEY().toBlockState(),
+                VanillaBlocks::RED_TULIP().toBlockState(),   VanillaBlocks::ORANGE_TULIP().toBlockState(),
+                VanillaBlocks::PINK_TULIP().toBlockState(),  VanillaBlocks::WHITE_TULIP().toBlockState()};
         return states;
     }
 

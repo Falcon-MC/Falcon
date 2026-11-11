@@ -48,8 +48,8 @@ namespace {
     // corners for the quad spring
     const AttachPoint DAMPENED_MOB_POINTS[] = {{0.0f, 0.0f, 1.0f}};
     const AttachPoint DAMPENED_HOLDER_POINTS[] = {{0.0f, 0.0f, 0.0f}};
-    const AttachPoint QUAD_POINTS[] = {{-1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, -1.0f}, {1.0f, 0.0f, -1.0f},
-                                       {1.0f, 0.0f, 1.0f}};
+    const AttachPoint QUAD_POINTS[] = {
+            {-1.0f, 0.0f, 1.0f}, {-1.0f, 0.0f, -1.0f}, {1.0f, 0.0f, -1.0f}, {1.0f, 0.0f, 1.0f}};
 
     float numberOr(const json::Value *object, const char *key, float fallback) {
         const json::Value *value = object == nullptr ? nullptr : object->get(key);

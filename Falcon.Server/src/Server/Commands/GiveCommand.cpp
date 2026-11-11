@@ -1,8 +1,9 @@
 #include "Server/Commands/GiveCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
+#include "World/Item/Item.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
-#include "World/Item/StringToItemParser.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <cstdlib>
@@ -13,8 +14,7 @@ namespace {
 }
 
 GiveCommand::GiveCommand(ServerNetworkHandler &handler)
-        : Command("give", "commands.give.description", "/give <player> <item> [amount] [data]"),
-          mHandler(handler) {}
+        : Command("give", "commands.give.description", "/give <player> <item> [amount] [data]"), mHandler(handler) {}
 
 std::vector<CommandOverloadData> GiveCommand::getOverloads() const {
     const CommandParamData playerParameter = makePlayerParameter("player");
@@ -23,7 +23,7 @@ std::vector<CommandOverloadData> GiveCommand::getOverloads() const {
     itemParameter.mName = "itemName";
     itemParameter.mHasEnumData = true;
     itemParameter.mEnumData.mName = "Item";
-    itemParameter.mEnumData.mValues = StringToItemParser::getInstance().getKnownAliases();
+    itemParameter.mEnumData.mValues = CommandEnums::itemValues();
 
     CommandParamData amountParameter;
     amountParameter.mName = "amount";
@@ -93,13 +93,12 @@ bool GiveCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     }
 
     Item item;
-    if (!StringToItemParser::getInstance().parse(arguments[1], item)) {
+    if (!CommandEnums::parseItem(arguments[1], item)) {
         sender.sendTranslation("commands.give.item.notFound", {arguments[1]});
         return false;
     }
 
-    std::shared_ptr<ItemDefinition> definition =
-            mHandler.getItemDefinitions().getDefinition(item.getIdentifier());
+    std::shared_ptr<ItemDefinition> definition = mHandler.getItemDefinitions().getDefinition(item.getIdentifier());
 
     if (definition == nullptr) {
         sender.sendTranslation("commands.give.item.notFound", {arguments[1]});

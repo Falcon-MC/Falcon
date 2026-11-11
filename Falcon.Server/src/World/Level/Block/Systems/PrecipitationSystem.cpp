@@ -18,9 +18,8 @@ namespace {
     const int32_t TEMPERATURE_FALLOFF_START = 80;
     const float TEMPERATURE_FALLOFF_PER_BLOCK = 0.05f / 40.0f;
 
-    const Vector3i HORIZONTAL_OFFSETS[] = {
-            Vector3i(0, 0, -1), Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)
-    };
+    const Vector3i HORIZONTAL_OFFSETS[] = {Vector3i(0, 0, -1), Vector3i(0, 0, 1), Vector3i(-1, 0, 0),
+                                           Vector3i(1, 0, 0)};
 
     const BlockState *stateAt(Level &level, const Vector3i &position) {
         return level.peekBlockPtr(position.x, position.y, position.z);
@@ -96,8 +95,7 @@ void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
         BlockChangeSystem::change(level, below, BlockState(IceBlock::IDENTIFIER), BlockChangeCause::Form, true);
 
     if (level.isRaining() && level.canRainAt(x, z) && shouldSnow(level, top))
-        BlockChangeSystem::change(level, top, VanillaBlocks::SNOW_LAYER().toBlockState(), BlockChangeCause::Form,
-                                  true);
+        BlockChangeSystem::change(level, top, VanillaBlocks::SNOW_LAYER().toBlockState(), BlockChangeCause::Form, true);
 }
 
 bool PrecipitationSystem::shouldFreeze(Level &level, const Vector3i &position) {

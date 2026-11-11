@@ -16,13 +16,16 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
     const auto &input = context.input;
 
     const ItemStack &boots = context.player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
-    state.start = context.player.hasSimulatedPosition() ? context.player.getSimulatedPosition() : context.player.getPosition();
-    const Block *soulSupport = blockAt(context.level, state.start.x, state.start.y - SUPPORT_PROBE_DEPTH, state.start.z);
+    state.start = context.player.hasSimulatedPosition() ? context.player.getSimulatedPosition()
+                                                        : context.player.getPosition();
+    const Block *soulSupport = blockAt(context.level, state.start.x, state.start.y - SUPPORT_PROBE_DEPTH,
+                                       state.start.z);
     // the modifier stays over air while jumping, refreshed on the next non-air block
     if (soulSupport != nullptr && soulSupport->getTypeId() != BlockTypeIds::AIR) {
         const int enchantmentLevel = ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED);
         const float bonus = enchantmentLevel > 0 && soulSupport->getBehavior().supportsSoulSpeed()
-                            ? 0.03f + 0.0105f * (float) enchantmentLevel : 0.0f;
+                                    ? 0.03f + 0.0105f * (float) enchantmentLevel
+                                    : 0.0f;
         context.player.getEffects().setMovementSpeedBonus(bonus);
     }
     if (!context.owner.getProperties().getMovementSimulation()) {

@@ -13,13 +13,19 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    // flowing_*: turns still on its queued tick (sub_149C43290)
+    static bool isDynamic(const std::string &identifier);
+
     static BlockState source();
 
     static bool isSource(const BlockState &state);
 
-    int getTickRate() const override { return 5; }
-    int getFlowDecayPerBlock() const override { return 1; }
-    int getMinAdjacentSourcesToFormSource() const override { return 2; }
-    const char *getBucketFillSound() const override { return LevelSoundEvent::BUCKET_FILL_WATER; }
-    const char *getBucketEmptySound() const override { return LevelSoundEvent::BUCKET_EMPTY_WATER; }
+    int32_t getTickDelay(DimensionType dimension) const override;
+
+    const char *getBucketFillSound() const override {
+        return LevelSoundEvent::BUCKET_FILL_WATER;
+    }
+    const char *getBucketEmptySound() const override {
+        return LevelSoundEvent::BUCKET_EMPTY_WATER;
+    }
 };

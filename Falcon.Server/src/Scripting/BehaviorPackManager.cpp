@@ -130,6 +130,33 @@ namespace {
             }
         }
 
+        const json::Value *settings = root->get("settings");
+        if (settings != nullptr && settings->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: settings->mArray) {
+                const json::Value *name = entry->isObject() ? entry->get("name") : nullptr;
+                const json::Value *value = entry->isObject() ? entry->get("default") : nullptr;
+                // labels carry no name and no value
+                if (name == nullptr || !name->isString() || value == nullptr)
+                    continue;
+
+                PackSetting setting;
+                setting.mName = name->string();
+                if (value->mType == json::Value::Type::Boolean) {
+                    setting.mType = PackSetting::Type::Boolean;
+                    setting.mBoolean = value->mBoolean;
+                } else if (value->isNumber()) {
+                    setting.mType = PackSetting::Type::Number;
+                    setting.mNumber = value->mNumber;
+                } else if (value->isString()) {
+                    setting.mType = PackSetting::Type::String;
+                    setting.mString = value->mString;
+                } else {
+                    continue;
+                }
+                out.mSettings.push_back(setting);
+            }
+        }
+
         const json::Value *dependencies = root->get("dependencies");
         if (dependencies == nullptr || !dependencies->isArray())
             return;
@@ -213,8 +240,7 @@ size_t BehaviorPackManager::pruneUnsatisfied(const std::vector<std::string> &ava
             continue;
         }
 
-        LOG_WARN(LogAreaID::Resource, "Skipping behavior pack %s: missing dependency pack",
-                 mPacks[i].mName.c_str());
+        LOG_WARN(LogAreaID::Resource, "Skipping behavior pack %s: missing dependency pack", mPacks[i].mName.c_str());
         mPacks.erase(mPacks.begin() + (long) i);
         removed++;
     }
@@ -228,7 +254,7 @@ void BehaviorPackManager::_scanRoot(const std::string &root) {
 
     if (!std::filesystem::exists(base / "manifest.json", error)) {
         for (const std::filesystem::directory_entry &entry:
-                     std::filesystem::recursive_directory_iterator(base, error)) {
+             std::filesystem::recursive_directory_iterator(base, error)) {
             if (entry.is_regular_file() && entry.path().filename() == "manifest.json")
                 _addPackFromManifest(entry.path().parent_path().string());
         }

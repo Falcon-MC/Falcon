@@ -9,7 +9,9 @@ class OverworldNoiseHolder {
 public:
     explicit OverworldNoiseHolder(int64_t seed);
 
-    IRandom &getRandomSource() const { return *mRandomSource; }
+    IRandom &getRandomSource() const {
+        return *mRandomSource;
+    }
 
     const XoroshiroPositionalFactory &getNoiseFactory() const {
         return mNoiseFactory;

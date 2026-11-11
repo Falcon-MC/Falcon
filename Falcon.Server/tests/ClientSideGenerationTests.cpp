@@ -78,9 +78,7 @@ namespace {
         context.mBuildRadius = 5;
         context.mPlayerCount = 1;
         context.mPlayerChunks.emplace_back(0, 0);
-        context.mIsSaved = [&saved](int32_t x, int32_t z) {
-            return saved.count({x, z}) != 0;
-        };
+        context.mIsSaved = [&saved](int32_t x, int32_t z) { return saved.count({x, z}) != 0; };
 
         using ClientSideGeneration::isServerBuilt;
         require(isServerBuilt(11, 0, context), "the edge of the player margin stays on the server");
@@ -101,9 +99,7 @@ namespace {
         require(isServerBuilt(107, 1, context), "a ticking area keeps the chunks six past its half width");
         require(!isServerBuilt(109, 1, context), "further from the ticking area the client builds");
 
-        context.mIsForced = [](int32_t x, int32_t z) {
-            return x == 50 && z == 50;
-        };
+        context.mIsForced = [](int32_t x, int32_t z) { return x == 50 && z == 50; };
         require(isServerBuilt(50, 50, context), "the parity guard keeps a chunk on the server");
 
         context.mPlayerCount = 0;
@@ -120,7 +116,8 @@ namespace {
 
         const std::vector<Vector2i> drained = list.drain();
         require(drained.size() == 2 && drained[0].x == 3 && drained[0].y == 4 && drained[1].x == -1
-                && drained[1].y == 7, "the list keeps the order the chunks were sent in");
+                        && drained[1].y == 7,
+                "the list keeps the order the chunks were sent in");
         require(list.empty(), "draining empties the list");
         list.add(3, 4);
         require(list.size() == 1, "a drained chunk can be listed again");
@@ -168,7 +165,7 @@ namespace {
         state.mClientBuiltCursor = 1;
         ChunkStreamHandler::dropPendingChunks(state);
         require(state.mSendQueue.empty() && state.mLoading.empty() && state.mReadyToSend.empty()
-                && state.mClientBuilt.empty() && state.mClientBuiltCursor == 0,
+                        && state.mClientBuilt.empty() && state.mClientBuiltCursor == 0,
                 "a teleport leaves nothing of the old view to send");
     }
 
@@ -190,7 +187,7 @@ namespace {
         require(colors != nullptr && colors->asByteArray().size() == 65536, "the map keeps four bytes per pixel");
         const std::vector<int8_t> &bytes = colors->asByteArray();
         require((uint8_t) bytes[129 * 4] == 0x99 && (uint8_t) bytes[129 * 4 + 1] == 0x66
-                && (uint8_t) bytes[129 * 4 + 2] == 0x33 && (uint8_t) bytes[129 * 4 + 3] == 0xff,
+                        && (uint8_t) bytes[129 * 4 + 2] == 0x33 && (uint8_t) bytes[129 * 4 + 3] == 0xff,
                 "the colour is stored as the game lays it out");
         require(bytes[2 * 4] == 0, "a blank pixel is ignored");
         require(!map.applyClientPixels(pixels), "the same pixels change nothing");
@@ -218,8 +215,7 @@ namespace {
             require(storage.open(directory.string(), "World"), "could not reopen the storage");
             require(storage.hasChunk(3, -2), "the saved chunk survives a restart");
             Tag map;
-            require(storage.loadMapData(-9, map) && map.getLong("mapId") == -9,
-                    "the map survives a restart");
+            require(storage.loadMapData(-9, map) && map.getLong("mapId") == -9, "the map survives a restart");
         }
         {
             Level level("World", 4, 12345);
@@ -269,7 +265,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-csg-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-csg-test-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         BiomeChunkGenDataRegistry::initialize();
         BlockPaletteRegistry::getInstance().initialize();

@@ -76,12 +76,13 @@ namespace {
 
     // the only blocks the builder replaces (list at 0x1529AB1B8, filled from 0x14F1F5B40)
     bool isReplaceable(const BlockState &state) {
-        static const BlockStateSet REPLACEABLE = {
-                VanillaBlocks::STONE().getIdentifier(), VanillaBlocks::GRANITE().getIdentifier(),
-                VanillaBlocks::POLISHED_GRANITE().getIdentifier(), VanillaBlocks::DIORITE().getIdentifier(),
-                VanillaBlocks::POLISHED_DIORITE().getIdentifier(), VanillaBlocks::ANDESITE().getIdentifier(),
-                VanillaBlocks::POLISHED_ANDESITE().getIdentifier()
-        };
+        static const BlockStateSet REPLACEABLE = {VanillaBlocks::STONE().getIdentifier(),
+                                                  VanillaBlocks::GRANITE().getIdentifier(),
+                                                  VanillaBlocks::POLISHED_GRANITE().getIdentifier(),
+                                                  VanillaBlocks::DIORITE().getIdentifier(),
+                                                  VanillaBlocks::POLISHED_DIORITE().getIdentifier(),
+                                                  VanillaBlocks::ANDESITE().getIdentifier(),
+                                                  VanillaBlocks::POLISHED_ANDESITE().getIdentifier()};
         return REPLACEABLE.contains(state);
     }
 
@@ -128,7 +129,8 @@ OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactor
         mSwampNoise.emplace_back(swampRandom);
 
     // the frozen ocean builder's noises (sub_1471334C0)
-    mIcebergPillarNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar", -6, {1.0f, 1.0f, 1.0f, 1.0f});
+    mIcebergPillarNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar", -6,
+                                              {1.0f, 1.0f, 1.0f, 1.0f});
     mIcebergPillarRoofNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar_roof", -3, {1.0f});
     mIcebergSurfaceNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_surface", -6, {1.0f, 1.0f, 1.0f});
 }

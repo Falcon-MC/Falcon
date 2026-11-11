@@ -6,9 +6,7 @@
 
 class PistonBlock final : public FacingMachineBlock {
 public:
-    explicit PistonBlock(const Block &block) : FacingMachineBlock(block)
-    {
-    }
+    explicit PistonBlock(const Block &block) : FacingMachineBlock(block) {}
 
     static bool matches(const std::string &identifier);
 

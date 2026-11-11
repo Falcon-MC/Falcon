@@ -112,6 +112,25 @@ void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t a
     mEventBus.after().mEffectAdd.emit(event);
 }
 
+bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item) {
+    const FoodItemComponent *food = findFoodComponent(item);
+    if (food == nullptr)
+        return false;
+
+    player.consumeFood(food->getNutrition(), food->getSaturation());
+    for (const FoodEffect &effect: food->getEffects())
+        addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+    // cured effects (poison for the honey bottle) come only from the vanilla components
+    const Tag *vanilla = vanillaFood(item);
+    const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
+    if (removed != nullptr && removed->isList()) {
+        for (const Tag &effect: removed->getList())
+            player.removeEffect((MobEffectId) effect.asInt());
+    }
+    return true;
+}
+
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
     if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
         return;
@@ -150,8 +169,8 @@ void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId
     if (heldTicks < useDurationTicksFor(heldItem))
         return;
 
-    if (heldItem.isAir() || heldItem.mDefinition == nullptr ||
-        static_cast<uint16_t>(itemId) != static_cast<uint16_t>(heldItem.mDefinition->getRuntimeId()))
+    if (heldItem.isAir() || heldItem.mDefinition == nullptr
+        || static_cast<uint16_t>(itemId) != static_cast<uint16_t>(heldItem.mDefinition->getRuntimeId()))
         return;
 
     _consumeHeldItem(player);
@@ -168,6 +187,7 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
 
     ItemUseAfterEvent useEvent(player, heldItem.mDefinition->getIdentifier());
     mEventBus.after().mItemUse.emit(useEvent);
+    mScriptEngine.onItemUse(player);
 }
 
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
@@ -206,13 +226,11 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
     inventory.setItemInHand(std::move(worn));
 
     player.getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
-    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                          inventory.getSelectedSlot());
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     InventoryHandler::sendArmorContent(*this, player);
     InventoryHandler::sendHeldItem(*this, player);
 
-    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(),
-                   "minecraft:player");
+    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(), "minecraft:player");
     return true;
 }
 
@@ -349,19 +367,12 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
     }
 
-    if (food != nullptr) {
-        player.consumeFood(food->getNutrition(), food->getSaturation());
-        for (const FoodEffect &effect: food->getEffects())
-            addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+    applyFood(player, usedItem);
 
-        // cured effects (poison for the honey bottle) come only from the vanilla components
-        const Tag *vanilla = vanillaFood(usedItem);
-        const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
-        if (removed != nullptr && removed->isList()) {
-            for (const Tag &effect: removed->getList())
-                player.removeEffect((MobEffectId) effect.asInt());
-        }
-    }
+    // both ride publisher_use_time_depleted (sub_14483F960): food at priority 0 eats and fires onConsume,
+    // custom onCompleteUse at priority 3 runs after (sub_143EBF6E0, sub_14A7F6070)
+    mScriptEngine.onItemConsume(player, usedItem);
+    mScriptEngine.onItemCompleteUse(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

@@ -71,22 +71,19 @@ namespace {
 
     // binary heap over a vector, comparator reversed: the best chunk at the front
     void makeQueue(const ChunkStreamState &state, std::vector<int64_t> &queue) {
-        std::make_heap(queue.begin(), queue.end(), [&state](int64_t left, int64_t right) {
-            return comesBefore(state, right, left);
-        });
+        std::make_heap(queue.begin(), queue.end(),
+                       [&state](int64_t left, int64_t right) { return comesBefore(state, right, left); });
     }
 
     void pushQueue(const ChunkStreamState &state, std::vector<int64_t> &queue, int64_t hash) {
         queue.push_back(hash);
-        std::push_heap(queue.begin(), queue.end(), [&state](int64_t left, int64_t right) {
-            return comesBefore(state, right, left);
-        });
+        std::push_heap(queue.begin(), queue.end(),
+                       [&state](int64_t left, int64_t right) { return comesBefore(state, right, left); });
     }
 
     int64_t popQueue(const ChunkStreamState &state, std::vector<int64_t> &queue) {
-        std::pop_heap(queue.begin(), queue.end(), [&state](int64_t left, int64_t right) {
-            return comesBefore(state, right, left);
-        });
+        std::pop_heap(queue.begin(), queue.end(),
+                      [&state](int64_t left, int64_t right) { return comesBefore(state, right, left); });
 
         const int64_t hash = queue.back();
         queue.pop_back();
@@ -133,7 +130,7 @@ namespace {
             const int32_t tickRange = properties.getTickDistance();
             const int32_t viewRadius = ClientSideGeneration::computeViewRadius(mChunkRadius, tickRange);
             mContext.mBuildRadius = ClientSideGeneration::computeServerBuildRadius(mPlayer.getServerBuildRatio(),
-                                                                                  viewRadius, tickRange);
+                                                                                   viewRadius, tickRange);
 
             for (auto &entry: mOwner.getPlayers()) {
                 const ServerPlayer &other = entry.second;
@@ -159,9 +156,7 @@ namespace {
             }
 
             Level *level = &mLevel;
-            mContext.mIsSaved = [level](int32_t chunkX, int32_t chunkZ) {
-                return level->isChunkSaved(chunkX, chunkZ);
-            };
+            mContext.mIsSaved = [level](int32_t chunkX, int32_t chunkZ) { return level->isChunkSaved(chunkX, chunkZ); };
 
             if (mLevel.getDimensionType() != DimensionType::Overworld)
                 return;
@@ -239,8 +234,7 @@ namespace {
         makeQueue(state, state.mSendQueue);
     }
 
-    void pruneQueueOutOfRadius(ChunkStreamState &state, std::vector<int64_t> &queue,
-                               Level &level, uint64_t loaderId) {
+    void pruneQueueOutOfRadius(ChunkStreamState &state, std::vector<int64_t> &queue, Level &level, uint64_t loaderId) {
         std::vector<int64_t> kept;
         kept.reserve(queue.size());
 
@@ -369,12 +363,13 @@ namespace {
         stamp.mRevision = levelChunk.getNetworkRevision();
 
         const ChunkPacketCache::Key key{&level, hash, &context};
-        owner.getNetworkHandler().sendShared(id, owner.getChunkPacketCache().get(
-                key, stamp, owner.getChunkStreamTick(), [&]() {
-            BinaryStream stream;
-            makeChunkPacket(level, chunkX, chunkZ, context, stamp.mBlockActors).writeWithHeader(stream, context);
-            return stream.getBuffer();
-        }));
+        owner.getNetworkHandler().sendShared(
+                id, owner.getChunkPacketCache().get(key, stamp, owner.getChunkStreamTick(), [&]() {
+                    BinaryStream stream;
+                    makeChunkPacket(level, chunkX, chunkZ, context, stamp.mBlockActors)
+                            .writeWithHeader(stream, context);
+                    return stream.getBuffer();
+                }));
     }
 
     void sendReadyChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -528,11 +523,11 @@ namespace {
     }
 }
 
-bool ChunkStreamHandler::isPublisherUpdateDue(const ChunkStreamState &state, const Vector3i &position,
-                                              uint32_t radius, std::chrono::steady_clock::time_point now) {
+bool ChunkStreamHandler::isPublisherUpdateDue(const ChunkStreamState &state, const Vector3i &position, uint32_t radius,
+                                              std::chrono::steady_clock::time_point now) {
     if (state.mChunkSentSinceUpdate) {
-        const int64_t elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(now - state.mLastChunkSent)
-                .count();
+        const int64_t elapsed =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(now - state.mLastChunkSent).count();
         if (elapsed < ClientSideGeneration::PUBLISHER_DELAY_NANOSECONDS)
             return false;
     }
@@ -597,8 +592,8 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     }
 
     const int32_t attempts = player.hasSpawnChunksReady()
-                             ? (int32_t) owner.getChunksPerTick()
-                             : std::max((int32_t) owner.getChunksPerTick(), (int32_t) SPAWN_CHUNK_COUNT);
+                                     ? (int32_t) owner.getChunksPerTick()
+                                     : std::max((int32_t) owner.getChunksPerTick(), (int32_t) SPAWN_CHUNK_COUNT);
     loadQueuedChunks(state, owner, player, attempts);
     sendReadyChunks(state, owner, player);
     if (clientSideGeneration)

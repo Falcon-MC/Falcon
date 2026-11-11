@@ -118,8 +118,8 @@ namespace {
             if (ingredient.mEmpty)
                 storage.mIngredients.push_back({nullptr, 0, 0});
             else
-                storage.mIngredients.push_back({storage.store(ingredient.mItemId), ingredient.mAuxValue,
-                                                ingredient.mCount});
+                storage.mIngredients.push_back(
+                        {storage.store(ingredient.mItemId), ingredient.mAuxValue, ingredient.mCount});
         }
 
         const json::Value *id = source.get("id");
@@ -154,8 +154,8 @@ namespace {
     void loadShapedRecipe(RecipeStorage &storage, const json::Value &source, const TagMap &tags) {
         const json::Value *shapeData = source.get("shape");
         const json::Value *inputData = source.get("input");
-        if (shapeData == nullptr || inputData == nullptr || shapeData->mType != json::Value::Type::Array ||
-            inputData->mType != json::Value::Type::Object || shapeData->mArray.empty())
+        if (shapeData == nullptr || inputData == nullptr || shapeData->mType != json::Value::Type::Array
+            || inputData->mType != json::Value::Type::Object || shapeData->mArray.empty())
             return;
 
         std::vector<std::string> shape;
@@ -233,8 +233,8 @@ namespace {
         addVariants(storage, source, 0, 0, choices);
     }
 
-    void loadFurnaceRecipe(RecipeStorage &storage, std::vector<FurnaceRecipeData> &target,
-                           const json::Value &source, const TagMap &tags) {
+    void loadFurnaceRecipe(RecipeStorage &storage, std::vector<FurnaceRecipeData> &target, const json::Value &source,
+                           const TagMap &tags) {
         const json::Value *inputData = source.get("input");
         const json::Value *outputData = source.get("output");
         if (inputData == nullptr || inputData->mType != json::Value::Type::Array || inputData->mArray.empty()
@@ -267,8 +267,8 @@ namespace {
                 continue;
             }
             const std::string recipeId = index == 0 ? baseId : baseId + "#" + std::to_string(index);
-            target.push_back({storage.store(recipeId), storage.store(choice.mItemId), choice.mAuxValue,
-                              choice.mCount, storage.store(output->mString), outputCount, priority});
+            target.push_back({storage.store(recipeId), storage.store(choice.mItemId), choice.mAuxValue, choice.mCount,
+                              storage.store(output->mString), outputCount, priority});
         }
     }
 
@@ -287,10 +287,8 @@ namespace {
             const json::Value *reagentMeta = mix->get("reagentMeta");
             const json::Value *outputMeta = mix->get("outputMeta");
             target.push_back({storage.store(input->string()), inputMeta == nullptr ? -1 : inputMeta->integer(-1),
-                              storage.store(reagent->string()),
-                              reagentMeta == nullptr ? -1 : reagentMeta->integer(-1),
-                              storage.store(output->string()),
-                              outputMeta == nullptr ? -1 : outputMeta->integer(-1)});
+                              storage.store(reagent->string()), reagentMeta == nullptr ? -1 : reagentMeta->integer(-1),
+                              storage.store(output->string()), outputMeta == nullptr ? -1 : outputMeta->integer(-1)});
         }
     }
 
@@ -327,10 +325,10 @@ namespace {
                     continue;
 
                 std::vector<FurnaceRecipeData> &target = blockName == "furnace"
-                                                         ? storage.mFurnaceRecipes
-                                                         : (blockName == "campfire"
-                                                            ? storage.mCampfireRecipes
-                                                            : storage.mSoulCampfireRecipes);
+                                                                 ? storage.mFurnaceRecipes
+                                                                 : (blockName == "campfire"
+                                                                            ? storage.mCampfireRecipes
+                                                                            : storage.mSoulCampfireRecipes);
                 loadFurnaceRecipe(storage, target, *recipe, tags);
                 continue;
             }

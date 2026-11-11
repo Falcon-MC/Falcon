@@ -8,8 +8,17 @@ bool WaterBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:water" || identifier == "minecraft:flowing_water";
 }
 
+bool WaterBlock::isDynamic(const std::string &identifier) {
+    return identifier == "minecraft:flowing_water";
+}
+
 bool WaterBlock::isSource(const BlockState &state) {
     return matches(state.mName) && state.mStates.getInt("liquid_depth", 0) == 0;
+}
+
+int32_t WaterBlock::getTickDelay(DimensionType dimension) const {
+    (void) dimension;
+    return 5;
 }
 
 BlockState WaterBlock::source() {

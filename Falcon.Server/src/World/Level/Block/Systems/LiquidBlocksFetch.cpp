@@ -57,7 +57,7 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool hor
     // BDS LiquidPhysicsSystem (0x140FC98E0): lava first, summed current normalized in 3D
     contact.flow = contact.lava ? lavaFlow : waterFlow;
     const float flowLength = std::sqrt(contact.flow.x * contact.flow.x + contact.flow.y * contact.flow.y
-                                        + contact.flow.z * contact.flow.z);
+                                       + contact.flow.z * contact.flow.z);
     if (flowLength >= 0.0001f)
         contact.flow = Vector3f(contact.flow.x / flowLength, contact.flow.y / flowLength, contact.flow.z / flowLength);
     else
@@ -68,9 +68,8 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool hor
     const int32_t eyeBlockY = (int32_t) std::floor(eyeY);
     const int32_t eyeZ = (int32_t) std::floor(feet.z);
     const LiquidInfo eye = level.getLiquidInfo(eyeX, eyeBlockY, eyeZ);
-    const float liquidTop = eye.bubble
-                            ? (float) eyeBlockY + 1.0f
-                            : (float) eyeBlockY + 1.0f - (eye.height - 0.1111111f);
+    const float liquidTop = eye.bubble ? (float) eyeBlockY + 1.0f
+                                       : (float) eyeBlockY + 1.0f - (eye.height - 0.1111111f);
     contact.eyeSubmerged = (eye.water || eye.bubble) && eyeY < liquidTop;
     contact.eyeInWater = eye.water && !eye.bubble && eyeY < liquidTop;
 

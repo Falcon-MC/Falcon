@@ -13,8 +13,9 @@ void MovementAbilitiesSystem::tick(PlayerMovementContext &context) {
     abilities.spectator = abilities.gameType == (int32_t) GameType::Spectator;
     abilities.flying = context.player.isFlying() || abilities.spectator;
     abilities.gliding = !abilities.flying && ElytraItem::isWearingElytra(context.player)
-                         && activeState(context.player.getFlags().get(ActorFlag::Gliding), context.input.getPacket(),
-                                        PlayerAuthInputData::StartGliding, PlayerAuthInputData::StopGliding);
-    abilities.swimming = !abilities.flying && activeState(context.player.getFlags().get(ActorFlag::Swimming), context.input.getPacket(),
-                                                PlayerAuthInputData::StartSwimming, PlayerAuthInputData::StopSwimming);
+                        && activeState(context.player.getFlags().get(ActorFlag::Gliding), context.input.getPacket(),
+                                       PlayerAuthInputData::StartGliding, PlayerAuthInputData::StopGliding);
+    abilities.swimming = !abilities.flying
+                         && activeState(context.player.getFlags().get(ActorFlag::Swimming), context.input.getPacket(),
+                                        PlayerAuthInputData::StartSwimming, PlayerAuthInputData::StopSwimming);
 }

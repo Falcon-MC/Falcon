@@ -104,8 +104,7 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
             continue;
         }
 
-        const FurnaceRecipeData *recipe = CraftingRecipeTable::findCampfireRecipe(identifier, item.mDamage,
-                                                                                 _isSoul());
+        const FurnaceRecipeData *recipe = CraftingRecipeTable::findCampfireRecipe(identifier, item.mDamage, _isSoul());
         if (recipe == nullptr) {
             mInventory.setContainerItem(slot, ItemStack::air());
             mCookTimes[slot] = 0;

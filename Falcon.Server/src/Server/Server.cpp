@@ -6,6 +6,7 @@
 #include "Core/Debug/FileLogEndPoint.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerHost.h"
+#include "Server/ServerTelemetry.h"
 #include "Server/SetupWizard.h"
 
 #include <atomic>
@@ -72,8 +73,17 @@ static void setupServerLogging() {
         BedrockLog::addEndPoint(fileEndPoint);
 }
 
-static void logTelemetryNotice() {
+static void logTelemetryNotice(bool enabled) {
     LOG_INFO(LogAreaID::Server, "================ TELEMETRY MESSAGE ===================");
+    if (enabled) {
+        LOG_INFO(LogAreaID::Server, "Server Telemetry is enabled. Thank you for helping improve Falcon.");
+        LOG_INFO(LogAreaID::Server, "%s", "");
+        LOG_INFO(LogAreaID::Server, "Sent every half hour: version, system, transport, player count and limit,");
+        LOG_INFO(LogAreaID::Server, "uptime, client check counts. No address, name or identifier is sent.");
+        LOG_INFO(LogAreaID::Server, "To disable this feature, set 'emit-server-telemetry=false'");
+        LOG_INFO(LogAreaID::Server, "======================================================");
+        return;
+    }
     LOG_INFO(LogAreaID::Server, "Server Telemetry is currently not enabled. ");
     LOG_INFO(LogAreaID::Server, "Enabling this telemetry helps us improve the game.");
     LOG_INFO(LogAreaID::Server, "%s", "");
@@ -103,8 +113,14 @@ void startServer(const ServerSettings &settings) {
     if (!host.start(options))
         return;
 
-    logTelemetryNotice();
+    const PropertiesSettings &properties = host.getHandler().getProperties();
+    const bool telemetry = properties.getEmitServerTelemetry();
+    logTelemetryNotice(telemetry);
     BedrockLog::flush();
+    if (telemetry)
+        ServerTelemetry::getInstance().start(properties.getTransportLayer() == TransportLayer::NetherNet ? "nethernet"
+                                                                                                         : "raknet",
+                                             properties.getMaxPlayers());
 
     VersionChecker::checkForUpdatesAsync();
 
@@ -145,6 +161,7 @@ void startServer(const ServerSettings &settings) {
 
     gRunning.store(false);
     host.shutdown();
+    ServerTelemetry::getInstance().stop();
     BedrockLog::shutdown();
 
     // saved by now; on Windows the console thread can sit in std::getline holding the stdin lock, and a normal exit

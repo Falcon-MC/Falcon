@@ -198,12 +198,10 @@ namespace {
 
     void checkPhysics() {
         // the values of the archetype groups in the definition
-        const PhysicsCase cases[] = {
-                {"minecraft:oak_log", "bouncy", 0.9f, 0.3f, 0.01f},
-                {"minecraft:honeycomb_block", "sticky", 0.0f, 2.0f, 0.01f},
-                {"minecraft:blue_ice", "fast_sliding", 0.1f, 0.05f, 0.01f},
-                {"minecraft:white_wool", "light", 1.0f, 0.3f, 1.8f}
-        };
+        const PhysicsCase cases[] = {{"minecraft:oak_log", "bouncy", 0.9f, 0.3f, 0.01f},
+                                     {"minecraft:honeycomb_block", "sticky", 0.0f, 2.0f, 0.01f},
+                                     {"minecraft:blue_ice", "fast_sliding", 0.1f, 0.05f, 0.01f},
+                                     {"minecraft:white_wool", "light", 1.0f, 0.3f, 1.8f}};
         for (const PhysicsCase &test: cases) {
             Fixture fixture;
             MobActor &mob = fixture.cube(Vector3f(0.5f, 66.0f, 0.5f));
@@ -359,7 +357,8 @@ namespace {
             "liquid_blocks":["minecraft:water","minecraft:flowing_water","minecraft:lava","minecraft:flowing_lava"]})");
         const BuoyancySettings settings = BuoyancySystem::read(component.get());
         require(settings.mEnabled && settings.mWater && settings.mLava && !settings.mApplyGravity
-                && settings.mMovement == BuoyancyMovement::Bobbing, "the buoyant component parses");
+                        && settings.mMovement == BuoyancyMovement::Bobbing,
+                "the buoyant component parses");
 
         std::mt19937 random(1);
         approx((float) BuoyancySystem::advanceTimer(4.0, settings, Vector3f(1.0f, 0.0f, 0.0f), random), 5.0f,
@@ -393,7 +392,8 @@ namespace {
         require(condition.mSupported && condition.mOnSurface && condition.mUnderground, "surface and underground");
         require(condition.mWeight == 150, "weight 150");
         require(condition.mHerds.size() == 1 && condition.mHerds.front().mMinSize == 2
-                && condition.mHerds.front().mMaxSize == 4, "herds of 2 to 4");
+                        && condition.mHerds.front().mMaxSize == 4,
+                "herds of 2 to 4");
         require(condition.mBiomeFilter != nullptr, "a biome filter");
         const json::Value &filter = *condition.mBiomeFilter;
         const json::Value &test = filter.isArray() ? *filter.mArray.front() : filter;

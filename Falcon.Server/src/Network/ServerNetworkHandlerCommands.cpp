@@ -35,6 +35,7 @@
 #include "Server/Commands/ProfilerCommand.h"
 #include "Server/Commands/SaveCommand.h"
 #include "Server/Commands/SayCommand.h"
+#include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
@@ -186,7 +187,8 @@ namespace {
                 filter.mNameNegated = negated;
                 filter.mName = value;
             } else if (key == "c") {
-                if (negated || value.empty() || value.size() > 9 || value.find_first_not_of("0123456789") != std::string::npos)
+                if (negated || value.empty() || value.size() > 9
+                    || value.find_first_not_of("0123456789") != std::string::npos)
                     return filter;
                 filter.mLimit = (size_t) std::stoul(value);
                 if (filter.mLimit == 0)
@@ -240,6 +242,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, true));
     mCommands.registerCommand(std::make_shared<SetWorldSpawnCommand>(*this));
     mCommands.registerCommand(std::make_shared<SayCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ScriptEventCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellCommand>(*this));
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
@@ -324,8 +327,7 @@ std::vector<std::string> ServerNetworkHandler::getPlayerNames() const {
     return names;
 }
 
-std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &sender,
-                                                                 const std::string &selector) {
+std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &sender, const std::string &selector) {
     std::vector<ServerPlayer *> targets;
 
     if (selector.empty() || selector[0] != '@') {
@@ -416,6 +418,8 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
         mPluginManager->dispatch(gameModeEvent);
         if (gameModeEvent.mCancelled)
             return;
+        if (mScriptEngine.beforePlayerGameModeChange(player, previousGameMode, gameMode))
+            return;
     }
 
     player.setGameType(gameMode);
@@ -443,6 +447,7 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     if (previousGameMode != gameMode) {
         PlayerGameModeChangeAfterEvent event(player, previousGameMode, gameMode);
         mEventBus.after().mPlayerGameModeChange.emit(event);
+        mScriptEngine.onPlayerGameModeChange(player, previousGameMode, gameMode);
     }
 }
 
@@ -462,8 +467,7 @@ void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const Command
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
-                                             const std::string &key,
-                                             const std::vector<std::string> &parameters) {
+                                             const std::string &key, const std::vector<std::string> &parameters) {
     CommandOutputPacket output;
     output.mOrigin = origin;
     output.mType = CommandOutputType::AllOutput;

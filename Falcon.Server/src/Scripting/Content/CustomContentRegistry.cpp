@@ -10,6 +10,7 @@
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "World/Actor/Definition/Molang.h"
 
 #include <algorithm>
 #include <cctype>
@@ -81,6 +82,130 @@ namespace {
         readVec3(value->get("size"), box.mSize);
     }
 
+    std::string stringify(const json::Value &value) {
+        switch (value.mType) {
+            case json::Value::Type::Boolean:
+                return value.mBoolean ? "true" : "false";
+            case json::Value::Type::Number: {
+                std::ostringstream number;
+                number.precision(17);
+                number << value.mNumber;
+                return number.str();
+            }
+            case json::Value::Type::String:
+                return "\"" + json::escape(value.mString) + "\"";
+            case json::Value::Type::Array: {
+                std::string text = "[";
+                for (size_t index = 0; index < value.mArray.size(); ++index)
+                    text += (index == 0 ? "" : ",") + stringify(*value.mArray[index]);
+                return text + "]";
+            }
+            case json::Value::Type::Object: {
+                std::string text = "{";
+                for (size_t index = 0; index < value.mKeys.size(); ++index)
+                    text += (index == 0 ? "\"" : ",\"") + json::escape(value.mKeys[index])
+                            + "\":" + stringify(*value.get(value.mKeys[index]));
+                return text + "}";
+            }
+            default:
+                return "null";
+        }
+    }
+
+    // the components the client draws and collides with; the block's own, then each permutation's over them
+    void applyBlockComponents(const json::Value &components, CustomBlockDefinition &definition) {
+        const json::Value *destructible = components.get("minecraft:destructible_by_mining");
+        if (destructible != nullptr && destructible->isObject() && destructible->get("seconds_to_destroy") != nullptr) {
+            definition.mDestroyTime = (float) destructible->get("seconds_to_destroy")->number(0.5);
+            definition.mHasDestroyTime = true;
+        }
+
+        const json::Value *explosion = components.get("minecraft:destructible_by_explosion");
+        if (explosion != nullptr && explosion->isObject() && explosion->get("explosion_resistance") != nullptr) {
+            definition.mExplosionResistance = (float) explosion->get("explosion_resistance")->number(1.0);
+            definition.mHasExplosionResistance = true;
+        }
+
+        const json::Value *light = components.get("minecraft:light_emission");
+        if (light != nullptr)
+            definition.mLightEmission = light->integer(0);
+
+        const json::Value *friction = components.get("minecraft:friction");
+        if (friction != nullptr) {
+            definition.mFriction = (float) friction->number(0.6);
+            definition.mHasFriction = true;
+        }
+
+        const json::Value *material = components.get("minecraft:material_instances");
+        if (material != nullptr && material->isObject()) {
+            const json::Value *instance = material->get("*");
+            if (instance == nullptr)
+                instance = material->get("up");
+            if (instance != nullptr && instance->isObject()) {
+                if (instance->get("texture") != nullptr)
+                    definition.mTexture = instance->get("texture")->string(definition.mTexture);
+                if (instance->get("render_method") != nullptr)
+                    definition.mRenderMethod = instance->get("render_method")->string(definition.mRenderMethod);
+            }
+        }
+
+        parseBox(components.get("minecraft:collision_box"), definition.mCollision);
+        parseBox(components.get("minecraft:selection_box"), definition.mSelection);
+
+        const json::Value *geometry = components.get("minecraft:geometry");
+        if (geometry != nullptr && geometry->isString())
+            definition.mGeometry = geometry->string(definition.mGeometry);
+        else if (geometry != nullptr && geometry->isObject() && geometry->get("identifier") != nullptr)
+            definition.mGeometry = geometry->get("identifier")->string(definition.mGeometry);
+
+        const json::Value *displayName = components.get("minecraft:display_name");
+        if (displayName != nullptr && displayName->isString())
+            definition.mDisplayName = displayName->string(definition.mDisplayName);
+    }
+
+    // a list of booleans, integers or strings, or {"values": {"min", "max"}} for an integer range
+    void readStateValues(const std::string &name, const json::Value &value, std::vector<CustomBlockStateValues> &out) {
+        CustomBlockStateValues state;
+        state.mName = name;
+        if (value.isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: value.mArray) {
+                if (entry->mType == json::Value::Type::Boolean)
+                    state.mValues.push_back(Tag::ofByte(entry->mBoolean ? 1 : 0));
+                else if (entry->isNumber())
+                    state.mValues.push_back(Tag::ofInt(entry->integer(0)));
+                else if (entry->isString())
+                    state.mValues.push_back(Tag::ofString(entry->string()));
+            }
+        } else if (value.isObject() && value.get("values") != nullptr && value.get("values")->isObject()) {
+            const json::Value &range = *value.get("values");
+            const int32_t min = range.get("min") != nullptr ? range.get("min")->integer(0) : 0;
+            const int32_t max = range.get("max") != nullptr ? range.get("max")->integer(0) : 0;
+            // "Max must be greater than min"
+            for (int32_t entry = min; max > min && entry <= max; ++entry)
+                state.mValues.push_back(Tag::ofInt(entry));
+        }
+        if (!state.mValues.empty())
+            out.push_back(std::move(state));
+    }
+
+    // 1.x lists names under minecraft:custom_components; 2.x declares each one as a key holding its params
+    std::vector<CustomComponentUse> readCustomComponents(const json::Value &components) {
+        std::vector<CustomComponentUse> uses;
+        const json::Value *legacy = components.get("minecraft:custom_components");
+        if (legacy != nullptr && legacy->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: legacy->mArray) {
+                if (entry->isString())
+                    uses.push_back({entry->string(), std::string()});
+            }
+        }
+        for (const std::string &key: components.mKeys) {
+            if (key.find(':') == std::string::npos || key.compare(0, 10, "minecraft:") == 0)
+                continue;
+            uses.push_back({key, stringify(*components.get(key))});
+        }
+        return uses;
+    }
+
 }
 
 CustomContentRegistry &CustomContentRegistry::getInstance() {
@@ -98,6 +223,57 @@ bool CustomContentRegistry::isCustomBlock(const std::string &identifier) const {
             return true;
     }
     return false;
+}
+
+const CustomBlockDefinition *CustomContentRegistry::findBlock(const std::string &identifier) const {
+    for (const CustomBlockDefinition &block: mBlocks) {
+        if (block.mIdentifier == identifier)
+            return &block;
+    }
+    return nullptr;
+}
+
+std::vector<Tag> CustomContentRegistry::permutationsOf(const CustomBlockDefinition &block) {
+    std::vector<Tag> permutations(1, Tag::ofCompound());
+    for (const CustomBlockStateValues &state: block.mStates) {
+        std::vector<Tag> expanded;
+        for (const Tag &base: permutations) {
+            for (const Tag &value: state.mValues) {
+                Tag next = base;
+                next.put(state.mName, value);
+                expanded.push_back(std::move(next));
+            }
+        }
+        permutations = std::move(expanded);
+    }
+    return permutations;
+}
+
+Tag CustomContentRegistry::defaultStatesOf(const CustomBlockDefinition &block) {
+    Tag states = Tag::ofCompound();
+    for (const CustomBlockStateValues &state: block.mStates) {
+        if (!state.mValues.empty())
+            states.put(state.mName, state.mValues.front());
+    }
+    return states;
+}
+
+std::vector<CustomComponentUse> CustomContentRegistry::componentsFor(const CustomBlockDefinition &block,
+                                                                     const Tag &states) {
+    std::vector<CustomComponentUse> uses = block.mCustomComponents;
+    for (const CustomBlockPermutation &permutation: block.mPermutations) {
+        if (permutation.mCustomComponents.empty() || !Molang::evaluateForBlock(permutation.mCondition, states).isTrue())
+            continue;
+        for (const CustomComponentUse &use: permutation.mCustomComponents) {
+            const auto same = std::find_if(uses.begin(), uses.end(),
+                                           [&](const CustomComponentUse &other) { return other.mName == use.mName; });
+            if (same != uses.end())
+                *same = use;
+            else
+                uses.push_back(use);
+        }
+    }
+    return uses;
 }
 
 const ActorPropertyDescription *CustomActorDefinition::findProperty(const std::string &name) const {
@@ -175,8 +351,8 @@ const CustomItemDefinition *CustomContentRegistry::registerItem(const CustomItem
 const CustomBlockDefinition *CustomContentRegistry::registerBlock(const CustomBlockDefinition &block,
                                                                   ItemDefinitionRegistry &items,
                                                                   BlockDefinitionRegistry &blocks) {
-    if (mFrozen || hasIdentifier(block.mIdentifier) || items.getDefinition(block.mIdentifier) != nullptr ||
-        blocks.getDefinition(block.mIdentifier) != nullptr)
+    if (mFrozen || hasIdentifier(block.mIdentifier) || items.getDefinition(block.mIdentifier) != nullptr
+        || blocks.getDefinition(block.mIdentifier) != nullptr)
         return nullptr;
 
     _registerBlock(block, items, blocks);
@@ -199,7 +375,6 @@ void CustomContentRegistry::load(const BehaviorPackManager &packs, ItemDefinitio
         _loadPackActors(pack.mPath);
         _loadPackRecipes(pack.mPath);
     }
-
 }
 
 namespace {
@@ -251,7 +426,7 @@ void CustomContentRegistry::_loadPackRecipes(const std::string &packPath) {
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -336,7 +511,7 @@ void CustomContentRegistry::_loadPackActors(const std::string &packPath) {
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -428,7 +603,7 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -506,7 +681,8 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
             // and a repair_amount: number or Molang expression
             const json::Value *repairable = components->get("minecraft:repairable");
             const json::Value *repairItems = repairable != nullptr && repairable->isObject()
-                                             ? repairable->get("repair_items") : nullptr;
+                                                     ? repairable->get("repair_items")
+                                                     : nullptr;
             if (repairItems != nullptr && repairItems->isArray()) {
                 for (const std::unique_ptr<json::Value> &entry: repairItems->mArray) {
                     if (!entry->isObject())
@@ -536,13 +712,7 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                 }
             }
 
-            const json::Value *customComponents = components->get("minecraft:custom_components");
-            if (customComponents != nullptr && customComponents->isArray()) {
-                for (const std::unique_ptr<json::Value> &entry: customComponents->mArray) {
-                    if (entry->isString())
-                        definition.mCustomComponents.push_back(entry->string());
-                }
-            }
+            definition.mCustomComponents = readCustomComponents(*components);
 
             const json::Value *digger = components->get("minecraft:digger");
             if (digger != nullptr && digger->isObject()) {
@@ -595,8 +765,8 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
     stored.mNetworkId = mNextItemNetworkId++;
 
     Tag componentData = _buildItemComponentData(stored, items);
-    items.registerDefinition(std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mNetworkId, true,
-                                                              componentData));
+    items.registerDefinition(
+            std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mNetworkId, true, componentData));
 
     const std::string identifier = stored.mIdentifier;
     const std::string name = stored.mDisplayName;
@@ -728,7 +898,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
         return;
 
     for (const std::filesystem::directory_entry &entry:
-                 std::filesystem::recursive_directory_iterator(directory, error)) {
+         std::filesystem::recursive_directory_iterator(directory, error)) {
         if (!entry.is_regular_file() || entry.path().extension() != ".json")
             continue;
 
@@ -763,16 +933,55 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                 if (menuCategory->get("group") != nullptr)
                     definition.mCreativeGroup = menuCategory->get("group")->string();
             }
+            const json::Value *states = description2->get("states");
+            if (states != nullptr && states->isObject()) {
+                for (const std::string &name: states->mKeys)
+                    readStateValues(name, *states->get(name), definition.mStates);
+            }
+        }
+
+        const json::Value *permutations = block->get("permutations");
+        if (permutations != nullptr && permutations->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: permutations->mArray) {
+                const json::Value *condition = entry->isObject() ? entry->get("condition") : nullptr;
+                if (condition == nullptr || !condition->isString())
+                    continue;
+                CustomBlockPermutation permutation;
+                permutation.mCondition = condition->string();
+                const json::Value *permutationComponents = entry->get("components");
+                if (permutationComponents != nullptr && permutationComponents->isObject()) {
+                    permutation.mCustomComponents = readCustomComponents(*permutationComponents);
+                    permutation.mComponents = stringify(*permutationComponents);
+                }
+                definition.mPermutations.push_back(std::move(permutation));
+            }
         }
 
         const json::Value *components = block->get("components");
         if (components != nullptr && components->isObject()) {
-            const json::Value *customComponents = components->get("minecraft:custom_components");
-            if (customComponents != nullptr && customComponents->isArray()) {
-                for (const std::unique_ptr<json::Value> &entry: customComponents->mArray) {
-                    if (entry->isString())
-                        definition.mCustomComponents.push_back(entry->string());
+            definition.mCustomComponents = readCustomComponents(*components);
+
+            const json::Value *consumer = components->get("minecraft:redstone_consumer");
+            // sub_147A9F440, sub_145C7C0F0: both descriptions start zeroed, min_power 0, min_fall_distance 0
+            if (consumer != nullptr && consumer->isObject()) {
+                definition.mRedstoneConsumer = true;
+                if (consumer->get("min_power") != nullptr) {
+                    // sub_142A6A5A0: outside 0-15 is error 64; the block loader's mask (sub_1431DD4C0) drops the block
+                    const double power = consumer->get("min_power")->number(0.0);
+                    if (power < 0.0 || power > 15.0) {
+                        LOG_WARN(LogAreaID::Script, "Skipping custom block %s: min_power outside 0-15",
+                                 definition.mIdentifier.c_str());
+                        continue;
+                    }
+                    definition.mRedstoneMinPower = (int32_t) power;
                 }
+            }
+
+            const json::Value *fallOn = components->get("minecraft:entity_fall_on");
+            if (fallOn != nullptr && fallOn->isObject()) {
+                definition.mEntityFallOn = true;
+                if (fallOn->get("min_fall_distance") != nullptr)
+                    definition.mMinFallDistance = (float) fallOn->get("min_fall_distance")->number(0.0);
             }
 
             const json::Value *tick = components->get("minecraft:tick");
@@ -787,45 +996,10 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                     definition.mTickLooping = tick->get("looping")->boolean(true);
             }
 
-            const json::Value *destructible = components->get("minecraft:destructible_by_mining");
-            if (destructible != nullptr && destructible->isObject() &&
-                destructible->get("seconds_to_destroy") != nullptr) {
-                definition.mDestroyTime = (float) destructible->get("seconds_to_destroy")->number(0.5);
-                definition.mHasDestroyTime = true;
-            }
-
-            const json::Value *explosion = components->get("minecraft:destructible_by_explosion");
-            if (explosion != nullptr && explosion->isObject() &&
-                explosion->get("explosion_resistance") != nullptr) {
-                definition.mExplosionResistance = (float) explosion->get("explosion_resistance")->number(1.0);
-                definition.mHasExplosionResistance = true;
-            }
-
-            const json::Value *light = components->get("minecraft:light_emission");
-            if (light != nullptr)
-                definition.mLightEmission = light->integer(0);
-
-            const json::Value *friction = components->get("minecraft:friction");
-            if (friction != nullptr) {
-                definition.mFriction = (float) friction->number(0.6);
-                definition.mHasFriction = true;
-            }
-
-            const json::Value *material = components->get("minecraft:material_instances");
-            if (material != nullptr && material->isObject()) {
-                const json::Value *instance = material->get("*");
-                if (instance == nullptr)
-                    instance = material->get("up");
-                if (instance != nullptr && instance->isObject()) {
-                    if (instance->get("texture") != nullptr)
-                        definition.mTexture = instance->get("texture")->string(definition.mTexture);
-                    if (instance->get("render_method") != nullptr)
-                        definition.mRenderMethod = instance->get("render_method")->string(definition.mRenderMethod);
-                }
-            }
-
-            parseBox(components->get("minecraft:collision_box"), definition.mCollision);
-            parseBox(components->get("minecraft:selection_box"), definition.mSelection);
+            applyBlockComponents(*components, definition);
+            const json::Value *placement = components->get("minecraft:placement_filter");
+            if (placement != nullptr && placement->isObject())
+                definition.mPlacementFilter = BlockPlacementFilter::parse(*placement, definition.mIdentifier);
         }
 
         _registerBlock(definition, items, blocks);
@@ -844,10 +1018,16 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     CustomBlockDefinition stored = block;
     stored.mVanillaBlockId = mNextBlockRuntimeId++;
     stored.mItemNetworkId = mNextItemNetworkId++;
-    const Tag states = Tag::ofCompound();
+    const Tag states = defaultStatesOf(stored);
     stored.mNetworkHash = BlockStateHasher::hash(stored.mIdentifier, states);
 
+    // hashed runtime ids: one definition per permutation, the default first
     blocks.registerDefinition(std::make_shared<BlockDefinition>(stored.mIdentifier, stored.mNetworkHash, states));
+    for (const Tag &permutation: permutationsOf(stored)) {
+        if (!(permutation == states))
+            blocks.registerDefinition(std::make_shared<BlockDefinition>(
+                    stored.mIdentifier, BlockStateHasher::hash(stored.mIdentifier, permutation), permutation));
+    }
 
     int32_t blockCategoryId = 1;
     if (stored.mMenuCategory == "nature")
@@ -882,16 +1062,16 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     blockItemData.putInt("id", stored.mItemNetworkId);
     blockItemData.put("components", blockComponents);
 
-    items.registerDefinition(std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mItemNetworkId, true,
-                                                              blockItemData));
+    items.registerDefinition(
+            std::make_shared<ItemDefinition>(stored.mIdentifier, stored.mItemNetworkId, true, blockItemData));
 
     BlockPropertyData property;
     property.mName = stored.mIdentifier;
     property.mProperties = _buildBlockPropertyNbt(stored);
     mBlockProperties.push_back(property);
 
-    StringToItemParser::getInstance().registerBlock(stored.mIdentifier, [stored]() {
-        return Block(stored.mNetworkHash, stored.mIdentifier, stored.mDisplayName, Tag::ofCompound());
+    StringToItemParser::getInstance().registerBlock(stored.mIdentifier, [stored, states]() {
+        return Block(stored.mNetworkHash, stored.mIdentifier, stored.mDisplayName, states);
     });
 
     mBlocks.push_back(stored);
@@ -928,22 +1108,21 @@ namespace {
     Tag selectionBoxComponent(const CustomBlockBox &box) {
         Tag component = Tag::ofCompound();
         component.putByte("enabled", box.mEnabled ? 1 : 0);
-        component.put("origin", Tag::ofList(Tag::Type::Float,
-                                            {Tag::ofFloat(box.mOrigin[0]), Tag::ofFloat(box.mOrigin[1]),
-                                             Tag::ofFloat(box.mOrigin[2])}));
-        component.put("size", Tag::ofList(Tag::Type::Float,
-                                          {Tag::ofFloat(box.mSize[0]), Tag::ofFloat(box.mSize[1]),
-                                           Tag::ofFloat(box.mSize[2])}));
+        component.put("origin",
+                      Tag::ofList(Tag::Type::Float, {Tag::ofFloat(box.mOrigin[0]), Tag::ofFloat(box.mOrigin[1]),
+                                                     Tag::ofFloat(box.mOrigin[2])}));
+        component.put("size", Tag::ofList(Tag::Type::Float, {Tag::ofFloat(box.mSize[0]), Tag::ofFloat(box.mSize[1]),
+                                                             Tag::ofFloat(box.mSize[2])}));
         return component;
     }
 
-    Tag fullBlockGeometry() {
+    Tag geometryComponent(const std::string &identifier) {
         Tag geometry = Tag::ofCompound();
         geometry.put("bone_visibility", Tag::ofCompound());
         geometry.putString("culling", "");
         geometry.putString("culling_layer", "minecraft:culling_layer.undefined");
         geometry.putString("culling_shape", "");
-        geometry.putString("identifier", "minecraft:geometry.full_block");
+        geometry.putString("identifier", identifier);
         geometry.putByte("ignoreGeometryForIsSolid", 1);
         geometry.putByte("needsLegacyTopRotation", 0);
         geometry.putByte("useLegacyBlockLightAbsorption", 0);
@@ -970,44 +1149,90 @@ namespace {
     }
 }
 
+namespace {
+    // the client NBT of a definition's components
+    Tag clientComponents(const CustomBlockDefinition &block) {
+        Tag components = Tag::ofCompound();
+
+        Tag frictionComponent = Tag::ofCompound();
+        frictionComponent.putFloat("value", block.mHasFriction ? block.mFriction : 0.4f);
+        components.put("minecraft:friction", frictionComponent);
+
+        Tag destructibleByExplosion = Tag::ofCompound();
+        destructibleByExplosion.putInt("explosion_resistance",
+                                       block.mHasExplosionResistance ? (int32_t) block.mExplosionResistance : 0);
+        components.put("minecraft:destructible_by_explosion", destructibleByExplosion);
+
+        Tag destructibleByMining = Tag::ofCompound();
+        destructibleByMining.putFloat("value", block.mHasDestroyTime ? block.mDestroyTime : 0.0f);
+        components.put("minecraft:destructible_by_mining", destructibleByMining);
+
+        Tag lightDampening = Tag::ofCompound();
+        lightDampening.putByte("lightLevel", 15);
+        components.put("minecraft:light_dampening", lightDampening);
+
+        Tag lightEmission = Tag::ofCompound();
+        lightEmission.putByte("emission", (int8_t) block.mLightEmission);
+        components.put("minecraft:light_emission", lightEmission);
+
+        components.putString("minecraft:map_color", "#ffffff");
+
+        components.put("minecraft:geometry", geometryComponent(block.mGeometry));
+        components.put("minecraft:material_instances", materialInstancesComponent(block));
+        components.put("minecraft:collision_box", collisionBoxComponent(block.mCollision));
+        components.put("minecraft:selection_box", selectionBoxComponent(block.mSelection));
+
+        Tag displayName = Tag::ofCompound();
+        displayName.putString("value", block.mDisplayName);
+        components.put("minecraft:display_name", displayName);
+        return components;
+    }
+
+    // a permutation sends only what it declares, in the client form of the block's own components
+    Tag permutationComponents(const CustomBlockDefinition &block, const std::string &declared) {
+        Tag components = Tag::ofCompound();
+        const std::unique_ptr<json::Value> json = json::parse(declared);
+        if (json == nullptr || !json->isObject())
+            return components;
+
+        CustomBlockDefinition overlay = block;
+        applyBlockComponents(*json, overlay);
+        const Tag full = clientComponents(overlay);
+        for (const std::string &key: json->mKeys) {
+            const Tag *component = full.get(key);
+            if (component != nullptr)
+                components.put(key, *component);
+        }
+        return components;
+    }
+}
+
 Tag CustomContentRegistry::_buildBlockPropertyNbt(const CustomBlockDefinition &block) {
     Tag properties = Tag::ofCompound();
-
-    Tag components = Tag::ofCompound();
-
-    Tag frictionComponent = Tag::ofCompound();
-    frictionComponent.putFloat("value", block.mHasFriction ? block.mFriction : 0.4f);
-    components.put("minecraft:friction", frictionComponent);
-
-    Tag destructibleByExplosion = Tag::ofCompound();
-    destructibleByExplosion.putInt("explosion_resistance",
-                                   block.mHasExplosionResistance ? (int32_t) block.mExplosionResistance : 0);
-    components.put("minecraft:destructible_by_explosion", destructibleByExplosion);
-
-    Tag destructibleByMining = Tag::ofCompound();
-    destructibleByMining.putFloat("value", block.mHasDestroyTime ? block.mDestroyTime : 0.0f);
-    components.put("minecraft:destructible_by_mining", destructibleByMining);
-
-    Tag lightDampening = Tag::ofCompound();
-    lightDampening.putByte("lightLevel", 15);
-    components.put("minecraft:light_dampening", lightDampening);
-
-    Tag lightEmission = Tag::ofCompound();
-    lightEmission.putByte("emission", (int8_t) block.mLightEmission);
-    components.put("minecraft:light_emission", lightEmission);
-
-    components.putString("minecraft:map_color", "#ffffff");
-
-    components.put("minecraft:geometry", fullBlockGeometry());
-    components.put("minecraft:material_instances", materialInstancesComponent(block));
-    components.put("minecraft:collision_box", collisionBoxComponent(block.mCollision));
-    components.put("minecraft:selection_box", selectionBoxComponent(block.mSelection));
-
-    Tag displayName = Tag::ofCompound();
-    displayName.putString("value", block.mDisplayName);
-    components.put("minecraft:display_name", displayName);
-
+    const Tag components = clientComponents(block);
     properties.put("components", components);
+
+    // sub_1431BD560: properties [{name, enum}], permutations [{condition, components}]
+    if (!block.mStates.empty()) {
+        Tag states = Tag::ofList(Tag::Type::Compound);
+        for (const CustomBlockStateValues &state: block.mStates) {
+            Tag property = Tag::ofCompound();
+            property.putString("name", state.mName);
+            property.put("enum", Tag::ofList(state.mValues.front().getType(), state.mValues));
+            states.addToList(property);
+        }
+        properties.put("properties", states);
+    }
+    if (!block.mPermutations.empty()) {
+        Tag permutations = Tag::ofList(Tag::Type::Compound);
+        for (const CustomBlockPermutation &permutation: block.mPermutations) {
+            Tag entry = Tag::ofCompound();
+            entry.putString("condition", permutation.mCondition);
+            entry.put("components", permutationComponents(block, permutation.mComponents));
+            permutations.addToList(entry);
+        }
+        properties.put("permutations", permutations);
+    }
 
     Tag menuCategory = Tag::ofCompound();
     menuCategory.putString("category", block.mMenuCategory);

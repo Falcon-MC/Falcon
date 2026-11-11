@@ -93,7 +93,7 @@ void AbstractSlimeActor::_split(ServerNetworkHandler &owner, Level &level) {
     for (int index = 0; index < count; ++index) {
         const float dx = ((float) (index % 2) - 0.5f) * offset;
         const float dz = ((float) (index / 2) - 0.5f) * offset;
-        owner.spawnActor(level, getTypeId(),Vector3f(position.x + dx, position.y + 0.5f, position.z + dz),
+        owner.spawnActor(level, getTypeId(), Vector3f(position.x + dx, position.y + 0.5f, position.z + dz),
                          [childSize](ServerActor &actor) {
                              static_cast<AbstractSlimeActor &>(actor).setSizeVariant(childSize);
                          });
@@ -110,7 +110,8 @@ int32_t AbstractSlimeActor::_nextJumpDelay() const {
         maximum = (float) delay->mArray[1]->number(minimum);
     }
 
-    float seconds = maximum > minimum ? std::uniform_real_distribution<float>(minimum, maximum)(slimeRandom()) : minimum;
+    float seconds = maximum > minimum ? std::uniform_real_distribution<float>(minimum, maximum)(slimeRandom())
+                                      : minimum;
     if (mAggressive)
         seconds /= AGGRESSIVE_DELAY_DIVISOR;
     return std::max(1, (int32_t) std::lround(seconds * TICKS_PER_SECOND));
@@ -181,8 +182,10 @@ void AbstractSlimeActor::_attackTouchingPlayers(ServerNetworkHandler &owner) {
             continue;
 
         const Vector3f target = player.getPosition();
-        if (target.x + PLAYER_HALF_WIDTH < position.x - halfWidth || target.x - PLAYER_HALF_WIDTH > position.x + halfWidth
-            || target.z + PLAYER_HALF_WIDTH < position.z - halfWidth || target.z - PLAYER_HALF_WIDTH > position.z + halfWidth
+        if (target.x + PLAYER_HALF_WIDTH < position.x - halfWidth
+            || target.x - PLAYER_HALF_WIDTH > position.x + halfWidth
+            || target.z + PLAYER_HALF_WIDTH < position.z - halfWidth
+            || target.z - PLAYER_HALF_WIDTH > position.z + halfWidth
             || target.y + PLAYER_HEIGHT < position.y - ATTACK_RANGE || target.y > position.y + height)
             continue;
 

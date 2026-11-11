@@ -23,7 +23,9 @@ public:
         return false;
     }
 
-    int getSizeVariant() const { return mSizeVariant; }
+    int getSizeVariant() const {
+        return mSizeVariant;
+    }
 
     void setSizeVariant(int variant);
 
@@ -31,7 +33,9 @@ public:
 
     float getDefaultMaxHealth() const override;
 
-    int getExperienceDrop() const override { return mSizeVariant; }
+    int getExperienceDrop() const override {
+        return mSizeVariant;
+    }
 
     virtual float getContactDamage() const = 0;
 

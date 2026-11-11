@@ -62,7 +62,8 @@ void SunlightBurn::tick(ServerNetworkHandler &owner, ServerActor &actor) {
         return;
 
     const float brightness = (float) std::max(0, level.getSkyLightAt(blockX, blockY, blockZ)
-                                                 - level.getSkyLightSubtracted()) / MAX_LIGHT;
+                                                         - level.getSkyLightSubtracted())
+                             / MAX_LIGHT;
     if (brightness <= MIN_BRIGHTNESS || touchesWater(level, actor))
         return;
 

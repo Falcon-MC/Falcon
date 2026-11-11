@@ -14,9 +14,11 @@ public:
     float sampleFloat(float x, float y, float z) const;
 
 private:
-    double _sample(int32_t sectionX, int32_t sectionY, int32_t sectionZ, double localX, double localY, double localZ, double fadeLocalY) const;
+    double _sample(int32_t sectionX, int32_t sectionY, int32_t sectionZ, double localX, double localY, double localZ,
+                   double fadeLocalY) const;
 
-    float _sampleFloat(int32_t sectionX, int32_t sectionY, int32_t sectionZ, float localX, float localY, float localZ) const;
+    float _sampleFloat(int32_t sectionX, int32_t sectionY, int32_t sectionZ, float localX, float localY,
+                       float localZ) const;
 
     float mOriginXFloat;
     float mOriginYFloat;

@@ -16,13 +16,7 @@ class MobActor;
 class ServerNetworkHandler;
 
 // order of the dweller_role names of minecraft:dweller
-enum class DwellerRole : int32_t {
-    Inhabitant = 0,
-    Defender = 1,
-    Hostile = 2,
-    Passive = 3,
-    None = 4
-};
+enum class DwellerRole : int32_t { Inhabitant = 0, Defender = 1, Hostile = 2, Passive = 3, None = 4 };
 
 // created and removed by its level's VillageManager
 class Village : public std::enable_shared_from_this<Village> {

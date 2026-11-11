@@ -74,8 +74,7 @@ const PushableByEntityPreset *PushableByEntity::findPreset(ServerNetworkHandler 
     return nullptr;
 }
 
-bool PushableByEntity::inReach(const PushableByEntityPreset &preset, float offsetX, float offsetZ,
-                               float pusherWidth) {
+bool PushableByEntity::inReach(const PushableByEntityPreset &preset, float offsetX, float offsetZ, float pusherWidth) {
     // sub_143A0AF90
     const float distance = std::sqrt(offsetX * offsetX + offsetZ * offsetZ);
     return preset.mMinDistance <= distance && distance - pusherWidth * 0.5f <= preset.mMaxDistance;

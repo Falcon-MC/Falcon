@@ -63,8 +63,7 @@ private:
 
     bool _less(int32_t left, int32_t right) const;
 
-    void _buildPath(int32_t endIndex, bool reachesTarget, const Vector3f &start, const Vector3f &target,
-                    Path &path);
+    void _buildPath(int32_t endIndex, bool reachesTarget, const Vector3f &start, const Vector3f &target, Path &path);
 
     NodeEvaluator mEvaluator;
     std::vector<Node> mNodes;

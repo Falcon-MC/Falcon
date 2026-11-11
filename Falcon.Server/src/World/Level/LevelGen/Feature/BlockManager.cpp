@@ -12,12 +12,10 @@ namespace {
     }
 }
 
-BlockManager::BlockManager(Level &level) : mLevel(&level) {
-}
+BlockManager::BlockManager(Level &level) : mLevel(&level) {}
 
 int64_t BlockManager::hashXYZ(int32_t x, int32_t y, int32_t z) {
-    return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37)
-           | (((int64_t) (z + 30000000) & 0x3FFFFFFLL) << 11)
+    return (((int64_t) (x + 30000000) & 0x3FFFFFFLL) << 37) | (((int64_t) (z + 30000000) & 0x3FFFFFFLL) << 11)
            | (((int64_t) (y + 400) & 0x3FFLL) << 1);
 }
 
@@ -53,7 +51,8 @@ const BlockState &BlockManager::_getBlockAt(int32_t x, int32_t y, int32_t z, int
 }
 
 const BlockState *BlockManager::getCachedBlock(int32_t x, int32_t y, int32_t z, int32_t layer) const {
-    const std::unordered_map<int64_t, const BlockState *>::const_iterator cached = mCaches.find(hashXYZ(x, y, z) | layer);
+    const std::unordered_map<int64_t, const BlockState *>::const_iterator cached = mCaches.find(hashXYZ(x, y, z)
+                                                                                                | layer);
     if (cached == mCaches.end())
         return nullptr;
 

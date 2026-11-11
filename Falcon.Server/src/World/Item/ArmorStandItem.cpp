@@ -26,14 +26,14 @@ namespace {
 
     AxisAlignedBB actorBox(const Vector3f &position, const ActorSize &size) {
         const float half = size.mWidth * 0.5f;
-        return AxisAlignedBB(position.x - half, position.y, position.z - half,
-                             position.x + half, position.y + size.mHeight, position.z + half);
+        return AxisAlignedBB(position.x - half, position.y, position.z - half, position.x + half,
+                             position.y + size.mHeight, position.z + half);
     }
 
     // the game tests the two whole blocks the stand stands in, against every actor
     bool isAreaFree(ServerNetworkHandler &owner, Level &level, const Vector3i &target) {
-        const AxisAlignedBB area((float) target.x, (float) target.y, (float) target.z,
-                                 (float) target.x + 1.0f, (float) target.y + 2.0f, (float) target.z + 1.0f);
+        const AxisAlignedBB area((float) target.x, (float) target.y, (float) target.z, (float) target.x + 1.0f,
+                                 (float) target.y + 2.0f, (float) target.z + 1.0f);
 
         for (auto &entry: owner.getPlayers()) {
             ServerPlayer &other = entry.second;
@@ -95,8 +95,7 @@ bool ArmorStandItem::matches(const std::string &identifier) {
 }
 
 bool ArmorStandItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                  const Vector3i &blockPosition, int32_t face,
-                                  const Vector3f &clickPosition) const {
+                                  const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) clickPosition;
 
     if (face == 0)
@@ -127,9 +126,7 @@ bool ArmorStandItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     const Vector3f spawnPosition((float) target.x + 0.5f, (float) target.y, (float) target.z + 0.5f);
     const float yaw = placedYaw(player.getRotation().y);
     ServerActor *stand = owner.spawnActor(level, ArmorStandActor::IDENTIFIER, spawnPosition,
-                                          [&](ServerActor &actor) {
-                                              actor.setRotation(Vector3f(0.0f, yaw, yaw));
-                                          });
+                                          [&](ServerActor &actor) { actor.setRotation(Vector3f(0.0f, yaw, yaw)); });
     if (stand == nullptr)
         return false;
 
@@ -143,8 +140,7 @@ bool ArmorStandItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
 
         PlayerInventory &inventory = player.getInventory();
         inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     return true;

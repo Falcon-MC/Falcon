@@ -10,27 +10,32 @@ FALCON_REGISTER_BLOCK(ReplaceableBlock, 330);
 
 namespace {
     const std::unordered_set<std::string> &replaceableIdentifiers() {
-        static const std::unordered_set<std::string> identifiers = {
-                "minecraft:bubble_column", "minecraft:bush", "minecraft:crimson_roots", "minecraft:warped_roots",
-                "minecraft:nether_sprouts", "minecraft:large_fern",
-                "minecraft:tall_grass", "minecraft:short_dry_grass", "minecraft:tall_dry_grass",
-                "minecraft:leaf_litter", "minecraft:glow_lichen", "minecraft:sculk_vein", "minecraft:resin_clump",
-                "minecraft:seagrass", "minecraft:vine"
-        };
+        static const std::unordered_set<std::string> identifiers = {"minecraft:bubble_column",
+                                                                    "minecraft:bush",
+                                                                    "minecraft:crimson_roots",
+                                                                    "minecraft:warped_roots",
+                                                                    "minecraft:nether_sprouts",
+                                                                    "minecraft:large_fern",
+                                                                    "minecraft:tall_grass",
+                                                                    "minecraft:short_dry_grass",
+                                                                    "minecraft:tall_dry_grass",
+                                                                    "minecraft:leaf_litter",
+                                                                    "minecraft:glow_lichen",
+                                                                    "minecraft:sculk_vein",
+                                                                    "minecraft:resin_clump",
+                                                                    "minecraft:seagrass",
+                                                                    "minecraft:vine"};
         return identifiers;
     }
 
     const std::unordered_set<std::string> &shearsOnlyIdentifiers() {
-        static const std::unordered_set<std::string> identifiers = {
-                "minecraft:vine", "minecraft:nether_sprouts"
-        };
+        static const std::unordered_set<std::string> identifiers = {"minecraft:vine", "minecraft:nether_sprouts"};
         return identifiers;
     }
 
     const std::unordered_set<std::string> &shearsOrSilkTouchIdentifiers() {
-        static const std::unordered_set<std::string> identifiers = {
-                "minecraft:bush", "minecraft:short_dry_grass", "minecraft:tall_dry_grass"
-        };
+        static const std::unordered_set<std::string> identifiers = {"minecraft:bush", "minecraft:short_dry_grass",
+                                                                    "minecraft:tall_dry_grass"};
         return identifiers;
     }
 

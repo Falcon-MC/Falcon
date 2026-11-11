@@ -98,8 +98,7 @@ namespace {
 
     float coneHeight(float distance, int32_t radius, float scale, float bluntness) {
         const double ratio = (double) (std::max(bluntness, distance) / (float) radius) * 0.384;
-        const double shape = std::pow(ratio, 4.0 / 3.0) * 0.75 - std::pow(ratio, 2.0 / 3.0)
-                             - std::log(ratio) / 3.0;
+        const double shape = std::pow(ratio, 4.0 / 3.0) * 0.75 - std::pow(ratio, 2.0 / 3.0) - std::log(ratio) / 3.0;
         return (float) radius * (float) (std::max(shape * scale, 0.0) / 0.384);
     }
 
@@ -128,8 +127,8 @@ namespace {
                 if (IceCavesSupport::isLava(manager.getBlockAt(speleothem.mX, y, speleothem.mZ)))
                     return false;
 
-                if (isCircleMostlyEmbedded(manager, wind.offsetX(speleothem.mX, y), y,
-                                           wind.offsetZ(speleothem.mZ, y), speleothem.mRadius)) {
+                if (isCircleMostlyEmbedded(manager, wind.offsetX(speleothem.mX, y), y, wind.offsetZ(speleothem.mZ, y),
+                                           speleothem.mRadius)) {
                     speleothem.mY = y;
                     return true;
                 }
@@ -221,15 +220,17 @@ namespace {
         const bool stalagmiteSettled = settleRoot(manager, stalagmite, wind);
 
         if (stalactiteSettled) {
-            const int32_t tipY = stalactite.mY - (int32_t) coneHeight(0.0f, stalactite.mRadius, stalactite.mScale,
-                                                                      stalactite.mBluntness);
+            const int32_t tipY = stalactite.mY
+                                 - (int32_t) coneHeight(0.0f, stalactite.mRadius, stalactite.mScale,
+                                                        stalactite.mBluntness);
             if (tipY > LevelChunk::MIN_Y)
                 placeCone(manager, random, stalactite, wind);
         }
 
         if (stalagmiteSettled) {
-            const int32_t tipY = stalagmite.mY + (int32_t) coneHeight(0.0f, stalagmite.mRadius, stalagmite.mScale,
-                                                                      stalagmite.mBluntness);
+            const int32_t tipY = stalagmite.mY
+                                 + (int32_t) coneHeight(0.0f, stalagmite.mRadius, stalagmite.mScale,
+                                                        stalagmite.mBluntness);
             if (tipY < LevelChunk::MAX_Y)
                 placeCone(manager, random, stalagmite, wind);
         }

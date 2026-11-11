@@ -392,9 +392,8 @@ bool SubChunk::isLayerEmpty(int layer) const {
     return true;
 }
 
-void SubChunk::_writeStorage(BinaryStream &stream, bool persistent,
-                            const std::vector<const BlockState *> &palette,
-                            const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const {
+void SubChunk::_writeStorage(BinaryStream &stream, bool persistent, const std::vector<const BlockState *> &palette,
+                             const PaletteIndices &blocks, const BlockNetworkIdMap *blockIds) const {
     const int bitsPerBlock = _bitsPerBlock(palette.size());
 
     stream.putByte((unsigned char) ((bitsPerBlock << 1) | (persistent ? 0 : 1)));
@@ -453,9 +452,8 @@ void SubChunk::packRaw(std::string &out) const {
 
 bool SubChunk::unpackRaw(RawPack::Reader &in) {
     _forgetPaletteQueries();
-    return in.get(mY) && in.getVector(mPalette) && !mPalette.empty() && mBlocks.unpackRaw(in)
-           && in.getVector(mPalette2) && mBlocks2.unpackRaw(in) && in.getVector(mBiomePalette)
-           && !mBiomePalette.empty() && mBiomes.unpackRaw(in);
+    return in.get(mY) && in.getVector(mPalette) && !mPalette.empty() && mBlocks.unpackRaw(in) && in.getVector(mPalette2)
+           && mBlocks2.unpackRaw(in) && in.getVector(mBiomePalette) && !mBiomePalette.empty() && mBiomes.unpackRaw(in);
 }
 
 void SubChunk::writePersistent(BinaryStream &stream) const {
@@ -472,7 +470,7 @@ void SubChunk::writePersistent(BinaryStream &stream) const {
 }
 
 bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette,
-                           PaletteIndices &blocks, bool *replacedUnknown) {
+                            PaletteIndices &blocks, bool *replacedUnknown) {
     const unsigned char header = stream.getByte();
     const int bitsPerBlock = header >> 1;
     if (bitsPerBlock < 0 || bitsPerBlock > 16)
@@ -509,8 +507,7 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const Bloc
         const Tag tag = NbtIo::readTag(stream, NbtVariant::LittleEndian);
         const Tag *storedStates = tag.get("states");
         BlockStateData stored(tag.getString("name", "minecraft:air"),
-                              storedStates != nullptr && storedStates->isCompound() ? *storedStates
-                                                                                    : Tag::ofCompound(),
+                              storedStates != nullptr && storedStates->isCompound() ? *storedStates : Tag::ofCompound(),
                               tag.getInt("version"));
 
         try {
@@ -522,8 +519,8 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const Bloc
         const std::string &name = stored.getName();
         const Tag *states = &stored.getStates();
 
-        if (VanillaBlocks::fromIdentifier(name) == nullptr &&
-            !CustomContentRegistry::getInstance().isCustomBlock(name)) {
+        if (VanillaBlocks::fromIdentifier(name) == nullptr
+            && !CustomContentRegistry::getInstance().isCustomBlock(name)) {
             LOG_WARN(LogAreaID::Level, "Replaced unknown block %s with air while loading chunk data", name.c_str());
             palette.push_back(airState());
             if (replacedUnknown != nullptr)

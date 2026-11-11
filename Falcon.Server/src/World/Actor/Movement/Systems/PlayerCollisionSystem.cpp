@@ -165,10 +165,12 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &travel = context.travel;
 
-    travel.box = boxAt(state.start, context.pose.mHeight);
+    if (!context.player.findSimulatedBox(state.start, context.pose.mHeight, travel.box))
+        travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
     // spectators and creative flight ignore cobweb, powder snow and berry bush slowdown
-    const bool slowdownImmune = abilities.spectator || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
+    const bool slowdownImmune = abilities.spectator
+                                || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
     travel.isStuck = !slowdownImmune && stuckMultiplier(context.level, context.player, travel.box, stuck);
     if (travel.isStuck) {
         state.velocity.x *= stuck.x;
@@ -176,17 +178,20 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
         state.velocity.z *= stuck.z;
     }
 
-    if (!abilities.flying && context.pose.mSneaking && !context.pose.mCrawling && state.onGround && state.velocity.y <= 0.0f)
+    if (!abilities.flying && context.pose.mSneaking && !context.pose.mCrawling && state.onGround
+        && state.velocity.y <= 0.0f)
         avoidEdge(context.level, context.player, travel.box, state.velocity);
 
     if (abilities.spectator) {
         travel.box = travel.box.offset(state.velocity.x, state.velocity.y, state.velocity.z);
         travel.moved.mMoved = state.velocity;
     } else {
-        travel.moved = ActorCollisionSystem::move(context.level, travel.box, state.velocity, STEP_HEIGHT, state.onGround,
-                                                  &context.player);
+        travel.moved = ActorCollisionSystem::move(context.level, travel.box, state.velocity, STEP_HEIGHT,
+                                                  state.onGround, &context.player);
     }
-    state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY, travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+    state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY,
+                               travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+    context.player.setSimulatedBox(travel.box, state.simulated);
     const bool wasOnGround = state.onGround;
     state.onGround = travel.moved.mOnGround;
     ClientAcceptanceSystem::tick(context);
@@ -204,7 +209,9 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     if (travel.moved.mCollidedZ)
         state.velocity.z = 0.0f;
     if (travel.moved.mCollidedY)
-        state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak ? 0.0f : landingVelocity(under, state.velocity.y);
+        state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak
+                                   ? 0.0f
+                                   : landingVelocity(under, state.velocity.y);
 
     // a wall bump on a climbable lifts after the move; that tick skips gravity and vertical drag
     if (!abilities.flying && !abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava

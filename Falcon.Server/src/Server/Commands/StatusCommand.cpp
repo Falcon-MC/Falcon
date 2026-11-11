@@ -23,9 +23,8 @@ bool StatusCommand::execute(CommandOrigin &sender, const std::vector<std::string
     (void) arguments;
 
     const double millisecondsPerTick = mHandler.getMillisecondsPerTick();
-    const double ticksPerSecond = millisecondsPerTick <= 0.0
-                                  ? TICKS_PER_SECOND
-                                  : std::min(TICKS_PER_SECOND, 1000.0 / millisecondsPerTick);
+    const double ticksPerSecond = millisecondsPerTick <= 0.0 ? TICKS_PER_SECOND
+                                                             : std::min(TICKS_PER_SECOND, 1000.0 / millisecondsPerTick);
 
     int online = 0;
     for (const auto &entry: mHandler.getPlayers()) {

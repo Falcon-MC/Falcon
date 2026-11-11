@@ -147,14 +147,18 @@ public:
               mMaxStackSize(data.mMaxStackSize), mIsBlock(false), mMaxDurability(data.mMaxDurability),
               mToolType(data.mToolType), mToolTier(data.mToolTier), mHarvestLevel(data.mHarvestLevel),
               mAttackDamage(data.mAttackDamage), mArmorSlot(data.mArmorSlot), mArmorTier(data.mArmorTier),
-              mArmorPoints(data.mArmorPoints), mArmorToughness(data.mArmorToughness),
-              mNutrition(data.mNutrition), mSaturation(data.mSaturation) {
+              mArmorPoints(data.mArmorPoints), mArmorToughness(data.mArmorToughness), mNutrition(data.mNutrition),
+              mSaturation(data.mSaturation) {
         initializeComponents();
     }
 
-    int32_t getTypeId() const { return mTypeId; }
+    int32_t getTypeId() const {
+        return mTypeId;
+    }
 
-    const std::string &getIdentifier() const { return mIdentifier; }
+    const std::string &getIdentifier() const {
+        return mIdentifier;
+    }
 
     const std::string &getName() const {
         const auto *component = mComponents.get<DisplayNameItemComponent>();
@@ -166,39 +170,63 @@ public:
         return component == nullptr ? mMaxStackSize : component->getValue();
     }
 
-    bool isBlock() const { return mIsBlock; }
+    bool isBlock() const {
+        return mIsBlock;
+    }
 
-    const Block &getBlock() const { return mBlock; }
+    const Block &getBlock() const {
+        return mBlock;
+    }
 
     int32_t getMaxDurability() const {
         const auto *component = mComponents.get<DurabilityItemComponent>();
         return component == nullptr ? mMaxDurability : component->getMaxDurability();
     }
 
-    bool isDurable() const { return mMaxDurability > 0; }
+    bool isDurable() const {
+        return mMaxDurability > 0;
+    }
 
-    ToolType getToolType() const { return mToolType; }
+    ToolType getToolType() const {
+        return mToolType;
+    }
 
-    bool isTool() const { return mToolType != ToolType::None; }
+    bool isTool() const {
+        return mToolType != ToolType::None;
+    }
 
-    int32_t getToolTier() const { return mToolTier; }
+    int32_t getToolTier() const {
+        return mToolTier;
+    }
 
-    int32_t getHarvestLevel() const { return mHarvestLevel; }
+    int32_t getHarvestLevel() const {
+        return mHarvestLevel;
+    }
 
     int32_t getAttackDamage() const {
         const auto *component = mComponents.get<DamageItemComponent>();
         return component == nullptr ? mAttackDamage : component->getDamage();
     }
 
-    ArmorSlot getArmorSlot() const { return mArmorSlot; }
+    ArmorSlot getArmorSlot() const {
+        return mArmorSlot;
+    }
 
-    bool isArmor() const { return mArmorSlot != ArmorSlot::None; }
+    bool isArmor() const {
+        return mArmorSlot != ArmorSlot::None;
+    }
 
-    int32_t getArmorTier() const { return mArmorTier; }
+    int32_t getArmorTier() const {
+        return mArmorTier;
+    }
 
-    int32_t getArmorPoints() const { return mArmorPoints; }
+    int32_t getArmorPoints() const {
+        return mArmorPoints;
+    }
 
-    int32_t getArmorToughness() const { return mArmorToughness; }
+    int32_t getArmorToughness() const {
+        return mArmorToughness;
+    }
 
     int32_t getNutrition() const {
         const auto *component = mComponents.get<FoodItemComponent>();
@@ -215,18 +243,26 @@ public:
         return component != nullptr && component->isEdible();
     }
 
-    ItemComponents &getComponents() { return mComponents; }
+    ItemComponents &getComponents() {
+        return mComponents;
+    }
 
-    const ItemComponents &getComponents() const { return mComponents; }
+    const ItemComponents &getComponents() const {
+        return mComponents;
+    }
 
     template <typename T>
-    T *getComponent() { return mComponents.get<T>(); }
+    T *getComponent() {
+        return mComponents.get<T>();
+    }
 
     template <typename T>
-    const T *getComponent() const { return mComponents.get<T>(); }
+    const T *getComponent() const {
+        return mComponents.get<T>();
+    }
 
     template <typename T, typename... Args>
-    T &addComponent(Args &&... args) {
+    T &addComponent(Args &&...args) {
         return mComponents.emplace<T>(std::forward<Args>(args)...);
     }
 

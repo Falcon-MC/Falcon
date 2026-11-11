@@ -37,18 +37,24 @@ public:
     // the client predicts its own exit point; the next input reports it once
     void allowDismountPosition() {
         mDismountPending = true;
+        mDismountInputsLeft = DISMOUNT_INPUTS;
     }
 
     // true when the input must move the player straight to the reported position
     bool takeDismountPosition(const Vector3f &simulated, const Vector3f &reported);
 
+    // true while the client still reports the seat after a dismount: the input holds no movement yet
+    bool stillSeated(const Vector3f &start, const Vector3f &reported);
+
     // proves a correction reached the client: a network stack latency request follows it, its ack means the
     // correction arrived too; inputs still diverging after it mean a drop; the ack is handled on arrival while inputs
     // queue: only inputs newer than the last one received with it can carry the correction
-    bool armCorrectionCheck() {
+    bool armCorrectionCheck(const Vector3f &corrected, const Vector3f &reported) {
         if (mCorrectionCheck != CorrectionCheck::None)
             return false;
         mCorrectionCheck = CorrectionCheck::AwaitingAcknowledgement;
+        mCorrectedPosition = corrected;
+        mDroppedPosition = reported;
         return true;
     }
 
@@ -61,12 +67,21 @@ public:
 
     // inputs ignoring an acknowledged correction so far; consecutive only: inputs the queue discarded (burst
     // after lag or blink) were skipped by the simulation, their divergence says nothing: start over
-    uint32_t noteInputAfterCorrection(int64_t inputTick, bool diverging) {
+    // a client that took the correction moves on from it, even when its blocks differ and it diverges again; a
+    // dropped one moves on from where it was
+    uint32_t noteInputAfterCorrection(int64_t inputTick, bool diverging, const Vector3f &reported) {
         const bool consecutive = inputTick == mLastInputTick + 1;
         mLastInputTick = inputTick;
         if (mCorrectionCheck != CorrectionCheck::Acknowledged || inputTick <= mAcknowledgedInputTick)
             return 0;
-        if (!diverging || !consecutive) {
+        const auto squared = [](const Vector3f &from, const Vector3f &to) {
+            const float x = to.x - from.x;
+            const float y = to.y - from.y;
+            const float z = to.z - from.z;
+            return x * x + y * y + z * z;
+        };
+        const bool tookCorrection = squared(reported, mCorrectedPosition) < squared(reported, mDroppedPosition);
+        if (!diverging || !consecutive || tookCorrection) {
             mCorrectionCheck = CorrectionCheck::None;
             mIgnoredCorrections = 0;
             return 0;
@@ -78,18 +93,19 @@ private:
     ClientAcceptanceThresholdsComponent mClientAcceptance;
     MovementTraceComponent mTrace;
     uint64_t mLastCorrectionTick = 0;
-    enum class CorrectionCheck : uint8_t {
-        None,
-        AwaitingAcknowledgement,
-        Acknowledged
-    };
+    enum class CorrectionCheck : uint8_t { None, AwaitingAcknowledgement, Acknowledged };
 
     CorrectionCheck mCorrectionCheck = CorrectionCheck::None;
     uint32_t mIgnoredCorrections = 0;
     int64_t mAcknowledgedInputTick = 0;
+    Vector3f mCorrectedPosition;
+    Vector3f mDroppedPosition;
     int64_t mLastInputTick = 0;
     uint8_t mAdjustmentCount = 0;
     bool mDismountPending = false;
+    // the exit lands a tick after the leave request: inputs still at the seat keep the allowance
+    static constexpr int32_t DISMOUNT_INPUTS = 4;
+    int32_t mDismountInputsLeft = 0;
     bool mHasMovementEffect = false;
     uint64_t mLastMovementEffectTick = 0;
 };

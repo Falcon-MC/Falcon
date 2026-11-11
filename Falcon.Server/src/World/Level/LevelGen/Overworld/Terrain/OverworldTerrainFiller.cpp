@@ -4,7 +4,9 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -138,10 +140,8 @@ namespace {
 
 OverworldTerrainFiller::OverworldTerrainFiller(const XoroshiroPositionalFactory &noiseFactory,
                                                const OverworldClimate &climate)
-        : mClimate(climate),
-          mVeinFactory(forkedFactory(noiseFactory, "minecraft:ore")),
-          mDeepslateFactory(forkedFactory(noiseFactory, "minecraft:depth_based_layer")),
-          mAquiferNoises(noiseFactory) {
+        : mClimate(climate), mVeinFactory(forkedFactory(noiseFactory, "minecraft:ore")),
+          mDeepslateFactory(forkedFactory(noiseFactory, "minecraft:depth_based_layer")), mAquiferNoises(noiseFactory) {
     // one stream for the three stacks, in this order (sub_145C2AAB0)
     XoroshiroRandom terrain = noiseFactory.hashOf("minecraft:terrain");
     mMinLimitNoise = createOctaves(terrain, 16);
@@ -252,8 +252,8 @@ float OverworldTerrainFiller::_caves(float density, float x, float y, float z) c
     const float height = std::fabs(y * -0.125f + elevation);
     const float thickness2d = halfMapped(thicknessNoise) * 0.6999999f + 0.6f;
     const float distance = height - thickness2d;
-    const float spaghetti2d = clampUnit(std::fmax(distance * distance * distance,
-                                                  thickness2d * -0.083f + std::fabs(rarity2d * spaghetti)));
+    const float spaghetti2d = clampUnit(
+            std::fmax(distance * distance * distance, thickness2d * -0.083f + std::fabs(rarity2d * spaghetti)));
     const float underground = std::fmin(cheeseAndLayer, std::fmin(entrances, roughnessTerm + spaghetti2d));
 
     const float rarenessNoise = mPillarRareness->getValue(x, y, z);
@@ -369,7 +369,8 @@ OverworldAquifer OverworldTerrainFiller::createAquifer() const {
     return OverworldAquifer(mAquiferNoises, mClimate, SEA_LEVEL);
 }
 
-void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer) const {
+void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer,
+                                  const TerrainBeard *beard) const {
     const int32_t chunkX = chunk.getX();
     const int32_t chunkZ = chunk.getZ();
     const int32_t baseX = chunkX << 4;
@@ -386,17 +387,24 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
     CellInterpolator veinToggle;
     CellInterpolator veinRidgeA;
     CellInterpolator veinRidgeB;
-    CellInterpolator *const interpolators[] = {
-            &density, &noodleToggle, &noodleThickness, &noodleRidgeA, &noodleRidgeB, &veinToggle, &veinRidgeA,
-            &veinRidgeB
-    };
+    CellInterpolator *const interpolators[] = {&density,      &noodleToggle, &noodleThickness, &noodleRidgeA,
+                                               &noodleRidgeB, &veinToggle,   &veinRidgeA,      &veinRidgeB};
     const std::vector<float> *const sources[] = {
-            &corners.mDensity, &corners.mNoodleToggle, &corners.mNoodleThickness, &corners.mNoodleRidgeA,
-            &corners.mNoodleRidgeB, &corners.mVeinToggle, &corners.mVeinRidgeA, &corners.mVeinRidgeB
-    };
+            &corners.mDensity,      &corners.mNoodleToggle, &corners.mNoodleThickness, &corners.mNoodleRidgeA,
+            &corners.mNoodleRidgeB, &corners.mVeinToggle,   &corners.mVeinRidgeA,      &corners.mVeinRidgeB};
 
     // cells above the preliminary surface and sea level stop at the first one with a solid bottom corner
     const int32_t seaLevelCell = (uint8_t) (SEA_LEVEL - MIN_Y) >> 3;
+
+    // a beard keeps every cell up to its highest reach and is sampled only in the cells it spans
+    const bool bearded = beard != nullptr && !beard->empty();
+    int32_t beardCell = 0;
+    if (bearded) {
+        int32_t top = std::max(beard->getMaxY(), MIN_Y);
+        if (beard->getMaxY() > MIN_Y + CELL_COUNT_Y * 8)
+            top = MIN_Y + CELL_COUNT_Y * 8;
+        beardCell = std::min(std::max((top - MIN_Y) / 8, 0), CELL_COUNT_Y);
+    }
 
     for (int32_t cellX = 0; cellX < 4; cellX++) {
         for (int32_t cellZ = 0; cellZ < 4; cellZ++) {
@@ -404,6 +412,8 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
             uint8_t lowestTop = (uint8_t) ((surface - MIN_Y) / 8);
             if ((uint8_t) seaLevelCell > lowestTop)
                 lowestTop = (uint8_t) seaLevelCell;
+            if (lowestTop <= (uint8_t) beardCell)
+                lowestTop = (uint8_t) beardCell;
 
             int32_t topCell = CELL_COUNT_Y;
             if (lowestTop <= 38) {
@@ -420,6 +430,8 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
             }
 
             for (int32_t cellY = 0; cellY < topCell; cellY++) {
+                const int32_t cellBottom = MIN_Y + cellY * 8;
+                const bool beardCellY = bearded && cellBottom + 7 >= beard->getMinY() && cellBottom <= beard->getMaxY();
                 for (size_t i = 0; i < 8; i++)
                     interpolators[i]->load(*sources[i], cellX, cellZ, cellY);
 
@@ -457,6 +469,9 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
                                 value = std::fmin(std::fmax(ridgeB, ridgeA), value);
                             }
 
+                            if (beardCellY)
+                                value = (float) (beard->compute(worldX, y, worldZ) + (double) value);
+
                             OverworldAquifer::Substance substance;
                             if (value <= 0.0f) {
                                 substance = aquifer.compute(worldX, y, worldZ);
@@ -486,7 +501,8 @@ void OverworldTerrainFiller::fill(LevelChunk &chunk, int32_t *heightMap, Overwor
                                         XoroshiroRandom random = mVeinFactory.at(worldX, y, worldZ);
                                         if (random.nextFloat() <= 0.7f
                                             && std::fmax(std::fabs(veinRidgeA.value()) + -0.08f,
-                                                         std::fabs(veinRidgeB.value()) + -0.08f) < 0.0f) {
+                                                         std::fabs(veinRidgeB.value()) + -0.08f)
+                                                       < 0.0f) {
                                             const float roll = random.nextFloat();
                                             const float richnessT = (strength + -0.4f) / 0.20000002f;
                                             float richness = 0.1f;

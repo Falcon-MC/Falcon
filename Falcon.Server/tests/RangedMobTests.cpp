@@ -72,7 +72,7 @@ namespace {
             return *mob;
         }
 
-        template<typename T>
+        template <typename T>
         std::vector<T *> all() {
             std::vector<T *> found;
             for (auto &entry: mOwner.getActors()) {
@@ -125,8 +125,18 @@ namespace {
         require(arrows.size() == 1, "one arrow");
         const ProjectileData &data = arrows.front()->getProjectileData();
         require(data.mImpactDamage == -1 && data.mBaseDamage == 2.0f, "mob_arrow damage scales with speed by 2");
-        require(closeTo(speedOf(*arrows.front()), 1.6f, 0.25f), "mob_arrow power 1.6");
         require(arrows.front()->getPosition().z > 1.0f, "spawned a block toward the target");
+
+        // the gaussian spread scales a single shot's speed: average many
+        const int32_t shots = 64;
+        for (int32_t shot = 1; shot < shots; shot++)
+            require(MobShooter::shootAt(field.mOwner, skeleton, pig), "the skeleton shoots again");
+        const std::vector<ArrowActor *> volley = field.all<ArrowActor>();
+        require(volley.size() == (size_t) shots, "one arrow per shot");
+        float total = 0.0f;
+        for (const ArrowActor *arrow: volley)
+            total += speedOf(*arrow);
+        require(closeTo(total / (float) shots, 1.6f, 0.1f), "mob_arrow power 1.6");
     }
 
     void drownedTrident() {
@@ -176,14 +186,14 @@ namespace {
                                         {"components", "minecraft:shooter", "aux_val"});
         require(stray.integer() == 19, "stray shoots slowness arrows");
 
-        const json::Value &bogged = path(EntityDefinitions::find("minecraft:bogged"),
-                                         {"component_groups", "minecraft:ranged_attack", "minecraft:shooter",
-                                          "aux_val"});
+        const json::Value &bogged = path(
+                EntityDefinitions::find("minecraft:bogged"),
+                {"component_groups", "minecraft:ranged_attack", "minecraft:shooter", "aux_val"});
         require(bogged.integer() == 26, "bogged shoots poison arrows");
 
-        const json::Value &pillager = path(EntityDefinitions::find("minecraft:pillager"),
-                                           {"component_groups", "minecraft:ranged_attack",
-                                            "minecraft:behavior.ranged_attack", "attack_radius"});
+        const json::Value &pillager = path(
+                EntityDefinitions::find("minecraft:pillager"),
+                {"component_groups", "minecraft:ranged_attack", "minecraft:behavior.ranged_attack", "attack_radius"});
         require(pillager.integer() == 8, "pillager attack radius");
     }
 }

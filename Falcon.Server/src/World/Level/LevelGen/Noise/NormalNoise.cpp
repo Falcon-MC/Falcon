@@ -5,13 +5,13 @@
 
 namespace {
 
-// float 0x3F8251FB in the game (dword_14F279BE0)
-constexpr float INPUT_FACTOR = 1.01812684535980224609375f;
+    // float 0x3F8251FB in the game (dword_14F279BE0)
+    constexpr float INPUT_FACTOR = 1.01812684535980224609375f;
 
 }
 
 NormalNoise::NormalNoise(IRandom &random, int32_t firstOctave, const std::vector<float> &amplitudes)
-    : mFirst(nullptr), mSecond(nullptr), mValueFactor(0.0f), mMaxValue(0.0) {
+        : mFirst(nullptr), mSecond(nullptr), mValueFactor(0.0f), mMaxValue(0.0) {
     int32_t min = 0;
     int32_t max = 0;
     const std::vector<double> octaveAmplitudes = _octaveAmplitudes(amplitudes, min, max);
@@ -23,7 +23,7 @@ NormalNoise::NormalNoise(IRandom &random, int32_t firstOctave, const std::vector
 }
 
 NormalNoise::NormalNoise(std::mt19937 &random, int32_t firstOctave, const std::vector<float> &amplitudes)
-    : mFirst(nullptr), mSecond(nullptr), mValueFactor(0.0f), mMaxValue(0.0) {
+        : mFirst(nullptr), mSecond(nullptr), mValueFactor(0.0f), mMaxValue(0.0) {
     int32_t min = 0;
     int32_t max = 0;
     const std::vector<double> octaveAmplitudes = _octaveAmplitudes(amplitudes, min, max);
@@ -35,7 +35,7 @@ NormalNoise::NormalNoise(std::mt19937 &random, int32_t firstOctave, const std::v
 }
 
 NormalNoise::NormalNoise(std::shared_ptr<PerlinNoise> first, std::shared_ptr<PerlinNoise> second, float valueFactor)
-    : mFirst(std::move(first)), mSecond(std::move(second)), mValueFactor(valueFactor), mMaxValue(0.0) {
+        : mFirst(std::move(first)), mSecond(std::move(second)), mValueFactor(valueFactor), mMaxValue(0.0) {
     mMaxValue = (mFirst->maxValue() + mSecond->maxValue()) * mValueFactor;
 }
 

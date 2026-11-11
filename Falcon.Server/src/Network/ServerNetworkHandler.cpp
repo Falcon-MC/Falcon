@@ -1,5 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "Core/Text/StringUtil.h"
+
 #include "World/Actor/Movement/PlayerMovementRegistry.h"
 
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -23,6 +25,8 @@
 #include "Network/ConnectionRequest.h"
 #include "Network/AuthKeyProvider.h"
 #include "Network/TransportFactory.h"
+#include "Network/ClientAttestation.h"
+#include "Server/ServerTelemetry.h"
 #include "Network/NetherNet/NetherNetInstance.h"
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -87,6 +91,8 @@
 #include "World/Actor/Player/PlayerAbility.h"
 #include "Protocol/Packets/StartGamePacket.h"
 #include "Protocol/Packets/SetTimePacket.h"
+#include "Protocol/Packets/SetDifficultyPacket.h"
+#include "Protocol/Packets/SetSpawnPositionPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
 #include "Protocol/Packets/DeathInfoPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -200,11 +206,16 @@ namespace {
                     --mDepth;
                     return valid;
                 }
-                case '"': return parseString();
-                case 't': return parseLiteral("true");
-                case 'f': return parseLiteral("false");
-                case 'n': return parseLiteral("null");
-                default: return parseNumber();
+                case '"':
+                    return parseString();
+                case 't':
+                    return parseLiteral("true");
+                case 'f':
+                    return parseLiteral("false");
+                case 'n':
+                    return parseLiteral("null");
+                default:
+                    return parseNumber();
             }
         }
 
@@ -284,8 +295,8 @@ namespace {
                         if (!std::isxdigit((unsigned char) mValue[mPosition++]))
                             return false;
                     }
-                } else if (escape != '"' && escape != '\\' && escape != '/' && escape != 'b' &&
-                           escape != 'f' && escape != 'n' && escape != 'r' && escape != 't') {
+                } else if (escape != '"' && escape != '\\' && escape != '/' && escape != 'b' && escape != 'f'
+                           && escape != 'n' && escape != 'r' && escape != 't') {
                     return false;
                 }
             }
@@ -342,7 +353,30 @@ namespace {
         int mDepth = 0;
     };
 
+    // width * height * 4 bytes, or no image at all
+    bool isValidSkinImage(const SkinImageData &image) {
+        if (image.mWidth == 0 && image.mHeight == 0)
+            return image.mData.empty();
+        if (image.mWidth <= 0 || image.mHeight <= 0)
+            return false;
+        return image.mData.size() == (size_t) image.mWidth * (size_t) image.mHeight * 4;
+    }
+
+    // the cape and the animations are relayed to every player like the skin: each image must be the
+    // size its header announces, which the packet itself then bounds
+    bool isValidSkinExtras(const SerializedSkin &skin) {
+        if (!isValidSkinImage(skin.mCapeData))
+            return false;
+        for (const SkinAnimationData &animation: skin.mAnimations) {
+            if (!isValidSkinImage(animation.mImage))
+                return false;
+        }
+        return true;
+    }
+
     bool isValidSkin(const SerializedSkin &skin) {
+        if (!isValidSkinExtras(skin))
+            return false;
         if (skin.mSkinData.mWidth <= 0 || skin.mSkinData.mHeight <= 0)
             return skin.mPersona && !skin.mPersonaPieces.empty();
         if (skin.mSkinData.mWidth > 128 || skin.mSkinData.mHeight > 128)
@@ -364,11 +398,23 @@ namespace {
     }
 }
 
+void ServerNetworkHandler::boundSkin(SerializedSkin &skin) {
+    if (isValidSkinExtras(skin))
+        return;
+
+    // a login is not refused over its cosmetics: an image that lies about its size is dropped
+    if (!isValidSkinImage(skin.mCapeData))
+        skin.mCapeData = SkinImageData();
+    skin.mAnimations.erase(
+            std::remove_if(skin.mAnimations.begin(), skin.mAnimations.end(),
+                           [](const SkinAnimationData &animation) { return !isValidSkinImage(animation.mImage); }),
+            skin.mAnimations.end());
+}
+
 ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                                            TransportLayer transport)
-        : mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers),
-          mIsListening(false), mNextRuntimeId(1),
-          mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
+        : mCodecContext(mBlockDefinitions, mItemDefinitions), mMaxPlayers(maxPlayers), mIsListening(false),
+          mNextRuntimeId(1), mPlayerData(ServerPaths::file("players")), mOps(ServerPaths::file("ops.txt")),
           mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
           mIpBanList(ServerPaths::file("banned-ips.json")) {
     mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
@@ -383,9 +429,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
         mNetworkHandler.reset(new NetworkHandler(std::move(netherNet)));
         mNetworkHandler->setProfiler(&mProfiler);
         mNetworkHandler->addListener(this);
-        mNetworkHandler->setContextResolver([this](const NetworkIdentifier &id) {
-            return &getCodecContext(id);
-        });
+        mNetworkHandler->setContextResolver([this](const NetworkIdentifier &id) { return &getCodecContext(id); });
     }
 
     mAnnouncement.mServerName = serverName;
@@ -422,6 +466,14 @@ unsigned short ServerNetworkHandler::getBoundPort() const {
     return mNetherNetInstance != nullptr ? mNetherNetInstance->getBoundPort() : 0;
 }
 
+bool ServerNetworkHandler::isSignalingSecure() const {
+    return mNetherNetInstance != nullptr && mNetherNetInstance->isSignalingSecure();
+}
+
+unsigned short ServerNetworkHandler::getExtraSignalingPort() const {
+    return mNetherNetInstance != nullptr ? mNetherNetInstance->getExtraSignalingPort() : 0;
+}
+
 int ServerNetworkHandler::_getServerViewDistance() const {
     int distance = mProperties.getViewDistance();
 
@@ -452,8 +504,11 @@ void ServerNetworkHandler::_registerVanillaDefinitions() {
 }
 
 ServerNetworkHandler::~ServerNetworkHandler() {
-    try { stopServerListening(); } catch (...) {
-        if (mNetworkHandler != nullptr) mNetworkHandler->disconnect();
+    try {
+        stopServerListening();
+    } catch (...) {
+        if (mNetworkHandler != nullptr)
+            mNetworkHandler->disconnect();
     }
 
     if (mNetworkHandler != nullptr)
@@ -480,7 +535,23 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mProperties = properties;
     mPlayerIdleTimeoutTicks = (int64_t) mProperties.getPlayerIdleTimeout() * TICKS_PER_MINUTE;
 
+    // encryption is what proves a client holds the key in its token: without it a login seen once replays
+    if (mProperties.getOnlineMode() && !mProperties.getNetworkEncryption())
+        LOG_WARN(LogAreaID::Server, "online-mode is on but network-encryption is off: a login captured elsewhere "
+                                    "can be replayed here. Turn network-encryption back on");
+
     if (mNetherNetInstance != nullptr) {
+        mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
+        mNetherNetInstance->setAnonymousLanClientsAllowed(mProperties.getAllowLanWithoutIdentity());
+        // the verdict comes back later, see the tick: the connection is not held for it
+        mNetherNetInstance->setNegotiationFailureObserver([](int errorCode, int clientCheck) {
+            if (clientCheck != 0)
+                ServerTelemetry::getInstance().countFailure(ServerTelemetry::FailureStage::OfferCheck, clientCheck);
+            else
+                ServerTelemetry::getInstance().countFailure(ServerTelemetry::FailureStage::Offer, errorCode);
+        });
+        mNetherNetInstance->setConnectionObserver(
+                [](const nethernet::Connection &connection) { ClientAttestation::getInstance().inspect(connection); });
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
             data.mServerName = mProperties.getServerName();
@@ -494,11 +565,46 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
             data.mAcceptsSelfSignedAuth = !mProperties.getOnlineMode();
             return data;
         });
+
+        const std::string certificate = mProperties.getSignalingCertificate();
+        const std::string privateKey = mProperties.getSignalingPrivateKey();
+        const bool certificatePair = !certificate.empty() && !privateKey.empty();
+        if (certificate.empty() != privateKey.empty())
+            LOG_WARN(LogAreaID::Server, "signaling-certificate and signaling-private-key go together, both are "
+                                        "ignored");
+        if (certificatePair)
+            mNetherNetInstance->setTlsCertificate(ServerPaths::file(certificate), ServerPaths::file(privateKey));
+        else
+            mNetherNetInstance->setTlsCertificate(std::string(), std::string());
+        mNetherNetInstance->setExtraSignalingPort(mProperties.getSignalingExtraPort());
+
+        const std::string acmeDomain = acme::normalizeDomain(mProperties.getSignalingAcmeDomain());
+        const std::string acmeDirectory = mProperties.getSignalingAcmeDirectory();
+        acme::ChallengeType challenge = acme::ChallengeType::TlsAlpn01;
+        acme::parseChallengeType(mProperties.getSignalingAcmeChallenge(), challenge);
+        mNetherNetInstance->disableAcme();
+        if (acmeDomain.empty() || certificatePair) {
+            if (!acmeDomain.empty())
+                LOG_WARN(LogAreaID::Server, "signaling-certificate is set, signaling-acme-domain is ignored");
+        } else if (!acme::isDomain(acmeDomain)) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-domain must be a public domain name such as "
+                                        "play.example.org, ACME is off");
+        } else if (acmeDirectory.rfind("https://", 0) != 0) {
+            LOG_WARN(LogAreaID::Server, "signaling-acme-directory must be an https:// URL, ACME is off");
+        } else {
+            acme::ManagerSettings acmeSettings;
+            acmeSettings.mClient.mDirectoryUrl = acmeDirectory;
+            acmeSettings.mClient.mDomain = acmeDomain;
+            acmeSettings.mClient.mEmail = mProperties.getSignalingAcmeEmail();
+            acmeSettings.mClient.mChallenge = challenge;
+            acmeSettings.mStorageDirectory = ServerPaths::file("certificates");
+            mNetherNetInstance->enableAcme(acmeSettings);
+        }
     }
 
     const int64_t levelSeed = properties.getLevelSeed().empty()
-                              ? randomSeed()
-                              : OverworldGenerator::parseSeed(properties.getLevelSeed());
+                                      ? randomSeed()
+                                      : OverworldGenerator::parseSeed(properties.getLevelSeed());
 
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
@@ -585,8 +691,7 @@ void ServerNetworkHandler::_validatePackDependencies() {
         const std::vector<std::string> behaviorUuids = mBehaviorPacks.getLoadedUuids();
         available.insert(available.end(), behaviorUuids.begin(), behaviorUuids.end());
 
-        const size_t removed = mResourcePacks.pruneUnsatisfied(available)
-                               + mBehaviorPacks.pruneUnsatisfied(available);
+        const size_t removed = mResourcePacks.pruneUnsatisfied(available) + mBehaviorPacks.pruneUnsatisfied(available);
         if (removed == 0)
             break;
     }
@@ -617,7 +722,12 @@ void ServerNetworkHandler::stopServerListening() {
     mIsListening = false;
     struct DisconnectOnExit {
         NetworkHandler *handler;
-        ~DisconnectOnExit() { try { handler->disconnect(); } catch (...) {} }
+        ~DisconnectOnExit() {
+            try {
+                handler->disconnect();
+            } catch (...) {
+            }
+        }
     } disconnectOnExit{mNetworkHandler.get()};
 
     std::exception_ptr error;
@@ -639,7 +749,8 @@ void ServerNetworkHandler::stopServerListening() {
             ServerPlayer &player = entry.second;
 
             finish([this, &player]() {
-                if (!player.getName().empty()) _savePlayerData(player, true);
+                if (!player.getName().empty())
+                    _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
                 _disconnect(entry.first, DisconnectReason::Shutdown, player.localize("falcon.disconnect.disconnected"));
@@ -663,7 +774,8 @@ void ServerNetworkHandler::stopServerListening() {
     finish([this]() { mNetworkHandler->disconnect(); });
 
     LOG_INFO(LogAreaID::Server, "Server stopped.");
-    if (error) std::rethrow_exception(error);
+    if (error)
+        std::rethrow_exception(error);
 }
 
 void ServerNetworkHandler::tick(bool paused) {
@@ -695,7 +807,8 @@ void ServerNetworkHandler::tick(bool paused) {
             std::lock_guard<std::mutex> lock(mMainThreadTaskMutex);
             tasks.swap(mMainThreadTasks);
         }
-        for (const auto &task: tasks) task();
+        for (const auto &task: tasks)
+            task();
         for (Level *level: getLevels()) {
             level->drainCompletedChunks();
             level->processGeneratedChanges();
@@ -813,6 +926,10 @@ void ServerNetworkHandler::tick(bool paused) {
         _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
+        for (Level *level: world->getLevels()) {
+            if (Dimension::isCustom(level->getDimensionType()))
+                _tickDimension(*world, *level);
+        }
     }
 
     const std::vector<Level *> levels = getLevels();
@@ -845,7 +962,12 @@ void ServerNetworkHandler::tick(bool paused) {
 
     std::vector<std::pair<NetworkIdentifier, std::string>> timedOut;
     std::vector<NetworkIdentifier> idle;
+    std::vector<std::pair<NetworkIdentifier, int>> unanswered;
+    const bool unofficialClientsAllowed = mProperties.getAllowUnofficialClients();
     for (auto &entry: mPlayers) {
+        const int failedCheck = unofficialClientsAllowed ? 0 : mClientProbes.tick(*this, entry.second, mCurrentTick);
+        if (failedCheck != 0)
+            unanswered.emplace_back(entry.first, failedCheck);
         entry.second.getAcknowledgements().flush(*this, entry.first);
         if (entry.second.getAcknowledgements().hasTimedOut(mCurrentTick))
             timedOut.emplace_back(entry.first, entry.second.localize("falcon.disconnect.timedOut"));
@@ -857,6 +979,42 @@ void ServerNetworkHandler::tick(bool paused) {
         _disconnect(entry.first, DisconnectReason::Timeout, entry.second);
     for (const NetworkIdentifier &entry: idle)
         _disconnect(entry, DisconnectReason::KickedForIdle, IDLE_MESSAGE);
+    for (const auto &entry: unanswered) {
+        const ServerPlayer *refused = _getPlayer(entry.first);
+        ServerTelemetry::getInstance().countCheck(entry.second);
+        ServerTelemetry::getInstance().countRefusal(entry.second, refused != nullptr ? refused->getBuildPlatform() : 0);
+        _rejectBadPacket(entry.first, "client check " + std::to_string(entry.second));
+    }
+
+    if (!unofficialClientsAllowed) {
+        // a second or so: the verdict often comes back before the login that names the platform
+        static const int64_t REMOVAL_WAIT_TICKS = 40;
+
+        for (const auto &verdict: ClientAttestation::getInstance().takeVerdicts()) {
+            if (verdict.second > 0) {
+                mPendingRemovals.push_back({verdict.first, 100 + verdict.second, mCurrentTick + REMOVAL_WAIT_TICKS});
+            } else {
+                ServerTelemetry::getInstance().countCheck(1000 - verdict.second);
+                LOG_INFO(LogAreaID::Network, "Client note %d for %s", 100 - verdict.second,
+                         verdict.first.getAddress().c_str());
+            }
+        }
+
+        for (size_t index = 0; index < mPendingRemovals.size();) {
+            const PendingRemoval removal = mPendingRemovals[index];
+            const ServerPlayer *refused = _getPlayer(removal.mId);
+            const bool named = refused != nullptr && refused->getLoggedInTick() != 0;
+            if (!named && mCurrentTick < removal.mDeadline) {
+                index++;
+                continue;
+            }
+
+            mPendingRemovals.erase(mPendingRemovals.begin() + (long) index);
+            ServerTelemetry::getInstance().countCheck(removal.mCheck);
+            ServerTelemetry::getInstance().countRefusal(removal.mCheck, named ? refused->getBuildPlatform() : 0);
+            _rejectBadPacket(removal.mId, "client check " + std::to_string(removal.mCheck));
+        }
+    }
 
     uint32_t loadedChunks = 0;
     uint32_t pendingChunkTasks = 0;
@@ -870,11 +1028,13 @@ void ServerNetworkHandler::tick(bool paused) {
         fluidsProcessed += (uint32_t) overworld.getLastFluidProcessedCount();
         fluidsScheduled += (uint32_t) overworld.getScheduledFluidCount();
     }
+    ServerTelemetry::getInstance().setPlayers((int) mPlayers.size());
     mProfiler.endTick((uint32_t) mPlayers.size(), loadedChunks, pendingChunkTasks, fluidsProcessed, fluidsScheduled);
 
-    const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - tickStart).count();
+    const double elapsedMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tickStart).count();
 
+    ServerTelemetry::getInstance().recordTick(elapsedMs);
     mTickDurationSamples.push_back(elapsedMs);
     if (mTickDurationSamples.size() > TICK_SAMPLE_COUNT)
         mTickDurationSamples.pop_front();
@@ -989,13 +1149,20 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     (void) message;
 
     mRateLimiters.erase(id);
+    mClientProbes.forget(id);
+    for (size_t index = 0; index < mPendingRemovals.size();) {
+        if (mPendingRemovals[index].mId == id)
+            mPendingRemovals.erase(mPendingRemovals.begin() + (long) index);
+        else
+            index++;
+    }
 
     ServerPlayer *player = _getPlayer(id);
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
-    const std::string playerName = player != nullptr && !player->getName().empty()
-                                   ? player->getName()
-                                   : id.toString();
+    const std::string playerName = player != nullptr && !player->getName().empty() ? player->getName() : id.toString();
     if (player != nullptr && !player->getName().empty()) {
+        if (player->isSpawned())
+            mScriptEngine.beforePlayerLeave(*player);
         stopSleep(*player);
         if (player->isRiding())
             RideSystem::dismount(*this, *player, false);
@@ -1028,16 +1195,14 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
 }
 
 int64_t ServerNetworkHandler::getUptimeSeconds() const {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::steady_clock::now() - mStartTime).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - mStartTime).count();
 }
 
 double ServerNetworkHandler::getTicksPerSecond() const {
     if (mTickStartSamples.size() < 2)
         return 20.0;
 
-    const double span = std::chrono::duration<double>(
-            mTickStartSamples.back() - mTickStartSamples.front()).count();
+    const double span = std::chrono::duration<double>(mTickStartSamples.back() - mTickStartSamples.front()).count();
     if (span <= 0.0)
         return 20.0;
 
@@ -1068,8 +1233,7 @@ double ServerNetworkHandler::getPeakMillisecondsPerTick() const {
 
 void ServerNetworkHandler::sendModalForm(ServerPlayer &player, uint32_t formId, const std::string &formData,
                                          ModalFormCallback callback) {
-    if (!player.isSpawned() || formData.empty() || formData.size() > 1024 * 1024 ||
-        !JsonValidator(formData).parse())
+    if (!player.isSpawned() || formData.empty() || formData.size() > 1024 * 1024 || !JsonValidator(formData).parse())
         return;
 
     auto &callbacks = mModalFormCallbacks[player.getNetworkIdentifier()];
@@ -1185,6 +1349,7 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
         rates[(size_t) RateLimitedPacket::Chat] = mProperties.getMaxChatMessagesPerSecond();
         rates[(size_t) RateLimitedPacket::FormResponse] = mProperties.getMaxFormResponsesPerSecond();
         rates[(size_t) RateLimitedPacket::Movement] = mProperties.getMaxMovementPacketsPerSecond();
+        rates[(size_t) RateLimitedPacket::ViolationWarning] = 1;
         limiter = mRateLimiters.emplace(id, PacketRateLimiter(rates)).first;
     }
 
@@ -1205,39 +1370,39 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
     // login/cache packets sent before a player exists, plus one entry per handle() override;
     // anything else is dropped before createPacket; _validateServerboundPackets() checks it at startup
     static const std::unordered_set<MinecraftPacketIds> allowed = {
-        MinecraftPacketIds::RequestNetworkSettings,
-        MinecraftPacketIds::Login,
-        MinecraftPacketIds::ClientToServerHandshake,
-        MinecraftPacketIds::ClientCacheStatus,
-        MinecraftPacketIds::ResourcePackClientResponse,
-        MinecraftPacketIds::ResourcePackChunkRequest,
-        MinecraftPacketIds::SetLocalPlayerAsInitialized,
-        MinecraftPacketIds::NetworkStackLatency,
-        MinecraftPacketIds::PlayerAuthInput,
-        MinecraftPacketIds::CompletedUsingItem,
-        MinecraftPacketIds::CommandRequest,
-        MinecraftPacketIds::Text,
-        MinecraftPacketIds::PacketViolationWarning,
-        MinecraftPacketIds::RequestChunkRadius,
-        MinecraftPacketIds::SubChunkRequest,
-        MinecraftPacketIds::RequestAbility,
-        MinecraftPacketIds::MobEquipment,
-        MinecraftPacketIds::PlayerHotbar,
-        MinecraftPacketIds::ItemStackRequest,
-        MinecraftPacketIds::CraftingEvent,
-        MinecraftPacketIds::InventoryTransaction,
-        MinecraftPacketIds::ContainerClose,
-        MinecraftPacketIds::Interact,
-        MinecraftPacketIds::PlayerAction,
-        MinecraftPacketIds::Respawn,
-        MinecraftPacketIds::SetPlayerGameType,
-        MinecraftPacketIds::BlockActorData,
-        MinecraftPacketIds::CommandBlockUpdate,
-        MinecraftPacketIds::BlockPickRequest,
-        MinecraftPacketIds::ActorPickRequest,
-        MinecraftPacketIds::Emote,
-        MinecraftPacketIds::ModalFormResponse,
-        MinecraftPacketIds::PlayerSkin,
+            MinecraftPacketIds::RequestNetworkSettings,
+            MinecraftPacketIds::Login,
+            MinecraftPacketIds::ClientToServerHandshake,
+            MinecraftPacketIds::ClientCacheStatus,
+            MinecraftPacketIds::ResourcePackClientResponse,
+            MinecraftPacketIds::ResourcePackChunkRequest,
+            MinecraftPacketIds::SetLocalPlayerAsInitialized,
+            MinecraftPacketIds::NetworkStackLatency,
+            MinecraftPacketIds::PlayerAuthInput,
+            MinecraftPacketIds::CompletedUsingItem,
+            MinecraftPacketIds::CommandRequest,
+            MinecraftPacketIds::Text,
+            MinecraftPacketIds::PacketViolationWarning,
+            MinecraftPacketIds::RequestChunkRadius,
+            MinecraftPacketIds::SubChunkRequest,
+            MinecraftPacketIds::RequestAbility,
+            MinecraftPacketIds::MobEquipment,
+            MinecraftPacketIds::PlayerHotbar,
+            MinecraftPacketIds::ItemStackRequest,
+            MinecraftPacketIds::CraftingEvent,
+            MinecraftPacketIds::InventoryTransaction,
+            MinecraftPacketIds::ContainerClose,
+            MinecraftPacketIds::Interact,
+            MinecraftPacketIds::PlayerAction,
+            MinecraftPacketIds::Respawn,
+            MinecraftPacketIds::SetPlayerGameType,
+            MinecraftPacketIds::BlockActorData,
+            MinecraftPacketIds::CommandBlockUpdate,
+            MinecraftPacketIds::BlockPickRequest,
+            MinecraftPacketIds::ActorPickRequest,
+            MinecraftPacketIds::Emote,
+            MinecraftPacketIds::ModalFormResponse,
+            MinecraftPacketIds::PlayerSkin,
     };
 
     return allowed;
@@ -1253,13 +1418,12 @@ void ServerNetworkHandler::_validateServerboundPackets() const {
     const ProtocolCodec &codec = mCodecContext.getCodec();
     for (const MinecraftPacketIds id: _serverboundPackets()) {
         if (!codec.supports(id))
-            LOG_ERROR(LogAreaID::Network, "Serverbound packet %d is in the allowlist but not in the codec",
-                      (int) id);
+            LOG_ERROR(LogAreaID::Network, "Serverbound packet %d is in the allowlist but not in the codec", (int) id);
     }
 }
 
 ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const NetworkIdentifier &id,
-                                                                     MinecraftPacketIds packetId) {
+                                                                       MinecraftPacketIds packetId) {
     using LoginState = ServerPlayer::LoginState;
 
     if (packetId == MinecraftPacketIds::PacketViolationWarning)
@@ -1288,7 +1452,7 @@ ServerNetworkHandler::LoginGate ServerNetworkHandler::_checkLoginState(const Net
             break;
         default:
             return player != nullptr && player->getLoginState() >= LoginState::StartGameSent ? LoginGate::Accept
-                                                                                            : LoginGate::Ignore;
+                                                                                             : LoginGate::Ignore;
     }
     return expected ? LoginGate::Accept : LoginGate::Reject;
 }
@@ -1341,6 +1505,11 @@ ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
 
 void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectReason reason,
                                        const std::string &message) {
+    // a player who never made it into the world: the reason is what an operator would ask about
+    const ServerPlayer *leaving = _getPlayer(id);
+    if (leaving == nullptr || !leaving->isSpawned())
+        ServerTelemetry::getInstance().countFailure(ServerTelemetry::FailureStage::Login, (int) reason);
+
     DisconnectPacket disconnect;
     disconnect.mReason = (int32_t) reason;
     disconnect.mMessageSkipped = false;
@@ -1469,6 +1638,27 @@ EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = player.getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
+
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = player.getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = player.getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry playerFlags;
     playerFlags.mId = ActorFlags::PLAYER_FLAGS_DATA_ID;
@@ -1636,7 +1826,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
     switch (packet.mAction) {
         case PlayerActionType::StartBreak:
         case PlayerActionType::BlockContinueDestroy:
-            if (player->hasLastBlockAttacked() && player->getLastBlockAttacked() == packet.mBlockPosition)
+            // a repeat on the block being broken keeps its progress; a ContinueBreak only marked a new block
+            if (player->hasLastBlockAttacked() && player->getLastBlockAttacked() == packet.mBlockPosition
+                && player->isBreakingBlock() && player->getBreakingBlockPosition() == packet.mBlockPosition)
                 return;
             BlockActionHandler::startBreakingBlock(*this, *player, packet.mBlockPosition, packet.mFace);
             player->setLastBlockAttacked(packet.mBlockPosition);
@@ -1647,8 +1839,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
             player->setLastBlockAttacked(packet.mBlockPosition);
             return;
         case PlayerActionType::AbortBreak:
-        case PlayerActionType::StopBreak:
             BlockActionHandler::stopBreakingBlock(*this, *player);
+            player->clearLastBlockAttacked();
+            return;
+        case PlayerActionType::StopBreak:
+            // sent right before the finishing destroy: only AbortBreak cancels, the break stays until validated
             player->clearLastBlockAttacked();
             return;
         case PlayerActionType::BlockPredictDestroy:
@@ -1704,9 +1899,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetPlayerGa
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
-    if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId() ||
-        packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
+    if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId()
+        || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
         return;
+
+    mScriptEngine.onPlayerEmote(*player, packet.mEmoteId);
 
     EmotePacket emote = packet;
     emote.mRuntimeActorId = player->getRuntimeId();
@@ -1731,8 +1928,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormRe
         return;
     if (cancelled && (int) packet.mCancelReason > (int) ModalFormResponsePacket::CancelReason::UserBusy)
         return;
-    if (!cancelled && (packet.mFormData.empty() || packet.mFormData.size() > 1024 * 1024 ||
-                       !JsonValidator(packet.mFormData).parse()))
+    if (!cancelled
+        && (packet.mFormData.empty() || packet.mFormData.size() > 1024 * 1024
+            || !JsonValidator(packet.mFormData).parse()))
         return;
 
     auto playerCallbacks = mModalFormCallbacks.find(id);
@@ -1771,8 +1969,9 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinP
     normalizeSkin(skin);
 
     const SerializedSkin &currentSkin = player->getSkin();
-    if (currentSkin.mFullSkinId == skin.mFullSkinId && currentSkin.mSkinData.mWidth == skin.mSkinData.mWidth &&
-        currentSkin.mSkinData.mHeight == skin.mSkinData.mHeight && currentSkin.mSkinData.mData == skin.mSkinData.mData)
+    if (currentSkin.mFullSkinId == skin.mFullSkinId && currentSkin.mSkinData.mWidth == skin.mSkinData.mWidth
+        && currentSkin.mSkinData.mHeight == skin.mSkinData.mHeight
+        && currentSkin.mSkinData.mData == skin.mSkinData.mData)
         return;
 
     player->setSkin(skin);
@@ -1792,6 +1991,52 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinP
 namespace {
     bool isSignBlock(const std::string &identifier) {
         return identifier.find("sign") != std::string::npos;
+    }
+
+    void copySignString(const Tag &from, Tag &to, const char *key, size_t maximum) {
+        if (from.contains(key, Tag::Type::String))
+            to.putString(key, from.getString(key).substr(0, maximum));
+    }
+
+    void copySignByte(const Tag &from, Tag &to, const char *key) {
+        if (from.contains(key, Tag::Type::Byte))
+            to.putByte(key, from.getByte(key));
+    }
+
+    Tag sanitizedSignData(const Tag &source, const Vector3i &position, bool hanging) {
+        static const size_t MAX_SIGN_TEXT = 512;
+        static const size_t MAX_SIGN_OWNER = 64;
+
+        Tag data = Tag::ofCompound();
+        data.putString("id", hanging ? "HangingSign" : "Sign");
+        data.putInt("x", position.x);
+        data.putInt("y", position.y);
+        data.putInt("z", position.z);
+        copySignByte(source, data, "IsWaxed");
+
+        // older clients send the lines flat
+        const char *const legacyKeys[] = {"Text", "Text1", "Text2", "Text3", "Text4", "TextOwner"};
+        for (const char *key: legacyKeys)
+            copySignString(source, data, key, MAX_SIGN_TEXT);
+
+        const char *const sideKeys[] = {"FrontText", "BackText"};
+        for (const char *sideKey: sideKeys) {
+            const Tag *side = source.get(sideKey);
+            if (side == nullptr || !side->isCompound())
+                continue;
+
+            Tag clean = Tag::ofCompound();
+            copySignString(*side, clean, "Text", MAX_SIGN_TEXT);
+            copySignString(*side, clean, "FilteredText", MAX_SIGN_TEXT);
+            copySignString(*side, clean, "TextOwner", MAX_SIGN_OWNER);
+            copySignByte(*side, clean, "HideGlowOutline");
+            copySignByte(*side, clean, "IgnoreLighting");
+            copySignByte(*side, clean, "PersistFormatting");
+            if (side->contains("SignTextColor", Tag::Type::Int))
+                clean.putInt("SignTextColor", side->getInt("SignTextColor"));
+            data.put(sideKey, clean);
+        }
+        return data;
     }
 
     void putPickedItem(ServerPlayer &player, ItemStack item, int hotbarSlot) {
@@ -1825,9 +2070,8 @@ namespace {
         if (player.getGameType() != (int32_t) GameType::Creative)
             return;
 
-        const int slot = hotbarSlot >= 0 && hotbarSlot < PlayerInventory::HOTBAR_SIZE
-                             ? hotbarSlot
-                             : inventory.getSelectedSlot();
+        const int slot = hotbarSlot >= 0 && hotbarSlot < PlayerInventory::HOTBAR_SIZE ? hotbarSlot
+                                                                                      : inventory.getSelectedSlot();
 
         item.mCount = 1;
         inventory.setItem(slot, std::move(item));
@@ -1842,15 +2086,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (player == nullptr || !player->isSpawned())
         return;
 
-    const Vector3f position = player->getPosition();
-    const float dx = position.x - ((float) packet.mBlockPosition.x + 0.5f);
-    const float dy = position.y - ((float) packet.mBlockPosition.y + 0.5f);
-    const float dz = position.z - ((float) packet.mBlockPosition.z + 0.5f);
-    if (dx * dx + dy * dy + dz * dz > 10000.0f)
+    // the editor only opens on a sign in reach
+    if (!BlockActionHandler::canInteractWithBlock(*player, packet.mBlockPosition))
         return;
 
-    // peek only, and require a sign: else any block in range relays arbitrary client NBT to everyone,
-    // and a far position forces a chunk load
+    // peek only: a far position must not force a chunk load
     const BlockState *statePtr = getLevelFor(*player).peekBlockPtr(packet.mBlockPosition.x, packet.mBlockPosition.y,
                                                                    packet.mBlockPosition.z);
     if (statePtr == nullptr || !isSignBlock(statePtr->mName))
@@ -1858,28 +2098,12 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (!packet.mData.isCompound())
         return;
 
-    // cap each relayed line: no oversized string pushed to every player
-    static const size_t MAX_SIGN_TEXT = 512;
-    BlockActorDataPacket relayed = packet;
-    const char *const textKeys[] = {"Text1", "Text2", "Text3", "Text4"};
-    for (const char *key: textKeys) {
-        if (relayed.mData.contains(key)) {
-            const std::string line = relayed.mData.getString(key);
-            if (line.size() > MAX_SIGN_TEXT)
-                relayed.mData.putString(key, line.substr(0, MAX_SIGN_TEXT));
-        }
-    }
-    const char *const sideKeys[] = {"FrontText", "BackText"};
-    for (const char *side: sideKeys) {
-        Tag *sideData = relayed.mData.get(side);
-        if (sideData == nullptr || !sideData->isCompound())
-            continue;
-        if (sideData->contains("Text")) {
-            const std::string line = sideData->getString("Text");
-            if (line.size() > MAX_SIGN_TEXT)
-                sideData->putString("Text", line.substr(0, MAX_SIGN_TEXT));
-        }
-    }
+    // rebuilt from the fields a sign has: the client's compound goes to every player, so nothing else
+    // in it may ride along
+    BlockActorDataPacket relayed;
+    relayed.mBlockPosition = packet.mBlockPosition;
+    relayed.mData = sanitizedSignData(packet.mData, packet.mBlockPosition,
+                                      statePtr->mName.find("hanging") != std::string::npos);
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SIGN_CHANGE)) {
         const char *const sides[] = {"FrontText", "BackText"};
         for (const char *side: sides) {
@@ -1961,8 +2185,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
         return;
 
     for (const std::unique_ptr<ItemActor> &actor: mItemEntities) {
-        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId ||
-            !actor->sharesLevelWith(*player))
+        if (actor->isRemoved() || actor->getRuntimeId() != packet.mRuntimeActorId || !actor->sharesLevelWith(*player))
             continue;
 
         const Vector3f position = player->getPosition();
@@ -2018,8 +2241,7 @@ void ServerNetworkHandler::broadcastSystemMessage(const std::string &message) {
     }
 }
 
-void ServerNetworkHandler::broadcastTranslation(const std::string &key,
-                                                const std::vector<std::string> &parameters) {
+void ServerNetworkHandler::broadcastTranslation(const std::string &key, const std::vector<std::string> &parameters) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             entry.second.sendTranslation(key, parameters);
@@ -2050,6 +2272,8 @@ bool ServerNetworkHandler::changeGameRule(World &world, const std::string &name,
     }
 
     overworld.saveGameRules();
+    mScriptEngine.onGameRuleChange(rule->mName, rule->mType == GameRuleData::Type::Bool, rule->mBoolValue,
+                                   rule->mIntValue);
     return true;
 }
 
@@ -2079,6 +2303,33 @@ void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {
     mProperties.setProperty("difficulty", difficulty);
 }
 
+void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {
+    static const char *const NAMES[] = {"peaceful", "easy", "normal", "hard"};
+    setDifficulty(NAMES[(size_t) difficulty]);
+
+    SetDifficultyPacket packet;
+    packet.mDifficulty = (uint32_t) difficulty;
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
+}
+
+void ServerNetworkHandler::changeWorldSpawn(Level &level, const Vector3i &spawn) {
+    level.setSpawnPosition(spawn);
+    level.saveLevelDat();
+
+    SetSpawnPositionPacket packet;
+    packet.mSpawnType = SetSpawnPositionPacket::Type::WorldSpawn;
+    packet.mBlockPosition = spawn;
+    packet.mDimensionId = level.getDimensionId();
+    packet.mSpawnPosition = spawn;
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
+}
+
 void ServerNetworkHandler::sendPacketTo(const NetworkIdentifier &id, const Packet &packet) {
     mNetworkHandler->send(id, packet, mCodecContext);
 }
@@ -2097,10 +2348,10 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerAuthI
     if (!_allowPacket(id, RateLimitedPacket::Movement))
         return;
 
-    if (!std::isfinite(packet.mPosition.x) || !std::isfinite(packet.mPosition.y) ||
-        !std::isfinite(packet.mPosition.z) || !std::isfinite(packet.mRotation.x) ||
-        !std::isfinite(packet.mRotation.y) || !std::isfinite(packet.mRotation.z) ||
-        !std::isfinite(packet.mDelta.x) || !std::isfinite(packet.mDelta.y) || !std::isfinite(packet.mDelta.z)) {
+    if (!std::isfinite(packet.mPosition.x) || !std::isfinite(packet.mPosition.y) || !std::isfinite(packet.mPosition.z)
+        || !std::isfinite(packet.mRotation.x) || !std::isfinite(packet.mRotation.y)
+        || !std::isfinite(packet.mRotation.z) || !std::isfinite(packet.mDelta.x) || !std::isfinite(packet.mDelta.y)
+        || !std::isfinite(packet.mDelta.z)) {
         return;
     }
 
@@ -2317,11 +2568,21 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ContainerCl
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PacketViolationWarningPacket &packet) {
-    (void) id;
+    // accepted at every login step, a failed encryption handshake reports through it: one a second,
+    // or before a login it is anyone's free line in the log
+    if (!_allowPacket(id, RateLimitedPacket::ViolationWarning))
+        return;
+
+    // the answer a probe was waiting for is not a rejection to report
+    ServerPlayer *probed = _getPlayer(id);
+    if (probed != nullptr && !mProperties.getAllowUnofficialClients()
+        && mClientProbes.onViolationWarning(*probed, packet))
+        return;
 
     const char *causeName = toString((MinecraftPacketIds) packet.mPacketCauseId);
     LOG_ERROR(LogAreaID::Network, "CLIENT REJECTED PACKET id=%d (%s), type=%d, severity=%d, context: %s",
-              packet.mPacketCauseId, causeName, (int) packet.mType, (int) packet.mSeverity, packet.mContext.c_str());
+              packet.mPacketCauseId, causeName, (int) packet.mType, (int) packet.mSeverity,
+              StringUtil::printable(packet.mContext).c_str());
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequestPacket &packet) {
@@ -2330,7 +2591,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandRequ
         return;
 
     player->markActive(mCurrentTick);
-    LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(), packet.mCommand.c_str());
+    LOG_INFO(LogAreaID::Server, "%s issued command: %s", player->getName().c_str(),
+             StringUtil::printable(packet.mCommand, 512).c_str());
 
     std::string commandLine = packet.mCommand;
     PluginEvent commandEvent;

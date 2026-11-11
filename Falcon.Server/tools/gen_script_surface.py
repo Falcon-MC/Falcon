@@ -31,7 +31,17 @@ BOUND = {
         'ScoreboardObjective', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
         'ItemComponentRegistry', 'CommandResult', 'BlockVolume', 'EntityWaypoint', 'EquipmentSlot', 'GameMode',
         'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
-        'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent',
+        'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent', 'GameRules', 'SystemInfo', 'Difficulty',
+        'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
+        'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
+        'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
+        'DimensionRegistry',
+        'Effect', 'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause',
+        'EntityInitializationCause', 'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo',
+        'EntitySwingSource', 'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel',
+        'TickingArea', 'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
+        'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
+        'EntityHealSource',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
@@ -39,23 +49,8 @@ BOUND = {
     'common': None,
 }
 
+# every signal of these classes is subscribable; their signal and event classes join the bound set
 SIGNAL_OWNERS = ('WorldAfterEvents', 'WorldBeforeEvents', 'SystemAfterEvents', 'SystemBeforeEvents')
-
-# signals the scripting layer fires; their signal and event classes join the bound set
-BOUND_SIGNALS = {
-    'WorldAfterEvents': {
-        'playerBreakBlock', 'playerPlaceBlock', 'playerSpawn', 'playerJoin', 'playerLeave', 'chatSend', 'entityHurt',
-        'entityDie', 'itemUse', 'projectileHitBlock', 'projectileHitEntity', 'entityHitBlock', 'entityHitEntity',
-        'entityItemDrop', 'playerHotbarSelectedSlotChange', 'playerInventoryItemChange', 'playerInteractWithBlock',
-        'entitySpawn', 'entityRemove', 'entityLoad', 'worldLoad', 'worldInitialize',
-    },
-    'WorldBeforeEvents': {
-        'playerBreakBlock', 'chatSend', 'playerInteractWithBlock', 'entityHurt', 'effectAdd',
-        'playerInteractWithEntity', 'itemUse', 'itemUseOn', 'worldInitialize',
-    },
-    'SystemAfterEvents': set(),
-    'SystemBeforeEvents': {'startup', 'shutdown'},
-}
 
 
 def version_key(text):
@@ -106,7 +101,8 @@ def parse(path):
             line = line.strip().rstrip(',')
             if '=' in line:
                 key, value = [part.strip() for part in line.split('=', 1)]
-                values.append((key, value.strip("'")))
+                # a reserved word is quoted as a key: void = 'void'
+                values.append((key.strip("'"), value.strip("'")))
         enums[match.group(1)] = values
     return exports, classes, enums
 
@@ -161,8 +157,6 @@ def main():
             if owner not in classes:
                 continue
             for member, (_, _, _, signature) in classes[owner][1].items():
-                if member not in BOUND_SIGNALS[owner]:
-                    continue
                 signal = signature.strip().rstrip(';').split('.')[-1]
                 bound_events.add(signal)
                 subscribe = classes.get(signal, (None, {}))[1].get('subscribe')
@@ -177,8 +171,10 @@ def main():
             beta = bool(version_key(version)[3])
             for name, kind in exports.items():
                 is_error = kind == 'class' and name.endswith('Error')
-                payload = name in bound_events
-                if bound is not None and name not in bound and not is_error and not payload:
+                # custom component hook payloads
+                payload = name in bound_events or re.match(r'(Block|Item)Component\w+Event$', name) is not None
+                component = name.startswith('Entity') and name.endswith('Component')
+                if bound is not None and name not in bound and not is_error and not payload and not component:
                     continue
                 entry('%s:%s' % (short, name)).add(version)
                 if kind == 'class' and name in classes:
@@ -191,7 +187,7 @@ def main():
                         # the newest declaration wins: versions arrive in ascending order
                         item.early = early
                         item.blocked = blocked
-                        if name in SIGNAL_OWNERS and member in BOUND_SIGNALS[name]:
+                        if name in SIGNAL_OWNERS:
                             signal = signature.strip().rstrip(';').split('.')[-1]
                             signals['%s.%s' % (name, member)] = signal
                 if kind == 'enum':

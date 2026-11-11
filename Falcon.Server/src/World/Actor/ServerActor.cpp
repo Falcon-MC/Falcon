@@ -83,9 +83,9 @@ namespace {
                                         actor.getFloatProperty(descriptor.mName, descriptor.mDefaultFloat));
                     break;
                 case ActorPropertyDescription::Type::Bool:
-                    properties.putByte(descriptor.mName,
-                                       actor.getIntProperty(descriptor.mName, descriptor.mDefaultBool ? 1 : 0) != 0
-                                       ? 1 : 0);
+                    properties.putByte(
+                            descriptor.mName,
+                            actor.getIntProperty(descriptor.mName, descriptor.mDefaultBool ? 1 : 0) != 0 ? 1 : 0);
                     break;
                 case ActorPropertyDescription::Type::Enum: {
                     const int32_t index = actor.getIntProperty(descriptor.mName, descriptor.mDefaultInt);
@@ -120,7 +120,8 @@ namespace {
                     actor.setIntProperty(descriptor.mName, properties.getByte(descriptor.mName, 0) != 0 ? 1 : 0);
                     break;
                 case ActorPropertyDescription::Type::Enum: {
-                    const int32_t index = descriptor.findEnumIndex(properties.getString(descriptor.mName, std::string()));
+                    const int32_t index = descriptor.findEnumIndex(
+                            properties.getString(descriptor.mName, std::string()));
                     if (index >= 0)
                         actor.setIntProperty(descriptor.mName, index);
                     break;
@@ -163,8 +164,8 @@ bool ServerActor::needsMovementSync() const {
     const Vector3f rotation = getRotation();
     return std::fabs(position.x - mSyncedPosition.x) > SYNC_POSITION_EPSILON
            || std::fabs(position.y - mSyncedPosition.y) > SYNC_POSITION_EPSILON
-           || std::fabs(position.z - mSyncedPosition.z) > SYNC_POSITION_EPSILON
-           || rotation.x != mSyncedRotation.x || rotation.y != mSyncedRotation.y || rotation.z != mSyncedRotation.z;
+           || std::fabs(position.z - mSyncedPosition.z) > SYNC_POSITION_EPSILON || rotation.x != mSyncedRotation.x
+           || rotation.y != mSyncedRotation.y || rotation.z != mSyncedRotation.z;
 }
 
 void ServerActor::markMovementSynced() {
@@ -197,8 +198,9 @@ void ServerActor::tickFire(ServerNetworkHandler &owner) {
 
 bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel) {
     ActorDamageSource source;
-    source.mDeathMessageKey = attacker == nullptr ? "death.attack.generic"
-                                                  : attacker->isPlayer() ? "death.attack.player" : "death.attack.mob";
+    source.mDeathMessageKey = attacker == nullptr    ? "death.attack.generic"
+                              : attacker->isPlayer() ? "death.attack.player"
+                                                     : "death.attack.mob";
     source.mAttacker = attacker;
     return hurt(owner, amount, source, lootingLevel);
 }
@@ -215,8 +217,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (!senseDamage(owner, amount, damageSource))
         return false;
 
-    const char *cause = attacker != nullptr ? "entityAttack" : "none";
-    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, cause, attacker))
+    if (owner.getScriptEngine().beforeEntityHurt(*this, amount, damageSource) || amount <= 0.0f)
         return false;
 
     PluginEvent damageEvent;
@@ -248,6 +249,8 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     setHealth(getHealth() - amount);
     setNoDamageTicks(INVULNERABILITY_TICKS);
     setLastDamageAmount(rawAmount);
+    if (auto *mob = dynamic_cast<MobActor *>(this))
+        mob->setLastHurtSource(damageSource);
     onDamaged(owner, attacker);
 
     if (attacker != nullptr && getHealth() > 0.0f && catchFireFrom(*attacker, owner.getProperties().getDifficulty()))
@@ -258,6 +261,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
 
     owner.broadcastActorEvent(*this, EntityEventType::HurtAnimation);
     owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
+    owner.getScriptEngine().onEntityHurt(*this, amount, damageSource);
 
     if (source != nullptr) {
         const Vector3f sourcePosition = source->getPosition();
@@ -268,11 +272,13 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     if (getHealth() <= 0.0f) {
         int32_t looting = lootingLevel;
         if (looting < 0) {
-            looting = source != nullptr
-                      ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(), EnchantmentIds::LOOTING)
-                      : 0;
+            looting = source != nullptr ? ItemEnchantments::getLevel(source->getInventory().getItemInHand(),
+                                                                     EnchantmentIds::LOOTING)
+                                        : 0;
         }
+        mFatalSource = &damageSource;
         kill(owner, source, looting);
+        mFatalSource = nullptr;
     }
 
     return true;
@@ -295,6 +301,15 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     event.mEntity = this;
     event.mAttacker = source;
     PluginManager::getInstance().dispatch(event);
+
+    if (mFatalSource != nullptr) {
+        owner.getScriptEngine().onEntityDie(*this, *mFatalSource);
+        return;
+    }
+    ActorDamageSource fallback;
+    fallback.mDeathMessageKey = "death.attack.generic";
+    fallback.mAttacker = source;
+    owner.getScriptEngine().onEntityDie(*this, fallback);
 }
 
 int32_t ServerActor::getIntProperty(const std::string &name, int32_t fallback) const {
@@ -327,10 +342,9 @@ void ServerActor::initializeProperties() {
         const bool computed = !descriptor.mDefaultExpression.empty();
         if (descriptor.mType == ActorPropertyDescription::Type::Float) {
             if (!hasFloatProperty(descriptor.mName))
-                setFloatProperty(descriptor.mName, computed
-                                                   ? (float) Molang::evaluate(descriptor.mDefaultExpression,
-                                                                              *this).mNumber
-                                                   : descriptor.mDefaultFloat);
+                setFloatProperty(descriptor.mName,
+                                 computed ? (float) Molang::evaluate(descriptor.mDefaultExpression, *this).mNumber
+                                          : descriptor.mDefaultFloat);
             continue;
         }
 
@@ -436,21 +450,18 @@ void ServerActor::loadNbt(const Tag &data) {
     if (data.contains("UniqueID"))
         setUniqueId(data.getLong("UniqueID"));
 
-    mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x),
-                         listValue(data, "Pos", 1, mPosition.y),
+    mPosition = Vector3f(listValue(data, "Pos", 0, mPosition.x), listValue(data, "Pos", 1, mPosition.y),
                          listValue(data, "Pos", 2, mPosition.z));
 
     if (data.contains(FalconDataVersion::TAG) && !data.contains("Attributes")) {
-        mRotation = Vector3f(listValue(data, "Rotation", 0, 0.0f),
-                             listValue(data, "Rotation", 1, 0.0f),
+        mRotation = Vector3f(listValue(data, "Rotation", 0, 0.0f), listValue(data, "Rotation", 1, 0.0f),
                              listValue(data, "Rotation", 2, 0.0f));
     } else {
         const float yaw = listValue(data, "Rotation", 0, 0.0f);
         mRotation = Vector3f(listValue(data, "Rotation", 1, 0.0f), yaw, yaw);
     }
 
-    mMotion = Vector3f(listValue(data, "Motion", 0, 0.0f),
-                       listValue(data, "Motion", 1, 0.0f),
+    mMotion = Vector3f(listValue(data, "Motion", 0, 0.0f), listValue(data, "Motion", 1, 0.0f),
                        listValue(data, "Motion", 2, 0.0f));
 
     const Tag *attributes = data.get("Attributes");

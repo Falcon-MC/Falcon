@@ -12,8 +12,7 @@ public:
 
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 
-    std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
-                                                        const BlockState &state,
+    std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position, const BlockState &state,
                                                         int playerFacing) const override;
 
     std::vector<Vector3i> getAffectedBlocks(Level &level, const Vector3i &position,

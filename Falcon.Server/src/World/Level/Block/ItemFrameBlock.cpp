@@ -27,9 +27,7 @@ namespace {
     const char *FILLED_MAP = "minecraft:filled_map";
     const char *STATE_MAP_BIT = "item_frame_map_bit";
 
-    const int FACE_OFFSETS[6][3] = {
-            {0,  -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-    };
+    const int FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     Vector3f centreOf(const Vector3i &position) {
         return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
@@ -70,15 +68,13 @@ namespace {
         if (frame.isEmpty() || !rollsDrop(frame.getDropChance()))
             return;
 
-        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.25f,
-                                    (float) position.z + 0.5f);
+        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.25f, (float) position.z + 0.5f);
         owner.dropItem(level, dropPosition, frame.getItem(), ItemActorHandler::randomDropMotion(),
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
 }
 
-ItemFrameBlock::ItemFrameBlock(const Block &base) : Block(base) {
-}
+ItemFrameBlock::ItemFrameBlock(const Block &base) : Block(base) {}
 
 BlockState ItemFrameBlock::applyPlacementOrientation(const BlockState &state,
                                                      const BlockPlacementContext &context) const {
@@ -113,8 +109,7 @@ bool ItemFrameBlock::canPlaceAt(Level &level, const Vector3i &position, int bloc
     if (blockFace < 0 || blockFace >= 6)
         return false;
 
-    const Vector3i support(position.x - FACE_OFFSETS[blockFace][0],
-                           position.y - FACE_OFFSETS[blockFace][1],
+    const Vector3i support(position.x - FACE_OFFSETS[blockFace][0], position.y - FACE_OFFSETS[blockFace][1],
                            position.z - FACE_OFFSETS[blockFace][2]);
 
     const BlockState state = level.getBlockState(support.x, support.y, support.z);
@@ -199,10 +194,9 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
     frame->setRotation(0);
     setStoringMap(owner, level, position, state, false);
 
-    owner.broadcastLevelEvent(level,
-                              creative ? LevelEventPacket::SoundItemFrameRemoveItem
-                                       : LevelEventPacket::SoundItemFrameBreak,
-                              centreOf(position), 0);
+    owner.broadcastLevelEvent(
+            level, creative ? LevelEventPacket::SoundItemFrameRemoveItem : LevelEventPacket::SoundItemFrameBreak,
+            centreOf(position), 0);
 
     BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
     return true;

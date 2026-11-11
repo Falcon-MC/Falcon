@@ -100,10 +100,10 @@ namespace {
             return false;
 
         bool valid = false;
-        if (EVP_DigestVerifyInit(context, nullptr, digest, nullptr, key) == 1 &&
-            EVP_DigestVerifyUpdate(context, message.data(), message.size()) == 1) {
-            const int result = EVP_DigestVerifyFinal(
-                    context, reinterpret_cast<const unsigned char *>(signature.data()), signature.size());
+        if (EVP_DigestVerifyInit(context, nullptr, digest, nullptr, key) == 1
+            && EVP_DigestVerifyUpdate(context, message.data(), message.size()) == 1) {
+            const int result = EVP_DigestVerifyFinal(context, reinterpret_cast<const unsigned char *>(signature.data()),
+                                                     signature.size());
             valid = result == 1;
         }
 
@@ -142,8 +142,8 @@ std::vector<std::string> LoginChainVerifier::_extractChain(const std::string &au
 
     for (size_t i = position; i <= end; i++) {
         const char c = authJwt[i];
-        const bool isTokenChar = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-                                 (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+        const bool isTokenChar = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'
+                                 || c == '_' || c == '.';
 
         if (isTokenChar) {
             token.push_back(c);
@@ -180,8 +180,7 @@ bool LoginChainVerifier::_splitJwt(const std::string &jwt, std::string &header, 
     payload = jwt.substr(first + 1, second - first - 1);
     signature = jwt.substr(second + 1);
 
-    return !header.empty() && !payload.empty() && !signature.empty() &&
-           jwt.find('.', second + 1) == std::string::npos;
+    return !header.empty() && !payload.empty() && !signature.empty() && jwt.find('.', second + 1) == std::string::npos;
 }
 
 std::string LoginChainVerifier::_extractObject(const std::string &json, const std::string &key) {
@@ -275,7 +274,7 @@ void LoginChainVerifier::_extractIdentity(const std::string &payload) {
 
 // legacy three-link chain: each link signed by the previous identityPublicKey (the first by its own x5u),
 // the second by the root auth key; identity read from the last link
-bool LoginChainVerifier::_verifyChain(const std::vector<std::string> &chain) {
+bool LoginChainVerifier::_verifyChain(const std::vector<std::string> &chain, const std::string &clientJwt) {
     EVP_PKEY *currentKey = nullptr;
     EVP_PKEY *mojangKey = parseKey(MOJANG_PUBLIC_KEY_BASE64);
     if (mojangKey == nullptr) {
@@ -360,6 +359,11 @@ bool LoginChainVerifier::_verifyChain(const std::vector<std::string> &chain) {
 
     _extractIdentity(lastPayload);
     mIdentityPublicKey = ConnectionRequest::findJsonString(lastPayload, "identityPublicKey");
+
+    // a chain is only a certificate: without this anyone who saw it once could present it
+    if (mIdentityPublicKey.empty() || !_verifyClientData(clientJwt, mIdentityPublicKey))
+        return _fail("Your client data token was not signed by your login chain");
+
     mSigned = true;
     return true;
 }
@@ -544,9 +548,9 @@ std::string LoginChainVerifier::_xuidToUuid(const std::string &xuid) {
     digest[8] = (unsigned char) ((digest[8] & 0x3f) | 0x80);
 
     char buffer[40];
-    snprintf(buffer, sizeof(buffer), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-             digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
-             digest[8], digest[9], digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]);
+    snprintf(buffer, sizeof(buffer), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", digest[0],
+             digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7], digest[8], digest[9],
+             digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]);
 
     return std::string(buffer);
 }
@@ -564,7 +568,7 @@ bool LoginChainVerifier::verify(const std::string &authJwt, const std::string &c
 
     if (!token.empty()) {
         const int authenticationType = ConnectionRequest::findJsonInt(authJwt, "AuthenticationType",
-                                                                     AUTHENTICATION_TYPE_FULL);
+                                                                      AUTHENTICATION_TYPE_FULL);
 
         if (authenticationType == AUTHENTICATION_TYPE_SELF_SIGNED)
             return _verifySelfSignedToken(token, clientJwt);
@@ -595,7 +599,7 @@ bool LoginChainVerifier::verify(const std::string &authJwt, const std::string &c
     }
 
     if (chain.size() == 3)
-        return _verifyChain(chain);
+        return _verifyChain(chain, clientJwt);
 
     LOG_WARN(LogAreaID::Network, "Unexpected login chain length %u", (unsigned) chain.size());
     return _fail("Your login chain has an unexpected length");

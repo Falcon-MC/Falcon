@@ -8,12 +8,10 @@
 #include <iterator>
 #include <utility>
 
-TerrainCache::TerrainCache(const ChunkGenerator &generator) : mGenerator(generator) {
-}
+TerrainCache::TerrainCache(const ChunkGenerator &generator) : mGenerator(generator) {}
 
 TerrainCache::DecorationArea::DecorationArea(TerrainCache &cache, int32_t chunkX, int32_t chunkZ, uint64_t sequence)
-        : mCache(cache), mChunkX(chunkX), mChunkZ(chunkZ), mSequence(sequence) {
-}
+        : mCache(cache), mChunkX(chunkX), mChunkZ(chunkZ), mSequence(sequence) {}
 
 TerrainCache::DecorationArea::~DecorationArea() {
     {
@@ -44,19 +42,77 @@ int64_t TerrainCache::_packChunk(int32_t chunkX, int32_t chunkZ) {
 }
 
 LevelChunk TerrainCache::terrain(int32_t chunkX, int32_t chunkZ) {
+    return *_get(chunkX, chunkZ, false, nullptr);
+}
+
+std::shared_ptr<const LevelChunk> TerrainCache::sharedTerrain(int32_t chunkX, int32_t chunkZ) {
     return _get(chunkX, chunkZ, false, nullptr);
 }
 
 LevelChunk TerrainCache::neighbour(int32_t chunkX, int32_t chunkZ) {
-    return _get(chunkX, chunkZ, true, nullptr);
+    return *_get(chunkX, chunkZ, true, nullptr);
 }
 
 LevelChunk TerrainCache::base(int32_t chunkX, int32_t chunkZ, uint64_t &created) {
-    return _get(chunkX, chunkZ, true, &created);
+    return *_get(chunkX, chunkZ, true, &created);
 }
 
-LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, uint64_t *created) {
+void TerrainCache::setStoredLoader(StoredLoader loader) {
+    std::lock_guard<std::mutex> lock(mMutex);
+    mStoredLoader = std::move(loader);
+}
+
+// a neighbour decorated in another session, or evicted: its raw terrain would let a feature write over its plants
+std::shared_ptr<const LevelChunk> TerrainCache::_stored(int32_t chunkX, int32_t chunkZ, uint64_t *created) {
     const int64_t key = _packChunk(chunkX, chunkZ);
+    StoredLoader loader;
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        while (mLoading.count(key) != 0)
+            mPublished.wait(lock);
+        if (!mStoredLoader)
+            return nullptr;
+        const auto found = mChunks.find(key);
+        if (found != mChunks.end() && (found->second.mDecorated != nullptr || found->second.mStoredChecked))
+            return nullptr;
+        mLoading.insert(key);
+        loader = mStoredLoader;
+    }
+
+    std::shared_ptr<const LevelChunk> shared;
+    try {
+        LevelChunk chunk(chunkX, chunkZ);
+        chunk.setDimension(mGenerator.getDimensionType());
+        if (loader(chunk))
+            shared = std::make_shared<const LevelChunk>(std::move(chunk));
+    } catch (...) {
+        shared = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        mLoading.erase(key);
+        Entry &entry = _entry(key);
+        entry.mStoredChecked = true;
+        if (shared != nullptr && entry.mDecorated == nullptr)
+            entry.mDecorated = shared;
+        else
+            shared = entry.mDecorated;
+        if (shared != nullptr && created != nullptr)
+            *created = entry.mCreated;
+    }
+    mPublished.notify_all();
+    return shared;
+}
+
+std::shared_ptr<const LevelChunk> TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated,
+                                                     uint64_t *created) {
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    if (decorated) {
+        std::shared_ptr<const LevelChunk> stored = _stored(chunkX, chunkZ, created);
+        if (stored != nullptr)
+            return stored;
+    }
 
     std::shared_ptr<const LevelChunk> cached;
     {
@@ -84,22 +140,22 @@ LevelChunk TerrainCache::_get(int32_t chunkX, int32_t chunkZ, bool decorated, ui
     }
 
     if (cached != nullptr)
-        return *cached;
+        return cached;
 
     const GenerationClaim claim{*this, key};
     LevelChunk chunk(chunkX, chunkZ);
     chunk.setDimension(mGenerator.getDimensionType());
     mGenerator.generate(chunk);
 
-    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(chunk);
+    std::shared_ptr<const LevelChunk> shared = std::make_shared<const LevelChunk>(std::move(chunk));
     {
         std::lock_guard<std::mutex> lock(mMutex);
         Entry &entry = _entry(key);
-        entry.mTerrain = std::move(shared);
+        entry.mTerrain = shared;
         if (created != nullptr)
             *created = entry.mCreated;
     }
-    return chunk;
+    return shared;
 }
 
 void TerrainCache::put(LevelChunk chunk) {
@@ -188,6 +244,7 @@ void TerrainCache::waitForDecoration(std::chrono::milliseconds timeout) {
 
 GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
         : mScratch("generator", 1, seed, dimension), mCache(cache) {
+    mScratch.setTerrainCache(&cache);
 }
 
 uint64_t GeneratorChunkSource::populate(LevelChunk &chunk, std::vector<GeneratedBlockChange> &overflow,
@@ -247,6 +304,8 @@ uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
     }
 
     chunk = mScratch.extractChunk(chunkX, chunkZ);
+    // later neighbours tell it from a raw one: structure pieces read its blocks (sub_147761B80)
+    chunk.setPopulated(true);
     mCache.put(chunk);
 
     BlockActorStore &generatedActors = mScratch.getBlockActors();

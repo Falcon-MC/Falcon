@@ -7,6 +7,7 @@
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BedBlock.h"
+#include "World/Level/Block/RespawnAnchorBlock.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Event/GameEvents.h"
 #include "Core/Math/MathConstants.h"
@@ -146,7 +147,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (isDamageDisabledByGameRule(getWorldFor(player).getOverworld().getGameRules(), key))
         return DamageResult::Ignored;
 
-    if (mScriptEngine.beforeEntityHurt(player, amount, key, source.mAttacker))
+    if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount <= 0.0f)
         return DamageResult::Ignored;
 
     // inside the 10-tick invulnerability window only a stronger hit lands, dealing the difference
@@ -212,17 +213,20 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (amount <= 0.0f)
         return DamageResult::Ignored;
 
-    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" &&
-        key != "death.attack.suicide" && TotemItem::consume(*this, player))
+    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" && key != "death.attack.suicide"
+        && TotemItem::consume(*this, player))
         return DamageResult::Dealt;
 
     const float health = player.reduceHealth(amount);
 
     EntityHurtAfterEvent hurtEvent(player, amount, key);
     mEventBus.after().mEntityHurt.emit(hurtEvent);
+    mScriptEngine.onEntityHurt(player, amount, source);
 
     if (health <= 0.0f) {
+        mFatalSource = &source;
         killPlayer(player, key, source.mDeathMessageParameters);
+        mFatalSource = nullptr;
         return DamageResult::Dealt;
     }
 
@@ -249,6 +253,10 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     EntityDieAfterEvent dieEvent(player, deathMessageKey);
     mEventBus.after().mEntityDie.emit(dieEvent);
+    if (mFatalSource != nullptr)
+        mScriptEngine.onEntityDie(player, *mFatalSource);
+    else
+        mScriptEngine.onEntityDie(player, ActorDamageSource::environment(deathMessageKey, player.getName()));
 
     player.getInventoryManager().onCurrentWindowRemove();
 
@@ -274,8 +282,8 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     const std::string key = deathMessageKey.empty() ? "death.attack.generic" : deathMessageKey;
     const std::vector<std::string> parameters = deathMessageParameters.empty()
-                                                ? std::vector<std::string>{player.getName()}
-                                                : deathMessageParameters;
+                                                        ? std::vector<std::string>{player.getName()}
+                                                        : deathMessageParameters;
 
     std::string deathMessage = key;
     PluginEvent deathEvent;
@@ -320,8 +328,7 @@ void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &ite
     const float yaw = player.getRotation().y * MathConstants::PI_F / 180.0f;
     const float pitch = player.getRotation().x * MathConstants::PI_F / 180.0f;
 
-    const Vector3f motion(-std::sin(yaw) * std::cos(pitch) * THROW_SPEED,
-                          -std::sin(pitch) * THROW_SPEED + 0.1f,
+    const Vector3f motion(-std::sin(yaw) * std::cos(pitch) * THROW_SPEED, -std::sin(pitch) * THROW_SPEED + 0.1f,
                           std::cos(yaw) * std::cos(pitch) * THROW_SPEED);
 
     ItemActor *dropped = dropItem(getLevelFor(player), dropPosition, item, motion, THROW_PICKUP_DELAY);
@@ -385,11 +392,37 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     _sendInventory(player);
 }
 
-Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player) {
+Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *&destination,
+                                                   std::optional<Vector3i> &anchor) {
     World &world = getWorldFor(player);
     Level &overworld = world.getOverworld();
+    destination = &overworld;
+    anchor.reset();
     if (!player.hasSpawnPoint() || player.getSpawnWorld() != world.getName())
         return overworld.getSpawnPositionForPlayer();
+
+    // a /spawnpoint spawn has no block to check (sub_1402BF690 needs one)
+    if (!player.hasSpawnBlock()) {
+        destination = &world.getLevel(player.getSpawnDimension());
+        const Vector3i stand = player.getSpawnStandPosition();
+        return Vector3f((float) stand.x + 0.5f, (float) stand.y, (float) stand.z + 0.5f);
+    }
+
+    if (player.getSpawnDimension() == DimensionType::Nether) {
+        Level &nether = world.getLevel(DimensionType::Nether);
+        const std::optional<Vector3f> respawn = RespawnAnchorBlock::findRespawnPosition(nether, player.getSpawnPoint(),
+                                                                                        player.getSpawnStandPosition());
+        if (respawn.has_value()) {
+            destination = &nether;
+            anchor = player.getSpawnPoint();
+            return *respawn;
+        }
+
+        // sub_1402D44A0: the message follows the spawn dimension
+        player.clearSpawnPoint();
+        player.sendTranslation("§7%tile.respawn_anchor.notValid", {});
+        return overworld.getSpawnPositionForPlayer();
+    }
 
     const Vector3i bed = player.getSpawnPoint();
     if (!BedBlock::isValidAt(overworld, bed)) {
@@ -405,18 +438,25 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     if (!player.isDead())
         return;
 
-    Vector3f spawn = _respawnPositionFor(player);
+    Level *destination = nullptr;
+    std::optional<Vector3i> anchor;
+    Vector3f spawn = _respawnPositionFor(player, destination, anchor);
 
     PluginEvent respawnEvent;
     respawnEvent.mType = FALCON_EVENT_PLAYER_RESPAWN;
     respawnEvent.mPlayer = &player;
     respawnEvent.mTo = spawn;
     PluginManager::getInstance().dispatch(respawnEvent);
-    if (respawnEvent.mToChanged)
+    // a plugin position carries no dimension: it is an overworld one, and the anchor was not used
+    if (respawnEvent.mToChanged) {
         spawn = respawnEvent.mTo;
+        destination = &getWorldFor(player).getOverworld();
+    } else if (anchor.has_value()) {
+        RespawnAnchorBlock::addCharge(*this, *destination, *anchor, -1);
+    }
 
-    if (player.getDimension() != DimensionType::Overworld)
-        changePlayerLevel(player, getWorldFor(player).getOverworld(), spawn);
+    if (player.getDimension() != destination->getDimensionType())
+        changePlayerLevel(player, *destination, spawn);
 
     player.setDead(false);
     player.grantSpawnInvulnerability();
@@ -452,6 +492,5 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     sendActorsTo(player);
     _sendChunks(player);
 
-    LOG_INFO(LogAreaID::Server, "%s respawned at %.2f %.2f %.2f", player.getName().c_str(), spawn.x, spawn.y,
-             spawn.z);
+    LOG_INFO(LogAreaID::Server, "%s respawned at %.2f %.2f %.2f", player.getName().c_str(), spawn.x, spawn.y, spawn.z);
 }

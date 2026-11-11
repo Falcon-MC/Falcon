@@ -67,8 +67,7 @@ namespace {
                 {"minecraft:red_mushroom", {PlantSupport::Mushroom, false}},
                 {"minecraft:reeds", {PlantSupport::Reeds, false}},
                 {"minecraft:cactus", {PlantSupport::Cactus, false}},
-                {"minecraft:cactus_flower", {PlantSupport::CactusFlower, false}}
-        };
+                {"minecraft:cactus_flower", {PlantSupport::CactusFlower, false}}};
         return rules;
     }
 
@@ -88,8 +87,7 @@ namespace {
     }
 }
 
-PlantBlock::PlantBlock(const Block &block) : Block(block) {
-}
+PlantBlock::PlantBlock(const Block &block) : Block(block) {}
 
 bool PlantBlock::matches(const std::string &identifier) {
     return plantRules().find(identifier) != plantRules().end();
@@ -115,8 +113,7 @@ bool PlantBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFac
         case PlantSupport::DirtWithoutLiquid: {
             const BlockState current = level.getBlockState(position.x, position.y, position.z);
             const BlockState overlay = level.getBlockStateAtLayer(position.x, position.y, position.z, 1);
-            return IFeature::isSupportDirt(below) && !LiquidView(current).isLiquid()
-                   && !LiquidView(overlay).isLiquid();
+            return IFeature::isSupportDirt(below) && !LiquidView(current).isLiquid() && !LiquidView(overlay).isLiquid();
         }
         case PlantSupport::DirtNetherrackSoulSand:
             return IFeature::isSupportDirt(below) || below.mName == "minecraft:netherrack"

@@ -24,13 +24,9 @@ namespace {
     }
 }
 
-AnvilBlock::AnvilBlock()
-        : Block(BlockTypeIds::ANVIL, "minecraft:anvil", "Anvil") {
-}
+AnvilBlock::AnvilBlock() : Block(BlockTypeIds::ANVIL, "minecraft:anvil", "Anvil") {}
 
-AnvilBlock::AnvilBlock(const Block &block)
-        : Block(block) {
-}
+AnvilBlock::AnvilBlock(const Block &block) : Block(block) {}
 
 bool AnvilBlock::matches(const BlockState &state) {
     return matches(state.mName);

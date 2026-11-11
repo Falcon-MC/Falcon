@@ -6,56 +6,35 @@
 
 namespace {
 
-const double FLAT_SIMPLEX_GRAD[64] = {
-    1, 1, 0, 0,
-    -1, 1, 0, 0,
-    1, -1, 0, 0,
-    -1, -1, 0, 0,
-    1, 0, 1, 0,
-    -1, 0, 1, 0,
-    1, 0, -1, 0,
-    -1, 0, -1, 0,
-    0, 1, 1, 0,
-    0, -1, 1, 0,
-    0, 1, -1, 0,
-    0, -1, -1, 0,
-    1, 1, 0, 0,
-    0, -1, 1, 0,
-    -1, 1, 0, 0,
-    0, -1, -1, 0
-};
+    const double FLAT_SIMPLEX_GRAD[64] = {1, 1,  0,  0, -1, 1, 0,  0, 1,  -1, 0, 0, -1, -1, 0, 0,  1, 0,  1,  0, -1, 0,
+                                          1, 0,  1,  0, -1, 0, -1, 0, -1, 0,  0, 1, 1,  0,  0, -1, 1, 0,  0,  1, -1, 0,
+                                          0, -1, -1, 0, 1,  1, 0,  0, 0,  -1, 1, 0, -1, 1,  0, 0,  0, -1, -1, 0};
 
-float fade(float t) {
-    return ((t * 6.0f + -15.0f) * t + 10.0f) * (t * t * t);
-}
+    float fade(float t) {
+        return ((t * 6.0f + -15.0f) * t + 10.0f) * (t * t * t);
+    }
 
-float dot(int32_t gradient, float x, float y, float z) {
-    const float gx = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient]);
-    const float gy = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient | 1]);
-    const float gz = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient | 2]);
-    return gz * z + (gx * x + gy * y);
-}
+    float dot(int32_t gradient, float x, float y, float z) {
+        const float gx = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient]);
+        const float gy = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient | 1]);
+        const float gz = static_cast<float>(FLAT_SIMPLEX_GRAD[gradient | 2]);
+        return gz * z + (gx * x + gy * y);
+    }
 
-float lerp(float delta, float start, float end) {
-    return (end - start) * delta + start;
-}
+    float lerp(float delta, float start, float end) {
+        return (end - start) * delta + start;
+    }
 
 }
 
 // drawn as doubles, stored as floats (sub_145C2AF90)
 PerlinNoiseSampler::PerlinNoiseSampler(IRandom &rand)
-    : Noise(rand),
-      mOriginXFloat(static_cast<float>(mOriginX)),
-      mOriginYFloat(static_cast<float>(mOriginY)),
-      mOriginZFloat(static_cast<float>(mOriginZ)) {
-}
+        : Noise(rand), mOriginXFloat(static_cast<float>(mOriginX)), mOriginYFloat(static_cast<float>(mOriginY)),
+          mOriginZFloat(static_cast<float>(mOriginZ)) {}
 
 PerlinNoiseSampler::PerlinNoiseSampler(std::mt19937 &random)
-    : Noise(random),
-      mOriginXFloat(static_cast<float>(mOriginX)),
-      mOriginYFloat(static_cast<float>(mOriginY)),
-      mOriginZFloat(static_cast<float>(mOriginZ)) {
-}
+        : Noise(random), mOriginXFloat(static_cast<float>(mOriginX)), mOriginYFloat(static_cast<float>(mOriginY)),
+          mOriginZFloat(static_cast<float>(mOriginZ)) {}
 
 double PerlinNoiseSampler::sample(double x, double y, double z, double yAmplification, double minY) const {
     const double offsetX = x + mOriginX;
@@ -74,10 +53,12 @@ double PerlinNoiseSampler::sample(double x, double y, double z, double yAmplific
         yOffset = std::floor(yClamp / yAmplification + 1.0E-7) * yAmplification;
     }
 
-    return _sample(static_cast<int32_t>(floorX), static_cast<int32_t>(floorY), static_cast<int32_t>(floorZ), localX, localY - yOffset, localZ, localY);
+    return _sample(static_cast<int32_t>(floorX), static_cast<int32_t>(floorY), static_cast<int32_t>(floorZ), localX,
+                   localY - yOffset, localZ, localY);
 }
 
-double PerlinNoiseSampler::_sample(int32_t sectionX, int32_t sectionY, int32_t sectionZ, double localX, double localY, double localZ, double fadeLocalY) const {
+double PerlinNoiseSampler::_sample(int32_t sectionX, int32_t sectionY, int32_t sectionZ, double localX, double localY,
+                                   double localZ, double fadeLocalY) const {
     const int32_t var0 = sectionX & 0xFF;
     const int32_t var1 = (sectionX + 1) & 0xFF;
     const int32_t var2 = static_cast<int32_t>(mPermutations[static_cast<size_t>(var0)]) & 0xFF;
@@ -112,14 +93,22 @@ double PerlinNoiseSampler::_sample(int32_t sectionX, int32_t sectionY, int32_t s
     const double yMinusOne = localY - 1.0;
     const double zMinusOne = localZ - 1.0;
 
-    const double grad000 = FLAT_SIMPLEX_GRAD[var20] * localX + FLAT_SIMPLEX_GRAD[var20 | 1] * localY + FLAT_SIMPLEX_GRAD[var20 | 2] * localZ;
-    const double grad100 = FLAT_SIMPLEX_GRAD[var21] * xMinusOne + FLAT_SIMPLEX_GRAD[var21 | 1] * localY + FLAT_SIMPLEX_GRAD[var21 | 2] * localZ;
-    const double grad010 = FLAT_SIMPLEX_GRAD[var22] * localX + FLAT_SIMPLEX_GRAD[var22 | 1] * yMinusOne + FLAT_SIMPLEX_GRAD[var22 | 2] * localZ;
-    const double grad110 = FLAT_SIMPLEX_GRAD[var23] * xMinusOne + FLAT_SIMPLEX_GRAD[var23 | 1] * yMinusOne + FLAT_SIMPLEX_GRAD[var23 | 2] * localZ;
-    const double grad001 = FLAT_SIMPLEX_GRAD[var24] * localX + FLAT_SIMPLEX_GRAD[var24 | 1] * localY + FLAT_SIMPLEX_GRAD[var24 | 2] * zMinusOne;
-    const double grad101 = FLAT_SIMPLEX_GRAD[var25] * xMinusOne + FLAT_SIMPLEX_GRAD[var25 | 1] * localY + FLAT_SIMPLEX_GRAD[var25 | 2] * zMinusOne;
-    const double grad011 = FLAT_SIMPLEX_GRAD[var26] * localX + FLAT_SIMPLEX_GRAD[var26 | 1] * yMinusOne + FLAT_SIMPLEX_GRAD[var26 | 2] * zMinusOne;
-    const double grad111 = FLAT_SIMPLEX_GRAD[var27] * xMinusOne + FLAT_SIMPLEX_GRAD[var27 | 1] * yMinusOne + FLAT_SIMPLEX_GRAD[var27 | 2] * zMinusOne;
+    const double grad000 = FLAT_SIMPLEX_GRAD[var20] * localX + FLAT_SIMPLEX_GRAD[var20 | 1] * localY
+                           + FLAT_SIMPLEX_GRAD[var20 | 2] * localZ;
+    const double grad100 = FLAT_SIMPLEX_GRAD[var21] * xMinusOne + FLAT_SIMPLEX_GRAD[var21 | 1] * localY
+                           + FLAT_SIMPLEX_GRAD[var21 | 2] * localZ;
+    const double grad010 = FLAT_SIMPLEX_GRAD[var22] * localX + FLAT_SIMPLEX_GRAD[var22 | 1] * yMinusOne
+                           + FLAT_SIMPLEX_GRAD[var22 | 2] * localZ;
+    const double grad110 = FLAT_SIMPLEX_GRAD[var23] * xMinusOne + FLAT_SIMPLEX_GRAD[var23 | 1] * yMinusOne
+                           + FLAT_SIMPLEX_GRAD[var23 | 2] * localZ;
+    const double grad001 = FLAT_SIMPLEX_GRAD[var24] * localX + FLAT_SIMPLEX_GRAD[var24 | 1] * localY
+                           + FLAT_SIMPLEX_GRAD[var24 | 2] * zMinusOne;
+    const double grad101 = FLAT_SIMPLEX_GRAD[var25] * xMinusOne + FLAT_SIMPLEX_GRAD[var25 | 1] * localY
+                           + FLAT_SIMPLEX_GRAD[var25 | 2] * zMinusOne;
+    const double grad011 = FLAT_SIMPLEX_GRAD[var26] * localX + FLAT_SIMPLEX_GRAD[var26 | 1] * yMinusOne
+                           + FLAT_SIMPLEX_GRAD[var26 | 2] * zMinusOne;
+    const double grad111 = FLAT_SIMPLEX_GRAD[var27] * xMinusOne + FLAT_SIMPLEX_GRAD[var27 | 1] * yMinusOne
+                           + FLAT_SIMPLEX_GRAD[var27 | 2] * zMinusOne;
 
     const double fadeX = localX * localX * localX * (localX * (localX * 6.0 - 15.0) + 10.0);
     const double fadeY = fadeLocalY * fadeLocalY * fadeLocalY * (fadeLocalY * (fadeLocalY * 6.0 - 15.0) + 10.0);
@@ -147,7 +136,8 @@ float PerlinNoiseSampler::sampleFloat(float x, float y, float z) const {
                         offsetY - static_cast<float>(sectionY), offsetZ - static_cast<float>(sectionZ));
 }
 
-float PerlinNoiseSampler::_sampleFloat(int32_t sectionX, int32_t sectionY, int32_t sectionZ, float localX, float localY, float localZ) const {
+float PerlinNoiseSampler::_sampleFloat(int32_t sectionX, int32_t sectionY, int32_t sectionZ, float localX, float localY,
+                                       float localZ) const {
     const int32_t a = lookup(sectionX);
     const int32_t b = lookup(sectionX + 1);
     const int32_t aa = lookup(a + sectionY);

@@ -30,8 +30,7 @@ public:
     static void completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player);
 
     static void handleResourcePackClientResponse(ServerNetworkHandler &owner, const NetworkIdentifier &id,
-                                                 ServerPlayer &player,
-                                                 const ResourcePackClientResponsePacket &packet);
+                                                 ServerPlayer &player, const ResourcePackClientResponsePacket &packet);
 
     static void handleResourcePackChunkRequest(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                const ResourcePackChunkRequestPacket &packet);

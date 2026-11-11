@@ -19,7 +19,8 @@ namespace {
     }
 
     bool isWaterBiome(int32_t biomeId) {
-        return BiomeChunkGenDataRegistry::hasTag(biomeId, "ocean") || BiomeChunkGenDataRegistry::hasTag(biomeId, "river");
+        return BiomeChunkGenDataRegistry::hasTag(biomeId, "ocean")
+               || BiomeChunkGenDataRegistry::hasTag(biomeId, "river");
     }
 }
 

@@ -200,8 +200,8 @@ void MoveToVillageGoal::_checkRepeatedPath(const MobActor &mob) {
 
     mPathCheckPending = false;
     const Vector3i start = blockOf(mob.getPosition());
-    if (navigation.isDone() || (start.x == mLastPathStart.x && start.y == mLastPathStart.y
-                                && start.z == mLastPathStart.z)) {
+    if (navigation.isDone()
+        || (start.x == mLastPathStart.x && start.y == mLastPathStart.y && start.z == mLastPathStart.z)) {
         mCooldown = mSettings.mCooldownTicks;
         return;
     }

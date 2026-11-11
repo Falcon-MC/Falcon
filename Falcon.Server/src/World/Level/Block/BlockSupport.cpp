@@ -9,9 +9,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 
 namespace {
-    const int FACE_OFFSETS[6][3] = {
-            {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-    };
+    const int FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 }
 
 namespace BlockSupport {
@@ -19,8 +17,7 @@ namespace BlockSupport {
         if (blockFace < 0 || blockFace > 5)
             return Vector3i(position.x, position.y - 1, position.z);
 
-        return Vector3i(position.x - FACE_OFFSETS[blockFace][0],
-                        position.y - FACE_OFFSETS[blockFace][1],
+        return Vector3i(position.x - FACE_OFFSETS[blockFace][0], position.y - FACE_OFFSETS[blockFace][1],
                         position.z - FACE_OFFSETS[blockFace][2]);
     }
 

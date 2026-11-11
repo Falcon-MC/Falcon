@@ -6,9 +6,7 @@
 
 class BellBlock final : public Block {
 public:
-    explicit BellBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit BellBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

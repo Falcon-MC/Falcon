@@ -12,8 +12,8 @@ using namespace PluginApiHelpers;
 
 namespace {
     bool isValidGameMode(FalconGameMode gameMode) {
-        return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE ||
-               gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
+        return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE
+               || gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
     }
 
     FalconGameMode playerGameMode(FalconPlayer *target) {
@@ -79,7 +79,7 @@ namespace {
         ServerPlayer *value = player(target);
         const bool isOp = operator_ != 0;
         if (isOp)
-            owner().getOpList().addOp(value->getName());
+            owner().getOpList().addOp(value->getName(), value->getXuid());
         else
             owner().getOpList().removeOp(value->getName());
         owner().setPlayerOp(*value, isOp);

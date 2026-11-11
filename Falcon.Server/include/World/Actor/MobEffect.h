@@ -55,7 +55,9 @@ struct MobEffectInstance {
     bool mAmbient = false;
     bool mInfinite = false;
 
-    int32_t level() const { return mAmplifier + 1; }
+    int32_t level() const {
+        return mAmplifier + 1;
+    }
 };
 
 const char *getMobEffectName(MobEffectId id);
@@ -78,8 +80,12 @@ public:
     }
 
     virtual void tick(Actor &, const MobEffectInstance &) const {}
-    virtual int32_t getApplyInterval(const MobEffectInstance &) const { return 1; }
-    virtual bool isInstantaneous() const { return false; }
+    virtual int32_t getApplyInterval(const MobEffectInstance &) const {
+        return 1;
+    }
+    virtual bool isInstantaneous() const {
+        return false;
+    }
 };
 
 class AbsorptionMobEffect final : public MobEffect {
@@ -101,7 +107,9 @@ public:
 
 class InstantaneousMobEffect : public MobEffect {
 public:
-    bool isInstantaneous() const override { return true; }
+    bool isInstantaneous() const override {
+        return true;
+    }
 };
 
 class InstantHealthMobEffect final : public InstantaneousMobEffect {
@@ -183,12 +191,18 @@ class WindChargedMobEffect final : public MobEffect {};
 class MobEffectManager {
 public:
     using EventCallback = std::function<void(const MobEffectInstance &, MobEffectEvent)>;
-    using AddFilter = std::function<bool(Actor &, const MobEffectInstance &)>;
+    // may rewrite the duration; false refuses the effect
+    using AddFilter = std::function<bool(Actor &, MobEffectInstance &)>;
+    using AddListener = std::function<void(Actor &, const MobEffectInstance &)>;
 
     explicit MobEffectManager(Actor &actor) : mActor(actor) {}
 
     static void setAddFilter(AddFilter filter) {
         sAddFilter = std::move(filter);
+    }
+
+    static void setAddListener(AddListener listener) {
+        sAddListener = std::move(listener);
     }
 
     bool add(const MobEffectInstance &instance);
@@ -198,9 +212,13 @@ public:
 
     bool has(MobEffectId id) const;
     const MobEffectInstance *get(MobEffectId id) const;
-    const std::unordered_map<int32_t, MobEffectInstance> &getAll() const { return mEffects; }
+    const std::unordered_map<int32_t, MobEffectInstance> &getAll() const {
+        return mEffects;
+    }
 
-    void setEventCallback(EventCallback callback) { mEventCallback = std::move(callback); }
+    void setEventCallback(EventCallback callback) {
+        mEventCallback = std::move(callback);
+    }
 
     float movementSpeedMultiplier() const;
     void setMovementSpeedBonus(float bonus);
@@ -209,7 +227,9 @@ public:
     int32_t getFreezingTicks() const {
         return mFreezingTicks;
     }
-    bool hasResistance() const { return has(MobEffectId::Resistance); }
+    bool hasResistance() const {
+        return has(MobEffectId::Resistance);
+    }
 
     bool consumeAttributesDirty() {
         const bool dirty = mAttributesDirty;
@@ -224,6 +244,7 @@ private:
     void emit(const MobEffectInstance &instance, MobEffectEvent event) const;
 
     static inline AddFilter sAddFilter;
+    static inline AddListener sAddListener;
 
     Actor &mActor;
     std::unordered_map<int32_t, MobEffectInstance> mEffects;

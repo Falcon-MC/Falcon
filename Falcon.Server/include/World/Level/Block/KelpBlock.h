@@ -4,8 +4,7 @@
 
 class KelpBlock : public Block {
 public:
-    explicit KelpBlock(const Block &block) : Block(block) {
-    }
+    explicit KelpBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

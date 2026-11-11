@@ -29,9 +29,7 @@ namespace {
             octaves.push_back(octave);
         }
 
-        std::sort(octaves.begin(), octaves.end(), [](int32_t a, int32_t b) {
-            return b < a;
-        });
+        std::sort(octaves.begin(), octaves.end(), [](int32_t a, int32_t b) { return b < a; });
         return octaves;
     }
 
@@ -74,13 +72,11 @@ namespace {
             for (int32_t octave = 0; octave < mMainNoise->getCount(); octave++) {
                 const PerlinNoiseSampler *sampler = mMainNoise->getOctave(octave);
                 if (sampler != nullptr) {
-                    mainValue += sampler->sample(
-                            NoiseMath::maintainPrecision(mainX * frequency),
-                            NoiseMath::maintainPrecision(mainY * frequency),
-                            NoiseMath::maintainPrecision(mainZ * frequency),
-                            mainSmear * frequency,
-                            mainY * frequency
-                    ) / frequency;
+                    mainValue += sampler->sample(NoiseMath::maintainPrecision(mainX * frequency),
+                                                 NoiseMath::maintainPrecision(mainY * frequency),
+                                                 NoiseMath::maintainPrecision(mainZ * frequency), mainSmear * frequency,
+                                                 mainY * frequency)
+                                 / frequency;
                 }
                 frequency /= 2.0;
             }
@@ -146,8 +142,7 @@ namespace {
 }
 
 DensityFunctionPtr DensityBase3dNoise::oldBlendedNoise(XoroshiroRandom &random, double xzScale, double yScale,
-                                                       double xzFactor, double yFactor,
-                                                       double smearScaleMultiplier) {
+                                                       double xzFactor, double yFactor, double smearScaleMultiplier) {
     // order matters: one stream, no fork
     OctavePerlinNoiseSamplerPtr minLimitNoise = std::make_shared<OctavePerlinNoiseSampler>(random, limitOctaves());
     OctavePerlinNoiseSamplerPtr maxLimitNoise = std::make_shared<OctavePerlinNoiseSampler>(random, limitOctaves());

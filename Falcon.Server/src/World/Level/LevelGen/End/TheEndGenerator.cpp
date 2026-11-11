@@ -72,7 +72,7 @@ float TheEndGenerator::getIslandHeight(int32_t chunkX, int32_t chunkZ, int32_t x
     return height;
 }
 
-template<typename Visitor>
+template <typename Visitor>
 void TheEndGenerator::_forEachTerrainBlock(int32_t chunkX, int32_t chunkZ, Visitor &&visit) const {
     const TheEndTerrainNoises &noises = mNoiseHolder->getTerrainNoises();
     const int32_t xzCount = TheEndGeneratorConstants::DENSITY_XZ_COUNT;

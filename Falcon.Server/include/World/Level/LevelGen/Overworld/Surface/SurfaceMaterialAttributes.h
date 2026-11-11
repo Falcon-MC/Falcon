@@ -26,12 +26,7 @@ public:
 };
 
 // the "type" of a biome's minecraft:surface_builder
-enum class SurfaceBuilderType {
-    Overworld,
-    Mesa,
-    Swamp,
-    FrozenOcean
-};
+enum class SurfaceBuilderType { Overworld, Mesa, Swamp, FrozenOcean };
 
 class SurfaceBuilderComponent {
 public:

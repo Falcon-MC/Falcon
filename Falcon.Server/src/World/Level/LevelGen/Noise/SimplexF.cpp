@@ -4,30 +4,27 @@
 
 namespace {
 
-const int32_t GRAD3[12][3] = {
-    {1, 1, 0}, {-1, 1, 0}, {1, -1, 0}, {-1, -1, 0},
-    {1, 0, 1}, {-1, 0, 1}, {1, 0, -1}, {-1, 0, -1},
-    {0, 1, 1}, {0, -1, 1}, {0, 1, -1}, {0, -1, -1}
-};
+    const int32_t GRAD3[12][3] = {{1, 1, 0},  {-1, 1, 0},  {1, -1, 0}, {-1, -1, 0}, {1, 0, 1},  {-1, 0, 1},
+                                  {1, 0, -1}, {-1, 0, -1}, {0, 1, 1},  {0, -1, 1},  {0, 1, -1}, {0, -1, -1}};
 
-const float SQRT_3 = static_cast<float>(std::sqrt(3.0));
-const float SQRT_5 = static_cast<float>(std::sqrt(5.0));
-const float F2 = 0.5f * (SQRT_3 - 1.0f);
-const float G2 = (3.0f - SQRT_3) / 6.0f;
-const float G22 = G2 * 2.0f - 1.0f;
-const float F3 = 1.0f / 3.0f;
-const float G3 = 1.0f / 6.0f;
-const float F4 = (SQRT_5 - 1.0f) / 4.0f;
-const float G4 = (5.0f - SQRT_5) / 20.0f;
-const float G42 = G4 * 2.0f;
-const float G43 = G4 * 3.0f;
-const float G44 = G4 * 4.0f - 1.0f;
+    const float SQRT_3 = static_cast<float>(std::sqrt(3.0));
+    const float SQRT_5 = static_cast<float>(std::sqrt(5.0));
+    const float F2 = 0.5f * (SQRT_3 - 1.0f);
+    const float G2 = (3.0f - SQRT_3) / 6.0f;
+    const float G22 = G2 * 2.0f - 1.0f;
+    const float F3 = 1.0f / 3.0f;
+    const float G3 = 1.0f / 6.0f;
+    const float F4 = (SQRT_5 - 1.0f) / 4.0f;
+    const float G4 = (5.0f - SQRT_5) / 20.0f;
+    const float G42 = G4 * 2.0f;
+    const float G43 = G4 * 3.0f;
+    const float G44 = G4 * 4.0f - 1.0f;
 
 }
 
 NoiseF::NoiseF()
-    : mPerm(), mOffsetX(0.0f), mOffsetY(0.0f), mOffsetZ(0.0f), mOctaves(8.0f), mPersistence(0.0f), mExpansion(0.0f) {
-}
+        : mPerm(), mOffsetX(0.0f), mOffsetY(0.0f), mOffsetZ(0.0f), mOctaves(8.0f), mPersistence(0.0f),
+          mExpansion(0.0f) {}
 
 int32_t NoiseF::floor(float x) {
     return x >= 0.0f ? static_cast<int32_t>(x) : static_cast<int32_t>(x - 1.0f);
@@ -114,12 +111,9 @@ void NoiseF::setOffset(float x, float y, float z) {
     mOffsetZ = z;
 }
 
-PerlinF::PerlinF(IRandom &random, float octaves, float persistence)
-    : PerlinF(random, octaves, persistence, 1.0f) {
-}
+PerlinF::PerlinF(IRandom &random, float octaves, float persistence) : PerlinF(random, octaves, persistence, 1.0f) {}
 
-PerlinF::PerlinF(IRandom &random, float octaves, float persistence, float expansion)
-    : NoiseF() {
+PerlinF::PerlinF(IRandom &random, float octaves, float persistence, float expansion) : NoiseF() {
     mOctaves = octaves;
     mPersistence = persistence;
     mExpansion = expansion;
@@ -194,12 +188,12 @@ float PerlinF::getNoise3D(float x, float y, float z) const {
 }
 
 SimplexF::SimplexF(IRandom &random, float octaves, float persistence)
-    : PerlinF(random, octaves, persistence), mOffsetW(0.0f) {
+        : PerlinF(random, octaves, persistence), mOffsetW(0.0f) {
     mOffsetW = random.nextFloat() * 256.0f;
 }
 
 SimplexF::SimplexF(IRandom &random, float octaves, float persistence, float expansion)
-    : PerlinF(random, octaves, persistence, expansion), mOffsetW(0.0f) {
+        : PerlinF(random, octaves, persistence, expansion), mOffsetW(0.0f) {
     mOffsetW = random.nextFloat() * 256.0f;
 }
 
@@ -300,29 +294,44 @@ float SimplexF::getNoise3D(float x, float y, float z) const {
     const float t0 = 0.6f - x0 * x0 - y0 * y0 - z0 * z0;
 
     if (t0 > 0.0f) {
-        const int32_t *gi0 = GRAD3[mPerm[static_cast<size_t>(ii + mPerm[static_cast<size_t>(jj + mPerm[static_cast<size_t>(kk)])])] % 12];
-        n += t0 * t0 * t0 * t0 * (static_cast<float>(gi0[0]) * x0 + static_cast<float>(gi0[1]) * y0 + static_cast<float>(gi0[2]) * z0);
+        const int32_t *gi0 =
+                GRAD3[mPerm[static_cast<size_t>(ii + mPerm[static_cast<size_t>(jj + mPerm[static_cast<size_t>(kk)])])]
+                      % 12];
+        n += t0 * t0 * t0 * t0
+             * (static_cast<float>(gi0[0]) * x0 + static_cast<float>(gi0[1]) * y0 + static_cast<float>(gi0[2]) * z0);
     }
 
     const float t1 = 0.6f - x1 * x1 - y1 * y1 - z1 * z1;
 
     if (t1 > 0.0f) {
-        const int32_t *gi1 = GRAD3[mPerm[static_cast<size_t>(ii + i1 + mPerm[static_cast<size_t>(jj + j1 + mPerm[static_cast<size_t>(kk + k1)])])] % 12];
-        n += t1 * t1 * t1 * t1 * (static_cast<float>(gi1[0]) * x1 + static_cast<float>(gi1[1]) * y1 + static_cast<float>(gi1[2]) * z1);
+        const int32_t *gi1 =
+                GRAD3[mPerm[static_cast<size_t>(
+                              ii + i1 + mPerm[static_cast<size_t>(jj + j1 + mPerm[static_cast<size_t>(kk + k1)])])]
+                      % 12];
+        n += t1 * t1 * t1 * t1
+             * (static_cast<float>(gi1[0]) * x1 + static_cast<float>(gi1[1]) * y1 + static_cast<float>(gi1[2]) * z1);
     }
 
     const float t2 = 0.6f - x2 * x2 - y2 * y2 - z2 * z2;
 
     if (t2 > 0.0f) {
-        const int32_t *gi2 = GRAD3[mPerm[static_cast<size_t>(ii + i2 + mPerm[static_cast<size_t>(jj + j2 + mPerm[static_cast<size_t>(kk + k2)])])] % 12];
-        n += t2 * t2 * t2 * t2 * (static_cast<float>(gi2[0]) * x2 + static_cast<float>(gi2[1]) * y2 + static_cast<float>(gi2[2]) * z2);
+        const int32_t *gi2 =
+                GRAD3[mPerm[static_cast<size_t>(
+                              ii + i2 + mPerm[static_cast<size_t>(jj + j2 + mPerm[static_cast<size_t>(kk + k2)])])]
+                      % 12];
+        n += t2 * t2 * t2 * t2
+             * (static_cast<float>(gi2[0]) * x2 + static_cast<float>(gi2[1]) * y2 + static_cast<float>(gi2[2]) * z2);
     }
 
     const float t3 = 0.6f - x3 * x3 - y3 * y3 - z3 * z3;
 
     if (t3 > 0.0f) {
-        const int32_t *gi3 = GRAD3[mPerm[static_cast<size_t>(ii + 1 + mPerm[static_cast<size_t>(jj + 1 + mPerm[static_cast<size_t>(kk + 1)])])] % 12];
-        n += t3 * t3 * t3 * t3 * (static_cast<float>(gi3[0]) * x3 + static_cast<float>(gi3[1]) * y3 + static_cast<float>(gi3[2]) * z3);
+        const int32_t *gi3 =
+                GRAD3[mPerm[static_cast<size_t>(
+                              ii + 1 + mPerm[static_cast<size_t>(jj + 1 + mPerm[static_cast<size_t>(kk + 1)])])]
+                      % 12];
+        n += t3 * t3 * t3 * t3
+             * (static_cast<float>(gi3[0]) * x3 + static_cast<float>(gi3[1]) * y3 + static_cast<float>(gi3[2]) * z3);
     }
 
     return 32.0f * n;

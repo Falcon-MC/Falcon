@@ -83,7 +83,7 @@ std::vector<CommandOverloadData> LocateCommand::getOverloads() const {
     structureParameter.mHasEnumData = true;
     structureParameter.mEnumData.mName = "Structure";
     structureParameter.mEnumData.mIsSoft = false;
-    for (const StructureFeature *feature : StructureFeature::getAll())
+    for (const StructureFeature *feature: StructureFeature::getAll())
         structureParameter.mEnumData.mValues.push_back(feature->getName());
 
     CommandOverloadData structureOverload;
@@ -228,13 +228,13 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
     // shared: a world unloaded mid-search doesn't take the generator with it
     const std::shared_ptr<const ChunkGenerator> generator = level.shareGenerator();
 
-    std::thread search([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport,
-                        originX, originY, originZ]() {
-        BiomeSearch::Result result = BiomeSearch::findNearest(*generator, Vector3i(originX, originY, originZ),
-                                                              biomeId);
+    std::thread search([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport, originX, originY,
+                        originZ]() {
+        BiomeSearch::Result result = BiomeSearch::findNearest(*generator, Vector3i(originX, originY, originZ), biomeId);
         if (!result.mFound) {
-            result = BiomeSearch::findNearest(*generator, Vector3i(originX + RETRY_OFFSET, originY + RETRY_OFFSET,
-                                                                   originZ + RETRY_OFFSET), biomeId);
+            result = BiomeSearch::findNearest(
+                    *generator, Vector3i(originX + RETRY_OFFSET, originY + RETRY_OFFSET, originZ + RETRY_OFFSET),
+                    biomeId);
         }
         gSearchRunning = false;
 
@@ -259,9 +259,8 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
                 return;
             }
 
-            const Vector3i found = result.mNeedsOpening
-                                   ? BiomeSearch::findOpening(level, result.mPosition, biomeId)
-                                   : result.mPosition;
+            const Vector3i found = result.mNeedsOpening ? BiomeSearch::findOpening(level, result.mPosition, biomeId)
+                                                        : result.mPosition;
 
             const int32_t deltaX = found.x - originX;
             const int32_t deltaZ = found.z - originZ;

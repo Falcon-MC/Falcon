@@ -27,24 +27,38 @@ public:
 
     virtual void loadNbt(const Tag &data, const PacketCodecContext &context) = 0;
 
-    virtual Container *getContainer() { return nullptr; }
+    virtual Container *getContainer() {
+        return nullptr;
+    }
 
     virtual bool tick(ServerNetworkHandler &owner) {
         (void) owner;
         return true;
     }
 
-    const BlockState &getState() const noexcept { return mState; }
+    const BlockState &getState() const noexcept {
+        return mState;
+    }
 
-    void setState(const BlockState &state) { mState = state; }
+    void setState(const BlockState &state) {
+        mState = state;
+    }
 
-    const Vector3i &getPosition() const noexcept { return mPosition; }
+    const Vector3i &getPosition() const noexcept {
+        return mPosition;
+    }
 
-    void setPosition(const Vector3i &position) { mPosition = position; }
+    void setPosition(const Vector3i &position) {
+        mPosition = position;
+    }
 
-    Level *getLevel() const noexcept { return mLevel; }
+    Level *getLevel() const noexcept {
+        return mLevel;
+    }
 
-    void setLevel(Level *level) { mLevel = level; }
+    void setLevel(Level *level) {
+        mLevel = level;
+    }
 
     Tag saveWithPosition() const;
 

@@ -43,8 +43,7 @@ namespace {
     }
 }
 
-BiomeSearch::Result BiomeSearch::findNearest(const ChunkGenerator &generator, const Vector3i &origin,
-                                             int32_t biomeId) {
+BiomeSearch::Result BiomeSearch::findNearest(const ChunkGenerator &generator, const Vector3i &origin, int32_t biomeId) {
     const DimensionType dimension = generator.getDimensionType();
     const int32_t minY = Dimension::getMinY(dimension);
     // the game's height range ends one block above the highest y

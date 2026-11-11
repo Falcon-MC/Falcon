@@ -13,8 +13,8 @@ namespace {
     const char *const GRIEFING_RULE = "mobgriefing";
     const int32_t MERGE_CHANCE = 10;
     const float MERGE_HEIGHT_OFFSET = 0.5f;
-    const Vector3i MERGE_DIRECTIONS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1),
-                                         Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
+    const Vector3i MERGE_DIRECTIONS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                         Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
     const int32_t WAKE_DELAY_TICKS = 20;
     const int32_t WAKE_RANGE_HORIZONTAL = 10;
     const int32_t WAKE_RANGE_VERTICAL = 5;
@@ -43,7 +43,8 @@ bool SilverfishMergeWithStoneGoal::canUse(ServerNetworkHandler &owner, MobActor 
         return false;
 
     const size_t count = sizeof(MERGE_DIRECTIONS) / sizeof(MERGE_DIRECTIONS[0]);
-    const Vector3i &direction = MERGE_DIRECTIONS[std::uniform_int_distribution<size_t>(0, count - 1)(silverfishRandom())];
+    const Vector3i &direction =
+            MERGE_DIRECTIONS[std::uniform_int_distribution<size_t>(0, count - 1)(silverfishRandom())];
     const Vector3f position = mob.getPosition();
     const Vector3i candidate((int32_t) std::floor(position.x) + direction.x,
                              (int32_t) std::floor(position.y + MERGE_HEIGHT_OFFSET) + direction.y,

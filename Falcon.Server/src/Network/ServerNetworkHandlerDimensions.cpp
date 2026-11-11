@@ -130,7 +130,7 @@ void ServerNetworkHandler::_broadcastFluidChanges(Level &level) {
     for (const Level::FluidChange &change: level.consumeFluidChanges()) {
         UpdateBlockPacket update;
         update.mBlockPosition = change.position;
-        update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
+        update.mRuntimeId = change.runtimeId;
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = (uint32_t) change.layer;
         BlockActionHandler::broadcastToViewers(*this, level,
@@ -224,8 +224,7 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
     changePlayerLevel(player, getWorldFor(player).getLevel(dimension), position);
 }
 
-void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destinationLevel,
-                                             const Vector3f &position) {
+void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destinationLevel, const Vector3f &position) {
     if (player.isIn(destinationLevel))
         return;
 
@@ -272,6 +271,7 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
 
     Level &previous = getLevelFor(player);
     World &previousWorld = getWorldFor(player);
+    const Vector3f fromLocation = player.getPosition();
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
     player.moveToLevel(destinationLevel);
@@ -298,13 +298,15 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     // another dimension and complete on the first ack
     if (sameDimension) {
         player.setPendingDimensionHop(true);
-        _sendDimensionChange(player, dimension == DimensionType::Overworld ? DimensionType::Nether
-                                                                          : DimensionType::Overworld, destination);
+        _sendDimensionChange(player,
+                             dimension == DimensionType::Overworld ? DimensionType::Nether : DimensionType::Overworld,
+                             destination);
         return;
     }
 
     _sendDimensionChange(player, dimension, destination);
     ChunkStreamHandler::handleTeleport(*this, player);
+    mScriptEngine.onPlayerDimensionChange(player, previous, fromLocation, destinationLevel, destination);
 }
 
 void ServerNetworkHandler::_sendDimensionChange(ServerPlayer &player, DimensionType dimension,

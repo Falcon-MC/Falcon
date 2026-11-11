@@ -54,8 +54,7 @@ void PlayerAcknowledgements::clear() {
 }
 
 bool PlayerAcknowledgements::_matches(uint64_t sent, uint64_t received) {
-    return received == sent || received == sent * RESPONSE_SCALE
-           || received == sent * RESPONSE_SCALE * RESPONSE_SCALE;
+    return received == sent || received == sent * RESPONSE_SCALE || received == sent * RESPONSE_SCALE * RESPONSE_SCALE;
 }
 
 bool PlayerAcknowledgements::hasTimedOut(int64_t currentTick) const {

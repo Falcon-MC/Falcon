@@ -2,8 +2,7 @@
 
 #include "World/Containers/Managers/Models/ContainerManagerModel.h"
 
-class BlockContainerScreenValidator : public ContainerScreenValidatorBase {
-};
+class BlockContainerScreenValidator : public ContainerScreenValidatorBase {};
 
 class BlockContainerManagerModel : public ContainerManagerModel {
 public:

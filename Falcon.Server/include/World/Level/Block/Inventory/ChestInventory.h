@@ -12,7 +12,9 @@ public:
     static const int SIZE = 27;
     static const int DOUBLE_SIZE = SIZE * 2;
 
-    int getContainerSize() const override { return SIZE; }
+    int getContainerSize() const override {
+        return SIZE;
+    }
 
     const ItemStack &getContainerItem(int slot) const override;
 
@@ -34,7 +36,9 @@ class DoubleChestInventory : public Container {
 public:
     DoubleChestInventory(ChestInventory &left, ChestInventory &right) : mLeft(left), mRight(right) {}
 
-    int getContainerSize() const override { return ChestInventory::DOUBLE_SIZE; }
+    int getContainerSize() const override {
+        return ChestInventory::DOUBLE_SIZE;
+    }
 
     const ItemStack &getContainerItem(int slot) const override;
 

@@ -14,25 +14,15 @@ namespace {
     const char *const ACTOR_IDENTIFIER_TAG = "identifier";
     const int32_t GENERATED_STAY_TICKS = 600;
 
-    const char *FLOWER_BLOCKS[] = {
-            "minecraft:dandelion",
-            "minecraft:poppy",
-            "minecraft:blue_orchid",
-            "minecraft:allium",
-            "minecraft:azure_bluet",
-            "minecraft:red_tulip",
-            "minecraft:orange_tulip",
-            "minecraft:white_tulip",
-            "minecraft:pink_tulip",
-            "minecraft:oxeye_daisy",
-            "minecraft:cornflower",
-            "minecraft:lily_of_the_valley",
-            "minecraft:wither_rose",
-            "minecraft:torchflower",
-            "minecraft:open_eyeblossom",
-            "minecraft:closed_eyeblossom",
-            "minecraft:flowering_azalea"
-    };
+    const char *FLOWER_BLOCKS[] = {"minecraft:dandelion",       "minecraft:poppy",
+                                   "minecraft:blue_orchid",     "minecraft:allium",
+                                   "minecraft:azure_bluet",     "minecraft:red_tulip",
+                                   "minecraft:orange_tulip",    "minecraft:white_tulip",
+                                   "minecraft:pink_tulip",      "minecraft:oxeye_daisy",
+                                   "minecraft:cornflower",      "minecraft:lily_of_the_valley",
+                                   "minecraft:wither_rose",     "minecraft:torchflower",
+                                   "minecraft:open_eyeblossom", "minecraft:closed_eyeblossom",
+                                   "minecraft:flowering_azalea"};
 
     bool isFlower(const std::string &identifier) {
         for (const char *candidate: FLOWER_BLOCKS) {

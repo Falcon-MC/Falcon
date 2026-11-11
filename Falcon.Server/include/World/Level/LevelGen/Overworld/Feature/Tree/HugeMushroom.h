@@ -4,11 +4,7 @@
 
 class HugeMushroom : public ObjectGenerator {
 public:
-    enum class MushroomType : int32_t {
-        RED = 0,
-        BROWN = 1,
-        RANDOM = 2
-    };
+    enum class MushroomType : int32_t { RED = 0, BROWN = 1, RANDOM = 2 };
 
     static const int32_t NORTH_WEST = 1;
     static const int32_t NORTH = 2;

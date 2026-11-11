@@ -139,8 +139,7 @@ namespace {
     }
 }
 
-BlockPaletteRegistry::BlockPaletteRegistry() : mLoaded(false) {
-}
+BlockPaletteRegistry::BlockPaletteRegistry() : mLoaded(false) {}
 
 BlockPaletteRegistry &BlockPaletteRegistry::getInstance() {
     static BlockPaletteRegistry instance;

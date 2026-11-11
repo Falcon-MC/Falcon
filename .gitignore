@@ -1,5 +1,7 @@
 *
 !/.gitignore
+!/.clang-format
+!/.clang-format-ignore
 !/.github
 !/.github/**
 !/CMakeLists.txt

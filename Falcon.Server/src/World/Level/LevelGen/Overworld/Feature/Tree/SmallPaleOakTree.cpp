@@ -18,8 +18,7 @@ namespace {
 }
 
 SmallPaleOakTree::SmallPaleOakTree(int32_t minTreeHeight, int32_t maxTreeHeight)
-        : mMinTreeHeight(minTreeHeight), mMaxTreeHeight(maxTreeHeight) {
-}
+        : mMinTreeHeight(minTreeHeight), mMaxTreeHeight(maxTreeHeight) {}
 
 bool SmallPaleOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     int32_t i = random.nextInt(mMaxTreeHeight) + mMinTreeHeight;

@@ -76,8 +76,8 @@ void GoHomeGoal::_fire(ServerNetworkHandler &owner, MobActor &mob, const json::V
         return;
 
     const Vector3f &home = mob.getHomePosition();
-    mob.setEventBlock(Vector3i((int32_t) std::floor(home.x), (int32_t) std::floor(home.y),
-                               (int32_t) std::floor(home.z)));
+    mob.setEventBlock(
+            Vector3i((int32_t) std::floor(home.x), (int32_t) std::floor(home.y), (int32_t) std::floor(home.z)));
     EntityEvents::fireTriggers(owner, mob, triggers);
     mob.clearEventBlock();
 }

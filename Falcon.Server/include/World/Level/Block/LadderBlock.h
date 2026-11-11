@@ -7,9 +7,7 @@
 
 class LadderBlock final : public WallAttachedBlock {
 public:
-    explicit LadderBlock(const Block &block) : WallAttachedBlock(block)
-    {
-    }
+    explicit LadderBlock(const Block &block) : WallAttachedBlock(block) {}
 
     static bool matches(const std::string &identifier);
 

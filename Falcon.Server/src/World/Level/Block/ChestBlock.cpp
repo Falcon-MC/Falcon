@@ -16,12 +16,7 @@ namespace {
     const char *CHEST = "minecraft:chest";
     const char *TRAPPED_CHEST = "minecraft:trapped_chest";
 
-    const int32_t NEIGHBOUR_OFFSETS[4][2] = {
-            {1,  0},
-            {-1, 0},
-            {0,  1},
-            {0,  -1}
-    };
+    const int32_t NEIGHBOUR_OFFSETS[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
     std::string facingOf(const BlockState &state) {
         const Tag *states = state.mStates.get("minecraft:cardinal_direction");
@@ -44,8 +39,7 @@ namespace {
     }
 }
 
-ChestBlock::ChestBlock(const Block &base) : Block(base) {
-}
+ChestBlock::ChestBlock(const Block &base) : Block(base) {}
 
 bool ChestBlock::matches(const std::string &identifier) {
     return identifier == CHEST || identifier == TRAPPED_CHEST;
@@ -101,8 +95,7 @@ void ChestBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vecto
     chest->unpackLoot(owner);
     chest->unpair();
 
-    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                (float) position.z + 0.5f);
+    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     ChestInventory &inventory = chest->getInventory();
     for (int slot = 0; slot < ChestInventory::SIZE; ++slot) {
         const ItemStack &item = inventory.getContainerItem(slot);

@@ -5,8 +5,7 @@
 HugeTreeGenerator::HugeTreeGenerator(int32_t baseHeight, int32_t extraRandomHeight, const BlockState &woodMetadata,
                                      const BlockState &leavesMetadata)
         : mBaseHeight(baseHeight), mExtraRandomHeight(extraRandomHeight), mWoodMetadata(woodMetadata),
-          mLeavesMetadata(leavesMetadata) {
-}
+          mLeavesMetadata(leavesMetadata) {}
 
 int32_t HugeTreeGenerator::getHeight(IRandom &random) {
     int32_t height = random.nextInt(3) + mBaseHeight;
@@ -31,8 +30,7 @@ bool HugeTreeGenerator::_isSpaceAt(BlockManager &manager, int32_t x, int32_t y, 
 
             for (int32_t k = -j; k <= j && flag; ++k) {
                 for (int32_t l = -j; l <= j && flag; ++l) {
-                    if (y + i < 0 || y + i >= 256
-                        || !canGrowInto(manager.getBlockAt(x + k, y + i, z + l).mName))
+                    if (y + i < 0 || y + i >= 256 || !canGrowInto(manager.getBlockAt(x + k, y + i, z + l).mName))
                         flag = false;
                 }
             }

@@ -5,6 +5,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/TickingAreaManager.h"
 
+#include <unordered_map>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -48,7 +49,13 @@ public:
         return *mOverworld;
     }
 
+    // an unknown custom dimension reads as the overworld
     Level &getLevel(DimensionType dimension);
+
+    // opens a registered custom dimension's level: void generation, the overworld's database
+    Level &addCustomLevel(DimensionType dimension);
+
+    bool hasLevel(DimensionType dimension) const;
 
     std::vector<Level *> getLevels();
 
@@ -76,9 +83,14 @@ private:
     std::unique_ptr<Level> mOverworld;
     std::unique_ptr<Level> mNether;
     std::unique_ptr<Level> mTheEnd;
+    std::unordered_map<int32_t, std::unique_ptr<Level>> mCustomLevels;
+    // what open gave: custom levels open later, after the startup event
+    size_t mWorkerThreads = 0;
+    Level::PacketBroadcaster mBroadcaster;
+    ServerNetworkHandler *mOwner = nullptr;
     std::unique_ptr<EndDragonFight> mDragonFight;
     // kept whole: fields the server ignores are written back unchanged
     Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
-    std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
+    std::unordered_map<int32_t, std::unordered_set<int64_t>> mActorLoadedChunks;
 };

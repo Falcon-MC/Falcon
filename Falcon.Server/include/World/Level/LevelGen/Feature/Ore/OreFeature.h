@@ -7,10 +7,7 @@ class BlockManager;
 
 class OreFeature : public IFeature {
 public:
-    enum class ConcentrationType {
-        UNIFORM,
-        TRIANGLE
-    };
+    enum class ConcentrationType { UNIFORM, TRIANGLE };
 
     virtual const BlockState &getState(const BlockState &original) const = 0;
 
@@ -38,5 +35,4 @@ protected:
     static const BlockState &netherrackState();
 
     void spawn(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z);
-
 };

@@ -13,14 +13,15 @@ void PlayerMovementInitializationSystem::tick(PlayerMovementContext &context) {
     prediction.strict = context.owner.getProperties().getServerAuthoritativeMovementStrict();
     if (!context.player.takeKnockback(state.velocity)
         && !context.player.takeServerMotion(input.getPacket().mTick, state.velocity))
-        state.velocity = context.player.hasSimulatedVelocity() ? context.player.getSimulatedVelocity() : context.player.getMotion();
+        state.velocity = context.player.hasSimulatedVelocity() ? context.player.getSimulatedVelocity()
+                                                               : context.player.getMotion();
     state.onGround = context.player.hasSimulatedGround() ? context.player.isSimulatedOnGround()
-                                                        : context.player.isOnGround();
+                                                         : context.player.isOnGround();
     state.jumpDelay = context.player.getJumpDelay();
     input.jumpHeld = input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::Jumping)
-                          || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::StartJumping)
-                          || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AutoJumpingInWater)
-                          || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AscendBlock);
+                     || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::StartJumping)
+                     || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AutoJumpingInWater)
+                     || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AscendBlock);
     // DecrementNoJumpDelaySystem (0x140EB0DA0) runs before the jump systems
     if (state.jumpDelay > 0)
         --state.jumpDelay;

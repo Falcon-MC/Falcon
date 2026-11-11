@@ -13,8 +13,7 @@ namespace {
     const int64_t DAY_LENGTH_TICKS = 24000;
 
     bool countsForSleep(const ServerPlayer &player, const Level &level) {
-        return player.isSpawned() && player.isIn(level)
-               && player.getGameType() != (int32_t) GameType::Spectator;
+        return player.isSpawned() && player.isIn(level) && player.getGameType() != (int32_t) GameType::Spectator;
     }
 }
 
@@ -33,7 +32,8 @@ bool ServerNetworkHandler::sleepOn(ServerPlayer &player, const Vector3i &head) {
 
     player.setSleeping(head);
     player.resetSleepCounter();
-    player.setSpawnPoint(head, getWorldFor(player).getName());
+    player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(),
+                         getWorldFor(player).getName());
     player.getFlags().set(ActorFlag::Sleeping, true);
     player.teleport(*this, Vector3f((float) head.x + 0.5f, (float) head.y + 0.5f, (float) head.z + 0.5f));
     BedBlock::setOccupied(*this, getLevelFor(player), head, true);

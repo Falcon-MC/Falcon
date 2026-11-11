@@ -87,8 +87,7 @@ bool CopperGolemStatueBlock::onInteract(ServerNetworkHandler &owner, ServerPlaye
     Level &level = owner.getLevelFor(player);
     const ItemStack &held = player.getInventory().getItemInHand();
     if (held.isAir()) {
-        CopperGolemStatueBlockActor &statue =
-                level.getBlockActors().getOrCreate<CopperGolemStatueBlockActor>(position);
+        CopperGolemStatueBlockActor &statue = level.getBlockActors().getOrCreate<CopperGolemStatueBlockActor>(position);
         statue.setPose((statue.getPose() + 1) % CopperGolemStatueBlockActor::POSE_COUNT);
         BlockActionHandler::broadcastBlockActorData(owner, level, statue);
         return true;
@@ -121,8 +120,7 @@ void CopperGolemStatueBlock::onBroken(ServerNetworkHandler &owner, Level &level,
 }
 
 bool CopperGolemStatueBlock::onActorEvent(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                          const BlockState &state, const std::string &event,
-                                          MobActor &source) const {
+                                          const BlockState &state, const std::string &event, MobActor &source) const {
     (void) state;
 
     if (event == SERIALIZE_EVENT) {

@@ -3,6 +3,8 @@
 #include <cstdint>
 
 namespace FalconDataVersion {
-    const int64_t CURRENT = 1;
+    // 2: liquids saved as still blocks only
+    const int64_t CURRENT = 2;
+    const int64_t STILL_LIQUIDS = 2;
     const char *const TAG = "FalconDataVersion";
 }

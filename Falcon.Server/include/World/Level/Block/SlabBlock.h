@@ -6,9 +6,7 @@
 
 class SlabBlock final : public Block {
 public:
-    explicit SlabBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit SlabBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -21,4 +19,6 @@ public:
                                         BlockState &state) const override;
 
     bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
+
+    uint8_t getLiquidBlockedFaces(const BlockState &state) const override;
 };

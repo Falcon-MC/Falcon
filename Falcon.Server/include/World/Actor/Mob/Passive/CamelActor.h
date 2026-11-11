@@ -16,7 +16,9 @@ public:
         return RIDE_SPRINT_MULTIPLIER;
     }
 
-    ActorSize getSize() const override { return ActorSize{1.7f, 2.375f}; }
+    ActorSize getSize() const override {
+        return ActorSize{1.7f, 2.375f};
+    }
 
     PhysicsComponent getPhysics() const override {
         PhysicsComponent physics = PassiveActor::getPhysics();
@@ -24,5 +26,7 @@ public:
         return physics;
     }
 
-    float getDefaultMaxHealth() const override { return 32.0f; }
+    float getDefaultMaxHealth() const override {
+        return 32.0f;
+    }
 };

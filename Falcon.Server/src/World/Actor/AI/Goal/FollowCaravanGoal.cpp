@@ -137,8 +137,7 @@ Actor *FollowCaravanGoal::_findHead(ServerNetworkHandler &owner, const MobActor 
 
     owner.forEachActorNear(position, SEARCH_HORIZONTAL, [&](ServerActor &actor) {
         MobActor *candidate = dynamic_cast<MobActor *>(&actor);
-        if (candidate == nullptr || candidate == &mob || !candidate->isAlive()
-            || !candidate->sharesLevelWith(mob))
+        if (candidate == nullptr || candidate == &mob || !candidate->isAlive() || !candidate->sharesLevelWith(mob))
             return;
 
         const Vector3f other = candidate->getPosition();

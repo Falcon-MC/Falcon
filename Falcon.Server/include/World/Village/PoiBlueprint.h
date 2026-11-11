@@ -4,11 +4,7 @@
 #include <string>
 
 // order of the game's per-type poi maps in the village manager
-enum class PoiType : int32_t {
-    Bed = 0,
-    MeetingArea = 1,
-    JobSite = 2
-};
+enum class PoiType : int32_t { Bed = 0, MeetingArea = 1, JobSite = 2 };
 
 // what a dweller's scan turns the block into
 struct PoiBlueprint {

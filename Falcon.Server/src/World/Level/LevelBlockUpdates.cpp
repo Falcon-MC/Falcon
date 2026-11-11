@@ -26,12 +26,20 @@ void Level::setBlock(const Vector3i &position, const BlockState &state, bool upd
         return;
 
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    const BlockState placed = block != nullptr && block->hasDynamicShape()
-                              ? block->updateShape(*this, position, state) : state;
+    const BlockState placed = block != nullptr && block->hasDynamicShape() ? block->updateShape(*this, position, state)
+                                                                           : state;
+    const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
+    const bool placesCustom = block == nullptr && !custom.getBlocks().empty() && custom.isCustomBlock(placed.mName);
+    const BlockState previous = placesCustom ? getBlockState(position.x, position.y, position.z) : BlockState();
     setBlockState(position.x, position.y, position.z, placed);
 
     if (mOwner != nullptr)
         BlockActionHandler::broadcastBlockUpdate(*mOwner, *this, position, placed);
+
+    if (placesCustom && mOwner != nullptr && previous.mName != placed.mName)
+        mOwner->getScriptEngine().onCustomBlockPlaced(*this, position, placed, previous);
+    else if (placesCustom && mOwner != nullptr && !(previous.mStates == placed.mStates))
+        mOwner->getScriptEngine().onCustomBlockStateChange(*this, position, placed, previous);
 
     if (!update)
         return;
@@ -42,11 +50,11 @@ void Level::setBlock(const Vector3i &position, const BlockState &state, bool upd
 
 void Level::updateAround(const Vector3i &position) {
     for (int face = 0; face < RedstoneFace::COUNT; ++face) {
-        updateAt(RedstoneFace::relative(position, face), BlockUpdateType::Normal);
+        updateAt(RedstoneFace::relative(position, face), BlockUpdateType::Normal, &position);
     }
 }
 
-void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
+void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vector3i *changed) {
     if (mOwner == nullptr || !isChunkReady(*this, position))
         return;
 
@@ -78,23 +86,39 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type) {
             FireSystem::onNormalUpdate(owner, *this, position, state);
     } else if (FallingBlockSystem::matches(identifier)) {
         if (type == BlockUpdateType::Normal)
-            FallingBlockSystem::onNormalUpdate(owner, *this, position, state);
+            FallingBlockSystem::onNormalUpdate(owner, *this, position, state, changed);
+        else if (type == BlockUpdateType::Scheduled)
+            FallingBlockSystem::onScheduledUpdate(owner, *this, position, state);
     } else if (CommandBlock::matches(identifier)) {
         if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             CommandBlockSystem::setPowered(owner, *this, position,
                                            RedstoneSystem::isGettingPower(owner, *this, position));
     } else {
         RedstoneSystem::onRedstoneUpdate(owner, *this, position, state, type);
+        const CustomBlockDefinition *custom = shapedBlock == nullptr && type != BlockUpdateType::Scheduled
+                                                      ? CustomContentRegistry::getInstance().findBlock(identifier)
+                                                      : nullptr;
+        if (custom != nullptr && custom->mRedstoneConsumer)
+            owner.getScriptEngine().onCustomBlockRedstone(
+                    *this, identifier, position,
+                    RedstoneSystem::isBlockIndirectlyGettingPowered(owner, *this, position));
     }
 
     if (type == BlockUpdateType::Normal || type == BlockUpdateType::Scheduled) {
         const BlockState current = getBlockState(position.x, position.y, position.z);
         const Block *block = VanillaBlocks::fromIdentifier(current.mName);
-        if (block != nullptr && type == BlockUpdateType::Normal)
-            block->onNeighbourChanged(owner, *this, position, current);
-        else if (block != nullptr)
+        if (block != nullptr && type == BlockUpdateType::Normal) {
+            if (block->watchesNeighbour(position, current, changed))
+                block->onNeighbourChanged(owner, *this, position, current);
+        } else if (block == nullptr && type == BlockUpdateType::Normal) {
+            // a pack block has no class: its placement filter is its survival
+            const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(current.mName);
+            if (custom != nullptr && !custom->mPlacementFilter.survives(*this, position))
+                BlockActionHandler::destroyBlock(owner, *this, position, current, true, ItemStack::air());
+        } else if (block != nullptr)
             block->onScheduledUpdate(owner, *this, position, current);
-        else if (type == BlockUpdateType::Scheduled && CustomContentRegistry::getInstance().isCustomBlock(current.mName))
+        else if (type == BlockUpdateType::Scheduled
+                 && CustomContentRegistry::getInstance().isCustomBlock(current.mName))
             owner.getScriptEngine().onCustomBlockTick(*this, current.mName, position);
     }
 
@@ -114,12 +138,8 @@ void Level::cancelUpdate(const Vector3i &position) {
 }
 
 void Level::tickBlockUpdates() {
-    mBlockUpdates.tick([this](const Vector3i &position) {
-                           updateAt(position, BlockUpdateType::Scheduled);
-                       },
-                       [this](int32_t chunkX, int32_t chunkZ) {
-                           return isColumnActive(chunkX, chunkZ);
-                       });
+    mBlockUpdates.tick([this](const Vector3i &position) { updateAt(position, BlockUpdateType::Scheduled); },
+                       [this](int32_t chunkX, int32_t chunkZ) { return isColumnActive(chunkX, chunkZ); });
 }
 
 void Level::onBlockPlaced(const Vector3i &position, const BlockState &state) {

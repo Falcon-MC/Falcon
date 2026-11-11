@@ -14,13 +14,19 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{1.0f, 3.0f}; }
+    ActorSize getSize() const override {
+        return ActorSize{1.0f, 3.0f};
+    }
 
-    float getDefaultMaxHealth() const override { return EASY_HEALTH; }
+    float getDefaultMaxHealth() const override {
+        return EASY_HEALTH;
+    }
 
     float resolveMaxHealth(Difficulty difficulty) const override;
 
-    int getExperienceDrop() const override { return 50; }
+    int getExperienceDrop() const override {
+        return 50;
+    }
 
     bool hasGravity() const override {
         return false;

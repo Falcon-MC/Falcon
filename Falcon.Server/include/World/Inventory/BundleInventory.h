@@ -45,7 +45,9 @@ public:
 
     void setContainerItem(int slot, ItemStack item) override;
 
-    const std::vector<ItemStack> &getContents() const { return mContents; }
+    const std::vector<ItemStack> &getContents() const {
+        return mContents;
+    }
 
     int getFirstOccupiedSlot() const;
 

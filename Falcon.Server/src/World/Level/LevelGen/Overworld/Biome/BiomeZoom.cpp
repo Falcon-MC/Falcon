@@ -17,8 +17,8 @@ namespace {
 
 }
 
-BiomeZoom::BiomeZoom(uint32_t seed, int32_t originX, int32_t originY, int32_t originZ, int32_t countX,
-                     int32_t countY, int32_t countZ)
+BiomeZoom::BiomeZoom(uint32_t seed, int32_t originX, int32_t originY, int32_t originZ, int32_t countX, int32_t countY,
+                     int32_t countZ)
         : mOriginX(originX), mOriginY(originY), mOriginZ(originZ), mCountY(countY), mCountZ(countZ) {
     // sub_14A227520
     const uint64_t scrambled = static_cast<uint64_t>(seed) ^ LCG_MULTIPLIER;
@@ -48,9 +48,8 @@ int32_t BiomeZoom::nearestSample(int32_t x, int32_t y, int32_t z) const {
                                      (z >> 3) - (mOriginZ >> 3));
 
     // corners in the game's order: z, then y, then x
-    static const int32_t CORNERS[8][3] = {
-            {0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1}, {1, 0, 0}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}
-    };
+    static const int32_t CORNERS[8][3] = {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1},
+                                          {1, 0, 0}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}};
 
     int32_t best = base;
     float bestDistance = 0.0f;

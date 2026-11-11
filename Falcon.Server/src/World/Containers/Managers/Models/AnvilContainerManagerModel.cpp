@@ -6,8 +6,7 @@
 #include <memory>
 
 AnvilContainerManagerModel::AnvilContainerManagerModel()
-        : ContainerManagerModel(ContainerType::Anvil, std::make_unique<AnvilContainerScreenValidator>()) {
-}
+        : ContainerManagerModel(ContainerType::Anvil, std::make_unique<AnvilContainerScreenValidator>()) {}
 
 bool AnvilContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
                                             const Vector3i &position) {

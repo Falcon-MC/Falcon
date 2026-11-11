@@ -13,24 +13,30 @@
 #include <map>
 
 namespace {
-    const char *const UNDEAD_ACTORS[] = {
-            "minecraft:bogged", "minecraft:drowned", "minecraft:husk", "minecraft:parched",
-            "minecraft:phantom", "minecraft:skeleton", "minecraft:stray", "minecraft:wither",
-            "minecraft:wither_skeleton", "minecraft:zombie", "minecraft:zombie_horse",
-            "minecraft:zombie_pigman", "minecraft:zombie_villager", "minecraft:zombie_villager_v2"
-    };
+    const char *const UNDEAD_ACTORS[] = {"minecraft:bogged",
+                                         "minecraft:drowned",
+                                         "minecraft:husk",
+                                         "minecraft:parched",
+                                         "minecraft:phantom",
+                                         "minecraft:skeleton",
+                                         "minecraft:stray",
+                                         "minecraft:wither",
+                                         "minecraft:wither_skeleton",
+                                         "minecraft:zombie",
+                                         "minecraft:zombie_horse",
+                                         "minecraft:zombie_pigman",
+                                         "minecraft:zombie_villager",
+                                         "minecraft:zombie_villager_v2"};
 
-    const char *const ARTHROPOD_ACTORS[] = {
-            "minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish", "minecraft:endermite"
-    };
+    const char *const ARTHROPOD_ACTORS[] = {"minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish",
+                                            "minecraft:endermite"};
 
     const char *const FIRE_IMMUNE_ACTORS[] = {
-            "minecraft:blaze", "minecraft:ender_dragon", "minecraft:ghast", "minecraft:magma_cube",
-            "minecraft:strider", "minecraft:wither", "minecraft:wither_skeleton", "minecraft:zoglin",
-            "minecraft:zombie_pigman"
-    };
+            "minecraft:blaze",           "minecraft:ender_dragon", "minecraft:ghast",
+            "minecraft:magma_cube",      "minecraft:strider",      "minecraft:wither",
+            "minecraft:wither_skeleton", "minecraft:zoglin",       "minecraft:zombie_pigman"};
 
-    template<size_t N>
+    template <size_t N>
     bool containsIdentifier(const char *const (&identifiers)[N], const char *identifier) {
         for (const char *candidate: identifiers) {
             if (std::strcmp(candidate, identifier) == 0)
@@ -139,7 +145,9 @@ float Actor::getHealth() const {
 }
 
 void Actor::setHealth(float health) {
+    const float previous = getHealth();
     mAttributes.setClamped(ATTRIBUTE_HEALTH, health);
+    _healthChanged(previous);
 }
 
 float Actor::getMaxHealth() const {
@@ -386,8 +394,7 @@ void Actor::exhaust(float amount) {
 }
 
 void Actor::_changeFood(float food) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE)
-                                        : nullptr;
+    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE) : nullptr;
     if (plugins != nullptr) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_FOOD_CHANGE;
@@ -448,20 +455,19 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
         }
 
         if (mFoodTickTimer % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
-            mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
+            heal(1.0f, HealCause::SelfHeal);
     }
 
     if (mFoodTickTimer == 0) {
         if (food >= 18.0f && naturalRegeneration) {
             if (getHealth() < maxHealth) {
-                mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
+                heal(1.0f, HealCause::SelfHeal);
                 exhaust(6.0f);
             }
         } else if (food <= 0.0f) {
             const float health = getHealth();
             const bool starve = (difficulty == DIFFICULTY_EASY && health > 10.0f)
-                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f)
-                                || difficulty == DIFFICULTY_HARD;
+                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f) || difficulty == DIFFICULTY_HARD;
 
             if (starve)
                 mPendingStarveDamage = true;
@@ -471,9 +477,7 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
     if (!canSprint())
         mFlags.set(ActorFlag::Sprinting, false);
 
-    return getFood() != previousFood
-           || getSaturation() != previousSaturation
-           || getExhaustion() != previousExhaustion
+    return getFood() != previousFood || getSaturation() != previousSaturation || getExhaustion() != previousExhaustion
            || getHealth() != previousHealth;
 }
 
@@ -483,7 +487,9 @@ void Actor::kill() {
     // a respawn starts thawed
     mEffects.resetFreezing();
     extinguish();
+    const float previous = getHealth();
     mAttributes.set(ATTRIBUTE_HEALTH, 0.0f);
+    _healthChanged(previous);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     resetFallDistance();
     mNoDamageTicks = 0;
@@ -505,15 +511,22 @@ float Actor::reduceHealth(float amount) {
         amount -= absorbed;
     }
 
-    const float newHealth = getHealth() - amount;
-    mAttributes.setClamped(ATTRIBUTE_HEALTH, newHealth);
+    const float previous = getHealth();
+    mAttributes.setClamped(ATTRIBUTE_HEALTH, previous - amount);
+    _healthChanged(previous);
     return getHealth();
 }
 
-float Actor::heal(float amount) {
+float Actor::heal(float amount, HealCause cause) {
     if (amount <= 0.0f || !isAlive())
         return getHealth();
-    mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + amount);
+    if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
+        return getHealth();
+    const float previous = getHealth();
+    mAttributes.setClamped(ATTRIBUTE_HEALTH, previous + amount);
+    _healthChanged(previous);
+    if (sHealListener && getHealth() > previous)
+        sHealListener(*this, getHealth() - previous, cause);
     return getHealth();
 }
 

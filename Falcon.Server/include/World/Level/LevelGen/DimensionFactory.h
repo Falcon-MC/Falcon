@@ -10,10 +10,7 @@
 class DimensionFactory {
 public:
     // values of the level.dat Generator key
-    enum class GeneratorType : int32_t {
-        Overworld = 1,
-        Flat = 2
-    };
+    enum class GeneratorType : int32_t { Overworld = 1, Flat = 2 };
 
     static std::unique_ptr<ChunkGenerator> createGenerator(DimensionType dimension, int64_t seed,
                                                            GeneratorType type = GeneratorType::Overworld,

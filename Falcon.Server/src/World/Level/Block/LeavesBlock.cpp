@@ -46,8 +46,7 @@ namespace {
                 {"minecraft:orange_poplar_leaves", {"minecraft:poplar_sapling", false}},
                 {"minecraft:red_poplar_leaves", {"minecraft:poplar_sapling", false}},
                 {"minecraft:yellow_poplar_leaves", {"minecraft:poplar_sapling", false}},
-                {"minecraft:mangrove_leaves", {nullptr, false}}
-        };
+                {"minecraft:mangrove_leaves", {nullptr, false}}};
         return loot;
     }
 
@@ -56,10 +55,8 @@ namespace {
     }
 
     bool isLogState(const BlockState &state) {
-        return BlockIdentifier::endsWith(state.mName, "_log")
-               || BlockIdentifier::endsWith(state.mName, "_wood")
-               || BlockIdentifier::endsWith(state.mName, "_stem")
-               || BlockIdentifier::endsWith(state.mName, "_hyphae")
+        return BlockIdentifier::endsWith(state.mName, "_log") || BlockIdentifier::endsWith(state.mName, "_wood")
+               || BlockIdentifier::endsWith(state.mName, "_stem") || BlockIdentifier::endsWith(state.mName, "_hyphae")
                || state.mName == "minecraft:mangrove_roots";
     }
 
@@ -68,9 +65,7 @@ namespace {
     }
 
     bool findLog(Level &level, const Vector3i &position, int distance, std::unordered_set<int64_t> &visited) {
-        static const int OFFSETS[6][3] = {
-                {0, 1, 0}, {0, -1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-        };
+        static const int OFFSETS[6][3] = {{0, 1, 0}, {0, -1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
         const BlockState state = level.getBlockState(position.x, position.y, position.z);
         if (isLogState(state))

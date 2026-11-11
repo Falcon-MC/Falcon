@@ -31,6 +31,15 @@ int32_t ChunkGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t quart
     return getPreliminaryHeight(quartX * 4, quartZ * 4);
 }
 
+std::array<int32_t, 256> ChunkGenerator::getPreliminaryHeights(int32_t chunkX, int32_t chunkZ) const {
+    std::array<int32_t, 256> heights{};
+    for (int32_t z = 0; z < 16; ++z) {
+        for (int32_t x = 0; x < 16; ++x)
+            heights[(size_t) ((z << 4) | x)] = getPreliminaryHeight(chunkX * 16 + x, chunkZ * 16 + z);
+    }
+    return heights;
+}
+
 int32_t ChunkGenerator::getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const {
     return getPreliminaryHeight(chunkX * 16, chunkZ * 16);
 }
@@ -43,7 +52,7 @@ std::unique_ptr<LevelChunk> ChunkGenerator::generateTerrain(int32_t chunkX, int3
 }
 
 int32_t ChunkGenerator::solidHeight(const LevelChunk &chunk, int32_t localX, int32_t localZ) {
-    static const BlockStateSet SKIPPED{"minecraft:air", "minecraft:water", "minecraft:flowing_water",
+    static const BlockStateSet SKIPPED{"minecraft:air",  "minecraft:water",        "minecraft:flowing_water",
                                        "minecraft:lava", "minecraft:flowing_lava", "minecraft:snow_layer"};
 
     int32_t y = LevelChunk::MAX_Y;

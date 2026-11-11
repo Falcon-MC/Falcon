@@ -7,12 +7,12 @@
 
 // read back by the same process only: host-endian integers and pointers to interned block states
 namespace RawPack {
-    template<typename T>
+    template <typename T>
     void put(std::string &out, const T &value) {
         out.append((const char *) &value, sizeof(T));
     }
 
-    template<typename T>
+    template <typename T>
     void putVector(std::string &out, const std::vector<T> &values) {
         put(out, (uint32_t) values.size());
         if (!values.empty())
@@ -23,7 +23,7 @@ namespace RawPack {
     public:
         Reader(const char *data, size_t size) : mCursor(data), mEnd(data + size) {}
 
-        template<typename T>
+        template <typename T>
         bool get(T &value) {
             if ((size_t) (mEnd - mCursor) < sizeof(T))
                 return false;
@@ -33,7 +33,7 @@ namespace RawPack {
             return true;
         }
 
-        template<typename T>
+        template <typename T>
         bool getVector(std::vector<T> &values) {
             uint32_t count = 0;
             if (!get(count) || (size_t) (mEnd - mCursor) / sizeof(T) < count)

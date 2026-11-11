@@ -35,11 +35,11 @@ bool PluginItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const 
 
     ItemStack used = item;
     try {
-        return entry->mOnUse(PluginApiHelpers::toHandle(&player), PluginApiHelpers::toHandle(&used),
-                             entry->mUserData) != 0;
+        return entry->mOnUse(PluginApiHelpers::toHandle(&player), PluginApiHelpers::toHandle(&used), entry->mUserData)
+               != 0;
     } catch (...) {
-        LOG_ERROR(LogAreaID::Server, "[%s] onUse of %s threw an exception",
-                  entry->mPlugin->mDescription.mName.c_str(), getIdentifier().c_str());
+        LOG_ERROR(LogAreaID::Server, "[%s] onUse of %s threw an exception", entry->mPlugin->mDescription.mName.c_str(),
+                  getIdentifier().c_str());
         return false;
     }
 }
@@ -57,7 +57,8 @@ bool PluginItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player,
     const FalconBlockPos position{blockPosition.x, blockPosition.y, blockPosition.z};
     try {
         return entry->mOnUseOnBlock(PluginApiHelpers::toHandle(&player), PluginApiHelpers::toHandle(&used), position,
-                                    (uint32_t) face, entry->mUserData) != 0;
+                                    (uint32_t) face, entry->mUserData)
+               != 0;
     } catch (...) {
         LOG_ERROR(LogAreaID::Server, "[%s] onUseOnBlock of %s threw an exception",
                   entry->mPlugin->mDescription.mName.c_str(), getIdentifier().c_str());

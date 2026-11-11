@@ -21,9 +21,7 @@ namespace {
 }
 
 PluginScheduler::PluginScheduler() {
-    mWorker = std::thread([this] {
-        _workerLoop();
-    });
+    mWorker = std::thread([this] { _workerLoop(); });
 }
 
 PluginScheduler::~PluginScheduler() {
@@ -33,8 +31,8 @@ PluginScheduler::~PluginScheduler() {
 uint64_t PluginScheduler::schedule(LoadedPlugin &plugin, FalconTask task, void *userData, uint64_t delayTicks,
                                    uint64_t periodTicks) {
     const uint64_t id = mNextId++;
-    mTasks.push_back(Task{id, &plugin, task, userData, mCurrentTick + std::max<uint64_t>(delayTicks, 1),
-                          periodTicks, false});
+    mTasks.push_back(
+            Task{id, &plugin, task, userData, mCurrentTick + std::max<uint64_t>(delayTicks, 1), periodTicks, false});
     return id;
 }
 
@@ -93,9 +91,8 @@ void PluginScheduler::tick() {
             mTasks[index].mNextTick = mCurrentTick + task.mPeriod;
     }
 
-    mTasks.erase(std::remove_if(mTasks.begin(), mTasks.end(), [](const Task &task) {
-        return task.mCancelled;
-    }), mTasks.end());
+    mTasks.erase(std::remove_if(mTasks.begin(), mTasks.end(), [](const Task &task) { return task.mCancelled; }),
+                 mTasks.end());
 
     // completion callbacks always run here on the main thread, where game state is safe to touch
     std::deque<AsyncJob> completed;
@@ -139,9 +136,7 @@ void PluginScheduler::_workerLoop() {
         AsyncJob job;
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            mCondition.wait(lock, [this] {
-                return mStopping || !mPending.empty();
-            });
+            mCondition.wait(lock, [this] { return mStopping || !mPending.empty(); });
 
             if (mStopping)
                 return;

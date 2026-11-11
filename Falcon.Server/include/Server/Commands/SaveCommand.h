@@ -6,11 +6,7 @@ class ServerNetworkHandler;
 
 class SaveCommand : public Command {
 public:
-    enum class Mode {
-        Save,
-        On,
-        Off
-    };
+    enum class Mode { Save, On, Off };
 
     SaveCommand(ServerNetworkHandler &handler, Mode mode);
 

@@ -22,14 +22,7 @@ class GeneratorChunkSource;
 class TerrainCache;
 
 struct ChunkTask {
-    enum class Kind : int {
-        Load = 0,
-        Save = 1,
-        Populate = 2,
-        Barrier = 3,
-        PersistChanges = 4,
-        EraseEntities = 5
-    };
+    enum class Kind : int { Load = 0, Save = 1, Populate = 2, Barrier = 3, PersistChanges = 4, EraseEntities = 5 };
 
     Kind mKind = Kind::Load;
     int32_t mX = 0;
@@ -80,9 +73,13 @@ public:
 
     void stop();
 
-    bool isRunning() const { return mRunning.load(); }
+    bool isRunning() const {
+        return mRunning.load();
+    }
 
-    size_t getThreadCount() const { return mQueues.size(); }
+    size_t getThreadCount() const {
+        return mQueues.size();
+    }
 
     // `parked`: feature blocks spilled in while absent, applied before lighting
     bool requestLoad(int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> &parked);
@@ -91,8 +88,8 @@ public:
 
     bool requestPopulate(std::unique_ptr<LevelChunk> chunk);
 
-    std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(
-            int32_t chunkX, int32_t chunkZ, std::vector<GeneratedBlockChange> changes);
+    std::future<std::vector<GeneratedBlockChange>> requestPersistChanges(int32_t chunkX, int32_t chunkZ,
+                                                                         std::vector<GeneratedBlockChange> changes);
 
     // off the main thread; the future completes once every deletion ran
     std::future<void> requestEraseEntities(std::vector<int64_t> uniqueIds);
@@ -116,13 +113,21 @@ public:
 
     size_t getPendingTaskCount() const;
 
-    uint64_t getGeneratedCount() const { return mGeneratedCount.load(); }
+    uint64_t getGeneratedCount() const {
+        return mGeneratedCount.load();
+    }
 
-    uint64_t getLoadedCount() const { return mLoadedCount.load(); }
+    uint64_t getLoadedCount() const {
+        return mLoadedCount.load();
+    }
 
-    uint64_t getSavedCount() const { return mSavedCount.load(); }
+    uint64_t getSavedCount() const {
+        return mSavedCount.load();
+    }
 
-    uint64_t getPopulatedCount() const { return mPopulatedCount.load(); }
+    uint64_t getPopulatedCount() const {
+        return mPopulatedCount.load();
+    }
 
 private:
     void _run(size_t queueIndex);
@@ -140,8 +145,8 @@ private:
 
     bool _reserveGeneration();
 
-    void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident,
-                      bool generated, std::vector<GeneratedBlockChange> parked);
+    void _finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceIndex, bool replacesResident, bool generated,
+                      std::vector<GeneratedBlockChange> parked);
 
     size_t _queueIndexFor(int32_t chunkX, int32_t chunkZ) const;
 

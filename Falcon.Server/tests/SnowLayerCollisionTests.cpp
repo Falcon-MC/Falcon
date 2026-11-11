@@ -46,7 +46,8 @@ namespace {
         for (int32_t height = 0; height < 8; height++) {
             const int32_t top = topEighths(height, actor);
             require(top == expected[height], std::string(name) + " height " + std::to_string(height) + ": top "
-                    + std::to_string(top) + ", expected " + std::to_string(expected[height]));
+                                                     + std::to_string(top) + ", expected "
+                                                     + std::to_string(expected[height]));
         }
     }
 

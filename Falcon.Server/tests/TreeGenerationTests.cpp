@@ -24,56 +24,170 @@ namespace {
     }
 
     // roofed_tree_feature and roofed_tree_with_vines_feature of the 1.26.61 behavior packs
-    const Tree::Acacia ROOFED = {2, 6, {3, 2}, 3, {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1}, 1, 3, 2, true,
-                                 0, 0, 4, 2, 2, 3};
-    const Tree::Definition ROOFED_TREE = {"minecraft:roofed_tree_feature", Tree::Trunk::Acacia,
-                                          &VanillaBlocks::DARK_OAK_LOG, {0, 0}, {0, 0}, Tree::Canopy::Roofed,
-                                          &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
-    const Tree::Definition ROOFED_WITH_VINES = {"minecraft:roofed_tree_with_vines_feature", Tree::Trunk::Acacia,
-                                                &VanillaBlocks::DARK_OAK_LOG, {0, 0}, {0, 0}, Tree::Canopy::Roofed,
-                                                &VanillaBlocks::DARK_OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f,
-                                                false, 0, 1, 0, 0, 0, false, true};
+    const Tree::Acacia ROOFED = {2, 6, {3, 2}, 3,    {0, 4}, {0, 3}, {0, 0}, false, {2, 5}, {1, 1},
+                                 1, 3, 2,      true, 0,      0,      4,      2,     2,      3};
+    const Tree::Definition ROOFED_TREE = {"minecraft:roofed_tree_feature",
+                                          Tree::Trunk::Acacia,
+                                          &VanillaBlocks::DARK_OAK_LOG,
+                                          {0, 0},
+                                          {0, 0},
+                                          Tree::Canopy::Roofed,
+                                          &VanillaBlocks::DARK_OAK_LEAVES,
+                                          {0, 0},
+                                          {0, 0},
+                                          {0, 0},
+                                          0,
+                                          0.0f,
+                                          false};
+    const Tree::Definition ROOFED_WITH_VINES = {"minecraft:roofed_tree_with_vines_feature",
+                                                Tree::Trunk::Acacia,
+                                                &VanillaBlocks::DARK_OAK_LOG,
+                                                {0, 0},
+                                                {0, 0},
+                                                Tree::Canopy::Roofed,
+                                                &VanillaBlocks::DARK_OAK_LEAVES,
+                                                {0, 0},
+                                                {0, 0},
+                                                {0, 0},
+                                                0,
+                                                0.0f,
+                                                false,
+                                                0,
+                                                1,
+                                                0,
+                                                0,
+                                                0,
+                                                false,
+                                                true};
 
     // jungle_bush_feature, jungle_tree_feature and mega_jungle_tree_feature of the 1.26.61 features
     const Tree::SimpleCanopy BUSH_CANOPY = {-1, 1, 0, 1.0f, {{1, 2}, {1, 2}, {1, 2}}};
-    const Tree::Definition JUNGLE_BUSH = {"minecraft:jungle_bush_feature", Tree::Trunk::Simple,
-                                          &VanillaBlocks::JUNGLE_LOG, {1, 1}, {0, 0}, Tree::Canopy::Simple,
-                                          &VanillaBlocks::OAK_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false, 0, 0,
-                                          0, 0, 0, false, false, &BUSH_CANOPY};
-    const Tree::Definition JUNGLE_TREE = {"minecraft:jungle_tree_feature", Tree::Trunk::Simple,
-                                          &VanillaBlocks::JUNGLE_LOG, {4, 11}, {0, 0}, Tree::Canopy::Simple,
-                                          &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 33.33f, false, 0,
-                                          1, 1, 4, 4};
-    const Tree::Mega MEGA_JUNGLE = {2, 10, {3, 20}, {0, 0}, 0, 0.0f, 0, &VanillaBlocks::DIRT, 0, 0,
-                                    {{3, 3}, 2, 2, false}, 5, 0.5f, {2, 6}, 0.5f, 1.0f, {{2, 4}, 1, 0, true}, 1, 3};
-    const Tree::Definition MEGA_JUNGLE_TREE = {"minecraft:mega_jungle_tree_feature", Tree::Trunk::Mega,
-                                               &VanillaBlocks::JUNGLE_LOG, {0, 0}, {0, 0}, Tree::Canopy::Mega,
-                                               &VanillaBlocks::JUNGLE_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
+    const Tree::Definition JUNGLE_BUSH = {"minecraft:jungle_bush_feature",
+                                          Tree::Trunk::Simple,
+                                          &VanillaBlocks::JUNGLE_LOG,
+                                          {1, 1},
+                                          {0, 0},
+                                          Tree::Canopy::Simple,
+                                          &VanillaBlocks::OAK_LEAVES,
+                                          {0, 0},
+                                          {0, 0},
+                                          {0, 0},
+                                          0,
+                                          0.0f,
+                                          false,
+                                          0,
+                                          0,
+                                          0,
+                                          0,
+                                          0,
+                                          false,
+                                          false,
+                                          &BUSH_CANOPY};
+    const Tree::Definition JUNGLE_TREE = {"minecraft:jungle_tree_feature",
+                                          Tree::Trunk::Simple,
+                                          &VanillaBlocks::JUNGLE_LOG,
+                                          {4, 11},
+                                          {0, 0},
+                                          Tree::Canopy::Simple,
+                                          &VanillaBlocks::JUNGLE_LEAVES,
+                                          {0, 0},
+                                          {0, 0},
+                                          {0, 0},
+                                          0,
+                                          33.33f,
+                                          false,
+                                          0,
+                                          1,
+                                          1,
+                                          4,
+                                          4};
+    const Tree::Mega MEGA_JUNGLE = {2,
+                                    10,
+                                    {3, 20},
+                                    {0, 0},
+                                    0,
+                                    0.0f,
+                                    0,
+                                    &VanillaBlocks::DIRT,
+                                    0,
+                                    0,
+                                    {{3, 3}, 2, 2, false},
+                                    5,
+                                    0.5f,
+                                    {2, 6},
+                                    0.5f,
+                                    1.0f,
+                                    {{2, 4}, 1, 0, true},
+                                    1,
+                                    3};
+    const Tree::Definition MEGA_JUNGLE_TREE = {"minecraft:mega_jungle_tree_feature",
+                                               Tree::Trunk::Mega,
+                                               &VanillaBlocks::JUNGLE_LOG,
+                                               {0, 0},
+                                               {0, 0},
+                                               Tree::Canopy::Mega,
+                                               &VanillaBlocks::JUNGLE_LEAVES,
+                                               {0, 0},
+                                               {0, 0},
+                                               {0, 0},
+                                               0,
+                                               0.0f,
+                                               false};
 
     // savanna_tree_feature of the 1.26.61 features
-    const Tree::Acacia SAVANNA = {1, 5, {3, 3}, 0, {1, 5}, {1, 4}, {0, 0}, true, {1, 4}, {1, 3}, 1, 1, 2, true,
-                                  0, 0, 0, 0, 0, 0, 3};
-    const Tree::Definition SAVANNA_TREE = {"minecraft:savanna_tree_feature", Tree::Trunk::Acacia,
-                                           &VanillaBlocks::ACACIA_LOG, {0, 0}, {0, 0}, Tree::Canopy::Acacia,
-                                           &VanillaBlocks::ACACIA_LEAVES, {0, 0}, {0, 0}, {0, 0}, 0, 0.0f, false};
+    const Tree::Acacia SAVANNA = {1, 5, {3, 3}, 0, {1, 5}, {1, 4}, {0, 0}, true, {1, 4}, {1, 3}, 1,
+                                  1, 2, true,   0, 0,      0,      0,      0,    0,      3};
+    const Tree::Definition SAVANNA_TREE = {"minecraft:savanna_tree_feature",
+                                           Tree::Trunk::Acacia,
+                                           &VanillaBlocks::ACACIA_LOG,
+                                           {0, 0},
+                                           {0, 0},
+                                           Tree::Canopy::Acacia,
+                                           &VanillaBlocks::ACACIA_LEAVES,
+                                           {0, 0},
+                                           {0, 0},
+                                           {0, 0},
+                                           0,
+                                           0.0f,
+                                           false};
 
     // mangrove_tree_feature of the 1.26.61 features
     const Tree::Mangrove MANGROVE = {8, 15, {1, 4}, 1, 2, 2, 1, 4, {0, 1}, {1, 4}, {2, 2}, {3, 3}, 70, 1, 4, 4, 1, 4};
     const Tree::Definition MANGROVE_TREE = [] {
-        Tree::Definition tree = {"minecraft:mangrove_tree_feature", Tree::Trunk::Mangrove, &VanillaBlocks::MANGROVE_LOG,
-                                 {0, 0}, {0, 0}, Tree::Canopy::Mangrove, &VanillaBlocks::MANGROVE_LEAVES, {0, 0}, {0, 0},
-                                 {0, 0}, 0, 0.0f, false};
+        Tree::Definition tree = {"minecraft:mangrove_tree_feature",
+                                 Tree::Trunk::Mangrove,
+                                 &VanillaBlocks::MANGROVE_LOG,
+                                 {0, 0},
+                                 {0, 0},
+                                 Tree::Canopy::Mangrove,
+                                 &VanillaBlocks::MANGROVE_LEAVES,
+                                 {0, 0},
+                                 {0, 0},
+                                 {0, 0},
+                                 0,
+                                 0.0f,
+                                 false};
         tree.mMangrove = &MANGROVE;
         return tree;
     }();
 
     // cherry_tree_feature of the 1.26.61 features
-    const Tree::Cherry CHERRY = {
-            7, {1}, {10, 10, 10}, {-4, -3}, {-1, 0}, {2, 4}, {5, 5}, {4, 4}, 25.0f, 50.0f, 16.6666f, 33.3333f};
+    const Tree::Cherry CHERRY = {7,      {1},    {10, 10, 10}, {-4, -3}, {-1, 0},  {2, 4},
+                                 {5, 5}, {4, 4}, 25.0f,        50.0f,    16.6666f, 33.3333f};
     const Tree::Definition CHERRY_TREE = [] {
-        Tree::Definition tree = {"minecraft:cherry_tree_feature", Tree::Trunk::Cherry, &VanillaBlocks::CHERRY_LOG,
-                                 {0, 0}, {0, 0}, Tree::Canopy::Cherry, &VanillaBlocks::CHERRY_LEAVES, {0, 0}, {0, 0},
-                                 {0, 0}, 0, 0.0f, false};
+        Tree::Definition tree = {"minecraft:cherry_tree_feature",
+                                 Tree::Trunk::Cherry,
+                                 &VanillaBlocks::CHERRY_LOG,
+                                 {0, 0},
+                                 {0, 0},
+                                 Tree::Canopy::Cherry,
+                                 &VanillaBlocks::CHERRY_LEAVES,
+                                 {0, 0},
+                                 {0, 0},
+                                 {0, 0},
+                                 0,
+                                 0.0f,
+                                 false};
         tree.mCherry = &CHERRY;
         return tree;
     }();
@@ -144,8 +258,8 @@ namespace {
             BlockManager blocks(*level);
             std::mt19937 random(seed);
             int32_t placedAt[3] = {0, 0, 0};
-            require(Tree::place(blocks, JUNGLE_TREE, nullptr, nullptr, nullptr, 4, GROUND + 1, 4, random, {},
-                                placedAt), "the jungle tree grows on grass");
+            require(Tree::place(blocks, JUNGLE_TREE, nullptr, nullptr, nullptr, 4, GROUND + 1, 4, random, {}, placedAt),
+                    "the jungle tree grows on grass");
 
             const int32_t height = logHeight(blocks, 4, 4, &VanillaBlocks::JUNGLE_LOG);
             require(height >= 4 && height <= 10, "the trunk is 4 plus up to 6 tall");
@@ -159,8 +273,8 @@ namespace {
             std::unique_ptr<Level> level = flatLevel();
             BlockManager blocks(*level);
             std::mt19937 random(seed);
-            require(Tree::place(blocks, MEGA_JUNGLE_TREE, nullptr, &MEGA_JUNGLE, nullptr, 4, GROUND + 1, 4, random,
-                                {}), "the mega jungle tree grows on grass");
+            require(Tree::place(blocks, MEGA_JUNGLE_TREE, nullptr, &MEGA_JUNGLE, nullptr, 4, GROUND + 1, 4, random, {}),
+                    "the mega jungle tree grows on grass");
 
             // a 2x2 trunk up to two below the top, then one log on the first corner
             const int32_t height = logHeight(blocks, 4, 4, &VanillaBlocks::JUNGLE_LOG);
@@ -307,7 +421,8 @@ namespace {
             for (int32_t x = -2; x <= 8; x++) {
                 for (int32_t z = -2; z <= 8; z++) {
                     for (int32_t y = GROUND + 1; y <= top + 3; y++) {
-                        if (!is(blocks, x, y, z, &VanillaBlocks::DARK_OAK_LOG) || (x >= 4 && x <= 5 && z >= 4 && z <= 5))
+                        if (!is(blocks, x, y, z, &VanillaBlocks::DARK_OAK_LOG)
+                            || (x >= 4 && x <= 5 && z >= 4 && z <= 5))
                             continue;
                         require(x >= 3 && x <= 6 && z >= 3 && z <= 6, "branches hang on the ring around the trunk");
                         require(y < top && y >= top - 5, "branches hang 1 to 5 under the top log");

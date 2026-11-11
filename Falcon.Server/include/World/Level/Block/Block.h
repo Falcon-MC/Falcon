@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "Core/NBT/Tag.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
@@ -16,6 +18,7 @@ class Actor;
 class BlockBehavior;
 class ItemStack;
 class Level;
+class LiquidPhysicsSystem;
 class MobActor;
 class ServerActor;
 class ServerNetworkHandler;
@@ -45,29 +48,13 @@ struct BlockDrop {
     int32_t mCount;
 };
 
-enum class PlacementMergeResult {
-    None,
-    Merged,
-    Rejected
-};
+enum class PlacementMergeResult { None, Merged, Rejected };
 
-enum class BlockTraversal {
-    None,
-    Scaffolding,
-    PowderSnow
-};
+enum class BlockTraversal { None, Scaffolding, PowderSnow };
 
-enum class PathHazard {
-    None,
-    Damaging,
-    Portal
-};
+enum class PathHazard { None, Damaging, Portal };
 
-enum class PistonMoveReaction {
-    Normal,
-    Break,
-    PushOnly
-};
+enum class PistonMoveReaction { Normal, Break, PushOnly };
 
 class Block {
 public:
@@ -98,8 +85,8 @@ public:
         (void) state;
     }
 
-    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
-                          const BlockState &state, float fallDistance) const {
+    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position, const BlockState &state,
+                          float fallDistance) const {
         (void) owner;
         (void) actor;
         (void) position;
@@ -114,6 +101,44 @@ public:
         (void) position;
         (void) state;
         return false;
+    }
+
+    // faces liquid cannot cross, a bit per LiquidFace (BlockType +185, stops_liquid_flowing_from_direction)
+    virtual uint8_t getLiquidBlockedFaces(const BlockState &state) const {
+        (void) state;
+        return 0;
+    }
+
+    // Material type 18: liquid falling onto it turns it to stone (sub_149C3E1F0)
+    virtual bool isIceMaterial() const {
+        return false;
+    }
+
+    // true for blocks reacting to the hooks below: other blocks never reach them
+    virtual bool usesBlockTicks() const {
+        return false;
+    }
+
+    // BlockPlaceEvent, neighborChanged (slot 75) and BlockQueuedTickEvent as the tick queues run them;
+    // `ticks` reads and writes the world and queues ticks
+    virtual void onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+    }
+
+    virtual void onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
+                                        const Vector3i &changed) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+        (void) changed;
+    }
+
+    virtual void onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
     }
 
     virtual bool canBeReplaced(const BlockState &state) const {
@@ -290,6 +315,14 @@ public:
     virtual void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) const;
 
+    // whether a normal update from `changed` reaches onNeighbourChanged; null `changed` is the block itself
+    virtual bool watchesNeighbour(const Vector3i &position, const BlockState &state, const Vector3i *changed) const {
+        (void) position;
+        (void) state;
+        (void) changed;
+        return true;
+    }
+
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {
         (void) owner;
@@ -308,6 +341,18 @@ public:
 
     // item and projectile physics read the shape only of these; other blocks stop them at the cell
     virtual bool shapesCollisionPerActor() const {
+        return false;
+    }
+
+    // several boxes resolved with the neighbours; false leaves the single shape and the vanilla table
+    virtual bool getCollisionShapesAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                      const std::function<const BlockState *(int32_t, int32_t, int32_t)> &neighbours,
+                                      std::vector<AxisAlignedBB> &shapes) const {
+        (void) state;
+        (void) position;
+        (void) actor;
+        (void) neighbours;
+        (void) shapes;
         return false;
     }
 
@@ -357,12 +402,17 @@ public:
         return false;
     }
 
+    // block light of a state; `dataEmission` is the value the block data gives every state
+    virtual int getLightEmission(const BlockState &state, int dataEmission) const {
+        (void) state;
+        return dataEmission;
+    }
+
     virtual PistonMoveReaction getPistonMoveReaction() const {
         return PistonMoveReaction::Normal;
     }
 
-    virtual BlockState applyPlacementOrientation(const BlockState &state,
-                                                 const BlockPlacementContext &context) const;
+    virtual BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const;
 
     Block() : mTypeId(0), mIdentifier("minecraft:air"), mName("Air"), mStates(Tag::ofCompound()) {}
 
@@ -375,13 +425,21 @@ public:
     explicit Block(const BlockState &state)
             : mTypeId(0), mIdentifier(state.mName), mName(state.mName), mStates(state.mStates) {}
 
-    int32_t getTypeId() const { return mTypeId; }
+    int32_t getTypeId() const {
+        return mTypeId;
+    }
 
-    const std::string &getIdentifier() const { return mIdentifier; }
+    const std::string &getIdentifier() const {
+        return mIdentifier;
+    }
 
-    const std::string &getName() const { return mName; }
+    const std::string &getName() const {
+        return mName;
+    }
 
-    const Tag &getStates() const { return mStates; }
+    const Tag &getStates() const {
+        return mStates;
+    }
 
     const BlockData *getData() const;
 
@@ -395,9 +453,13 @@ public:
 
     float getFallDistanceMultiplier() const;
 
-    BlockState toBlockState() const { return BlockState(mIdentifier, mStates); }
+    BlockState toBlockState() const {
+        return BlockState(mIdentifier, mStates);
+    }
 
-    int32_t getNetworkHash() const { return BlockStateHasher::hash(mIdentifier, mStates); }
+    int32_t getNetworkHash() const {
+        return BlockStateHasher::hash(mIdentifier, mStates);
+    }
 
 private:
     int32_t mTypeId;

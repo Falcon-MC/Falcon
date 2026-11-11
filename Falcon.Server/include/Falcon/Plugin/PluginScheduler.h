@@ -18,8 +18,7 @@ public:
 
     ~PluginScheduler();
 
-    uint64_t schedule(LoadedPlugin &plugin, FalconTask task, void *userData, uint64_t delayTicks,
-                      uint64_t periodTicks);
+    uint64_t schedule(LoadedPlugin &plugin, FalconTask task, void *userData, uint64_t delayTicks, uint64_t periodTicks);
 
     uint64_t runAsync(LoadedPlugin &plugin, FalconTask work, FalconTask done, void *userData);
 

@@ -10,7 +10,9 @@ public:
 
     using MobActor::MobActor;
 
-    ActorCategory getCategory() const override { return ActorCategory::Passive; }
+    ActorCategory getCategory() const override {
+        return ActorCategory::Passive;
+    }
 
     static constexpr float ANIMAL_STEP_HEIGHT = 0.5f;
 

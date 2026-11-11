@@ -14,31 +14,53 @@ public:
 
     ItemActor(uint64_t runtimeId, const ItemStack &item);
 
-    const char *getIdentifier() const override { return IDENTIFIER; }
+    const char *getIdentifier() const override {
+        return IDENTIFIER;
+    }
 
     bool collidesAtSnowLayerLook() const override {
         return true;
     }
 
-    const ItemStack &getItem() const { return mItem; }
+    const ItemStack &getItem() const {
+        return mItem;
+    }
 
-    ItemStack &getItem() { return mItem; }
+    ItemStack &getItem() {
+        return mItem;
+    }
 
-    void setItem(const ItemStack &item) { mItem = item; }
+    void setItem(const ItemStack &item) {
+        mItem = item;
+    }
 
-    int getPickupDelay() const { return mPickupDelay; }
+    int getPickupDelay() const {
+        return mPickupDelay;
+    }
 
-    void setPickupDelay(int pickupDelay) { mPickupDelay = pickupDelay; }
+    void setPickupDelay(int pickupDelay) {
+        mPickupDelay = pickupDelay;
+    }
 
-    bool canPickup() const { return mPickupDelay <= 0; }
+    bool canPickup() const {
+        return mPickupDelay <= 0;
+    }
 
-    int getAge() const { return mAge; }
+    int getAge() const {
+        return mAge;
+    }
 
-    bool isExpired() const { return mAge >= LIFETIME_TICKS; }
+    bool isExpired() const {
+        return mAge >= LIFETIME_TICKS;
+    }
 
-    bool isRemoved() const { return mRemoved; }
+    bool isRemoved() const {
+        return mRemoved;
+    }
 
-    void setRemoved(bool removed) { mRemoved = removed; }
+    void setRemoved(bool removed) {
+        mRemoved = removed;
+    }
 
     void tick();
 

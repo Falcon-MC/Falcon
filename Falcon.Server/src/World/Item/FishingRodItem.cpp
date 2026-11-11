@@ -37,14 +37,13 @@ bool FishingRodItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, co
 
     ServerActor *spawned = owner.spawnActor(owner.getLevelFor(player), FishingHookActor::IDENTIFIER,
                                             player.getPosition(), [&](ServerActor &actor) {
-                FishingHookActor *created = dynamic_cast<FishingHookActor *>(&actor);
-                if (created != nullptr)
-                    created->cast(owner, player);
-            });
+                                                FishingHookActor *created = dynamic_cast<FishingHookActor *>(&actor);
+                                                if (created != nullptr)
+                                                    created->cast(owner, player);
+                                            });
     if (spawned == nullptr)
         return false;
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(),
-                         "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(), "minecraft:player");
     return true;
 }

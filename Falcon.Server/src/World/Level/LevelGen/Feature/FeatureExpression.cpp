@@ -270,9 +270,7 @@ float FeatureExpression::evaluate(const Context &context) const {
 
 float FeatureExpression::_evaluate(int32_t index, const Context &context) const {
     const Node &node = mNodes[(size_t) index];
-    const auto operand = [&](int32_t which) {
-        return _evaluate(node.mOperands[which], context);
-    };
+    const auto operand = [&](int32_t which) { return _evaluate(node.mOperands[which], context); };
 
     switch (node.mOperation) {
         case Operation::Constant:

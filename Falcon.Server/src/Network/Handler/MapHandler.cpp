@@ -64,8 +64,7 @@ void MapHandler::tickPlayer(ServerNetworkHandler &owner, ServerPlayer &player) {
 
         const bool changed = MapItem::inventoryTick(owner, player, item, selected);
         const int64_t mapId = MapItem::getMapId(item);
-        if (mapId != MapItemSavedData::INVALID_ID
-            && std::find(carried.begin(), carried.end(), mapId) == carried.end())
+        if (mapId != MapItemSavedData::INVALID_ID && std::find(carried.begin(), carried.end(), mapId) == carried.end())
             carried.push_back(mapId);
         return changed;
     };
