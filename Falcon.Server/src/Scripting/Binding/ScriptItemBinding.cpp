@@ -2238,7 +2238,7 @@ namespace {
             {"minecraft:cursor_inventory", "PlayerCursorInventoryComponent", ScriptContainerRef::Kind::Cursor},
     };
 
-    // TODO: equippable on every mob, not only those with minecraft:equipment, is unverified (IDA unavailable)
+    // equippable on any mob: its natives only test the mob type flag, sub_140B9C800(actor, 256)
     bool hasContainerComponent(Actor &actor, ScriptContainerRef::Kind kind) {
         if (actor.isPlayer())
             return true;
