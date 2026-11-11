@@ -396,6 +396,8 @@ namespace {
             return MobEquipment::LEGS;
         if (slot == "Feet")
             return MobEquipment::FEET;
+        if (slot == "Body")
+            return MobEquipment::BODY;
         return -1;
     }
 
@@ -2183,7 +2185,7 @@ namespace {
         return api->makeInstance("ContainerSlot", slot);
     }
 
-    // TODO: whether totalArmor adds the entity's base armor is unverified (IDA unavailable)
+    // every armor container slot, body included, and no base armor: Mob vtable slot 153 sub_142C31810
     JSValue equippableTotal(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int toughness) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptContainerRef *ref = api->native<ScriptContainerRef>(thisVal);
@@ -2191,7 +2193,7 @@ namespace {
         if (actor == nullptr)
             return api->throwInvalidEntity("get property", toughness ? "totalToughness" : "totalArmor", ref->mEntity);
         int32_t total = 0;
-        for (const char *name: {"Head", "Chest", "Legs", "Feet"}) {
+        for (const char *name: {"Head", "Chest", "Legs", "Feet", "Body"}) {
             const ScriptSlotView slot = equipmentSlot(*api, *actor, name);
             const ItemStack &item = slot ? slot.mGet() : PlayerInventory::getEmptyItem();
             if (item.isAir() || item.mDefinition == nullptr)
