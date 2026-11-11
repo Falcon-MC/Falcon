@@ -17,6 +17,7 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AnimatePacket.h"
+#include "Protocol/Packets/SetHudPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
@@ -902,6 +903,24 @@ void ServerPlayer::clearTitle() {
     SetTitlePacket packet;
     packet.mType = SetTitlePacket::Type::Clear;
     mSender->sendPacketTo(mId, packet);
+}
+
+void ServerPlayer::setHudVisibility(bool hidden, const std::vector<int32_t> *elements) {
+    SetHudPacket packet;
+    packet.mVisibility = hidden ? SetHudPacket::HudVisibility::Hide : SetHudPacket::HudVisibility::Reset;
+    if (elements != nullptr) {
+        packet.mElements = *elements;
+    } else {
+        for (int32_t element = 0; element < HUD_ELEMENT_COUNT; ++element)
+            packet.mElements.push_back(element);
+    }
+    for (const int32_t element: packet.mElements) {
+        if (element >= 0 && element < HUD_ELEMENT_COUNT)
+            mHiddenHudElements[element] = hidden;
+    }
+
+    if (mSender != nullptr)
+        mSender->sendPacketTo(mId, packet);
 }
 
 void ServerPlayer::resetTitle() {
