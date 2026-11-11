@@ -539,18 +539,6 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: waypoint behaviour, the constructor arguments only for now
-    JSValue entityWaypointConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        JSValue object = ScriptApi::fromContext(ctx)->makeInstance("EntityWaypoint", new ScriptNative());
-        if (argc >= 1)
-            JS_SetPropertyStr(ctx, object, "entity", JS_DupValue(ctx, argv[0]));
-        if (argc >= 2)
-            JS_SetPropertyStr(ctx, object, "textureSelector", JS_DupValue(ctx, argv[1]));
-        if (argc >= 3)
-            JS_SetPropertyStr(ctx, object, "entityRules", JS_DupValue(ctx, argv[2]));
-        return object;
-    }
-
     JSValue dimensionGetId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptDimensionRef *ref = ScriptApi::fromContext(ctx)->native<ScriptDimensionRef>(thisVal);
         const std::string *custom = Dimension::customName(ref->mDimension);
@@ -1079,7 +1067,6 @@ void ScriptApi::_bindBlock() {
     property(block, "Block", "type", blockGetType);
     property(block, "Block", "isAir", blockGetIsAir);
 
-    defineClass("EntityWaypoint", entityWaypointConstructor, 3);
     _bindBlockSurface();
 }
 

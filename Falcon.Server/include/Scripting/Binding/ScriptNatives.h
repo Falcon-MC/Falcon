@@ -144,6 +144,39 @@ struct ScriptIdentityRef : ScriptNative {
     int32_t mScore = 0;
 };
 
+// one WaypointTextureBounds: a WaypointTexture value or a CustomTexture path with its icon size
+struct ScriptWaypointTexture {
+    double mLowerBound = 0.0;
+    bool mHasUpperBound = false;
+    double mUpperBound = 0.0;
+    bool mCustom = false;
+    std::string mTexture;
+    double mIconWidth = 0.0;
+    double mIconHeight = 0.0;
+};
+
+// shared by the waypoint object and every locator bar holding it
+struct ScriptWaypointState {
+    enum class Kind { Location, Entity, Player };
+
+    Kind mKind = Kind::Location;
+    ScriptEntityRef mEntity;
+    DimensionType mDimension = DimensionType::Overworld;
+    uint32_t mWorldId = 0;
+    double mX = 0.0, mY = 0.0, mZ = 0.0;
+    std::vector<ScriptWaypointTexture> mTextures;
+    bool mHasColor = false;
+    double mRed = 0.0, mGreen = 0.0, mBlue = 0.0;
+    bool mEnabled = true;
+    bool mRemoved = false;
+    bool mShowDead = true, mShowInvisible = true, mShowSneaking = true;
+    bool mShowHidden = true, mShowSpectator = true, mShowSpectatorToSpectator = true;
+};
+
+struct ScriptWaypointRef : ScriptNative {
+    std::shared_ptr<ScriptWaypointState> mState;
+};
+
 namespace ScriptValues {
     std::string toString(JSContext *ctx, JSValueConst value);
 
