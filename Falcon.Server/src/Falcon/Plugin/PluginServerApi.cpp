@@ -101,7 +101,10 @@ namespace {
                 return;
 
             owner().sendModalForm(found->second, formId, form,
-                                  [formId](ServerPlayer &responder, const std::string &response, bool closed) {
+                                  [formId](ServerPlayer &responder, const std::string &response,
+                                           ServerNetworkHandler::ModalFormOutcome outcome) {
+                                      if (outcome == ServerNetworkHandler::ModalFormOutcome::PlayerQuit)
+                                          return;
                                       PluginManager *plugins = PluginManager::findWithSubscribers(
                                               FALCON_EVENT_PLAYER_FORM_RESPONSE);
                                       if (plugins == nullptr)
@@ -112,7 +115,7 @@ namespace {
                                       answer.mPlayer = &responder;
                                       answer.mFormId = formId;
                                       answer.mFormResponse = response;
-                                      answer.mState = closed;
+                                      answer.mState = outcome != ServerNetworkHandler::ModalFormOutcome::Answered;
                                       plugins->dispatch(answer);
                                   });
         });

@@ -62,6 +62,7 @@
 #include "Protocol/Packets/RequestChunkRadiusPacket.h"
 #include "Protocol/Packets/RequestAbilityPacket.h"
 #include "Protocol/Packets/ChunkRadiusUpdatedPacket.h"
+#include "Protocol/Packets/ClientboundCloseFormPacket.h"
 #include "Protocol/Packets/RequestNetworkSettingsPacket.h"
 #include "Protocol/Packets/ResourcePackClientResponsePacket.h"
 #include "Protocol/Packets/ResourcePackStackPacket.h"
@@ -105,6 +106,7 @@
 #include "Protocol/Packets/EmotePacket.h"
 #include "Protocol/Packets/ModalFormRequestPacket.h"
 #include "Protocol/Packets/ModalFormResponsePacket.h"
+#include "Protocol/Packets/ClientboundDataDrivenUICloseScreenPacket.h"
 #include "Protocol/Packets/PlayerSkinPacket.h"
 #include "Protocol/Packets/SetHealthPacket.h"
 #include "Protocol/BlockStateHasher.h"
@@ -1189,7 +1191,16 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         getLevelFor(*player).unregisterAllChunkLoaders(player->getRuntimeId());
     }
 
-    mModalFormCallbacks.erase(id);
+    auto pendingForms = mModalFormCallbacks.find(id);
+    if (pendingForms != mModalFormCallbacks.end()) {
+        auto callbacks = std::move(pendingForms->second);
+        mModalFormCallbacks.erase(pendingForms);
+        if (player != nullptr) {
+            for (auto &entry: callbacks)
+                entry.second(*player, std::string(), ModalFormOutcome::PlayerQuit);
+        }
+    }
+    _endDataDrivenScreens(id, DataDrivenScreenOutcome::PlayerLeft);
     erasePlayer(id);
     // an awake player leaving can bring the remaining sleepers up to the threshold
     if (playerWorld != nullptr)
@@ -1249,6 +1260,18 @@ void ServerNetworkHandler::sendModalForm(ServerPlayer &player, uint32_t formId, 
     request.mFormId = formId;
     request.mFormData = formData;
     mNetworkHandler->send(player.getNetworkIdentifier(), request, mCodecContext);
+}
+
+void ServerNetworkHandler::closeAllForms(ServerPlayer &player) {
+    if (!player.isSpawned())
+        return;
+
+    ClientboundCloseFormPacket packet;
+    mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
+
+    // no form id closes every data-driven screen; each comes back as ProgrammaticCloseAll
+    ClientboundDataDrivenUICloseScreenPacket closeScreens;
+    mNetworkHandler->send(player.getNetworkIdentifier(), closeScreens, mCodecContext);
 }
 
 void ServerNetworkHandler::setMaxPlayers(int maxPlayers) {
@@ -1405,6 +1428,8 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::ActorPickRequest,
             MinecraftPacketIds::Emote,
             MinecraftPacketIds::ModalFormResponse,
+            MinecraftPacketIds::ServerboundDataStore,
+            MinecraftPacketIds::ServerboundDataDrivenScreenClosed,
             MinecraftPacketIds::MapInfoRequest,
             MinecraftPacketIds::MapCreateLockedCopy,
             MinecraftPacketIds::PlayerSkin,
@@ -1952,7 +1977,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormRe
         mModalFormCallbacks.erase(playerCallbacks);
 
     if (callback)
-        callback(*player, cancelled ? std::string() : packet.mFormData, cancelled);
+        callback(*player, cancelled ? std::string() : packet.mFormData,
+                 !cancelled ? ModalFormOutcome::Answered
+                 : packet.mCancelReason == ModalFormResponsePacket::CancelReason::UserBusy
+                         ? ModalFormOutcome::UserBusy
+                         : ModalFormOutcome::UserClosed);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinPacket &packet) {

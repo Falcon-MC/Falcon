@@ -56,9 +56,7 @@ BOUND = {
         'ItemBlockDynamicPropertiesComponent', 'CustomCommandRegistry', 'CustomCommandOrigin', 'CustomCommandSource',
         'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
     },
-    'server-ui': {
-        'ActionFormData', 'MessageFormData', 'ModalFormData',
-    },
+    'server-ui': None,
     'common': None,
 }
 

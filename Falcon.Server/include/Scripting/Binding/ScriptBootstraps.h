@@ -12,6 +12,6 @@ namespace ScriptBootstraps {
     // (native) => { BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator }
     const char *volumes();
 
-    // (native) => { ActionFormData, MessageFormData, ModalFormData }
+    // (native: showForm, closeAllForms, errors) => the classic form classes, responses and uiManager
     const char *ui();
 }

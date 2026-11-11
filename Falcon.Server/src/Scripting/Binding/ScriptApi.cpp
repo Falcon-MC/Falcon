@@ -279,6 +279,43 @@ namespace {
         return api->showForm(argv[0], toString(ctx, argv[1]));
     }
 
+    JSValue uiCloseAllForms(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc >= 1)
+            api->closeAllForms(argv[0]);
+        return JS_UNDEFINED;
+    }
+
+    JSValue uiShowScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 7)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->showScreen(argv[0], toString(ctx, argv[1]), toString(ctx, argv[2]), argv[3], argv[4], argv[5],
+                               argv[6]);
+    }
+
+    JSValue uiUpdateScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t formId = 0;
+        if (argc < 4 || JS_ToInt32(ctx, &formId, argv[1]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->updateScreen(argv[0], formId, argv[2], argv[3]);
+    }
+
+    JSValue uiCloseScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t formId = 0;
+        if (argc >= 2 && JS_ToInt32(ctx, &formId, argv[1]) == 0)
+            api->closeScreen(argv[0], formId);
+        return JS_UNDEFINED;
+    }
+
+    // true for a player still on the server: DDUI constructors and show() throw for any other
+    JSValue uiIsPlayer(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && api->resolvePlayer(argv[0]) != nullptr);
+    }
+
     JSValue runBootstrap(JSContext *ctx, const std::string &pack, const char *source, const char *name,
                          JSValue argument) {
         JSValue factory = JS_Eval(ctx, source, std::strlen(source), name, JS_EVAL_TYPE_GLOBAL);
@@ -1304,6 +1341,11 @@ void ScriptApi::worldLoad() {
 
 void ScriptApi::shutdown() {
     emit("system.before.shutdown", makeEvent("SystemBeforeEvents.shutdown"));
+    std::vector<uint32_t> pending;
+    for (const auto &entry: mFormResolvers)
+        pending.push_back(entry.first);
+    for (uint32_t formId: pending)
+        _resolveForm(formId, std::string(), "ServerShutdown");
 }
 
 JSValue ScriptApi::_makeSignalHolder(const char *className, const char *signalOwner, const char *keyPrefix) {
@@ -1372,9 +1414,12 @@ void ScriptApi::_bindRegistries() {
 void ScriptApi::_installBootstraps() {
     const std::vector<std::string> commonErrors = mCommonSurface.errorClasses();
     const std::vector<std::string> serverErrors = mSurface.errorClasses();
+    const std::vector<std::string> uiErrors = mModules.find("@minecraft/server-ui") != nullptr
+                                                      ? mUiSurface.errorClasses()
+                                                      : std::vector<std::string>();
     JSValue names = JS_NewArray(mContext);
     uint32_t count = 0;
-    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors}) {
+    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors, &uiErrors}) {
         for (const std::string &error: *list)
             JS_SetPropertyUint32(mContext, names, count++, string(mContext, error));
     }
@@ -1385,6 +1430,8 @@ void ScriptApi::_installBootstraps() {
         mCommonExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     for (const std::string &error: serverErrors)
         mServerExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: uiErrors)
+        mUiExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     JS_FreeValue(mContext, classes);
 
     JSValue data = JS_NewObject(mContext);
@@ -1423,12 +1470,33 @@ void ScriptApi::_installBootstraps() {
 
     JSValue ui = JS_NewObject(mContext);
     addFunction(mContext, ui, "showForm", uiShowForm, 2);
+    addFunction(mContext, ui, "closeAllForms", uiCloseAllForms, 1);
+    addFunction(mContext, ui, "showScreen", uiShowScreen, 7);
+    addFunction(mContext, ui, "updateScreen", uiUpdateScreen, 4);
+    addFunction(mContext, ui, "closeScreen", uiCloseScreen, 2);
+    addFunction(mContext, ui, "isPlayer", uiIsPlayer, 1);
+    JS_SetPropertyStr(mContext, ui, "errors", JS_DupValue(mContext, mErrors));
     JSValue uiExports = runBootstrap(mContext, mPackName, ScriptBootstraps::ui(), "<ui>", ui);
-    for (const char *name: {"ActionFormData", "MessageFormData", "ModalFormData"}) {
+    for (const char *name:
+         {"ActionFormData", "MessageFormData", "ModalFormData", "FormResponse", "ActionFormResponse",
+          "MessageFormResponse", "ModalFormResponse", "UIManager", "uiManager", "CustomForm", "MessageBox",
+          "ObservableBoolean", "ObservableNumber", "ObservableString", "ObservableUIRawMessage"}) {
         if (mUiSurface.has(name))
             mUiExports.emplace_back(name, JS_GetPropertyStr(mContext, uiExports, name));
     }
     JS_FreeValue(mContext, uiExports);
+
+    for (const char *name: {"FormCancelationReason", "FormRejectReason", "FormVisibilityErrorReason",
+                            "TextFilteringError", "DataDrivenScreenClosedReason"}) {
+        if (!mUiSurface.has(name))
+            continue;
+
+        JSValue object = JS_NewObject(mContext);
+        for (const auto &value: mUiSurface.enumValues(name))
+            JS_DefinePropertyValueStr(mContext, object, value.first.c_str(), string(mContext, value.second),
+                                      JS_PROP_ENUMERABLE);
+        mUiExports.emplace_back(name, object);
+    }
 }
 
 void ScriptApi::_defineEnums() {
