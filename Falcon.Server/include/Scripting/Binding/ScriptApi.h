@@ -530,6 +530,7 @@ private:
     ScriptSurface mSurface;
     ScriptSurface mUiSurface;
     ScriptSurface mCommonSurface;
+    ScriptSurface mGraphicsSurface;
     ScriptPrivilege mPrivilege = ScriptPrivilege::Normal;
 
     struct SteppedBlock {
@@ -549,6 +550,7 @@ private:
     std::vector<std::pair<std::string, JSValue>> mServerExports;
     std::vector<std::pair<std::string, JSValue>> mUiExports;
     std::vector<std::pair<std::string, JSValue>> mCommonExports;
+    std::vector<std::pair<std::string, JSValue>> mGraphicsExports;
 
     // same entity, same object: scripts compare and key maps by them
     std::unordered_map<int64_t, JSValue> mActorObjects;

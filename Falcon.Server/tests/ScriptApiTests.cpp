@@ -27,6 +27,7 @@
 #include "Protocol/Packets/ModalFormResponsePacket.h"
 #include "Protocol/Packets/ClientboundDataDrivenUIShowScreenPacket.h"
 #include "Protocol/Packets/ClientboundDataStorePacket.h"
+#include "Protocol/Packets/GraphicsOverrideParameterPacket.h"
 #include "Protocol/Packets/ServerboundDataDrivenScreenClosedPacket.h"
 #include "Protocol/Packets/ServerboundDataStorePacket.h"
 #include "Protocol/Packets/DimensionDataPacket.h"
@@ -523,6 +524,33 @@ system.runTimeout(() => {
   } catch (e) { r.sbError = e.name + ":" + e.message + ":" + e.stack; }
 }, 3);
 system.runTimeout(() => world.setDynamicProperty("entities", JSON.stringify(r)), 7);
+)JS";
+
+    const char *const GRAPHICS = R"JS(
+import { world, system, BiomeTypes } from "@minecraft/server";
+import { BiomeWater, getBiomeAtmospherics, getBiomeColorGrading, getBiomeLighting,
+         getPlayerWater } from "@minecraft/server-graphics";
+
+const r = {};
+const errorOf = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ":" + e.message; } };
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "gfx:apply") return;
+    const plains = BiomeTypes.get("minecraft:plains");
+    const p = world.getAllPlayers()[0];
+    const sky = getBiomeAtmospherics(plains);
+    sky.setSkyZenithColor({ red: 1, green: 0, blue: 0.5 });
+    sky.setHorizonBlendMax({ 0: 0.2, 0.5: 0.8 });
+    getPlayerWater(plains, p).setWavesDepth(3);
+    getBiomeColorGrading(plains).setHighlightsGain({ x: 1, y: 2, z: 3 });
+    getBiomeLighting(plains).resetSunColor();
+    r.range = errorOf(() => sky.setHorizonBlendMax(2));
+    r.color = errorOf(() => sky.setSkyZenithColor({ red: 2, green: 0, blue: 0 }));
+    r.key = errorOf(() => sky.setHorizonBlendMax({ 2: 0.5 }));
+    r.type = errorOf(() => sky.setHorizonBlendMax("x"));
+    r.biome = errorOf(() => getBiomeAtmospherics({}));
+    r.constructor = errorOf(() => new BiomeWater());
+    world.setDynamicProperty("graphics", JSON.stringify(r));
+});
 )JS";
 
     const char *const ITEMS = R"JS(
@@ -1386,6 +1414,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   std::string(PRELUDE) + BETA_ENTITIES);
         writePack(packs, "items", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
                   std::string(PRELUDE) + ITEMS);
+        writePack(packs, "graphics",
+                  server2 + ", {\"module_name\": \"@minecraft/server-graphics\", \"version\": \"1.0.0\"},"
+                            " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  GRAPHICS);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -1434,7 +1466,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 10, "only the ten valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 11, "only the eleven valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -1801,6 +1833,53 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*ddui, "closed", "ClientClosed|true|false|true|true|false");
         expect(*ddui, "box", "ClientClosed|1");
         expect(*ddui, "observable", "3|TypeError:Native type conversion failed.");
+
+        // graphics: a single value goes out as one keyframe at time 0, a player override to that player only
+        std::vector<GraphicsOverrideParameterPacket> overrides;
+        owner.getNetworkHandler().setOutboundFilter([&overrides, &owner](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            if (Packet::peekId(header, sender, client) == MinecraftPacketIds::GraphicsOverrideParameter) {
+                ReadOnlyBinaryStream body(data);
+                GraphicsOverrideParameterPacket packet;
+                packet.readHeader(body);
+                packet.read(body, owner.getCodecContext());
+                overrides.push_back(packet);
+            }
+            return false;
+        });
+        scriptEvent.execute(console, {"gfx:apply"});
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(overrides.size() == 5, "the graphics overrides were not all sent");
+        const GraphicsOverrideParameterPacket &zenith = overrides[0];
+        require(zenith.mParameterType == GraphicsOverrideParameterType::SkyZenithColor
+                        && zenith.mBiomeIdentifier == "minecraft:plains" && !zenith.mHasPlayerIdentifier
+                        && zenith.mValues.size() == 1 && zenith.mValues[0].mKey == 0.0f
+                        && zenith.mValues[0].mValue.x == 1.0f && zenith.mValues[0].mValue.z == 0.5f && !zenith.mReset,
+                "a sky color did not go out as one keyframe");
+        const GraphicsOverrideParameterPacket &blend = overrides[1];
+        require(blend.mParameterType == GraphicsOverrideParameterType::HorizonBlendMax && blend.mValues.size() == 2
+                        && blend.mValues[1].mKey == 0.5f && blend.mValues[1].mValue.y == 0.8f,
+                "the blend keyframes were not sent");
+        require(overrides[2].mParameterType == GraphicsOverrideParameterType::WavesDepth
+                        && overrides[2].mHasFloatValue && overrides[2].mFloatValue == 3.0f
+                        && overrides[2].mHasPlayerIdentifier && overrides[2].mPlayerIdentifier == player.getName(),
+                "the player water override lost its value or its player");
+        require(overrides[3].mParameterType == GraphicsOverrideParameterType::HighlightsGain
+                        && overrides[3].mHasVec3Value && overrides[3].mVec3Value.y == 2.0f,
+                "the color grading vector was not sent");
+        require(overrides[4].mParameterType == GraphicsOverrideParameterType::SunColor && overrides[4].mReset
+                        && overrides[4].mValues.empty(),
+                "the reset was not sent");
+        const std::unique_ptr<json::Value> graphics = result(owner, "graphics");
+        const std::string unsupported =
+                "InvalidArgumentError:Invalid value passed. Value did not match one of the supported values.";
+        expect(*graphics, "range", unsupported);
+        expect(*graphics, "color", unsupported);
+        expect(*graphics, "key", unsupported);
+        expect(*graphics, "type", "TypeError:Native type conversion failed.");
+        expect(*graphics, "biome", "TypeError:Native type conversion failed.");
+        expect(*graphics, "constructor", "ReferenceError:No constructor for native class 'BiomeWater'.");
 
         // custom commands: in the command map under both names, parsed from a player and gated by cheats
         CommandMap &commands = owner.getCommands();
@@ -2294,7 +2373,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable2, "weatherAfter", "minecraft:overworld|Clear|Thunder;");
         expect(*stable2, "scriptEvents",
                "test:ping|hello world|Server|false|true|true;other:pong||Entity|true|true|true;ui:forms||Server|false|true|true;"
-               "ui:ddui||Server|false|true|true;test:event|m|Server|false|true|true;");
+               "ui:ddui||Server|false|true|true;gfx:apply||Server|false|true|true;"
+               "test:event|m|Server|false|true|true;");
         expect(*stable2, "filtered", "other:pong;");
         require(stable2->get("removed") == nullptr, "an unsubscribed scriptEventReceive callback ran");
         expect(*stable2, "prototypeBound",
