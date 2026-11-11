@@ -1405,6 +1405,8 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::ActorPickRequest,
             MinecraftPacketIds::Emote,
             MinecraftPacketIds::ModalFormResponse,
+            MinecraftPacketIds::MapInfoRequest,
+            MinecraftPacketIds::MapCreateLockedCopy,
             MinecraftPacketIds::PlayerSkin,
     };
 
