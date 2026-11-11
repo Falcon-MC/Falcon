@@ -13,7 +13,7 @@ struct ServerHostOptions {
     std::string serverName = "Falcon Server";
     std::string subMotd = "Falcon";
     std::string gameVersion = "1.26.70";
-    int protocolVersion = 2250;
+    int protocolVersion = 2259;
     int maxPlayers = 20;
     unsigned short port = 19132;
     unsigned short portV6 = 19133;

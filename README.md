@@ -13,7 +13,7 @@
 	<a href="https://falcon-mc.github.io"><img src="https://img.shields.io/badge/website-falcon--mc.github.io-2ea44f" alt="Website"></a>
 	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 	<img src="https://img.shields.io/badge/minecraft-v1.26.70%20(Bedrock)-56383E" alt="Minecraft">
-	<img src="https://img.shields.io/badge/protocol-2250-blue" alt="Protocol">
+	<img src="https://img.shields.io/badge/protocol-2259-blue" alt="Protocol">
 	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
 	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
 </p>
@@ -37,7 +37,7 @@ Every setting is described on the [website](https://falcon-mc.github.io).
 
 ## Supported versions
 
-Falcon speaks Minecraft **1.26.70** (protocol 2250). 1.26.60, 1.26.52, 1.26.45 and 1.26.40 can join with
+Falcon speaks Minecraft **1.26.70** (protocol 2259). 1.26.60, 1.26.52, 1.26.45 and 1.26.40 can join with
 `any-version=true`.
 
 ## Plugins
