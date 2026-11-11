@@ -21,6 +21,8 @@ namespace {
             return "ui:";
         if (module == "@minecraft/common")
             return "common:";
+        if (module == "@minecraft/server-graphics")
+            return "graphics:";
         return "server:";
     }
 }

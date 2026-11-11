@@ -14,4 +14,7 @@ namespace ScriptBootstraps {
 
     // (native: showForm, closeAllForms, errors) => the classic form classes, responses and uiManager
     const char *ui();
+
+    // (native: send, isBiome, isPlayer, errors) => the four biome setting classes and their getters
+    const char *graphics();
 }

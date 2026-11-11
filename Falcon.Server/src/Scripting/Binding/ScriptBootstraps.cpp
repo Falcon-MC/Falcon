@@ -1235,6 +1235,148 @@ namespace {
         ObservableString, ObservableUIRawMessage };
 })
 )JS";
+
+    // GraphicsOverrideParameterType order; ranges from the definitions, checked by the game's setters
+    const char *GRAPHICS = R"JS(
+(function (native) {
+    const token = Symbol();
+    const UNSUPPORTED = "Invalid value passed. Value did not match one of the supported values.";
+    const invalid = () => native.errors.make("InvalidArgumentError", UNSUPPORTED);
+    const conversion = () => new TypeError("Native type conversion failed.");
+    const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
+    const inRange = (value, range) => range === undefined || (value >= range[0] && value <= range[1]);
+    const color = (value) => {
+        if (value === null || typeof value !== "object" || !isNumber(value.red) || !isNumber(value.green)
+            || !isNumber(value.blue))
+            return undefined;
+        return [value.red, value.green, value.blue];
+    };
+    // a single value goes out as one keyframe at time 0; a number fills all three components
+    const keyframes = (value, kind, range) => {
+        const single = kind === "rgb" ? color(value) : (isNumber(value) ? [value, value, value] : undefined);
+        let frames;
+        if (single !== undefined) {
+            frames = [[0, single]];
+        } else {
+            if (value === null || typeof value !== "object" || Array.isArray(value))
+                throw conversion();
+            frames = [];
+            for (const key of Object.keys(value)) {
+                const time = Number(key);
+                const entry = kind === "rgb" ? color(value[key])
+                    : (isNumber(value[key]) ? [value[key], value[key], value[key]] : undefined);
+                if (!Number.isFinite(time) || entry === undefined)
+                    throw conversion();
+                if (time < 0 || time > 1)
+                    throw invalid();
+                frames.push([time, entry]);
+            }
+        }
+        for (const frame of frames) {
+            if (kind === "rgb" ? frame[1].some((c) => c < 0 || c > 1) : !inRange(frame[1][0], range))
+                throw invalid();
+        }
+        return frames;
+    };
+    const SPECS = {
+        BiomeAtmospherics: [
+            ["SkyZenithColor", 0, "rgb"], ["SkyHorizonColor", 1, "rgb"], ["HorizonBlendMin", 2, "frames", [0, 1]],
+            ["HorizonBlendMax", 3, "frames", [0, 1]], ["HorizonBlendStart", 4, "frames", [0, 1]],
+            ["HorizonBlendMieStart", 5, "frames", [0, 1.2]], ["RayleighStrength", 6, "frames", [0, 11]],
+            ["SunMieStrength", 7, "frames", [0, 60]], ["MoonMieStrength", 8, "frames", [0, 60]],
+            ["SunGlareShape", 9, "frames", [0, 50]]],
+        BiomeWater: [
+            ["Chlorophyll", 10, "number", [0, 10]], ["CDOM", 11, "number", [0, 15]],
+            ["SuspendedSediment", 12, "number", [0, 300]], ["WavesDepth", 13, "number", [0, 10]],
+            ["WavesFrequency", 14, "number", [0, 10]], ["WavesFrequencyScaling", 15, "number", [0, 2]],
+            ["WavesSpeed", 16, "number", [0.01, 10]], ["WavesSpeedScaling", 17, "number", [0, 2]],
+            ["WavesShape", 18, "number", [1, 10]], ["WavesOctaves", 19, "number", [1, 10]],
+            ["WavesMix", 20, "number", [0, 1]], ["WavesPull", 21, "number", [-1, 1]],
+            ["WavesDirectionIncrement", 22, "number", [0, 360]]],
+        BiomeColorGrading: [
+            ["MidtonesContrast", 23, "vector", [0, 4]], ["HighlightsContrast", 24, "vector", [0, 4]],
+            ["ShadowsContrast", 25, "vector", [0, 4]], ["HighlightsGain", 26, "vector", [0, 10]],
+            ["HighlightsGamma", 27, "vector", [0, 4]], ["HighlightsOffset", 28, "vector", [-1, 1]],
+            ["HighlightsSaturation", 29, "vector", [0, 10]], ["MidtonesGain", 30, "vector", [0, 10]],
+            ["MidtonesGamma", 31, "vector", [0, 4]], ["MidtonesOffset", 32, "vector", [-1, 1]],
+            ["MidtonesSaturation", 33, "vector", [0, 10]], ["ShadowsGain", 34, "vector", [0, 10]],
+            ["ShadowsGamma", 35, "vector", [0, 4]], ["ShadowsOffset", 36, "vector", [-1, 1]],
+            ["ShadowsSaturation", 37, "vector", [0, 10]], ["HighlightsMin", 38, "number", [1, 20]],
+            ["ShadowsMax", 39, "number", [0, 1]], ["Temperature", 40, "number", [1000, 15000]]],
+        BiomeLighting: [
+            ["SunColor", 41, "rgb"], ["SunIlluminance", 42, "frames"], ["MoonColor", 43, "rgb"],
+            ["MoonIlluminance", 44, "frames"], ["FlashColor", 45, "rgb"], ["FlashIlluminance", 46, "frames"],
+            ["AmbientColor", 47, "rgb"], ["AmbientIlluminance", 48, "frames"],
+            ["EmissiveDesaturation", 49, "number"], ["SkyIntensity", 50, "frames"],
+            ["OrbitalOffsetDegrees", 51, "frames"]],
+    };
+    // biome and optional player of each object: the game keeps them on the native side
+    const owners = new WeakMap();
+    const send = (self, parameter, reset, mode, data) => {
+        const owner = owners.get(self);
+        native.send(owner.biome, owner.player, parameter, reset, mode, data);
+    };
+    const classes = {};
+    for (const name of Object.keys(SPECS)) {
+        const cls = class {
+            constructor(key, biome, player) {
+                if (key !== token)
+                    throw new ReferenceError("No constructor for native class '" + name + "'.");
+                owners.set(this, { biome, player });
+            }
+        };
+        Object.defineProperty(cls, "name", { value: name });
+        for (const [suffix, parameter, kind, range] of SPECS[name]) {
+            Object.defineProperty(cls.prototype, "set" + suffix, { writable: true, configurable: true,
+                value: function (value) {
+                    if (arguments.length < 1)
+                        throw conversion();
+                    if (kind === "frames" || kind === "rgb")
+                        return send(this, parameter, false, 0, keyframes(value, kind, range));
+                    if (kind === "number") {
+                        if (!isNumber(value))
+                            throw conversion();
+                        if (!inRange(value, range))
+                            throw invalid();
+                        return send(this, parameter, false, 1, [value]);
+                    }
+                    if (value === null || typeof value !== "object" || !isNumber(value.x) || !isNumber(value.y)
+                        || !isNumber(value.z))
+                        throw conversion();
+                    if (![value.x, value.y, value.z].every((c) => inRange(c, range)))
+                        throw invalid();
+                    return send(this, parameter, false, 2, [value.x, value.y, value.z]);
+                } });
+            Object.defineProperty(cls.prototype, "reset" + suffix, { writable: true, configurable: true,
+                value: function () {
+                    return send(this, parameter, true, 0, []);
+                } });
+        }
+        classes[name] = cls;
+    }
+    const make = (name, biome, player) => {
+        if (!native.isBiome(biome))
+            throw conversion();
+        if (player !== undefined && !native.isPlayer(player))
+            throw conversion();
+        return new classes[name](token, biome, player);
+    };
+    return {
+        BiomeAtmospherics: classes.BiomeAtmospherics,
+        BiomeColorGrading: classes.BiomeColorGrading,
+        BiomeLighting: classes.BiomeLighting,
+        BiomeWater: classes.BiomeWater,
+        getBiomeAtmospherics: (biome) => make("BiomeAtmospherics", biome),
+        getBiomeColorGrading: (biome) => make("BiomeColorGrading", biome),
+        getBiomeLighting: (biome) => make("BiomeLighting", biome),
+        getBiomeWater: (biome) => make("BiomeWater", biome),
+        getPlayerAtmospherics: (biome, player) => make("BiomeAtmospherics", biome, player),
+        getPlayerColorGrading: (biome, player) => make("BiomeColorGrading", biome, player),
+        getPlayerLighting: (biome, player) => make("BiomeLighting", biome, player),
+        getPlayerWater: (biome, player) => make("BiomeWater", biome, player),
+    };
+})
+)JS";
 }
 
 namespace ScriptBootstraps {
@@ -1248,6 +1390,10 @@ namespace ScriptBootstraps {
 
     const char *ui() {
         return UI;
+    }
+
+    const char *graphics() {
+        return GRAPHICS;
     }
 
     const char *volumes() {

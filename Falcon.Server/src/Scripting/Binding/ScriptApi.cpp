@@ -15,6 +15,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/BlockStateHasher.h"
+#include "Protocol/Packets/GraphicsOverrideParameterPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 
 #include <algorithm>
@@ -310,6 +311,77 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    JSValue graphicsIsBiome(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && JS_IsObject(argv[0]) && api->native<ScriptNamedRef>(argv[0]) != nullptr);
+    }
+
+    float floatAt(JSContext *ctx, JSValueConst array, uint32_t index) {
+        JSValue value = JS_GetPropertyUint32(ctx, array, index);
+        double number = 0.0;
+        JS_ToFloat64(ctx, &number, value);
+        JS_FreeValue(ctx, value);
+        return (float) number;
+    }
+
+    // (biome, player | undefined, parameter, reset, mode, data): mode 0 keyframes [[time, [x, y, z]]...],
+    // 1 a float, 2 a vector; a player override goes to that player only, a biome one to everyone (sub_14DD0C6C0)
+    JSValue graphicsSend(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 6)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const ScriptNamedRef *biome = api->native<ScriptNamedRef>(argv[0]);
+        int32_t parameter = 0, mode = 0;
+        if (biome == nullptr || JS_ToInt32(ctx, &parameter, argv[2]) != 0 || JS_ToInt32(ctx, &mode, argv[4]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        GraphicsOverrideParameterPacket packet;
+        packet.mBiomeIdentifier = biome->mName;
+        packet.mParameterType = (GraphicsOverrideParameterType) parameter;
+        packet.mReset = JS_ToBool(ctx, argv[3]) == 1;
+        ServerPlayer *target = nullptr;
+        if (!JS_IsUndefined(argv[1])) {
+            target = api->resolvePlayer(argv[1]);
+            if (target == nullptr)
+                return JS_UNDEFINED;
+            packet.mHasPlayerIdentifier = true;
+            packet.mPlayerIdentifier = target->getName();
+        }
+        if (!packet.mReset && mode == 1) {
+            packet.mHasFloatValue = true;
+            packet.mFloatValue = floatAt(ctx, argv[5], 0);
+        } else if (!packet.mReset && mode == 2) {
+            packet.mHasVec3Value = true;
+            packet.mVec3Value = Vector3f(floatAt(ctx, argv[5], 0), floatAt(ctx, argv[5], 1), floatAt(ctx, argv[5], 2));
+        } else if (!packet.mReset) {
+            JSValue length = JS_GetPropertyStr(ctx, argv[5], "length");
+            uint32_t count = 0;
+            JS_ToUint32(ctx, &count, length);
+            JS_FreeValue(ctx, length);
+            for (uint32_t index = 0; index < count; ++index) {
+                JSValue frame = JS_GetPropertyUint32(ctx, argv[5], index);
+                JSValue value = JS_GetPropertyUint32(ctx, frame, 1);
+                GraphicsOverrideValueEntry entry;
+                entry.mKey = floatAt(ctx, frame, 0);
+                entry.mValue = Vector3f(floatAt(ctx, value, 0), floatAt(ctx, value, 1), floatAt(ctx, value, 2));
+                packet.mValues.push_back(entry);
+                JS_FreeValue(ctx, value);
+                JS_FreeValue(ctx, frame);
+            }
+        }
+
+        ServerNetworkHandler &host = api->host();
+        if (target != nullptr) {
+            host.getNetworkHandler().send(target->getNetworkIdentifier(), packet, host.getCodecContext());
+            return JS_UNDEFINED;
+        }
+        for (auto &entry: host.getPlayers()) {
+            if (entry.second.isSpawned())
+                host.getNetworkHandler().send(entry.first, packet, host.getCodecContext());
+        }
+        return JS_UNDEFINED;
+    }
+
     // true for a player still on the server: DDUI constructors and show() throw for any other
     JSValue uiIsPlayer(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -469,7 +541,9 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mTrack(moduleOrDefault(mModules, "@minecraft/server").mTrack),
           mSurface("@minecraft/server", moduleOrDefault(mModules, "@minecraft/server")),
           mUiSurface("@minecraft/server-ui", moduleOrDefault(mModules, "@minecraft/server-ui")),
-          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")), mScheduler(context),
+          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")),
+          mGraphicsSurface("@minecraft/server-graphics", moduleOrDefault(mModules, "@minecraft/server-graphics")),
+          mScheduler(context),
           mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
 }
@@ -502,7 +576,7 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
-    for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports}) {
+    for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports}) {
         for (auto &entry: *exports)
             JS_FreeValue(mContext, entry.second);
     }
@@ -1465,6 +1539,24 @@ void ScriptApi::_installBootstraps() {
     JS_FreeValue(mContext, volumeExports);
 
 
+    if (mModules.find("@minecraft/server-graphics") != nullptr) {
+        JSValue graphics = JS_NewObject(mContext);
+        addFunction(mContext, graphics, "send", graphicsSend, 6);
+        addFunction(mContext, graphics, "isBiome", graphicsIsBiome, 1);
+        addFunction(mContext, graphics, "isPlayer", uiIsPlayer, 1);
+        JS_SetPropertyStr(mContext, graphics, "errors", JS_DupValue(mContext, mErrors));
+        JSValue graphicsExports =
+                runBootstrap(mContext, mPackName, ScriptBootstraps::graphics(), "<graphics>", graphics);
+        for (const char *name: {"BiomeAtmospherics", "BiomeColorGrading", "BiomeLighting", "BiomeWater",
+                                "getBiomeAtmospherics", "getBiomeColorGrading", "getBiomeLighting", "getBiomeWater",
+                                "getPlayerAtmospherics", "getPlayerColorGrading", "getPlayerLighting",
+                                "getPlayerWater"}) {
+            if (mGraphicsSurface.has(name))
+                mGraphicsExports.emplace_back(name, JS_GetPropertyStr(mContext, graphicsExports, name));
+        }
+        JS_FreeValue(mContext, graphicsExports);
+    }
+
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;
 
@@ -1541,6 +1633,8 @@ void ScriptApi::_defineEnums() {
 const std::vector<std::pair<std::string, JSValue>> &ScriptApi::moduleExports(const std::string &module) const {
     if (module == "@minecraft/server-ui")
         return mUiExports;
+    if (module == "@minecraft/server-graphics")
+        return mGraphicsExports;
     if (module == "@minecraft/common")
         return mCommonExports;
     return mServerExports;
