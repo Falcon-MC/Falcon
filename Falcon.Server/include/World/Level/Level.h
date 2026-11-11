@@ -110,8 +110,13 @@ public:
     }
 
     void tickTime() {
-        if (mGameRules.getBool("dodaylightcycle"))
+        if (!mTimePaused && mGameRules.getBool("dodaylightcycle"))
             ++mTime;
+    }
+
+    // sub_140B49930: the day is the minecraft:overworld clock, paused with it
+    void setTimePaused(bool paused) {
+        mTimePaused = paused;
     }
 
     bool isRaining() const {
@@ -656,6 +661,7 @@ private:
     std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;
+    bool mTimePaused = false;
     bool mRaining = false;
     int32_t mRainTime = 0;
     bool mThundering = false;

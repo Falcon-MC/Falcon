@@ -864,6 +864,30 @@ namespace {
         }
         return JS_NewInt32(ctx, count);
     }
+
+    // the limit is an optional<int> the level gets at creation; empty: -1 and every area fits (sub_14C3A58D0,
+    // sub_14C2BBDD0). falcon sets no limit
+    JSValue tickingMaxChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        return JS_NewInt32(ctx, -1);
+    }
+
+    JSValue tickingHasCapacity(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi &api = *ScriptApi::fromContext(ctx);
+        if (argc < 1 || !JS_IsObject(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        JSValue dimension = JS_GetPropertyStr(ctx, argv[0], "dimension");
+        JSValue from = JS_GetPropertyStr(ctx, argv[0], "from");
+        JSValue to = JS_GetPropertyStr(ctx, argv[0], "to");
+        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
+        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
+                           && readVector3(ctx, to, tx, ty, tz);
+        JS_FreeValue(ctx, dimension);
+        JS_FreeValue(ctx, from);
+        JS_FreeValue(ctx, to);
+        if (!valid)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return JS_NewBool(ctx, true);
+    }
 }
 
 void ScriptApi::resolveTickingAreas() {
@@ -887,9 +911,11 @@ void ScriptApi::resolveTickingAreas() {
 void ScriptApi::_bindTickingAreas() {
     JSValue manager = defineClass("TickingAreaManager");
     property(manager, "TickingAreaManager", "chunkCount", tickingChunkCount);
+    property(manager, "TickingAreaManager", "maxChunkCount", tickingMaxChunkCount);
     method(manager, "TickingAreaManager", "createTickingArea", tickingCreate, 2);
     method(manager, "TickingAreaManager", "getAllTickingAreas", tickingGetAll, 0);
     method(manager, "TickingAreaManager", "getTickingArea", tickingGet, 1);
+    method(manager, "TickingAreaManager", "hasCapacity", tickingHasCapacity, 1);
     method(manager, "TickingAreaManager", "hasTickingArea", tickingHas, 1);
     method(manager, "TickingAreaManager", "removeAllTickingAreas", tickingRemoveAll, 0);
     method(manager, "TickingAreaManager", "removeTickingArea", tickingRemove, 1);

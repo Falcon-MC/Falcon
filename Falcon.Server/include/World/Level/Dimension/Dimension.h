@@ -93,7 +93,7 @@ public:
         }
     }
 
-    // registerCustomDimension takes no bounds: a custom dimension gets the overworld's range
+    // sub_14C703FD0: a script dimension spans -64 to 320, like the overworld
     static int32_t getMinY(DimensionType dimension) {
         if (dimension == DimensionType::Overworld || isCustom(dimension)) {
             return -64;

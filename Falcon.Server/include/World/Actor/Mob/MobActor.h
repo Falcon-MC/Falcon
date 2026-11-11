@@ -119,6 +119,9 @@ public:
 
     void applyDefaults(Difficulty difficulty);
 
+    // only a loaded actor runs its pending upgrades; any other cause takes the current version (sub_140B938D0)
+    void upgradeDefinition(ServerNetworkHandler &owner, bool loaded);
+
     static int randomRange(int minimum, int maximum);
 
     void dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer, int32_t lootingLevel) const;
@@ -206,6 +209,10 @@ public:
 
     void setSpawnEvent(const std::string &event) {
         mSpawnEvent = event;
+    }
+
+    const std::string &getSpawnEvent() const {
+        return mSpawnEvent;
     }
 
     void setHomePosition(const Vector3f &position) {
@@ -632,6 +639,7 @@ private:
     float mScale = 1.0f;
     bool mDefinitionStarted = false;
     bool mBorn = false;
+    int32_t mActorVersion = 0;
     std::string mSpawnEvent;
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;

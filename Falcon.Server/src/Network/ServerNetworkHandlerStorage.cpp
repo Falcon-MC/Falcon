@@ -143,6 +143,8 @@ void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int3
         ServerActor *result = _registerActor(std::move(actor));
 
         broadcastActorSpawn(*result);
+        if (MobActor *loaded = dynamic_cast<MobActor *>(result))
+            loaded->upgradeDefinition(*this, true);
         mScriptEngine.onEntitySpawn(*result, "Loaded");
         mScriptEngine.onEntityLoad(*result);
     }

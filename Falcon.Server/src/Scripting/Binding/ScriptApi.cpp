@@ -749,23 +749,30 @@ ServerActor *ScriptApi::resolveActor(JSValueConst value) {
     const ScriptEntityRef *ref = native<ScriptEntityRef>(value);
     if (ref == nullptr || ref->mKind != ScriptEntityRef::Kind::Actor)
         return nullptr;
-    return mHost.getActor(ref->mId);
+    return mHost.getActorByRuntimeId((uint64_t) ref->mId);
 }
 
 Actor *ScriptApi::resolveEntity(const ScriptEntityRef &ref) {
+    Actor *actor = nullptr;
     switch (ref.mKind) {
         case ScriptEntityRef::Kind::Player:
-            return resolvePlayerByHandle((uint32_t) ref.mId);
+            actor = resolvePlayerByHandle((uint32_t) ref.mId);
+            break;
         case ScriptEntityRef::Kind::Actor:
-            return mHost.getActor(ref.mId);
+            actor = mHost.getActorByRuntimeId((uint64_t) ref.mId);
+            break;
         case ScriptEntityRef::Kind::Item:
             for (const std::unique_ptr<ItemActor> &item: mHost.getItemEntities()) {
-                if ((int64_t) item->getRuntimeId() == ref.mId && !item->isRemoved())
-                    return item.get();
+                if ((int64_t) item->getRuntimeId() == ref.mId && !item->isRemoved()) {
+                    actor = item.get();
+                    break;
+                }
             }
-            return nullptr;
+            break;
     }
-    return nullptr;
+    if (actor != nullptr)
+        ref.mEntityId = std::to_string(actor->getUniqueId());
+    return actor;
 }
 
 Actor *ScriptApi::resolveEntity(JSValueConst value) {
@@ -790,17 +797,18 @@ JSValue ScriptApi::makePlayer(ServerPlayer &player) {
 }
 
 JSValue ScriptApi::makeActor(ServerActor &actor) {
-    const auto cached = mActorObjects.find(actor.getUniqueId());
+    const int64_t runtimeId = (int64_t) actor.getRuntimeId();
+    const auto cached = mActorObjects.find(runtimeId);
     if (cached != mActorObjects.end())
         return JS_DupValue(mContext, cached->second);
 
     ScriptEntityRef *ref = new ScriptEntityRef();
     ref->mKind = ScriptEntityRef::Kind::Actor;
-    ref->mId = actor.getUniqueId();
+    ref->mId = runtimeId;
     ref->mEntityId = std::to_string(actor.getUniqueId());
     ref->mTypeId = actor.getTypeId();
     JSValue object = makeInstance("Entity", ref);
-    mActorObjects[actor.getUniqueId()] = JS_DupValue(mContext, object);
+    mActorObjects[runtimeId] = JS_DupValue(mContext, object);
     return object;
 }
 
@@ -825,8 +833,8 @@ JSValue ScriptApi::makeEntity(Actor &actor) {
     return makeInstance("Entity", ref);
 }
 
-void ScriptApi::forgetEntity(int64_t uniqueId) {
-    const auto it = mActorObjects.find(uniqueId);
+void ScriptApi::forgetEntity(uint64_t runtimeId) {
+    const auto it = mActorObjects.find((int64_t) runtimeId);
     if (it == mActorObjects.end())
         return;
     JS_FreeValue(mContext, it->second);
@@ -1201,7 +1209,7 @@ JSValue ScriptApi::registerCustomDimension(const std::string &name) {
         return throwError("NamespaceNameError", "", fields);
     }
 
-    // sub_142CA2AF0: one colon, no whitespace
+    // sub_142CA2AF0, sub_1403ED180: one colon, no space, tab, cr or lf
     if (name.find(':', colon + 1) != std::string::npos || name.find_first_of(" \t\n\r") != std::string::npos)
         return throwError("CustomDimensionNameError", "Custom dimension '" + name + "' has invalid characters.");
 

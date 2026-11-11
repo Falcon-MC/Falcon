@@ -247,6 +247,11 @@ public:
         return getBool("allow-unofficial-clients");
     }
 
+    // on, LAN players from a private address may join without the identity assertion the game leaves out there
+    bool getAllowLanWithoutIdentity() const {
+        return getBool("allow-lan-without-identity");
+    }
+
     bool getDisableClientVibrantVisuals() const {
         return getBool("disable-client-vibrant-visuals");
     }

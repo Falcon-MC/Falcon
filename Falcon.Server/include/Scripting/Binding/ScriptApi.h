@@ -289,7 +289,7 @@ public:
         return mPackSettings;
     }
 
-    void forgetEntity(int64_t uniqueId);
+    void forgetEntity(uint64_t runtimeId);
 
     void forgetPlayer(ServerPlayer &player);
 

@@ -668,8 +668,8 @@ namespace {
             return JS_UNDEFINED;
         if (owner->mKind == ScriptEntityRef::Kind::Player)
             actor->setOwnerPlayerHandle((uint32_t) owner->mId);
-        else if (owner->mKind == ScriptEntityRef::Kind::Actor)
-            actor->setOwnerUniqueId(owner->mId);
+        else if (ServerActor *resolved = target.mApi->resolveActor(argv[0]))
+            actor->setOwnerUniqueId(resolved->getUniqueId());
         return JS_UNDEFINED;
     }
 

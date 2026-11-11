@@ -455,6 +455,27 @@ void ArmorStandActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     flags2.mLongValue = getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
 
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
+
     EntityDataEntry pose;
     pose.mId = ACTOR_DATA_POSE_INDEX;
     pose.mFormat = EntityDataFormat::Int;

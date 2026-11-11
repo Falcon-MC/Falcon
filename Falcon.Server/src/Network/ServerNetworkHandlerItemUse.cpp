@@ -377,10 +377,14 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         const std::string identifier = usedItem.mDefinition->getIdentifier();
         ItemCompleteUseAfterEvent completeEvent(player, identifier, (int32_t) useDurationTicksFor(usedItem));
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
-        mScriptEngine.onItemCompleteUse(player, usedItem, 0);
     }
 
     applyFood(player, usedItem);
+
+    // both ride publisher_use_time_depleted (sub_14483F960): food at priority 0 eats and fires onConsume,
+    // custom onCompleteUse at priority 3 runs after (sub_143EBF6E0, sub_14A7F6070)
+    mScriptEngine.onItemConsume(player, usedItem);
+    mScriptEngine.onItemCompleteUse(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

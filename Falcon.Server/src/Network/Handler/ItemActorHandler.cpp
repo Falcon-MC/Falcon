@@ -135,6 +135,27 @@ namespace {
         flags2.mLongValue = actor.getFlags().getHighBits();
         add.mMetadata.mEntries.push_back(flags2);
 
+
+        EntityDataEntry flags3;
+
+        flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+        flags3.mFormat = EntityDataFormat::Long;
+
+        flags3.mLongValue = actor.getFlags().getExtendedBits();
+add.mMetadata.mEntries.push_back(flags3);
+
+
+        EntityDataEntry nameplateDistance;
+
+        nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+        nameplateDistance.mFormat = EntityDataFormat::Float;
+
+        nameplateDistance.mFloatValue = actor.getNameplateRenderDistance();
+
+        add.mMetadata.mEntries.push_back(nameplateDistance);
+
         owner.getNetworkHandler().send(player.getNetworkIdentifier(), add, owner.getCodecContext());
     }
 

@@ -542,6 +542,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     if (mNetherNetInstance != nullptr) {
         mNetherNetInstance->setUnofficialClientsAllowed(mProperties.getAllowUnofficialClients());
+        mNetherNetInstance->setAnonymousLanClientsAllowed(mProperties.getAllowLanWithoutIdentity());
         // the verdict comes back later, see the tick: the connection is not held for it
         mNetherNetInstance->setNegotiationFailureObserver([](int errorCode, int clientCheck) {
             if (clientCheck != 0)
@@ -1637,6 +1638,27 @@ EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = player.getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
+
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = player.getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = player.getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry playerFlags;
     playerFlags.mId = ActorFlags::PLAYER_FLAGS_DATA_ID;

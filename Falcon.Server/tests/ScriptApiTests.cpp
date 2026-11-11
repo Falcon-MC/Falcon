@@ -303,8 +303,16 @@ world.beforeEvents.playerGameModeChange.subscribe((e) => {
         e.toGameMode = "Creative";
 });
 world.afterEvents.playerGameModeChange.subscribe((e) => log("gm:" + e.fromGameMode + ">" + e.toGameMode));
-world.afterEvents.playerEmote.subscribe((e) => log("emote:" + e.personaPieceId));
-world.afterEvents.playerButtonInput.subscribe((e) => log("button:" + e.button + ":" + e.newButtonState));
+let emotePlayer;
+world.afterEvents.playerEmote.subscribe((e) => {
+    log("emote:" + e.personaPieceId);
+    emotePlayer = e.player;
+    r.idBefore = e.player.id;
+});
+world.afterEvents.playerButtonInput.subscribe((e) => {
+    log("button:" + e.button + ":" + e.newButtonState);
+    r.idAfter = (e.player === emotePlayer) + ":" + e.player.id;
+});
 world.afterEvents.playerInputModeChange.subscribe((e) => log("mode:" + e.previousInputModeUsed + ">"
     + e.newInputModeUsed));
 world.afterEvents.playerSwingStart.subscribe((e) => log("swing:" + e.swingSource));
@@ -352,6 +360,8 @@ system.runTimeout(() => {
         + "," + (EffectTypes.get("nope") === undefined);
     const added = cow.addEffect("speed", 200, { amplifier: 1 });
     r.addEffect = (added instanceof Effect) + ":" + added.amplifier + ":" + added.duration + ":" + added.isValid;
+    r.effectName = added.displayName + "|" + cow.addEffect("haste", 200).displayName;
+    cow.removeEffect("haste");
     r.cancelledEffect = cow.addEffect(EffectTypes.get("poison"), 100) === undefined;
     r.effects = cow.getEffects().map((effect) => effect.typeId).join(",");
     cow.removeEffect("speed");
@@ -822,8 +832,14 @@ system.beforeEvents.startup.subscribe((event) => {
                 + (event instanceof ItemComponentUseOnEvent) + (event instanceof ItemUseOnEvent);
             save();
         },
-        onCompleteUse: log("onCompleteUse"),
-        onConsume: log("onConsume"),
+        onCompleteUse(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":complete;";
+            log("onCompleteUse")(event, params);
+        },
+        onConsume(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":consume;";
+            log("onConsume")(event, params);
+        },
         onHitEntity(event, params) {
             r.itemOrder = (r.itemOrder || "") + "hit;";
             log("onHitEntity")(event, params);
@@ -961,6 +977,14 @@ system.runTimeout(() => {
   }
 })JSON";
 
+    const char *const COMPONENT_FOOD = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:snack" },
+    "components": { "minecraft:food": { "nutrition": 2 }, "minecraft:use_duration": 1.6, "test:wand": {} }
+  }
+})JSON";
+
     const char *const STATEFUL_BLOCK = R"JSON({
   "format_version": "1.21.90",
   "minecraft:block": {
@@ -1072,6 +1096,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writePack(packs, "components", server2, std::string(PRELUDE) + COMPONENTS);
         writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
+        writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
 
@@ -1151,6 +1176,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         player.heal(5.0f, HealCause::Regeneration);
         owner.hurt(player, 1.0f, ActorDamageSource::environment("death.attack.magic", player.getName()));
         engine.onPlayerEmote(player, "emote:wave");
+        const int64_t loadedId = player.getUniqueId() + 77;
+        player.setUniqueId(loadedId);
         engine.onPlayerButtonInput(player, "Jump", true);
         engine.onPlayerInputModeChange(player, "KeyboardAndMouse", "Touch");
         engine.onPlayerSwingStart(player, "Attack");
@@ -1198,6 +1225,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(dimensionData.mDefinitions.size() == 1 && dimensionData.mDefinitions[0].mId == "test:void",
                 "DimensionDataPacket does not carry the custom dimension");
         sentDimension = dimensionData.mDefinitions[0];
+        require(sentDimension.mMinimumHeight == -64 && sentDimension.mMaximumHeight == 384
+                        && sentDimension.mGeneratorType == 5 && sentDimension.mCloudHeight == 128
+                        && !sentDimension.mRenderClouds,
+                "DimensionDataPacket does not carry the game's script dimension definition");
 
         sent.clear();
         owner.changePlayerLevel(player, defaultWorld.getLevel(voidDimension), Vector3f(0.5f, 80.0f, 0.5f));
@@ -1256,7 +1287,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         player.getInventory().setItemInHand(wand);
         engine.onItemUse(player);
         engine.onItemUseOnBlock(player, at, 1, Vector3f(0.5f, 1.0f, 0.5f));
+        engine.onItemConsume(player, wand);
         engine.onItemCompleteUse(player, wand);
+        ItemStack snack;
+        snack.mDefinition = owner.getItemDefinitions().getDefinition("test:snack");
+        snack.mCount = 1;
+        require(snack.mDefinition != nullptr, "the custom food was not registered");
+        engine.onItemConsume(player, snack);
+        engine.onItemCompleteUse(player, snack);
         require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
         PlayerBreakBlockAfterEvent broken(player, at, "test:block");
         owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
@@ -1418,15 +1456,35 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(restored.registerClock("test:clock", {}, markerError) == WorldClockError::None
                         && restored.find("test:clock")->mTime == 5 && restored.find("test:clock")->mPaused,
                 "a registered clock did not take its saved state");
+        int64_t levelTime = 1000;
+        bool levelPaused = false;
+        WorldClockSystem::LevelTime binding;
+        binding.mGet = [&levelTime]() { return levelTime; };
+        binding.mSet = [&levelTime](int64_t value) { levelTime = value; };
+        binding.mSetPaused = [&levelPaused](bool paused) { levelPaused = paused; };
+        restored.bindOverworld(binding);
+        WorldClock *overworldClock = restored.find("minecraft:overworld");
+        require(overworldClock->mTime == 1000, "the overworld clock does not start at the level's time");
+        levelTime = 1001;
+        restored.tick();
+        require(overworldClock->mTime == 1001, "the overworld clock does not follow the level's time");
+        restored.setTime(*overworldClock, 6000);
+        require(levelTime == 6000, "setting the overworld clock does not set the level's time");
+        restored.setPaused(*overworldClock, true);
+        require(levelPaused, "pausing the overworld clock does not stop the level's day");
+        restored.setPaused(*overworldClock, false);
         SyncWorldClocksPacket states;
         restored.writeStates(states);
         require(states.mType == SyncWorldClocksType::SyncState && states.mClockStates.size() == 2
                         && states.mClockStates.front().mClockId == 0x63D7EDE73C38F916ull,
                 "the periodic sync does not carry every clock under its hashed id");
+
         const std::unique_ptr<json::Value> entities = result(owner, "entities");
         const json::Value &e = *entities;
         if (e.get("error") != nullptr)
             require(false, "the entities pack threw: " + text(e, "error"));
+        expect(e, "idBefore", std::to_string(loadedId - 77));
+        expect(e, "idAfter", "true:" + std::to_string(loadedId));
         expect(e, "enums", "void,entityAttack,Born,SelfHeal,Jump,Pressed,Touch,Attack,2,2");
         expect(e, "componentIds", "minecraft:health,minecraft:type_family,minecraft:movement");
         expect(e, "componentChain", "true");
@@ -1442,6 +1500,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "navigation", "true:undefined");
         expect(e, "localization", "entity.cow.name,entity.cow.name,minecraft:cow,true,true");
         expect(e, "effectTypes", "speed,true,true");
+        expect(e, "effectName", "Speed II|potion.digSpeed");
         expect(e, "addEffect", "true:1:40:true");
         expect(e, "cancelledEffect", "true");
         expect(e, "effects", "speed");
@@ -1452,7 +1511,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "projectileOption", "TypeError");
         expect(e, "rotation", "10,20");
         expect(e, "lookAt", "0");
-        expect(e, "entityRay", "2:false:5.03:0:1");
+        expect(e, "entityRay", "2:false:5.74:0:1");
         expect(e, "blockRay", "true");
         expect(e, "shapeRay", "minecraft:oak_fence:North:0.375");
         expect(e, "filterRay", "8:8:true:true");
@@ -1463,7 +1522,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "pending", "rejected");
         expect(e, "blockedTeleport", "false");
         expect(e, "teleport", "true:200:90");
-        expect(e, "teleportBounds", "LocationOutOfWorldBoundariesError");
+        expect(e, "teleportBounds", "ok");
         expect(e, "entityDynamic", "two:true");
         expect(e, "resetProperty", "function");
         expect(e, "matchesLevel", "true,false,false,true");
@@ -1487,7 +1546,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
                "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
                "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"
-               "dimension:minecraft:overworld>test:void;dimension:test:void>minecraft:overworld;effect:speed:40:true;hurt:minecraft:cow:3:fall:true;"
+               "effect:speed:40:true;effect:haste:200:true;hurt:minecraft:cow:3:fall:true;"
                "trigger:minecraft:ageable_grow_up:[{\"addedComponentGroups\":[\"minecraft:cow_adult\"],"
                "\"removedComponentGroups\":[\"minecraft:cow_baby\"]}];"
                "gm:Survival>Creative;die:minecraft:cow:override;spawn:minecraft:horse:Spawned;"
@@ -1704,6 +1763,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "truetrue");
         expect(c, "onCompleteUse", "ItemComponentCompleteUseEvent|itemStack+source|{}");
         expect(c, "onConsume", "ItemComponentConsumeEvent|itemStack+source|{}");
+        // onConsume needs minecraft:food and runs before onCompleteUse
+        expect(c, "useOrder", "test:wand:complete;test:snack:consume;test:snack:complete;");
         expect(c, "onHitEntity", "ItemComponentHitEntityEvent|attackingEntity+hadEffect+hitEntity+itemStack|{}");
         expect(c, "onBeforeDurabilityDamage",
                "ItemComponentBeforeDurabilityDamageEvent|attackingEntity+durabilityDamage+hitEntity+itemStack|{}|2");
@@ -1744,7 +1805,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(c, "overworld",
                "minecraft:day@1000/24000,minecraft:noon@6000/24000,minecraft:sunset@12000/24000,"
                "minecraft:night@13000/24000,minecraft:midnight@18000/24000,minecraft:sunrise@23000/24000");
-        expect(c, "clockTime", "9");
+        expect(c, "clockTime", "8");
         expect(c, "rewind", "ok@7");
         expect(c, "skip", "ok@7");
         expect(c, "setMarker", "ok@2");
@@ -1802,6 +1863,9 @@ int main() {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
+        // the game's file: tab comments, crlf; haste is left out to check the key comes back
+        writeFile(directory / "resource_packs" / "vanilla" / "texts" / "en_US.lang",
+                  "## effects\npotion.moveSpeed=Speed\t#\r\npotion.potency.1=II\n");
         run(directory);
     } catch (const std::exception &error) {
         std::clog << "Script API regression failed: " << error.what() << '\n';

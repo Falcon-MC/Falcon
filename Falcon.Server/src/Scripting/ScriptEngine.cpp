@@ -473,6 +473,14 @@ void ScriptEngine::startup() {
     if (mHost != nullptr
         && mHost->getWorlds().getDefault().getOverworld().loadSavedData(WorldClockSystem::STORAGE_KEY, saved, false))
         mClocks.load(saved);
+    if (mHost != nullptr) {
+        Level &overworld = mHost->getWorlds().getDefault().getOverworld();
+        WorldClockSystem::LevelTime time;
+        time.mGet = [&overworld]() { return overworld.getTime(); };
+        time.mSet = [&overworld](int64_t value) { overworld.setTime(value); };
+        time.mSetPaused = [&overworld](bool paused) { overworld.setTimePaused(paused); };
+        mClocks.bindOverworld(std::move(time));
+    }
 
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
@@ -1095,7 +1103,21 @@ void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used
         JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
     };
     _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent", fill);
-    _fireComponent(false, item->mCustomComponents, "onConsume", "ItemComponentConsumeEvent", fill);
+}
+
+void ScriptEngine::onItemConsume(ServerPlayer &player, const ItemStack &used) {
+    if (used.isAir() || used.mDefinition == nullptr)
+        return;
+    const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
+    // the game subscribes onConsume to the food component's signal only (sub_14A7F6070)
+    if (item == nullptr || !item->mIsFood)
+        return;
+
+    _fireComponent(false, item->mCustomComponents, "onConsume", "ItemComponentConsumeEvent",
+                   [&](ScriptApi &api, JSValue event) {
+                       JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
+                       JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
+                   });
 }
 
 int32_t ScriptEngine::onItemHitEntity(ServerPlayer &attacker, Actor &target, bool hadEffect, int32_t durabilityDamage) {
@@ -1158,7 +1180,7 @@ void ScriptEngine::onEntityRemove(ServerActor &entity) {
     });
 
     for (std::unique_ptr<ScriptApi> &api: mApis)
-        api->forgetEntity(entity.getUniqueId());
+        api->forgetEntity(entity.getRuntimeId());
 }
 
 void ScriptEngine::onEntityLoad(ServerActor &entity) {
@@ -1313,6 +1335,16 @@ void ScriptEngine::onDataDrivenEntityTrigger(MobActor &entity, const std::string
               JS_SetPropertyStr(ctx, event, "eventId", string(ctx, eventId));
               JS_SetPropertyStr(ctx, event, "getModifiers", api.makeModifiersGetter(added, removed));
           });
+}
+
+void ScriptEngine::onEntityUpgrade(MobActor &entity, const std::string &upgradeId,
+                                   const std::vector<std::string> &added, const std::vector<std::string> &removed) {
+    _emit("after.entityUpgrade", "WorldAfterEvents.entityUpgrade", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "entity", api.makeActor(entity));
+        JS_SetPropertyStr(ctx, event, "upgradeId", string(ctx, upgradeId));
+        JS_SetPropertyStr(ctx, event, "getModifiers", api.makeModifiersGetter(added, removed));
+    });
 }
 
 bool ScriptEngine::beforePlayerGameModeChange(ServerPlayer &player, int32_t fromGameMode, int32_t &toGameMode) {
@@ -1555,7 +1587,9 @@ void ScriptEngine::tick(int64_t currentTick) {
     for (const auto &event: queued)
         emitScriptEvent(event.first, event.second);
 
-    mClocks.tick();
+    // sub_145D0A460: every clock stands still without the daylight cycle
+    if (mHost == nullptr || mHost->getWorlds().getDefault().getOverworld().getGameRules().getBool("dodaylightcycle"))
+        mClocks.tick();
     if (currentTick - mLastClockSync >= WorldClockSystem::SYNC_INTERVAL_TICKS) {
         mLastClockSync = currentTick;
         SyncWorldClocksPacket packet;

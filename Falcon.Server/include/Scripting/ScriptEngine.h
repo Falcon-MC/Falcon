@@ -140,6 +140,9 @@ public:
 
     void onEntityContainerClosed(Actor &container, Actor &source);
 
+    // food only, before onCompleteUse: the food component fires it once eaten
+    void onItemConsume(ServerPlayer &player, const ItemStack &used);
+
     // onBeforeDurabilityDamage then onHitEntity; returns the durability damage scripts settled on
     int32_t onItemHitEntity(ServerPlayer &attacker, Actor &target, bool hadEffect, int32_t durabilityDamage);
 
@@ -183,6 +186,9 @@ public:
     bool beforeEntityTamed(Actor &entity, Actor &tamer);
 
     void onEntityTamed(Actor &entity, Actor &tamer);
+
+    void onEntityUpgrade(MobActor &entity, const std::string &upgradeId, const std::vector<std::string> &added,
+                         const std::vector<std::string> &removed);
 
     void onDataDrivenEntityTrigger(MobActor &entity, const std::string &eventId, const std::vector<std::string> &added,
                                    const std::vector<std::string> &removed);

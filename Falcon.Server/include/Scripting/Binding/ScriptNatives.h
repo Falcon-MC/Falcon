@@ -21,10 +21,10 @@ struct ScriptEntityRef : ScriptNative {
     enum class Kind { Player, Actor, Item };
 
     Kind mKind = Kind::Actor;
-    // player handle, actor unique id or item entity runtime id
+    // player handle or runtime id: a unique id can still change once the object exists
     int64_t mId = 0;
-    // kept for InvalidEntityError once the entity is gone
-    std::string mEntityId;
+    // refreshed on every resolve, kept for InvalidEntityError once the entity is gone
+    mutable std::string mEntityId;
     std::string mTypeId;
 };
 

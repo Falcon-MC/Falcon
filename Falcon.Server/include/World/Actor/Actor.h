@@ -185,6 +185,14 @@ public:
         return mFlags;
     }
 
+    float getNameplateRenderDistance() const {
+        return mNameplateRenderDistance;
+    }
+
+    void setNameplateRenderDistance(float distance) {
+        mNameplateRenderDistance = distance;
+    }
+
     ActorAttributes &getAttributes() {
         return mAttributes;
     }
@@ -521,6 +529,8 @@ protected:
     Vector3f mRotation;
     Vector3f mMotion;
     ActorFlags mFlags;
+    // data 140, defined at 64 for every actor (sub_140B91370)
+    float mNameplateRenderDistance = 64.0f;
     ActorAttributes mAttributes;
     bool mOnGround = false;
     bool mHorizontalCollision = false;

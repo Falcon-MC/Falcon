@@ -125,8 +125,18 @@ namespace {
         require(arrows.size() == 1, "one arrow");
         const ProjectileData &data = arrows.front()->getProjectileData();
         require(data.mImpactDamage == -1 && data.mBaseDamage == 2.0f, "mob_arrow damage scales with speed by 2");
-        require(closeTo(speedOf(*arrows.front()), 1.6f, 0.25f), "mob_arrow power 1.6");
         require(arrows.front()->getPosition().z > 1.0f, "spawned a block toward the target");
+
+        // the gaussian spread scales a single shot's speed: average many
+        const int32_t shots = 64;
+        for (int32_t shot = 1; shot < shots; shot++)
+            require(MobShooter::shootAt(field.mOwner, skeleton, pig), "the skeleton shoots again");
+        const std::vector<ArrowActor *> volley = field.all<ArrowActor>();
+        require(volley.size() == (size_t) shots, "one arrow per shot");
+        float total = 0.0f;
+        for (const ArrowActor *arrow: volley)
+            total += speedOf(*arrow);
+        require(closeTo(total / (float) shots, 1.6f, 0.1f), "mob_arrow power 1.6");
     }
 
     void drownedTrident() {
