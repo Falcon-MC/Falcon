@@ -580,6 +580,9 @@ system.runTimeout(() => {
     r.entityType = Array.isArray(m.generateLootFromEntityType(EntityTypes.get("minecraft:zombie")));
     r.tool = errorOf(() => m.generateLootFromTable(t, {}));
     r.constructor = errorOf(() => new LootTable());
+    const gem = m.getLootTable("custom/gem");
+    r.pack = gem.path + "|" + m.generateLootFromTable(gem).map((i) => i.typeId + "x" + i.amount).join(",");
+    r.override = m.generateLootFromTable(m.getLootTable("chests/igloo_chest")).map((i) => i.typeId).join(",");
     world.setDynamicProperty("loot", JSON.stringify(r));
 }, 2);
 )JS";
@@ -1450,6 +1453,13 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
                   GRAPHICS);
         writePack(packs, "loot", server2, LOOT);
+        const std::string gemTable = "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", "
+                                     "\"name\": \"minecraft:diamond\", \"functions\": [{\"function\": "
+                                     "\"set_count\", \"count\": 3}]}]}]}";
+        writeFile(packs / "loot" / "loot_tables" / "custom" / "gem.json", gemTable);
+        writeFile(packs / "loot" / "loot_tables" / "chests" / "igloo_chest.json",
+                  "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", "
+                  "\"name\": \"minecraft:emerald\"}]}]}");
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -1927,6 +1937,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*loot, "entityType", "true");
         expect(*loot, "tool", "TypeError:Native type conversion failed.");
         expect(*loot, "constructor", "ReferenceError:No constructor for native class 'LootTable'.");
+        expect(*loot, "pack", "custom/gem|minecraft:diamondx3");
+        expect(*loot, "override", "minecraft:emerald");
 
         // custom commands: in the command map under both names, parsed from a player and gated by cheats
         CommandMap &commands = owner.getCommands();
