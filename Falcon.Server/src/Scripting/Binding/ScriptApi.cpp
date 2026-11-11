@@ -275,6 +275,36 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    JSValue uiShowScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 7)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->showScreen(argv[0], toString(ctx, argv[1]), toString(ctx, argv[2]), argv[3], argv[4], argv[5],
+                               argv[6]);
+    }
+
+    JSValue uiUpdateScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t formId = 0;
+        if (argc < 4 || JS_ToInt32(ctx, &formId, argv[1]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->updateScreen(argv[0], formId, argv[2], argv[3]);
+    }
+
+    JSValue uiCloseScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t formId = 0;
+        if (argc >= 2 && JS_ToInt32(ctx, &formId, argv[1]) == 0)
+            api->closeScreen(argv[0], formId);
+        return JS_UNDEFINED;
+    }
+
+    // true for a player still on the server: DDUI constructors and show() throw for any other
+    JSValue uiIsPlayer(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && api->resolvePlayer(argv[0]) != nullptr);
+    }
+
     JSValue scoreboardSetScore(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 3)
@@ -1407,10 +1437,16 @@ void ScriptApi::_installBootstraps() {
     JSValue ui = JS_NewObject(mContext);
     addFunction(mContext, ui, "showForm", uiShowForm, 2);
     addFunction(mContext, ui, "closeAllForms", uiCloseAllForms, 1);
+    addFunction(mContext, ui, "showScreen", uiShowScreen, 7);
+    addFunction(mContext, ui, "updateScreen", uiUpdateScreen, 4);
+    addFunction(mContext, ui, "closeScreen", uiCloseScreen, 2);
+    addFunction(mContext, ui, "isPlayer", uiIsPlayer, 1);
     JS_SetPropertyStr(mContext, ui, "errors", JS_DupValue(mContext, mErrors));
     JSValue uiExports = runBootstrap(mContext, mPackName, ScriptBootstraps::ui(), "<ui>", ui);
-    for (const char *name: {"ActionFormData", "MessageFormData", "ModalFormData", "FormResponse", "ActionFormResponse",
-                            "MessageFormResponse", "ModalFormResponse", "UIManager", "uiManager"}) {
+    for (const char *name:
+         {"ActionFormData", "MessageFormData", "ModalFormData", "FormResponse", "ActionFormResponse",
+          "MessageFormResponse", "ModalFormResponse", "UIManager", "uiManager", "CustomForm", "MessageBox",
+          "ObservableBoolean", "ObservableNumber", "ObservableString", "ObservableUIRawMessage"}) {
         if (mUiSurface.has(name))
             mUiExports.emplace_back(name, JS_GetPropertyStr(mContext, uiExports, name));
     }

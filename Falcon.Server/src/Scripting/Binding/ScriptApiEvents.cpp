@@ -9,6 +9,7 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 
 #include <cmath>
+#include <memory>
 
 using namespace ScriptValues;
 
@@ -23,6 +24,121 @@ namespace {
         JS_FreeValue(ctx, hit);
         JS_DefinePropertyValueStr(ctx, getter, "name", JS_NewString(ctx, name), JS_PROP_CONFIGURABLE);
         return getter;
+    }
+
+    // the depth the protocol accepts for a change value
+    const int MAX_STORE_DEPTH = 16;
+
+    // numbers are doubles and bigints longs, as the store's variant keeps them
+    bool toStoreValue(JSContext *ctx, JSValueConst value, DataStoreChangeValue &out, int depth) {
+        if (depth > MAX_STORE_DEPTH)
+            return false;
+        if (JS_IsBool(value)) {
+            out.mType = DataStoreChangeValueType::Bool;
+            out.mBoolValue = JS_ToBool(ctx, value) == 1;
+            return true;
+        }
+        if (JS_IsBigInt(ctx, value)) {
+            out.mType = DataStoreChangeValueType::Long;
+            return JS_ToBigInt64(ctx, &out.mLongValue, value) == 0;
+        }
+        if (JS_IsNumber(value)) {
+            out.mType = DataStoreChangeValueType::Double;
+            return JS_ToFloat64(ctx, &out.mDoubleValue, value) == 0;
+        }
+        if (JS_IsString(value)) {
+            out.mType = DataStoreChangeValueType::String;
+            out.mStringValue = toString(ctx, value);
+            return true;
+        }
+        if (JS_IsArray(value)) {
+            out.mType = DataStoreChangeValueType::Array;
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, value, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            for (uint32_t i = 0; i < length; i++) {
+                JSValue element = JS_GetPropertyUint32(ctx, value, i);
+                DataStoreChangeValue child;
+                const bool ok = toStoreValue(ctx, element, child, depth + 1);
+                JS_FreeValue(ctx, element);
+                if (!ok)
+                    return false;
+                out.mArrayValue.push_back(std::move(child));
+            }
+            return true;
+        }
+        if (!JS_IsObject(value)) {
+            out.mType = DataStoreChangeValueType::Null;
+            return true;
+        }
+
+        JSPropertyEnum *properties = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &properties, &count, value, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) != 0)
+            return false;
+        out.mType = DataStoreChangeValueType::Map;
+        bool ok = true;
+        for (uint32_t i = 0; i < count && ok; i++) {
+            JSValue child = JS_GetProperty(ctx, value, properties[i].atom);
+            const char *key = JS_AtomToCString(ctx, properties[i].atom);
+            DataStoreChangeValue converted;
+            ok = key != nullptr && toStoreValue(ctx, child, converted, depth + 1);
+            if (ok)
+                out.mMapValue.emplace_back(key, std::move(converted));
+            if (key != nullptr)
+                JS_FreeCString(ctx, key);
+            JS_FreeValue(ctx, child);
+        }
+        JS_FreePropertyEnum(ctx, properties, count);
+        return ok;
+    }
+
+    std::vector<std::string> toPathList(JSContext *ctx, JSValueConst list) {
+        std::vector<std::string> paths;
+        if (!JS_IsArray(list))
+            return paths;
+        uint32_t length = 0;
+        JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+        JS_ToUint32(ctx, &length, lengthValue);
+        JS_FreeValue(ctx, lengthValue);
+        for (uint32_t i = 0; i < length; i++) {
+            JSValue entry = JS_GetPropertyUint32(ctx, list, i);
+            paths.push_back(toString(ctx, entry));
+            JS_FreeValue(ctx, entry);
+        }
+        return paths;
+    }
+
+    JSValue scalarToJs(JSContext *ctx, const DataStoreScalar &scalar) {
+        switch (scalar.mType) {
+            case DataStoreScalarType::Number:
+                return JS_NewFloat64(ctx, scalar.mNumberValue);
+            case DataStoreScalarType::Bool:
+                return JS_NewBool(ctx, scalar.mBoolValue);
+            case DataStoreScalarType::String:
+                return string(ctx, scalar.mStringValue);
+            default:
+                return JS_UNDEFINED;
+        }
+    }
+
+    const char *outcomeName(ServerNetworkHandler::DataDrivenScreenOutcome outcome) {
+        switch (outcome) {
+            case ServerNetworkHandler::DataDrivenScreenOutcome::ProgrammaticClose:
+                return "ProgrammaticClose";
+            case ServerNetworkHandler::DataDrivenScreenOutcome::ProgrammaticCloseAll:
+                return "ProgrammaticCloseAll";
+            case ServerNetworkHandler::DataDrivenScreenOutcome::ClientCanceled:
+                return "ClientCanceled";
+            case ServerNetworkHandler::DataDrivenScreenOutcome::UserBusy:
+                return "UserBusy";
+            case ServerNetworkHandler::DataDrivenScreenOutcome::InvalidForm:
+                return "InvalidForm";
+            case ServerNetworkHandler::DataDrivenScreenOutcome::PlayerLeft:
+                return "PlayerLeft";
+        }
+        return "InvalidForm";
     }
 }
 
@@ -91,6 +207,72 @@ void ScriptApi::closeAllForms(JSValueConst playerValue) {
     ServerPlayer *player = resolvePlayer(playerValue);
     if (player != nullptr)
         mHost.closeAllForms(*player);
+}
+
+JSValue ScriptApi::showScreen(JSValueConst playerValue, const std::string &screenId, const std::string &propertyPrefix,
+                              JSValueConst value, JSValueConst writable, JSValueConst onWrite, JSValueConst onClose) {
+    ServerPlayer *player = resolvePlayer(playerValue);
+    if (player == nullptr)
+        return JS_NewInt32(mContext, 0);
+
+    DataStoreChangeValue storeValue;
+    if (!toStoreValue(mContext, value, storeValue, 0))
+        return JS_ThrowTypeError(mContext, "Native type conversion failed.");
+
+    JSValue writeCallback = JS_DupValue(mContext, onWrite);
+    JSValue closeCallback = JS_DupValue(mContext, onClose);
+    std::shared_ptr<bool> open = std::make_shared<bool>(true);
+    ServerNetworkHandler::DataDrivenScreenCallbacks callbacks;
+    callbacks.mOnWrite = [this, writeCallback, open](const std::string &path, const DataStoreScalar &scalar) {
+        if (!*open)
+            return;
+        JSValue args[2] = {string(mContext, path), scalarToJs(mContext, scalar)};
+        JSValue result = JS_Call(mContext, writeCallback, JS_UNDEFINED, 2, args);
+        for (JSValue arg: args)
+            JS_FreeValue(mContext, arg);
+        if (JS_IsException(result))
+            JS_FreeValue(mContext, JS_GetException(mContext));
+        JS_FreeValue(mContext, result);
+    };
+    callbacks.mOnClose = [this, writeCallback, closeCallback,
+                          open](ServerNetworkHandler::DataDrivenScreenOutcome outcome) {
+        if (!*open)
+            return;
+        *open = false;
+        JSValue reason = string(mContext, outcomeName(outcome));
+        JSValue result = JS_Call(mContext, closeCallback, JS_UNDEFINED, 1, &reason);
+        JS_FreeValue(mContext, reason);
+        if (JS_IsException(result))
+            JS_FreeValue(mContext, JS_GetException(mContext));
+        JS_FreeValue(mContext, result);
+        JS_FreeValue(mContext, writeCallback);
+        JS_FreeValue(mContext, closeCallback);
+    };
+    const int32_t formId = mHost.showDataDrivenScreen(*player, screenId, propertyPrefix, std::move(storeValue),
+                                                      toPathList(mContext, writable), callbacks);
+    if (formId == 0) {
+        JS_FreeValue(mContext, writeCallback);
+        JS_FreeValue(mContext, closeCallback);
+    }
+    return JS_NewInt32(mContext, formId);
+}
+
+JSValue ScriptApi::updateScreen(JSValueConst playerValue, int32_t formId, JSValueConst value, JSValueConst writable) {
+    ServerPlayer *player = resolvePlayer(playerValue);
+    if (player == nullptr)
+        return JS_UNDEFINED;
+
+    DataStoreChangeValue storeValue;
+    if (!toStoreValue(mContext, value, storeValue, 0))
+        return JS_ThrowTypeError(mContext, "Native type conversion failed.");
+    mHost.updateDataDrivenScreen(*player, formId, std::move(storeValue), toPathList(mContext, writable));
+    return JS_UNDEFINED;
+}
+
+void ScriptApi::closeScreen(JSValueConst playerValue, int32_t formId) {
+    ServerPlayer *player = resolvePlayer(playerValue);
+    if (player != nullptr)
+        mHost.closeDataDrivenScreen(*player, formId);
 }
 
 void ScriptApi::_resolveForm(uint32_t formId, const std::string &response, const char *status) {

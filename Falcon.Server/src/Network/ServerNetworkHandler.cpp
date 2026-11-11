@@ -106,6 +106,7 @@
 #include "Protocol/Packets/EmotePacket.h"
 #include "Protocol/Packets/ModalFormRequestPacket.h"
 #include "Protocol/Packets/ModalFormResponsePacket.h"
+#include "Protocol/Packets/ClientboundDataDrivenUICloseScreenPacket.h"
 #include "Protocol/Packets/PlayerSkinPacket.h"
 #include "Protocol/Packets/SetHealthPacket.h"
 #include "Protocol/BlockStateHasher.h"
@@ -1196,6 +1197,7 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
                 entry.second(*player, std::string(), ModalFormOutcome::PlayerQuit);
         }
     }
+    _endDataDrivenScreens(id, DataDrivenScreenOutcome::PlayerLeft);
     erasePlayer(id);
     // an awake player leaving can bring the remaining sleepers up to the threshold
     if (playerWorld != nullptr)
@@ -1263,6 +1265,10 @@ void ServerNetworkHandler::closeAllForms(ServerPlayer &player) {
 
     ClientboundCloseFormPacket packet;
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
+
+    // no form id closes every data-driven screen; each comes back as ProgrammaticCloseAll
+    ClientboundDataDrivenUICloseScreenPacket closeScreens;
+    mNetworkHandler->send(player.getNetworkIdentifier(), closeScreens, mCodecContext);
 }
 
 void ServerNetworkHandler::setMaxPlayers(int maxPlayers) {

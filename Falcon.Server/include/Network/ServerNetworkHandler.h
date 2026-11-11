@@ -13,6 +13,7 @@
 #include "Network/ClientProbe.h"
 #include "Network/PingedCompatibleServer.h"
 #include "Protocol/NetworkPacketHandler.h"
+#include "Protocol/Types/DataStoreTypes.h"
 #include "Protocol/Types/DisconnectReason.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"
@@ -88,6 +89,22 @@ public:
     enum class ModalFormOutcome { Answered, UserClosed, UserBusy, PlayerQuit };
     // the response is empty unless answered
     using ModalFormCallback = std::function<void(ServerPlayer &, const std::string &, ModalFormOutcome)>;
+
+    // the screen-closed reasons in packet order, then the player leaving
+    enum class DataDrivenScreenOutcome {
+        ProgrammaticClose,
+        ProgrammaticCloseAll,
+        ClientCanceled,
+        UserBusy,
+        InvalidForm,
+        PlayerLeft,
+    };
+
+    struct DataDrivenScreenCallbacks {
+        // a client write the store accepted: the path inside the property and the value it now holds
+        std::function<void(const std::string &, const DataStoreScalar &)> mOnWrite;
+        std::function<void(DataDrivenScreenOutcome)> mOnClose;
+    };
 
     ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                          TransportLayer transport = TransportLayer::NetherNet);
@@ -827,6 +844,15 @@ public:
                        ModalFormCallback callback = {});
     void closeAllForms(ServerPlayer &player);
 
+    // the screen binds to propertyPrefix + id in the minecraft store; writable lists the paths the client may set.
+    // returns the form id, 0 when the player is not spawned
+    int32_t showDataDrivenScreen(ServerPlayer &player, const std::string &screenId, const std::string &propertyPrefix,
+                                 DataStoreChangeValue value, std::vector<std::string> writable,
+                                 DataDrivenScreenCallbacks callbacks);
+    void updateDataDrivenScreen(ServerPlayer &player, int32_t formId, DataStoreChangeValue value,
+                                std::vector<std::string> writable);
+    void closeDataDrivenScreen(ServerPlayer &player, int32_t formId);
+
 private:
     friend class MovementInputProbe;
 
@@ -906,6 +932,15 @@ private:
     void handle(const NetworkIdentifier &id, const EmotePacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const ServerboundDataStorePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const ServerboundDataDrivenScreenClosedPacket &packet) override;
+
+    void _sendDataStoreChange(const NetworkIdentifier &id, const std::string &property, int32_t updateCount,
+                              const DataStoreChangeValue &value);
+
+    void _endDataDrivenScreens(const NetworkIdentifier &id, DataDrivenScreenOutcome outcome);
 
     void handle(const NetworkIdentifier &id, const PlayerSkinPacket &packet) override;
 
@@ -1075,6 +1110,19 @@ private:
     int64_t mNextScoreboardId = 1;
     std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>, NetworkIdentifier::Hasher>
             mModalFormCallbacks;
+
+    struct DataDrivenScreen {
+        std::string mProperty;
+        DataStoreChangeValue mValue;
+        int32_t mUpdateCount = 0;
+        std::unordered_map<std::string, int32_t> mPathUpdateCounts;
+        std::unordered_set<std::string> mWritable;
+        DataDrivenScreenCallbacks mCallbacks;
+    };
+
+    std::unordered_map<NetworkIdentifier, std::unordered_map<int32_t, DataDrivenScreen>, NetworkIdentifier::Hasher>
+            mDataDrivenScreens;
+    int32_t mNextDataDrivenScreenId = 1;
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;

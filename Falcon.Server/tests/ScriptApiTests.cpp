@@ -18,6 +18,10 @@
 #include "Protocol/Packets/ChangeDimensionPacket.h"
 #include "Protocol/Packets/ModalFormRequestPacket.h"
 #include "Protocol/Packets/ModalFormResponsePacket.h"
+#include "Protocol/Packets/ClientboundDataDrivenUIShowScreenPacket.h"
+#include "Protocol/Packets/ClientboundDataStorePacket.h"
+#include "Protocol/Packets/ServerboundDataDrivenScreenClosedPacket.h"
+#include "Protocol/Packets/ServerboundDataStorePacket.h"
 #include "Protocol/Packets/DimensionDataPacket.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -777,7 +781,8 @@ system.runTimeout(() => {
 import { world, system } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData, FormResponse, ActionFormResponse, MessageFormResponse,
          ModalFormResponse, FormRejectError, FormRejectReason, FormCancelationReason, UIManager,
-         uiManager } from "@minecraft/server-ui";
+         uiManager, CustomForm, MessageBox, ObservableBoolean, ObservableNumber, ObservableString,
+         DataDrivenScreenClosedReason } from "@minecraft/server-ui";
 
 r.chatSend = ("chatSend" in world.afterEvents) && ("chatSend" in world.beforeEvents);
 r.form = typeof ActionFormData === "function"
@@ -804,7 +809,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
             save();
         });
     new ActionFormData().button("x").show(p).catch((e) => {
-        ui.malformed = [e instanceof FormRejectError, e.reason].join("|");
+        ui.malformed = [e instanceof FormRejectError, e.reason, e.message].join("|");
         save();
     });
     uiManager.closeAllForms(p);
@@ -815,6 +820,43 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     } catch (e) {
         ui.sealed = e.constructor.name;
     }
+    save();
+});
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "ui:ddui") return;
+    const p = world.getAllPlayers()[0];
+    const errorOf = (run) => {
+        try {
+            run();
+            return "none";
+        } catch (e) {
+            return e.constructor.name + ":" + e.message;
+        }
+    };
+    const toggled = new ObservableBoolean(false, { clientWritable: true });
+    const seen = [];
+    const listener = toggled.subscribe((value) => seen.push(value));
+    ui.readOnly = errorOf(() => new CustomForm(p, "t").toggle("x", new ObservableBoolean(true)));
+    const name = new ObservableString("n", { clientWritable: true });
+    const form = new CustomForm(p, { rawtext: [{ text: "title" }] }).toggle("on", toggled).button("go", () => {
+        ui.clicked = true;
+        save();
+    }).textField("name", name).slider("s", new ObservableNumber(2, { clientWritable: true }), 0, 5).closeButton();
+    ui.notShowing = errorOf(() => form.close());
+    form.show().then((reason) => {
+        ui.closed = [reason, reason === DataDrivenScreenClosedReason.ClientClosed, form.isShowing(), seen.join(","),
+                     toggled.unsubscribe(listener), toggled.unsubscribe(listener)].join("|");
+        save();
+    });
+    ui.showing = form.isShowing();
+    ui.modify = errorOf(() => form.label("late"));
+    ui.again = errorOf(() => form.show());
+    const box = new MessageBox(p, "m", { showHorizontalButtons: true }).body("b").button1("a").button2("b");
+    box.show().then((result) => {
+        ui.box = [result.closeReason, result.selection].join("|");
+        save();
+    });
+    ui.observable = [new ObservableNumber(3).getData(), errorOf(() => new ObservableNumber("3"))].join("|");
     save();
 });
 )JS";
@@ -1168,9 +1210,110 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*forms, "action", "true|true|false|1");
         expect(*forms, "message", "true|true|UserBusy|");
         expect(*forms, "modal", "true|[null,true,3,\"hi\"]|true");
-        expect(*forms, "malformed", "true|MalformedResponse");
+        expect(*forms, "malformed", "true|MalformedResponse|Response from the client was malformed.");
         expect(*forms, "enums", "PlayerQuit|UserBusy|true");
         expect(*forms, "sealed", "ReferenceError");
+
+        // DDUI: the store property and the screen go out together; client writes come back through the counts
+        sent.clear();
+        owner.getNetworkHandler().setOutboundFilter([&sent](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            sent.emplace_back(Packet::peekId(header, sender, client), data);
+            return false;
+        });
+        scriptEvent.execute(console, {"ui:ddui"});
+        engine.tick(6);
+        std::vector<ClientboundDataStorePacket> stores;
+        std::vector<ClientboundDataDrivenUIShowScreenPacket> screens;
+        for (const auto &packet: sent) {
+            ReadOnlyBinaryStream body(packet.second);
+            if (packet.first == MinecraftPacketIds::ClientboundDataStore) {
+                ClientboundDataStorePacket store;
+                store.readHeader(body);
+                store.read(body, owner.getCodecContext());
+                stores.push_back(store);
+            } else if (packet.first == MinecraftPacketIds::ClientboundDataDrivenUIShowScreen) {
+                ClientboundDataDrivenUIShowScreenPacket screen;
+                screen.readHeader(body);
+                screen.read(body, owner.getCodecContext());
+                screens.push_back(screen);
+            }
+        }
+        require(screens.size() == 2 && screens[0].mScreenId == "minecraft:custom_form"
+                        && screens[1].mScreenId == "minecraft:message_box",
+                "the data-driven screens were not shown");
+        require(stores.size() == 2, "the screen properties were not sent");
+        const DataStoreChange &formData = stores[0].mUpdates[0].mChange;
+        require(formData.mDataStoreName == "minecraft"
+                        && formData.mProperty == "custom_form_data_" + std::to_string(screens[0].mFormId),
+                "the form property is misnamed");
+        const auto child = [](const DataStoreChangeValue &value, const char *key) -> const DataStoreChangeValue & {
+            for (const auto &entry: value.mMapValue) {
+                if (entry.first == key)
+                    return entry.second;
+            }
+            throw std::runtime_error(std::string("missing store key ") + key);
+        };
+        const DataStoreChangeValue &layout = child(formData.mNewValue, "layout");
+        require(child(layout, "length").mType == DataStoreChangeValueType::Long
+                        && child(layout, "length").mLongValue == 4,
+                "the layout length is not a long");
+        require(child(child(layout, "0"), "toggle_visible").mBoolValue, "the toggle is not flagged");
+        require(child(child(formData.mNewValue, "closeButton"), "label").mStringValue == "Close"
+                        && child(child(formData.mNewValue, "closeButton"), "visible").mBoolValue,
+                "the close button is wrong");
+        require(child(formData.mNewValue, "title").mType == DataStoreChangeValueType::Map,
+                "a raw message title is not structured");
+
+        const auto write = [&](const std::string &property, const char *path, DataStoreScalar data, int32_t pathCount) {
+            ServerboundDataStorePacket update;
+            update.mUpdate.mDataStoreName = "minecraft";
+            update.mUpdate.mProperty = property;
+            update.mUpdate.mPath = path;
+            update.mUpdate.mData = data;
+            update.mUpdate.mUpdateCount = 1;
+            update.mUpdate.mPathUpdateCount = pathCount;
+            BinaryStream stream;
+            update.writeWithHeader(stream, owner.getCodecContext());
+            static_cast<NetworkHandler::Listener &>(owner).onDataReceived(id, stream.getBuffer());
+        };
+        DataStoreScalar on;
+        on.mType = DataStoreScalarType::Bool;
+        on.mBoolValue = true;
+        DataStoreScalar click;
+        click.mType = DataStoreScalarType::Number;
+        click.mNumberValue = 1;
+        write(formData.mProperty, "layout[0].toggled", on, 1);
+        // a stale path count is answered, not applied
+        write(formData.mProperty, "layout[0].toggled", on, 1);
+        write(formData.mProperty, "layout[1].onClick", click, 1);
+        write(formData.mProperty, "title", on, 1);
+        write("message_box_data_" + std::to_string(screens[1].mFormId), "button2.onClick", click, 1);
+        const auto close = [&](int32_t formId, ServerboundDataDrivenScreenClosedPacket::CloseReason reason) {
+            ServerboundDataDrivenScreenClosedPacket closed;
+            closed.mFormId = formId;
+            closed.mCloseReason = reason;
+            BinaryStream stream;
+            closed.writeWithHeader(stream, owner.getCodecContext());
+            static_cast<NetworkHandler::Listener &>(owner).onDataReceived(id, stream.getBuffer());
+        };
+        close(screens[0].mFormId, ServerboundDataDrivenScreenClosedPacket::CloseReason::ClientCanceled);
+        close(screens[1].mFormId, ServerboundDataDrivenScreenClosedPacket::CloseReason::ClientCanceled);
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        engine.tick(7);
+        const std::unique_ptr<json::Value> ddui = result(owner, "ui");
+        expect(*ddui, "readOnly", "InvalidObservableError:Expect 'toggled value' observable to be client writable.");
+        expect(*ddui, "notShowing",
+               "FormVisibilityError:'minecraft:custom_form' cannot be closed because it is not showing.");
+        expect(*ddui, "showing", "true");
+        expect(*ddui, "modify",
+               "InvalidFormModificationError:'minecraft:custom_form' cannot be modified because it is already showing.");
+        expect(*ddui, "again", "FormVisibilityError:'minecraft:custom_form' is already showing.");
+        expect(*ddui, "clicked", "true");
+        expect(*ddui, "closed", "ClientClosed|true|false|true|true|false");
+        expect(*ddui, "box", "ClientClosed|1");
+        expect(*ddui, "observable", "3|TypeError:Native type conversion failed.");
 
         if (static_cast<MobActor *>(horse)->isTamed()) {
             {

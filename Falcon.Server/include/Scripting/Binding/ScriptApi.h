@@ -200,6 +200,14 @@ public:
 
     void closeAllForms(JSValueConst playerValue);
 
+    // value is the store property: numbers become doubles, bigints longs; the form id, or 0 when the player is gone
+    JSValue showScreen(JSValueConst playerValue, const std::string &screenId, const std::string &propertyPrefix,
+                       JSValueConst value, JSValueConst writable, JSValueConst onWrite, JSValueConst onClose);
+
+    JSValue updateScreen(JSValueConst playerValue, int32_t formId, JSValueConst value, JSValueConst writable);
+
+    void closeScreen(JSValueConst playerValue, int32_t formId);
+
     void addSubscriber(const std::string &key, JSValue callback);
 
     void removeSubscriber(const std::string &key, JSValueConst callback);
