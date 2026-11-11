@@ -267,8 +267,9 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
             _sendEntityData(player);
-            // TODO: the charge length scripts see for bows and crossbows is unverified (IDA unavailable)
-            mScriptEngine.onItemStartUse(player, heldItem, (int32_t) useDurationTicksFor(heldItem));
+            const int32_t duration = itemType->getUseDuration();
+            mScriptEngine.onItemStartUse(player, heldItem,
+                                         duration > 0 ? duration : (int32_t) useDurationTicksFor(heldItem));
             return;
         }
     }
