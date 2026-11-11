@@ -43,6 +43,7 @@ void ScriptApi::install() {
     _bindWorld();
     _bindClocks();
     _bindScoreboard();
+    _bindCommands();
     _installBootstraps();
     _defineEnums();
     _registerModules();

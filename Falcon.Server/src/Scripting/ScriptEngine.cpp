@@ -718,6 +718,23 @@ bool ScriptEngine::isCustomComponentRegistered(bool blocks, const std::string &n
     return false;
 }
 
+const std::vector<std::string> *ScriptEngine::findCommandEnum(const std::string &name) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        const std::vector<std::string> *values = api->findCommandEnum(name);
+        if (values != nullptr)
+            return values;
+    }
+    return nullptr;
+}
+
+void ScriptEngine::runGuarded(const std::function<void()> &call) {
+    if (mGuardDepth++ == 0)
+        _arm();
+    call();
+    if (--mGuardDepth == 0)
+        _pumpJobs();
+}
+
 void ScriptEngine::_scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
     const CustomBlockDefinition *definition = CustomContentRegistry::getInstance().findBlock(blockId);
     if (definition == nullptr || !definition->mHasTick)

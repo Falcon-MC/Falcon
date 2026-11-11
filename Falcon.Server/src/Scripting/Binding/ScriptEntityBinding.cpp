@@ -1275,12 +1275,7 @@ namespace {
     JSValue entityRunCommand(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         const std::string line = argc >= 1 ? toString(ctx, argv[0]) : std::string();
-        const int32_t success = target.mPlayer != nullptr ? target.mApi->runCommandAsPlayer(*target.mPlayer, line)
-                                                          : target.mApi->runCommandAsConsole(line);
-
-        JSValue result = target.mApi->makeInstance("CommandResult", new ScriptNative());
-        JS_DefinePropertyValueStr(ctx, result, "successCount", JS_NewInt32(ctx, success), JS_PROP_ENUMERABLE);
-        return result;
+        return target.mApi->runCommand(target.mApi->host().getLevelFor(*target.mActor), target.mActor, line);
     }
 
     JSValue entityAddTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {

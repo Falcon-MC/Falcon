@@ -6,6 +6,7 @@
 #include "Scripting/WorldClockSystem.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <random>
 #include <string>
@@ -150,6 +151,12 @@ public:
     bool isCustomComponentRegistered(bool blocks, const std::string &name) const;
 
     bool isDimensionPending(const std::string &name) const;
+
+    // a custom command enum any pack registered; null when none did
+    const std::vector<std::string> *findCommandEnum(const std::string &name) const;
+
+    // a call into scripts from outside: arms the watchdog, then runs the microtasks; nested calls only run
+    void runGuarded(const std::function<void()> &call);
 
     // after startup: ids from DimensionNameIdTable, a level in every world, the table saved back
     void createCustomDimensions();
@@ -303,4 +310,5 @@ private:
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;
     int64_t mExecutionDeadlineMs;
+    int32_t mGuardDepth = 0;
 };

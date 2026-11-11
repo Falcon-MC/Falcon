@@ -3,9 +3,6 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
-#include "Server/Commands/CommandMap.h"
-#include "Server/Commands/ServerCommandOrigin.h"
-#include "Server/Commands/PlayerCommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "Core/Event/EventBus.h"
@@ -334,7 +331,11 @@ namespace {
                                         "EnchantmentSlot",
                                         "ItemLockMode",
                                         "BookErrorReason",
-                                        "ContainerRulesErrorReason"};
+                                        "ContainerRulesErrorReason",
+                                        "CustomCommandErrorReason",
+                                        "CustomCommandParamType",
+                                        "CustomCommandSource",
+                                        "CustomCommandStatus"};
 
     const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
                                                     "BlockComponentBlockBreakEvent",
@@ -417,6 +418,7 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
 
 ScriptApi::~ScriptApi() {
     mScheduler.clearAll();
+    unregisterCustomCommands();
 
     for (auto &entry: mSubscribers) {
         for (JSValue callback: entry.second)
@@ -453,8 +455,12 @@ ScriptApi::~ScriptApi() {
 
     for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
                          mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
-                         mClockRegistry, mDimensionRegistry})
+                         mClockRegistry, mDimensionRegistry, mCommandRegistry})
         JS_FreeValue(mContext, value);
+}
+
+void ScriptApi::logPendingException(const std::string &where) {
+    logException(mContext, mPackName, where);
 }
 
 ScriptApi *ScriptApi::fromContext(JSContext *ctx) {
@@ -954,28 +960,6 @@ bool ScriptApi::setBlock(Level &level, int32_t x, int32_t y, int32_t z, const Bl
     return true;
 }
 
-int32_t ScriptApi::runCommandAsPlayer(ServerPlayer &player, const std::string &commandLine) {
-    CommandOriginData origin;
-    origin.mOrigin = CommandOriginType::Scripting;
-    origin.mPlayerId = (int64_t) player.getRuntimeId();
-
-    PlayerCommandOrigin sender(mHost, player, origin);
-    std::string line = commandLine;
-    if (!line.empty() && line[0] == '/')
-        line.erase(0, 1);
-
-    return mHost.getCommands().dispatch(sender, line) ? 1 : 0;
-}
-
-int32_t ScriptApi::runCommandAsConsole(const std::string &commandLine) {
-    ServerCommandOrigin sender(&mHost);
-    std::string line = commandLine;
-    if (!line.empty() && line[0] == '/')
-        line.erase(0, 1);
-
-    return mHost.getCommands().dispatch(sender, line) ? 1 : 0;
-}
-
 void ScriptApi::addSubscriber(const std::string &key, JSValue callback) {
     mSubscribers[key].push_back(callback);
 }
@@ -1284,6 +1268,8 @@ void ScriptApi::startup() {
             JS_SetPropertyStr(mContext, event, "worldClockRegistry", JS_DupValue(mContext, mClockRegistry));
         if (!JS_IsUndefined(mDimensionRegistry))
             JS_SetPropertyStr(mContext, event, "dimensionRegistry", JS_DupValue(mContext, mDimensionRegistry));
+        if (!JS_IsUndefined(mCommandRegistry))
+            JS_SetPropertyStr(mContext, event, "customCommandRegistry", JS_DupValue(mContext, mCommandRegistry));
         emit("system.before.startup", event);
     }
     mRegistrationOpen = false;

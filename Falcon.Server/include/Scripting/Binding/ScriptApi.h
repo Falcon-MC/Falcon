@@ -29,6 +29,8 @@ class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 class ServerActor;
+class CommandOrigin;
+class ScriptCustomCommand;
 
 // what the running script may touch: early execution before startup ends, restricted inside before events
 enum class ScriptPrivilege { Normal, Early, Restricted };
@@ -203,9 +205,24 @@ public:
 
     bool setBlockType(Level &level, int32_t x, int32_t y, int32_t z, const std::string &typeId);
 
-    int32_t runCommandAsPlayer(ServerPlayer &player, const std::string &commandLine);
+    // a CommandResult, or throws CommandError for a command that does not parse; entity null: the dimension runs it
+    JSValue runCommand(Level &level, Actor *entity, const std::string &commandLine);
 
-    int32_t runCommandAsConsole(const std::string &commandLine);
+    // CustomCommandRegistry.registerCommand and registerEnum: throw the official errors when refused
+    JSValue registerCustomCommand(JSValueConst definition, JSValueConst callback);
+
+    JSValue registerCommandEnum(const std::string &name, std::vector<std::string> values);
+
+    const std::vector<std::string> *findCommandEnum(const std::string &name) const;
+
+    // parses the arguments as the command's parameters and calls its callback; false when it failed
+    bool runCustomCommand(const ScriptCustomCommand &command, CommandOrigin &sender,
+                          const std::vector<std::string> &arguments);
+
+    void unregisterCustomCommands();
+
+    // logs and clears the context's pending exception
+    void logPendingException(const std::string &where);
 
     JSValue showForm(JSValueConst playerValue, const std::string &formData);
 
@@ -463,6 +480,8 @@ private:
 
     void _bindScoreboard();
 
+    void _bindCommands();
+
     JSContext *mContext;
     ServerNetworkHandler &mHost;
     JSClassID mNativeClassId;
@@ -525,6 +544,11 @@ private:
     JSValue mClockRegistry = JS_UNDEFINED;
     JSValue mDimensionRegistry = JS_UNDEFINED;
     std::vector<std::string> mPendingDimensions;
+    JSValue mCommandRegistry = JS_UNDEFINED;
+    // one namespace per pack for its commands and enums
+    std::string mCommandNamespace;
+    std::unordered_map<std::string, std::vector<std::string>> mCommandEnums;
+    std::vector<std::string> mCustomCommands;
     std::unordered_map<std::string, JSValue> mBlockComponents;
     std::unordered_map<std::string, JSValue> mItemComponents;
     bool mRegistrationOpen = false;

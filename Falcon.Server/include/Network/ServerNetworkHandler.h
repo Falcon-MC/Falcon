@@ -630,7 +630,8 @@ public:
 
     void kickNotAllowListedPlayers();
 
-    void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message);
+    void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message,
+                           bool success = true);
 
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &key,
                            const std::vector<std::string> &parameters);

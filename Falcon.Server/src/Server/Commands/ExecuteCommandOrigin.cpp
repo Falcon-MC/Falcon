@@ -28,3 +28,9 @@ std::string ExecuteCommandOrigin::getLocale() const {
 CommandPermission ExecuteCommandOrigin::getCommandPermission() const {
     return mBase.getCommandPermission();
 }
+
+Actor *ExecuteCommandOrigin::getEntity() {
+    if (mExecutor != nullptr)
+        return mExecutor;
+    return mBase.getEntity();
+}

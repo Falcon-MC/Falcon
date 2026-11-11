@@ -46,7 +46,8 @@ BOUND = {
         'ItemFoodComponent', 'ItemInventoryComponent', 'ItemPotionComponent', 'PlayerCursorInventoryComponent',
         'EnchantmentType', 'EnchantmentTypes', 'EnchantmentSlot', 'ItemLockMode', 'PotionEffectType',
         'PotionDeliveryType', 'Potions', 'BookErrorReason', 'ContainerRulesErrorReason',
-        'ItemBlockDynamicPropertiesComponent',
+        'ItemBlockDynamicPropertiesComponent', 'CustomCommandRegistry', 'CustomCommandOrigin', 'CustomCommandSource',
+        'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
