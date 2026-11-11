@@ -1549,32 +1549,27 @@ namespace {
 
     JSValue playerPlaySound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        if (argc < 1)
-            return JS_UNDEFINED;
+        const ScriptSoundDefinitionRef *definition =
+                argc >= 1 ? target.mApi->native<ScriptSoundDefinitionRef>(argv[0]) : nullptr;
+        if (argc < 1 || (definition == nullptr && !JS_IsString(argv[0])))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         Vector3f position = target.mPlayer->getPosition();
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        if (argc >= 2 && JS_IsObject(argv[1])) {
-            JSValue locationValue = JS_GetPropertyStr(ctx, argv[1], "location");
+        JSValueConst options = argc >= 2 ? argv[1] : JS_UNDEFINED;
+        if (JS_IsObject(options)) {
+            JSValue locationValue = JS_GetPropertyStr(ctx, options, "location");
             double x = 0.0, y = 0.0, z = 0.0;
             if (readVector3(ctx, locationValue, x, y, z))
                 position = Vector3f((float) x, (float) y, (float) z);
             JS_FreeValue(ctx, locationValue);
-
-            JSValue volumeValue = JS_GetPropertyStr(ctx, argv[1], "volume");
-            JSValue pitchValue = JS_GetPropertyStr(ctx, argv[1], "pitch");
-            double parsed = 1.0;
-            if (!JS_IsUndefined(volumeValue) && JS_ToFloat64(ctx, &parsed, volumeValue) == 0)
-                volume = (float) parsed;
-            if (!JS_IsUndefined(pitchValue) && JS_ToFloat64(ctx, &parsed, pitchValue) == 0)
-                pitch = (float) parsed;
-            JS_FreeValue(ctx, volumeValue);
-            JS_FreeValue(ctx, pitchValue);
         }
-
-        target.mApi->host().playSoundFor(*target.mPlayer, toString(ctx, argv[0]), position, volume, pitch);
-        return JS_UNDEFINED;
+        ScriptSoundOptions read;
+        JSValue refused = target.mApi->readSoundOptions(options, read);
+        if (JS_IsException(refused))
+            return refused;
+        const std::string eventId = definition != nullptr ? definition->mEventId : toString(ctx, argv[0]);
+        return target.mApi->playSound(target.mApi->host().getLevelFor(*target.mPlayer), target.mPlayer, eventId,
+                                      position, read);
     }
 
     JSValue playerSpawnParticle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {

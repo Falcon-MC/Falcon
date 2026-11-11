@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Level/Dimension/Dimension.h"
@@ -35,6 +36,14 @@ class ScriptCustomCommand;
 
 // what the running script may touch: early execution before startup ends, restricted inside before events
 enum class ScriptPrivilege { Normal, Early, Restricted };
+
+// WorldSoundOptions and PlayerSoundOptions as read
+struct ScriptSoundOptions {
+    double mVolume = 1.0;
+    double mPitch = 1.0;
+    int32_t mLoopCount = 0;
+    bool mBroadcast = false;
+};
 
 // one behavior pack's scripts: its own context, module versions and official surface
 class ScriptApi {
@@ -354,6 +363,20 @@ public:
 
     Uuid nextWaypointHandle();
 
+    // a server sound handle unique across packs
+    static int64_t nextSoundHandle();
+
+    // WorldSoundOptions and PlayerSoundOptions; an exception value when they are refused, undefined otherwise
+    JSValue readSoundOptions(JSValueConst options, ScriptSoundOptions &read);
+
+    // the SoundInstance; recipient: Player.playSound's player, null for every player in the level
+    JSValue playSound(Level &level, ServerPlayer *recipient, const std::string &eventId, const Vector3f &position,
+                      const ScriptSoundOptions &options);
+
+    JSValue soundDefinitionRegistry() const {
+        return mSoundDefinitionRegistry;
+    }
+
     JSValue lootTableManager() const {
         return mLootTableManager;
     }
@@ -544,6 +567,10 @@ private:
 
     void _tickLocatorBars();
 
+    void _bindSounds();
+
+    void _tickSounds();
+
     // the natives the loot bootstrap reads its tables and rolls through; takes itemTypes
     JSValue _lootNatives(JSValue itemTypes);
 
@@ -607,6 +634,8 @@ private:
     JSValue mStructureManager = JS_UNDEFINED;
     JSValue mListVolume = JS_UNDEFINED;
     JSValue mLootTableManager = JS_UNDEFINED;
+    JSValue mSoundDefinitionRegistry = JS_UNDEFINED;
+    std::vector<std::shared_ptr<ScriptSoundState>> mTrackedSounds;
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
     std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;

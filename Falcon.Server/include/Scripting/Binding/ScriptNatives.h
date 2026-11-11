@@ -5,6 +5,7 @@
 #include "Core/NBT/Tag.h"
 #include "World/Scores/Scoreboard.h"
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -175,6 +176,34 @@ struct ScriptWaypointState {
 
 struct ScriptWaypointRef : ScriptNative {
     std::shared_ptr<ScriptWaypointState> mState;
+};
+
+// a played sound: the controls go to its recipients under the server sound handle
+struct ScriptSoundState {
+    int64_t mHandle = 0;
+    std::string mEventId;
+    // player handles the sound was sent to; mRecipient only when Player.playSound played it
+    std::vector<uint32_t> mListeners;
+    uint32_t mRecipient = 0;
+    bool mHasDuration = false;
+    double mDuration = 0.0;
+    bool mRealTime = false;
+    // -1 loops until stopped or until scripts drop the last SoundInstance
+    int32_t mLoopCount = 0;
+    double mElapsed = 0.0;
+    std::chrono::steady_clock::time_point mLastRealTime;
+    bool mPaused = false;
+    bool mStopped = false;
+    bool mCompleted = false;
+};
+
+// SoundInstance and its SoundDurationInfo share the state
+struct ScriptSoundRef : ScriptNative {
+    std::shared_ptr<ScriptSoundState> mState;
+};
+
+struct ScriptSoundDefinitionRef : ScriptNative {
+    std::string mEventId;
 };
 
 namespace ScriptValues {

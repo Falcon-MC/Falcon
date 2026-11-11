@@ -72,6 +72,7 @@ BOUND = {
         'SetDataFromColorIndexFunction', 'SetItemCountFunction', 'SetItemDamageFunction', 'SetItemDataFunction',
         'SetItemLoreFunction', 'SetItemNameFunction', 'SetOminousBottleFunction', 'SetPotionFunction',
         'SetSpawnEggFunction', 'SetStewEffectFunction', 'SmeltItemFunction', 'SpecificEnchantFunction',
+        'SoundInstance', 'SoundDurationInfo', 'SoundDefinition', 'SoundDefinitionRegistry', 'BlockInstrumentComponent',
     },
     'server-ui': None,
     'common': None,

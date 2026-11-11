@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
+#include "Scripting/ScriptSoundRegistry.h"
 #include "Scripting/ScriptStructureRegistry.h"
 #include "Scripting/WorldClockSystem.h"
 
@@ -158,6 +159,9 @@ public:
 
     void onPlayerInputPermissionCategoryChange(ServerPlayer &player, int32_t category, bool enabled);
 
+    // a tracked sound's declared duration elapsed, every loop included
+    void onSoundCompleted(const std::string &soundInstanceId);
+
     // food only, before onCompleteUse: the food component fires it once eaten
     void onItemConsume(ServerPlayer &player, const ItemStack &used);
 
@@ -293,6 +297,10 @@ public:
     }
 
     // world.structureManager of every pack
+    ScriptSoundRegistry &sounds() {
+        return mSounds;
+    }
+
     ScriptStructureRegistry &structures() {
         return mStructures;
     }
@@ -360,6 +368,7 @@ private:
 
     WorldClockSystem mClocks;
     ScriptStructureRegistry mStructures;
+    ScriptSoundRegistry mSounds;
     int64_t mLastClockSync = 0;
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;
