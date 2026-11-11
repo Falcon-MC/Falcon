@@ -19,6 +19,7 @@
 #include "World/Level/Block/RedStoneWireBlock.h"
 #include "World/Level/Block/ObserverBlock.h"
 #include "World/Level/Block/RedstoneBlock.h"
+#include "World/Level/Block/CrafterBlock.h"
 #include "World/Level/Block/LecternBlock.h"
 #include "World/Level/Block/RedstoneComparatorBlock.h"
 #include "World/Level/Block/RedstoneDiodeBlock.h"
@@ -1144,6 +1145,9 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
     } else if (dynamic_cast<const DispenserBlock *>(block) != nullptr) {
         if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             DispenserBlock::onRedstoneUpdate(owner, level, position, state);
+    } else if (dynamic_cast<const CrafterBlock *>(block) != nullptr) {
+        if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
+            CrafterBlock::onRedstoneUpdate(owner, level, position, state);
     }
 }
 

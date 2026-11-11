@@ -98,7 +98,7 @@ namespace {
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
             const ItemStack &existing = container.getContainerItem(slot);
-            if (existing.isAir() || existing.mCount <= 0)
+            if (existing.isAir() || existing.mCount <= 0 || container.isSlotDisabled(slot))
                 continue;
 
             if (!PlayerInventory::canStack(existing, item) || existing.mCount >= maxStackSize)
@@ -112,7 +112,7 @@ namespace {
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
             const ItemStack &existing = container.getContainerItem(slot);
-            if (!existing.isAir() && existing.mCount > 0)
+            if ((!existing.isAir() && existing.mCount > 0) || container.isSlotDisabled(slot))
                 continue;
 
             ItemStack single = item;

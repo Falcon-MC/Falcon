@@ -144,6 +144,17 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
 
 void DispenserBlock::_eject(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
                             const ItemStack &item) {
+    ItemStack single = item;
+    single.mCount = 1;
+    ejectItem(owner, level, position, facing, single);
+
+    owner.broadcastLevelEvent(level, LEVEL_EVENT_PARTICLE_SHOOT, centerOf(position),
+                              FACE_OFFSETS[facing][0] + 3 * FACE_OFFSETS[facing][2] + 4);
+    owner.playLevelSound(level, SOUND_DISPENSE, centerOf(position));
+}
+
+void DispenserBlock::ejectItem(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
+                               const ItemStack &item) {
     const float dx = (float) FACE_OFFSETS[facing][0];
     const float dy = (float) FACE_OFFSETS[facing][1];
     const float dz = (float) FACE_OFFSETS[facing][2];
@@ -160,11 +171,5 @@ void DispenserBlock::_eject(ServerNetworkHandler &owner, Level &level, const Vec
                           EJECT_UPWARD_MOTION + gaussian(dispenseRandom()) * EJECT_SPREAD,
                           dz * speed + gaussian(dispenseRandom()) * EJECT_SPREAD);
 
-    ItemStack single = item;
-    single.mCount = 1;
-    ItemActorHandler::dropItem(owner, level, spawn, single, motion, ItemActorHandler::DROP_PICKUP_DELAY);
-
-    owner.broadcastLevelEvent(level, LEVEL_EVENT_PARTICLE_SHOOT, centerOf(position),
-                              FACE_OFFSETS[facing][0] + 3 * FACE_OFFSETS[facing][2] + 4);
-    owner.playLevelSound(level, SOUND_DISPENSE, centerOf(position));
+    ItemActorHandler::dropItem(owner, level, spawn, item, motion, ItemActorHandler::DROP_PICKUP_DELAY);
 }

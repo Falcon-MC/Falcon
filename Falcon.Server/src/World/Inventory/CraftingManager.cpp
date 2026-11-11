@@ -281,16 +281,22 @@ bool CraftingManager::matchNetworkRecipe(const std::vector<ItemStack> &grid, int
     return matchRecipe(grid, gridWidth, CraftingRecipeTable::getRecipes()[sourceIndex], match);
 }
 
+int32_t CraftingManager::findNetworkRecipe(const std::vector<ItemStack> &grid, int gridWidth,
+                                           const std::vector<ItemStack> &recipeOutputs,
+                                           const std::vector<uint32_t> &recipeSourceIndices) {
+    CraftingRecipeMatch match;
+    for (size_t index = 0; index < recipeOutputs.size() && index < recipeSourceIndices.size(); ++index) {
+        if (matchNetworkRecipe(grid, gridWidth, (int32_t) index + 1, recipeOutputs, recipeSourceIndices, match))
+            return (int32_t) index + 1;
+    }
+    return 0;
+}
+
 ItemStack CraftingManager::findResult(const std::vector<ItemStack> &grid, int gridWidth,
                                       const std::vector<ItemStack> &recipeOutputs,
                                       const std::vector<uint32_t> &recipeSourceIndices) {
-    CraftingRecipeMatch match;
-    for (size_t index = 0; index < recipeOutputs.size() && index < recipeSourceIndices.size(); ++index) {
-        if (matchNetworkRecipe(grid, gridWidth, (int32_t) index + 1, recipeOutputs, recipeSourceIndices, match)) {
-            return recipeOutputs[index];
-        }
-    }
-    return ItemStack::air();
+    const int32_t networkId = findNetworkRecipe(grid, gridWidth, recipeOutputs, recipeSourceIndices);
+    return networkId > 0 ? recipeOutputs[(size_t) networkId - 1] : ItemStack::air();
 }
 
 bool CraftingManager::matchResult(const std::vector<ItemStack> &grid, int gridWidth, const ItemStack &result,

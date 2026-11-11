@@ -3,6 +3,7 @@
 #include "Core/NBT/Tag.h"
 #include "World/Inventory/Container.h"
 
+#include <cstdint>
 #include <vector>
 
 class PacketCodecContext;
@@ -25,6 +26,18 @@ public:
         mRejectsShulkerBoxes = rejects;
     }
 
+    bool isSlotDisabled(int slot) const override {
+        return slot >= 0 && slot < 16 && (mDisabledSlots & (1u << slot)) != 0;
+    }
+
+    uint16_t getDisabledSlots() const {
+        return mDisabledSlots;
+    }
+
+    void setDisabledSlots(uint16_t slots) {
+        mDisabledSlots = slots;
+    }
+
     bool isEmpty() const;
 
     bool isFull() const;
@@ -42,4 +55,5 @@ public:
 private:
     std::vector<ItemStack> mItems;
     bool mRejectsShulkerBoxes = false;
+    uint16_t mDisabledSlots = 0;
 };

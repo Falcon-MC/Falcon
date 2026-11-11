@@ -336,7 +336,7 @@ namespace {
         if (slot < first || slot >= last)
             return true;
 
-        return context.mOpenContainer->canHold(item);
+        return context.mOpenContainer->canHold(item) && !context.mOpenContainer->isSlotDisabled((int) (slot - first));
     }
 
     // armor slots take only the matching piece, the head slot also head-worn blocks, as vanilla does;

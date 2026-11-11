@@ -31,6 +31,7 @@
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/BookHandler.h"
+#include "Network/Handler/CrafterHandler.h"
 #include "Network/Handler/LecternHandler.h"
 #include "Network/Handler/LodestoneHandler.h"
 #include "Network/Handler/ChatHandler.h"
@@ -109,6 +110,7 @@
 #include "Protocol/Packets/AnimatePacket.h"
 #include "Protocol/Packets/BookEditPacket.h"
 #include "Protocol/Packets/LecternUpdatePacket.h"
+#include "Protocol/Packets/PlayerToggleCrafterSlotRequestPacket.h"
 #include "Protocol/Packets/PositionTrackingDBClientRequestPacket.h"
 #include "Protocol/Packets/EmotePacket.h"
 #include "Protocol/Packets/RequestPermissionsPacket.h"
@@ -1448,6 +1450,7 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::BookEdit,
             MinecraftPacketIds::LecternUpdate,
             MinecraftPacketIds::PositionTrackingDBClientRequest,
+            MinecraftPacketIds::PlayerToggleCrafterSlotRequest,
             MinecraftPacketIds::PlayerSkin,
     };
 
@@ -2048,6 +2051,14 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PositionTra
         return;
 
     LodestoneHandler::handleRequest(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerToggleCrafterSlotRequestPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr || !player->isSpawned())
+        return;
+
+    CrafterHandler::handleToggleSlot(*this, *player, packet);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) {
