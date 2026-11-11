@@ -2199,11 +2199,6 @@ namespace {
         return JS_NewBool(ctx, partOwner(ctx, thisVal) != nullptr);
     }
 
-    // TODO: camera splines and the locator bar do nothing yet
-    JSValue partNoop(JSContext *, JSValueConst, int, JSValueConst *) {
-        return JS_UNDEFINED;
-    }
-
     // InputPermissionCategory values from the typings: 1 to 12, 3 unused
     bool readInputCategory(JSContext *ctx, JSValueConst value, int32_t &category) {
         return JS_IsNumber(value) && JS_ToInt32(ctx, &category, value) == 0 && category >= 1 && category <= 12
@@ -3018,10 +3013,6 @@ void ScriptApi::_bindPlayer() {
     property(permissions, "PlayerInputPermissions", "movementEnabled", inputCategoryGet<2>, inputCategorySet<2>);
     method(permissions, "PlayerInputPermissions", "isPermissionCategoryEnabled", inputPermissionEnabled, 1);
 
-    JSValue locator = defineClass("LocatorBar");
-    method(locator, "LocatorBar", "addWaypoint", partNoop, 1);
-    method(locator, "LocatorBar", "removeWaypoint", partNoop, 1);
-    method(locator, "LocatorBar", "removeAllWaypoints", partNoop, 0);
 }
 
 void ScriptApi::_bindComponents() {

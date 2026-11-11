@@ -132,6 +132,8 @@ namespace {
             return accepts<ScriptNamedRef>;
         if (cls == "InputInfo")
             return accepts<ScriptInputInfoRef>;
+        if (hasSuffix(cls, "Waypoint"))
+            return accepts<ScriptWaypointRef>;
         return acceptsAny;
     }
 
@@ -443,6 +445,8 @@ namespace {
                                         "EasingType",
                                         "CameraShakeType",
                                         "EntityAttachPoint",
+                                        "WaypointTexture",
+                                        "LocatorBarErrorReason",
                                         "WeatherType",
                                         "ScriptEventSource",
                                         "GameRule",
@@ -579,6 +583,10 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mDimensionObjects)
         JS_FreeValue(mContext, entry.second);
+    for (auto &bar: mLocatorBars) {
+        for (LocatorEntry &entry: bar.second)
+            JS_FreeValue(mContext, entry.mObject);
+    }
     for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports}) {
@@ -949,6 +957,12 @@ void ScriptApi::forgetEntity(uint64_t runtimeId) {
 
 void ScriptApi::forgetPlayer(ServerPlayer &player) {
     const uint32_t handle = mPlayers.acquire(player.getNetworkIdentifier());
+    const auto bar = mLocatorBars.find(handle);
+    if (bar != mLocatorBars.end()) {
+        for (LocatorEntry &entry: bar->second)
+            JS_FreeValue(mContext, entry.mObject);
+        mLocatorBars.erase(bar);
+    }
     const auto it = mPlayerObjects.find(handle);
     if (it == mPlayerObjects.end())
         return;

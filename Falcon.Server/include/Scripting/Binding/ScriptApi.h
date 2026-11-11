@@ -4,6 +4,7 @@
 #include "World/Actor/MobEffect.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
+#include "Protocol/Types/LocatorBarWaypoint.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "World/Level/Block/BlockState.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -338,6 +339,21 @@ public:
 
     void forgetPlayer(ServerPlayer &player);
 
+    // a waypoint in one player's locator bar and what the client last received for it
+    struct LocatorEntry {
+        std::shared_ptr<ScriptWaypointState> mState;
+        JSValue mObject = JS_UNDEFINED;
+        Uuid mHandle;
+        bool mSent = false;
+        LocatorBarWaypoint mSentWaypoint;
+    };
+
+    std::vector<LocatorEntry> &locatorBarOf(uint32_t handle) {
+        return mLocatorBars[handle];
+    }
+
+    Uuid nextWaypointHandle();
+
     void emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z);
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
@@ -520,6 +536,10 @@ private:
 
     void _bindCommands();
 
+    void _bindWaypoints();
+
+    void _tickLocatorBars();
+
     JSContext *mContext;
     ServerNetworkHandler &mHost;
     JSClassID mNativeClassId;
@@ -556,6 +576,8 @@ private:
     std::unordered_map<int64_t, JSValue> mActorObjects;
     std::unordered_map<uint32_t, JSValue> mPlayerObjects;
     std::unordered_map<uint64_t, JSValue> mDimensionObjects;
+    std::unordered_map<uint32_t, std::vector<LocatorEntry>> mLocatorBars;
+    uint64_t mNextWaypointHandle = 0;
 
     JSValue mWorld = JS_UNDEFINED;
     JSValue mSystem = JS_UNDEFINED;

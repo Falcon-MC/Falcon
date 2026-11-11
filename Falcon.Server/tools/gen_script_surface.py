@@ -58,6 +58,7 @@ BOUND = {
         'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
         'HudElement', 'HudVisibility', 'HudElementsCount', 'HudVisibilityCount',
         'EasingType', 'CameraShakeType', 'EntityAttachPoint',
+        'Waypoint', 'LocationWaypoint', 'PlayerWaypoint', 'WaypointTexture', 'LocatorBarErrorReason',
     },
     'server-ui': None,
     'common': None,

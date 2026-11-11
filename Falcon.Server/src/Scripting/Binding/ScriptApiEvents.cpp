@@ -160,6 +160,7 @@ void ScriptApi::install() {
     _bindStructures();
     _bindClocks();
     _bindScoreboard();
+    _bindWaypoints();
     _bindCommands();
     _installBootstraps();
     _defineEnums();
@@ -179,6 +180,7 @@ void ScriptApi::tick(int64_t currentTick) {
         resolveTickingAreas();
     _emitInventoryChanges();
     _emitCursorChanges();
+    _tickLocatorBars();
 }
 
 JSValue ScriptApi::showForm(JSValueConst playerValue, const std::string &formData) {
