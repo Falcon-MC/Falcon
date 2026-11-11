@@ -463,7 +463,7 @@ namespace {
                 return 1;
             return 2;
         }
-        // TODO: x, then z, then y outermost, unverified against the game's iterator
+        // x, then z, then y outermost: sub_14314C1B0
         getBlockLocationIterator() {
             const min = this.getMin(), max = this.getMax();
             let x = min.x, y = min.y, z = min.z;
