@@ -8,6 +8,7 @@
 #include "Scripting/Binding/ScriptCustomCommand.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ScriptCommandOrigin.h"
+#include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Localization.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
@@ -1680,6 +1681,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         const std::vector<ServerActor *> selfTargets = owner.resolveActorTargets(fromCow, "@s");
         require(selfTargets.size() == 1 && selfTargets[0] == cow, "@s of a cow did not resolve to it");
         require(owner.resolveActorTargets(fromCow, "@s[type=minecraft:pig]").empty(), "@s ignored its type filter");
+        ExecuteCommandOrigin executedFromCow(fromCow, nullptr, cow->getPosition(), cow->getRotation(),
+                                             &world.getOverworld());
+        const std::vector<ServerActor *> executedTargets = owner.resolveActorTargets(executedFromCow, "@s");
+        require(executedTargets.size() == 1 && executedTargets[0] == cow, "execute lost the cow running it");
         require(commands.dispatch(playerOrigin, "beta:toggle off"), "an enumName parameter did not parse");
         player.setOp(wasOp);
 
