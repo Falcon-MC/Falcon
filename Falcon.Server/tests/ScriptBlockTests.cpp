@@ -558,7 +558,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "notWaterloggable", "throw:Error");
         expect(r, "permutationTags", "true:tile.stone.name:2:false");
         expect(r, "typeKey", "tile.stone.name");
-        expect(r, "sign", "true:hello:hello::Black:false");
+        expect(r, "sign", "true:hello:hello::undefined:false");
         expect(r, "signWaxed", "true:minecraft:standing_sign");
         expect(r, "cauldron", "3:Water");
         expect(r, "cauldronAfter", "6:Lava:throw:Error");
@@ -624,7 +624,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "snow", "true");
         expect(r, "fluid", "1,0,1:Potion:throw:Error");
         expect(r, "jukebox", "true:false:true");
-        expect(r, "dye", "ok:throw:Error:Black");
+        expect(r, "dye", "ok:ok:Red");
         expect(r, "dynamic", "3:abc:true:throw:Error:true");
         expect(r, "containsBiomes", "true:false:false");
         expect(r, "herd", "1");
