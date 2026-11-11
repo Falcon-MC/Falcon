@@ -47,6 +47,11 @@ namespace {
 
 CrossbowItem::CrossbowItem(const Item &base) : Item(base) {}
 
+// sub_148EF52D0: the shooter base sets 72000, the crossbow then 25
+int32_t CrossbowItem::getUseDuration() const {
+    return 25;
+}
+
 bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     if (!isCrossbowLoaded(item))
         return false;

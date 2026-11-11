@@ -107,11 +107,15 @@ namespace {
             return accepts<ScriptDimensionRef>;
         if (cls == "Component")
             return acceptsComponent;
+        if (cls == "EnchantmentType" || cls == "PotionEffectType" || cls == "PotionDeliveryType")
+            return accepts<ScriptNamedRef>;
         if (cls == "ItemStack" || cls.compare(0, 4, "Item") == 0)
             return accepts<ScriptItemRef>;
-        if (cls == "ScreenDisplay" || cls == "Camera" || cls == "PlayerInputPermissions" || cls == "LocatorBar"
-            || cls == "Container" || cls == "ContainerSlot" || cls == "EntityInventoryComponent"
-            || cls == "EntityEquippableComponent")
+        if (cls == "Container" || cls == "ContainerSlot" || cls == "EntityInventoryComponent"
+            || cls == "EntityEquippableComponent" || cls == "EntityEnderInventoryComponent"
+            || cls == "PlayerCursorInventoryComponent")
+            return accepts<ScriptContainerRef>;
+        if (cls == "ScreenDisplay" || cls == "Camera" || cls == "PlayerInputPermissions" || cls == "LocatorBar")
             return accepts<ScriptPlayerPart>;
         if (cls == "EntityComponent")
             return acceptsComponent;
@@ -196,6 +200,9 @@ namespace {
             JS_FreeValue(ctx, clock);
             JS_FreeValue(ctx, marker);
         }
+        // options the emitting side reads back per callback
+        if (ScriptApi::keepsSubscribeOptions(signal->mKey) && argc >= 2 && JS_IsObject(argv[1]))
+            api->keepSubscribeOptions(argv[0], argv[1]);
         return JS_DupValue(ctx, argv[0]);
     }
 
@@ -360,7 +367,11 @@ namespace {
                                         "GameRule",
                                         "MemoryTier",
                                         "CustomComponentNameErrorReason",
-                                        "NamespaceNameErrorReason"};
+                                        "NamespaceNameErrorReason",
+                                        "EnchantmentSlot",
+                                        "ItemLockMode",
+                                        "BookErrorReason",
+                                        "ContainerRulesErrorReason"};
 
     const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
                                                     "BlockComponentBlockBreakEvent",
@@ -391,6 +402,17 @@ namespace {
             {"ItemDurabilityComponent", "minecraft:durability"},
             {"ItemEnchantableComponent", "minecraft:enchantable"},
             {"ItemCooldownComponent", "minecraft:cooldown"},
+            {"ItemBookComponent", "minecraft:book"},
+            {"ItemCompostableComponent", "minecraft:compostable"},
+            {"ItemDyeableComponent", "minecraft:dyeable"},
+            {"ItemFoodComponent", "minecraft:food"},
+            {"ItemInventoryComponent", "minecraft:inventory"},
+            {"ItemPotionComponent", "minecraft:potion"},
+            {"ItemBlockDynamicPropertiesComponent", "minecraft:block_actor_dynamic_properties"},
+            {"EntityInventoryComponent", "minecraft:inventory"},
+            {"EntityEquippableComponent", "minecraft:equippable"},
+            {"EntityEnderInventoryComponent", "minecraft:ender_inventory"},
+            {"PlayerCursorInventoryComponent", "minecraft:cursor_inventory"},
     };
 
     bool isNumber(const std::string &text) {
@@ -437,6 +459,8 @@ ScriptApi::~ScriptApi() {
         for (JSValue callback: entry.second)
             JS_FreeValue(mContext, callback);
     }
+    for (auto &entry: mSubscribeOptions)
+        JS_FreeValue(mContext, entry.second);
     for (auto &entry: mBlockComponents)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mItemComponents)
@@ -873,27 +897,30 @@ JSValue ScriptApi::makeItemStack(const std::string &typeId, int32_t amount) {
 JSValue ScriptApi::makeItem(const ItemStack &item) {
     if (item.isAir() || item.mDefinition == nullptr)
         return JS_UNDEFINED;
-    return makeItemStack(item.mDefinition->getIdentifier(), item.mCount);
+    JSValue jsItem = makeItemStack(item.mDefinition->getIdentifier(), item.mCount);
+    readItemStack(item, *native<ScriptItemRef>(jsItem)->mItem);
+    return jsItem;
+}
+
+void ScriptApi::readItemStack(const ItemStack &item, ScriptItemData &data) {
+    data.mTypeId = item.mDefinition == nullptr ? std::string() : item.mDefinition->getIdentifier();
+    data.mAmount = item.mCount;
+    data.mDamage = item.mDamage;
+    data.mCanPlaceOn = item.mCanPlace;
+    data.mCanDestroy = item.mCanBreak;
+    data.mDynamicProperties.clear();
+    data.mTag = item.mTag.isCompound() ? item.mTag : Tag::ofCompound();
+    if (const Tag *dynamicProperties = data.mTag.get("DynamicProperties")) {
+        deserializeDynamicProperties(*dynamicProperties, data.mDynamicProperties);
+        data.mTag.remove("DynamicProperties");
+    }
 }
 
 JSValue ScriptApi::makeHeldItemStack(ServerPlayer &player, const std::string &identifier) {
     const ItemStack &stack = player.getInventory().getItemInHand();
-
-    std::string typeId = identifier;
-    int32_t count = 1;
-    const Tag *dynamicProperties = nullptr;
-    if (!stack.isAir() && stack.mDefinition != nullptr) {
-        typeId = stack.mDefinition->getIdentifier();
-        count = stack.mCount;
-        if (stack.mTag.isCompound())
-            dynamicProperties = stack.mTag.get("DynamicProperties");
-    }
-
-    JSValue jsItem = makeItemStack(typeId, count);
-    const ScriptItemRef *ref = native<ScriptItemRef>(jsItem);
-    if (dynamicProperties != nullptr && ref != nullptr)
-        deserializeDynamicProperties(*dynamicProperties, ref->mItem->mDynamicProperties);
-    return jsItem;
+    if (!stack.isAir() && stack.mDefinition != nullptr)
+        return makeItem(stack);
+    return makeItemStack(identifier, 1);
 }
 
 bool ScriptApi::toItemStack(const ScriptItemData &data, ItemStack &stack) {
@@ -910,6 +937,13 @@ bool ScriptApi::toItemStack(const ScriptItemData &data, ItemStack &stack) {
     stack.mBlockDefinition = mHost.getBlockDefinitions().getDefinition(item.getIdentifier());
     stack.mCount = data.mAmount < 1 ? 1 : data.mAmount;
     stack.mDamage = data.mDamage;
+    stack.mCanPlace = data.mCanPlaceOn;
+    stack.mCanBreak = data.mCanDestroy;
+    Tag tag = data.mTag.isCompound() ? data.mTag : Tag::ofCompound();
+    if (!data.mDynamicProperties.empty())
+        tag.put("DynamicProperties", serializeDynamicProperties(data.mDynamicProperties));
+    if (!tag.getKeys().empty())
+        stack.mTag = std::move(tag);
     return true;
 }
 
@@ -993,6 +1027,11 @@ void ScriptApi::removeSubscriber(const std::string &key, JSValueConst callback) 
         if (JS_VALUE_GET_PTR(*entry) == JS_VALUE_GET_PTR(callback)) {
             if (key == SCRIPT_EVENT_KEY)
                 mScriptEventNamespaces.erase(JS_VALUE_GET_PTR(callback));
+            const auto options = mSubscribeOptions.find(JS_VALUE_GET_PTR(callback));
+            if (options != mSubscribeOptions.end()) {
+                JS_FreeValue(mContext, options->second);
+                mSubscribeOptions.erase(options);
+            }
             JS_FreeValue(mContext, *entry);
             list.erase(entry);
             return;
@@ -1020,6 +1059,27 @@ bool ScriptApi::emitClockEvent(const std::string &key, JSValue eventObject, cons
     const bool cancelled = emit(key, eventObject);
     mEmitClock.clear();
     mEmitMarker.clear();
+    return cancelled;
+}
+
+bool ScriptApi::keepsSubscribeOptions(const std::string &key) {
+    return key == "after.playerInventoryItemChange" || key == "after.entityItemPickup"
+           || key == "before.entityItemPickup" || key == "after.entityContainerOpened"
+           || key == "after.entityContainerClosed";
+}
+
+void ScriptApi::keepSubscribeOptions(JSValueConst callback, JSValueConst options) {
+    JSValue &kept = mSubscribeOptions[JS_VALUE_GET_PTR(callback)];
+    JS_FreeValue(mContext, kept);
+    kept = JS_DupValue(mContext, options);
+}
+
+bool ScriptApi::emitFiltered(const std::string &key, JSValue eventObject,
+                             const std::function<bool(JSValueConst options)> &accepts) {
+    const std::function<bool(JSValueConst)> *previous = mEmitAccepts;
+    mEmitAccepts = &accepts;
+    const bool cancelled = emit(key, eventObject);
+    mEmitAccepts = previous;
     return cancelled;
 }
 
@@ -1074,6 +1134,11 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
             continue;
         if (!mEmitClock.empty() && !_acceptsClockEvent(callback))
             continue;
+        if (mEmitAccepts != nullptr) {
+            const auto options = mSubscribeOptions.find(JS_VALUE_GET_PTR(callback));
+            if (options != mSubscribeOptions.end() && !(*mEmitAccepts)(options->second))
+                continue;
+        }
 
         JSValue result = JS_Call(mContext, callback, JS_UNDEFINED, 1, &eventObject);
         if (JS_IsException(result))

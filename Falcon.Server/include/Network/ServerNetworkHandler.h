@@ -371,6 +371,8 @@ public:
 
     void refreshContainerViewers(const Vector3i &position, const ServerPlayer *except = nullptr);
 
+    void refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except = nullptr);
+
     void sendActorsTo(ServerPlayer &player);
 
     void broadcastActorRemove(ServerActor &actor);
@@ -498,6 +500,9 @@ public:
     bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);
 
     void emitItemUse(ServerPlayer &player);
+
+    // ticks left before the held item's use completes, 0 once it could
+    int32_t getItemUseTicksLeft(const ServerPlayer &player) const;
 
     std::unordered_map<std::string, DynamicPropertyValue> &getWorldDynamicProperties() {
         return mWorldDynamicProperties;

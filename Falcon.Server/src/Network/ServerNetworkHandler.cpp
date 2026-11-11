@@ -2511,6 +2511,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
     if (packet.mAction != InteractPacket::Action::OpenInventory)
         return;
 
+    // riding a tamed mount, the inventory key opens the mount's window
+    // the mount or the player: both accepted, which one the client sends is not checked
+    ServerActor *mount = player->isRiding()
+                                 ? dynamic_cast<ServerActor *>(RideSystem::resolve(*this, player->getVehicleId()))
+                                 : nullptr;
+    if (mount != nullptr && mount->getEntityContainer() != nullptr
+        && (packet.mRuntimeActorId == player->getRuntimeId() || packet.mRuntimeActorId == mount->getRuntimeId())
+        && player->getInventoryManager().openEntityContainer(*mount, ContainerType::Horse))
+        return;
+
     if (packet.mRuntimeActorId != player->getRuntimeId())
         return;
 

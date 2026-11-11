@@ -2,6 +2,8 @@
 #include <functional>
 
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/GameRules.h"
@@ -433,6 +435,22 @@ namespace {
         return string(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)));
     }
 
+    // BlockType lives in the data bootstrap: the object BlockTypes.get hands out
+    JSValue blockGetType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        for (const auto &entry: api->moduleExports("@minecraft/server")) {
+            if (entry.first != "BlockTypes")
+                continue;
+            JSValue get = JS_GetPropertyStr(ctx, entry.second, "get");
+            JSValue id = string(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)));
+            JSValue type = JS_Call(ctx, get, entry.second, 1, &id);
+            JS_FreeValue(ctx, id);
+            JS_FreeValue(ctx, get);
+            return type;
+        }
+        return JS_UNDEFINED;
+    }
+
     JSValue blockGetIsAir(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == "minecraft:air");
     }
@@ -555,164 +573,6 @@ namespace {
         return object;
     }
 
-    ScriptItemData *itemOf(JSContext *ctx, JSValueConst thisVal) {
-        const ScriptItemRef *ref = ScriptApi::fromContext(ctx)->native<ScriptItemRef>(thisVal);
-        return ref == nullptr ? nullptr : ref->mItem.get();
-    }
-
-    JSValue itemStackConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc < 1)
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-
-        std::string typeId = typeIdentifier(ctx, argv[0]);
-        if (typeId.empty())
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        if (typeId.find(':') == std::string::npos)
-            typeId = "minecraft:" + typeId;
-
-        int32_t amount = 1;
-        if (argc >= 2 && !JS_IsUndefined(argv[1]))
-            JS_ToInt32(ctx, &amount, argv[1]);
-        return api->makeItemStack(typeId, amount < 1 ? 1 : amount);
-    }
-
-    JSValue itemStackGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return string(ctx, itemOf(ctx, thisVal)->mTypeId);
-    }
-
-    JSValue itemStackGetAmount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, itemOf(ctx, thisVal)->mAmount);
-    }
-
-    JSValue itemStackSetAmount(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        int32_t amount = 1;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &amount, argv[0]);
-        itemOf(ctx, thisVal)->mAmount = amount;
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemStackGetDynamicProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_UNDEFINED;
-        return dynamicPropertyGet(ctx, itemOf(ctx, thisVal)->mDynamicProperties, toString(ctx, argv[0]));
-    }
-
-    JSValue itemStackSetDynamicProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc >= 1)
-            dynamicPropertySet(ctx, itemOf(ctx, thisVal)->mDynamicProperties, toString(ctx, argv[0]),
-                               argc >= 2 ? argv[1] : JS_UNDEFINED);
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemStackGetDynamicPropertyIds(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return dynamicPropertyIds(ctx, itemOf(ctx, thisVal)->mDynamicProperties);
-    }
-
-    JSValue itemStackGetTags(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        JSValue tags = JS_NewArray(ctx);
-        uint32_t index = 0;
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(itemOf(ctx, thisVal)->mTypeId))
-            JS_SetPropertyUint32(ctx, tags, index++, string(ctx, tag));
-        return tags;
-    }
-
-    JSValue itemStackHasTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        const std::string wanted = toString(ctx, argv[0]);
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(itemOf(ctx, thisVal)->mTypeId)) {
-            if (tag == wanted)
-                return JS_TRUE;
-        }
-        return JS_FALSE;
-    }
-
-    // the item components a stack of this type carries; getComponent and hasComponent both answer from here
-    JSValue makeItemComponent(JSContext *ctx, JSValueConst thisVal, const std::string &requested) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal);
-        const std::string id = requested.find(':') == std::string::npos ? "minecraft:" + requested : requested;
-        const CustomItemDefinition *definition = CustomContentRegistry::getInstance().findItem(item->mItem->mTypeId);
-
-        const char *className = nullptr;
-        if (id == "minecraft:durability" && definition != nullptr && definition->mMaxDurability > 0)
-            className = "ItemDurabilityComponent";
-        else if (id == "minecraft:enchantable")
-            className = "ItemEnchantableComponent";
-        else if (id == "minecraft:cooldown" && definition != nullptr
-                 && (definition->mCooldownTicks > 0 || !definition->mCooldownCategory.empty()))
-            className = "ItemCooldownComponent";
-        if (className == nullptr)
-            return JS_UNDEFINED;
-
-        ScriptItemRef *component = new ScriptItemRef();
-        component->mItem = item->mItem;
-        component->mComponentId = id;
-        return api->makeInstance(className, component);
-    }
-
-    JSValue itemStackGetComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_UNDEFINED;
-        return makeItemComponent(ctx, thisVal, toString(ctx, argv[0]));
-    }
-
-    JSValue itemStackHasComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        JSValue component = makeItemComponent(ctx, thisVal, toString(ctx, argv[0]));
-        const bool has = !JS_IsUndefined(component);
-        JS_FreeValue(ctx, component);
-        return JS_NewBool(ctx, has);
-    }
-
-    const CustomItemDefinition *componentDefinition(JSContext *ctx, JSValueConst thisVal) {
-        return CustomContentRegistry::getInstance().findItem(itemOf(ctx, thisVal)->mTypeId);
-    }
-
-    JSValue durabilityGetDamage(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, itemOf(ctx, thisVal)->mDamage);
-    }
-
-    JSValue durabilitySetDamage(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        int32_t value = 0;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &value, argv[0]);
-        itemOf(ctx, thisVal)->mDamage = value < 0 ? 0 : value;
-        return JS_UNDEFINED;
-    }
-
-    JSValue durabilityGetMax(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return JS_NewInt32(ctx, definition == nullptr ? 0 : definition->mMaxDurability);
-    }
-
-    // TODO: the game's unbreaking chance range, a plain 1 / (level + 1) for now
-    JSValue durabilityGetDamageChance(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        int32_t unbreaking = 0;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &unbreaking, argv[0]);
-        if (unbreaking < 0)
-            unbreaking = 0;
-        return JS_NewInt32(ctx, (int32_t) (100.0 / (double) (unbreaking + 1) + 0.5));
-    }
-
-    JSValue enchantableGetEnchantment(JSContext *, JSValueConst, int, JSValueConst *) {
-        return JS_UNDEFINED;
-    }
-
-    JSValue cooldownGetTicks(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return JS_NewInt32(ctx, definition == nullptr ? 0 : definition->mCooldownTicks);
-    }
-
-    JSValue cooldownGetCategory(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return string(ctx, definition == nullptr ? std::string() : definition->mCooldownCategory);
-    }
-
     JSValue dimensionGetId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptDimensionRef *ref = ScriptApi::fromContext(ctx)->native<ScriptDimensionRef>(thisVal);
         const std::string *custom = Dimension::customName(ref->mDimension);
@@ -789,9 +649,13 @@ namespace {
         if (item == nullptr || argc < 2 || !readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        api->host().spawnItemActor(api->levelOf(thisVal), item->mItem->mTypeId, item->mItem->mAmount,
-                                   Vector3f((float) x, (float) y, (float) z));
-        return JS_UNDEFINED;
+        ItemStack stack;
+        if (!api->toItemStack(*item->mItem, stack))
+            return JS_UNDEFINED;
+        ItemActor *spawned = ItemActorHandler::dropItem(
+                api->host(), api->levelOf(thisVal), Vector3f((float) x, (float) y, (float) z), stack,
+                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
+        return spawned == nullptr ? JS_UNDEFINED : api->makeEntity(*spawned);
     }
 
     JSValue dimensionSpawnParticle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -1234,36 +1098,12 @@ void ScriptApi::_bindBlock() {
     propertyMagic(block, "Block", "y", blockGetCoord, 1);
     propertyMagic(block, "Block", "z", blockGetCoord, 2);
     property(block, "Block", "typeId", blockGetTypeId);
+    property(block, "Block", "type", blockGetType);
     property(block, "Block", "isAir", blockGetIsAir);
     property(block, "Block", "permutation", blockGetPermutation);
 
     defineClass("BlockVolume", blockVolumeConstructor, 2);
     defineClass("EntityWaypoint", entityWaypointConstructor, 3);
-}
-
-void ScriptApi::_bindItemStack() {
-    JSValue item = defineClass("ItemStack", itemStackConstructor, 2);
-    property(item, "ItemStack", "typeId", itemStackGetTypeId);
-    property(item, "ItemStack", "amount", itemStackGetAmount, itemStackSetAmount);
-    method(item, "ItemStack", "getDynamicProperty", itemStackGetDynamicProperty, 1);
-    method(item, "ItemStack", "setDynamicProperty", itemStackSetDynamicProperty, 2);
-    method(item, "ItemStack", "getDynamicPropertyIds", itemStackGetDynamicPropertyIds, 0);
-    method(item, "ItemStack", "getComponent", itemStackGetComponent, 1);
-    method(item, "ItemStack", "hasComponent", itemStackHasComponent, 1);
-    method(item, "ItemStack", "getTags", itemStackGetTags, 0);
-    method(item, "ItemStack", "hasTag", itemStackHasTag, 1);
-
-    JSValue durability = defineClass("ItemDurabilityComponent");
-    property(durability, "ItemDurabilityComponent", "damage", durabilityGetDamage, durabilitySetDamage);
-    property(durability, "ItemDurabilityComponent", "maxDurability", durabilityGetMax);
-    method(durability, "ItemDurabilityComponent", "getDamageChance", durabilityGetDamageChance, 1);
-
-    JSValue enchantable = defineClass("ItemEnchantableComponent");
-    method(enchantable, "ItemEnchantableComponent", "getEnchantment", enchantableGetEnchantment, 1);
-
-    JSValue cooldown = defineClass("ItemCooldownComponent");
-    property(cooldown, "ItemCooldownComponent", "cooldownTicks", cooldownGetTicks);
-    property(cooldown, "ItemCooldownComponent", "cooldownCategory", cooldownGetCategory);
 }
 
 void ScriptApi::_bindDimension() {

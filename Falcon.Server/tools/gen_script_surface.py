@@ -35,13 +35,17 @@ BOUND = {
         'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
         'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
         'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
-        'DimensionRegistry',
-        'Effect', 'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause',
-        'EntityInitializationCause', 'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo',
-        'EntitySwingSource', 'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel',
-        'TickingArea', 'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
+        'DimensionRegistry', 'Effect',
+        'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause', 'EntityInitializationCause',
+        'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo', 'EntitySwingSource',
+        'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel', 'TickingArea',
+        'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
         'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
-        'EntityHealSource',
+        'EntityHealSource', 'ItemBookComponent', 'ItemCompostableComponent', 'ItemDyeableComponent',
+        'ItemFoodComponent', 'ItemInventoryComponent', 'ItemPotionComponent', 'PlayerCursorInventoryComponent',
+        'EnchantmentType', 'EnchantmentTypes', 'EnchantmentSlot', 'ItemLockMode', 'PotionEffectType',
+        'PotionDeliveryType', 'Potions', 'BookErrorReason', 'ContainerRulesErrorReason',
+        'ItemBlockDynamicPropertiesComponent',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
@@ -71,8 +75,9 @@ def parse(path):
     classes = {}
     for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))? \{(.*?)\n\}', raw, re.S):
         members = {}
+        # a reserved word is quoted as a member name: readonly 'type': ItemType
         for member in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)?\s*\n {4}((?:readonly |static |private )*)'
-                                  r'(\w+)\??(\(|:|<| =)([^;]*)', match.group(3), re.S):
+                                  r"'?(\w+)'?\??(\(|:|<| =)([^;]*)", match.group(3), re.S):
             doc = member.group(1) or ''
             modifiers = member.group(2)
             if 'private' in modifiers:

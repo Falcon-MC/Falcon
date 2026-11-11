@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -120,6 +121,14 @@ public:
 
     std::vector<std::string> entityComponentIds(Actor &actor);
 
+    // inventory, equippable, ender_inventory and cursor_inventory: undefined when the entity lacks it
+    JSValue makeContainerComponent(Actor &actor, const ScriptEntityRef &ref, const std::string &componentId);
+
+    static std::vector<std::string> containerComponentIds();
+
+    // the Container of a block actor's inventory: chest, barrel, furnace, hopper
+    JSValue makeBlockContainer(Level &level, const Vector3i &position);
+
     // minecraft:type_family of the active definition
     static std::vector<std::string> entityFamilies(Actor &actor);
 
@@ -134,6 +143,9 @@ public:
     Actor *resolveEntity(const ScriptEntityRef &ref);
 
     JSValue makeItem(const ItemStack &item);
+
+    // the script view of a game stack; dynamic properties come out of the NBT
+    static void readItemStack(const ItemStack &item, ScriptItemData &data);
 
     // the effect's name as scripts see it, without namespace
     static std::string effectTypeId(MobEffectId id);
@@ -220,6 +232,15 @@ public:
 
     // before events run restricted, startup early; true when a subscriber set cancel
     bool emit(const std::string &key, JSValue eventObject);
+
+    // signals whose subscribe options decide, per callback, which events it gets
+    static bool keepsSubscribeOptions(const std::string &key);
+
+    void keepSubscribeOptions(JSValueConst callback, JSValueConst options);
+
+    // emit skipping the callbacks whose kept options accepts refuses
+    bool emitFiltered(const std::string &key, JSValue eventObject,
+                      const std::function<bool(JSValueConst options)> &accepts);
 
     // throws the official error and returns JS_EXCEPTION when the registration is refused
     JSValue registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers);
@@ -404,6 +425,8 @@ private:
 
     void _bindItemStack();
 
+    void _bindContainers();
+
     void _bindDimension();
 
     void _bindEvents();
@@ -419,6 +442,8 @@ private:
     void _subscribeGameEvents();
 
     void _emitInventoryChanges();
+
+    void _emitCursorChanges();
 
     void _resolveForm(uint32_t formId, const std::string &response, bool cancelled);
 
@@ -487,6 +512,8 @@ private:
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
     std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;
     std::unordered_map<void *, std::pair<std::string, std::string>> mClockFilters;
+    std::unordered_map<void *, JSValue> mSubscribeOptions;
+    const std::function<bool(JSValueConst)> *mEmitAccepts = nullptr;
     std::string mEmitClock;
     std::string mEmitMarker;
     std::unordered_map<std::string, JSValue> mClockObjects;
@@ -497,6 +524,7 @@ private:
     std::unordered_map<std::string, JSValue> mItemComponents;
     bool mRegistrationOpen = false;
     std::unordered_map<uint64_t, std::vector<ItemStack>> mInventorySnapshots;
+    std::unordered_map<uint64_t, ItemStack> mCursorSnapshots;
 
     uint32_t mNextFormId = 1;
     std::unordered_map<uint32_t, JSValue> mFormResolvers;

@@ -122,8 +122,23 @@ public:
 
     void onItemUse(ServerPlayer &player);
 
-    // the used stack, read before the game decrements it
-    void onItemCompleteUse(ServerPlayer &player, const ItemStack &used);
+    // the used stack, read before the game decrements it; useDuration: ticks left of the charge
+    void onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration = 0);
+
+    void onItemStartUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration);
+
+    // release: the player let go of a charged item; every end of a use also fires itemStopUse
+    void onItemStopUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration, bool released);
+
+    // true when a script cancelled the pickup
+    bool beforeEntityItemPickup(Actor &collector, Actor &item, const ItemStack &picked);
+
+    void onEntityItemPickup(Actor &collector, const ItemStack &picked);
+
+    // container: the entity whose inventory window opened, source: who opened it
+    void onEntityContainerOpened(Actor &container, Actor &source);
+
+    void onEntityContainerClosed(Actor &container, Actor &source);
 
     // food only, before onCompleteUse: the food component fires it once eaten
     void onItemConsume(ServerPlayer &player, const ItemStack &used);
@@ -247,6 +262,10 @@ private:
     // calls fill(api, event) for each pack with subscribers; true when one cancelled
     template <typename Fill>
     bool _emit(const char *key, const char *signal, bool cancellable, Fill fill);
+
+    // entityContainerOpened and entityContainerClosed: sourceField is openSource or closeSource
+    void _emitContainerAccess(const char *key, const char *signal, const char *sourceField, Actor &container,
+                              Actor &source);
 
     void _onHealthChanged(Actor &entity, float oldValue, float newValue);
 

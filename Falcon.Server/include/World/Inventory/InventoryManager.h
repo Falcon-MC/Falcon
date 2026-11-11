@@ -21,6 +21,7 @@ class ChestBlockActor;
 class FurnaceBlockActor;
 class Level;
 class ContainerBlockActor;
+class ServerActor;
 enum class FurnaceKind : uint8_t;
 
 class InventoryManager {
@@ -133,6 +134,17 @@ public:
 
     bool onClientOpenBlockContainer(const Vector3i &position, ContainerType type);
 
+    // a ContainerOpenPacket naming the actor; false while another window is open or it has no container
+    bool openEntityContainer(ServerActor &actor, ContainerType type);
+
+    // the actor whose container is open, -1 for a block container or none
+    int64_t getContainerActorId() const {
+        return mContainerActorId;
+    }
+
+    // resends the open entity container after a change made outside the window
+    void refreshEntityContainer(int64_t actorId);
+
     bool isContainerOpen() const {
         return mContainerWindowId != CONTAINER_ID_NONE;
     }
@@ -208,6 +220,8 @@ private:
 
     void _sendContentPackets(int containerId, const Container &container);
 
+    void _closeContainerWindow();
+
     void _sendContentPackets(int containerId, InventoryId inventory);
 
     void _sendSlotPackets(int containerId, int netSlot, InventoryId inventory, int slot);
@@ -235,6 +249,7 @@ private:
     CartographyLock mClientMapLock;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
+    int64_t mContainerActorId = -1;
     std::string mEnchantInputId;
     int32_t mEnchantInputCount = 0;
     int32_t mEnchantInputDamage = 0;

@@ -87,7 +87,8 @@ namespace {
         #states;
         constructor(key, id, states) {
             guard(key, "BlockPermutation");
-            this.#type = new BlockType(token, id);
+            // the registered type when there is one: permutation.type === BlockTypes.get(id)
+            this.#type = allBlockTypes().get(id) || new BlockType(token, id);
             this.#states = states;
         }
 

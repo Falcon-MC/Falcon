@@ -103,6 +103,11 @@ public:
         return false;
     }
 
+    // 0: the item's minecraft:use_duration
+    virtual int32_t getUseDuration() const {
+        return 0;
+    }
+
     virtual bool isConsumable() const {
         return false;
     }

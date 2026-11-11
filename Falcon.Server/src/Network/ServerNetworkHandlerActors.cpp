@@ -987,6 +987,14 @@ void ServerNetworkHandler::refreshContainerViewers(const Vector3i &position, con
     }
 }
 
+void ServerNetworkHandler::refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except) {
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned())
+            player.getInventoryManager().refreshEntityContainer(actorId);
+    }
+}
+
 void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;

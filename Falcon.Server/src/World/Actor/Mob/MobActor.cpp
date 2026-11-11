@@ -1050,6 +1050,17 @@ const PushableByEntityPresets &MobActor::getPushPresets() const {
     return mPushPresets;
 }
 
+// mount windows and their saddle, armor and chest slots are not checked against the game
+Container *MobActor::getEntityContainer() {
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    const json::Value *type = inventory == nullptr ? nullptr : inventory->get("container_type");
+    if (type == nullptr || type->mType != json::Value::Type::String || type->mString != "horse" || !isTamed()
+        || getInventoryCapacity() <= 0)
+        return nullptr;
+    mEquipment.ensureInventorySize(getInventoryCapacity());
+    return &mInventoryView;
+}
+
 int MobActor::getInventoryCapacity() const {
     return (int) numberIn(getComponent(INVENTORY_COMPONENT), "inventory_size", 0.0f);
 }
