@@ -518,7 +518,9 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const bool creative = player.getGameType() == (int32_t) GameType::Creative;
     const ItemStack heldItem = player.getInventory().getItemInHand();
 
-    destroyBlock(owner, level, position, brokenState, !creative, heldItem, &player);
+    // a block the held item cannot harvest drops nothing for a player; explosions and pistons still drop it
+    const bool harvested = brokenData == nullptr || canHarvest(*brokenData, heldItem);
+    destroyBlock(owner, level, position, brokenState, !creative && harvested, heldItem, &player);
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
@@ -529,7 +531,7 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
         owner.damagePlayerHeldItem(player, 1);
 
     const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
-    if (!creative && !silkTouch) {
+    if (!creative && !silkTouch && harvested) {
         const int experience = ExperienceValues::getOreDropExperience(brokenState.mName);
         if (experience > 0) {
             const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
