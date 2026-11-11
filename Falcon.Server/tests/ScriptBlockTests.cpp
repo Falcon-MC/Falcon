@@ -588,8 +588,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "biome", "true:true:true");
         expect(r, "biomeTypes", "true:minecraft:plains:true");
         expect(r, "closestBiome", "true");
-        expect(r, "badFeature", "throw:Error");
-        expect(r, "badRule", "throw:Error");
+        expect(r, "badFeature", "throw:InvalidArgumentError");
+        expect(r, "badRule", "throw:InvalidArgumentError");
         expect(r, "manager", "true");
         expect(r, "empty", "true:{\"x\":2,\"y\":3,\"z\":4}:true:true");
         expect(r, "duplicate", "throw:Error");

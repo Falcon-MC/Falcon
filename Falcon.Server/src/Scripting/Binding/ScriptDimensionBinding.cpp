@@ -743,9 +743,9 @@ namespace {
             if (name == candidate.mName)
                 tree = &candidate;
         }
-        // TODO: the game's error class for an unknown feature is unverified
+        // sub_14B5C5B50
         if (tree == nullptr)
-            return api->throwError("Error", "Feature " + name + " not found.");
+            return api->throwError("InvalidArgumentError", "Feature name " + name + " cannot be found in the registry");
 
         TrackingRoot root(level);
         SimpleRandom random((int64_t) std::chrono::steady_clock::now().time_since_epoch().count());
@@ -794,9 +794,9 @@ namespace {
             if (feature != nullptr)
                 break;
         }
-        // TODO: the game's error class for an unknown rule is unverified
+        // sub_14B5C7EC0
         if (feature == nullptr)
-            return api->throwError("Error", "Feature rule " + name + " not found.");
+            return api->throwError("InvalidArgumentError", "Feature rule " + name + " cannot be found");
 
         TrackingRoot root(level);
         ChunkGenerateContext context(level, *chunk);
