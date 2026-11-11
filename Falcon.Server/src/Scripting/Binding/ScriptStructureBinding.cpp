@@ -251,9 +251,9 @@ namespace {
         const bool placed = registry.jigsaw().place(
                 api.host(), level, pool, jigsaw, depth, at, options,
                 [&](const std::string &id) { return registry.find(id); }, jigsawSeed(), box, error);
-        // TODO: the game's error class for a failed jigsaw is unverified
+        // sub_14B7F2440: the game wraps the placer's message in PlaceJigsawError
         if (!placed)
-            return api.throwError("Error", error);
+            return api.throwError("PlaceJigsawError", error);
         return boundingBox(api.context(), box);
     }
 
