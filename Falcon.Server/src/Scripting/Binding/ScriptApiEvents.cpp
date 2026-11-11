@@ -24,18 +24,13 @@ namespace {
         JS_DefinePropertyValueStr(ctx, getter, "name", JS_NewString(ctx, name), JS_PROP_CONFIGURABLE);
         return getter;
     }
-
-    JSValue makeDamageSource(JSContext *ctx, const std::string &cause) {
-        JSValue source = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, source, "cause", string(ctx, cause));
-        return source;
-    }
 }
 
 void ScriptApi::install() {
     _bindEntity();
     _bindPlayer();
     _bindComponents();
+    _bindEntityComponents();
     _bindBlock();
     _bindItemStack();
     _bindDimension();
@@ -52,6 +47,8 @@ void ScriptApi::install() {
 
 void ScriptApi::tick(int64_t currentTick) {
     mScheduler.tick(currentTick);
+    if (!mPendingTickingAreas.empty())
+        resolveTickingAreas();
     _emitInventoryChanges();
 }
 
@@ -386,25 +383,6 @@ void ScriptApi::_subscribeGameEvents() {
         JS_SetPropertyStr(mContext, object, "sender", makePlayer(event.mSender));
         JS_SetPropertyStr(mContext, object, "message", string(mContext, event.mMessage));
         emit("after.chatSend", object);
-    });
-
-    bus.after().mEntityHurt.subscribe([this](EntityHurtAfterEvent &event) {
-        if (!hasSubscribers("after.entityHurt"))
-            return;
-        JSValue object = makeEvent("WorldAfterEvents.entityHurt");
-        JS_SetPropertyStr(mContext, object, "hurtEntity", makePlayer(event.mHurtEntity));
-        JS_SetPropertyStr(mContext, object, "damage", JS_NewFloat64(mContext, event.mDamage));
-        JS_SetPropertyStr(mContext, object, "damageSource", makeDamageSource(mContext, event.mCause));
-        emit("after.entityHurt", object);
-    });
-
-    bus.after().mEntityDie.subscribe([this](EntityDieAfterEvent &event) {
-        if (!hasSubscribers("after.entityDie"))
-            return;
-        JSValue object = makeEvent("WorldAfterEvents.entityDie");
-        JS_SetPropertyStr(mContext, object, "deadEntity", makePlayer(event.mDeadEntity));
-        JS_SetPropertyStr(mContext, object, "damageSource", makeDamageSource(mContext, event.mCause));
-        emit("after.entityDie", object);
     });
 
     bus.after().mItemUse.subscribe([this](ItemUseAfterEvent &event) {

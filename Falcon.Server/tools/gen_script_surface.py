@@ -36,6 +36,12 @@ BOUND = {
         'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
         'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
         'DimensionRegistry',
+        'Effect', 'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause',
+        'EntityInitializationCause', 'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo',
+        'EntitySwingSource', 'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel',
+        'TickingArea', 'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
+        'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
+        'EntityHealSource',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
@@ -95,7 +101,8 @@ def parse(path):
             line = line.strip().rstrip(',')
             if '=' in line:
                 key, value = [part.strip() for part in line.split('=', 1)]
-                values.append((key, value.strip("'")))
+                # a reserved word is quoted as a key: void = 'void'
+                values.append((key.strip("'"), value.strip("'")))
         enums[match.group(1)] = values
     return exports, classes, enums
 
@@ -166,7 +173,8 @@ def main():
                 is_error = kind == 'class' and name.endswith('Error')
                 # custom component hook payloads
                 payload = name in bound_events or re.match(r'(Block|Item)Component\w+Event$', name) is not None
-                if bound is not None and name not in bound and not is_error and not payload:
+                component = name.startswith('Entity') and name.endswith('Component')
+                if bound is not None and name not in bound and not is_error and not payload and not component:
                     continue
                 entry('%s:%s' % (short, name)).add(version)
                 if kind == 'class' and name in classes:

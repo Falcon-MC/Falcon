@@ -86,6 +86,7 @@ namespace {
         return true;
     }
 
+
     bool hasSuffix(const std::string &text, const char *suffix) {
         const size_t length = std::strlen(suffix);
         return text.size() >= length && text.compare(text.size() - length, length, suffix) == 0;
@@ -108,13 +109,20 @@ namespace {
             return acceptsComponent;
         if (cls == "ItemStack" || cls.compare(0, 4, "Item") == 0)
             return accepts<ScriptItemRef>;
-        if (cls == "EntityAttributeComponent" || cls == "EntityHealthComponent" || cls == "EntityTypeFamilyComponent"
-            || cls == "EntityProjectileComponent")
-            return accepts<ScriptEntityPart>;
         if (cls == "ScreenDisplay" || cls == "Camera" || cls == "PlayerInputPermissions" || cls == "LocatorBar"
             || cls == "Container" || cls == "ContainerSlot" || cls == "EntityInventoryComponent"
             || cls == "EntityEquippableComponent")
             return accepts<ScriptPlayerPart>;
+        if (cls == "EntityComponent")
+            return acceptsComponent;
+        if (cls.compare(0, 6, "Entity") == 0 && hasSuffix(cls, "Component"))
+            return accepts<ScriptEntityPart>;
+        if (cls == "Effect")
+            return accepts<ScriptEffectRef>;
+        if (cls == "EffectType" || cls == "EntityType" || cls == "EntityHealSource")
+            return accepts<ScriptNamedRef>;
+        if (cls == "InputInfo")
+            return accepts<ScriptInputInfoRef>;
         return acceptsAny;
     }
 
@@ -139,7 +147,7 @@ namespace {
             return binding.mFunction(ctx, thisVal, argc, argv);
 
         const ScriptNative *native = api->native<ScriptNative>(thisVal);
-        if (native == nullptr || !binding.mAccepts(native))
+        if (!binding.mStatic && (native == nullptr || !binding.mAccepts(native)))
             return JS_ThrowReferenceError(ctx, "%s [%s] object bound to prototype does not exist.", label,
                                           binding.mName.c_str());
 
@@ -325,7 +333,18 @@ namespace {
 
     int moduleInit(JSContext *ctx, JSModuleDef *module);
 
-    const char *const SERVER_ENUMS[] = {"EquipmentSlot",
+    const char *const SERVER_ENUMS[] = {"EntityDamageCause",
+                                        "EntityInitializationCause",
+                                        "EntityHealCause",
+                                        "EntitySwingSource",
+                                        "InputButton",
+                                        "ButtonState",
+                                        "InputMode",
+                                        "CommandPermissionLevel",
+                                        "PlayerPermissionLevel",
+                                        "TickingAreaErrorReason",
+                                        "PaletteColor",
+                                        "EquipmentSlot",
                                         "GameMode",
                                         "InputPermissionCategory",
                                         "Direction",
@@ -369,11 +388,6 @@ namespace {
                                                     "ItemComponentUseOnEvent"};
 
     const char *const COMPONENT_IDS[][2] = {
-            {"EntityInventoryComponent", "minecraft:inventory"},
-            {"EntityEquippableComponent", "minecraft:equippable"},
-            {"EntityHealthComponent", "minecraft:health"},
-            {"EntityTypeFamilyComponent", "minecraft:type_family"},
-            {"EntityProjectileComponent", "minecraft:projectile"},
             {"ItemDurabilityComponent", "minecraft:durability"},
             {"ItemEnchantableComponent", "minecraft:enchantable"},
             {"ItemCooldownComponent", "minecraft:cooldown"},
@@ -429,6 +443,10 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mFormResolvers)
         JS_FreeValue(mContext, entry.second);
+    for (PendingTickingArea &pending: mPendingTickingAreas) {
+        JS_FreeValue(mContext, pending.mResolve);
+        JS_FreeValue(mContext, pending.mReject);
+    }
     for (auto &entry: mActorObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mPlayerObjects)
@@ -466,9 +484,15 @@ bool ScriptApi::method(JSValueConst target, const char *cls, const char *name, J
     if (!mSurface.has(key))
         return false;
 
+    // the definitions list statics as "static name": they live on the constructor and bind no object
+    const bool isStatic = std::strncmp(name, "static ", 7) == 0;
+    if (isStatic)
+        name += 7;
+
     Binding binding;
     binding.mName = std::string(cls) + "::" + name;
     binding.mAccepts = acceptorFor(cls);
+    binding.mStatic = isStatic;
     binding.mFunction = function;
     binding.mEarly = mSurface.isEarly(key);
     binding.mBlocked = mSurface.isBlocked(key);
@@ -701,23 +725,30 @@ ServerActor *ScriptApi::resolveActor(JSValueConst value) {
     const ScriptEntityRef *ref = native<ScriptEntityRef>(value);
     if (ref == nullptr || ref->mKind != ScriptEntityRef::Kind::Actor)
         return nullptr;
-    return mHost.getActor(ref->mId);
+    return mHost.getActorByRuntimeId((uint64_t) ref->mId);
 }
 
 Actor *ScriptApi::resolveEntity(const ScriptEntityRef &ref) {
+    Actor *actor = nullptr;
     switch (ref.mKind) {
         case ScriptEntityRef::Kind::Player:
-            return resolvePlayerByHandle((uint32_t) ref.mId);
+            actor = resolvePlayerByHandle((uint32_t) ref.mId);
+            break;
         case ScriptEntityRef::Kind::Actor:
-            return mHost.getActor(ref.mId);
+            actor = mHost.getActorByRuntimeId((uint64_t) ref.mId);
+            break;
         case ScriptEntityRef::Kind::Item:
             for (const std::unique_ptr<ItemActor> &item: mHost.getItemEntities()) {
-                if ((int64_t) item->getRuntimeId() == ref.mId && !item->isRemoved())
-                    return item.get();
+                if ((int64_t) item->getRuntimeId() == ref.mId && !item->isRemoved()) {
+                    actor = item.get();
+                    break;
+                }
             }
-            return nullptr;
+            break;
     }
-    return nullptr;
+    if (actor != nullptr)
+        ref.mEntityId = std::to_string(actor->getUniqueId());
+    return actor;
 }
 
 Actor *ScriptApi::resolveEntity(JSValueConst value) {
@@ -742,17 +773,18 @@ JSValue ScriptApi::makePlayer(ServerPlayer &player) {
 }
 
 JSValue ScriptApi::makeActor(ServerActor &actor) {
-    const auto cached = mActorObjects.find(actor.getUniqueId());
+    const int64_t runtimeId = (int64_t) actor.getRuntimeId();
+    const auto cached = mActorObjects.find(runtimeId);
     if (cached != mActorObjects.end())
         return JS_DupValue(mContext, cached->second);
 
     ScriptEntityRef *ref = new ScriptEntityRef();
     ref->mKind = ScriptEntityRef::Kind::Actor;
-    ref->mId = actor.getUniqueId();
+    ref->mId = runtimeId;
     ref->mEntityId = std::to_string(actor.getUniqueId());
     ref->mTypeId = actor.getTypeId();
     JSValue object = makeInstance("Entity", ref);
-    mActorObjects[actor.getUniqueId()] = JS_DupValue(mContext, object);
+    mActorObjects[runtimeId] = JS_DupValue(mContext, object);
     return object;
 }
 
@@ -777,8 +809,8 @@ JSValue ScriptApi::makeEntity(Actor &actor) {
     return makeInstance("Entity", ref);
 }
 
-void ScriptApi::forgetEntity(int64_t uniqueId) {
-    const auto it = mActorObjects.find(uniqueId);
+void ScriptApi::forgetEntity(uint64_t runtimeId) {
+    const auto it = mActorObjects.find((int64_t) runtimeId);
     if (it == mActorObjects.end())
         return;
     JS_FreeValue(mContext, it->second);
@@ -864,19 +896,30 @@ JSValue ScriptApi::makeHeldItemStack(ServerPlayer &player, const std::string &id
     return jsItem;
 }
 
-bool ScriptApi::giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount) {
+bool ScriptApi::toItemStack(const ScriptItemData &data, ItemStack &stack) {
     Item item;
-    if (!StringToItemParser::getInstance().parse(typeId, item))
+    if (!StringToItemParser::getInstance().parse(data.mTypeId, item))
         return false;
 
     std::shared_ptr<ItemDefinition> definition = mHost.getItemDefinitions().getDefinition(item.getIdentifier());
     if (definition == nullptr)
         return false;
 
-    ItemStack stack;
+    stack = ItemStack();
     stack.mDefinition = definition;
     stack.mBlockDefinition = mHost.getBlockDefinitions().getDefinition(item.getIdentifier());
-    stack.mCount = amount < 1 ? 1 : amount;
+    stack.mCount = data.mAmount < 1 ? 1 : data.mAmount;
+    stack.mDamage = data.mDamage;
+    return true;
+}
+
+bool ScriptApi::giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount) {
+    ScriptItemData data;
+    data.mTypeId = typeId;
+    data.mAmount = amount;
+    ItemStack stack;
+    if (!toItemStack(data, stack))
+        return false;
 
     std::vector<int> touchedSlots;
     const int remaining = player.getInventory().addItemPartial(stack, touchedSlots);
@@ -1334,12 +1377,11 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, world, "clearDisplay", scoreboardClearDisplay, 1);
     addFunction(mContext, world, "removeObjective", scoreboardRemoveObjective, 1);
     JSValue worldExports = runBootstrap(mContext, mPackName, ScriptBootstraps::world(), "<world>", world);
-    for (const char *name: {"Scoreboard", "ScoreboardObjective", "TickingAreaManager"}) {
+    for (const char *name: {"Scoreboard", "ScoreboardObjective"}) {
         if (mSurface.has(name))
             mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, worldExports, name));
     }
     mScoreboard = JS_GetPropertyStr(mContext, worldExports, "scoreboard");
-    mTickingAreas = JS_GetPropertyStr(mContext, worldExports, "tickingAreaManager");
     JS_FreeValue(mContext, worldExports);
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
@@ -1377,10 +1419,16 @@ void ScriptApi::_defineEnums() {
         mCommonExports.emplace_back("InvalidArgumentErrorType", object);
     }
 
-    for (const auto &component: COMPONENT_IDS) {
-        JSValue constructor = constructorOf(component[0]);
-        if (!JS_IsUndefined(constructor) && mSurface.has(std::string(component[0]) + ".static componentId"))
-            JS_DefinePropertyValueStr(mContext, constructor, "componentId", string(mContext, component[1]),
+    std::vector<std::pair<std::string, std::string>> components;
+    for (const auto &component: COMPONENT_IDS)
+        components.emplace_back(component[0], component[1]);
+    // EntityComponentTypes.Health is EntityHealthComponent.componentId
+    for (const auto &value: mSurface.enumValues("EntityComponentTypes"))
+        components.emplace_back("Entity" + value.first + "Component", value.second);
+    for (const auto &component: components) {
+        JSValue constructor = constructorOf(component.first);
+        if (!JS_IsUndefined(constructor) && mSurface.has(component.first + ".static componentId"))
+            JS_DefinePropertyValueStr(mContext, constructor, "componentId", string(mContext, component.second),
                                       JS_PROP_ENUMERABLE);
     }
 }

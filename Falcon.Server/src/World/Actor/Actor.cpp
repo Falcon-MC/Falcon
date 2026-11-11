@@ -145,7 +145,9 @@ float Actor::getHealth() const {
 }
 
 void Actor::setHealth(float health) {
+    const float previous = getHealth();
     mAttributes.setClamped(ATTRIBUTE_HEALTH, health);
+    _healthChanged(previous);
 }
 
 float Actor::getMaxHealth() const {
@@ -453,13 +455,13 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
         }
 
         if (mFoodTickTimer % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
-            mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
+            heal(1.0f, HealCause::SelfHeal);
     }
 
     if (mFoodTickTimer == 0) {
         if (food >= 18.0f && naturalRegeneration) {
             if (getHealth() < maxHealth) {
-                mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
+                heal(1.0f, HealCause::SelfHeal);
                 exhaust(6.0f);
             }
         } else if (food <= 0.0f) {
@@ -485,7 +487,9 @@ void Actor::kill() {
     // a respawn starts thawed
     mEffects.resetFreezing();
     extinguish();
+    const float previous = getHealth();
     mAttributes.set(ATTRIBUTE_HEALTH, 0.0f);
+    _healthChanged(previous);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     resetFallDistance();
     mNoDamageTicks = 0;
@@ -507,15 +511,22 @@ float Actor::reduceHealth(float amount) {
         amount -= absorbed;
     }
 
-    const float newHealth = getHealth() - amount;
-    mAttributes.setClamped(ATTRIBUTE_HEALTH, newHealth);
+    const float previous = getHealth();
+    mAttributes.setClamped(ATTRIBUTE_HEALTH, previous - amount);
+    _healthChanged(previous);
     return getHealth();
 }
 
-float Actor::heal(float amount) {
+float Actor::heal(float amount, HealCause cause) {
     if (amount <= 0.0f || !isAlive())
         return getHealth();
-    mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + amount);
+    if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
+        return getHealth();
+    const float previous = getHealth();
+    mAttributes.setClamped(ATTRIBUTE_HEALTH, previous + amount);
+    _healthChanged(previous);
+    if (sHealListener && getHealth() > previous)
+        sHealListener(*this, getHealth() - previous, cause);
     return getHealth();
 }
 

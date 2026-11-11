@@ -186,6 +186,10 @@ namespace {
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
+    // taken first: configure may spawn another actor
+    const bool spawned = mSpawnCause == nullptr;
+    const char *cause = spawned ? "Spawned" : mSpawnCause;
+    mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
     std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
@@ -201,6 +205,10 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     if (configure)
         configure(*actor);
+
+    // an identifier carrying its own spawn event makes the cause Event (sub_143708AF0)
+    if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
+        cause = "Event";
 
     if (mob != nullptr)
         mob->applyDefaults(mProperties.getDifficulty());
@@ -231,12 +239,15 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    mScriptEngine.onEntitySpawn(*result);
+    if (mob != nullptr)
+        mob->upgradeDefinition(*this, false);
+    mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
 
 ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
                                                   float scale) {
+    mSpawnCause = "Born";
     ServerActor *baby = spawnActor(level, identifier, position);
     if (baby == nullptr)
         return nullptr;
@@ -247,9 +258,10 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     baby->getFlags().set(ActorFlag::Baby, true);
 
     EntityDataMap metadata;
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits(),
+                                  baby->getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
@@ -734,7 +746,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
-        source.fromOrigin(origin).asProjectile();
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
 
         const DamageResult result = hurt(*victimPlayer, damage, source);
         applyArrowEffect = result == DamageResult::Dealt;
@@ -758,7 +770,8 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
             source.mAttacker = shooter != nullptr ? (Actor *) shooter
                                                   : (Actor *) getActor(projectile.getOwnerUniqueId());
-            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile().withDamager(&projectile),
+                                           data.mLootingLevel);
             if (!isTrident && victimActor->stopsProjectiles())
                 return true;
         }
@@ -1120,6 +1133,27 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
     flags2.mFormat = EntityDataFormat::Long;
     flags2.mLongValue = actor.getFlags().getHighBits();
     packet.mMetadata.mEntries.push_back(flags2);
+
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = actor.getFlags().getExtendedBits();
+    packet.mMetadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = actor.getNameplateRenderDistance();
+
+    packet.mMetadata.mEntries.push_back(nameplateDistance);
 
     EntityDataEntry visibleEffects;
     visibleEffects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;

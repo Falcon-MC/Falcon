@@ -1161,6 +1161,8 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
     const std::string playerName = player != nullptr && !player->getName().empty() ? player->getName() : id.toString();
     if (player != nullptr && !player->getName().empty()) {
+        if (player->isSpawned())
+            mScriptEngine.beforePlayerLeave(*player);
         stopSleep(*player);
         if (player->isRiding())
             RideSystem::dismount(*this, *player, false);
@@ -1637,6 +1639,27 @@ EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     flags2.mLongValue = player.getFlags().getHighBits();
     metadata.mEntries.push_back(flags2);
 
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = player.getFlags().getExtendedBits();
+metadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = player.getNameplateRenderDistance();
+
+    metadata.mEntries.push_back(nameplateDistance);
+
     EntityDataEntry playerFlags;
     playerFlags.mId = ActorFlags::PLAYER_FLAGS_DATA_ID;
     playerFlags.mFormat = EntityDataFormat::Byte;
@@ -1879,6 +1902,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket
     if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId()
         || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
         return;
+
+    mScriptEngine.onPlayerEmote(*player, packet.mEmoteId);
 
     EmotePacket emote = packet;
     emote.mRuntimeActorId = player->getRuntimeId();

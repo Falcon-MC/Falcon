@@ -22,6 +22,11 @@
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
 #include "World/Level/WorldManager.h"
 #include "World/Actor/MobEffect.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
 #include <chrono>
@@ -156,6 +161,8 @@ system.beforeEvents.startup.subscribe((event) => {
 
 let saved;
 world.beforeEvents.effectAdd.subscribe((event) => {
+    if (saved !== undefined || event.entity.typeId !== "minecraft:player")
+        return;
     saved = event.entity;
     r.restrictedWrite = capture(() => event.entity.addTag("x"));
     r.restrictedRead = capture(() => event.entity.getTags());
@@ -248,6 +255,229 @@ system.runTimeout(() => {
     r.sendEvent = capture(() => system.sendScriptEvent("test:event", "m"));
 }, 5);
 system.runTimeout(() => world.setDynamicProperty("world", JSON.stringify(r)), 7);
+)JS";
+
+    const char *const ENTITIES = R"JS(
+import { world, system, Entity, Player, Effect, EffectTypes, ItemStack, BlockPermutation, EntityTypes, EntityComponentTypes, EntityHealthComponent,
+         EntityTypeFamilyComponent, EntityDamageCause, EntityInitializationCause, EntityHealCause, InputButton,
+         ButtonState, InputMode, EntitySwingSource, CommandPermissionLevel, PlayerPermissionLevel,
+         TickingAreaManager, EntityComponent } from "@minecraft/server";
+
+const log = (line) => { r.events = (r.events || "") + line + ";"; };
+world.afterEvents.entitySpawn.subscribe((e) => log("spawn:" + e.entity.typeId + ":" + e.cause));
+world.beforeEvents.entityHurt.subscribe((e) => {
+    if (e.hurtEntity.typeId === "minecraft:cow" && e.damage === 5)
+        e.damage = 3;
+});
+world.afterEvents.entityHurt.subscribe((e) => log("hurt:" + e.hurtEntity.typeId + ":" + e.damage + ":"
+    + e.damageSource.cause + ":" + (e.damageSource.damagingEntity instanceof Player)));
+world.afterEvents.entityDie.subscribe((e) => log("die:" + e.deadEntity.typeId + ":" + e.damageSource.cause));
+world.beforeEvents.effectAdd.subscribe((e) => {
+    if (e.effectType === "speed")
+        e.duration = 40;
+    if (e.effectType === "poison")
+        e.cancel = true;
+});
+world.afterEvents.effectAdd.subscribe((e) => log("effect:" + e.effect.typeId + ":" + e.effect.duration
+    + ":" + (e.effect instanceof Effect)));
+world.afterEvents.entityHealthChanged.subscribe((e) => {
+    if (e.entity.typeId === "minecraft:player")
+        log("health:" + e.oldValue + ">" + e.newValue);
+});
+world.beforeEvents.entityHeal.subscribe((e) => { e.healing = 2; });
+world.afterEvents.entityHeal.subscribe((e) => log("heal:" + e.healing + ":" + e.healSource.cause));
+world.afterEvents.dataDrivenEntityTrigger.subscribe((e) => {
+    if (e.eventId === "minecraft:ageable_grow_up")
+        log("trigger:" + e.eventId + ":" + JSON.stringify(e.getModifiers()));
+});
+world.beforeEvents.entityRemove.subscribe((e) => log("beforeRemove:" + e.removedEntity.typeId));
+world.afterEvents.entityRemove.subscribe((e) => log("remove:" + e.typeId));
+world.beforeEvents.playerGameModeChange.subscribe((e) => {
+    if (e.toGameMode === "Adventure")
+        e.toGameMode = "Creative";
+});
+world.afterEvents.playerGameModeChange.subscribe((e) => log("gm:" + e.fromGameMode + ">" + e.toGameMode));
+let emotePlayer;
+world.afterEvents.playerEmote.subscribe((e) => {
+    log("emote:" + e.personaPieceId);
+    emotePlayer = e.player;
+    r.idBefore = e.player.id;
+});
+world.afterEvents.playerButtonInput.subscribe((e) => {
+    log("button:" + e.button + ":" + e.newButtonState);
+    r.idAfter = (e.player === emotePlayer) + ":" + e.player.id;
+});
+world.afterEvents.playerInputModeChange.subscribe((e) => log("mode:" + e.previousInputModeUsed + ">"
+    + e.newInputModeUsed));
+world.afterEvents.playerSwingStart.subscribe((e) => log("swing:" + e.swingSource));
+world.afterEvents.entityStartSneaking.subscribe((e) => log("sneak:" + e.entity.typeId));
+world.afterEvents.entityStopSneaking.subscribe((e) => log("unsneak:" + e.entity.typeId));
+world.beforeEvents.entityTamed.subscribe((e) => log("beforeTame:" + e.entity.typeId));
+world.afterEvents.entityTamed.subscribe((e) => log("tamed:" + e.entity.typeId + ":" + (e.tamingEntity instanceof Player)));
+world.afterEvents.playerDimensionChange.subscribe((e) => log("dimension:" + e.fromDimension.id + ">"
+    + e.toDimension.id));
+world.beforeEvents.playerLeave.subscribe((e) => log("leaving:" + (e.player instanceof Player)));
+world.afterEvents.playerInteractWithEntity.subscribe((e) => log("interact:" + e.target.typeId));
+
+r.enums = [EntityDamageCause.void, EntityDamageCause.entityAttack, EntityInitializationCause.Born,
+           EntityHealCause.SelfHeal, InputButton.Jump, ButtonState.Pressed, InputMode.Touch, EntitySwingSource.Attack,
+           CommandPermissionLevel.Admin, PlayerPermissionLevel.Operator].join(",");
+r.componentIds = [EntityHealthComponent.componentId, EntityTypeFamilyComponent.componentId,
+                  EntityComponentTypes.Movement].join(",");
+r.componentChain = Object.getPrototypeOf(EntityHealthComponent.prototype) !== null
+    && EntityHealthComponent.prototype instanceof EntityComponent;
+r.typesConstructor = (() => { try { new EffectTypes(); return "ok"; } catch (e) { return e.name; } })();
+
+system.runTimeout(() => {
+  try {
+    const overworld = world.getDimension("overworld");
+    const cow = overworld.getEntities({ type: "minecraft:cow" })[0];
+    const player = world.getPlayers()[0];
+    r.cowFound = cow instanceof Entity;
+    r.families = cow.getComponent("type_family").getTypeFamilies().join(",");
+    r.familyQuery = overworld.getEntities({ families: ["mob"], type: "minecraft:cow" }).length + ","
+        + overworld.getEntities({ excludeFamilies: ["cow"], type: "minecraft:cow" }).length;
+    const health = cow.getComponent(EntityComponentTypes.Health);
+    r.health = (health instanceof EntityHealthComponent) + ":" + health.effectiveMax + ":" + health.currentValue
+        + ":" + (health.entity === cow);
+    health.setCurrentValue(4);
+    r.healthSet = health.currentValue + ":" + health.setCurrentValue(1000);
+    health.resetToMaxValue();
+    r.componentsCount = cow.getComponents().length > 5;
+    r.movement = cow.hasComponent("minecraft:movement") + ":" + (cow.getComponent("movement").currentValue > 0);
+    r.missing = cow.getComponent("minecraft:tameable") === undefined && !cow.hasComponent("minecraft:is_tamed");
+    r.navigation = cow.getComponent("minecraft:navigation.walk").avoidWater + ":" + cow.getComponent("minecraft:navigation.walk").canWalk;
+    r.localization = cow.localizationKey + "," + EntityTypes.get("cow").localizationKey + ","
+        + EntityTypes.get("minecraft:cow").id + "," + (EntityTypes.get("nope:nope") === undefined)
+        + "," + (EntityTypes.getAll().length > 50);
+    r.effectTypes = EffectTypes.get("minecraft:speed").getName() + "," + (EffectTypes.getAll().length > 20)
+        + "," + (EffectTypes.get("nope") === undefined);
+    const added = cow.addEffect("speed", 200, { amplifier: 1 });
+    r.addEffect = (added instanceof Effect) + ":" + added.amplifier + ":" + added.duration + ":" + added.isValid;
+    r.effectName = added.displayName + "|" + cow.addEffect("haste", 200).displayName;
+    cow.removeEffect("haste");
+    r.cancelledEffect = cow.addEffect(EffectTypes.get("poison"), 100) === undefined;
+    r.effects = cow.getEffects().map((effect) => effect.typeId).join(",");
+    cow.removeEffect("speed");
+    r.removedEffect = added.isValid;
+    const box = cow.getAABB();
+    r.aabb = (box.extent.y > 0) + ":" + (box.center.y > cow.location.y);
+    r.states = [cow.isOnGround, cow.isInWater, cow.isFalling, cow.isClimbing, cow.isSwimming, cow.isSleeping].join(",");
+    cow.isSneaking = true;
+    r.sneaking = cow.isSneaking;
+    cow.isSneaking = false;
+    r.hurt = cow.applyDamage(5, { cause: EntityDamageCause.fall, damagingEntity: player });
+    r.projectileOption = (() => { try { cow.applyDamage(1, { damagingProjectile: {} }); return "ok"; }
+                                  catch (e) { return e.name; } })();
+    cow.triggerEvent("minecraft:ageable_grow_up");
+    cow.setRotation({ x: 10, y: 20 });
+    r.rotation = cow.getRotation().x + "," + cow.getRotation().y;
+    cow.lookAt({ x: cow.location.x, y: cow.location.y, z: cow.location.z + 10 });
+    r.lookAt = Math.round(cow.getRotation().y);
+    const viewer = overworld.getEntities({ type: "minecraft:wolf" })[0];
+    viewer.lookAt(player.location);
+    const seen = viewer.getEntitiesFromViewDirection({ maxDistance: 20, ignoreBlockCollision: true });
+    r.entityRay = seen.length + ":" + (seen.length > 0 && seen[0].entity === player) + ":"
+        + (seen.length > 0 ? seen[0].distance.toFixed(2) : "-")
+        + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 0, ignoreBlockCollision: true }).length
+        + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 20, excludeTypes: ["minecraft:player"],
+                                                    ignoreBlockCollision: true }).length;
+    r.blockRay = cow.getBlockFromViewDirection() === undefined;
+    player.setRotation({ x: 0, y: 0 });
+    const fence = player.getBlockFromViewDirection();
+    r.shapeRay = fence.block.typeId + ":" + fence.face + ":" + fence.faceLocation.z.toFixed(3);
+    const stone = player.getBlockFromViewDirection({ excludeTypes: ["oak_fence"] });
+    const permutation = player.getBlockFromViewDirection({ includePermutations: [BlockPermutation.resolve("minecraft:stone")] });
+    r.filterRay = stone.block.location.z + ":" + permutation.block.location.z + ":"
+        + (player.getBlockFromViewDirection({ maxDistance: 4 }) === undefined) + ":"
+        + (player.getBlockFromViewDirection({ excludeTags: ["stone"], excludeTypes: ["oak_fence"] }) === undefined);
+    const horse = overworld.getEntities({ type: "minecraft:horse" })[0];
+    // the spawn event rolls a foal at random: make it an adult, wild horse
+    if (!horse.hasComponent("minecraft:tamemount"))
+        horse.triggerEvent("minecraft:spawn_adult");
+    const mount = horse.getComponent("minecraft:tamemount");
+    mount.tame(false);
+    r.tameMount = mount.isTamed + ":" + mount.isTamedToPlayer + ":" + (mount.tamedToPlayerId === undefined);
+    r.emoting = player.isEmoting;
+    r.betaAbsent = !("chatDisplayName" in Player.prototype) && !("eatItem" in Player.prototype);
+    player.commandPermissionLevel = CommandPermissionLevel.GameDirectors;
+    r.op = player.commandPermissionLevel + ":" + player.playerPermissionLevel;
+    const promise = world.tickingAreaManager.createTickingArea("test:pending", { dimension: overworld,
+        from: { x: 4000, y: 0, z: 4000 }, to: { x: 4000, y: 0, z: 4000 } });
+    promise.then(() => { r.pending = "resolved"; }, () => { r.pending = "rejected"; });
+    world.tickingAreaManager.removeTickingArea("test:pending");
+    r.blockedTeleport = cow.tryTeleport({ x: 3000, y: 200, z: 3000 });
+    r.teleport = cow.tryTeleport({ x: 3, y: 200, z: 3 }, { rotation: { x: 0, y: 90 }, checkForBlocks: false })
+        + ":" + cow.location.y + ":" + cow.getRotation().y;
+    r.teleportBounds = (() => { try { cow.teleport({ x: 0, y: 100000, z: 0 }); return "ok"; }
+                                catch (e) { return e.name; } })();
+    cow.setDynamicProperties({ a: 1, b: "two" });
+    r.entityDynamic = cow.getDynamicProperty("b") + ":" + (cow.getDynamicPropertyTotalByteCount() > 0);
+    r.resetProperty = typeof cow.resetProperty;
+    r.matchesLevel = player.matches({ minLevel: 0, maxLevel: 0 }) + "," + player.matches({ minLevel: 1 }) + ","
+        + cow.matches({ minLevel: 0 }) + "," + cow.matches({ minVerticalRotation: -90, maxVerticalRotation: 90 });
+
+    r.player = [player.isFlying, player.isGliding, player.isJumping, player.getTotalXp(),
+                player.xpEarnedAtCurrentLevel, player.totalXpNeededForNextLevel, player.commandPermissionLevel,
+                player.playerPermissionLevel].join(",");
+    r.input = player.inputInfo.lastInputModeUsed + ":" + player.inputInfo.getButtonState(InputButton.Jump) + ":"
+        + JSON.stringify(player.inputInfo.getMovementVector());
+    player.selectedSlotIndex = 4;
+    r.slot = player.selectedSlotIndex + ":" + (() => { try { player.selectedSlotIndex = 9; return "ok"; }
+                                                    catch (e) { return e.name; } })();
+    r.spawnBefore = player.getSpawnPoint() === undefined;
+    player.setSpawnPoint({ dimension: overworld, x: 5, y: 70, z: 6 });
+    const spawn = player.getSpawnPoint();
+    r.spawn = spawn.x + "," + spawn.y + "," + spawn.z + "," + (spawn.dimension === overworld);
+    player.setSpawnPoint();
+    r.spawnCleared = player.getSpawnPoint() === undefined;
+    r.playerFamilies = player.getComponent("type_family").getTypeFamilies().join(",")
+        + ":" + player.matches({ families: ["player"] });
+    r.playerHealth = player.getComponent("health").effectiveMax + ":" + player.hasComponent("player.hunger");
+    player.setGameMode("Adventure");
+    r.gameMode = player.getGameMode();
+
+    const manager = world.tickingAreaManager;
+    r.tickingClass = manager instanceof TickingAreaManager;
+    manager.createTickingArea("test:area", { dimension: overworld, from: { x: 0, y: 0, z: 0 }, to: { x: 20, y: 0, z: 5 } });
+    r.ticking = manager.hasTickingArea("test:area") + ":" + manager.getAllTickingAreas().length + ":"
+        + manager.getTickingArea("test:area").chunkCount + ":" + manager.chunkCount;
+    r.tickingDuplicate = (() => { try { manager.createTickingArea("test:area", { dimension: overworld,
+        from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } }); return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    manager.removeTickingArea("test:area");
+    r.tickingRemoved = manager.hasTickingArea("test:area");
+    r.killed = cow.kill();
+  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+    world.setDynamicProperty("entities", JSON.stringify(r));
+}, 2);
+system.runTimeout(() => world.setDynamicProperty("entities", JSON.stringify(r)), 7);
+)JS";
+
+    const char *const BETA_ENTITIES = R"JS(
+import { world, system, Entity, Player, ItemStack } from "@minecraft/server";
+r.target = "target" in Entity.prototype;
+r.betaPlayer = ["chatDisplayName", "chatNamePrefix", "eatItem", "postClientMessage", "stopSound", "stopAllSounds"]
+    .every((key) => key in Player.prototype);
+system.runTimeout(() => {
+    const player = world.getPlayers()[0];
+    player.chatNamePrefix = "[A] ";
+    player.chatNameSuffix = "!";
+    player.chatMessagePrefix = "§a";
+    r.chat = player.chatDisplayName + ":" + player.chatMessagePrefix;
+    player.chatNameSuffix = undefined;
+    r.chatCleared = player.chatDisplayName + ":" + (player.chatNameSuffix === undefined);
+    player.stopSound("random.click");
+    player.stopAllSounds();
+    player.postClientMessage("test:id", "value");
+    const food = player.getComponent("player.hunger");
+    food.setCurrentValue(10);
+    player.eatItem(new ItemStack("minecraft:apple"));
+    r.eat = food.currentValue > 10;
+    r.eatStone = (() => { try { player.eatItem(new ItemStack("minecraft:stone")); return "ok"; }
+                          catch (e) { return e.name; } })();
+    r.ping = (() => { try { return String(player.getPing()); } catch (e) { return e.name; } })();
+    world.setDynamicProperty("betaEntities", JSON.stringify(r));
+}, 3);
 )JS";
 
     const char *const STABLE1 = R"JS(
@@ -610,6 +840,12 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 ", \"settings\": [{\"type\": \"label\", \"text\": \"x\"},"
                 " {\"type\": \"toggle\", \"name\": \"test:on\", \"default\": true},"
                 " {\"type\": \"slider\", \"name\": \"test:level\", \"default\": 4, \"min\": 0, \"max\": 8, \"step\": 1}]");
+        writePack(packs, "entities", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + ENTITIES);
+        writePack(packs, "betaentities",
+                  "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
+                  " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + BETA_ENTITIES);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -655,11 +891,57 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 5, "only the five valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 7, "only the seven valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
         engine.startup();
+        EntityDefinitions::initialize();
+        World &world = owner.getWorlds().getDefault();
+        world.getOverworld().insertChunk(LevelChunk(0, 0));
+        world.getOverworld().setBlock(Vector3i(0, 101, 5),
+                                      VanillaBlocks::fromIdentifier("minecraft:oak_fence")->toBlockState(), false);
+        world.getOverworld().setBlock(Vector3i(0, 101, 8),
+                                      VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState(), false);
+        player.setName("ScriptPlayer");
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.moveToLevel(world.getOverworld());
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(0.5f, 100.0f, 0.5f));
+        ServerActor *cow = owner.spawnActor(world.getOverworld(), "minecraft:cow", Vector3f(0.5f, 100.0f, 2.5f));
+        require(cow != nullptr, "no fixture cow");
+        if (MobActor *mob = dynamic_cast<MobActor *>(cow))
+            mob->startDefinition(owner);
+        owner.setSpawnCause("Born");
+        ServerActor *calf = owner.spawnActor(world.getOverworld(), "minecraft:cow", Vector3f(4.5f, 100.0f, 4.5f));
+        require(calf != nullptr, "no fixture calf");
+        ServerActor *wolf = owner.spawnActor(world.getOverworld(), "minecraft:wolf", Vector3f(8.5f, 100.0f, 8.5f));
+        MobActor *wolfMob = dynamic_cast<MobActor *>(wolf);
+        require(wolfMob != nullptr, "no fixture wolf");
+        wolfMob->startDefinition(owner);
+        require(wolfMob->tameTo(owner, player, "minecraft:tameable", true), "the wolf was not tamed");
+        ServerActor *horse = owner.spawnActor(world.getOverworld(), "minecraft:horse", Vector3f(-8.5f, 100.0f, 8.5f));
+        require(dynamic_cast<MobActor *>(horse) != nullptr, "no fixture horse");
+        static_cast<MobActor *>(horse)->startDefinition(owner);
+        player.setHealth(10.0f);
+        engine.tick(0);
+        player.heal(5.0f, HealCause::Regeneration);
+        owner.hurt(player, 1.0f, ActorDamageSource::environment("death.attack.magic", player.getName()));
+        engine.onPlayerEmote(player, "emote:wave");
+        const int64_t loadedId = player.getUniqueId() + 77;
+        player.setUniqueId(loadedId);
+        engine.onPlayerButtonInput(player, "Jump", true);
+        engine.onPlayerInputModeChange(player, "KeyboardAndMouse", "Touch");
+        engine.onPlayerSwingStart(player, "Attack");
+        engine.onEntitySneak(player, true);
+        engine.onEntitySneak(player, false);
+        engine.onPlayerInteractWithEntity(player, *cow, player.getInventory().getItemInHand());
+        engine.onPlayerDimensionChange(player, world.getOverworld(), player.getPosition(),
+                                       world.getLevel(DimensionType::Nether), player.getPosition());
+        MobEffectInstance speed;
+        speed.mId = MobEffectId::Speed;
+        speed.mDuration = 400;
+        player.addEffect(speed);
 
         bool customFound = false;
         const DimensionType voidDimension = Dimension::findCustom("test:void", customFound);
@@ -772,7 +1054,6 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         effect.mDuration = 20;
         engine.beforeEffectAdd(player, effect);
 
-        World &world = owner.getWorlds().getDefault();
         owner.changeGameRule(world, "keepinventory", "true");
         owner.changeGameRule(world, "randomtickspeed", "3");
         owner.setRaining(world, true);
@@ -791,6 +1072,19 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         for (int64_t tick = 1; tick <= 3; ++tick)
             engine.tick(tick);
 
+        if (static_cast<MobActor *>(horse)->isTamed()) {
+            {
+                ServerActor *copy = owner.spawnActor(world.getOverworld(), "minecraft:horse",
+                                                     Vector3f(-8.5f, 100.0f, 4.5f));
+                MobActor *loaded = dynamic_cast<MobActor *>(copy);
+                require(loaded != nullptr && !loaded->isTamed(), "no second horse");
+                loaded->loadNbt(horse->saveNbt());
+                require(loaded->isTamed() && loaded->getOwnerId() == MobActor::NO_OWNER,
+                        "an ownerless tame was not saved");
+                owner.removeActor(copy->getUniqueId());
+            }
+        }
+        engine.beforePlayerLeave(player);
         owner.getPlayers().erase(id);
         for (int64_t tick = 4; tick <= 8; ++tick)
             engine.tick(tick);
@@ -849,6 +1143,88 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(states.mType == SyncWorldClocksType::SyncState && states.mClockStates.size() == 2
                         && states.mClockStates.front().mClockId == 0x63D7EDE73C38F916ull,
                 "the periodic sync does not carry every clock under its hashed id");
+
+        const std::unique_ptr<json::Value> entities = result(owner, "entities");
+        const json::Value &e = *entities;
+        if (e.get("error") != nullptr)
+            require(false, "the entities pack threw: " + text(e, "error"));
+        expect(e, "idBefore", std::to_string(loadedId - 77));
+        expect(e, "idAfter", "true:" + std::to_string(loadedId));
+        expect(e, "enums", "void,entityAttack,Born,SelfHeal,Jump,Pressed,Touch,Attack,2,2");
+        expect(e, "componentIds", "minecraft:health,minecraft:type_family,minecraft:movement");
+        expect(e, "componentChain", "true");
+        expect(e, "typesConstructor", "ReferenceError");
+        expect(e, "cowFound", "true");
+        expect(e, "families", "cow,mob");
+        expect(e, "familyQuery", "2,0");
+        expect(e, "health", "true:10:10:true");
+        expect(e, "healthSet", "4:false");
+        expect(e, "componentsCount", "true");
+        expect(e, "movement", "true:true");
+        expect(e, "missing", "true");
+        expect(e, "navigation", "true:undefined");
+        expect(e, "localization", "entity.cow.name,entity.cow.name,minecraft:cow,true,true");
+        expect(e, "effectTypes", "speed,true,true");
+        expect(e, "effectName", "Speed II|potion.digSpeed");
+        expect(e, "addEffect", "true:1:40:true");
+        expect(e, "cancelledEffect", "true");
+        expect(e, "effects", "speed");
+        expect(e, "removedEffect", "false");
+        expect(e, "aabb", "true:true");
+        expect(e, "sneaking", "true");
+        expect(e, "hurt", "true");
+        expect(e, "projectileOption", "TypeError");
+        expect(e, "rotation", "10,20");
+        expect(e, "lookAt", "0");
+        expect(e, "entityRay", "2:false:5.74:0:1");
+        expect(e, "blockRay", "true");
+        expect(e, "shapeRay", "minecraft:oak_fence:North:0.375");
+        expect(e, "filterRay", "8:8:true:true");
+        expect(e, "tameMount", "true:false:true");
+        expect(e, "emoting", "false");
+        expect(e, "betaAbsent", "true");
+        expect(e, "op", "1:2");
+        expect(e, "pending", "rejected");
+        expect(e, "blockedTeleport", "false");
+        expect(e, "teleport", "true:200:90");
+        expect(e, "teleportBounds", "ok");
+        expect(e, "entityDynamic", "two:true");
+        expect(e, "resetProperty", "function");
+        expect(e, "matchesLevel", "true,false,false,true");
+        expect(e, "player", "false,false,false,0,0,7,1,2");
+        expect(e, "input", "KeyboardAndMouse:Released:{\"x\":0,\"y\":0}");
+        expect(e, "slot", "4:InvalidArgumentError");
+        expect(e, "spawnBefore", "true");
+        expect(e, "spawn", "5,70,6,true");
+        expect(e, "spawnCleared", "true");
+        expect(e, "playerFamilies", "player:true");
+        expect(e, "playerHealth", "20:true");
+        expect(e, "gameMode", "Creative");
+        expect(e, "tickingClass", "true");
+        expect(e, "ticking", "true:1:2:2");
+        expect(e, "tickingDuplicate", "TickingAreaError:IdentifierAlreadyExists");
+        expect(e, "tickingRemoved", "false");
+        expect(e, "killed", "true");
+        expect(e, "events",
+               "spawn:minecraft:cow:Spawned;spawn:minecraft:cow:Born;spawn:minecraft:wolf:Spawned;"
+               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;health:20>10;"
+               "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
+               "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
+               "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"
+               "effect:speed:40:true;effect:haste:200:true;hurt:minecraft:cow:3:fall:true;"
+               "trigger:minecraft:ageable_grow_up:[{\"addedComponentGroups\":[\"minecraft:cow_adult\"],"
+               "\"removedComponentGroups\":[\"minecraft:cow_baby\"]}];"
+               "gm:Survival>Creative;die:minecraft:cow:override;spawn:minecraft:horse:Spawned;"
+               "beforeRemove:minecraft:horse;remove:minecraft:horse;leaving:true;");
+
+        const std::unique_ptr<json::Value> betaEntities = result(owner, "betaEntities");
+        expect(*betaEntities, "target", "true");
+        expect(*betaEntities, "betaPlayer", "true");
+        expect(*betaEntities, "chat", "[A] ScriptPlayer!:§a");
+        expect(*betaEntities, "chatCleared", "[A] ScriptPlayer:true");
+        expect(*betaEntities, "eat", "true");
+        expect(*betaEntities, "eatStone", "Error");
+        expect(*betaEntities, "ping", "EngineError");
 
         const std::unique_ptr<json::Value> stable2 = result(owner, "stable2");
         expect(*stable2, "alone", "true");
@@ -1084,6 +1460,9 @@ int main() {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
+        // the game's file: tab comments, crlf; haste is left out to check the key comes back
+        writeFile(directory / "resource_packs" / "vanilla" / "texts" / "en_US.lang",
+                  "## effects\npotion.moveSpeed=Speed\t#\r\npotion.potency.1=II\n");
         run(directory);
     } catch (const std::exception &error) {
         std::clog << "Script API regression failed: " << error.what() << '\n';

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3i.h"
+#include "World/Actor/MobEffect.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Scripting/BehaviorPackManager.h"
@@ -21,6 +22,7 @@
 #include <quickjs.h>
 
 class Actor;
+class ActorDamageSource;
 class ItemActor;
 class Level;
 class ServerNetworkHandler;
@@ -113,6 +115,14 @@ public:
 
     JSValue makeEntity(Actor &actor);
 
+    // undefined when the entity lacks the component or the pack's version lacks its class
+    JSValue makeEntityComponent(Actor &actor, const ScriptEntityRef &ref, const std::string &componentId);
+
+    std::vector<std::string> entityComponentIds(Actor &actor);
+
+    // minecraft:type_family of the active definition
+    static std::vector<std::string> entityFamilies(Actor &actor);
+
     ServerPlayer *resolvePlayer(JSValueConst value);
 
     ServerPlayer *resolvePlayerByHandle(uint32_t handle);
@@ -124,6 +134,28 @@ public:
     Actor *resolveEntity(const ScriptEntityRef &ref);
 
     JSValue makeItem(const ItemStack &item);
+
+    // the effect's name as scripts see it, without namespace
+    static std::string effectTypeId(MobEffectId id);
+
+    JSValue makeEffect(Actor &actor, MobEffectId id);
+
+    // an EntityDamageSource: cause, damagingEntity and damagingProjectile
+    JSValue makeDamageSource(const ActorDamageSource &source);
+
+    // the EntityDamageCause of a source
+    static std::string damageCauseName(const ActorDamageSource &source);
+
+    JSValue makeHealSource(const char *cause);
+
+    // getModifiers of a data driven trigger: one DefinitionModifier
+    JSValue makeModifiersGetter(const std::vector<std::string> &added, const std::vector<std::string> &removed);
+
+    // a wire game type as this pack's GameMode value
+    const char *gameModeName(int32_t gameType) const;
+
+    // -1 for a name this pack's GameMode lacks
+    int32_t parseGameMode(const std::string &name) const;
 
     JSValue makeItemStack(const std::string &typeId, int32_t amount);
 
@@ -153,6 +185,9 @@ public:
     Level &resolveLevel(uint32_t worldId, DimensionType dimension);
 
     bool giveItem(ServerPlayer &player, const std::string &typeId, int32_t amount);
+
+    // false for an unknown item type
+    bool toItemStack(const ScriptItemData &item, ItemStack &stack);
 
     bool setBlockType(Level &level, int32_t x, int32_t y, int32_t z, const std::string &typeId);
 
@@ -233,7 +268,7 @@ public:
         return mPackSettings;
     }
 
-    void forgetEntity(int64_t uniqueId);
+    void forgetEntity(uint64_t runtimeId);
 
     void forgetPlayer(ServerPlayer &player);
 
@@ -255,6 +290,23 @@ public:
     JSValue moduleTickingAreas() const {
         return mTickingAreas;
     }
+
+    // the ticking areas this pack's manager added, by identifier
+    std::vector<std::string> &tickingAreaNames() {
+        return mTickingAreaNames;
+    }
+
+    struct PendingTickingArea {
+        std::string mName;
+        JSValue mResolve;
+        JSValue mReject;
+    };
+
+    std::vector<PendingTickingArea> &pendingTickingAreas() {
+        return mPendingTickingAreas;
+    }
+
+    void resolveTickingAreas();
 
     JSValue gameRules() const {
         return mGameRules;
@@ -292,6 +344,8 @@ public:
         bool mBlocked = false;
         // Entity and Player members check the entity still exists first
         bool mEntity = false;
+        // on the constructor: no bound object
+        bool mStatic = false;
         // the opaque type the native reads: a script can graft any object onto any prototype
         bool (*mAccepts)(const ScriptNative *) = nullptr;
     };
@@ -334,6 +388,8 @@ private:
 
     void _bindWorld();
 
+    void _bindTickingAreas();
+
     void _bindSystem();
 
     void _bindEntity();
@@ -341,6 +397,8 @@ private:
     void _bindPlayer();
 
     void _bindComponents();
+
+    void _bindEntityComponents();
 
     void _bindBlock();
 
@@ -417,6 +475,8 @@ private:
     JSValue mSystemBeforeEvents = JS_UNDEFINED;
     JSValue mScoreboard = JS_UNDEFINED;
     JSValue mTickingAreas = JS_UNDEFINED;
+    std::vector<std::string> mTickingAreaNames;
+    std::vector<PendingTickingArea> mPendingTickingAreas;
     JSValue mGameRules = JS_UNDEFINED;
     JSValue mSystemInfo = JS_UNDEFINED;
     std::vector<PackSetting> mPackSettings;

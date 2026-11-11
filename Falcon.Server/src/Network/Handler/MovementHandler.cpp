@@ -24,6 +24,7 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
+#include "Scripting/ScriptEngine.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
@@ -380,6 +381,52 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
 
 // reads what the player pressed, never the resulting position: water, pistons and mobs move an idle player, and
 // the client sends this packet every tick whether or not anything was pressed
+static const char *inputModeName(int32_t mode) {
+    switch ((PlayerInputMode) mode) {
+        case PlayerInputMode::Mouse:
+            return "KeyboardAndMouse";
+        case PlayerInputMode::Touch:
+            return "Touch";
+        case PlayerInputMode::Gamepad:
+            return "Gamepad";
+        case PlayerInputMode::MotionController:
+            return "MotionController";
+        default:
+            return nullptr;
+    }
+}
+
+static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    ServerPlayer::InputState &state = player.getInputState();
+    ScriptEngine &scripts = owner.getScriptEngine();
+
+    const int32_t mode = (int32_t) packet.mInputMode;
+    // an undefined device keeps the last one used
+    if (inputModeName(mode) != nullptr && mode != state.mInputMode) {
+        const char *previousMode = inputModeName(state.mInputMode);
+        state.mInputMode = mode;
+        if (previousMode != nullptr)
+            scripts.onPlayerInputModeChange(player, previousMode, inputModeName(mode));
+    }
+
+    state.mMoveX = packet.mRawMoveVectorX;
+    state.mMoveY = packet.mRawMoveVectorY;
+    state.mJumping = packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping);
+
+    const bool jump = packet.hasInputFlag((int32_t) PlayerAuthInputData::JumpDown);
+    const bool sneak = packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown);
+    const bool jumpChanged = jump != state.mJumpHeld;
+    const bool sneakChanged = sneak != state.mSneakHeld;
+    state.mJumpHeld = jump;
+    state.mSneakHeld = sneak;
+    if (jumpChanged)
+        scripts.onPlayerButtonInput(player, "Jump", jump);
+    if (sneakChanged)
+        scripts.onPlayerButtonInput(player, "Sneak", sneak);
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing))
+        scripts.onPlayerSwingStart(player, "Attack");
+}
+
 static bool isActiveInput(ServerPlayer &player, const PlayerAuthInputPacket &packet) {
     const bool rotated = player.updateInputRotation(packet.mRotation);
 
@@ -518,6 +565,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
 
+    flags.set(ActorFlag::Emoting, packet.hasInputFlag((int32_t) PlayerAuthInputData::Emoting));
+
     if (player.hasSimulatedVelocity()) {
         flags.set(ActorFlag::Crawling, player.isSimulatedCrawling());
     } else {
@@ -530,8 +579,11 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);
 
-    if (sneaking != previous.get(ActorFlag::Sneaking))
+    if (sneaking != previous.get(ActorFlag::Sneaking)) {
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
+        owner.getScriptEngine().onEntitySneak(player, sneaking);
+    }
+    recordInput(owner, player, packet);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
         // sprint changes the movement attribute too (0x140F4D3F0); client-requested: no validation reset
         owner._sendAttributes(player, false);

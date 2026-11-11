@@ -194,4 +194,47 @@ namespace ScriptValues {
         js_free(ctx, properties);
         return states;
     }
+
+    bool dynamicPropertySetAll(JSContext *ctx, std::unordered_map<std::string, DynamicPropertyValue> &store,
+                               JSValueConst values) {
+        JSPropertyEnum *properties = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &properties, &count, values, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) != 0)
+            return false;
+        for (uint32_t i = 0; i < count; ++i) {
+            JSValue key = JS_AtomToString(ctx, properties[i].atom);
+            JSValue value = JS_GetProperty(ctx, values, properties[i].atom);
+            dynamicPropertySet(ctx, store, toString(ctx, key), value);
+            JS_FreeValue(ctx, value);
+            JS_FreeValue(ctx, key);
+        }
+        JS_FreePropertyEnum(ctx, properties, count);
+        return true;
+    }
+
+    // recomputed from the whole collection on load: key + 1, then 8 for a double, 1 for a bool, length + 1 for a
+    // string, 12 for a vector (sub_143D41120)
+    int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store) {
+        int64_t total = 0;
+        for (const auto &entry: store) {
+            total += (int64_t) entry.first.size() + 1;
+            switch (entry.second.mType) {
+                case DynamicPropertyValue::Type::Number:
+                    total += 8;
+                    break;
+                case DynamicPropertyValue::Type::Boolean:
+                    total += 1;
+                    break;
+                case DynamicPropertyValue::Type::String:
+                    total += (int64_t) entry.second.mString.size() + 1;
+                    break;
+                case DynamicPropertyValue::Type::Vector:
+                    total += 12;
+                    break;
+                default:
+                    break;
+            }
+        }
+        return total;
+    }
 }

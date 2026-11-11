@@ -3,6 +3,8 @@
 #include <algorithm>
 
 #include "World/Actor/MobEffect.h"
+#include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -253,6 +255,9 @@ ScriptEngine::ScriptEngine() : mRuntime(nullptr), mWatchdogMs(DEFAULT_WATCHDOG_M
 
 ScriptEngine::~ScriptEngine() {
     MobEffectManager::setAddFilter(nullptr);
+    MobEffectManager::setAddListener(nullptr);
+    Actor::setHealHooks(nullptr, nullptr);
+    Actor::setHealthListener(nullptr);
 
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         JSContext *context = api->context();
@@ -271,7 +276,16 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
 
     mHost = &host;
     MobEffectManager::setAddFilter(
-            [this](Actor &actor, const MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
+            [this](Actor &actor, MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
+    MobEffectManager::setAddListener(
+            [this](Actor &actor, const MobEffectInstance &effect) { onEffectAdd(actor, effect); });
+    Actor::setHealHooks(
+            [this](Actor &actor, float &amount, HealCause cause) {
+                return !_beforeHeal(actor, amount, (int32_t) cause);
+            },
+            [this](Actor &actor, float amount, HealCause cause) { _onHeal(actor, amount, (int32_t) cause); });
+    Actor::setHealthListener(
+            [this](Actor &actor, float oldValue, float newValue) { _onHealthChanged(actor, oldValue, newValue); });
     _bindClockListener();
 }
 
@@ -966,14 +980,21 @@ int32_t ScriptEngine::onItemHitEntity(ServerPlayer &attacker, Actor &target, boo
     return durabilityDamage;
 }
 
-void ScriptEngine::onEntitySpawn(ServerActor &entity) {
+void ScriptEngine::onEntitySpawn(ServerActor &entity, const char *cause) {
     _emit("after.entitySpawn", "WorldAfterEvents.entitySpawn", false, [&](ScriptApi &api, JSValue event) {
         JS_SetPropertyStr(api.context(), event, "entity", api.makeActor(entity));
-        JS_SetPropertyStr(api.context(), event, "cause", JS_NewString(api.context(), "Spawned"));
+        JS_SetPropertyStr(api.context(), event, "cause", JS_NewString(api.context(), cause));
+    });
+}
+
+void ScriptEngine::beforeEntityRemove(ServerActor &entity) {
+    _emit("before.entityRemove", "WorldBeforeEvents.entityRemove", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "removedEntity", api.makeActor(entity));
     });
 }
 
 void ScriptEngine::onEntityRemove(ServerActor &entity) {
+    beforeEntityRemove(entity);
     _emit("after.entityRemove", "WorldAfterEvents.entityRemove", false, [&](ScriptApi &api, JSValue event) {
         JSContext *ctx = api.context();
         JS_SetPropertyStr(ctx, event, "removedEntityId", string(ctx, std::to_string(entity.getUniqueId())));
@@ -981,7 +1002,7 @@ void ScriptEngine::onEntityRemove(ServerActor &entity) {
     });
 
     for (std::unique_ptr<ScriptApi> &api: mApis)
-        api->forgetEntity(entity.getUniqueId());
+        api->forgetEntity(entity.getRuntimeId());
 }
 
 void ScriptEngine::onEntityLoad(ServerActor &entity) {
@@ -995,26 +1016,80 @@ bool ScriptEngine::beforePlayerInteractWithBlock(ServerPlayer &player, const Vec
                  [&](ScriptApi &api, JSValue event) { fillBlockInteraction(api, event, player, position, face); });
 }
 
-bool ScriptEngine::beforeEntityHurt(Actor &hurtEntity, float damage, const std::string &cause, const Actor *attacker) {
-    return _emit("before.entityHurt", "WorldBeforeEvents.entityHurt", true, [&](ScriptApi &api, JSValue event) {
+bool ScriptEngine::beforeEntityHurt(Actor &hurtEntity, float &damage, const ActorDamageSource &source) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.entityHurt"))
+            continue;
+
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.entityHurt");
+        JS_SetPropertyStr(ctx, event, "hurtEntity", api->makeEntity(hurtEntity));
+        JS_SetPropertyStr(ctx, event, "damage", JS_NewFloat64(ctx, damage));
+        JS_SetPropertyStr(ctx, event, "damageSource", api->makeDamageSource(source));
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        JS_DupValue(ctx, event);
+        cancelled = api->emit("before.entityHurt", event) || cancelled;
+
+        JSValue value = JS_GetPropertyStr(ctx, event, "damage");
+        double rewritten = damage;
+        if (JS_ToFloat64(ctx, &rewritten, value) == 0 && std::isfinite(rewritten))
+            damage = (float) rewritten;
+        JS_FreeValue(ctx, value);
+        JS_FreeValue(ctx, event);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onEntityHurt(Actor &hurtEntity, float damage, const ActorDamageSource &source) {
+    _emit("after.entityHurt", "WorldAfterEvents.entityHurt", false, [&](ScriptApi &api, JSValue event) {
         JSContext *ctx = api.context();
         JS_SetPropertyStr(ctx, event, "hurtEntity", api.makeEntity(hurtEntity));
         JS_SetPropertyStr(ctx, event, "damage", JS_NewFloat64(ctx, damage));
-
-        JSValue source = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, source, "cause", string(ctx, cause));
-        if (attacker != nullptr)
-            JS_SetPropertyStr(ctx, source, "damagingEntity", api.makeEntity(const_cast<Actor &>(*attacker)));
-        JS_SetPropertyStr(ctx, event, "damageSource", source);
+        JS_SetPropertyStr(ctx, event, "damageSource", api.makeDamageSource(source));
     });
 }
 
-bool ScriptEngine::beforeEffectAdd(Actor &entity, const MobEffectInstance &effect) {
-    return _emit("before.effectAdd", "WorldBeforeEvents.effectAdd", true, [&](ScriptApi &api, JSValue event) {
-        JSContext *ctx = api.context();
-        JS_SetPropertyStr(ctx, event, "entity", api.makeEntity(entity));
-        JS_SetPropertyStr(ctx, event, "effectType", JS_NewString(ctx, getMobEffectName(effect.mId)));
+void ScriptEngine::onEntityDie(Actor &deadEntity, const ActorDamageSource &source) {
+    _emit("after.entityDie", "WorldAfterEvents.entityDie", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "deadEntity", api.makeEntity(deadEntity));
+        JS_SetPropertyStr(api.context(), event, "damageSource", api.makeDamageSource(source));
+    });
+}
+
+bool ScriptEngine::beforeEffectAdd(Actor &entity, MobEffectInstance &effect) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.effectAdd"))
+            continue;
+
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.effectAdd");
+        JS_SetPropertyStr(ctx, event, "entity", api->makeEntity(entity));
+        JS_SetPropertyStr(ctx, event, "effectType", string(ctx, ScriptApi::effectTypeId(effect.mId)));
         JS_SetPropertyStr(ctx, event, "duration", JS_NewInt32(ctx, effect.mDuration));
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        JS_DupValue(ctx, event);
+        cancelled = api->emit("before.effectAdd", event) || cancelled;
+
+        JSValue value = JS_GetPropertyStr(ctx, event, "duration");
+        int32_t duration = effect.mDuration;
+        if (JS_ToInt32(ctx, &duration, value) == 0)
+            effect.mDuration = duration;
+        JS_FreeValue(ctx, value);
+        JS_FreeValue(ctx, event);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onEffectAdd(Actor &entity, const MobEffectInstance &effect) {
+    _emit("after.effectAdd", "WorldAfterEvents.effectAdd", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "entity", api.makeEntity(entity));
+        JS_SetPropertyStr(api.context(), event, "effect", api.makeEffect(entity, effect.mId));
     });
 }
 
@@ -1037,6 +1112,203 @@ bool ScriptEngine::beforeItemUse(ServerPlayer &player) {
         JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
         JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(held));
     });
+}
+
+void ScriptEngine::onPlayerInteractWithEntity(ServerPlayer &player, Actor &target, const ItemStack &before) {
+    _emit("after.playerInteractWithEntity", "WorldAfterEvents.playerInteractWithEntity", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+              JS_SetPropertyStr(ctx, event, "target", api.makeEntity(target));
+              JS_SetPropertyStr(ctx, event, "beforeItemStack", api.makeItem(before));
+              JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
+          });
+}
+
+void ScriptEngine::onEntitySneak(Actor &entity, bool started) {
+    const char *key = started ? "after.entityStartSneaking" : "after.entityStopSneaking";
+    const char *signal = started ? "WorldAfterEvents.entityStartSneaking" : "WorldAfterEvents.entityStopSneaking";
+    _emit(key, signal, false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "entity", api.makeEntity(entity));
+    });
+}
+
+bool ScriptEngine::beforeEntityTamed(Actor &entity, Actor &tamer) {
+    return _emit("before.entityTamed", "WorldBeforeEvents.entityTamed", true, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "entity", api.makeEntity(entity));
+        JS_SetPropertyStr(api.context(), event, "tamingEntity", api.makeEntity(tamer));
+    });
+}
+
+void ScriptEngine::onEntityTamed(Actor &entity, Actor &tamer) {
+    _emit("after.entityTamed", "WorldAfterEvents.entityTamed", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "entity", api.makeEntity(entity));
+        JS_SetPropertyStr(api.context(), event, "tamingEntity", api.makeEntity(tamer));
+    });
+}
+
+void ScriptEngine::onDataDrivenEntityTrigger(MobActor &entity, const std::string &eventId,
+                                             const std::vector<std::string> &added,
+                                             const std::vector<std::string> &removed) {
+    _emit("after.dataDrivenEntityTrigger", "WorldAfterEvents.dataDrivenEntityTrigger", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "entity", api.makeActor(entity));
+              JS_SetPropertyStr(ctx, event, "eventId", string(ctx, eventId));
+              JS_SetPropertyStr(ctx, event, "getModifiers", api.makeModifiersGetter(added, removed));
+          });
+}
+
+void ScriptEngine::onEntityUpgrade(MobActor &entity, const std::string &upgradeId,
+                                   const std::vector<std::string> &added, const std::vector<std::string> &removed) {
+    _emit("after.entityUpgrade", "WorldAfterEvents.entityUpgrade", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "entity", api.makeActor(entity));
+        JS_SetPropertyStr(ctx, event, "upgradeId", string(ctx, upgradeId));
+        JS_SetPropertyStr(ctx, event, "getModifiers", api.makeModifiersGetter(added, removed));
+    });
+}
+
+bool ScriptEngine::beforePlayerGameModeChange(ServerPlayer &player, int32_t fromGameMode, int32_t &toGameMode) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.playerGameModeChange"))
+            continue;
+
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.playerGameModeChange");
+        JS_SetPropertyStr(ctx, event, "player", api->makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "fromGameMode", JS_NewString(ctx, api->gameModeName(fromGameMode)));
+        JS_SetPropertyStr(ctx, event, "toGameMode", JS_NewString(ctx, api->gameModeName(toGameMode)));
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        JS_DupValue(ctx, event);
+        cancelled = api->emit("before.playerGameModeChange", event) || cancelled;
+
+        JSValue value = JS_GetPropertyStr(ctx, event, "toGameMode");
+        const int32_t parsed = api->parseGameMode(toString(ctx, value));
+        if (parsed >= 0)
+            toGameMode = parsed;
+        JS_FreeValue(ctx, value);
+        JS_FreeValue(ctx, event);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onPlayerGameModeChange(ServerPlayer &player, int32_t fromGameMode, int32_t toGameMode) {
+    _emit("after.playerGameModeChange", "WorldAfterEvents.playerGameModeChange", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+              JS_SetPropertyStr(ctx, event, "fromGameMode", JS_NewString(ctx, api.gameModeName(fromGameMode)));
+              JS_SetPropertyStr(ctx, event, "toGameMode", JS_NewString(ctx, api.gameModeName(toGameMode)));
+          });
+}
+
+void ScriptEngine::onPlayerDimensionChange(ServerPlayer &player, const Level &from, const Vector3f &fromLocation,
+                                           const Level &to, const Vector3f &toLocation) {
+    _emit("after.playerDimensionChange", "WorldAfterEvents.playerDimensionChange", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+              JS_SetPropertyStr(ctx, event, "fromDimension", api.makeDimension(from));
+              JS_SetPropertyStr(ctx, event, "fromLocation",
+                                vector3(ctx, fromLocation.x, fromLocation.y, fromLocation.z));
+              JS_SetPropertyStr(ctx, event, "toDimension", api.makeDimension(to));
+              JS_SetPropertyStr(ctx, event, "toLocation", vector3(ctx, toLocation.x, toLocation.y, toLocation.z));
+          });
+}
+
+void ScriptEngine::onPlayerEmote(ServerPlayer &player, const std::string &personaPieceId) {
+    _emit("after.playerEmote", "WorldAfterEvents.playerEmote", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(api.context(), event, "personaPieceId", string(api.context(), personaPieceId));
+    });
+}
+
+void ScriptEngine::onPlayerInputModeChange(ServerPlayer &player, const char *previous, const char *current) {
+    _emit("after.playerInputModeChange", "WorldAfterEvents.playerInputModeChange", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+              JS_SetPropertyStr(ctx, event, "previousInputModeUsed", JS_NewString(ctx, previous));
+              JS_SetPropertyStr(ctx, event, "newInputModeUsed", JS_NewString(ctx, current));
+          });
+}
+
+void ScriptEngine::onPlayerButtonInput(ServerPlayer &player, const char *button, bool pressed) {
+    _emit("after.playerButtonInput", "WorldAfterEvents.playerButtonInput", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "button", JS_NewString(ctx, button));
+        JS_SetPropertyStr(ctx, event, "newButtonState", JS_NewString(ctx, pressed ? "Pressed" : "Released"));
+    });
+}
+
+void ScriptEngine::onPlayerSwingStart(ServerPlayer &player, const char *source) {
+    _emit("after.playerSwingStart", "WorldAfterEvents.playerSwingStart", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "heldItemStack", api.makeItem(player.getInventory().getItemInHand()));
+        JS_SetPropertyStr(ctx, event, "swingSource", JS_NewString(ctx, source));
+    });
+}
+
+void ScriptEngine::beforePlayerLeave(ServerPlayer &player) {
+    _emit("before.playerLeave", "WorldBeforeEvents.playerLeave", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "player", api.makePlayer(player));
+    });
+}
+
+namespace {
+    const char *const HEAL_CAUSES[] = {"Heal", "Regeneration", "SelfHeal", "TotemOfUndying"};
+}
+
+bool ScriptEngine::_beforeHeal(Actor &entity, float &amount, int32_t cause) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.entityHeal"))
+            continue;
+
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.entityHeal");
+        JS_SetPropertyStr(ctx, event, "healedEntity", api->makeEntity(entity));
+        JS_SetPropertyStr(ctx, event, "healing", JS_NewFloat64(ctx, amount));
+        JS_SetPropertyStr(ctx, event, "healSource", api->makeHealSource(HEAL_CAUSES[cause]));
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        JS_DupValue(ctx, event);
+        cancelled = api->emit("before.entityHeal", event) || cancelled;
+
+        JSValue value = JS_GetPropertyStr(ctx, event, "healing");
+        double healing = amount;
+        if (JS_ToFloat64(ctx, &healing, value) == 0 && std::isfinite(healing))
+            amount = (float) healing;
+        JS_FreeValue(ctx, value);
+        JS_FreeValue(ctx, event);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::_onHeal(Actor &entity, float amount, int32_t cause) {
+    _emit("after.entityHeal", "WorldAfterEvents.entityHeal", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "healedEntity", api.makeEntity(entity));
+        JS_SetPropertyStr(ctx, event, "healing", JS_NewFloat64(ctx, amount));
+        JS_SetPropertyStr(ctx, event, "healSource", api.makeHealSource(HEAL_CAUSES[cause]));
+    });
+}
+
+void ScriptEngine::_onHealthChanged(Actor &entity, float oldValue, float newValue) {
+    _emit("after.entityHealthChanged", "WorldAfterEvents.entityHealthChanged", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "entity", api.makeEntity(entity));
+              JS_SetPropertyStr(ctx, event, "oldValue", JS_NewFloat64(ctx, oldValue));
+              JS_SetPropertyStr(ctx, event, "newValue", JS_NewFloat64(ctx, newValue));
+          });
 }
 
 void ScriptEngine::onGameRuleChange(const std::string &rule, bool isBool, bool boolValue, int32_t intValue) {

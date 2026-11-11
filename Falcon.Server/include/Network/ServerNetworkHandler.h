@@ -283,6 +283,11 @@ public:
 
     ServerActor *spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position, float scale);
 
+    // the EntityInitializationCause the next spawnActor reports, Spawned otherwise
+    void setSpawnCause(const char *cause) {
+        mSpawnCause = cause;
+    }
+
     FallingBlock *spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position);
 
     PrimedTntActor *spawnPrimedTnt(Level &level, const Vector3f &position, const Vector3f &motion, int32_t fuse);
@@ -330,6 +335,9 @@ public:
     void applyPotionEffects(ServerPlayer &player, int32_t potionId, float durationScale);
 
     void addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks);
+
+    // the hunger, saturation and effects of a food item; false for anything else
+    bool applyFood(ServerPlayer &player, const ItemStack &item);
 
     void applyPotionEffects(ServerActor &actor, int32_t potionId, float durationScale);
 
@@ -1077,6 +1085,9 @@ private:
     Profiler mProfiler;
     EventBus mEventBus;
     ScriptEngine mScriptEngine;
+    // the hit hurt() is dealing while killPlayer runs: the death event reports its cause
+    const ActorDamageSource *mFatalSource = nullptr;
+    const char *mSpawnCause = nullptr;
     BehaviorPackManager mBehaviorPacks;
 
     std::map<std::pair<int, int>, std::shared_ptr<const SharedPacket>> mSharedLoginPackets;

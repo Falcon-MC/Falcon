@@ -47,15 +47,22 @@ void EndCrystalActor::setBeamTarget(ServerNetworkHandler &owner, const std::opti
 }
 
 void EndCrystalActor::fillSpawnMetadata(EntityDataMap &metadata) const {
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {getFlags().getLowBits(), getFlags().getHighBits(),
+                                   getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
         entry.mLongValue = flagValues[index];
         metadata.mEntries.push_back(entry);
     }
+
+    EntityDataEntry nameplateDistance;
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+    nameplateDistance.mFloatValue = getNameplateRenderDistance();
+    metadata.mEntries.push_back(nameplateDistance);
 
     if (mBeamTarget.has_value())
         _appendBeamTarget(metadata);

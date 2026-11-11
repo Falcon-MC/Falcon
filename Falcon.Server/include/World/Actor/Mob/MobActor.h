@@ -118,6 +118,9 @@ public:
 
     void applyDefaults(Difficulty difficulty);
 
+    // only a loaded actor runs its pending upgrades; any other cause takes the current version (sub_140B938D0)
+    void upgradeDefinition(ServerNetworkHandler &owner, bool loaded);
+
     static int randomRange(int minimum, int maximum);
 
     void dropLoot(ServerNetworkHandler &owner, Level &level, const ServerPlayer *killer, int32_t lootingLevel) const;
@@ -207,6 +210,10 @@ public:
         mSpawnEvent = event;
     }
 
+    const std::string &getSpawnEvent() const {
+        return mSpawnEvent;
+    }
+
     void setHomePosition(const Vector3f &position) {
         mHomePosition = position;
         mHasHome = true;
@@ -264,7 +271,7 @@ public:
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);
 
     bool isTamed() const {
-        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty();
+        return mOwnerId != NO_OWNER || !mLegacyOwnerName.empty() || mOwnerless;
     }
 
     int64_t getOwnerId() const {
@@ -414,6 +421,12 @@ public:
     bool isMountTaming() const;
 
     void attemptMountTame(ServerNetworkHandler &owner, ServerPlayer &rider);
+
+    // the success of minecraft:tameable or minecraft:tamemount; false when untameable, tamed or cancelled
+    bool tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects);
+
+    // tamed with no owner, as a script's EntityTameMountComponent.tame does (sub_143C9C590)
+    bool tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects);
 
     float getJumpStrength() const;
 
@@ -592,6 +605,7 @@ private:
     int32_t mAgeTicks = 0;
     int64_t mOwnerId = NO_OWNER;
     std::string mLegacyOwnerName;
+    bool mOwnerless = false;
     int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
     bool mGoalsRegistered = false;
@@ -600,6 +614,7 @@ private:
     float mScale = 1.0f;
     bool mDefinitionStarted = false;
     bool mBorn = false;
+    int32_t mActorVersion = 0;
     std::string mSpawnEvent;
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
