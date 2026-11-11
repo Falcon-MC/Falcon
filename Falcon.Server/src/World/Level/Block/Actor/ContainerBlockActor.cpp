@@ -1,6 +1,7 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 
 #include "World/Inventory/ItemStackNbt.h"
+#include "World/Level/Level.h"
 
 namespace {
     const char *TAG_PRIMARY = "Primary";
@@ -13,6 +14,10 @@ namespace {
     const char *TAG_RECORD_ITEM = "RecordItem";
     const char *TAG_FINISHED_RECORDING = "FinishedRecording";
     const char *TAG_TICKS_PLAYING = "TicksPlaying";
+    const char *TAG_DISABLED_SLOTS = "disabled_slots";
+    const char *TAG_CRAFTING_TICKS = "crafting_ticks_remaining";
+    const char *STATE_CRAFTING = "crafting";
+    const uint16_t ALL_SLOTS = 0x1FF;
 }
 
 Tag ShulkerBoxBlockActor::saveNbt() const {
@@ -119,4 +124,59 @@ Tag JukeboxBlockActor::getSpawnCompound() const {
     if (!record.isAir() && record.mCount > 0)
         data.put(TAG_RECORD_ITEM, ItemStackNbt::write(record));
     return data;
+}
+
+Tag CrafterBlockActor::saveNbt() const {
+    Tag data = ContainerBlockActor::saveNbt();
+    data.putShort(TAG_DISABLED_SLOTS, (int16_t) mInventory.getDisabledSlots());
+    return data;
+}
+
+void CrafterBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    ContainerBlockActor::loadNbt(data, context);
+    mInventory.setDisabledSlots((uint16_t) data.getShort(TAG_DISABLED_SLOTS, 0) & ALL_SLOTS);
+}
+
+Tag CrafterBlockActor::getSpawnCompound() const {
+    Tag data = BlockActor::getSpawnCompound();
+    data.putShort(TAG_DISABLED_SLOTS, (int16_t) mInventory.getDisabledSlots());
+    data.putInt(TAG_CRAFTING_TICKS, mCraftingTicks);
+    return data;
+}
+
+bool CrafterBlockActor::tick(ServerNetworkHandler &owner) {
+    (void) owner;
+    if (mCraftingTicks <= 0 || --mCraftingTicks > 0 || mLevel == nullptr)
+        return true;
+
+    const BlockState *state = mLevel->peekBlockPtr(mPosition.x, mPosition.y, mPosition.z);
+    if (state == nullptr || state->mStates.getByte(STATE_CRAFTING, 0) == 0)
+        return true;
+
+    Tag states = state->mStates;
+    states.putByte(STATE_CRAFTING, 0);
+    mLevel->setBlock(mPosition, BlockState(state->mName, states), false);
+    return true;
+}
+
+bool CrafterBlockActor::setSlotDisabled(int slot, bool disabled) {
+    if (slot < 0 || slot >= SIZE)
+        return false;
+    if (disabled && !mInventory.getContainerItem(slot).isAir())
+        return false;
+
+    const uint16_t before = mInventory.getDisabledSlots();
+    const uint16_t bit = (uint16_t) (1u << slot);
+    mInventory.setDisabledSlots(disabled ? (uint16_t) (before | bit) : (uint16_t) (before & ~bit));
+    return mInventory.getDisabledSlots() != before;
+}
+
+int CrafterBlockActor::getComparatorSignal() const {
+    int signal = 0;
+    for (int slot = 0; slot < SIZE; ++slot) {
+        const ItemStack &item = mInventory.getContainerItem(slot);
+        if (mInventory.isSlotDisabled(slot) || (!item.isAir() && item.mCount > 0))
+            ++signal;
+    }
+    return signal;
 }

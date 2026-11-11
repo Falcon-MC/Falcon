@@ -16,4 +16,10 @@ public:
         (void) item;
         return true;
     }
+
+    // a disabled slot takes nothing, from players or hoppers alike
+    virtual bool isSlotDisabled(int slot) const {
+        (void) slot;
+        return false;
+    }
 };

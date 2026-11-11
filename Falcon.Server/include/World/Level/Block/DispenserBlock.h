@@ -16,6 +16,10 @@ public:
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 
+    // sub_149C59E30: the stack flies out of the facing side, as the crafter ejects too
+    static void ejectItem(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
+                          const ItemStack &item);
+
 private:
     static void _eject(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
                        const ItemStack &item);
