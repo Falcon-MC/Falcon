@@ -28,9 +28,14 @@ public:
         bool mBlocks = true;
         bool mEntities = true;
         bool mWaterlogged = false;
+        // a block that can hold water and lands in water keeps it on layer 1
+        bool mKeepWorldWater = false;
         // the share of blocks kept, 1 keeps all
         float mIntegrity = 1.0f;
         uint32_t mSeed = 0;
+        // cells [mFromCell, mToCell) in y, x, z order: an animated placement sets them a step at a time
+        int64_t mFromCell = 0;
+        int64_t mToCell = INT64_MAX;
         // called with each block before it is set: may change it, false skips the cell
         std::function<bool(const Vector3i &target, BlockState &state)> mFilter;
     };

@@ -28,6 +28,17 @@ public:
         BlockState mOutput;
     };
 
+    // minecraft:rule, minecraft:block_ignore, minecraft:protected_blocks or minecraft:capped
+    struct Processor {
+        std::string mType;
+        std::vector<Rule> mRules;
+        // block_ignore: template blocks left out; protected_blocks: world blocks left in place
+        std::vector<std::string> mBlocks;
+        std::shared_ptr<Processor> mDelegate;
+        int32_t mLimitMin = 0;
+        int32_t mLimitMax = 0;
+    };
+
     struct Element {
         // empty for minecraft:empty_pool_element
         std::string mLocation;
@@ -45,12 +56,15 @@ public:
         int32_t mMaxDepth = 1;
         // nothing set: the placement height stays
         bool mHasStartHeight = false;
-        int32_t mStartHeight = 0;
+        // an int provider: constant gives min == max, uniform both bounds inclusive
+        int32_t mStartHeightMin = 0;
+        int32_t mStartHeightMax = 0;
     };
 
     struct Options {
         bool mIncludeEntities = true;
         bool mKeepJigsaws = false;
+        bool mApplyWaterlogging = true;
     };
 
     struct Box {
@@ -67,7 +81,7 @@ public:
 
     const Structure *structure(const std::string &identifier) const;
 
-    const std::vector<Rule> *processors(const std::string &identifier) const;
+    const std::vector<Processor> *processors(const std::string &identifier) const;
 
     // places the pieces; false with the error text when nothing could start
     bool place(ServerNetworkHandler &owner, Level &level, const std::string &startPool, const std::string &startJigsaw,
@@ -83,5 +97,5 @@ public:
 private:
     std::map<std::string, Pool> mPools;
     std::map<std::string, Structure> mStructures;
-    std::map<std::string, std::vector<Rule>> mProcessors;
+    std::map<std::string, std::vector<Processor>> mProcessors;
 };

@@ -8,6 +8,7 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Level.h"
 
 #include <algorithm>
@@ -304,6 +305,9 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
         for (int32_t y = 0; y < mSize.y; ++y) {
             for (int32_t x = 0; x < mSize.x; ++x) {
                 for (int32_t z = 0; z < mSize.z; ++z) {
+                    const int64_t cell = ((int64_t) y * mSize.x + x) * mSize.z + z;
+                    if (cell < options.mFromCell || cell >= options.mToCell)
+                        continue;
                     const Vector3i local(x, y, z);
                     const BlockState *state = getBlock(local);
                     if (state == nullptr || !_kept(_index(local), integrity, options.mSeed))
@@ -318,6 +322,9 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
                     if (options.mFilter && !options.mFilter(target, chosen))
                         continue;
                     state = &chosen;
+                    const bool inWater = options.mKeepWorldWater
+                                         && level.getBlockState(target.x, target.y, target.z).mName == "minecraft:water"
+                                         && LiquidPhysicsSystem::getWaterloggingLevel(*state) > 0;
                     level.getBlockActors().remove(target);
                     level.setBlock(target, *state, true);
                     BlockActionHandler::broadcastBlockUpdate(owner, level, target, *state);
@@ -325,7 +332,7 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
                     const BlockState *overlay = getBlock(local, 1);
                     BlockState water("minecraft:water");
                     water.mStates.putInt("liquid_depth", 0);
-                    const BlockState *layer1 = overlay != nullptr ? overlay : (options.mWaterlogged ? &water : nullptr);
+                    const BlockState *layer1 = overlay != nullptr ? overlay : (options.mWaterlogged || inWater ? &water : nullptr);
                     if (layer1 != nullptr) {
                         level.setBlockStateAtLayer(target.x, target.y, target.z, 1, *layer1);
                         BlockActionHandler::broadcastBlockUpdate(owner, level, target, *layer1, 1);

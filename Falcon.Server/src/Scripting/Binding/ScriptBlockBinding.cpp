@@ -27,8 +27,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
-#include <tuple>
 #include <unordered_map>
 
 using namespace ScriptValues;
@@ -650,12 +648,13 @@ namespace {
     }
 
     // a potion cauldron keeps water as its liquid and a PotionId on its block actor
-    // powder snow cauldrons are not modelled by CauldronBlock; an empty one reports Water
     JSValue fluidGetFluidType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         const CauldronBlock cauldron(at.state());
         if (cauldron.getLiquid() == CauldronBlock::Liquid::Lava)
             return JS_NewString(ctx, "Lava");
+        if (cauldron.getLiquid() == CauldronBlock::Liquid::PowderSnow)
+            return JS_NewString(ctx, "PowderSnow");
         CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition);
         if (actor != nullptr && actor->saveNbt().getShort("PotionId", -1) >= 0)
             return JS_NewString(ctx, "Potion");
@@ -667,11 +666,15 @@ namespace {
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         const std::string type = toString(ctx, argv[0]);
-        if (type != "Water" && type != "Lava")
+        if (type != "Water" && type != "Lava" && type != "PowderSnow")
             return at.mApi->throwError("Error", "Fluid type " + type + " is not supported.");
         const CauldronBlock cauldron(at.state());
         const int fill = std::max(cauldron.getFillLevel(), 1);
-        setCauldron(at, type == "Lava" ? CauldronBlock::Liquid::Lava : CauldronBlock::Liquid::Water, fill);
+        setCauldron(at,
+                    type == "Lava"         ? CauldronBlock::Liquid::Lava
+                    : type == "PowderSnow" ? CauldronBlock::Liquid::PowderSnow
+                                           : CauldronBlock::Liquid::Water,
+                    fill);
         if (CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition)) {
             Tag data = actor->saveNbt();
             data.putShort("PotionId", -1);
@@ -856,9 +859,17 @@ namespace {
             return JS_UNDEFINED;
         stopAt(at);
         jukebox->getContainer()->setContainerItem(0, ItemStack::air());
-        // the game tries up, north, south, east, west, down for a free block (sub_143C803A0); up only
-        const Vector3i above(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
-        ItemActorHandler::dropItem(at.mApi->host(), *at.mLevel, ItemActorHandler::randomPopPosition(above), record,
+        // sub_143C803A0: up, north, south, east, west, down, the first free block takes the record
+        static const int SIDES[6][3] = {{0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {1, 0, 0}, {-1, 0, 0}, {0, -1, 0}};
+        Vector3i target(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
+        for (const int *side: SIDES) {
+            const Vector3i candidate(at.mPosition.x + side[0], at.mPosition.y + side[1], at.mPosition.z + side[2]);
+            if (at.mLevel->getBlockState(candidate.x, candidate.y, candidate.z).mName == "minecraft:air") {
+                target = candidate;
+                break;
+            }
+        }
+        ItemActorHandler::dropItem(at.mApi->host(), *at.mLevel, ItemActorHandler::randomPopPosition(target), record,
                                    ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
         BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
         return JS_UNDEFINED;
@@ -957,42 +968,45 @@ namespace {
         return JS_NewBool(ctx, isPlayingAt(blockAt(ctx, thisVal)));
     }
 
-    // per pack and per block actor, as the game keeps them
-    // not saved with the block actor yet; lost when the chunk unloads
-    using BlockProperties = std::unordered_map<std::string, DynamicPropertyValue>;
-    std::map<std::tuple<const ScriptApi *, const Level *, int64_t>, BlockProperties> gBlockProperties;
-
-    BlockProperties &propertiesAt(const BlockAt &at) {
-        return gBlockProperties[std::make_tuple(at.mApi, at.mLevel, BlockActorStore::packPosition(at.mPosition))];
+    // stored on the block actor and saved with it; a block without one has none
+    std::unordered_map<std::string, DynamicPropertyValue> *propertiesAt(const BlockAt &at) {
+        BlockActor *actor = at.mLevel->getBlockActors().find(at.mPosition);
+        return actor == nullptr ? nullptr : &actor->getDynamicProperties();
     }
 
     JSValue dynamicGet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        return dynamicPropertyGet(ctx, propertiesAt(blockAt(ctx, thisVal)), toString(ctx, argv[0]));
+        const auto *properties = propertiesAt(blockAt(ctx, thisVal));
+        if (properties == nullptr)
+            return JS_UNDEFINED;
+        return dynamicPropertyGet(ctx, *properties, toString(ctx, argv[0]));
     }
 
-    // 1KB per pack and block actor, from the definitions
+    // 1KB per block actor, from the definitions
     constexpr int64_t BLOCK_PROPERTY_LIMIT = 1024;
 
     JSValue dynamicSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        BlockProperties &properties = propertiesAt(at);
-        const BlockProperties before = properties;
-        dynamicPropertySet(ctx, properties, toString(ctx, argv[0]), argc >= 2 ? argv[1] : JS_UNDEFINED);
+        auto *properties = propertiesAt(at);
+        if (properties == nullptr)
+            return JS_UNDEFINED;
+        const auto before = *properties;
+        dynamicPropertySet(ctx, *properties, toString(ctx, argv[0]), argc >= 2 ? argv[1] : JS_UNDEFINED);
         if (JS_HasException(ctx))
             return JS_EXCEPTION;
-        if (dynamicPropertyByteCount(properties) > BLOCK_PROPERTY_LIMIT) {
-            properties = before;
+        if (dynamicPropertyByteCount(*properties) > BLOCK_PROPERTY_LIMIT) {
+            *properties = before;
             return at.mApi->throwError("Error", "Block dynamic properties exceed 1KB.");
         }
         return JS_UNDEFINED;
     }
 
     JSValue dynamicByteCount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt64(ctx, dynamicPropertyByteCount(propertiesAt(blockAt(ctx, thisVal))));
+        const auto *properties = propertiesAt(blockAt(ctx, thisVal));
+        return JS_NewInt64(ctx, properties == nullptr ? 0 : dynamicPropertyByteCount(*properties));
     }
 
     // undefined writes opaque black, a dye its texture rgb with full alpha (sub_14C8C4BD0)

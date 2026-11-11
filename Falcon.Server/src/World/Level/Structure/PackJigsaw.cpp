@@ -93,6 +93,96 @@ namespace {
         return state;
     }
 
+    // a number, {"type": "constant", "value"} or {"type": "uniform", "min_inclusive", "max_inclusive"}
+    bool readIntProvider(const json::Value *value, int32_t &min, int32_t &max) {
+        if (value == nullptr)
+            return false;
+        if (value->isNumber()) {
+            min = max = value->integer();
+            return true;
+        }
+        const json::Value *type = value->get("type");
+        if (type != nullptr && type->string() == "uniform") {
+            const json::Value *low = value->get("min_inclusive");
+            const json::Value *high = value->get("max_inclusive");
+            if (low == nullptr || high == nullptr || !low->isNumber() || !high->isNumber())
+                return false;
+            min = low->integer();
+            max = std::max(min, high->integer());
+            return true;
+        }
+        const json::Value *constant = value->get("value");
+        if (constant == nullptr || !constant->isNumber())
+            return false;
+        min = max = constant->integer();
+        return true;
+    }
+
+    std::vector<std::string> blockNames(const json::Value *value) {
+        std::vector<std::string> names;
+        if (value == nullptr)
+            return names;
+        if (!value->isArray()) {
+            names.push_back(value->get("name") != nullptr ? value->get("name")->string() : value->string());
+            return names;
+        }
+        for (const std::unique_ptr<json::Value> &entry: value->mArray)
+            names.push_back(entry->get("name") != nullptr ? entry->get("name")->string() : entry->string());
+        return names;
+    }
+
+    PackJigsaw::Rule ruleOf(const json::Value &entry) {
+        PackJigsaw::Rule rule;
+        if (const json::Value *input = entry.get("input_predicate")) {
+            const json::Value *predicate = input->get("predicate_type");
+            const json::Value *block = input->get("block");
+            const json::Value *probability = input->get("probability");
+            rule.mPredicate = predicate != nullptr ? predicate->string() : rule.mPredicate;
+            rule.mBlock = block != nullptr ? block->string() : std::string();
+            rule.mProbability = probability != nullptr ? (float) probability->number(1.0) : 1.0f;
+        }
+        if (const json::Value *location = entry.get("location_predicate")) {
+            const json::Value *block = location->get("block");
+            rule.mLocationBlock = block != nullptr ? block->string() : std::string();
+        }
+        rule.mOutput = stateOf(entry.get("output_state"));
+        return rule;
+    }
+
+    // field names from the processor schema (sub_149301D80)
+    bool readProcessor(const json::Value &value, PackJigsaw::Processor &processor) {
+        const json::Value *type = value.get("processor_type");
+        if (type == nullptr)
+            return false;
+        processor.mType = type->string();
+        if (processor.mType == "minecraft:rule") {
+            const json::Value *rules = value.get("rules");
+            if (rules == nullptr || !rules->isArray())
+                return false;
+            for (const std::unique_ptr<json::Value> &entry: rules->mArray)
+                processor.mRules.push_back(ruleOf(*entry));
+            return true;
+        }
+        if (processor.mType == "minecraft:block_ignore") {
+            processor.mBlocks = blockNames(value.get("blocks"));
+            return true;
+        }
+        if (processor.mType == "minecraft:protected_blocks") {
+            processor.mBlocks = blockNames(value.get("value"));
+            return true;
+        }
+        if (processor.mType == "minecraft:capped") {
+            const json::Value *delegate = value.get("delegate");
+            auto inner = std::make_shared<PackJigsaw::Processor>();
+            if (delegate == nullptr || !readProcessor(*delegate, *inner)
+                || !readIntProvider(value.get("limit"), processor.mLimitMin, processor.mLimitMax))
+                return false;
+            processor.mDelegate = inner;
+            return true;
+        }
+        return false;
+    }
+
     struct Marker {
         Vector3i mPosition;
         int mFacing = 0;
@@ -228,15 +318,8 @@ void PackJigsaw::addPack(const std::string &packRoot) {
         const json::Value *depth = body->get("max_depth");
         structure.mStartPool = pool != nullptr ? pool->string() : std::string();
         structure.mMaxDepth = depth != nullptr ? depth->integer(1) : 1;
-        // start_height as a constant only; height providers such as uniform are not read
-        const json::Value *height = body->get("start_height");
-        if (height != nullptr && height->isNumber()) {
-            structure.mHasStartHeight = true;
-            structure.mStartHeight = height->integer();
-        } else if (height != nullptr && height->get("value") != nullptr && height->get("value")->isNumber()) {
-            structure.mHasStartHeight = true;
-            structure.mStartHeight = height->get("value")->integer();
-        }
+        structure.mHasStartHeight = readIntProvider(body->get("start_height"), structure.mStartHeightMin,
+                                                    structure.mStartHeightMax);
         mStructures[identifier] = structure;
     });
     eachJson(root / "processors", [&](const json::Value &file) {
@@ -246,35 +329,16 @@ void PackJigsaw::addPack(const std::string &packRoot) {
         const std::string identifier = identifierOf(*body);
         if (identifier.empty())
             return;
-        std::vector<Rule> rules;
+        std::vector<Processor> list;
         const json::Value *processors = body->get("processors");
         if (processors != nullptr && processors->isArray()) {
             for (const std::unique_ptr<json::Value> &processor: processors->mArray) {
-                const json::Value *type = processor->get("processor_type");
-                const json::Value *list = processor->get("rules");
-                // only minecraft:rule processors are read
-                if (type == nullptr || type->string() != "minecraft:rule" || list == nullptr || !list->isArray())
-                    continue;
-                for (const std::unique_ptr<json::Value> &entry: list->mArray) {
-                    Rule rule;
-                    if (const json::Value *input = entry->get("input_predicate")) {
-                        const json::Value *predicate = input->get("predicate_type");
-                        const json::Value *block = input->get("block");
-                        const json::Value *probability = input->get("probability");
-                        rule.mPredicate = predicate != nullptr ? predicate->string() : rule.mPredicate;
-                        rule.mBlock = block != nullptr ? block->string() : std::string();
-                        rule.mProbability = probability != nullptr ? (float) probability->number(1.0) : 1.0f;
-                    }
-                    if (const json::Value *location = entry->get("location_predicate")) {
-                        const json::Value *block = location->get("block");
-                        rule.mLocationBlock = block != nullptr ? block->string() : std::string();
-                    }
-                    rule.mOutput = stateOf(entry->get("output_state"));
-                    rules.push_back(rule);
-                }
+                Processor read;
+                if (readProcessor(*processor, read))
+                    list.push_back(std::move(read));
             }
         }
-        mProcessors[identifier] = rules;
+        mProcessors[identifier] = std::move(list);
     });
 }
 
@@ -288,7 +352,7 @@ const PackJigsaw::Structure *PackJigsaw::structure(const std::string &identifier
     return found == mStructures.end() ? nullptr : &found->second;
 }
 
-const std::vector<PackJigsaw::Rule> *PackJigsaw::processors(const std::string &identifier) const {
+const std::vector<PackJigsaw::Processor> *PackJigsaw::processors(const std::string &identifier) const {
     const auto found = mProcessors.find(identifier);
     return found == mProcessors.end() ? nullptr : &found->second;
 }
@@ -401,10 +465,20 @@ bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::str
     std::uniform_real_distribution<float> chance(0.0f, 1.0f);
     for (const Piece &piece: pieces) {
         std::vector<Marker> markers = markersOf(*piece.mStructure, piece.mRotation, piece.mOrigin);
-        const std::vector<Rule> *rules = processors(piece.mProcessors);
+        const std::vector<Processor> *list = processors(piece.mProcessors);
+        // capped: each one changes at most its rolled limit of blocks in the piece
+        std::map<const Processor *, int32_t> remaining;
+        if (list != nullptr) {
+            for (const Processor &processor: *list) {
+                if (processor.mType == "minecraft:capped")
+                    remaining[&processor] = std::uniform_int_distribution<int32_t>(processor.mLimitMin,
+                                                                                   processor.mLimitMax)(random);
+            }
+        }
         McStructure::PlaceOptions place;
         place.mRotation = piece.mRotation;
         place.mEntities = options.mIncludeEntities;
+        place.mKeepWorldWater = options.mApplyWaterlogging;
         place.mFilter = [&](const Vector3i &target, BlockState &state) {
             if (state.mName == "minecraft:jigsaw" && !options.mKeepJigsaws) {
                 for (const Marker &marker: markers) {
@@ -416,20 +490,45 @@ bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::str
                 state = BlockState("minecraft:air");
                 return true;
             }
-            if (rules == nullptr)
+            if (list == nullptr)
                 return true;
             const BlockState world = level.getBlockState(target.x, target.y, target.z);
-            for (const Rule &rule: *rules) {
-                bool input = rule.mPredicate == "minecraft:always_true";
-                if (rule.mPredicate == "minecraft:block_match")
-                    input = state.mName == rule.mBlock;
-                else if (rule.mPredicate == "minecraft:random_block_match")
-                    input = state.mName == rule.mBlock && chance(random) < rule.mProbability;
-                const bool where = rule.mLocationBlock.empty() || world.mName == rule.mLocationBlock;
-                if (input && where) {
-                    state = rule.mOutput;
-                    break;
+            const auto applyRules = [&](const Processor &processor) {
+                for (const Rule &rule: processor.mRules) {
+                    bool input = rule.mPredicate == "minecraft:always_true";
+                    if (rule.mPredicate == "minecraft:block_match")
+                        input = state.mName == rule.mBlock;
+                    else if (rule.mPredicate == "minecraft:random_block_match")
+                        input = state.mName == rule.mBlock && chance(random) < rule.mProbability;
+                    const bool where = rule.mLocationBlock.empty() || world.mName == rule.mLocationBlock;
+                    if (input && where) {
+                        state = rule.mOutput;
+                        return true;
+                    }
                 }
+                return false;
+            };
+            const auto listed = [](const std::vector<std::string> &names, const std::string &name) {
+                return std::find(names.begin(), names.end(), name) != names.end();
+            };
+            // -1 leaves the cell out, 1 changed the block, 0 did nothing
+            std::function<int(const Processor &)> apply = [&](const Processor &processor) {
+                if (processor.mType == "minecraft:block_ignore")
+                    return listed(processor.mBlocks, state.mName) ? -1 : 0;
+                if (processor.mType == "minecraft:protected_blocks")
+                    return listed(processor.mBlocks, world.mName) ? -1 : 0;
+                if (processor.mType == "minecraft:rule")
+                    return applyRules(processor) ? 1 : 0;
+                if (remaining[&processor] <= 0)
+                    return 0;
+                const int result = apply(*processor.mDelegate);
+                if (result != 0)
+                    --remaining[&processor];
+                return result;
+            };
+            for (const Processor &processor: *list) {
+                if (apply(processor) < 0)
+                    return false;
             }
             return true;
         };

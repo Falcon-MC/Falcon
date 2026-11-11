@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -63,6 +64,11 @@ public:
 
     ScriptScheduler &scheduler() {
         return mScheduler;
+    }
+
+    // runs once per tick until it returns false
+    void addTickJob(std::function<bool()> job) {
+        mTickJobs.push_back(std::move(job));
     }
 
     const std::string &packName() const {
@@ -478,6 +484,7 @@ private:
     // the custom block each actor stands on: fires once per step, not per tick
     std::unordered_map<int64_t, SteppedBlock> mStepping;
     ScriptScheduler mScheduler;
+    std::vector<std::function<bool()>> mTickJobs;
     PlayerHandleRegistry &mPlayers;
 
     // a deque: a native may define a class, and so a binding, while its own binding is in use

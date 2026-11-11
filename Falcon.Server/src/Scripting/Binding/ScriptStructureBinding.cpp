@@ -12,6 +12,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <functional>
+#include <memory>
+#include <random>
 
 using namespace ScriptValues;
 
@@ -248,8 +250,37 @@ namespace {
         const Vector3i size = structure->rotatedSize(place.mRotation);
         if (at.y < level.getMinY() || at.y + size.y - 1 > level.getMaxY())
             return api->throwError("LocationOutOfWorldBoundariesError", "");
-        // animationMode and animationSeconds are not played; the structure appears at once
-        structure->place(api->host(), level, at, place);
+        JSValue mode = optionValue(ctx, options, "animationMode");
+        const std::string animation = JS_IsString(mode) ? toString(ctx, mode) : std::string("None");
+        JS_FreeValue(ctx, mode);
+        JSValue secondsValue = optionValue(ctx, options, "animationSeconds");
+        double seconds = 0.0;
+        if (!JS_IsUndefined(secondsValue) && JS_ToFloat64(ctx, &seconds, secondsValue) != 0)
+            seconds = 0.0;
+        JS_FreeValue(ctx, secondsValue);
+        const int64_t ticks = (int64_t) std::ceil(seconds * 20.0);
+        if (animation == "None" || ticks <= 0 || !place.mBlocks) {
+            structure->place(api->host(), level, at, place);
+            return JS_UNDEFINED;
+        }
+
+        // Layers steps whole y layers; Blocks steps single cells
+        const Vector3i &raw = structure->getSize();
+        const int64_t layer = (int64_t) raw.x * raw.z;
+        const int64_t units = animation == "Layers" ? (int64_t) raw.y : layer * raw.y;
+        const int64_t unitCells = animation == "Layers" ? layer : 1;
+        auto step = std::make_shared<int64_t>(0);
+        ServerNetworkHandler *owner = &api->host();
+        Level *target = &level;
+        api->addTickJob([structure, place, owner, target, at, ticks, units, unitCells, step]() {
+            const int64_t done = (*step)++;
+            McStructure::PlaceOptions part = place;
+            part.mFromCell = (units * done / ticks) * unitCells;
+            part.mToCell = (units * (done + 1) / ticks) * unitCells;
+            part.mEntities = place.mEntities && done + 1 == ticks;
+            structure->place(*owner, *target, at, part);
+            return done + 1 < ticks;
+        });
         return JS_UNDEFINED;
     }
 
@@ -264,7 +295,10 @@ namespace {
         PackJigsaw::Options read;
         read.mIncludeEntities = optionBool(ctx, options, "includeEntities", true);
         read.mKeepJigsaws = optionBool(ctx, options, "keepJigsaws", false);
-        // liquidSettings is not applied; pieces keep the water they were saved with
+        JSValue liquid = optionValue(ctx, options, "liquidSettings");
+        if (JS_IsString(liquid))
+            read.mApplyWaterlogging = toString(ctx, liquid) != "IgnoreWaterlogging";
+        JS_FreeValue(ctx, liquid);
         return read;
     }
 
@@ -311,8 +345,10 @@ namespace {
         if (structure == nullptr)
             return api->throwError("Error", "Unknown jigsaw structure " + id);
         JSValueConst options = argc >= 4 ? argv[3] : JS_UNDEFINED;
-        if (structure->mHasStartHeight && !optionBool(ctx, options, "ignoreStartHeight", false))
-            at.y = structure->mStartHeight;
+        if (structure->mHasStartHeight && !optionBool(ctx, options, "ignoreStartHeight", false)) {
+            std::mt19937_64 random((uint64_t) jigsawSeed());
+            at.y = std::uniform_int_distribution<int32_t>(structure->mStartHeightMin, structure->mStartHeightMax)(random);
+        }
         return runJigsaw(*api, api->levelOf(argv[1]), structure->mStartPool, std::string(), structure->mMaxDepth, at,
                          jigsawOptions(ctx, options));
     }

@@ -194,6 +194,7 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
         blockActor->setPosition(Vector3i(data.getInt("x"), data.getInt("y"), data.getInt("z")));
         blockActor->loadNbt(data, context);
         blockActor->loadLootTable(data);
+        blockActor->loadDynamicProperties(data);
         insert(std::move(blockActor));
     }
 }
