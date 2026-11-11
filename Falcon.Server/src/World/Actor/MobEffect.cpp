@@ -3,10 +3,6 @@
 #include "World/Actor/Actor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Mob/MobActor.h"
-#include "World/Actor/Mob/Hostile/ZombieActor.h"
-#include "World/Actor/Mob/Hostile/DrownedActor.h"
-#include "World/Actor/Mob/Hostile/HuskActor.h"
-#include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
 #include "World/Item/ItemData.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -455,9 +451,7 @@ float MobEffectManager::advanceFreezing(bool rising) {
 }
 
 bool FreezingMobEffect::isImmune(const Actor &actor) {
-    return dynamic_cast<const ZombieActor *>(&actor) != nullptr || dynamic_cast<const DrownedActor *>(&actor) != nullptr
-           || dynamic_cast<const HuskActor *>(&actor) != nullptr || dynamic_cast<const WitherActor *>(&actor) != nullptr
-           || dynamic_cast<const EnderDragon *>(&actor) != nullptr
+    return actor.isUndead() || dynamic_cast<const EnderDragon *>(&actor) != nullptr
            || std::string(actor.getIdentifier()) == "minecraft:frostbite";
 }
 
