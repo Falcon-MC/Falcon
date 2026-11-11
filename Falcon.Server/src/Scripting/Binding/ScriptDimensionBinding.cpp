@@ -86,7 +86,7 @@ namespace {
         const Level &level = levelOf(ctx, thisVal);
         JSValue range = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, range, "min", JS_NewInt32(ctx, level.getMinY()));
-        // TODO: max read as the first y above the world, the game's own bound is unverified
+        // sub_14B5B5520 returns the stored bound: exclusive, the top block is max - 1 (0x143848dbc)
         JS_SetPropertyStr(ctx, range, "max", JS_NewInt32(ctx, level.getMaxY() + 1));
         return range;
     }
