@@ -3,6 +3,7 @@
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "Core/NBT/Tag.h"
+#include "World/Scores/Scoreboard.h"
 
 #include <cstdint>
 #include <memory>
@@ -41,10 +42,14 @@ struct ScriptEntityPart : ScriptNative {
     std::string mComponentId;
 };
 
+// the stack's own NBT (name, lore, enchantments, lock, book, color) stays in mTag as the game saves it
 struct ScriptItemData {
     std::string mTypeId;
     int32_t mAmount = 1;
     int32_t mDamage = 0;
+    Tag mTag = Tag::ofCompound();
+    std::vector<std::string> mCanPlaceOn;
+    std::vector<std::string> mCanDestroy;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
 };
 
@@ -55,12 +60,43 @@ struct ScriptItemRef : ScriptNative {
     std::string mComponentId;
 };
 
+// an entity's container, one of its slots, or the storage of an item; read on every access
+struct ScriptContainerRef : ScriptEntityPart {
+    enum class Kind { Inventory, Ender, Equipment, Cursor, Item, Block };
+
+    Kind mKind = Kind::Inventory;
+    // Kind::Item: the bundle the container lives in
+    std::shared_ptr<ScriptItemData> mItem;
+    // a ContainerSlot: its index, or its EquipmentSlot name; -1 and empty on the Container
+    int32_t mSlot = -1;
+    std::string mEquipmentSlot;
+    // the Container itself, not its owning component
+    bool mIsContainer = false;
+    // Kind::Block: the block actor holding the container
+    uint32_t mWorldId = 0;
+    DimensionType mDimension = DimensionType::Overworld;
+    int32_t mX = 0;
+    int32_t mY = 0;
+    int32_t mZ = 0;
+};
+
 struct ScriptBlockRef : ScriptNative {
     DimensionType mDimension = DimensionType::Overworld;
     uint32_t mWorldId = 0;
     int32_t mX = 0;
     int32_t mY = 0;
     int32_t mZ = 0;
+};
+
+// a block component: reads the block on every access
+struct ScriptBlockPart : ScriptNative {
+    ScriptBlockRef mBlock;
+    std::string mComponentId;
+};
+
+// a structure of the shared registry, by identifier: deleting it leaves the object invalid
+struct ScriptStructureRef : ScriptNative {
+    std::string mId;
 };
 
 struct ScriptDimensionRef : ScriptNative {
@@ -94,6 +130,18 @@ struct ScriptRegistryRef : ScriptNative {
 struct ScriptClockRef : ScriptNative {
     std::string mClock;
     std::string mMarker;
+};
+
+// an objective by name and serial: a removed objective stays invalid once another takes its name
+struct ScriptObjectiveRef : ScriptNative {
+    std::string mName;
+    uint64_t mSerial = 0;
+};
+
+// a ScoreboardIdentity, or a ScoreboardScoreInfo with its score; the identity is kept for an invalid one
+struct ScriptIdentityRef : ScriptNative {
+    ScoreboardIdentity mIdentity;
+    int32_t mScore = 0;
 };
 
 namespace ScriptValues {

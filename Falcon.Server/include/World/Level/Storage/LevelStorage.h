@@ -123,6 +123,11 @@ public:
 
     bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
 
+    // every key starting with prefix, prefix removed, with its unwrapped tag
+    std::vector<std::pair<std::string, Tag>> loadSavedDataWithPrefix(const std::string &prefix);
+
+    bool eraseSavedData(const std::string &key);
+
     bool loadGameRules(Tag &rules);
 
     // display name, game mode, difficulty and the game's own options are kept from the file;

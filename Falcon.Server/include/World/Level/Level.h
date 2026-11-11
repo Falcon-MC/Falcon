@@ -241,6 +241,14 @@ public:
 
     bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
 
+    std::vector<std::pair<std::string, Tag>> loadSavedDataWithPrefix(const std::string &prefix) {
+        return mStorage.loadSavedDataWithPrefix(prefix);
+    }
+
+    bool eraseSavedData(const std::string &key) {
+        return mStorage.eraseSavedData(key);
+    }
+
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
     std::vector<Tag> loadBlockEntities(int32_t chunkX, int32_t chunkZ);

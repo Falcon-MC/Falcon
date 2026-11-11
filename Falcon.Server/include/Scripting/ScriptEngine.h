@@ -3,9 +3,11 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
+#include "Scripting/ScriptStructureRegistry.h"
 #include "Scripting/WorldClockSystem.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <random>
 #include <string>
@@ -122,8 +124,23 @@ public:
 
     void onItemUse(ServerPlayer &player);
 
-    // the used stack, read before the game decrements it
-    void onItemCompleteUse(ServerPlayer &player, const ItemStack &used);
+    // the used stack, read before the game decrements it; useDuration: ticks left of the charge
+    void onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration = 0);
+
+    void onItemStartUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration);
+
+    // release: the player let go of a charged item; every end of a use also fires itemStopUse
+    void onItemStopUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration, bool released);
+
+    // true when a script cancelled the pickup
+    bool beforeEntityItemPickup(Actor &collector, Actor &item, const ItemStack &picked);
+
+    void onEntityItemPickup(Actor &collector, const ItemStack &picked);
+
+    // container: the entity whose inventory window opened, source: who opened it
+    void onEntityContainerOpened(Actor &container, Actor &source);
+
+    void onEntityContainerClosed(Actor &container, Actor &source);
 
     // food only, before onCompleteUse: the food component fires it once eaten
     void onItemConsume(ServerPlayer &player, const ItemStack &used);
@@ -135,6 +152,12 @@ public:
     bool isCustomComponentRegistered(bool blocks, const std::string &name) const;
 
     bool isDimensionPending(const std::string &name) const;
+
+    // a custom command enum any pack registered; null when none did
+    const std::vector<std::string> *findCommandEnum(const std::string &name) const;
+
+    // a call into scripts from outside: arms the watchdog, then runs the microtasks; nested calls only run
+    void runGuarded(const std::function<void()> &call);
 
     // after startup: ids from DimensionNameIdTable, a level in every world, the table saved back
     void createCustomDimensions();
@@ -204,6 +227,30 @@ public:
     // rule is the game's lowercase name; packs whose GameRule enum lacks it get nothing
     void onGameRuleChange(const std::string &rule, bool isBool, bool boolValue, int32_t intValue);
 
+    // explosion before event: scripts may cancel or rewrite the impacted blocks; true when cancelled
+    bool beforeExplosion(Level &level, const ServerActor *source, std::vector<Vector3i> &blocks);
+
+    void onExplosion(Level &level, const ServerActor *source, const std::vector<Vector3i> &blocks);
+
+    // one destroyed block; exploded is the block before the explosion
+    void onBlockExplode(Level &level, const Vector3i &position, const BlockState &exploded, const ServerActor *source);
+
+    void onPistonActivate(Level &level, const Vector3i &position, bool expanding);
+
+    // sources: the entities on the wire, none once it releases
+    void onTripWireTrip(Level &level, const Vector3i &position, bool powered, const std::vector<Actor *> &sources);
+
+    void onTargetBlockHit(Level &level, const Vector3i &position, const Vector3f &hitVector, int32_t previousPower,
+                          int32_t power, Actor *source);
+
+    // source: the entity that pressed it, null for none
+    void onButtonPush(Level &level, const Vector3i &position, Actor *source);
+
+    void onLeverAction(Level &level, const Vector3i &position, bool powered, ServerPlayer &player);
+
+    // a plate going from off to on pushes, from on to off pops
+    void onPressurePlate(Level &level, const Vector3i &position, int32_t previousPower, int32_t power, Actor *source);
+
     // WeatherType values; scripts may rewrite newWeather and duration (ticks); true when cancelled
     bool beforeWeatherChange(const std::string &previousWeather, std::string &newWeather, int32_t &duration);
 
@@ -229,6 +276,11 @@ public:
         return mClocks;
     }
 
+    // world.structureManager of every pack
+    ScriptStructureRegistry &structures() {
+        return mStructures;
+    }
+
     // InitializeRegistry for a player who just spawned
     void sendWorldClocks(ServerPlayer &player);
 
@@ -247,6 +299,10 @@ private:
     // calls fill(api, event) for each pack with subscribers; true when one cancelled
     template <typename Fill>
     bool _emit(const char *key, const char *signal, bool cancellable, Fill fill);
+
+    // entityContainerOpened and entityContainerClosed: sourceField is openSource or closeSource
+    void _emitContainerAccess(const char *key, const char *signal, const char *sourceField, Actor &container,
+                              Actor &source);
 
     void _onHealthChanged(Actor &entity, float oldValue, float newValue);
 
@@ -280,8 +336,10 @@ private:
     void _broadcastClocks(const SyncWorldClocksPacket &packet);
 
     WorldClockSystem mClocks;
+    ScriptStructureRegistry mStructures;
     int64_t mLastClockSync = 0;
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;
     int64_t mExecutionDeadlineMs;
+    int32_t mGuardDepth = 0;
 };

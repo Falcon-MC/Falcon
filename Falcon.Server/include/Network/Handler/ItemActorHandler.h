@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
 #include "Core/NBT/Tag.h"
 
 #include <cstdint>
@@ -21,6 +22,8 @@ public:
     static Vector3f randomDropMotion();
 
     static Vector3f randomDropAroundMotion();
+
+    static Vector3f randomPopPosition(const Vector3i &block);
 
     static ItemActor *dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                const ItemStack &item, const Vector3f &motion, int pickupDelay);

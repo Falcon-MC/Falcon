@@ -2,9 +2,7 @@
 
 #include "World/Level/Block/BlockData.h"
 #include "BlockUpgradeSchemas.h"
-#include "LegacyBlockTables.h"
 #include "Core/BlockState/BlockStateUpgrader.h"
-#include "Core/BlockState/LegacyBlockStates.h"
 
 #include <utility>
 #include <vector>
@@ -22,17 +20,6 @@ namespace {
         static const BlockStateUpgrader UPGRADER = buildUpgrader();
         return UPGRADER;
     }
-
-    const LegacyBlockStates &legacyStates() {
-        static const LegacyBlockStates STATES(
-                std::string(FalconLegacyBlockData::kIdMap, FalconLegacyBlockData::kIdMapSize),
-                std::string((const char *) FalconLegacyBlockData::kIdMeta, FalconLegacyBlockData::kIdMetaSize));
-        return STATES;
-    }
-}
-
-BlockStateData BlockStateUpgrades::fromLegacy(int32_t id, int32_t meta) {
-    return legacyStates().fromLegacy(id, meta);
 }
 
 BlockStateData BlockStateUpgrades::upgrade(const BlockStateData &state) {

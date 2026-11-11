@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
@@ -29,11 +30,8 @@
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
-#include "Protocol/Packets/RemoveObjectivePacket.h"
-#include "Protocol/Packets/SetDisplayObjectivePacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Packets/TakeItemActorPacket.h"
-#include "Protocol/Packets/SetScorePacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
 #include "Protocol/Packets/TextPacket.h"
 #include "World/Item/Item.h"
@@ -987,6 +985,14 @@ void ServerNetworkHandler::refreshContainerViewers(const Vector3i &position, con
     }
 }
 
+void ServerNetworkHandler::refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except) {
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned())
+            player.getInventoryManager().refreshEntityContainer(actorId);
+    }
+}
+
 void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
@@ -1468,90 +1474,6 @@ void ServerNetworkHandler::syncPlayerAttributes(ServerPlayer &player) {
     _sendAttributes(player);
 }
 
-void ServerNetworkHandler::displayScoreboardObjective(const std::string &slot, const std::string &objectiveId,
-                                                      const std::string &displayName) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = objectiveId;
-    packet.mDisplayName = displayName.empty() ? objectiveId : displayName;
-    packet.mCriteria = "dummy";
-    packet.mSortOrder = 0;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::clearScoreboardDisplay(const std::string &slot) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = "";
-    packet.mDisplayName = "";
-    packet.mCriteria = "dummy";
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::setScoreboardScore(const std::string &objectiveId, const std::string &participant,
-                                              int32_t score) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        it = mScoreboardIds.emplace(key, mNextScoreboardId++).first;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mScore = score;
-    info.mType = ScorerType::Fake;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mAction = SetScorePacket::Action::Change;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::removeScoreboardScore(const std::string &objectiveId, const std::string &participant) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        return;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mType = ScorerType::Invalid;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-    mScoreboardIds.erase(it);
-}
-
-void ServerNetworkHandler::removeScoreboardObjective(const std::string &objectiveId) {
-    RemoveObjectivePacket packet;
-    packet.mObjectiveId = objectiveId;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
 void ServerNetworkHandler::sendJsonMessage(ServerPlayer &player, const std::string &json) {
     TextPacket packet;
     packet.mType = TextPacket::Type::Json;
@@ -1776,6 +1698,8 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
+                if (DetectorSystem::isTarget(hitState))
+                    DetectorSystem::onTargetHit(*this, level, hitBlock, position, previousPosition, actor, arrowLike);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
                     expired.push_back(actorId);

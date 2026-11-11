@@ -51,6 +51,9 @@ private:
 
     bool _allowByPlugins();
 
+    // the explosion before event: scripts may cancel or narrow the blocks
+    bool _allowByScripts();
+
     static float _calculateEntityDamage(double doubleRadius, double impact);
 
     float _scaleDamageForDifficulty(float damage) const;
@@ -77,4 +80,5 @@ private:
     std::unordered_set<int64_t> mAffectedKeys;
     std::vector<Vector3i> mFireIgnitions;
     std::vector<Vector3i> mSmokePositions;
+    std::vector<Vector3i> mDestroyed;
 };

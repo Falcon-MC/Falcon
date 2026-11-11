@@ -7,6 +7,8 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
+#include "Scripting/ScriptEngine.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/FenceBlock.h"
 #include "World/Level/Block/FenceGateBlock.h"
@@ -38,6 +40,7 @@
 #include "Protocol/Types/ContainerSlotType.h"
 
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <string>
 #include <unordered_map>
@@ -887,7 +890,7 @@ void InventoryManager::onCurrentWindowRemove() {
         for (ItemStack &item: mFurnaceObservedItems)
             item = ItemStack::air();
     } else if (mContainerWindowId == currentWindowId) {
-        _closeBlockContainer();
+        _closeContainerWindow();
         mContainerWindowId = CONTAINER_ID_NONE;
     } else {
         mMainInventoryWindowId = CONTAINER_ID_NONE;
@@ -1077,7 +1080,7 @@ bool InventoryManager::refreshEnchantInput(const ItemStack &current, int32_t new
 }
 
 void InventoryManager::refreshOpenContainer(const Vector3i &position) {
-    if (mContainerWindowId == CONTAINER_ID_NONE || !(mContainerPosition == position))
+    if (mContainerWindowId == CONTAINER_ID_NONE || mContainerActorId != -1 || !(mContainerPosition == position))
         return;
 
     Container *container = getContainer();
@@ -1086,6 +1089,10 @@ void InventoryManager::refreshOpenContainer(const Vector3i &position) {
 }
 
 Container *InventoryManager::getContainer() {
+    if (mContainerActorId != -1) {
+        ServerActor *actor = mOwner == nullptr ? nullptr : mOwner->getActor(mContainerActorId);
+        return actor == nullptr || !isContainerOpen() ? nullptr : actor->getEntityContainer();
+    }
     BlockActorStore *blockActors = _blockActors();
     if (!isContainerOpen() || blockActors == nullptr)
         return nullptr;
@@ -1106,7 +1113,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
         return false;
 
     if (mContainerWindowId != CONTAINER_ID_NONE)
-        return mContainerPosition == position;
+        return mContainerActorId == -1 && mContainerPosition == position;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
         || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
@@ -1156,12 +1163,65 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
     return true;
 }
 
+bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType type) {
+    if (mPlayer == nullptr || mSender == nullptr || mOwner == nullptr)
+        return false;
+    Container *container = actor.getEntityContainer();
+    if (container == nullptr)
+        return false;
+    if (mContainerWindowId != CONTAINER_ID_NONE)
+        return mContainerActorId == actor.getUniqueId();
+    if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        return false;
+
+    const int windowId = _getNewWindowId();
+    mContainerWindowId = windowId;
+    mContainerActorId = actor.getUniqueId();
+    const Vector3f &position = actor.getPosition();
+    mContainerPosition = Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                                  (int32_t) std::floor(position.z));
+    mCurrentWindowType = type;
+
+    ContainerOpenPacket open;
+    open.mWindowId = (int8_t) windowId;
+    open.mType = type;
+    open.mBlockPosition = mContainerPosition;
+    open.mUniqueActorId = actor.getUniqueId();
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
+    _sendContentPackets(windowId, *container);
+
+    mOwner->getScriptEngine().onEntityContainerOpened(actor, *mPlayer);
+    return true;
+}
+
+void InventoryManager::refreshEntityContainer(int64_t actorId) {
+    if (mContainerActorId == -1 || mContainerActorId != actorId)
+        return;
+    Container *container = getContainer();
+    if (container != nullptr)
+        _sendContentPackets(mContainerWindowId, *container);
+}
+
+// the entity container window fires entityContainerClosed, a block one closes its block actor
+void InventoryManager::_closeContainerWindow() {
+    if (mContainerActorId == -1) {
+        _closeBlockContainer();
+        return;
+    }
+    const int64_t actorId = mContainerActorId;
+    mContainerActorId = -1;
+    ServerActor *actor = mOwner == nullptr ? nullptr : mOwner->getActor(actorId);
+    if (actor != nullptr && mPlayer != nullptr)
+        mOwner->getScriptEngine().onEntityContainerClosed(*actor, *mPlayer);
+}
+
 bool InventoryManager::onClientOpenChest(const Vector3i &position) {
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
 
     if (mContainerWindowId != CONTAINER_ID_NONE)
-        return mContainerPosition == position;
+        return mContainerActorId == -1 && mContainerPosition == position;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
         || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
@@ -1419,7 +1479,7 @@ void InventoryManager::onClientRemoveWindow(int windowId) {
     }
 
     if (windowId == mContainerWindowId) {
-        _closeBlockContainer();
+        _closeContainerWindow();
         mContainerWindowId = CONTAINER_ID_NONE;
     }
     if (windowId == mFurnaceWindowId) {

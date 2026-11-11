@@ -119,7 +119,7 @@ bool Explosion::explodeA() {
 bool Explosion::_allowByPlugins() {
     PluginManager &plugins = mOwner.getPluginManager();
     if (!plugins.hasSubscribers(FALCON_EVENT_EXPLOSION))
-        return true;
+        return _allowByScripts();
 
     PluginEvent explosionEvent;
     explosionEvent.mType = FALCON_EVENT_EXPLOSION;
@@ -134,6 +134,21 @@ bool Explosion::_allowByPlugins() {
         return false;
 
     mSize = std::max(explosionEvent.mAmount, 0.0);
+    return _allowByScripts();
+}
+
+bool Explosion::_allowByScripts() {
+    std::vector<Vector3i> impacted;
+    for (const Vector3i &position: mAffectedBlocks) {
+        if (!isAir(mLevel.getBlockState(position.x, position.y, position.z)))
+            impacted.push_back(position);
+    }
+    if (mOwner.getScriptEngine().beforeExplosion(mLevel, mSourceActor, impacted))
+        return false;
+    mAffectedBlocks = impacted;
+    mAffectedKeys.clear();
+    for (const Vector3i &position: mAffectedBlocks)
+        mAffectedKeys.insert(_key(position));
     return true;
 }
 
@@ -216,6 +231,7 @@ bool Explosion::explodeB() {
     _destroyBlocks();
     _ignite();
     _playEffects();
+    mOwner.getScriptEngine().onExplosion(mLevel, mSourceActor, mDestroyed);
     return true;
 }
 
@@ -349,6 +365,8 @@ void Explosion::_destroyBlocks() {
         const bool keepsContents = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
         BlockActionHandler::destroyBlock(mOwner, mLevel, position, state, keepsContents || nextDouble() * 100.0 < yield,
                                          noTool, mSourceActor);
+        mDestroyed.push_back(position);
+        mOwner.getScriptEngine().onBlockExplode(mLevel, position, state, mSourceActor);
     }
 }
 

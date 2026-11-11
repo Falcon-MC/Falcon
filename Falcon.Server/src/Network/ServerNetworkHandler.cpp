@@ -441,6 +441,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
     mAnnouncement.mMaxPlayers = maxPlayers;
 
     _registerCommands();
+    _bindScoreboard();
 
     mResourcePacks.loadFromDirectory(ServerPaths::file("resource_packs"));
     mResourcePacks.loadBundledAddonsFrom(ServerPaths::file("behavior_packs"));
@@ -611,6 +612,7 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
     _openWorld(properties.getLevelName(), levelSeed);
+    loadScoreboard();
 
     for (const std::string &name: properties.getAutoloadWorlds()) {
         if (mWorlds.find(name) == nullptr && WorldManager::isValidName(name))
@@ -764,6 +766,7 @@ void ServerNetworkHandler::stopServerListening() {
     }
 
     finish([this]() { saveWorldDynamicProperties(true); });
+    finish([this]() { saveScoreboard(true); });
     finish([this]() { saveAllActors(); });
 
     for (World *world: mWorlds.getWorlds()) {
@@ -1425,6 +1428,8 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::ActorPickRequest,
             MinecraftPacketIds::Emote,
             MinecraftPacketIds::ModalFormResponse,
+            MinecraftPacketIds::ServerboundDataStore,
+            MinecraftPacketIds::ServerboundDataDrivenScreenClosed,
             MinecraftPacketIds::PlayerSkin,
     };
 
@@ -2536,6 +2541,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const InteractPac
     }
 
     if (packet.mAction != InteractPacket::Action::OpenInventory)
+        return;
+
+    // riding a tamed mount, the inventory key opens the mount's window
+    // the mount or the player: both accepted, which one the client sends is not checked
+    ServerActor *mount = player->isRiding()
+                                 ? dynamic_cast<ServerActor *>(RideSystem::resolve(*this, player->getVehicleId()))
+                                 : nullptr;
+    if (mount != nullptr && mount->getEntityContainer() != nullptr
+        && (packet.mRuntimeActorId == player->getRuntimeId() || packet.mRuntimeActorId == mount->getRuntimeId())
+        && player->getInventoryManager().openEntityContainer(*mount, ContainerType::Horse))
         return;
 
     if (packet.mRuntimeActorId != player->getRuntimeId())

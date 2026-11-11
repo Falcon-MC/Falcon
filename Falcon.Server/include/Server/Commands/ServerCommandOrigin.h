@@ -28,6 +28,10 @@ public:
 
     Level *getLevel() override;
 
+    bool canUseCommandsWithoutCheats() const override {
+        return true;
+    }
+
 private:
     ServerNetworkHandler *mHandler;
 };

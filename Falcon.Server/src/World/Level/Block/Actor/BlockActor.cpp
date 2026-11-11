@@ -1,5 +1,6 @@
 #include "World/Level/Block/Actor/BlockActor.h"
 
+#include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Storage/FalconDataVersion.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTable.h"
@@ -11,6 +12,7 @@
 namespace {
     const char *TAG_LOOT_TABLE = "LootTable";
     const char *TAG_LOOT_SEED = "LootTableSeed";
+    const char *TAG_DYNAMIC_PROPERTIES = "DynamicProperties";
 }
 
 Tag BlockActor::getSpawnCompound() const {
@@ -33,7 +35,15 @@ Tag BlockActor::saveWithPosition() const {
         data.putString(TAG_LOOT_TABLE, mLootTable);
         data.putInt(TAG_LOOT_SEED, mLootSeed);
     }
+    if (!mDynamicProperties.empty())
+        data.put(TAG_DYNAMIC_PROPERTIES, serializeDynamicProperties(mDynamicProperties));
     return data;
+}
+
+void BlockActor::loadDynamicProperties(const Tag &data) {
+    mDynamicProperties.clear();
+    if (const Tag *properties = data.get(TAG_DYNAMIC_PROPERTIES))
+        deserializeDynamicProperties(*properties, mDynamicProperties);
 }
 
 void BlockActor::setLootTable(const std::string &table, int32_t seed) {

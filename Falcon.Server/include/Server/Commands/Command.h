@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Server/Commands/CommandOrigin.h"
+#include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Protocol/Types/AdventureSettingData.h"
 #include "Protocol/Types/CommandData.h"
@@ -42,6 +43,10 @@ public:
     static std::string joinPlayerNames(const std::vector<ServerPlayer *> &players);
 
     static bool parseCoordinate(const std::string &value, float origin, float &out);
+
+    // three tokens: absolute, ~ relative, or all three ^ local to the rotation (pitch x, yaw y, degrees)
+    static bool parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                              const Vector3f &rotation, Vector3f &out);
 
     static bool parseBlockCoordinate(const std::string &value, int32_t origin, int32_t &out);
 

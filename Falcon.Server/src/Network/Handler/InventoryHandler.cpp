@@ -4,6 +4,7 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Item/VanillaItems.h"
 #include "World/Inventory/CraftingManager.h"
 #include "World/Level/Block/Inventory/CraftingTableInventory.h"
@@ -573,7 +574,9 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         || offhandAfter.mDamage != offhandBefore.mDamage || !(offhandAfter.mTag == offhandBefore.mTag))
         sendOffhandContent(owner, player);
 
-    if (player.getInventoryManager().isContainerOpen())
+    if (player.getInventoryManager().getContainerActorId() != -1)
+        owner.refreshEntityContainerViewers(player.getInventoryManager().getContainerActorId(), &player);
+    else if (player.getInventoryManager().isContainerOpen())
         owner.refreshContainerViewers(player.getInventoryManager().getContainerPosition(), &player);
 
     if (response.mEntries.empty())
@@ -644,6 +647,11 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
                     return;
 
                 target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
+                // a sneaking click opens a tamed mount's inventory instead of riding it
+                if (target != nullptr && dynamic_cast<MobActor *>(target) != nullptr
+                    && player.getFlags().get(ActorFlag::Sneaking) && target->getEntityContainer() != nullptr
+                    && player.getInventoryManager().openEntityContainer(*target, ContainerType::Horse))
+                    return;
                 if (target != nullptr) {
                     const ItemStack before = player.getInventory().getItemInHand();
                     if (target->onInteractAt(owner, player, packet.mClickPosition)) {
@@ -688,9 +696,12 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
         if (wasUsing && !releasedItem.isAir() && releasedItem.mDefinition != nullptr) {
             const Item *itemType = VanillaItems::fromIdentifier(releasedItem.mDefinition->getIdentifier());
             const int32_t elapsedTicks = (int32_t) (owner.getCurrentTick() - player.getItemUseStartTick());
+            const ItemStack released = releasedItem;
+            const int32_t ticksLeft = owner.getItemUseTicksLeft(player);
             if (itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks)) {
                 player.getFlags().set(ActorFlag::UsingItem, false);
                 owner._sendEntityData(player);
+                owner.getScriptEngine().onItemStopUse(player, released, ticksLeft, true);
                 return;
             }
         }
@@ -704,6 +715,8 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
                 player.setLastEarlyConsumableReleaseTick(owner.getCurrentTick());
                 player.getFlags().set(ActorFlag::UsingItem, false);
                 owner._sendEntityData(player);
+                owner.getScriptEngine().onItemStopUse(player, player.getInventory().getItemInHand(),
+                                                      owner.getItemUseTicksLeft(player), true);
             }
         }
         return;

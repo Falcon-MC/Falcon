@@ -6,6 +6,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ActorDamageSource.h"
 #include "Scripting/Binding/ScriptRaycast.h"
+#include "Scripting/Binding/ScriptRayQueries.h"
 #include "Protocol/Packets/ScriptMessagePacket.h"
 #include "Protocol/Packets/StopSoundPacket.h"
 #include "World/Actor/DamageCause.h"
@@ -266,7 +267,8 @@ namespace {
         if (hasMax && (target.mPlayer == nullptr || playerLevelOf(target) > level))
             return false;
 
-        return rotationMatches(ctx, target, options) && propertiesMatch(ctx, target, options);
+        return rotationMatches(ctx, target, options) && propertiesMatch(ctx, target, options)
+               && target.mApi->scoresMatch(*target.mActor, options);
     }
 
     JSValue entityGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -1274,12 +1276,7 @@ namespace {
     JSValue entityRunCommand(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         const std::string line = argc >= 1 ? toString(ctx, argv[0]) : std::string();
-        const int32_t success = target.mPlayer != nullptr ? target.mApi->runCommandAsPlayer(*target.mPlayer, line)
-                                                          : target.mApi->runCommandAsConsole(line);
-
-        JSValue result = target.mApi->makeInstance("CommandResult", new ScriptNative());
-        JS_DefinePropertyValueStr(ctx, result, "successCount", JS_NewInt32(ctx, success), JS_PROP_ENUMERABLE);
-        return result;
+        return target.mApi->runCommand(target.mApi->host().getLevelFor(*target.mActor), target.mActor, line);
     }
 
     JSValue entityAddTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -1440,16 +1437,12 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the player's inventory and equipment come from its own inventory, every other component from the entity
+    // inventories and equipment are read from the game's containers, every other component from the definition
     JSValue makeEntityComponent(const EntityTarget &target, const std::string &requested) {
         const std::string id = requested.find(':') == std::string::npos ? "minecraft:" + requested : requested;
-        if (target.mPlayer != nullptr && (id == "minecraft:inventory" || id == "minecraft:equippable")) {
-            ScriptPlayerPart *part = new ScriptPlayerPart();
-            part->mHandle = (uint32_t) target.mRef->mId;
-            part->mComponentId = id;
-            return target.mApi->makeInstance(
-                    id == "minecraft:inventory" ? "EntityInventoryComponent" : "EntityEquippableComponent", part);
-        }
+        JSValue container = target.mApi->makeContainerComponent(*target.mActor, *target.mRef, id);
+        if (!JS_IsUndefined(container))
+            return container;
         return target.mApi->makeEntityComponent(*target.mActor, *target.mRef, id);
     }
 
@@ -1470,11 +1463,7 @@ namespace {
 
     JSValue entityGetComponents(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        std::vector<std::string> ids;
-        if (target.mPlayer != nullptr) {
-            ids.emplace_back("minecraft:inventory");
-            ids.emplace_back("minecraft:equippable");
-        }
+        std::vector<std::string> ids = ScriptApi::containerComponentIds();
         for (const std::string &id: target.mApi->entityComponentIds(*target.mActor))
             ids.push_back(id);
 
@@ -2088,157 +2077,6 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    JSValue containerGetSize(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, PlayerInventory::CONTAINER_SIZE);
-    }
-
-    JSValue containerAddItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        const ScriptItemRef *item = argc >= 1 ? api->native<ScriptItemRef>(argv[0]) : nullptr;
-        if (item == nullptr)
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        if (player != nullptr)
-            api->giveItem(*player, item->mItem->mTypeId, item->mItem->mAmount);
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemFromStack(ScriptApi *api, const ItemStack &stack) {
-        if (stack.isAir() || stack.mDefinition == nullptr)
-            return JS_UNDEFINED;
-
-        JSValue jsItem = api->makeItemStack(stack.mDefinition->getIdentifier(), stack.mCount);
-        const ScriptItemRef *ref = api->native<ScriptItemRef>(jsItem);
-        ref->mItem->mDamage = stack.mDamage;
-        if (stack.mTag.isCompound()) {
-            const Tag *dynamicProperties = stack.mTag.get("DynamicProperties");
-            if (dynamicProperties != nullptr)
-                deserializeDynamicProperties(*dynamicProperties, ref->mItem->mDynamicProperties);
-        }
-        return jsItem;
-    }
-
-    JSValue containerGetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        int32_t slot = 0;
-        if (player == nullptr || argc < 1 || JS_ToInt32(ctx, &slot, argv[0]) != 0)
-            return JS_UNDEFINED;
-        if (slot < 0 || slot >= PlayerInventory::CONTAINER_SIZE)
-            return JS_UNDEFINED;
-        return itemFromStack(api, player->getInventory().getItem(slot));
-    }
-
-    JSValue containerSetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        int32_t slot = 0;
-        if (player == nullptr || argc < 1 || JS_ToInt32(ctx, &slot, argv[0]) != 0)
-            return JS_UNDEFINED;
-
-        const ScriptItemRef *item = argc >= 2 ? api->native<ScriptItemRef>(argv[1]) : nullptr;
-        if (item == nullptr) {
-            api->host().setContainerSlot(*player, slot, std::string(), 0, Tag::ofCompound());
-            return JS_UNDEFINED;
-        }
-        api->host().setContainerSlot(*player, slot, item->mItem->mTypeId, item->mItem->mAmount,
-                                     serializeDynamicProperties(item->mItem->mDynamicProperties));
-        return JS_UNDEFINED;
-    }
-
-    JSValue containerGetEmptySlotsCount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        int32_t empty = 0;
-        for (int slot = 0; player != nullptr && slot < PlayerInventory::CONTAINER_SIZE; ++slot) {
-            if (player->getInventory().getItem(slot).isAir())
-                empty++;
-        }
-        return JS_NewInt32(ctx, empty);
-    }
-
-    JSValue inventoryGetContainer(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal);
-        ScriptPlayerPart *container = new ScriptPlayerPart();
-        container->mHandle = part->mHandle;
-        return api->makeInstance("Container", container);
-    }
-
-    const ItemStack &equipmentStack(const PlayerInventory &inventory, const std::string &slot) {
-        if (slot == "Head")
-            return inventory.getArmor(PlayerInventory::ARMOR_HEAD);
-        if (slot == "Chest")
-            return inventory.getArmor(PlayerInventory::ARMOR_TORSO);
-        if (slot == "Legs")
-            return inventory.getArmor(PlayerInventory::ARMOR_LEGS);
-        if (slot == "Feet")
-            return inventory.getArmor(PlayerInventory::ARMOR_FEET);
-        if (slot == "Offhand")
-            return inventory.getOffhand();
-        return inventory.getItemInHand();
-    }
-
-    JSValue equippableGetEquipment(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player == nullptr || argc < 1)
-            return JS_UNDEFINED;
-        return itemFromStack(ScriptApi::fromContext(ctx),
-                             equipmentStack(player->getInventory(), toString(ctx, argv[0])));
-    }
-
-    void setEquipment(JSContext *ctx, ServerPlayer &player, const std::string &slot, JSValueConst value) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptItemRef *item = api->native<ScriptItemRef>(value);
-        if (item == nullptr) {
-            api->host().setPlayerEquipment(player, slot, std::string(), 0, 0, Tag::ofCompound());
-            return;
-        }
-        api->host().setPlayerEquipment(player, slot, item->mItem->mTypeId, item->mItem->mAmount, item->mItem->mDamage,
-                                       serializeDynamicProperties(item->mItem->mDynamicProperties));
-    }
-
-    JSValue equippableSetEquipment(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player == nullptr || argc < 1)
-            return JS_FALSE;
-        setEquipment(ctx, *player, toString(ctx, argv[0]), argc >= 2 ? argv[1] : JS_UNDEFINED);
-        return JS_TRUE;
-    }
-
-    JSValue equippableGetEquipmentSlot(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal);
-        ScriptPlayerPart *slot = new ScriptPlayerPart();
-        slot->mHandle = part->mHandle;
-        slot->mSlot = argc >= 1 ? toString(ctx, argv[0]) : std::string("Mainhand");
-        return api->makeInstance("ContainerSlot", slot);
-    }
-
-    JSValue slotGetItem(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const ScriptPlayerPart *part = nullptr;
-        ServerPlayer *player = partOwner(ctx, thisVal, &part);
-        if (player == nullptr)
-            return JS_UNDEFINED;
-        return itemFromStack(ScriptApi::fromContext(ctx), equipmentStack(player->getInventory(), part->mSlot));
-    }
-
-    JSValue slotHasItem(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const ScriptPlayerPart *part = nullptr;
-        ServerPlayer *player = partOwner(ctx, thisVal, &part);
-        if (player == nullptr)
-            return JS_FALSE;
-        const ItemStack &stack = equipmentStack(player->getInventory(), part->mSlot);
-        return JS_NewBool(ctx, !stack.isAir() && stack.mDefinition != nullptr);
-    }
-
-    JSValue slotSetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        const ScriptPlayerPart *part = nullptr;
-        ServerPlayer *player = partOwner(ctx, thisVal, &part);
-        if (player != nullptr)
-            setEquipment(ctx, *player, part->mSlot, argc >= 1 ? argv[0] : JS_UNDEFINED);
-        return JS_UNDEFINED;
-    }
-
     Actor *componentEntity(JSContext *ctx, JSValueConst thisVal) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptEntityPart *part = api->native<ScriptEntityPart>(thisVal);
@@ -2253,6 +2091,8 @@ namespace {
             return string(ctx, player->mComponentId);
         if (const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal))
             return string(ctx, item->mComponentId);
+        if (const ScriptBlockPart *block = api->native<ScriptBlockPart>(thisVal))
+            return string(ctx, block->mComponentId);
         return JS_UNDEFINED;
     }
 
@@ -2262,6 +2102,10 @@ namespace {
             return JS_NewBool(ctx, componentEntity(ctx, thisVal) != nullptr);
         if (api->native<ScriptPlayerPart>(thisVal) != nullptr)
             return JS_NewBool(ctx, partOwner(ctx, thisVal) != nullptr);
+        if (const ScriptBlockPart *block = api->native<ScriptBlockPart>(thisVal))
+            return JS_NewBool(ctx, api->resolveLevel(block->mBlock.mWorldId, block->mBlock.mDimension)
+                                                   .peekBlockPtr(block->mBlock.mX, block->mBlock.mY, block->mBlock.mZ)
+                                           != nullptr);
         return JS_TRUE;
     }
 }
@@ -2374,6 +2218,98 @@ int32_t ScriptApi::parseGameMode(const std::string &name) const {
             return i == 3 ? 6 : i;
     }
     return -1;
+}
+
+bool ScriptRayQueries::blockPassesFilter(JSContext *ctx, const BlockState &state, JSValueConst filter) {
+    return blockStatePassesFilter(ctx, state, filter);
+}
+
+JSValue ScriptRayQueries::blockFromRay(JSContext *ctx, Level &level, const Vector3f &origin, const Vector3f &direction,
+                                       JSValueConst options) {
+    ScriptApi *api = ScriptApi::fromContext(ctx);
+    ScriptRaycast::BlockOptions ray;
+    if (!readRayDistance(ctx, options, ray.mMaxDistance))
+        return JS_UNDEFINED;
+    ray.mIncludeLiquids = readFlag(ctx, options, "includeLiquidBlocks");
+    ray.mIncludePassable = readFlag(ctx, options, "includePassableBlocks");
+    ray.mAccepts = [ctx, options](const BlockState &state) { return blockStatePassesFilter(ctx, state, options); };
+
+    ScriptRaycast::BlockHit hit;
+    if (!ScriptRaycast::castBlocks(level, origin, direction, ray, hit))
+        return JS_UNDEFINED;
+
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "block", api->makeBlock(level, hit.mBlock.x, hit.mBlock.y, hit.mBlock.z));
+    JS_SetPropertyStr(ctx, result, "face", JS_NewString(ctx, hit.mFace));
+    JS_SetPropertyStr(ctx, result, "faceLocation",
+                      vector3(ctx, hit.mFaceLocation.x, hit.mFaceLocation.y, hit.mFaceLocation.z));
+    return result;
+}
+
+JSValue ScriptRayQueries::entitiesFromRay(JSContext *ctx, Level &level, const Vector3f &origin,
+                                          const Vector3f &direction, JSValueConst options, const Actor *except) {
+    ScriptApi *api = ScriptApi::fromContext(ctx);
+    JSValue array = JS_NewArray(ctx);
+    float distance = 0.0f;
+    if (!readRayDistance(ctx, options, distance))
+        return array;
+
+    ServerNetworkHandler &host = api->host();
+
+    // blocks stop the ray unless ignoreBlockCollision
+    if (!readFlag(ctx, options, "ignoreBlockCollision")) {
+        ScriptRaycast::BlockOptions ray;
+        ray.mMaxDistance = distance;
+        ray.mIncludeLiquids = readFlag(ctx, options, "includeLiquidBlocks");
+        ray.mIncludePassable = readFlag(ctx, options, "includePassableBlocks");
+        ScriptRaycast::BlockHit hit;
+        if (ScriptRaycast::castBlocks(level, origin, direction, ray, hit))
+            distance = std::min(distance, hit.mDistance);
+    }
+
+    std::vector<std::pair<float, JSValue>> hits;
+    const auto consider = [&](Actor &candidate, JSValue value) {
+        EntityTarget other;
+        other.mApi = api;
+        other.mRef = api->native<ScriptEntityRef>(value);
+        other.mActor = &candidate;
+        other.mPlayer = dynamic_cast<ServerPlayer *>(&candidate);
+        other.mServerActor = dynamic_cast<ServerActor *>(&candidate);
+        const ActorSize size = sizeOf(other);
+        const Vector3f &position = candidate.getPosition();
+        const float half = size.mWidth / 2.0f;
+        const float at = ScriptRaycast::intersectBox(
+                origin, direction, Vector3f(position.x - half, position.y, position.z - half),
+                Vector3f(position.x + half, position.y + size.mHeight, position.z + half));
+        if (at < 0.0f || at > distance || other.mRef == nullptr || !matchesQuery(ctx, other, options)) {
+            JS_FreeValue(ctx, value);
+            return;
+        }
+        hits.emplace_back(at, value);
+    };
+    for (auto &entry: host.getActors()) {
+        ServerActor &actor = *entry.second;
+        if (&actor != except && actor.isAlive() && actor.isIn(level))
+            consider(actor, api->makeActor(actor));
+    }
+    for (auto &entry: host.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned() && player.isIn(level))
+            consider(player, api->makePlayer(player));
+    }
+
+    std::stable_sort(hits.begin(), hits.end(),
+                     [](const std::pair<float, JSValue> &left, const std::pair<float, JSValue> &right) {
+                         return left.first < right.first;
+                     });
+    uint32_t index = 0;
+    for (const auto &found: hits) {
+        JSValue entry = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, entry, "distance", JS_NewFloat64(ctx, found.first));
+        JS_SetPropertyStr(ctx, entry, "entity", found.second);
+        JS_SetPropertyUint32(ctx, array, index++, entry);
+    }
+    return array;
 }
 
 void ScriptApi::_bindEntity() {
@@ -2552,26 +2488,4 @@ void ScriptApi::_bindComponents() {
     JSValue component = defineClass("Component");
     property(component, "Component", "typeId", componentGetTypeId);
     property(component, "Component", "isValid", componentGetIsValid);
-
-    JSValue inventory = defineClass("EntityInventoryComponent");
-    property(inventory, "EntityInventoryComponent", "container", inventoryGetContainer);
-
-    JSValue container = defineClass("Container");
-    property(container, "Container", "size", containerGetSize);
-    property(container, "Container", "emptySlotsCount", containerGetEmptySlotsCount);
-    property(container, "Container", "isValid", partGetIsValid);
-    method(container, "Container", "addItem", containerAddItem, 1);
-    method(container, "Container", "getItem", containerGetItem, 1);
-    method(container, "Container", "setItem", containerSetItem, 2);
-
-    JSValue equippable = defineClass("EntityEquippableComponent");
-    method(equippable, "EntityEquippableComponent", "getEquipment", equippableGetEquipment, 1);
-    method(equippable, "EntityEquippableComponent", "setEquipment", equippableSetEquipment, 2);
-    method(equippable, "EntityEquippableComponent", "getEquipmentSlot", equippableGetEquipmentSlot, 1);
-
-    JSValue slot = defineClass("ContainerSlot");
-    property(slot, "ContainerSlot", "isValid", partGetIsValid);
-    method(slot, "ContainerSlot", "getItem", slotGetItem, 0);
-    method(slot, "ContainerSlot", "hasItem", slotHasItem, 0);
-    method(slot, "ContainerSlot", "setItem", slotSetItem, 1);
 }

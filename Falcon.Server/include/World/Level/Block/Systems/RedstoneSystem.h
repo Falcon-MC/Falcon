@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_set>
 
+class Actor;
 class Level;
 class ServerNetworkHandler;
 
@@ -108,6 +109,7 @@ public:
     static void tick(ServerNetworkHandler &owner, Level &level);
 
 private:
-    static void _touchPressurePlate(ServerNetworkHandler &owner, Level &level, const Vector3f &feet,
+    // the actor standing on it is the push event's source
+    static void _touchPressurePlate(ServerNetworkHandler &owner, Level &level, Actor &actor,
                                     std::unordered_set<int64_t> &visited);
 };

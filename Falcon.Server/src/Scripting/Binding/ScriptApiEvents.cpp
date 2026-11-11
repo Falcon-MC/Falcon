@@ -7,7 +7,9 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Item/CraftingRecipeTable.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -149,12 +151,16 @@ void ScriptApi::install() {
     _bindEntityComponents();
     _bindBlock();
     _bindItemStack();
+    _bindContainers();
     _bindDimension();
     _bindEvents();
     _bindRegistries();
     _bindSystem();
     _bindWorld();
+    _bindStructures();
     _bindClocks();
+    _bindScoreboard();
+    _bindCommands();
     _installBootstraps();
     _defineEnums();
     _registerModules();
@@ -163,9 +169,16 @@ void ScriptApi::install() {
 
 void ScriptApi::tick(int64_t currentTick) {
     mScheduler.tick(currentTick);
+    for (size_t index = 0; index < mTickJobs.size();) {
+        if (mTickJobs[index]())
+            ++index;
+        else
+            mTickJobs.erase(mTickJobs.begin() + (std::ptrdiff_t) index);
+    }
     if (!mPendingTickingAreas.empty())
         resolveTickingAreas();
     _emitInventoryChanges();
+    _emitCursorChanges();
 }
 
 JSValue ScriptApi::showForm(JSValueConst playerValue, const std::string &formData) {
@@ -627,6 +640,86 @@ void ScriptApi::_subscribeGameEvents() {
     });
 }
 
+namespace {
+    std::vector<std::string> optionStrings(JSContext *ctx, JSValueConst options, const char *key, bool &present) {
+        std::vector<std::string> values;
+        JSValue list = JS_GetPropertyStr(ctx, options, key);
+        present = JS_IsArray(list);
+        if (present) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            for (uint32_t index = 0; index < length; ++index) {
+                JSValue element = JS_GetPropertyUint32(ctx, list, index);
+                values.push_back(toString(ctx, element));
+                JS_FreeValue(ctx, element);
+            }
+        }
+        JS_FreeValue(ctx, list);
+        return values;
+    }
+
+    std::string itemName(const ItemStack &item) {
+        return item.isAir() || item.mDefinition == nullptr ? std::string() : item.mDefinition->getIdentifier();
+    }
+
+    bool namedIn(const std::vector<std::string> &names, const std::string &identifier) {
+        for (const std::string &name: names) {
+            const std::string full = name.find(':') == std::string::npos ? "minecraft:" + name : name;
+            if (!identifier.empty() && full == identifier)
+                return true;
+        }
+        return false;
+    }
+
+    bool taggedIn(const std::vector<std::string> &tags, const std::string &identifier) {
+        if (identifier.empty())
+            return false;
+        for (const std::string &tag: CraftingRecipeTable::getItemTags(identifier)) {
+            if (std::find(tags.begin(), tags.end(), tag) != tags.end())
+                return true;
+        }
+        return false;
+    }
+
+    // InventoryItemEventOptions against one slot change; the item filters look at both stacks
+    bool acceptsInventoryChange(JSContext *ctx, JSValueConst options, int32_t slot, const char *inventoryType,
+                                const ItemStack &before, const ItemStack &after) {
+        bool present = false;
+        const std::vector<std::string> slots = optionStrings(ctx, options, "allowedSlots", present);
+        if (present && std::find(slots.begin(), slots.end(), std::to_string(slot)) == slots.end())
+            return false;
+
+        JSValue type = JS_GetPropertyStr(ctx, options, "inventoryType");
+        const bool typeMismatch = JS_IsString(type) && toString(ctx, type) != inventoryType;
+        JS_FreeValue(ctx, type);
+        if (typeMismatch)
+            return false;
+
+        JSValue ignore = JS_GetPropertyStr(ctx, options, "ignoreQuantityChange");
+        const bool ignoreQuantity = JS_ToBool(ctx, ignore) == 1;
+        JS_FreeValue(ctx, ignore);
+        if (ignoreQuantity && !before.isAir() && !after.isAir() && before.mDefinition == after.mDefinition
+            && before.mDamage == after.mDamage && before.mTag == after.mTag)
+            return false;
+
+        const std::string names[2] = {itemName(before), itemName(after)};
+        const std::vector<std::string> includeItems = optionStrings(ctx, options, "includeItems", present);
+        if (present && !namedIn(includeItems, names[0]) && !namedIn(includeItems, names[1]))
+            return false;
+        const std::vector<std::string> includeTags = optionStrings(ctx, options, "includeTags", present);
+        if (present && !taggedIn(includeTags, names[0]) && !taggedIn(includeTags, names[1]))
+            return false;
+        const std::vector<std::string> excludeItems = optionStrings(ctx, options, "excludeItems", present);
+        if (present && (namedIn(excludeItems, names[0]) || namedIn(excludeItems, names[1])))
+            return false;
+        const std::vector<std::string> excludeTags = optionStrings(ctx, options, "excludeTags", present);
+        return !(present && (taggedIn(excludeTags, names[0]) || taggedIn(excludeTags, names[1])));
+    }
+}
+
+// slots 0 to 8 are the hotbar; the same absolute indexes for both types, not checked against the game
 void ScriptApi::_emitInventoryChanges() {
     if (!hasSubscribers("after.playerInventoryItemChange")) {
         mInventorySnapshots.clear();
@@ -653,13 +746,16 @@ void ScriptApi::_emitInventoryChanges() {
                 if (same)
                     continue;
 
+                const char *type = slot < (size_t) PlayerInventory::HOTBAR_SIZE ? "Hotbar" : "Inventory";
                 JSValue event = makeEvent("WorldAfterEvents.playerInventoryItemChange");
                 JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
                 JS_SetPropertyStr(mContext, event, "slot", JS_NewInt32(mContext, (int32_t) slot));
-                JS_SetPropertyStr(mContext, event, "inventoryType", JS_NewString(mContext, "Inventory"));
+                JS_SetPropertyStr(mContext, event, "inventoryType", JS_NewString(mContext, type));
                 JS_SetPropertyStr(mContext, event, "itemStack", makeItem(after));
                 JS_SetPropertyStr(mContext, event, "beforeItemStack", makeItem(before));
-                emit("after.playerInventoryItemChange", event);
+                emitFiltered("after.playerInventoryItemChange", event, [&](JSValueConst options) {
+                    return acceptsInventoryChange(mContext, options, (int32_t) slot, type, before, after);
+                });
             }
         }
 
@@ -667,4 +763,43 @@ void ScriptApi::_emitInventoryChanges() {
     }
 
     mInventorySnapshots = std::move(current);
+}
+
+// a cursor change between two ticks releases the old stack, then grabs the new one; not checked against the game
+void ScriptApi::_emitCursorChanges() {
+    const bool grab = hasSubscribers("after.playerCursorItemGrab");
+    const bool release = hasSubscribers("after.playerCursorItemRelease");
+    if (!grab && !release) {
+        mCursorSnapshots.clear();
+        return;
+    }
+
+    std::unordered_map<uint64_t, ItemStack> current;
+    for (auto &entry: mHost.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned())
+            continue;
+        const ItemStack &cursor = player.getInventory().getCursor();
+        const uint64_t key = player.getRuntimeId();
+        const auto previous = mCursorSnapshots.find(key);
+        if (previous != mCursorSnapshots.end()) {
+            const ItemStack &before = previous->second;
+            const bool same = before.mDefinition == cursor.mDefinition && before.mCount == cursor.mCount
+                              && before.mDamage == cursor.mDamage && before.mTag == cursor.mTag;
+            if (!same && !before.isAir() && release) {
+                JSValue event = makeEvent("WorldAfterEvents.playerCursorItemRelease");
+                JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
+                JS_SetPropertyStr(mContext, event, "item", makeItem(before));
+                emit("after.playerCursorItemRelease", event);
+            }
+            if (!same && !cursor.isAir() && grab) {
+                JSValue event = makeEvent("WorldAfterEvents.playerCursorItemGrab");
+                JS_SetPropertyStr(mContext, event, "player", makePlayer(player));
+                JS_SetPropertyStr(mContext, event, "item", makeItem(cursor));
+                emit("after.playerCursorItemGrab", event);
+            }
+        }
+        current[key] = cursor;
+    }
+    mCursorSnapshots = std::move(current);
 }

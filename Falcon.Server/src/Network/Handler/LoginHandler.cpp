@@ -649,6 +649,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     sendItemComponents(owner, player);
     // sub_1422AA6C0: the clock registry follows the item registry
     owner.getScriptEngine().sendWorldClocks(player);
+    owner.sendScoreboard(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
     sendSharedLoginPacket(
@@ -1276,6 +1277,14 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
         data.mName = command->getName();
         data.mDescription = command->getDescription();
         data.mPermission = command->getRequiredPermission();
+        // sub_1455ACCB0: <name>CommandAliases, the name then its aliases
+        if (!command->getAliases().empty()) {
+            data.mHasAliases = true;
+            data.mAliases.mName = command->getName() + "CommandAliases";
+            data.mAliases.mValues.push_back(command->getName());
+            for (const std::string &alias: command->getAliases())
+                data.mAliases.mValues.push_back(alias);
+        }
 
         data.mOverloads = command->getOverloads();
 

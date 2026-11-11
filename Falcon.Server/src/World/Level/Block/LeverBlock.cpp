@@ -62,6 +62,9 @@ bool LeverBlock::isSignalSource() const {
 
 bool LeverBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                             const BlockState &state) const {
-    RedstoneSystem::onLeverActivated(owner, owner.getLevelFor(player), position, state);
+    Level &level = owner.getLevelFor(player);
+    RedstoneSystem::onLeverActivated(owner, level, position, state);
+    const BlockState toggled = level.getBlockState(position.x, position.y, position.z);
+    owner.getScriptEngine().onLeverAction(level, position, toggled.mStates.getBool("open_bit", false), player);
     return true;
 }

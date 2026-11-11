@@ -28,20 +28,33 @@ BOUND = {
         'EntityAttributeComponent', 'EntityHealthComponent', 'EntityTypeFamilyComponent',
         'EntityProjectileComponent', 'ItemComponent', 'ItemDurabilityComponent', 'ItemEnchantableComponent',
         'ItemCooldownComponent', 'ScreenDisplay', 'Camera', 'PlayerInputPermissions', 'LocatorBar', 'Scoreboard',
-        'ScoreboardObjective', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
+        'ScoreboardObjective', 'ScoreboardIdentity', 'ScoreboardScoreInfo',
+        'ScoreboardIdentityType', 'DisplaySlotId', 'ObjectiveSortOrder', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
         'ItemComponentRegistry', 'CommandResult', 'BlockVolume', 'EntityWaypoint', 'EquipmentSlot', 'GameMode',
         'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
         'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent', 'GameRules', 'SystemInfo', 'Difficulty',
         'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
         'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
         'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
-        'DimensionRegistry',
-        'Effect', 'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause',
-        'EntityInitializationCause', 'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo',
-        'EntitySwingSource', 'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel',
-        'TickingArea', 'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
+        'DimensionRegistry', 'Effect',
+        'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause', 'EntityInitializationCause',
+        'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo', 'EntitySwingSource',
+        'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel', 'TickingArea',
+        'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
         'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
-        'EntityHealSource',
+        'EntityHealSource', 'BlockVolumeBase', 'ListBlockVolume', 'BlockLocationIterator', 'BlockComponent',
+        'BlockInventoryComponent', 'BlockSignComponent', 'BlockPistonComponent', 'BlockFluidContainerComponent',
+        'BlockRedstoneProducerComponent', 'BlockMapColorComponent', 'BlockMovableComponent',
+        'BlockPrecipitationInteractionsComponent', 'BlockRecordPlayerComponent', 'BlockDynamicPropertiesComponent', 'BiomeType', 'BiomeTypes',
+        'Structure', 'StructureManager', 'BlockPistonState', 'BlockVolumeIntersection', 'FluidType', 'LiquidType',
+        'SignSide', 'StructureAnimationMode', 'StructureMirrorAxis', 'StructureRotation', 'StructureSaveMode',
+        'DyeColor', 'TintMethod', 'MovementType', 'StickyType', 'CloneMode',
+        'EntityHealSource', 'ItemBookComponent', 'ItemCompostableComponent', 'ItemDyeableComponent',
+        'ItemFoodComponent', 'ItemInventoryComponent', 'ItemPotionComponent', 'PlayerCursorInventoryComponent',
+        'EnchantmentType', 'EnchantmentTypes', 'EnchantmentSlot', 'ItemLockMode', 'PotionEffectType',
+        'PotionDeliveryType', 'Potions', 'BookErrorReason', 'ContainerRulesErrorReason',
+        'ItemBlockDynamicPropertiesComponent', 'CustomCommandRegistry', 'CustomCommandOrigin', 'CustomCommandSource',
+        'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
     },
     'server-ui': None,
     'common': None,
@@ -69,8 +82,9 @@ def parse(path):
     classes = {}
     for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))? \{(.*?)\n\}', raw, re.S):
         members = {}
+        # a reserved word is quoted as a member name: readonly 'type': ItemType
         for member in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)?\s*\n {4}((?:readonly |static |private )*)'
-                                  r'(\w+)\??(\(|:|<| =)([^;]*)', match.group(3), re.S):
+                                  r"'?(\w+)'?\??(\(|:|<| =)([^;]*)", match.group(3), re.S):
             doc = member.group(1) or ''
             modifiers = member.group(2)
             if 'private' in modifiers:

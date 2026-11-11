@@ -408,6 +408,8 @@ void ScriptEngine::_installConsole(JSContext *context) {
 size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     size_t loaded = 0;
     for (const BehaviorPack &pack: packs) {
+        // structures come from every pack, scripted or not
+        mStructures.addPack(pack.mPath);
         if (pack.hasScript() && _loadPack(pack))
             loaded++;
     }
@@ -718,6 +720,23 @@ bool ScriptEngine::isCustomComponentRegistered(bool blocks, const std::string &n
     return false;
 }
 
+const std::vector<std::string> *ScriptEngine::findCommandEnum(const std::string &name) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        const std::vector<std::string> *values = api->findCommandEnum(name);
+        if (values != nullptr)
+            return values;
+    }
+    return nullptr;
+}
+
+void ScriptEngine::runGuarded(const std::function<void()> &call) {
+    if (mGuardDepth++ == 0)
+        _arm();
+    call();
+    if (--mGuardDepth == 0)
+        _pumpJobs();
+}
+
 void ScriptEngine::_scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
     const CustomBlockDefinition *definition = CustomContentRegistry::getInstance().findBlock(blockId);
     if (definition == nullptr || !definition->mHasTick)
@@ -913,9 +932,187 @@ void ScriptEngine::onItemUse(ServerPlayer &player) {
                    });
 }
 
-void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used) {
+namespace {
+    // EntityItemPickupEventOptions: entityFilter through Entity.matches, itemFilter.includeTypes by type id
+    bool acceptsPickup(ScriptApi &api, JSValueConst options, JSValueConst entity, const ItemStack &picked) {
+        JSContext *ctx = api.context();
+        JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
+        bool accepted = true;
+        if (JS_IsObject(entityFilter)) {
+            JSValue matches = JS_GetPropertyStr(ctx, entity, "matches");
+            JSValue result = JS_IsFunction(ctx, matches) ? JS_Call(ctx, matches, entity, 1, &entityFilter)
+                                                         : JS_UNDEFINED;
+            if (JS_IsException(result))
+                JS_FreeValue(ctx, JS_GetException(ctx));
+            accepted = JS_ToBool(ctx, result) == 1;
+            JS_FreeValue(ctx, result);
+            JS_FreeValue(ctx, matches);
+        }
+        JS_FreeValue(ctx, entityFilter);
+
+        JSValue itemFilter = JS_GetPropertyStr(ctx, options, "itemFilter");
+        JSValue types = JS_IsObject(itemFilter) ? JS_GetPropertyStr(ctx, itemFilter, "includeTypes") : JS_UNDEFINED;
+        if (accepted && JS_IsArray(types) && picked.mDefinition != nullptr) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, types, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            bool found = false;
+            for (uint32_t index = 0; index < length && !found; ++index) {
+                JSValue type = JS_GetPropertyUint32(ctx, types, index);
+                JSValue id = JS_IsObject(type) ? JS_GetPropertyStr(ctx, type, "id") : JS_DupValue(ctx, type);
+                std::string name = toString(ctx, id);
+                if (name.find(':') == std::string::npos)
+                    name = "minecraft:" + name;
+                found = name == picked.mDefinition->getIdentifier();
+                JS_FreeValue(ctx, id);
+                JS_FreeValue(ctx, type);
+            }
+            accepted = found;
+        }
+        JS_FreeValue(ctx, types);
+        JS_FreeValue(ctx, itemFilter);
+        return accepted;
+    }
+}
+
+namespace {
+    // Entity.matches against an EntityFilter; a missing filter matches
+    bool entityMatches(JSContext *ctx, JSValueConst entity, JSValueConst filter) {
+        if (!JS_IsObject(filter))
+            return true;
+        JSValue matches = JS_GetPropertyStr(ctx, entity, "matches");
+        JSValue result = JS_IsFunction(ctx, matches) ? JS_Call(ctx, matches, entity, 1, &filter) : JS_UNDEFINED;
+        if (JS_IsException(result))
+            JS_FreeValue(ctx, JS_GetException(ctx));
+        const bool matched = JS_ToBool(ctx, result) == 1;
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, matches);
+        return matched;
+    }
+
+    // EntityContainerAccessEventOptions: entityFilter on the container, accessSourceFilter on who opened it
+    bool acceptsContainerAccess(JSContext *ctx, JSValueConst options, JSValueConst container, JSValueConst source) {
+        JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
+        bool accepted = entityMatches(ctx, container, entityFilter);
+        JS_FreeValue(ctx, entityFilter);
+        JSValue sourceFilter = JS_GetPropertyStr(ctx, options, "accessSourceFilter");
+        if (accepted && JS_IsObject(sourceFilter)) {
+            JSValue filter = JS_GetPropertyStr(ctx, sourceFilter, "entityFilter");
+            accepted = entityMatches(ctx, source, filter);
+            JS_FreeValue(ctx, filter);
+        }
+        JS_FreeValue(ctx, sourceFilter);
+        return accepted;
+    }
+}
+
+void ScriptEngine::_emitContainerAccess(const char *key, const char *signal, const char *sourceField, Actor &container,
+                                        Actor &source) {
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers(key))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent(signal);
+        JSValue entity = api->makeEntity(container);
+        JSValue opener = api->makeEntity(source);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
+        JSValue access = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, access, "entity", JS_DupValue(ctx, opener));
+        JS_SetPropertyStr(ctx, event, sourceField, access);
+        api->emitFiltered(key, event,
+                          [&](JSValueConst options) { return acceptsContainerAccess(ctx, options, entity, opener); });
+        JS_FreeValue(ctx, opener);
+        JS_FreeValue(ctx, entity);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onEntityContainerOpened(Actor &container, Actor &source) {
+    _emitContainerAccess("after.entityContainerOpened", "WorldAfterEvents.entityContainerOpened", "openSource",
+                         container, source);
+}
+
+void ScriptEngine::onEntityContainerClosed(Actor &container, Actor &source) {
+    _emitContainerAccess("after.entityContainerClosed", "WorldAfterEvents.entityContainerClosed", "closeSource",
+                         container, source);
+}
+
+void ScriptEngine::onItemStartUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {
+    if (used.isAir())
+        return;
+    _emit("after.itemStartUse", "WorldAfterEvents.itemStartUse", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration));
+    });
+}
+
+void ScriptEngine::onItemStopUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration, bool released) {
+    const auto fill = [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration < 0 ? 0 : useDuration));
+    };
+    if (released)
+        _emit("after.itemReleaseUse", "WorldAfterEvents.itemReleaseUse", false, fill);
+    _emit("after.itemStopUse", "WorldAfterEvents.itemStopUse", false, fill);
+}
+
+bool ScriptEngine::beforeEntityItemPickup(Actor &collector, Actor &item, const ItemStack &picked) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.entityItemPickup"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.entityItemPickup");
+        JSValue entity = api->makeEntity(collector);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
+        JS_SetPropertyStr(ctx, event, "item", api->makeEntity(item));
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        ScriptApi &target = *api;
+        cancelled = api->emitFiltered("before.entityItemPickup", event, [&](JSValueConst options) {
+            return acceptsPickup(target, options, entity, picked);
+        }) || cancelled;
+        JS_FreeValue(ctx, entity);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onEntityItemPickup(Actor &collector, const ItemStack &picked) {
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("after.entityItemPickup"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldAfterEvents.entityItemPickup");
+        JSValue entity = api->makeEntity(collector);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
+        JSValue items = JS_NewArray(ctx);
+        JS_SetPropertyUint32(ctx, items, 0, api->makeItem(picked));
+        JS_SetPropertyStr(ctx, event, "items", items);
+        ScriptApi &target = *api;
+        api->emitFiltered("after.entityItemPickup", event,
+                          [&](JSValueConst options) { return acceptsPickup(target, options, entity, picked); });
+        JS_FreeValue(ctx, entity);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {
     if (used.isAir() || used.mDefinition == nullptr)
         return;
+    _emit("after.itemCompleteUse", "WorldAfterEvents.itemCompleteUse", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration));
+    });
     const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
     if (item == nullptr)
         return;
@@ -1424,4 +1621,168 @@ void ScriptEngine::tick(int64_t currentTick) {
         api->tick(currentTick);
     }
     _pumpJobs();
+}
+
+namespace {
+    // getImpactedBlocks and setImpactedBlocks of the explosion events share the holder's blocks array
+    JSValue impactedGet(JSContext *ctx, JSValueConst, int, JSValueConst *, int, JSValue *data) {
+        JSValue blocks = JS_GetPropertyStr(ctx, data[0], "blocks");
+        JSAtom slice = JS_NewAtom(ctx, "slice");
+        JSValue copy = JS_Invoke(ctx, blocks, slice, 0, nullptr);
+        JS_FreeAtom(ctx, slice);
+        JS_FreeValue(ctx, blocks);
+        return copy;
+    }
+
+    JSValue impactedSet(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int, JSValue *data) {
+        if (argc < 1 || !JS_IsArray(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        JS_SetPropertyStr(ctx, data[0], "blocks", JS_DupValue(ctx, argv[0]));
+        return JS_UNDEFINED;
+    }
+
+    JSValue blockArray(ScriptApi &api, const Level &level, const std::vector<Vector3i> &blocks) {
+        JSContext *ctx = api.context();
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const Vector3i &position: blocks)
+            JS_SetPropertyUint32(ctx, array, index++, api.makeBlock(level, position.x, position.y, position.z));
+        return array;
+    }
+
+    void fillExplosion(ScriptApi &api, JSValue event, Level &level, const ServerActor *source,
+                       const std::vector<Vector3i> &blocks, JSValue holder, bool settable) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "dimension", api.makeDimension(level));
+        if (source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeActor(*const_cast<ServerActor *>(source)));
+        JS_SetPropertyStr(ctx, holder, "blocks", blockArray(api, level, blocks));
+        JS_SetPropertyStr(ctx, event, "getImpactedBlocks", JS_NewCFunctionData(ctx, impactedGet, 0, 0, 1, &holder));
+        if (settable)
+            JS_SetPropertyStr(ctx, event, "setImpactedBlocks", JS_NewCFunctionData(ctx, impactedSet, 1, 0, 1, &holder));
+    }
+}
+
+bool ScriptEngine::beforeExplosion(Level &level, const ServerActor *source, std::vector<Vector3i> &blocks) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.explosion"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.explosion");
+        JSValue holder = JS_NewObject(ctx);
+        fillExplosion(*api, event, level, source, blocks, holder, true);
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        cancelled = api->emit("before.explosion", event) || cancelled;
+
+        // the blocks the subscribers left, the order they gave
+        JSValue chosen = JS_GetPropertyStr(ctx, holder, "blocks");
+        uint32_t length = 0;
+        JSValue lengthValue = JS_GetPropertyStr(ctx, chosen, "length");
+        JS_ToUint32(ctx, &length, lengthValue);
+        JS_FreeValue(ctx, lengthValue);
+        std::vector<Vector3i> kept;
+        for (uint32_t index = 0; index < length; ++index) {
+            JSValue block = JS_GetPropertyUint32(ctx, chosen, index);
+            const ScriptBlockRef *ref = api->native<ScriptBlockRef>(block);
+            if (ref != nullptr && ref->mWorldId == level.getWorldId() && ref->mDimension == level.getDimensionType())
+                kept.emplace_back(ref->mX, ref->mY, ref->mZ);
+            JS_FreeValue(ctx, block);
+        }
+        JS_FreeValue(ctx, chosen);
+        JS_FreeValue(ctx, holder);
+        blocks = kept;
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onExplosion(Level &level, const ServerActor *source, const std::vector<Vector3i> &blocks) {
+    _emit("after.explosion", "WorldAfterEvents.explosion", false, [&](ScriptApi &api, JSValue event) {
+        JSValue holder = JS_NewObject(api.context());
+        fillExplosion(api, event, level, source, blocks, holder, false);
+        JS_FreeValue(api.context(), holder);
+    });
+}
+
+void ScriptEngine::onBlockExplode(Level &level, const Vector3i &position, const BlockState &exploded,
+                                  const ServerActor *source) {
+    _emit("after.blockExplode", "WorldAfterEvents.blockExplode", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "explodedBlockPermutation", api.makePermutation(exploded));
+        if (source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeActor(*const_cast<ServerActor *>(source)));
+    });
+}
+
+void ScriptEngine::onPistonActivate(Level &level, const Vector3i &position, bool expanding) {
+    _emit("after.pistonActivate", "WorldAfterEvents.pistonActivate", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "isExpanding", JS_NewBool(ctx, expanding));
+        JS_SetPropertyStr(ctx, event, "piston", api.makeBlockComponent(level, position, "minecraft:piston"));
+    });
+}
+
+void ScriptEngine::onButtonPush(Level &level, const Vector3i &position, Actor *source) {
+    _emit("after.buttonPush", "WorldAfterEvents.buttonPush", false, [&](ScriptApi &api, JSValue event) {
+        api.fillBlockEvent(event, level, position);
+        if (source != nullptr)
+            JS_SetPropertyStr(api.context(), event, "source", api.makeEntity(*source));
+    });
+}
+
+void ScriptEngine::onLeverAction(Level &level, const Vector3i &position, bool powered, ServerPlayer &player) {
+    _emit("after.leverAction", "WorldAfterEvents.leverAction", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "isPowered", JS_NewBool(ctx, powered));
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onPressurePlate(Level &level, const Vector3i &position, int32_t previousPower, int32_t power,
+                                   Actor *source) {
+    const bool push = previousPower == 0 && power > 0;
+    if (!push && !(previousPower > 0 && power == 0))
+        return;
+    const char *key = push ? "after.pressurePlatePush" : "after.pressurePlatePop";
+    const char *signal = push ? "WorldAfterEvents.pressurePlatePush" : "WorldAfterEvents.pressurePlatePop";
+    _emit(key, signal, false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "previousRedstonePower", JS_NewInt32(ctx, previousPower));
+        JS_SetPropertyStr(ctx, event, "redstonePower", JS_NewInt32(ctx, power));
+        if (push && source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*source));
+    });
+}
+
+void ScriptEngine::onTripWireTrip(Level &level, const Vector3i &position, bool powered,
+                                  const std::vector<Actor *> &sources) {
+    _emit("after.tripWireTrip", "WorldAfterEvents.tripWireTrip", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "isPowered", JS_NewBool(ctx, powered));
+        JSValue list = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (Actor *source: sources)
+            JS_SetPropertyUint32(ctx, list, index++, api.makeEntity(*source));
+        JS_SetPropertyStr(ctx, event, "sources", list);
+    });
+}
+
+void ScriptEngine::onTargetBlockHit(Level &level, const Vector3i &position, const Vector3f &hitVector,
+                                    int32_t previousPower, int32_t power, Actor *source) {
+    _emit("after.targetBlockHit", "WorldAfterEvents.targetBlockHit", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "hitVector", vector3(ctx, hitVector.x, hitVector.y, hitVector.z));
+        JS_SetPropertyStr(ctx, event, "previousRedstonePower", JS_NewInt32(ctx, previousPower));
+        JS_SetPropertyStr(ctx, event, "redstonePower", JS_NewInt32(ctx, power));
+        if (source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*source));
+    });
 }

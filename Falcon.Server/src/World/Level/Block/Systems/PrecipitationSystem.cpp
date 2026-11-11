@@ -129,7 +129,10 @@ bool PrecipitationSystem::shouldSnow(Level &level, const Vector3i &position) {
     if (state == nullptr || state->mName != "minecraft:air")
         return false;
 
-    const Vector3i below(position.x, position.y - 1, position.z);
+    return canHoldSnow(level, Vector3i(position.x, position.y - 1, position.z));
+}
+
+bool PrecipitationSystem::canHoldSnow(Level &level, const Vector3i &below) {
     const BlockState *support = stateAt(level, below);
     if (support == nullptr || IceBlock::matches(support->mName) || support->mName == "minecraft:packed_ice")
         return false;
