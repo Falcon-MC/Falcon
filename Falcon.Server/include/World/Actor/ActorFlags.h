@@ -68,7 +68,8 @@ enum class ActorFlag : int {
 class ActorFlags {
 public:
     static const int32_t FLAGS_DATA_ID = 0;
-    static const int32_t FLAGS_2_DATA_ID = 91;
+    // sub_142C6F4D0: the flag words go out as data 0 and 92
+    static const int32_t FLAGS_2_DATA_ID = 92;
     static const int32_t VARIANT_DATA_ID = 2;
     static const int32_t COLOR_DATA_ID = 3;
     static const int32_t OWNER_DATA_ID = 5;
