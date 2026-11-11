@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 
 #include <cstdint>
@@ -20,6 +21,11 @@ public:
 
     // sub_14BE9F0B0
     static Result findNearest(const ChunkGenerator &generator, const Vector3i &origin, int32_t biomeId);
+
+    // Dimension.findClosestBiome (sub_14B53D530): one pass of 64 over the box of the given size around the origin,
+    // the found column's surface for y
+    static Result findInBox(const ChunkGenerator &generator, const Vector3i &origin, int32_t biomeId,
+                            const Vector3f &size);
 
     // sub_14A229EC0
     static Vector3i findOpening(Level &level, const Vector3i &position, int32_t biomeId);

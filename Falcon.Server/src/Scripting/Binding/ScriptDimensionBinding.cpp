@@ -605,8 +605,17 @@ namespace {
         const int32_t id = BiomeChunkGenDataRegistry::getBiomeId(name);
         if (id < 0)
             return api->throwError("Error", "Unknown biome " + name);
-        // TODO: boundingSize of BiomeSearchOptions is not applied; the /locate search radius is used
-        const BiomeSearch::Result result = BiomeSearch::findNearest(levelOf(ctx, thisVal).getGenerator(), at, id);
+        // without boundingSize the box is 8000, 1024, 8000 (qword_14F4298A0)
+        Vector3f size(8000.0f, 1024.0f, 8000.0f);
+        if (argc >= 3 && JS_IsObject(argv[2])) {
+            JSValue bounds = JS_GetPropertyStr(ctx, argv[2], "boundingSize");
+            const bool given = !JS_IsUndefined(bounds);
+            const bool valid = !given || readPoint(ctx, bounds, size);
+            JS_FreeValue(ctx, bounds);
+            if (!valid)
+                return typeError(ctx);
+        }
+        const BiomeSearch::Result result = BiomeSearch::findInBox(levelOf(ctx, thisVal).getGenerator(), at, id, size);
         if (!result.mFound)
             return JS_UNDEFINED;
         return vector3(ctx, (float) result.mPosition.x, (float) result.mPosition.y, (float) result.mPosition.z);
