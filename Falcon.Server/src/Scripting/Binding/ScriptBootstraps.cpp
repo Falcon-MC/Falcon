@@ -444,7 +444,7 @@ namespace {
             return a.x <= d.x + 1 && c.x <= b.x + 1 && a.y <= d.y + 1 && c.y <= b.y + 1 && a.z <= d.z + 1
                 && c.z <= b.z + 1;
         }
-        // TODO: Contains is read as other inside this one, unverified
+        // other inside this one is Contains: sub_148F89760(this, other)
         intersects(other) {
             const a = this.getMin(), b = this.getMax(), c = other.getMin(), d = other.getMax();
             if (c.x > b.x || d.x < a.x || c.y > b.y || d.y < a.y || c.z > b.z || d.z < a.z)
