@@ -612,8 +612,12 @@ namespace {
 
         ServerActor *actor = api->host().spawnActor(api->levelOf(thisVal), typeIdentifier(ctx, argv[0]),
                                                     Vector3f((float) x, (float) y, (float) z));
+        // the game's messages by failure (sub_14C377CE0): only the peaceful refusal and the fallback reach here
         if (actor == nullptr)
-            return api->throwError("EntitySpawnError", "");
+            return api->throwError("EntitySpawnError",
+                                   api->host().getProperties().getDifficulty() == Difficulty::Peaceful
+                                           ? "Attempting to spawn a hostile mob in a peaceful world."
+                                           : "Could not spawn Entity");
         return api->makeActor(*actor);
     }
 
