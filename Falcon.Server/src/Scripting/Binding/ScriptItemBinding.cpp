@@ -53,7 +53,7 @@ namespace {
     const char *const TAG_TITLE = "title";
     const char *const TAG_AUTHOR = "author";
     const char *const TAG_GENERATION = "generation";
-    // TODO: dye color key unverified (IDA unavailable)
+    // int argb: sub_141A51A00
     const char *const TAG_CUSTOM_COLOR = "customColor";
 
     const char *const WRITABLE_BOOK = "minecraft:writable_book";
