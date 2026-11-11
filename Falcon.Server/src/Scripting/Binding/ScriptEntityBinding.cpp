@@ -26,6 +26,10 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 
+#include "Protocol/Packets/CameraInstructionPacket.h"
+#include "Protocol/Packets/CameraShakePacket.h"
+#include "Protocol/Types/CameraPresets.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -2195,13 +2199,365 @@ namespace {
         return JS_NewBool(ctx, partOwner(ctx, thisVal) != nullptr);
     }
 
-    // TODO: camera presets and fades, input permissions and the locator bar do nothing yet
+    // TODO: camera splines, input permissions and the locator bar do nothing yet
     JSValue partNoop(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
 
     JSValue inputPermissionEnabled(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_TRUE;
+    }
+
+    // a property of an options bag, undefined when the bag or the property is missing
+    JSValue optionOf(JSContext *ctx, JSValueConst options, const char *key) {
+        return JS_IsObject(options) ? JS_GetPropertyStr(ctx, options, key) : JS_UNDEFINED;
+    }
+
+    bool readNumber(JSContext *ctx, JSValueConst value, double &out) {
+        return JS_IsNumber(value) && JS_ToFloat64(ctx, &out, value) == 0;
+    }
+
+    bool readVector2(JSContext *ctx, JSValueConst value, float &x, float &y) {
+        if (!JS_IsObject(value))
+            return false;
+        JSValue xValue = JS_GetPropertyStr(ctx, value, "x");
+        JSValue yValue = JS_GetPropertyStr(ctx, value, "y");
+        double readX = 0.0, readY = 0.0;
+        const bool ok = readNumber(ctx, xValue, readX) && readNumber(ctx, yValue, readY);
+        JS_FreeValue(ctx, xValue);
+        JS_FreeValue(ctx, yValue);
+        x = (float) readX;
+        y = (float) readY;
+        return ok;
+    }
+
+    bool readVector3f(JSContext *ctx, JSValueConst value, Vector3f &out) {
+        double x = 0.0, y = 0.0, z = 0.0;
+        if (!readVector3(ctx, value, x, y, z))
+            return false;
+        out = Vector3f((float) x, (float) y, (float) z);
+        return true;
+    }
+
+    // EasingType names the CameraEase values in the same order, InSine for EaseInSine
+    bool readEase(JSContext *ctx, JSValueConst value, CameraEase &out) {
+        static const char *const NAMES[] = {
+                "Linear",     "Spring",     "InSine",      "OutSine",    "InOutSine",    "InQuad",     "OutQuad",
+                "InOutQuad",  "InCubic",    "OutCubic",    "InOutCubic", "InQuart",      "OutQuart",   "InOutQuart",
+                "InQuint",    "OutQuint",   "InOutQuint",  "InExpo",     "OutExpo",      "InOutExpo",  "InCirc",
+                "OutCirc",    "InOutCirc",  "InBack",      "OutBack",    "InOutBack",    "InElastic",  "OutElastic",
+                "InOutElastic", "InBounce", "OutBounce",   "InOutBounce"};
+        if (!JS_IsString(value))
+            return false;
+        const std::string name = toString(ctx, value);
+        for (size_t index = 0; index < sizeof(NAMES) / sizeof(NAMES[0]); ++index) {
+            if (name == NAMES[index]) {
+                out = (CameraEase) index;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // a missing time or type stays 0 and Linear: the game's options bag starts zeroed
+    bool readEaseOptions(JSContext *ctx, JSValueConst options, CameraEaseData &ease) {
+        JSValue easeOptions = optionOf(ctx, options, "easeOptions");
+        bool ok = true;
+        if (JS_IsObject(easeOptions)) {
+            ease.mHasValue = true;
+            JSValue time = JS_GetPropertyStr(ctx, easeOptions, "easeTime");
+            JSValue type = JS_GetPropertyStr(ctx, easeOptions, "easeType");
+            double seconds = 0.0;
+            if (!JS_IsUndefined(time))
+                ok = readNumber(ctx, time, seconds);
+            ease.mTime = (float) seconds;
+            if (ok && !JS_IsUndefined(type))
+                ok = readEase(ctx, type, ease.mEaseType);
+            JS_FreeValue(ctx, time);
+            JS_FreeValue(ctx, type);
+        } else if (!JS_IsUndefined(easeOptions)) {
+            ok = false;
+        }
+        JS_FreeValue(ctx, easeOptions);
+        return ok;
+    }
+
+    Actor *readEntity(JSContext *ctx, JSValueConst value) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptEntityRef *ref = api->native<ScriptEntityRef>(value);
+        return ref == nullptr ? nullptr : api->resolveEntity(*ref);
+    }
+
+    void sendCamera(JSContext *ctx, ServerPlayer &player, const CameraInstructionPacket &packet) {
+        ScriptApi::fromContext(ctx)->host().sendPacketTo(player.getNetworkIdentifier(), packet);
+    }
+
+    // ScriptCamera::setCamera (sub_14C871D00): the preset, then whichever options the bag holds
+    JSValue cameraSetCamera(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const int preset = cameraPresetRuntimeId(toString(ctx, argv[0]));
+        if (preset < 0)
+            return api->throwError("Error", "Invalid camera preset.");
+        if (player == nullptr)
+            return JS_UNDEFINED;
+
+        CameraInstructionPacket packet;
+        packet.mHasSetInstruction = true;
+        CameraSetInstruction &set = packet.mSetInstruction;
+        set.mPresetRuntimeId = preset;
+        const JSValueConst options = argc >= 2 ? argv[1] : JS_UNDEFINED;
+        if (!readEaseOptions(ctx, options, set.mEase))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        JSValue location = optionOf(ctx, options, "location");
+        JSValue facingLocation = optionOf(ctx, options, "facingLocation");
+        JSValue rotation = optionOf(ctx, options, "rotation");
+        JSValue facingEntity = optionOf(ctx, options, "facingEntity");
+        JSValue targetEntity = optionOf(ctx, options, "targetEntity");
+        JSValue targetOffset = optionOf(ctx, options, "offsetFromTargetCenter");
+        JSValue entityOffset = optionOf(ctx, options, "entityOffset");
+        JSValue viewOffset = optionOf(ctx, options, "viewOffset");
+        const auto release = [&]() {
+            for (JSValue value: {location, facingLocation, rotation, facingEntity, targetEntity, targetOffset,
+                                 entityOffset, viewOffset})
+                JS_FreeValue(ctx, value);
+        };
+
+        bool ok = true;
+        const char *error = nullptr;
+        if (!JS_IsUndefined(location))
+            ok = (set.mHasPos = readVector3f(ctx, location, set.mPos));
+        if (ok && !JS_IsUndefined(facingLocation))
+            ok = (set.mHasFacing = readVector3f(ctx, facingLocation, set.mFacing));
+        if (ok && !JS_IsUndefined(rotation)) {
+            ok = (set.mHasRot = readVector2(ctx, rotation, set.mRot.x, set.mRot.y));
+            if (ok && std::fabs(set.mRot.x) > 90.0f)
+                error = "Pitch (x rot) is outside accepted range of [-90, 90].";
+        }
+        if (ok && error == nullptr && !JS_IsUndefined(facingEntity)) {
+            Actor *facing = readEntity(ctx, facingEntity);
+            if (facing == nullptr) {
+                error = "Invalid actor selected.";
+            } else {
+                set.mHasFacing = true;
+                set.mFacing = facing->getPosition();
+            }
+        }
+        if (ok && error == nullptr && !JS_IsUndefined(targetEntity)) {
+            Actor *target = readEntity(ctx, targetEntity);
+            if (target == nullptr) {
+                error = "Invalid actor selected.";
+            } else {
+                packet.mHasTargetInstruction = true;
+                packet.mTargetInstruction.mUniqueActorId = target->getUniqueId();
+                if (!JS_IsUndefined(targetOffset))
+                    ok = (packet.mTargetInstruction.mHasTargetCenterOffset =
+                                  readVector3f(ctx, targetOffset, packet.mTargetInstruction.mTargetCenterOffset));
+            }
+        }
+        if (ok && error == nullptr && !JS_IsUndefined(entityOffset))
+            ok = (set.mHasActorOffset = readVector3f(ctx, entityOffset, set.mActorOffset));
+        if (ok && error == nullptr && !JS_IsUndefined(viewOffset))
+            ok = (set.mHasViewOffset = readVector2(ctx, viewOffset, set.mViewOffset.x, set.mViewOffset.y));
+        release();
+
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (error != nullptr)
+            return api->throwError("Error", error);
+        sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // sub_14C913F70: the preset becomes the player's default camera
+    JSValue cameraSetDefaultCamera(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const int preset = cameraPresetRuntimeId(toString(ctx, argv[0]));
+        if (preset < 0)
+            return api->throwError("Error", "Invalid camera preset!");
+
+        CameraInstructionPacket packet;
+        packet.mHasSetInstruction = true;
+        packet.mSetInstruction.mPresetRuntimeId = preset;
+        packet.mSetInstruction.mHasDefaultPreset = true;
+        packet.mSetInstruction.mDefaultPreset = true;
+        if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+            CameraEaseData &ease = packet.mSetInstruction.mEase;
+            JSValue wrapper = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, wrapper, "easeOptions", JS_DupValue(ctx, argv[1]));
+            const bool ok = readEaseOptions(ctx, wrapper, ease);
+            JS_FreeValue(ctx, wrapper);
+            if (!ok)
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        }
+        if (player != nullptr)
+            sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // ScriptCamera::fade (sub_14C910F70): times within [0, 10], colour channels within [0, 1]
+    JSValue cameraFade(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const JSValueConst options = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        CameraInstructionPacket packet;
+        packet.mHasFadeInstruction = true;
+        CameraFadeInstruction &fade = packet.mFadeInstruction;
+
+        JSValue time = optionOf(ctx, options, "fadeTime");
+        JSValue color = optionOf(ctx, options, "fadeColor");
+        bool ok = true;
+        const char *error = nullptr;
+        if (!JS_IsUndefined(time)) {
+            double values[3] = {0.0, 0.0, 0.0};
+            const char *const keys[3] = {"fadeInTime", "holdTime", "fadeOutTime"};
+            for (int i = 0; ok && i < 3; ++i) {
+                JSValue value = optionOf(ctx, time, keys[i]);
+                ok = readNumber(ctx, value, values[i]);
+                JS_FreeValue(ctx, value);
+                if (ok && (values[i] < 0.0 || values[i] > 10.0))
+                    error = "Fade times cannot be negative or greater than 10.";
+            }
+            fade.mHasTimeData = true;
+            fade.mTimeData.mFadeInTime = (float) values[0];
+            fade.mTimeData.mWaitTime = (float) values[1];
+            fade.mTimeData.mFadeOutTime = (float) values[2];
+        }
+        if (ok && error == nullptr && !JS_IsUndefined(color)) {
+            double values[3] = {0.0, 0.0, 0.0};
+            const char *const keys[3] = {"red", "green", "blue"};
+            for (int i = 0; ok && i < 3; ++i) {
+                JSValue value = optionOf(ctx, color, keys[i]);
+                ok = readNumber(ctx, value, values[i]);
+                JS_FreeValue(ctx, value);
+                if (ok && (values[i] < 0.0 || values[i] > 1.0))
+                    error = "Color values cannot be less than 0 or greater than 1.";
+            }
+            fade.mHasColor = true;
+            fade.mColor.mRed = (float) values[0];
+            fade.mColor.mGreen = (float) values[1];
+            fade.mColor.mBlue = (float) values[2];
+        }
+        JS_FreeValue(ctx, time);
+        JS_FreeValue(ctx, color);
+
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (error != nullptr)
+            return api->throwError("Error", error);
+        if (player != nullptr)
+            sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // ScriptCamera::setFov (sub_14C905CC0): no fov clears the custom one; a custom one lies in [30, 110]
+    JSValue cameraSetFov(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const JSValueConst options = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        CameraInstructionPacket packet;
+        packet.mHasFovInstruction = true;
+        CameraFovInstruction &fov = packet.mFovInstruction;
+        fov.mClear = true;
+
+        CameraEaseData ease;
+        if (!readEaseOptions(ctx, options, ease))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        fov.mEaseTime = ease.mTime;
+        fov.mEaseType = ease.mEaseType;
+
+        JSValue value = optionOf(ctx, options, "fov");
+        double degrees = 0.0;
+        const bool hasFov = !JS_IsUndefined(value);
+        const bool ok = !hasFov || readNumber(ctx, value, degrees);
+        JS_FreeValue(ctx, value);
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (hasFov) {
+            if (!(degrees >= 30.0 && degrees <= 110.0))
+                return api->throwError("Error", "Custom FOV must be within [30.0, 110.0]");
+            fov.mFov = (float) degrees;
+            fov.mClear = false;
+        }
+        if (player != nullptr)
+            sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // ScriptCamera::attachToEntity (sub_14C919F30): without options the camera detaches
+    JSValue cameraAttachToEntity(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        CameraInstructionPacket packet;
+        if (argc < 1 || JS_IsUndefined(argv[0])) {
+            packet.mHasDetachFromActor = true;
+            packet.mDetachFromActor = true;
+        } else {
+            JSValue entity = optionOf(ctx, argv[0], "entity");
+            Actor *actor = readEntity(ctx, entity);
+            JS_FreeValue(ctx, entity);
+            if (actor == nullptr)
+                return api->throwError("Error", "Invalid actor selected!");
+            packet.mHasAttachInstruction = true;
+            packet.mAttachInstruction.mUniqueActorId = actor->getUniqueId();
+        }
+        if (player != nullptr)
+            sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // ScriptCamera::addShake (sub_14C91C8E0): a positive duration, an intensity in (0, 4]
+    JSValue cameraAddShake(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const JSValueConst options = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        JSValue durationValue = optionOf(ctx, options, "duration");
+        JSValue intensityValue = optionOf(ctx, options, "intensity");
+        JSValue typeValue = optionOf(ctx, options, "type");
+        double duration = 0.0, intensity = 0.0;
+        const std::string type = JS_IsString(typeValue) ? toString(ctx, typeValue) : std::string();
+        const bool ok = readNumber(ctx, durationValue, duration) && readNumber(ctx, intensityValue, intensity)
+                        && (type == "Positional" || type == "Rotational");
+        JS_FreeValue(ctx, durationValue);
+        JS_FreeValue(ctx, intensityValue);
+        JS_FreeValue(ctx, typeValue);
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (!(duration > 0.0))
+            return api->throwError("Error", "shakeCameraOptions.duration must be > 0");
+        if (!(intensity > 0.0))
+            return api->throwError("Error", "shakeCameraOptions.intensity must be > 0");
+        if (intensity > 4.0)
+            return api->throwError("ArgumentOutOfBoundsError", "");
+
+        CameraShakePacket packet;
+        packet.mIntensity = (float) intensity;
+        packet.mDuration = (float) duration;
+        packet.mShakeType = type == "Rotational" ? CameraShakePacket::ShakeType::Rotational
+                                                 : CameraShakePacket::ShakeType::Positional;
+        packet.mShakeAction = CameraShakePacket::ShakeAction::Add;
+        if (player != nullptr)
+            api->host().sendPacketTo(player->getNetworkIdentifier(), packet);
+        return JS_UNDEFINED;
+    }
+
+    JSValue cameraStopShaking(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        CameraShakePacket packet;
+        packet.mIntensity = 0.0f;
+        packet.mDuration = 0.0f;
+        packet.mShakeType = CameraShakePacket::ShakeType::Positional;
+        packet.mShakeAction = CameraShakePacket::ShakeAction::Stop;
+        ScriptApi::fromContext(ctx)->host().sendPacketTo(player->getNetworkIdentifier(), packet);
+        return JS_UNDEFINED;
     }
 
     JSValue cameraClear(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -2611,8 +2967,13 @@ void ScriptApi::_bindPlayer() {
     JSValue camera = defineClass("Camera");
     property(camera, "Camera", "isValid", partGetIsValid);
     method(camera, "Camera", "clear", cameraClear, 0);
-    method(camera, "Camera", "setCamera", partNoop, 2);
-    method(camera, "Camera", "fade", partNoop, 1);
+    method(camera, "Camera", "setCamera", cameraSetCamera, 2);
+    method(camera, "Camera", "setDefaultCamera", cameraSetDefaultCamera, 2);
+    method(camera, "Camera", "fade", cameraFade, 1);
+    method(camera, "Camera", "setFov", cameraSetFov, 1);
+    method(camera, "Camera", "attachToEntity", cameraAttachToEntity, 1);
+    method(camera, "Camera", "addShake", cameraAddShake, 1);
+    method(camera, "Camera", "stopShaking", cameraStopShaking, 0);
 
     JSValue permissions = defineClass("PlayerInputPermissions");
     method(permissions, "PlayerInputPermissions", "setPermissionCategory", partNoop, 2);

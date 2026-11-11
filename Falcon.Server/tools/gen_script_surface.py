@@ -57,6 +57,7 @@ BOUND = {
         'ItemBlockDynamicPropertiesComponent', 'CustomCommandRegistry', 'CustomCommandOrigin', 'CustomCommandSource',
         'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
         'HudElement', 'HudVisibility', 'HudElementsCount', 'HudVisibilityCount',
+        'EasingType', 'CameraShakeType', 'EntityAttachPoint',
     },
     'server-ui': None,
     'common': None,
