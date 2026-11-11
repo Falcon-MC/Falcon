@@ -184,12 +184,10 @@ namespace {
         return identifier == WRITABLE_BOOK || identifier == WRITTEN_BOOK;
     }
 
-    // dyeable means carrying minecraft:dyeable: sub_142C33160; the component comes from item json, sub_143F0F5E0
-    // TODO: the vanilla item json is not in the binary nor the bundled data; leather armor and wolf armor for now
-    bool isDyeable(const std::string &identifier) {
-        return identifier == "minecraft:leather_helmet" || identifier == "minecraft:leather_chestplate"
-               || identifier == "minecraft:leather_leggings" || identifier == "minecraft:leather_boots"
-               || identifier == "minecraft:leather_horse_armor" || identifier == "minecraft:wolf_armor";
+    // only an item json declares minecraft:dyeable (sub_143F0F5E0); no vanilla item does, leather armor included
+    bool isDyeable(const ScriptItemData &data) {
+        const DyeableItemComponent *dyeable = gameComponents(data).get<DyeableItemComponent>();
+        return dyeable != nullptr && dyeable->isDyeable();
     }
 
     int32_t maxDurabilityOf(const ScriptItemData &data) {
@@ -1022,7 +1020,7 @@ namespace {
         if (id == "minecraft:book")
             return isBook(data.mTypeId) ? "ItemBookComponent" : nullptr;
         if (id == "minecraft:dyeable")
-            return isDyeable(data.mTypeId) ? "ItemDyeableComponent" : nullptr;
+            return isDyeable(data) ? "ItemDyeableComponent" : nullptr;
         if (id == "minecraft:compostable")
             return vanillaComponent(data.mTypeId, "minecraft:compostable") != nullptr ? "ItemCompostableComponent"
                                                                                       : nullptr;
@@ -1261,7 +1259,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // TODO: default_color comes from the vanilla item json (sub_143EB7290 schema), not in the binary
+    // the component's default_color once the stack has customColor (sub_14B3FDBA0); no vanilla item has the component
     JSValue dyeableGetDefaultColor(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
