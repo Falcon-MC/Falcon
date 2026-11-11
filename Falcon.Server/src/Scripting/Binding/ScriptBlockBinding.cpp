@@ -10,6 +10,7 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Block/BlockPickItem.h"
 #include "World/Level/Block/BlockPrecipitation.h"
@@ -100,9 +101,58 @@ namespace {
         return identifier;
     }
 
-    // TODO: tile.<name>.name is the vanilla convention; the game's own key per block is unverified
+    // BlockType vtable +784 (sub_1435AC4B0): mDescriptionId + ".name", "tile." + the name without a minecraft namespace
+    // (sub_1435A8150); a display_name component replaces it (sub_143169930)
     std::string localizationKeyOf(const std::string &identifier) {
-        const std::string name = identifier.compare(0, 10, "minecraft:") == 0 ? identifier.substr(10) : identifier;
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(identifier);
+        if (custom != nullptr && !custom->mDisplayName.empty())
+            return custom->mDisplayName;
+        const bool vanilla = identifier.compare(0, 10, "minecraft:") == 0;
+        const std::string name = vanilla ? identifier.substr(10) : identifier;
+        if (!vanilla)
+            return "tile." + name + ".name";
+
+        // sub_14A433AC0
+        static const std::unordered_map<std::string, std::string> fences = {
+                {"oak_fence", "fence"},          {"acacia_fence", "acaciaFence"},
+                {"birch_fence", "birchFence"},   {"dark_oak_fence", "darkOakFence"},
+                {"jungle_fence", "jungleFence"}, {"spruce_fence", "spruceFence"}};
+        // sub_1476FEEB0 over qword_14F319098
+        static const std::unordered_map<std::string, std::string> planks = {
+                {"oak_planks", "oak"},       {"spruce_planks", "spruce"}, {"birch_planks", "birch"},
+                {"jungle_planks", "jungle"}, {"acacia_planks", "acacia"}, {"dark_oak_planks", "big_oak"}};
+        // sub_14A429250 over off_14F3E5E38: element 1 to 118, any other number reads unknown
+        static const char *const elements[] = {
+                "h",  "he", "li", "be", "b",  "c",  "n",  "o",  "f",  "ne", "na", "mg", "al", "si", "p",  "s",  "cl",
+                "ar", "k",  "ca", "sc", "ti", "v",  "cr", "mn", "fe", "co", "ni", "cu", "zn", "ga", "ge", "as", "se",
+                "br", "kr", "rb", "sr", "y",  "zr", "nb", "mo", "tc", "ru", "rh", "pd", "ag", "cd", "in", "sn", "sb",
+                "te", "i",  "xe", "cs", "ba", "la", "ce", "pr", "nd", "pm", "sm", "eu", "gd", "tb", "dy", "ho", "er",
+                "tm", "yb", "lu", "hf", "ta", "w",  "re", "os", "ir", "pt", "au", "hg", "tl", "pb", "bi", "po", "at",
+                "rn", "fr", "ra", "ac", "th", "pa", "u",  "np", "pu", "am", "cm", "bk", "cf", "es", "fm", "md", "no",
+                "lr", "rf", "db", "sg", "bh", "hs", "mt", "ds", "rg", "cn", "nh", "fl", "mc", "lv", "ts", "og"};
+
+        const auto fence = fences.find(name);
+        if (fence != fences.end())
+            return "tile." + fence->second + ".name";
+        const auto plank = planks.find(name);
+        if (plank != planks.end())
+            return "tile.planks." + plank->second + ".name";
+        // sub_148F8B380: the skull class swaps tile. for item.
+        if (BlockIdentifier::equalsAny(identifier,
+                                       {"minecraft:skeleton_skull", "minecraft:wither_skeleton_skull",
+                                        "minecraft:zombie_head", "minecraft:player_head", "minecraft:creeper_head",
+                                        "minecraft:dragon_head", "minecraft:piglin_head"}))
+            return "item." + name + ".name";
+        if (name == "brewing_stand")
+            return "item.brewing_stand.name";
+        if (name == "seagrass")
+            return "tile.seagrass.seagrass.name";
+        if (name.compare(0, 8, "element_") == 0 && name.size() > 8
+            && name.find_first_not_of("0123456789", 8) == std::string::npos && name.size() <= 11) {
+            const int number = std::stoi(name.substr(8));
+            return std::string("tile.element.") + (number >= 1 && number <= 118 ? elements[number - 1] : "unknown")
+                   + ".name";
+        }
         return "tile." + name + ".name";
     }
 
