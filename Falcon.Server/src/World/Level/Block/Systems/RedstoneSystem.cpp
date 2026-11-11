@@ -19,6 +19,7 @@
 #include "World/Level/Block/RedStoneWireBlock.h"
 #include "World/Level/Block/ObserverBlock.h"
 #include "World/Level/Block/RedstoneBlock.h"
+#include "World/Level/Block/LecternBlock.h"
 #include "World/Level/Block/RedstoneComparatorBlock.h"
 #include "World/Level/Block/RedstoneDiodeBlock.h"
 #include "World/Level/Block/RedstoneLampBlock.h"
@@ -517,6 +518,13 @@ namespace {
 
     int comparatorCalculateInputStrength(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &state) {
+        const Vector3i front = RedstoneFace::relative(position, diodeFacing(state));
+        const BlockState frontState = stateAt(level, front);
+        if (const Block *block = VanillaBlocks::fromIdentifier(frontState.mName)) {
+            const int signal = block->getComparatorSignal(level, front, frontState);
+            if (signal >= 0)
+                return signal;
+        }
         return diodeCalculateInputStrength(owner, level, position, state);
     }
 
@@ -794,6 +802,10 @@ int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, cons
 
     if (dynamic_cast<const ButtonBlock *>(block) != nullptr)
         return stateBool(state, "button_pressed_bit", false) ? MAX_SIGNAL : 0;
+
+    // sub_143C87D50: 15 while a page turn holds powered_bit
+    if (dynamic_cast<const LecternBlock *>(block) != nullptr)
+        return stateBool(state, "powered_bit", false) ? MAX_SIGNAL : 0;
 
     if (dynamic_cast<const PressurePlateBlock *>(block) != nullptr
         || dynamic_cast<const DaylightDetectorBlock *>(block) != nullptr)

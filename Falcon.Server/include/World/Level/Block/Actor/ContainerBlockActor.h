@@ -308,6 +308,20 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
+    bool hasBook() const {
+        return !mInventory.getContainerItem(0).isAir();
+    }
+
+    const ItemStack &getBook() const {
+        return mInventory.getContainerItem(0);
+    }
+
+    // sub_144C3E260: one book in slot 0, back to its first page
+    void setBook(ItemStack book);
+
+    // sub_144C3E130: the book, now out of the lectern; air when there was none
+    ItemStack takeBook();
+
     int mPage = 0;
     int mTotalPages = 0;
 };
