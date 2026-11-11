@@ -884,6 +884,9 @@ void InventoryManager::onCurrentWindowRemove() {
     } else if (mFurnaceWindowId == currentWindowId) {
         _storeFurnaceState(true);
         mFurnaceWindowId = CONTAINER_ID_NONE;
+        if (mOwner != nullptr && mPlayer != nullptr)
+            mOwner->getScriptEngine().onBlockContainerClosed(mOwner->getLevelFor(*mPlayer), mFurnacePosition,
+                                                             *mPlayer);
         mFurnaceBurnTime = 0;
         mFurnaceMaxBurnTime = 0;
         mFurnaceCookTime = 0;
@@ -1160,6 +1163,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
     }
 
     RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), position);
+    mOwner->getScriptEngine().onBlockContainerOpened(mOwner->getLevelFor(*mPlayer), position, *mPlayer);
     return true;
 }
 
@@ -1259,6 +1263,7 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
     if (chest->getViewerCount() == 1)
         _animateChest(*chest, true);
 
+    mOwner->getScriptEngine().onBlockContainerOpened(mOwner->getLevelFor(*mPlayer), position, *mPlayer);
     return true;
 }
 
@@ -1337,6 +1342,8 @@ void InventoryManager::_closeBlockContainer() {
     BlockActor *blockActor = blockActors == nullptr ? nullptr : blockActors->find(mContainerPosition);
     if (blockActor == nullptr)
         return;
+    if (mOwner != nullptr && mPlayer != nullptr)
+        mOwner->getScriptEngine().onBlockContainerClosed(mOwner->getLevelFor(*mPlayer), mContainerPosition, *mPlayer);
 
     ChestBlockActor *chest = dynamic_cast<ChestBlockActor *>(blockActor);
     if (chest != nullptr) {
@@ -1420,6 +1427,8 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
     open.mUniqueActorId = -1;
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
     syncContents(InventoryId::FurnaceInput);
+    if (mOwner != nullptr)
+        mOwner->getScriptEngine().onBlockContainerOpened(mOwner->getLevelFor(*mPlayer), position, *mPlayer);
     return true;
 }
 
@@ -1485,6 +1494,9 @@ void InventoryManager::onClientRemoveWindow(int windowId) {
     if (windowId == mFurnaceWindowId) {
         _storeFurnaceState(true);
         mFurnaceWindowId = CONTAINER_ID_NONE;
+        if (mOwner != nullptr && mPlayer != nullptr)
+            mOwner->getScriptEngine().onBlockContainerClosed(mOwner->getLevelFor(*mPlayer), mFurnacePosition,
+                                                             *mPlayer);
         mFurnaceBurnTime = 0;
         mFurnaceMaxBurnTime = 0;
         mFurnaceCookTime = 0;

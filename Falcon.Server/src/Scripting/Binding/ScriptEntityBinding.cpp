@@ -2213,6 +2213,12 @@ namespace {
         return JS_NewBool(ctx, player == nullptr || !player->isInputLocked(category));
     }
 
+    void setInputCategory(JSContext *ctx, ServerPlayer *player, int32_t category, bool enabled) {
+        if (player != nullptr && player->setInputLocked(category, !enabled))
+            ScriptApi::fromContext(ctx)->host().getScriptEngine().onPlayerInputPermissionCategoryChange(
+                    *player, category, enabled);
+    }
+
     template <int32_t CATEGORY>
     JSValue inputCategoryGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ServerPlayer *player = partOwner(ctx, thisVal);
@@ -2223,9 +2229,7 @@ namespace {
     JSValue inputCategorySet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 1 || !JS_IsBool(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player != nullptr)
-            player->setInputLocked(CATEGORY, !JS_ToBool(ctx, argv[0]));
+        setInputCategory(ctx, partOwner(ctx, thisVal), CATEGORY, JS_ToBool(ctx, argv[0]) == 1);
         return JS_UNDEFINED;
     }
 
@@ -2233,9 +2237,7 @@ namespace {
         int32_t category = 0;
         if (argc < 2 || !readInputCategory(ctx, argv[0], category) || !JS_IsBool(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        ServerPlayer *player = partOwner(ctx, thisVal);
-        if (player != nullptr)
-            player->setInputLocked(category, !JS_ToBool(ctx, argv[1]));
+        setInputCategory(ctx, partOwner(ctx, thisVal), category, JS_ToBool(ctx, argv[1]) == 1);
         return JS_UNDEFINED;
     }
 

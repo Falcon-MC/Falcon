@@ -726,6 +726,7 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
     }
 
     player.startBreakingBlock(position, face, breakSpeed, owner.getCurrentTick());
+    owner.getScriptEngine().onPlayerStartBreakingBlock(player, position, face);
 
     owner.broadcastLevelEvent(level, LevelEventPacket::Event::BlockStartBreak,
                               Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
@@ -871,7 +872,7 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
     }
 
     if (player.isBreakingBlock())
-        stopBreakingBlock(owner, player);
+        stopBreakingBlock(owner, player, false);
 
     breakBlock(owner, player, position);
 }
@@ -905,11 +906,14 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     broadcastToViewers(owner, level, center, swing, &player);
 }
 
-void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player) {
+void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, bool cancelled) {
     if (!player.isBreakingBlock())
         return;
 
     const Vector3i position = player.getBreakingBlockPosition();
+    if (cancelled)
+        owner.getScriptEngine().onPlayerCancelBreakingBlock(player, position, player.getBreakingFace(),
+                                                            player.getBreakProgress());
     player.stopBreakingBlock();
 
     owner.broadcastLevelEvent(owner.getLevelFor(player), LevelEventPacket::Event::BlockStopBreak,

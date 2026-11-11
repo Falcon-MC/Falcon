@@ -70,7 +70,8 @@ public:
 
     static void continueBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    static void stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player);
+    // cancelled: the break ended before the block broke
+    static void stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, bool cancelled = true);
 
     static void completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 

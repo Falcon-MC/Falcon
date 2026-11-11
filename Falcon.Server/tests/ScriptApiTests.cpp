@@ -615,6 +615,25 @@ world.afterEvents.entityContainerClosed.subscribe((e) => log("closed:" + e.entit
     + e.closeSource.entity.typeId), { accessSourceFilter: { entityFilter: { type: "minecraft:player" } } });
 world.afterEvents.playerInventoryItemChange.subscribe((e) => log("hotbar:" + e.slot),
     { inventoryType: "Hotbar", allowedSlots: [3] });
+const worldLog = (line) => { r.world = (r.world || "") + line + ";"; };
+world.afterEvents.blockContainerOpened.subscribe((e) => worldLog("opened:" + e.block.typeId + ":"
+    + e.openSource.entity.typeId + ":" + (e.dimension.id === "minecraft:overworld")),
+    { blockFilter: { includeTypes: ["minecraft:stone"] } });
+world.afterEvents.blockContainerOpened.subscribe(() => worldLog("wrongOpened"),
+    { blockFilter: { includeTypes: ["minecraft:barrel"] } });
+world.afterEvents.blockContainerClosed.subscribe((e) => worldLog("closed:" + e.block.typeId + ":"
+    + e.closeSource.entity.typeId), { accessSourceFilter: { entityFilter: { type: "minecraft:player" } } });
+world.afterEvents.playerStartBreakingBlock.subscribe((e) => worldLog("start:" + e.blockPermutation.type.id + ":"
+    + e.face + ":" + e.player.typeId));
+world.afterEvents.playerStartBreakingBlock.subscribe(() => worldLog("wrongStart"),
+    { playerFilter: { type: "minecraft:cow" } });
+world.afterEvents.playerCancelBreakingBlock.subscribe((e) => worldLog("cancel:" + e.block.typeId + ":"
+    + e.breakProgress));
+world.afterEvents.itemStartUseOn.subscribe((e) => worldLog("useOn:" + e.block.typeId + ":" + e.blockFace + ":"
+    + e.source.typeId));
+world.afterEvents.itemStopUseOn.subscribe((e) => worldLog("stopUseOn:" + e.block.typeId));
+world.afterEvents.playerInputPermissionCategoryChange.subscribe((e) => r.input = (r.input || "") + e.category
+    + ":" + e.enabled + ":" + e.player.typeId + ";");
 
 system.runTimeout(() => {
   try {
@@ -799,6 +818,9 @@ system.runTimeout(() => {
     r.stateMatches = log.matches("oak_log", { pillar_axis: "y" }) + ":" + log.matches("oak_log", { pillar_axis: "x" })
         + ":" + log.matches("oak_log", { nope: 1 }) + ":" + new ItemStack("apple").matches("apple", { pillar_axis: "y" });
     const stoneBlock = world.getDimension("overworld").getBlock({ x: 0, y: 101, z: 8 });
+    player.inputPermissions.setPermissionCategory(2, false);
+    player.inputPermissions.setPermissionCategory(2, false);
+    player.inputPermissions.setPermissionCategory(2, true);
     r.blockType = stoneBlock.type.id + ":" + (stoneBlock.type === BlockTypes.get("stone")) + ":"
         + (BlockPermutation.resolve("stone").type === BlockTypes.get("minecraft:stone"));
     const cursorComponent = player.getComponent("cursor_inventory");
@@ -2083,6 +2105,13 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(!windows.openEntityContainer(*cow, ContainerType::Horse), "a cow opened an inventory");
         windows.onClientRemoveWindow(windows.getContainerWindowId());
         require(windows.getContainerActorId() == -1 && !windows.isContainerOpen(), "the window did not close");
+        const Vector3i stoneAt(0, 101, 8);
+        engine.onBlockContainerOpened(owner.getLevelFor(player), stoneAt, player);
+        engine.onBlockContainerClosed(owner.getLevelFor(player), stoneAt, player);
+        engine.onPlayerStartBreakingBlock(player, stoneAt, 1);
+        engine.onPlayerCancelBreakingBlock(player, stoneAt, 1, 1.5);
+        engine.onItemStartUseOn(player, stoneAt, 1);
+        engine.onItemStopUseOn(player, stoneAt);
         const Tag savedCart = minecart->saveNbt();
         const Tag *chestItems = savedCart.get("ChestItems");
         require(chestItems != nullptr && chestItems->getList().size() == 1
@@ -2378,6 +2407,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "pickup:minecraft:player:minecraft:diamondx2;beforePickup:minecraft:piglin:minecraft:item;"
                "change:3:Hotbar:->minecraft:diamond;hotbar:3;opened:minecraft:chest_minecart:minecraft:player;"
                "closed:minecraft:chest_minecart:minecraft:player;");
+        expect(it, "world",
+               "opened:minecraft:stone:minecraft:player:true;closed:minecraft:stone:minecraft:player;"
+               "start:minecraft:stone:Up:minecraft:player;cancel:minecraft:stone:1;"
+               "useOn:minecraft:stone:Up:minecraft:player;stopUseOn:minecraft:stone;");
+        expect(it, "input", "2:false:minecraft:player;2:true:minecraft:player;");
 
         const std::unique_ptr<json::Value> betaEntities = result(owner, "betaEntities");
         expect(*betaEntities, "cursor", "grab:minecraft:diamond;release:minecraft:diamond:ScriptPlayer;");

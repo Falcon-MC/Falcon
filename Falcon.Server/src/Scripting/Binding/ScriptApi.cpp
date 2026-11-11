@@ -1164,7 +1164,9 @@ bool ScriptApi::emitClockEvent(const std::string &key, JSValue eventObject, cons
 bool ScriptApi::keepsSubscribeOptions(const std::string &key) {
     return key == "after.playerInventoryItemChange" || key == "after.entityItemPickup"
            || key == "before.entityItemPickup" || key == "after.entityContainerOpened"
-           || key == "after.entityContainerClosed";
+           || key == "after.entityContainerClosed" || key == "after.blockContainerOpened"
+           || key == "after.blockContainerClosed" || key == "after.playerStartBreakingBlock"
+           || key == "after.playerCancelBreakingBlock";
 }
 
 void ScriptApi::keepSubscribeOptions(JSValueConst callback, JSValueConst options) {

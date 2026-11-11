@@ -906,16 +906,18 @@ void ServerPlayer::clearTitle() {
     mSender->sendPacketTo(mId, packet);
 }
 
-void ServerPlayer::setInputLocked(int32_t category, bool locked) {
+bool ServerPlayer::setInputLocked(int32_t category, bool locked) {
     if (category < 0 || category >= 32)
-        return;
+        return false;
     const uint32_t bit = 1u << category;
+    const uint32_t previous = mInputLocks;
     mInputLocks = locked ? (mInputLocks | bit) : (mInputLocks & ~bit);
 
     UpdateClientInputLocksPacket packet;
     packet.mLockComponentData = (int32_t) mInputLocks;
     if (mSender != nullptr)
         mSender->sendPacketTo(mId, packet);
+    return mInputLocks != previous;
 }
 
 void ServerPlayer::setHudVisibility(bool hidden, const std::vector<int32_t> *elements) {
