@@ -409,8 +409,8 @@ namespace {
         if (argc < 2 || !readPoint(ctx, argv[0], center) || JS_ToFloat64(ctx, &radius, argv[1]) != 0
             || !std::isfinite(radius))
             return typeError(ctx);
-        // TODO: the game's radius bounds are unverified; a negative one is refused
-        if (radius < 0.0)
+        // argument range of the createExplosion registration (sub_14B4FA790)
+        if (radius < 0.0 || radius > 1000.0)
             return api->throwError("ArgumentOutOfBoundsError", "");
         Level &level = levelOf(ctx, thisVal);
         JSValueConst options = argc >= 3 ? argv[2] : JS_UNDEFINED;
