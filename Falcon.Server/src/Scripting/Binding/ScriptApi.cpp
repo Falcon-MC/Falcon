@@ -1386,6 +1386,7 @@ void ScriptApi::_installBootstraps() {
     JS_FreeValue(mContext, dataExports);
 
     JSValue volumes = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, volumes, "error", JS_GetPropertyStr(mContext, mErrors, "make"));
     JSValue volumeExports = runBootstrap(mContext, mPackName, ScriptBootstraps::volumes(), "<volumes>", volumes);
     for (const char *name: {"BlockVolumeBase", "BlockVolume", "ListBlockVolume", "BlockLocationIterator"}) {
         if (mSurface.has(name))

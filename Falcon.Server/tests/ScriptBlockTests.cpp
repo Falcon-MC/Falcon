@@ -187,6 +187,12 @@ system.runTimeout(() => {
     r.list = list.getCapacity() + ":" + dim.getBlocks(list, { includeTypes: ["stone"] }).getCapacity();
     r.unloaded = capture(() => dim.fillBlocks(new BlockVolume({ x: 5000, y: 100, z: 5000 }, { x: 5000, y: 100, z: 5000 }), "stone"));
     r.closest = JSON.stringify(volume.getClosest(1, { x: 0, y: 100, z: 10 }));
+    const square = new BlockVolume({ x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 2 });
+    r.closestTies = JSON.stringify(square.getClosest(2, { x: 1, y: 0, z: 1 }));
+    r.closestZero = capture(() => square.getClosest(0, { x: 0, y: 0, z: 0 }));
+    r.touch = square.doesVolumeTouchFaces(new BlockVolume({ x: 3, y: 0, z: 0 }, { x: 3, y: 0, z: 0 })) + ":"
+        + square.doesVolumeTouchFaces(new BlockVolume({ x: 3, y: 1, z: 0 }, { x: 3, y: 1, z: 0 })) + ":"
+        + square.doesVolumeTouchFaces(new BlockVolume({ x: 1, y: 0, z: 1 }, { x: 1, y: 0, z: 1 }));
     let iterated = 0;
     for (const location of volume.getBlockLocationIterator())
         iterated++;
@@ -584,6 +590,9 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "unloaded", "throw:UnloadedChunksError");
         expect(r, "closest", "[{\"x\":10,\"y\":100,\"z\":10}]");
         expect(r, "iterated", "12");
+        expect(r, "closestTies", "[{\"x\":1,\"y\":0,\"z\":1},{\"x\":1,\"y\":0,\"z\":0}]");
+        expect(r, "touch", "true:false:true");
+        expect(r, "closestZero", "throw:ArgumentOutOfBoundsError");
         expect(r, "clone", "minecraft:gold_block");
         expect(r, "cloneOverlap", "throw:Error");
         expect(r, "biome", "true:true:true");

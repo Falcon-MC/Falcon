@@ -368,7 +368,6 @@ namespace {
             throw new TypeError("Native type conversion failed.");
         return { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z) };
     };
-    const distance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2;
 
     class BlockLocationIterator {
         #next;
@@ -397,16 +396,44 @@ namespace {
             const min = this.getMin(), max = this.getMax();
             return { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
         }
-        // TODO: the game's tie order between equally distant locations is unverified
+        // sub_14DD6ADE0, sub_14DD6B520: a bounded min-heap over (key, x, y, z) as floats; a location replaces
+        // the least kept one only on a strictly larger key, then all come out from the largest
+        #nearest(count, location, sign) {
+            const n = Math.max(0, count | 0);
+            if (n === 0)
+                throw native.error("ArgumentOutOfBoundsError", "", { minValue: 1, maxValue: 4294967295, value: 0 });
+            const at = { x: Math.fround(Number(location.x)), y: Math.fround(Number(location.y)),
+                         z: Math.fround(Number(location.z)) };
+            const f = Math.fround;
+            const less = (a, b) => a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1]
+                : a[2] !== b[2] ? a[2] < b[2] : a[3] < b[3];
+            const kept = [];
+            this.forEachLocation((p) => {
+                const dx = f(p.x - at.x), dy = f(p.y - at.y), dz = f(p.z - at.z);
+                const d = f(f(dz * dz) + f(f(dy * dy) + f(dx * dx)));
+                const entry = [sign < 0 ? -d : d, p.x, p.y, p.z];
+                if (kept.length < n) {
+                    kept.push(entry);
+                    return;
+                }
+                let least = 0;
+                for (let i = 1; i < kept.length; ++i)
+                    if (less(kept[i], kept[least]))
+                        least = i;
+                if (entry[0] > kept[least][0])
+                    kept[least] = entry;
+            });
+            return kept.sort((a, b) => (less(a, b) ? 1 : less(b, a) ? -1 : 0)).map((e) => ({ x: e[1], y: e[2], z: e[3] }));
+        }
+        forEachLocation(visit) {
+            for (const location of this.getBlockLocationIterator())
+                visit(location);
+        }
         getClosest(count, location) {
-            const at = vector(location);
-            return Array.from(this.getBlockLocationIterator()).sort((a, b) => distance(a, at) - distance(b, at))
-                .slice(0, Math.max(0, count | 0));
+            return this.#nearest(count, location, -1);
         }
         getFarthest(count, location) {
-            const at = vector(location);
-            return Array.from(this.getBlockLocationIterator()).sort((a, b) => distance(b, at) - distance(a, at))
-                .slice(0, Math.max(0, count | 0));
+            return this.#nearest(count, location, 1);
         }
     }
 
@@ -462,6 +489,14 @@ namespace {
             if (c.x >= a.x && d.x <= b.x && c.y >= a.y && d.y <= b.y && c.z >= a.z && d.z <= b.z)
                 return 1;
             return 2;
+        }
+        // forEach runs x, then z, then y innermost: sub_148F88D80
+        forEachLocation(visit) {
+            const min = this.getMin(), max = this.getMax();
+            for (let x = min.x; x <= max.x; ++x)
+                for (let z = min.z; z <= max.z; ++z)
+                    for (let y = min.y; y <= max.y; ++y)
+                        visit({ x, y, z });
         }
         // x, then z, then y outermost: sub_14314C1B0
         getBlockLocationIterator() {
