@@ -754,14 +754,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         player.getInventory().setItemInHand(wand);
         engine.onItemUse(player);
         engine.onItemUseOnBlock(player, at, 1, Vector3f(0.5f, 1.0f, 0.5f));
-        engine.onItemCompleteUse(player, wand);
         engine.onItemConsume(player, wand);
+        engine.onItemCompleteUse(player, wand);
         ItemStack snack;
         snack.mDefinition = owner.getItemDefinitions().getDefinition("test:snack");
         snack.mCount = 1;
         require(snack.mDefinition != nullptr, "the custom food was not registered");
-        engine.onItemCompleteUse(player, snack);
         engine.onItemConsume(player, snack);
+        engine.onItemCompleteUse(player, snack);
         require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
         PlayerBreakBlockAfterEvent broken(player, at, "test:block");
         owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
@@ -984,8 +984,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "truetrue");
         expect(c, "onCompleteUse", "ItemComponentCompleteUseEvent|itemStack+source|{}");
         expect(c, "onConsume", "ItemComponentConsumeEvent|itemStack+source|{}");
-        // onConsume needs minecraft:food and follows onCompleteUse
-        expect(c, "useOrder", "test:wand:complete;test:snack:complete;test:snack:consume;");
+        // onConsume needs minecraft:food and runs before onCompleteUse
+        expect(c, "useOrder", "test:wand:complete;test:snack:consume;test:snack:complete;");
         expect(c, "onHitEntity", "ItemComponentHitEntityEvent|attackingEntity+hadEffect+hitEntity+itemStack|{}");
         expect(c, "onBeforeDurabilityDamage",
                "ItemComponentBeforeDurabilityDamageEvent|attackingEntity+durabilityDamage+hitEntity+itemStack|{}|2");
