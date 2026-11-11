@@ -1,5 +1,6 @@
-#include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/BookHandler.h"
 
+#include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/BookEditPacket.h"
 
 #include <algorithm>
@@ -31,15 +32,11 @@ namespace {
     }
 }
 
-// sub_1422BA880: edits the writable book in the given inventory slot; signing turns it into a written book
-void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BookEditPacket &packet) {
-    ServerPlayer *player = _getPlayer(id);
-    if (player == nullptr || !player->isSpawned())
-        return;
+void BookHandler::handleEdit(ServerNetworkHandler &owner, ServerPlayer &player, const BookEditPacket &packet) {
     const int32_t slot = packet.mInventorySlot;
     if (slot < 0 || slot >= PlayerInventory::CONTAINER_SIZE)
         return;
-    const ItemStack &held = player->getInventory().getItem(slot);
+    const ItemStack &held = player.getInventory().getItem(slot);
     if (held.isAir() || held.mDefinition == nullptr || held.mDefinition->getIdentifier() != "minecraft:writable_book")
         return;
 
@@ -78,13 +75,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BookEditPac
 
     ItemStack edited = held;
     if (packet.mAction == BookEditPacket::Action::SignBook) {
-        edited = createItemStack("minecraft:written_book", held.mCount);
+        edited = owner.createItemStack("minecraft:written_book", held.mCount);
         if (edited.isAir())
             return;
         // sub_1447CD9D0: the signed fields next to the pages
         edited.mTag = held.mTag.isCompound() ? held.mTag : Tag::ofCompound();
         edited.mTag.putString("author", packet.mAuthor);
-        edited.mTag.putString("xuid", player->getXuid());
+        edited.mTag.putString("xuid", player.getXuid());
         edited.mTag.putString("title", packet.mTitle);
         edited.mTag.putInt("generation", 0);
     } else if (!edited.mTag.isCompound()) {
@@ -92,6 +89,6 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BookEditPac
     }
     edited.mTag.put("pages", Tag::ofList(Tag::Type::Compound, std::move(pages)));
 
-    player->getInventory().setItem(slot, std::move(edited));
-    player->getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+    player.getInventory().setItem(slot, std::move(edited));
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
 }
