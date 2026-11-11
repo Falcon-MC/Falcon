@@ -348,7 +348,7 @@ void Explosion::_destroyBlocks() {
         const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName);
         const bool keepsContents = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
         BlockActionHandler::destroyBlock(mOwner, mLevel, position, state, keepsContents || nextDouble() * 100.0 < yield,
-                                         noTool);
+                                         noTool, mSourceActor);
     }
 }
 

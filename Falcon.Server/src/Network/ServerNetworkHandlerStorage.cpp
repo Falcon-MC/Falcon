@@ -241,6 +241,7 @@ void ServerNetworkHandler::autoSave(bool wait) {
     }
 
     saveWorldDynamicProperties(wait);
+    mScriptEngine.saveWorldClocks();
     saveAllActors();
 
     for (World *world: mWorlds.getWorlds())

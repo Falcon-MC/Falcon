@@ -4,6 +4,8 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "Protocol/Types/ItemStack.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "World/Level/Block/BlockState.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/Binding/ScriptNatives.h"
 #include "Scripting/Binding/ScriptSurface.h"
@@ -132,6 +134,17 @@ public:
     // default states: the events only carry the block name
     JSValue makePermutation(const std::string &identifier);
 
+    JSValue makePermutation(const BlockState &state);
+
+    // a BlockPermutation's type and states; false when the value is not one
+    bool readPermutation(JSValueConst permutation, BlockState &state);
+
+    // the type's default states, from the palette or the pack block
+    static BlockState defaultBlockState(const std::string &identifier);
+
+    // sets and broadcasts the block, then the custom block onPlace or onBlockStateChange hooks
+    bool setBlock(Level &level, int32_t x, int32_t y, int32_t z, const BlockState &state);
+
     JSValue makeDimension(const Level &level);
 
     Level &levelOf(JSValueConst dimension);
@@ -158,16 +171,53 @@ public:
     // the namespaces option of scriptEventReceive.subscribe; the callback must already be subscribed
     void filterScriptEvents(JSValueConst callback, std::vector<std::string> namespaces);
 
+    // clock and marker: the subscribe options a callback must match, empty for any
+    void filterClockEvents(JSValueConst callback, std::string clock, std::string marker);
+
+    // emit for a world clock signal: callbacks whose options name another clock or marker are skipped
+    bool emitClockEvent(const std::string &key, JSValue eventObject, const std::string &clock,
+                        const std::string &marker);
+
+    // the WorldClock object of a registered clock, the same one each time
+    JSValue makeClock(const std::string &name);
+
+    JSValue makeTimeMarker(const std::string &clock, const std::string &marker);
+
     // before events run restricted, startup early; true when a subscriber set cancel
     bool emit(const std::string &key, JSValue eventObject);
 
-    bool registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers);
+    // throws the official error and returns JS_EXCEPTION when the registration is refused
+    JSValue registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers);
 
-    void fireBlockComponents(const std::string &blockId, const char *hook, JSValue event);
+    bool hasCustomComponent(bool blocks, const std::string &name) const;
 
-    void fireHeldItemComponents(ServerPlayer &player, const char *hook, JSValue event);
+    // names registerCustomDimension accepted during startup, created once it ends
+    const std::vector<std::string> &pendingDimensions() const {
+        return mPendingDimensions;
+    }
+
+    JSValue registerCustomDimension(const std::string &name);
+
+    // the startup event's registries accept entries only while it runs
+    bool registrationOpen() const {
+        return mRegistrationOpen;
+    }
+
+    // false when no component this pack registered for the uses defines hook
+    bool handlesHook(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook) const;
+
+    // an instance of a hook payload class; undefined when the pack's module version lacks it
+    JSValue makeComponentEvent(const char *eventClass);
+
+    // calls hook(event, params) on each registered component of uses; 1.x hooks take the event alone
+    void fireComponents(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook, JSValueConst event);
+
+    void fillBlockEvent(JSValueConst event, const Level &level, const Vector3i &position);
 
     void startup();
+
+    // after every pack's startup and the custom dimensions it registered
+    void worldLoad();
 
     void shutdown();
 
@@ -191,14 +241,8 @@ public:
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
 
-    void emitBlockInteract(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
-                           const char *face);
-
-    void emitBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
-
-    void emitBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position);
-
-    void emitBlockStepOff(Actor &actor, const Level &level);
+    // the custom block the actor now stands on, or an empty id: fires onStepOff then onStepOn on a change
+    void emitBlockStep(Actor &actor, const Level &level, const CustomBlockDefinition *block, const Vector3i &position);
 
     bool hasSteppingActors() const {
         return !mStepping.empty();
@@ -320,14 +364,16 @@ private:
 
     void _resolveForm(uint32_t formId, const std::string &response, bool cancelled);
 
-    JSValue _makeBlockEvent(const Level &level, const Vector3i &position);
-
-    void _fireComponents(std::unordered_map<std::string, JSValue> &handlers, const std::vector<std::string> *components,
-                         const char *hook, JSValue event);
+    void _fireStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position,
+                   const char *hook, const char *eventClass);
 
     JSValue _makeSignalHolder(const char *className, const char *signalOwner, const char *keyPrefix);
 
     bool _acceptsScriptEvent(JSValueConst callback, const std::string &eventNamespace) const;
+
+    bool _acceptsClockEvent(JSValueConst callback) const;
+
+    void _bindClocks();
 
     JSContext *mContext;
     ServerNetworkHandler &mHost;
@@ -380,6 +426,13 @@ private:
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;
     std::unordered_map<void *, std::vector<std::string>> mScriptEventNamespaces;
+    std::unordered_map<void *, std::pair<std::string, std::string>> mClockFilters;
+    std::string mEmitClock;
+    std::string mEmitMarker;
+    std::unordered_map<std::string, JSValue> mClockObjects;
+    JSValue mClockRegistry = JS_UNDEFINED;
+    JSValue mDimensionRegistry = JS_UNDEFINED;
+    std::vector<std::string> mPendingDimensions;
     std::unordered_map<std::string, JSValue> mBlockComponents;
     std::unordered_map<std::string, JSValue> mItemComponents;
     bool mRegistrationOpen = false;

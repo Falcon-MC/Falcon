@@ -169,7 +169,7 @@ namespace {
         std::vector<Vector3i> mPendingNotifications;
     };
 
-    std::array<RedstoneState, Dimension::DIMENSION_COUNT> gStates;
+    std::unordered_map<int32_t, RedstoneState> gStates;
 
     RedstoneState &stateOf(Level &level) {
         return gStates[level.getDimensionId()];

@@ -1,6 +1,8 @@
 #include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
 #include "Server/Commands/ScriptEventCommand.h"
@@ -9,6 +11,15 @@
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "Scripting/WorldClockSystem.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
+#include "Network/Handler/LoginHandler.h"
+#include "Network/Handler/NetworkHandler.h"
+#include "Protocol/Packets/ChangeDimensionPacket.h"
+#include "Protocol/Packets/DimensionDataPacket.h"
+#include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "Protocol/Packets/SyncWorldClocksPacket.h"
 #include "World/Level/WorldManager.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -250,12 +261,285 @@ r.systemBefore = "beforeEvents" in system;
 r.early = capture(() => world.getAllPlayers());
 r.startupEvent = "StartupEvent" in server;
 world.beforeEvents.worldInitialize.subscribe((event) => {
-    r.register = capture(() => event.blockComponentRegistry.registerCustomComponent("legacy:comp", {}));
+    r.register = capture(() => event.blockComponentRegistry.registerCustomComponent("legacy:comp", {
+        onPlayerInteract(...args) {
+            r.legacyInteract = args.length + "|" + Object.getPrototypeOf(args[0]).constructor.name;
+            world.setDynamicProperty("stable1", JSON.stringify(r));
+        },
+        onPlayerDestroy(event) {
+            r.legacyDestroy = Object.keys(event).filter((k) => k !== "block" && k !== "dimension").sort().join("+");
+            world.setDynamicProperty("stable1", JSON.stringify(r));
+        },
+        onPlayerBreak() {
+            r.legacyBreak = "called";
+        },
+    }));
+    r.legacyName = (() => {
+        try {
+            event.blockComponentRegistry.registerCustomComponent("nonamespace", {});
+        } catch (e) {
+            return e.name + "," + e.reason;
+        }
+        return "ok";
+    })();
 });
 world.afterEvents.worldInitialize.subscribe(() => {
     world.setDynamicProperty("stable1", JSON.stringify(r));
 });
 )JS";
+
+    const char *const COMPONENTS = R"JS(
+import { world, system, BlockPermutation, CustomComponentParameters, BlockComponentPlayerInteractEvent,
+         BlockEvent, ItemComponentUseOnEvent, ItemUseOnEvent, NamespaceNameError, WorldClock, Dimension } from "@minecraft/server";
+
+const save = () => world.setDynamicProperty("components", JSON.stringify(r));
+const describe = (event, params) => {
+    const fields = Object.keys(event).filter((k) => k !== "block" && k !== "dimension").sort();
+    return [Object.getPrototypeOf(event).constructor.name, fields.join("+"),
+            params instanceof CustomComponentParameters ? JSON.stringify(params.params) : "none"].join("|");
+};
+const log = (name) => (event, params) => {
+    r[name] = describe(event, params);
+    save();
+};
+
+let placeCalls = 0;
+system.beforeEvents.startup.subscribe((event) => {
+    const blocks = event.blockComponentRegistry;
+    const items = event.itemComponentRegistry;
+    r.noNamespace = (() => {
+        try {
+            blocks.registerCustomComponent("nonamespace", {});
+        } catch (e) {
+            return (e instanceof NamespaceNameError) + "," + e.reason;
+        }
+        return "ok";
+    })();
+    r.minecraftNamespace = capture(() => items.registerCustomComponent("minecraft:thing", {}));
+    r.notObject = capture(() => blocks.registerCustomComponent("test:bad", 3));
+    r.registerBlock = capture(() => blocks.registerCustomComponent("test:hooks", {
+        beforeOnPlayerPlace(event, params) {
+            placeCalls++;
+            r.beforePlace = describe(event, params) + "|" + event.permutationToPlace.type.id + "|" + event.face;
+            if (placeCalls === 1)
+                event.cancel = true;
+            else
+                event.permutationToPlace = BlockPermutation.resolve("minecraft:stone");
+            save();
+        },
+        onPlace(event, params) {
+            r.onPlace = describe(event, params) + "|" + event.previousBlock.type.id;
+            save();
+        },
+        onBreak(event, params) {
+            r.onBreak = describe(event, params) + "|" + (event.entitySource !== undefined);
+            save();
+        },
+        onPlayerBreak: log("onPlayerBreak"),
+        onPlayerInteract(event, params) {
+            r.onPlayerInteract = describe(event, params) + "|" + event.face + "|" + event.faceLocation.x + ","
+                + event.faceLocation.z + "|" + (event instanceof BlockComponentPlayerInteractEvent)
+                + (event instanceof BlockEvent) + "|" + event.block.x;
+            save();
+        },
+        onTick: log("onTick"),
+        onRandomTick: log("onRandomTick"),
+        onStepOn: log("onStepOn"),
+        onStepOff: log("onStepOff"),
+        onEntityFallOn(event, params) {
+            r.onEntityFallOn = (r.onEntityFallOn || "") + describe(event, params) + "|" + event.fallDistance + ";";
+            save();
+        },
+        onRedstoneUpdate(event, params) {
+            r.onRedstoneUpdate = (r.onRedstoneUpdate || "") + event.previousPowerLevel + ">" + event.powerLevel + ";";
+            save();
+        },
+        onPlayerDestroy: log("onPlayerDestroy"),
+    }));
+    r.duplicate = capture(() => blocks.registerCustomComponent("test:hooks", {}));
+    r.registerItem = capture(() => items.registerCustomComponent("test:wand", {
+        onUse: log("onUse"),
+        onUseOn(event, params) {
+            r.onUseOn = describe(event, params) + "|" + event.blockFace + "|" + event.faceLocation.y + "|"
+                + (event instanceof ItemComponentUseOnEvent) + (event instanceof ItemUseOnEvent);
+            save();
+        },
+        onCompleteUse(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":complete;";
+            log("onCompleteUse")(event, params);
+        },
+        onConsume(event, params) {
+            r.useOrder = (r.useOrder || "") + event.itemStack.typeId + ":consume;";
+            log("onConsume")(event, params);
+        },
+        onHitEntity(event, params) {
+            r.itemOrder = (r.itemOrder || "") + "hit;";
+            log("onHitEntity")(event, params);
+        },
+        onBeforeDurabilityDamage(event, params) {
+            r.itemOrder = (r.itemOrder || "") + "durability;";
+            r.onBeforeDurabilityDamage = describe(event, params) + "|" + event.durabilityDamage;
+            event.durabilityDamage = 7;
+            save();
+        },
+        onMineBlock: log("onMineBlock"),
+    }));
+    r.itemDuplicate = capture(() => items.registerCustomComponent("test:wand", {}));
+    r.litHook = capture(() => blocks.registerCustomComponent("test:lit_hook", {
+        onTick(event, params) {
+            r.litTick = JSON.stringify(params.params);
+            save();
+        },
+    }));
+    r.stateHook = capture(() => blocks.registerCustomComponent("test:states", {
+        onBlockStateChange(event, params) {
+            r.stateChange = Object.getPrototypeOf(event).constructor.name + "|"
+                + event.previousPermutation.getState("test:lit") + "|" + event.previousPermutation.getState("test:level");
+            save();
+        },
+    }));
+
+    const dimensions = event.dimensionRegistry;
+    dimensionsLate = dimensions;
+    r.dimRegister = capture(() => dimensions.registerCustomDimension("test:void"));
+    r.dimDuplicate = capture(() => dimensions.registerCustomDimension("test:void"));
+    const reason = (name) => {
+        try {
+            dimensions.registerCustomDimension(name);
+        } catch (e) {
+            return e.name + "," + e.reason;
+        }
+        return "ok";
+    };
+    r.dimNoNamespace = reason("void");
+    r.dimMinecraft = reason("minecraft:void");
+    r.dimChars = capture(() => dimensions.registerCustomDimension("test:a b"));
+
+    const clocks = event.worldClockRegistry;
+    r.registerClock = capture(() => clocks.registerClock("test:clock",
+        { timeMarkers: [{ name: "test:mark", time: 2, period: 5 }] }));
+    r.clockDuplicate = capture(() => clocks.registerClock("test:clock"));
+    r.clockName = capture(() => clocks.registerClock("noname"));
+    r.clockNames = [" test:a", "test:a:b", "test", "minecraft:mine", "test:with space", "Test:Upper"]
+        .map((name) => capture(() => clocks.registerClock(name)).startsWith("ok") ? "ok" : "no").join(",");
+    r.clockPeriod = capture(() => clocks.registerClock("test:other",
+        { timeMarkers: [{ name: "test:bad", time: 5, period: 5 }] }));
+    save();
+});
+
+world.afterEvents.worldLoad.subscribe(() => {
+    r.lateClock = capture(() => clocksLate.registerClock("test:late"));
+    r.dimLate = capture(() => dimensionsLate.registerCustomDimension("test:late"));
+    const custom = world.getDimension("test:void");
+    r.dimId = custom.id;
+    r.dimSame = custom === world.getDimension("test:void") && custom instanceof Dimension
+        && custom !== world.getDimension("overworld");
+    const clock = world.getClock("test:clock");
+    r.clockSame = clock === world.getClock("test:clock") && clock instanceof WorldClock;
+    r.clockMissing = capture(() => world.getClock("test:nope"));
+    r.overworld = world.getClock("minecraft:overworld").timeMarkers
+        .map((m) => m.name + "@" + m.time + "/" + m.period).join(",");
+    r.resolve = BlockPermutation.resolve("test:stateful", { "test:level": 2 }).getState("test:level") + ","
+        + BlockPermutation.resolve("test:stateful").getState("test:lit");
+    world.afterEvents.worldClockOnTimeMarker.subscribe((event) => {
+        r.markers = (r.markers || "") + event.clock.time + ";";
+        save();
+    }, { clock: "test:clock" });
+    world.afterEvents.worldClockOnTimeMarker.subscribe((event) => {
+        r.otherClock = event.clock.name;
+    }, { clock: "test:none" });
+    world.afterEvents.worldClockOnTimeModified.subscribe((event) => {
+        r.modified = (r.modified || 0) + 1;
+    }, { clock: "test:clock" });
+    world.afterEvents.worldClockOnPaused.subscribe((event) => { r.paused = event.clock.name; }, { clock: "test:clock" });
+    world.beforeEvents.worldClockOnRestart.subscribe((event) => {
+        r.restart = event.clock.name + "|" + event.newTime;
+        event.newTime = 5;
+        save();
+    }, { clock: "test:clock" });
+    save();
+});
+
+let clocksLate;
+let dimensionsLate;
+system.beforeEvents.startup.subscribe((event) => { clocksLate = event.worldClockRegistry; });
+
+system.runTimeout(() => {
+    const clock = world.getClock("test:clock");
+    r.clockTime = clock.time;
+    clock.isPaused = true;
+    r.rewind = capture(() => clock.rewindTo("test:mark")) + "@" + clock.time;
+    r.skip = capture(() => clock.skipTo(clock.timeMarkers[0])) + "@" + clock.time;
+    r.setMarker = capture(() => clock.set("test:mark")) + "@" + clock.time;
+    clock.time = 1;
+    r.rewindEarly = capture(() => clock.rewindTo("test:mark"));
+    r.unknownMarker = capture(() => clock.set("test:unknown"));
+    r.addMarker = capture(() => clock.addTimeMarker({ name: "test:added", time: 3 })) + ","
+        + capture(() => clock.addTimeMarker({ name: "test:added", time: 4 }));
+    const added = clock.timeMarkers.find((m) => m.name === "test:added");
+    r.removeMarker = capture(() => clock.removeTimeMarker("test:added")) + "," + capture(() => added.time);
+    r.removeMinecraft = capture(() => world.getClock("minecraft:overworld").removeTimeMarker("minecraft:noon"));
+    const block = world.getDimension("overworld").getBlock({ x: 4, y: 70, z: 4 });
+    r.setPermutation = capture(() => {
+        block.setPermutation(BlockPermutation.resolve("test:stateful"));
+        block.setPermutation(BlockPermutation.resolve("test:stateful", { "test:lit": true, "test:level": 1 }));
+    });
+    save();
+}, 8);
+)JS";
+
+    const char *const COMPONENT_BLOCK = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:block": {
+    "description": { "identifier": "test:block" },
+    "components": {
+      "minecraft:tick": { "interval_range": [10, 10] },
+      "minecraft:redstone_consumer": { "min_power": 3 },
+      "minecraft:entity_fall_on": { "min_fall_distance": 2 },
+      "test:hooks": { "value": 42, "list": ["a", true] }
+    }
+  }
+})JSON";
+
+    const char *const COMPONENT_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:wand" },
+    "components": { "test:wand": {} }
+  }
+})JSON";
+
+    const char *const COMPONENT_FOOD = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:snack" },
+    "components": { "minecraft:food": { "nutrition": 2 }, "minecraft:use_duration": 1.6, "test:wand": {} }
+  }
+})JSON";
+
+    const char *const STATEFUL_BLOCK = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:block": {
+    "description": {
+      "identifier": "test:stateful",
+      "states": { "test:lit": [false, true], "test:level": { "values": { "min": 0, "max": 2 } } }
+    },
+    "components": { "minecraft:tick": { "interval_range": [10, 10] }, "test:states": {} },
+    "permutations": [
+      { "condition": "q.block_state('test:lit') == true && q.block_state('test:level') >= 1",
+        "components": { "test:lit_hook": { "lit": true }, "minecraft:geometry": "geometry.lamp",
+                        "minecraft:material_instances": { "*": { "texture": "lit_tex", "render_method": "alpha_test" } } } }
+    ]
+  }
+})JSON";
+
+    const char *const LEGACY_BLOCK = R"JSON({
+  "format_version": "1.21.40",
+  "minecraft:block": {
+    "description": { "identifier": "legacy:block" },
+    "components": { "minecraft:custom_components": ["legacy:comp"] }
+  }
+})JSON";
 
     const char *const BETA = R"JS(
 import { world } from "@minecraft/server";
@@ -307,6 +591,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(actual == wanted, std::string(key) + ": expected \"" + wanted + "\", got \"" + actual + "\"");
     }
 
+    DimensionDefinition sentDimension;
+
     void run(const std::filesystem::path &directory) {
         const std::filesystem::path packs = directory / "packs";
         const std::string server2 = "{\"module_name\": \"@minecraft/server\", \"version\": \"2.11.0\"}";
@@ -331,6 +617,12 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writePack(packs, "unknown",
                   server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}", NEVER_RUNS);
         writeFile(packs / "outside.js", "export const x = 1;\n");
+        writePack(packs, "components", server2, std::string(PRELUDE) + COMPONENTS);
+        writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
+        writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
+        writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
+        writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
+        writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
 
         ServerNetworkHandler owner("Script API", "", 1);
         ScriptEngine &engine = owner.getScriptEngine();
@@ -338,11 +630,142 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
         BehaviorPackManager manager;
         manager.discover(packs.string());
-        require(engine.loadPacks(manager.getPacks()) == 4, "only the four valid packs start");
+        CustomContentRegistry::getInstance().load(manager, owner.getItemDefinitions(), owner.getBlockDefinitions());
+        for (const BlockPropertyData &property: CustomContentRegistry::getInstance().getBlockProperties()) {
+            if (property.mName != "test:stateful")
+                continue;
+            const Tag *permutations = property.mProperties.get("permutations");
+            require(permutations != nullptr && permutations->getList().size() == 1, "permutations not sent");
+            const Tag &first = permutations->getList().front();
+            const Tag *components = first.get("components");
+            require(components != nullptr && components->get("test:lit_hook") == nullptr,
+                    "a custom component reached the client");
+            const Tag *geometry = components->get("minecraft:geometry");
+            const Tag *materials = components->get("minecraft:material_instances");
+            require(geometry != nullptr && geometry->get("identifier")->asString() == "geometry.lamp",
+                    "the permutation geometry was not sent");
+            require(materials != nullptr
+                            && materials->get("materials")->get("*")->get("texture")->asString() == "lit_tex"
+                            && materials->get("materials")->get("*")->get("render_method")->asString() == "alpha_test",
+                    "the permutation material was not sent");
+            require(components->get("minecraft:friction") == nullptr, "an undeclared component was sent");
+            const Tag *base = property.mProperties.get("components")->get("minecraft:material_instances");
+            require(base->get("materials")->get("*")->get("texture")->asString() == "stateful",
+                    "the permutation changed the base material");
+            const Tag *states = property.mProperties.get("properties");
+            require(states != nullptr && states->getList().size() == 2, "states not sent");
+        }
+        require(engine.loadPacks(manager.getPacks()) == 5, "only the five valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
         engine.startup();
+
+        bool customFound = false;
+        const DimensionType voidDimension = Dimension::findCustom("test:void", customFound);
+        require(customFound && Dimension::toId(voidDimension) == Dimension::FIRST_CUSTOM_ID
+                        && Dimension::fromId(Dimension::FIRST_CUSTOM_ID) == voidDimension
+                        && std::string(Dimension::getName(voidDimension)) == "test:void",
+                "the custom dimension did not get the first custom id");
+        World &defaultWorld = owner.getWorlds().getDefault();
+
+        // a packet sensor: every encoded packet, dropped before any transport
+        require(owner.isTransportReady(), "the test server has no network handler to observe");
+        std::vector<std::pair<MinecraftPacketIds, std::string>> sent;
+        owner.getNetworkHandler().setOutboundFilter([&sent](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            sent.emplace_back(Packet::peekId(header, sender, client), data);
+            return false;
+        });
+        LoginHandler::sendStartGame(owner, player);
+        size_t startGameAt = sent.size(), dimensionsAt = sent.size();
+        for (size_t index = 0; index < sent.size(); ++index) {
+            if (sent[index].first == MinecraftPacketIds::StartGame && startGameAt == sent.size())
+                startGameAt = index;
+            if (sent[index].first == MinecraftPacketIds::DimensionData && dimensionsAt == sent.size())
+                dimensionsAt = index;
+        }
+        require(startGameAt < sent.size() && dimensionsAt == startGameAt + 1,
+                "DimensionDataPacket does not follow StartGame");
+        ReadOnlyBinaryStream body(sent[dimensionsAt].second);
+        DimensionDataPacket dimensionData;
+        dimensionData.readHeader(body);
+        dimensionData.read(body, owner.getCodecContext());
+        require(dimensionData.mDefinitions.size() == 1 && dimensionData.mDefinitions[0].mId == "test:void",
+                "DimensionDataPacket does not carry the custom dimension");
+        sentDimension = dimensionData.mDefinitions[0];
+        require(sentDimension.mMinimumHeight == -64 && sentDimension.mMaximumHeight == 384
+                        && sentDimension.mGeneratorType == 5 && sentDimension.mCloudHeight == 128
+                        && !sentDimension.mRenderClouds,
+                "DimensionDataPacket does not carry the game's script dimension definition");
+
+        sent.clear();
+        owner.changePlayerLevel(player, defaultWorld.getLevel(voidDimension), Vector3f(0.5f, 80.0f, 0.5f));
+        require(player.getDimension() == voidDimension, "the player did not move to the custom dimension");
+        bool changed = false;
+        for (const auto &packet: sent) {
+            if (packet.first != MinecraftPacketIds::ChangeDimension)
+                continue;
+            ReadOnlyBinaryStream change(packet.second);
+            ChangeDimensionPacket decoded;
+            decoded.readHeader(change);
+            decoded.read(change, owner.getCodecContext());
+            changed = decoded.mDimension == Dimension::FIRST_CUSTOM_ID;
+        }
+        require(changed, "no ChangeDimensionPacket named the custom dimension");
+        owner.changePlayerLevel(player, defaultWorld.getOverworld(), Vector3f(0.5f, 80.0f, 0.5f));
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(defaultWorld.hasLevel(voidDimension)
+                        && defaultWorld.getLevel(voidDimension).getDimensionType() == voidDimension
+                        && &defaultWorld.getLevel(voidDimension) != &defaultWorld.getOverworld(),
+                "no level was created for the custom dimension");
+        const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(voidDimension, 1);
+        const std::unique_ptr<LevelChunk> terrain = generator->generateTerrain(0, 0);
+        require(terrain->getBlock(0, 64, 0).mName == "minecraft:air"
+                        && terrain->getBlock(0, LevelChunk::MIN_Y, 0).mName == "minecraft:air",
+                "the custom dimension is not generated empty");
+
+        Level &level = owner.getLevelFor(player);
+        const Vector3i at(4, 70, 4);
+        BlockState placed("test:block");
+        require(engine.beforeCustomBlockPlace(player, level, at, 1, placed), "beforeOnPlayerPlace did not cancel");
+        require(!engine.beforeCustomBlockPlace(player, level, at, 1, placed) && placed.mName == "minecraft:stone",
+                "beforeOnPlayerPlace did not replace the permutation");
+        engine.onCustomBlockPlaced(level, at, BlockState("test:block"), BlockState("minecraft:air"));
+        engine.onPlayerInteractWithBlock(player, "test:block", at, 1, Vector3f(0.25f, 1.0f, 0.75f));
+        engine.onPlayerInteractWithBlock(player, "legacy:block", at, 1, Vector3f(0.25f, 1.0f, 0.75f));
+        engine.onCustomBlockTick(level, "test:block", at);
+        engine.onCustomBlockRandomTick(level, "test:block", at);
+        engine.onCustomBlockStep(player, level, "test:block", at);
+        engine.onCustomBlockStepOff(player, level);
+        engine.onCustomBlockFallOn(player, level, "test:block", at, 1.5f);
+        engine.onCustomBlockFallOn(player, level, "test:block", at, 3.5f);
+        for (int32_t power: {0, 2, 5, 5, 9, 0})
+            engine.onCustomBlockRedstone(level, "test:block", at, power);
+        engine.onCustomBlockBreak(level, at, BlockState("test:block"), &player);
+        PlayerBreakBlockAfterEvent legacyBroken(player, at, "legacy:block");
+        owner.getEventBus().after().mPlayerBreakBlock.emit(legacyBroken);
+
+        ItemStack wand;
+        wand.mDefinition = owner.getItemDefinitions().getDefinition("test:wand");
+        wand.mCount = 1;
+        require(wand.mDefinition != nullptr, "the custom item was not registered");
+        player.getInventory().setItemInHand(wand);
+        engine.onItemUse(player);
+        engine.onItemUseOnBlock(player, at, 1, Vector3f(0.5f, 1.0f, 0.5f));
+        engine.onItemConsume(player, wand);
+        engine.onItemCompleteUse(player, wand);
+        ItemStack snack;
+        snack.mDefinition = owner.getItemDefinitions().getDefinition("test:snack");
+        snack.mCount = 1;
+        require(snack.mDefinition != nullptr, "the custom food was not registered");
+        engine.onItemConsume(player, snack);
+        engine.onItemCompleteUse(player, snack);
+        require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
+        PlayerBreakBlockAfterEvent broken(player, at, "test:block");
+        owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
+        player.getInventory().setItemInHand(ItemStack::air());
 
         MobEffectInstance effect;
         effect.mId = MobEffectId::Speed;
@@ -371,6 +794,61 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         owner.getPlayers().erase(id);
         for (int64_t tick = 4; tick <= 8; ++tick)
             engine.tick(tick);
+
+        const BlockState stateful = level.getBlockState(at.x, at.y, at.z);
+        require(stateful.mName == "test:stateful" && stateful.mStates.get("test:lit") != nullptr
+                        && stateful.mStates.get("test:lit")->asByte() == 1
+                        && stateful.mStates.get("test:level")->asInt() == 1,
+                "setPermutation did not keep the states");
+        engine.onCustomBlockTick(level, "test:stateful", at);
+
+        WorldClock *clock = engine.worldClocks().find("test:clock");
+        require(clock != nullptr, "the script clock was not registered");
+        engine.worldClocks().setPaused(*clock, false);
+        engine.worldClocks().setTime(*clock, INT32_MAX);
+        engine.tick(9);
+        require(clock->mTime == 5, "worldClockOnRestart did not set the new time");
+
+        engine.worldClocks().setPaused(*clock, true);
+        const Tag saved = engine.worldClocks().save();
+        const Tag *found = nullptr;
+        for (const Tag &entry: saved.get("clocks")->getList()) {
+            if (entry.get("Name")->asString() == "test:clock")
+                found = &entry;
+        }
+        require(found != nullptr, "the script clock was not saved");
+        const Tag &entries = *found;
+        require(entries.get("Name")->asString() == "test:clock" && entries.get("Time")->asInt() == 5
+                        && entries.get("IsPaused")->asByte() == 1,
+                "the clocks were not saved in the game's form");
+        WorldClockSystem restored;
+        restored.load(saved);
+        bool markerError = false;
+        require(restored.registerClock("test:clock", {}, markerError) == WorldClockError::None
+                        && restored.find("test:clock")->mTime == 5 && restored.find("test:clock")->mPaused,
+                "a registered clock did not take its saved state");
+        int64_t levelTime = 1000;
+        bool levelPaused = false;
+        WorldClockSystem::LevelTime binding;
+        binding.mGet = [&levelTime]() { return levelTime; };
+        binding.mSet = [&levelTime](int64_t value) { levelTime = value; };
+        binding.mSetPaused = [&levelPaused](bool paused) { levelPaused = paused; };
+        restored.bindOverworld(binding);
+        WorldClock *overworldClock = restored.find("minecraft:overworld");
+        require(overworldClock->mTime == 1000, "the overworld clock does not start at the level's time");
+        levelTime = 1001;
+        restored.tick();
+        require(overworldClock->mTime == 1001, "the overworld clock does not follow the level's time");
+        restored.setTime(*overworldClock, 6000);
+        require(levelTime == 6000, "setting the overworld clock does not set the level's time");
+        restored.setPaused(*overworldClock, true);
+        require(levelPaused, "pausing the overworld clock does not stop the level's day");
+        restored.setPaused(*overworldClock, false);
+        SyncWorldClocksPacket states;
+        restored.writeStates(states);
+        require(states.mType == SyncWorldClocksType::SyncState && states.mClockStates.size() == 2
+                        && states.mClockStates.front().mClockId == 0x63D7EDE73C38F916ull,
+                "the periodic sync does not carry every clock under its hashed id");
 
         const std::unique_ptr<json::Value> stable2 = result(owner, "stable2");
         expect(*stable2, "alone", "true");
@@ -473,6 +951,104 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         const GameRules &rules = owner.getWorlds().getDefault().getOverworld().getGameRules();
         require(!rules.getBool("pvp") && rules.getInt("randomtickspeed") == 3, "game rules not written");
 
+        const std::unique_ptr<json::Value> components = result(owner, "components");
+        const json::Value &c = *components;
+        const std::string params = "{\"value\":42,\"list\":[\"a\",true]}";
+        expect(c, "noNamespace", "true,NoNamespace");
+        expect(c, "minecraftNamespace", "NamespaceNameError: ");
+        expect(c, "notObject", "TypeError: Native type conversion failed.");
+        expect(c, "registerBlock", "ok");
+        expect(c, "duplicate",
+               "BlockCustomComponentAlreadyRegisteredError: Block custom component 'test:hooks' was already registered.");
+        expect(c, "registerItem", "ok");
+        expect(c, "itemDuplicate",
+               "ItemCustomComponentAlreadyRegisteredError: Item custom component 'test:wand' was already registered.");
+        expect(c, "beforePlace",
+               "BlockComponentPlayerPlaceBeforeEvent|cancel+face+permutationToPlace+player|" + params
+                       + "|test:block|Up");
+        expect(c, "onPlace", "BlockComponentOnPlaceEvent|previousBlock|" + params + "|minecraft:air");
+        expect(c, "onPlayerInteract",
+               "BlockComponentPlayerInteractEvent|face+faceLocation+player|" + params + "|Up|0.25,0.75|truetrue|4");
+        expect(c, "onTick", "BlockComponentTickEvent||" + params);
+        expect(c, "onRandomTick", "BlockComponentRandomTickEvent||" + params);
+        expect(c, "onStepOn", "BlockComponentStepOnEvent|entity|" + params);
+        expect(c, "onStepOff", "BlockComponentStepOffEvent|entity|" + params);
+        expect(c, "onEntityFallOn", "BlockComponentEntityFallOnEvent|entity+fallDistance|" + params + "|3.5;");
+        expect(c, "onRedstoneUpdate", "2>5;5>9;");
+        expect(c, "onBreak", "BlockComponentBlockBreakEvent|brokenBlockPermutation+entitySource|" + params + "|true");
+        expect(c, "onPlayerBreak", "BlockComponentPlayerBreakEvent|brokenBlockPermutation+player|" + params);
+        require(c.get("onPlayerDestroy") == nullptr, "a 2.x pack received the 1.x onPlayerDestroy hook");
+        expect(c, "onUse", "ItemComponentUseEvent|itemStack+source|{}");
+        expect(c, "onUseOn",
+               "ItemComponentUseOnEvent|blockFace+faceLocation+itemStack+source+usedOnBlockPermutation|{}|Up|1|"
+               "truetrue");
+        expect(c, "onCompleteUse", "ItemComponentCompleteUseEvent|itemStack+source|{}");
+        expect(c, "onConsume", "ItemComponentConsumeEvent|itemStack+source|{}");
+        // onConsume needs minecraft:food and runs before onCompleteUse
+        expect(c, "useOrder", "test:wand:complete;test:snack:consume;test:snack:complete;");
+        expect(c, "onHitEntity", "ItemComponentHitEntityEvent|attackingEntity+hadEffect+hitEntity+itemStack|{}");
+        expect(c, "onBeforeDurabilityDamage",
+               "ItemComponentBeforeDurabilityDamageEvent|attackingEntity+durabilityDamage+hitEntity+itemStack|{}|2");
+        expect(c, "onMineBlock", "ItemComponentMineBlockEvent|itemStack+minedBlockPermutation+source|{}");
+        expect(c, "litHook", "ok");
+        expect(c, "stateHook", "ok");
+        expect(c, "resolve", "2,false");
+        expect(c, "setPermutation", "ok");
+        expect(c, "stateChange", "BlockComponentBlockStateChangeEvent|false|0");
+        expect(c, "litTick", "{\"lit\":true}");
+        expect(c, "registerClock", "ok");
+        expect(c, "dimRegister", "ok");
+        expect(c, "dimDuplicate",
+               "CustomDimensionAlreadyRegisteredError: Custom dimension 'test:void' was already registered.");
+        expect(c, "dimNoNamespace", "NamespaceNameError,NoNamespace");
+        expect(c, "dimMinecraft", "NamespaceNameError,DisallowedNamespace");
+        expect(c, "dimChars", "CustomDimensionNameError: Custom dimension 'test:a b' has invalid characters.");
+        expect(c, "dimLate",
+               "CustomDimensionInvalidRegistryError: Cannot register custom dimension 'test:late' outside of "
+               "StartupEvent.");
+        expect(c, "dimId", "test:void");
+        expect(c, "dimSame", "true");
+        expect(c, "itemOrder", "durability;hit;");
+        expect(c, "clockNames", "no,no,no,no,no,ok");
+        expect(c, "clockDuplicate",
+               "WorldClockRegistrationError: Failed to register world clock 'test:clock'. World clock name already "
+               "exists.");
+        expect(c, "clockName",
+               "WorldClockRegistrationError: Failed to register world clock 'noname'. World clock has invalid or "
+               "missing name.");
+        expect(c, "clockPeriod",
+               "WorldClockRegistrationError: Failed to register world clock 'test:other'. Time marker period must be "
+               "greater than its time.");
+        expect(c, "lateClock",
+               "WorldClockInvalidRegistryError: Cannot register world clock 'test:late' outside of StartupEvent.");
+        expect(c, "clockSame", "true");
+        expect(c, "clockMissing", "WorldClockNotFoundError: Failed to find world clock 'test:nope'.");
+        expect(c, "overworld",
+               "minecraft:day@1000/24000,minecraft:noon@6000/24000,minecraft:sunset@12000/24000,"
+               "minecraft:night@13000/24000,minecraft:midnight@18000/24000,minecraft:sunrise@23000/24000");
+        expect(c, "clockTime", "8");
+        expect(c, "rewind", "ok@7");
+        expect(c, "skip", "ok@7");
+        expect(c, "setMarker", "ok@2");
+        expect(c, "rewindEarly",
+               "WorldClockRewindError: Failed to rewind world clock 'test:clock'. Current time is behind time marker "
+               "'test:mark'");
+        expect(c, "unknownMarker",
+               "WorldClockTimeMarkerNotFoundError: Failed to find time marker 'test:unknown' in world clock "
+               "'test:clock'.");
+        expect(c, "addMarker",
+               "ok,WorldClockAddTimeMarkerError: Failed to add time marker 'test:added' on world clock 'test:clock' "
+               "Time marker name already exists.");
+        expect(c, "removeMarker", "ok,WorldClockInvalidTimeMarkerError: ");
+        expect(c, "removeMinecraft",
+               "WorldClockRemoveMinecraftTimeMarkerError: Failed to remove time marker 'minecraft:noon' from world "
+               "clock 'minecraft:overworld'. A time marker with the 'minecraft' namespace cannot be removed.");
+        expect(c, "paused", "test:clock");
+        expect(c, "markers", "2;7;7;2;2147483647;");
+        expect(c, "modified", "4");
+        expect(c, "restart", "test:clock|0");
+        require(c.get("otherClock") == nullptr, "a clock filter let another clock's event through");
+
         const std::unique_ptr<json::Value> stable1 = result(owner, "stable1");
         expect(*stable1, "alone", "true");
         expect(*stable1, "gameMode", "survival,undefined");
@@ -482,6 +1058,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable1, "early", "ok");
         expect(*stable1, "startupEvent", "false");
         expect(*stable1, "register", "ok");
+        expect(*stable1, "legacyName", "CustomComponentNameError,1");
+        expect(*stable1, "legacyInteract", "1|BlockComponentPlayerInteractEvent");
+        expect(*stable1, "legacyDestroy", "destroyedBlockPermutation+player");
+        require(stable1->get("legacyBreak") == nullptr, "a 1.x pack received the 2.x onPlayerBreak hook");
 
         const std::unique_ptr<json::Value> beta = result(owner, "beta");
         expect(*beta, "alone", "true");
@@ -509,6 +1089,7 @@ int main() {
         std::clog << "Script API regression failed: " << error.what() << '\n';
         result = 1;
     }
+    CustomContentRegistry::getInstance().reset();
     ServerPaths::setRoot(originalRoot);
     std::error_code ignored;
     std::filesystem::remove_all(directory, ignored);

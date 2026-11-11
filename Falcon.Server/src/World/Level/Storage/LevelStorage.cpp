@@ -198,7 +198,9 @@ std::string LevelStorage::_makeDataVersionKey(int32_t chunkX, int32_t chunkZ) co
 }
 
 int LevelStorage::_firstBiomeSection() const {
-    return mDimensionId == static_cast<int>(DimensionType::Overworld) ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
+    const bool overworldRange = mDimensionId == static_cast<int>(DimensionType::Overworld)
+                                || Dimension::isCustom(static_cast<DimensionType>(mDimensionId));
+    return overworldRange ? 0 : -LevelChunk::LOWEST_SUB_CHUNK_Y;
 }
 
 int LevelStorage::_biomeSectionCount() const {
@@ -948,12 +950,15 @@ bool LevelStorage::saveGameRules(const Tag &rules) {
     return true;
 }
 
-bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
+bool LevelStorage::saveSavedData(const std::string &key, const Tag &data, bool wrapped) {
     if (mDb == nullptr)
         return false;
 
-    Tag root = Tag::ofCompound();
-    root.put("data", data);
+    Tag root = data;
+    if (wrapped) {
+        root = Tag::ofCompound();
+        root.put("data", data);
+    }
 
     BinaryStream stream;
     NbtIo::writeTag(stream, root, NbtVariant::LittleEndian);
@@ -968,7 +973,7 @@ bool LevelStorage::saveSavedData(const std::string &key, const Tag &data) {
     return true;
 }
 
-bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
+bool LevelStorage::loadSavedData(const std::string &key, Tag &data, bool wrapped) {
     if (mDb == nullptr)
         return false;
 
@@ -980,7 +985,7 @@ bool LevelStorage::loadSavedData(const std::string &key, Tag &data) {
 
     try {
         const Tag root = NbtIo::readTag(stream, NbtVariant::LittleEndian);
-        const Tag *stored = root.get("data");
+        const Tag *stored = wrapped ? root.get("data") : &root;
         if (stored == nullptr || !stored->isCompound())
             return false;
 

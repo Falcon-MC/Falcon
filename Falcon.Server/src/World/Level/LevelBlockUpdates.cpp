@@ -28,10 +28,18 @@ void Level::setBlock(const Vector3i &position, const BlockState &state, bool upd
     const Block *block = VanillaBlocks::fromIdentifier(state.mName);
     const BlockState placed = block != nullptr && block->hasDynamicShape() ? block->updateShape(*this, position, state)
                                                                            : state;
+    const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
+    const bool placesCustom = block == nullptr && !custom.getBlocks().empty() && custom.isCustomBlock(placed.mName);
+    const BlockState previous = placesCustom ? getBlockState(position.x, position.y, position.z) : BlockState();
     setBlockState(position.x, position.y, position.z, placed);
 
     if (mOwner != nullptr)
         BlockActionHandler::broadcastBlockUpdate(*mOwner, *this, position, placed);
+
+    if (placesCustom && mOwner != nullptr && previous.mName != placed.mName)
+        mOwner->getScriptEngine().onCustomBlockPlaced(*this, position, placed, previous);
+    else if (placesCustom && mOwner != nullptr && !(previous.mStates == placed.mStates))
+        mOwner->getScriptEngine().onCustomBlockStateChange(*this, position, placed, previous);
 
     if (!update)
         return;
@@ -87,6 +95,13 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
                                            RedstoneSystem::isGettingPower(owner, *this, position));
     } else {
         RedstoneSystem::onRedstoneUpdate(owner, *this, position, state, type);
+        const CustomBlockDefinition *custom = shapedBlock == nullptr && type != BlockUpdateType::Scheduled
+                                                      ? CustomContentRegistry::getInstance().findBlock(identifier)
+                                                      : nullptr;
+        if (custom != nullptr && custom->mRedstoneConsumer)
+            owner.getScriptEngine().onCustomBlockRedstone(
+                    *this, identifier, position,
+                    RedstoneSystem::isBlockIndirectlyGettingPowered(owner, *this, position));
     }
 
     if (type == BlockUpdateType::Normal || type == BlockUpdateType::Scheduled) {

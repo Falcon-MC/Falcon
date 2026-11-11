@@ -168,6 +168,7 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
 
     ItemUseAfterEvent useEvent(player, heldItem.mDefinition->getIdentifier());
     mEventBus.after().mItemUse.emit(useEvent);
+    mScriptEngine.onItemUse(player);
 }
 
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
@@ -360,6 +361,11 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
                 player.removeEffect((MobEffectId) effect.asInt());
         }
     }
+
+    // both ride publisher_use_time_depleted (sub_14483F960): food at priority 0 eats and fires onConsume,
+    // custom onCompleteUse at priority 3 runs after (sub_143EBF6E0, sub_14A7F6070)
+    mScriptEngine.onItemConsume(player, usedItem);
+    mScriptEngine.onItemCompleteUse(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

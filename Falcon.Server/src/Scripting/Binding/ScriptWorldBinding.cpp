@@ -391,6 +391,10 @@ namespace {
             return api->makeDimension(api->host().getDimension(DimensionType::TheEnd));
         if (identifier == "minecraft:overworld")
             return api->makeDimension(api->host().getDimension(DimensionType::Overworld));
+        bool custom = false;
+        const DimensionType dimension = Dimension::findCustom(identifier, custom);
+        if (custom && api->host().getWorlds().getDefault().hasLevel(dimension))
+            return api->makeDimension(api->host().getDimension(dimension));
         return JS_ThrowTypeError(ctx, "Unknown dimension %s", identifier.c_str());
     }
 
@@ -554,11 +558,10 @@ namespace {
         if (argc < 1 || !JS_IsObject(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        // TODO: apply the permutation's states, the type only for now
-        const std::string identifier = typeIdentifier(ctx, argv[0]);
-        if (!identifier.empty())
-            ScriptApi::fromContext(ctx)->setBlockType(blockLevel(ctx, *block), block->mX, block->mY, block->mZ,
-                                                      identifier);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        BlockState state;
+        if (api->readPermutation(argv[0], state))
+            api->setBlock(blockLevel(ctx, *block), block->mX, block->mY, block->mZ, state);
         return JS_UNDEFINED;
     }
 
@@ -743,6 +746,9 @@ namespace {
 
     JSValue dimensionGetId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptDimensionRef *ref = ScriptApi::fromContext(ctx)->native<ScriptDimensionRef>(thisVal);
+        const std::string *custom = Dimension::customName(ref->mDimension);
+        if (custom != nullptr)
+            return string(ctx, *custom);
         if (ref->mDimension == DimensionType::Nether)
             return JS_NewString(ctx, "minecraft:nether");
         if (ref->mDimension == DimensionType::TheEnd)

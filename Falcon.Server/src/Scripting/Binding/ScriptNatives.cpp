@@ -145,4 +145,53 @@ namespace ScriptValues {
         }
         return false;
     }
+
+    JSValue statesToJs(JSContext *ctx, const Tag &states) {
+        JSValue object = JS_NewObject(ctx);
+        const std::vector<std::string> &keys = states.getKeys();
+        const std::vector<Tag> &values = states.getValues();
+        for (size_t index = 0; index < keys.size(); ++index) {
+            const Tag &value = values[index];
+            JSValue member = JS_UNDEFINED;
+            if (value.getType() == Tag::Type::Byte)
+                member = JS_NewBool(ctx, value.asByte() != 0);
+            else if (value.getType() == Tag::Type::Short)
+                member = JS_NewInt32(ctx, value.asShort());
+            else if (value.getType() == Tag::Type::Int)
+                member = JS_NewInt32(ctx, value.asInt());
+            else if (value.getType() == Tag::Type::String)
+                member = string(ctx, value.asString());
+            JS_SetPropertyStr(ctx, object, keys[index].c_str(), member);
+        }
+        return object;
+    }
+
+    Tag statesFromJs(JSContext *ctx, JSValueConst object) {
+        Tag states = Tag::ofCompound();
+        JSPropertyEnum *properties = nullptr;
+        uint32_t count = 0;
+        if (!JS_IsObject(object)
+            || JS_GetOwnPropertyNames(ctx, &properties, &count, object, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) != 0)
+            return states;
+
+        for (uint32_t index = 0; index < count; ++index) {
+            const char *name = JS_AtomToCString(ctx, properties[index].atom);
+            JSValue value = JS_GetProperty(ctx, object, properties[index].atom);
+            if (name != nullptr) {
+                if (JS_IsBool(value))
+                    states.putByte(name, JS_ToBool(ctx, value) == 1 ? 1 : 0);
+                else if (JS_IsNumber(value)) {
+                    int32_t number = 0;
+                    JS_ToInt32(ctx, &number, value);
+                    states.putInt(name, number);
+                } else if (JS_IsString(value))
+                    states.putString(name, toString(ctx, value));
+                JS_FreeCString(ctx, name);
+            }
+            JS_FreeValue(ctx, value);
+            JS_FreeAtom(ctx, properties[index].atom);
+        }
+        js_free(ctx, properties);
+        return states;
+    }
 }

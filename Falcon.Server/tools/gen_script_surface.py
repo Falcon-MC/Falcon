@@ -33,6 +33,9 @@ BOUND = {
         'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
         'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent', 'GameRules', 'SystemInfo', 'Difficulty',
         'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
+        'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
+        'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
+        'DimensionRegistry',
     },
     'server-ui': {
         'ActionFormData', 'MessageFormData', 'ModalFormData',
@@ -161,7 +164,8 @@ def main():
             beta = bool(version_key(version)[3])
             for name, kind in exports.items():
                 is_error = kind == 'class' and name.endswith('Error')
-                payload = name in bound_events
+                # custom component hook payloads
+                payload = name in bound_events or re.match(r'(Block|Item)Component\w+Event$', name) is not None
                 if bound is not None and name not in bound and not is_error and not payload:
                     continue
                 entry('%s:%s' % (short, name)).add(version)

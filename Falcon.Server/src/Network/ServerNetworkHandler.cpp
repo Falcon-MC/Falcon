@@ -926,6 +926,10 @@ void ServerNetworkHandler::tick(bool paused) {
         _processChunkUnloads(world->getOverworld());
         _tickDimension(*world, world->getLevel(DimensionType::Nether));
         _tickDimension(*world, world->getLevel(DimensionType::TheEnd));
+        for (Level *level: world->getLevels()) {
+            if (Dimension::isCustom(level->getDimensionType()))
+                _tickDimension(*world, *level);
+        }
     }
 
     const std::vector<Level *> levels = getLevels();

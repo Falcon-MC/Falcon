@@ -2,6 +2,7 @@
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "Core/NBT/Tag.h"
 
 #include <cstdint>
 #include <memory>
@@ -75,6 +76,12 @@ struct ScriptRegistryRef : ScriptNative {
     bool mBlocks = true;
 };
 
+// a world clock, or one of its time markers when mMarker is set; both read the clock system on access
+struct ScriptClockRef : ScriptNative {
+    std::string mClock;
+    std::string mMarker;
+};
+
 namespace ScriptValues {
     std::string toString(JSContext *ctx, JSValueConst value);
 
@@ -95,4 +102,9 @@ namespace ScriptValues {
     JSValue dynamicPropertyIds(JSContext *ctx, const std::unordered_map<std::string, DynamicPropertyValue> &store);
 
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
+
+    // block states: bytes are booleans, as the palette stores them
+    JSValue statesToJs(JSContext *ctx, const Tag &states);
+
+    Tag statesFromJs(JSContext *ctx, JSValueConst object);
 }

@@ -110,8 +110,13 @@ public:
     }
 
     void tickTime() {
-        if (mGameRules.getBool("dodaylightcycle"))
+        if (!mTimePaused && mGameRules.getBool("dodaylightcycle"))
             ++mTime;
+    }
+
+    // sub_140B49930: the day is the minecraft:overworld clock, paused with it
+    void setTimePaused(bool paused) {
+        mTimePaused = paused;
     }
 
     bool isRaining() const {
@@ -231,9 +236,10 @@ public:
 
     std::vector<std::pair<std::string, Tag>> loadTickingAreas();
 
-    bool saveSavedData(const std::string &key, const Tag &data);
+    // wrapped: under a "data" compound, as SavedData stores it; world clocks store the tag itself
+    bool saveSavedData(const std::string &key, const Tag &data, bool wrapped = true);
 
-    bool loadSavedData(const std::string &key, Tag &data);
+    bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
 
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
@@ -655,6 +661,7 @@ private:
     std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;
+    bool mTimePaused = false;
     bool mRaining = false;
     int32_t mRainTime = 0;
     bool mThundering = false;
