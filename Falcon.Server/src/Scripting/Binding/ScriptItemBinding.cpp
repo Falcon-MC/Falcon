@@ -1122,7 +1122,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // minecraft:durability damage_chance; TODO: the default range of items without one is unverified
+    // minecraft:durability damage_chance; the description defaults to 100..100: sub_143F0A930
     void damageChanceRange(const ScriptItemData &data, int32_t &min, int32_t &max) {
         min = 100;
         max = 100;
