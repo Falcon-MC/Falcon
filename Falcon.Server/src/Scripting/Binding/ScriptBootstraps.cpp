@@ -438,11 +438,21 @@ namespace {
             return this.isInside(at) && (at.x === min.x || at.x === max.x || at.y === min.y || at.y === max.y
                 || at.z === min.z || at.z === max.z);
         }
-        // TODO: the game's touching rule is unverified: overlapping or sharing a face
+        // sub_148F89560: within one block of this volume, apart on one axis at most; from inside, on a face
         doesVolumeTouchFaces(other) {
-            const a = this.getMin(), b = this.getMax(), c = other.getMin(), d = other.getMax();
-            return a.x <= d.x + 1 && c.x <= b.x + 1 && a.y <= d.y + 1 && c.y <= b.y + 1 && a.z <= d.z + 1
-                && c.z <= b.z + 1;
+            const lo = this.getMin(), hi = this.getMax(), mn = other.getMin(), mx = other.getMax();
+            let apart = 0, inside = true, onFace = false;
+            for (const k of ["x", "y", "z"]) {
+                if (mx[k] < lo[k] - 1 || mn[k] > hi[k] + 1)
+                    return false;
+                if (mx[k] < lo[k] || mn[k] > hi[k])
+                    ++apart;
+                if (mn[k] < lo[k] || mx[k] > hi[k])
+                    inside = false;
+                if (mn[k] === lo[k] || mx[k] === hi[k])
+                    onFace = true;
+            }
+            return inside ? onFace : apart <= 1;
         }
         // other inside this one is Contains: sub_148F89760(this, other)
         intersects(other) {
