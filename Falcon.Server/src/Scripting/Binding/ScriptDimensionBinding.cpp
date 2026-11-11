@@ -429,7 +429,6 @@ namespace {
         return JS_NewBool(ctx, explosion.explode());
     }
 
-    // TODO: without a duration the game draws one at random; 6000 ticks, /weather's default, for now
     JSValue dimensionSetWeather(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 1 || !JS_IsString(argv[0]))
@@ -437,9 +436,15 @@ namespace {
         const std::string type = toString(ctx, argv[0]);
         if (type != "Clear" && type != "Rain" && type != "Thunder")
             return typeError(ctx);
-        int32_t duration = 6000;
-        if (argc >= 2 && !JS_IsUndefined(argv[1]) && JS_ToInt32(ctx, &duration, argv[1]) != 0)
-            return typeError(ctx);
+        int32_t duration;
+        if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+            if (JS_ToInt32(ctx, &duration, argv[1]) != 0)
+                return typeError(ctx);
+        } else {
+            // sub_14B5B4B90: 20 * nextInt(600) + 6000 ticks
+            SimpleRandom random((int64_t) std::chrono::steady_clock::now().time_since_epoch().count());
+            duration = 20 * random.nextInt(600) + 6000;
+        }
         if (duration < 1)
             return api->throwError("ArgumentOutOfBoundsError", "");
 
