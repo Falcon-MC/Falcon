@@ -3,6 +3,7 @@
 #include "World/Level/Block/Actor/BlockActor.h"
 
 #include <cstdint>
+#include <string>
 
 // the potion or dye a cauldron holds; plain water is -1 for both
 class CauldronBlockActor final : public BlockActor {
@@ -18,6 +19,12 @@ public:
     Tag getSpawnCompound() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    // the dye color index of a dye item (black 0 to white 15), -1 for any other item
+    static int32_t dyeColorOf(const std::string &itemId);
+
+    // mixes one item into the water color; a non-dye adds nothing but the color is mixed again all the same
+    void addDye(int32_t dyeColor);
 
 private:
     void _putFields(Tag &data) const;
