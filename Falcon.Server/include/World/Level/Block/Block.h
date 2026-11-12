@@ -16,6 +16,7 @@
 struct BlockData;
 class Actor;
 class BlockBehavior;
+class Container;
 class ItemStack;
 class Level;
 class LiquidPhysicsSystem;
@@ -409,8 +410,22 @@ public:
     // what a comparator reads from the container of the block actor here, 0 without one
     static int containerSignal(Level &level, const Vector3i &position);
 
+    static int containerSignal(const Container &container);
+
     virtual bool isSignalSource() const {
         return false;
+    }
+
+    // power this source gives the neighbour on `face` (RedstoneSystem convention), strong through solid blocks;
+    // -1 leaves it to RedstoneSystem
+    virtual int getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
+                                 bool strong) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) face;
+        (void) strong;
+        return -1;
     }
 
     // a normal or redstone update reached this block; the power around it may have changed

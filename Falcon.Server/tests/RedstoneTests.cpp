@@ -5,6 +5,10 @@
 #include "World/Level/Block/Actor/HopperBlockActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/DetectorRailBlock.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Actor/ServerActor.h"
+#include "World/Inventory/Container.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -164,6 +168,41 @@ namespace {
         require(!lit(), "a second pulse did not turn the bulb off");
         require(fixture.signal(ORIGIN) == 0, "an unlit bulb gave a signal");
     }
+
+    void detectorRail() {
+        RedstoneFixture fixture;
+
+        fixture.set(ORIGIN, VanillaBlocks::DETECTOR_RAIL().toBlockState());
+        const auto powered = [&]() { return fixture.at(ORIGIN).mStates.getByte("rail_data_bit", 0) != 0; };
+        const auto check = [&]() {
+            DetectorRailBlock::checkPressed(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
+        };
+
+        check();
+        require(!powered(), "an empty detector rail was powered");
+
+        ServerActor *minecart = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:chest_minecart",
+                                                          Vector3f(8.5f, 64.0f, 8.5f));
+        require(minecart != nullptr && minecart->isMinecart(), "a chest minecart did not spawn as a minecart");
+        check();
+        require(powered(), "a minecart on a detector rail did not power it");
+
+        const Block *rail = VanillaBlocks::fromIdentifier(BlockNames::DETECTOR_RAIL);
+        require(rail != nullptr, "the detector rail has no block class");
+        const BlockState state = fixture.at(ORIGIN);
+        require(rail->getEmittedSignal(fixture.mLevel, ORIGIN, state, RedstoneFace::NORTH, false) == 15
+                        && rail->getEmittedSignal(fixture.mLevel, ORIGIN, state, RedstoneFace::NORTH, true) == 0
+                        && rail->getEmittedSignal(fixture.mLevel, ORIGIN, state, RedstoneFace::UP, true) == 15,
+                "a powered detector rail did not give 15 around and charge only the block below");
+
+        require(fixture.signal(ORIGIN) == 0, "an empty chest minecart gave a signal");
+        minecart->getEntityContainer()->setContainerItem(0, fixture.mOwner.createItemStack("minecraft:dirt", 64));
+        require(fixture.signal(ORIGIN) == 1, "a stack in a chest minecart did not give 1");
+
+        minecart->setPosition(Vector3f(8.5f, 64.0f, 12.5f));
+        rail->onScheduledUpdate(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
+        require(!powered(), "a detector rail stayed powered after the minecart left");
+    }
 }
 
 int main() {
@@ -173,6 +212,7 @@ int main() {
         containerSignals();
         hopperLock();
         copperBulb();
+        detectorRail();
         std::cout << "redstone checks passed\n";
         return 0;
     } catch (const std::exception &error) {

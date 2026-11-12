@@ -45,6 +45,11 @@ public:
         return false;
     }
 
+    // ActorType bit 0x80000: every minecart, the actors detector rails sense
+    virtual bool isMinecart() const {
+        return false;
+    }
+
     // AutonomousActorComponent: a player keeps it once sent, out of the actor range too
     virtual bool isAutonomous() const {
         return false;

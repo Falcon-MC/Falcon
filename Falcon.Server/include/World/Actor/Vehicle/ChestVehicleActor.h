@@ -8,7 +8,11 @@ class ChestVehicleActor : public SizedActor {
 public:
     static const char *TAG_CHEST_ITEMS;
 
-    ChestVehicleActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size);
+    ChestVehicleActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size, bool minecart);
+
+    bool isMinecart() const override {
+        return mMinecart;
+    }
 
     Container *getEntityContainer() override {
         return &mInventory;
@@ -24,4 +28,5 @@ public:
 
 private:
     SimpleContainerInventory mInventory;
+    bool mMinecart;
 };
