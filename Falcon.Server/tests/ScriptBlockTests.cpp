@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -547,17 +548,37 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         RedstoneSystem::tick(owner, level);
         const bool hookPowered = level.getBlockState(30, 100, 40).mStates.getBool("powered_bit", false)
                                  && level.getBlockState(33, 100, 40).mStates.getBool("powered_bit", false);
+        const bool recheckScheduled = level.isUpdateScheduled(Vector3i(31, 100, 40));
+        // the support behind the east-facing hook takes strong power from the west
+        const int supportPower = DetectorSystem::strongPower(level, Vector3i(30, 100, 40),
+                                                             level.getBlockState(30, 100, 40), RedstoneFace::EAST);
+        const int frontPower = DetectorSystem::strongPower(level, Vector3i(30, 100, 40),
+                                                           level.getBlockState(30, 100, 40), RedstoneFace::WEST);
         player.setPosition(Vector3f(8.5f, 100.0f, 0.5f));
-        for (int32_t tick = 0; tick < DetectorSystem::WIRE_RECHECK_TICKS; ++tick)
-            RedstoneSystem::tick(owner, level);
-        const bool hookReleased = !level.getBlockState(30, 100, 40).mStates.getBool("powered_bit", true);
+        RedstoneSystem::onRedstoneUpdate(owner, level, Vector3i(31, 100, 40), level.getBlockState(31, 100, 40),
+                                         BlockUpdateType::Scheduled);
+        const bool hookReleased = !level.getBlockState(30, 100, 40).mStates.getBool("powered_bit", true)
+                                  && level.getBlockState(30, 100, 40).mStates.getBool("attached_bit", false);
+        // a lone hook never attaches, so a tripped wire in front of it gives no power
+        BlockState loneHook = vanilla("minecraft:tripwire_hook");
+        loneHook.mStates.putInt("direction", 3);
+        level.setBlock(Vector3i(30, 100, 44), BlockState(loneHook.mName, loneHook.mStates), false);
+        level.setBlock(Vector3i(31, 100, 44), vanilla("minecraft:trip_wire"), false);
+        player.setPosition(Vector3f(31.5f, 100.0f, 44.5f));
+        RedstoneSystem::tick(owner, level);
+        const bool loneUnpowered = !level.getBlockState(30, 100, 44).mStates.getBool("powered_bit", true)
+                                   && level.getBlockState(31, 100, 44).mStates.getBool("powered_bit", false);
+        player.setPosition(Vector3f(8.5f, 100.0f, 0.5f));
 
         // a target struck square in the middle of its north face
         level.setBlock(Vector3i(40, 100, 40), vanilla("minecraft:target"), false);
-        DetectorSystem::onTargetHit(owner, level, Vector3i(40, 100, 40), Vector3f(40.5f, 100.5f, 40.0f),
+        DetectorSystem::onTargetHit(owner, level, Vector3i(40, 100, 40), Vector3f(40.5f, 100.5f, 40.2f),
                                     Vector3f(40.5f, 100.5f, 39.0f), *cow, true);
-        const int edge = DetectorSystem::targetPowerFor(Vector3i(0, 0, 0), Vector3f(0.98f, 0.98f, 0.0f),
-                                                        Vector3f(0.98f, 0.98f, -1.0f));
+        const int edge = DetectorSystem::targetPowerFor(Vector3i(0, 0, 0), Vector3f(0.98f, 0.98f, 0.0f));
+        // halfway to a face edge: (sqrt(0.5) - 0.25) * 16 / sqrt(0.5) = 10.34
+        const int halfway = DetectorSystem::targetPowerFor(Vector3i(0, 0, 0), Vector3f(0.75f, 0.5f, 0.0f));
+        const Vector3f entry = DetectorSystem::targetHitPoint(Vector3i(40, 100, 40), Vector3f(40.5f, 100.5f, 40.2f),
+                                                              Vector3f(40.5f, 100.5f, 39.0f));
         for (int64_t tick = 2; tick <= 3; ++tick)
             engine.tick(tick);
 
@@ -671,6 +692,11 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "target", "15");
         require(hookPowered && hookReleased, "the trip wire did not power then release both hooks");
         require(edge == 1, "a hit at the rim did not give the lowest power");
+        require(halfway == 10, "a hit halfway to the edge did not follow the game's distance formula");
+        require(std::fabs(entry.z - 40.0f) < 1e-4f, "the hit point was not on the struck face");
+        require(recheckScheduled, "a tripped wire did not schedule its recheck");
+        require(supportPower == 15 && frontPower == 0, "the hook did not strongly power its support only");
+        require(loneUnpowered, "a hook with no facing hook was powered");
         for (const char *wanted: {"piston:25,101,5:true:true;", "platePop:", "trip:31,100,40:true:1;",
                                   "trip:31,100,40:false:0;", "target:40,100,40:0>15:true;"})
             require(events.find(wanted) != std::string::npos, std::string("missing event ") + wanted + " in " + events);

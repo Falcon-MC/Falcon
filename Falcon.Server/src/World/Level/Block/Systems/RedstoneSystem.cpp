@@ -1148,6 +1148,9 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
     } else if (dynamic_cast<const CrafterBlock *>(block) != nullptr) {
         if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             CrafterBlock::onRedstoneUpdate(owner, level, position, state);
+    } else if (DetectorSystem::isWire(state)) {
+        if (type == BlockUpdateType::Scheduled)
+            DetectorSystem::onWireScheduled(owner, level, position, state);
     }
 }
 
