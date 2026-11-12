@@ -1971,14 +1971,21 @@ bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> do
     // counted before the first emit: a callback that settles at once must not finish the join early
     join.mOutstanding = 1;
     const std::string persistentId = player.getXuid().empty() ? player.getUuid() : player.getXuid();
+    // a subscriber may refuse the player while it is called: the player is erased, keep copies
+    const std::string name = player.getName();
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
-        if (api->emitPlayerJoin(token, player.getName(), persistentId))
-            mPendingJoins[token].mOutstanding++;
+        const bool emitted = api->emitPlayerJoin(token, name, persistentId);
+        auto pending = mPendingJoins.find(token);
+        if (pending != mPendingJoins.end() && emitted)
+            pending->second.mOutstanding++;
         _pumpJobs();
+        if (mPendingJoins.find(token) == mPendingJoins.end())
+            return true;
     }
-    if (mPendingJoins[token].mOutstanding == 1) {
-        mPendingJoins.erase(token);
+    const auto pending = mPendingJoins.find(token);
+    if (pending->second.mOutstanding == 1) {
+        mPendingJoins.erase(pending);
         return false;
     }
     settleJoin(token, false);
