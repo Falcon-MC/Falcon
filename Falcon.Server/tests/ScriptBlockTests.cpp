@@ -23,6 +23,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/Structure/McStructure.h"
+#include "World/Level/Structure/StructureBlockRotation.h"
 #include "World/Level/Structure/PackJigsaw.h"
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
@@ -454,6 +455,53 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         options.mMirror = McStructure::Mirror::X;
         const Vector3i mirrored = structure.transform(Vector3i(0, 0, 0), options);
         require(mirrored.x == 0 && mirrored.z == 2, "the x mirror did not flip z");
+
+        // the placed states turn with the structure (sub_145E93850)
+        const auto turn = [](const char *name, const Tag &states, int rotation, int mirror) {
+            return StructureBlockRotation::apply(BlockState(name, states), rotation, mirror).mStates;
+        };
+        Tag stairs = Tag::ofCompound();
+        stairs.putInt("weirdo_direction", 0);
+        require(turn("minecraft:oak_stairs", stairs, 1, 0).getInt("weirdo_direction", -1) == 2,
+                "a quarter turn did not face east stairs south");
+        Tag log = Tag::ofCompound();
+        log.putString("pillar_axis", "x");
+        require(turn("minecraft:oak_log", log, 1, 0).getString("pillar_axis") == "z", "an x log did not turn to z");
+        log.putString("pillar_axis", "y");
+        require(turn("minecraft:oak_log", log, 1, 0).getString("pillar_axis") == "y", "an upright log turned");
+        Tag facing = Tag::ofCompound();
+        facing.putString("minecraft:cardinal_direction", "north");
+        require(turn("minecraft:furnace", facing, 0, 1).getString("minecraft:cardinal_direction") == "south",
+                "the x mirror did not face north south");
+        Tag door = Tag::ofCompound();
+        door.putString("minecraft:cardinal_direction", "north");
+        door.putByte("door_hinge_bit", 0);
+        const Tag mirroredDoor = turn("minecraft:oak_door", door, 0, 1);
+        require(mirroredDoor.getString("minecraft:cardinal_direction") == "north"
+                        && mirroredDoor.getByte("door_hinge_bit", 0) == 1,
+                "a mirrored door did not keep its side and flip its hinge");
+        Tag trapdoor = Tag::ofCompound();
+        trapdoor.putInt("direction", 0);
+        require(turn("minecraft:oak_trapdoor", trapdoor, 1, 0).getInt("direction", -1) == 2,
+                "an east trapdoor did not turn south");
+        Tag sign = Tag::ofCompound();
+        sign.putInt("ground_sign_direction", 4);
+        require(turn("minecraft:standing_sign", sign, 1, 0).getInt("ground_sign_direction", -1) == 8
+                        && turn("minecraft:standing_sign", sign, 0, 2).getInt("ground_sign_direction", -1) == 12,
+                "a ground sign did not turn by four steps or mirror across x");
+        Tag vine = Tag::ofCompound();
+        vine.putInt("vine_direction_bits", 1);
+        require(turn("minecraft:vine", vine, 1, 0).getInt("vine_direction_bits", -1) == 2,
+                "a south vine did not turn west");
+        Tag wall = Tag::ofCompound();
+        wall.putString("wall_connection_type_north", "tall");
+        wall.putString("wall_connection_type_east", "none");
+        wall.putString("wall_connection_type_south", "none");
+        wall.putString("wall_connection_type_west", "short");
+        const Tag turnedWall = turn("minecraft:cobblestone_wall", wall, 1, 0);
+        require(turnedWall.getString("wall_connection_type_east") == "tall"
+                        && turnedWall.getString("wall_connection_type_north") == "short",
+                "the wall sides did not turn with the wall");
     }
 
     void run(const std::filesystem::path &directory) {

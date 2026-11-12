@@ -1,4 +1,5 @@
 #include "World/Level/Structure/McStructure.h"
+#include "World/Level/Structure/StructureBlockRotation.h"
 
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
@@ -319,7 +320,8 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
                         || level.peekBlockPtr(target.x, target.y, target.z) == nullptr)
                         continue;
 
-                    BlockState chosen = *state;
+                    // the states turn with the structure (sub_146986070 through sub_145E93850)
+                    BlockState chosen = StructureBlockRotation::apply(*state, options.mRotation, (int) options.mMirror);
                     if (options.mFilter && !options.mFilter(target, chosen))
                         continue;
                     state = &chosen;
