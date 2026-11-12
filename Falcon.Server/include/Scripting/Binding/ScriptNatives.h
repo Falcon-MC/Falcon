@@ -2,6 +2,7 @@
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/NeighborChangeQueue.h"
 #include "Core/NBT/Tag.h"
 #include "World/Scores/Scoreboard.h"
 
@@ -110,6 +111,11 @@ struct ScriptBlockPart : ScriptNative {
 struct ScriptNamedTickEvent : ScriptNative {
     std::string mNamespace;
     std::string mEventName;
+};
+
+// a BlockComponentNeighborChangedAfterEvent: the changes getChanges hands out
+struct ScriptNeighborChangedEvent : ScriptNative {
+    std::vector<NeighborChangeQueue::Change> mChanges;
 };
 
 // a structure of the shared registry, by identifier: deleting it leaves the object invalid

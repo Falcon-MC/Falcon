@@ -394,6 +394,35 @@ void CustomContentRegistry::load(const BehaviorPackManager &packs, ItemDefinitio
 }
 
 namespace {
+    // neighbor_directions: an array of down, up, north, south, west, east (0 to 5) or all (sub_1486DFFB0)
+    bool readNeighborDirections(const json::Value &component, uint8_t &directions) {
+        static const char *const NAMES[] = {"down", "up", "north", "south", "west", "east"};
+        directions = 0;
+        if (!component.isObject())
+            return false;
+        const json::Value *list = component.get("neighbor_directions");
+        if (list == nullptr)
+            return true;
+        if (!list->isArray())
+            return false;
+        for (const std::unique_ptr<json::Value> &value: list->mArray) {
+            if (!value->isString())
+                return false;
+            const std::string name = value->string();
+            if (name == "all") {
+                directions = 0x3F;
+                continue;
+            }
+            int face = 0;
+            while (face < 6 && name != NAMES[face])
+                ++face;
+            if (face == 6)
+                return false;
+            directions |= (uint8_t) (1 << face);
+        }
+        return true;
+    }
+
     CustomRecipeIngredient parseIngredient(const json::Value *value) {
         CustomRecipeIngredient ingredient;
         if (value == nullptr) {
@@ -1027,6 +1056,21 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                     definition.mTickLooping = tick->get("looping")->boolean(true);
             }
 
+            const json::Value *neighbor = components->get("minecraft:neighbor_change");
+            if (neighbor != nullptr) {
+                // BlockDefinitionNeighborChangeValidate (sub_14328ADB0): the document fails without the experiment
+                if (!mUpcomingCreatorFeatures) {
+                    LOG_ERROR(LogAreaID::Script,
+                              "To use 'minecraft:neighbor_change', experimental creator features are required");
+                    continue;
+                }
+                if (!readNeighborDirections(*neighbor, definition.mNeighborDirections)) {
+                    LOG_WARN(LogAreaID::Script, "Skipping custom block %s: invalid neighbor_directions",
+                             definition.mIdentifier.c_str());
+                    continue;
+                }
+            }
+
             applyBlockComponents(*components, definition);
             const json::Value *placement = components->get("minecraft:placement_filter");
             if (placement != nullptr && placement->isObject())
@@ -1051,6 +1095,8 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     stored.mItemNetworkId = mNextItemNetworkId++;
     const Tag states = defaultStatesOf(stored);
     stored.mNetworkHash = BlockStateHasher::hash(stored.mIdentifier, states);
+    if (stored.mNeighborDirections != 0)
+        mNeighborListeners[stored.mIdentifier] = stored.mNeighborDirections;
 
     // hashed runtime ids: one definition per permutation, the default first
     blocks.registerDefinition(std::make_shared<BlockDefinition>(stored.mIdentifier, stored.mNetworkHash, states));

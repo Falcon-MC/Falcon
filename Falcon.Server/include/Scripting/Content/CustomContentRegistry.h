@@ -105,6 +105,8 @@ struct CustomBlockDefinition {
     // minecraft:instrument_sound: up and down faces to a note sound
     bool mInstrumentSound = false;
     std::vector<std::pair<std::string, std::string>> mInstrumentSounds;
+    // minecraft:neighbor_change: one bit a face (down 0 ... east 5)
+    uint8_t mNeighborDirections = 0;
 };
 
 struct CustomActorDefinition {
@@ -187,6 +189,21 @@ public:
 
     bool hasIdentifier(const std::string &identifier) const;
 
+    // the faces a block's minecraft:neighbor_change watches, 0 for any other block
+    uint8_t neighborDirectionsOf(const std::string &identifier) const {
+        const auto found = mNeighborListeners.find(identifier);
+        return found == mNeighborListeners.end() ? 0 : found->second;
+    }
+
+    bool hasNeighborListeners() const {
+        return !mNeighborListeners.empty();
+    }
+
+    // the world's upcoming_creator_features experiment, read before the packs load
+    void setUpcomingCreatorFeatures(bool enabled) {
+        mUpcomingCreatorFeatures = enabled;
+    }
+
     const CustomItemDefinition *registerItem(const CustomItemDefinition &item, ItemDefinitionRegistry &items);
 
     const CustomBlockDefinition *registerBlock(const CustomBlockDefinition &block, ItemDefinitionRegistry &items,
@@ -232,5 +249,7 @@ private:
     std::vector<CustomActorDefinition> mActors;
     std::vector<CustomRecipe> mRecipes;
     std::vector<BlockPropertyData> mBlockProperties;
+    std::unordered_map<std::string, uint8_t> mNeighborListeners;
+    bool mUpcomingCreatorFeatures = false;
     bool mFrozen = false;
 };

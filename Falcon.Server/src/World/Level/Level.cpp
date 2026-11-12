@@ -16,6 +16,7 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockNames.h"
@@ -34,6 +35,29 @@
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #endif
+
+namespace {
+    // level.dat "experiments": a byte per toggle name beside two bookkeeping flags
+    std::vector<std::string> readExperiments(const Tag &levelDat) {
+        std::vector<std::string> names;
+        const Tag *experiments = levelDat.get("experiments");
+        if (experiments == nullptr || !experiments->isCompound())
+            return names;
+        const std::vector<std::string> &keys = experiments->getKeys();
+        const std::vector<Tag> &values = experiments->getValues();
+        for (size_t index = 0; index < keys.size() && index < values.size(); ++index) {
+            if (keys[index] == "experiments_ever_used" || keys[index] == "saved_with_toggled_experiments")
+                continue;
+            if (values[index].getType() == Tag::Type::Byte && values[index].asByte() != 0)
+                names.push_back(keys[index]);
+        }
+        return names;
+    }
+}
+
+bool Level::hasExperiment(const std::string &name) const {
+    return std::find(mExperiments.begin(), mExperiments.end(), name) != mExperiments.end();
+}
 
 Level::Level(const std::string &name, int viewDistance, int64_t seed, DimensionType dimension)
         : mName(name), mViewDistance(viewDistance), mSeed(seed), mDimension(dimension),
@@ -91,6 +115,8 @@ Level &Level::operator=(Level &&other) noexcept {
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
     mNamedTicks = std::move(other.mNamedTicks);
+    mNeighborChanges = std::move(other.mNeighborChanges);
+    mExperiments = std::move(other.mExperiments);
     mVillageManager = std::move(other.mVillageManager);
     mGameRules = std::move(other.mGameRules);
     mRulesOwner = other.mRulesOwner;
@@ -133,6 +159,7 @@ bool Level::openStorage(const std::string &worldsDirectory) {
                                                                levelDat.getString("FlatWorldLayers"));
 
             mWorldStartCount = (uint32_t) levelDat.getLong("worldStartCount", DEFAULT_WORLD_START_COUNT);
+            mExperiments = readExperiments(levelDat);
             mBonusChestEnabled = levelDat.getByte("bonusChestEnabled", 0) != 0;
             mBonusChestSpawned = levelDat.getByte("bonusChestSpawned", 0) != 0;
 
@@ -1554,6 +1581,8 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     // interned: still the old block once the chunk holds the new one
     const BlockState &previous = chunk.getBlock(x & 15, y, z & 15);
     chunk.setBlock(x & 15, y, z & 15, state);
+    if (mOwner != nullptr && CustomContentRegistry::getInstance().hasNeighborListeners())
+        _recordNeighborChange(x, y, z, previous, state);
     if (mBatchLight) {
         mBatchedLightColumns.insert(((int64_t) x << 32) | (uint32_t) z);
         addBlockLightUpdate(x, y, z);

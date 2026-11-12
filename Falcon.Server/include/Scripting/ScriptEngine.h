@@ -10,6 +10,7 @@
 #include "Scripting/ScriptSoundRegistry.h"
 #include "Scripting/ScriptStructureRegistry.h"
 #include "Scripting/WorldClockSystem.h"
+#include "World/Level/NeighborChangeQueue.h"
 
 #include <cstdint>
 #include <functional>
@@ -107,6 +108,10 @@ public:
     // a named tick fell due at a block still of the type it was scheduled on
     void onCustomBlockNamedTick(Level &level, const Vector3i &position, const BlockState &state,
                                 const std::string &eventNamespace, const std::string &eventName);
+
+    // the tick's neighbor changes of a block with minecraft:neighbor_change, still of the type they were seen on
+    void onCustomBlockNeighborChanged(Level &level, const Vector3i &position, const BlockState &state,
+                                      const std::vector<NeighborChangeQueue::Change> &changes);
 
     void onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position);
 

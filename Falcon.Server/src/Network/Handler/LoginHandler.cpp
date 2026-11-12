@@ -69,6 +69,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <unordered_map>
 #include <vector>
 
@@ -82,9 +83,16 @@ namespace {
     const char *const CUSTOM_DIMENSION_BIOME = "minecraft:ocean";
     const int32_t CUSTOM_DIMENSION_CLOUD_HEIGHT = 128;
 
-    std::vector<ExperimentData> enabledExperiments() {
+    // Falcon's own toggles, then the ones the world's level.dat turns on
+    std::vector<ExperimentData> enabledExperiments(ServerNetworkHandler &owner) {
+        std::vector<std::string> names(std::begin(ENABLED_EXPERIMENTS), std::end(ENABLED_EXPERIMENTS));
+        for (const std::string &name: owner.getLevel().getExperiments()) {
+            if (std::find(names.begin(), names.end(), name) == names.end())
+                names.push_back(name);
+        }
+
         std::vector<ExperimentData> experiments;
-        for (const char *name: ENABLED_EXPERIMENTS) {
+        for (const std::string &name: names) {
             ExperimentData experiment;
             experiment.mName = name;
             experiment.mEnabled = true;
@@ -512,7 +520,7 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
             ResourcePackStackPacket stack;
             stack.mForcedToAccept = owner.getProperties().getTexturePackRequired();
             stack.mGameVersion = owner.getAnnouncement().mGameVersion;
-            stack.mExperiments = enabledExperiments();
+            stack.mExperiments = enabledExperiments(owner);
             stack.mExperimentsPreviouslyToggled = true;
 
             for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
@@ -614,7 +622,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mEnchantmentSeed = 0;
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
-    startGame.mExperiments = enabledExperiments();
+    startGame.mExperiments = enabledExperiments(owner);
     startGame.mExperimentsPreviouslyToggled = true;
     startGame.mRewindHistorySize = 40;
 

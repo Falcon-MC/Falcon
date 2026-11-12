@@ -874,6 +874,29 @@ void ScriptEngine::onCustomBlockNamedTick(Level &level, const Vector3i &position
     }
 }
 
+void ScriptEngine::onCustomBlockNeighborChanged(Level &level, const Vector3i &position, const BlockState &state,
+                                                const std::vector<NeighborChangeQueue::Change> &changes) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(state.mName);
+    if (block == nullptr)
+        return;
+
+    const std::vector<CustomComponentUse> uses = CustomContentRegistry::componentsFor(*block, state.mStates);
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->surface().has("BlockComponentNeighborChangedAfterEvent")
+            || !api->handlesHook(true, uses, "onNeighborChanged"))
+            continue;
+
+        _arm();
+        ScriptNeighborChangedEvent *data = new ScriptNeighborChangedEvent();
+        data->mChanges = changes;
+        JSValue event = api->makeInstance("BlockComponentNeighborChangedAfterEvent", data);
+        api->fillBlockEvent(event, level, position);
+        api->fireComponents(true, uses, "onNeighborChanged", event);
+        JS_FreeValue(api->context(), event);
+        _pumpJobs();
+    }
+}
+
 void ScriptEngine::onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId,
                                      const Vector3i &position) {
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);

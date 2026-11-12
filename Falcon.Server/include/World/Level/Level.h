@@ -17,6 +17,7 @@
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "World/Level/GameRules.h"
 #include "World/Level/NamedTickQueue.h"
+#include "World/Level/NeighborChangeQueue.h"
 #include "World/Level/Storage/LevelStorage.h"
 #include "World/Village/VillageManager.h"
 
@@ -502,6 +503,13 @@ public:
         return mNamedTicks;
     }
 
+    // the experiments level.dat turns on, by toggle name
+    const std::vector<std::string> &getExperiments() const {
+        return mExperiments;
+    }
+
+    bool hasExperiment(const std::string &name) const;
+
     LiquidPhysicsSystem &getLiquidPhysics() {
         return mLiquidPhysics;
     }
@@ -559,6 +567,10 @@ private:
     void _dropPendingTicks(int32_t chunkX, int32_t chunkZ);
 
     void _tickNamedTicks();
+
+    void _recordNeighborChange(int32_t x, int32_t y, int32_t z, const BlockState &previous, const BlockState &current);
+
+    void _tickNeighborChanges();
 
     // sky columns relit once at the end of a liquid tick instead of once a write
     void _flushLightBatch();
@@ -621,6 +633,8 @@ private:
     LevelStorage mStorage;
     LiquidPhysicsSystem mLiquidPhysics;
     NamedTickQueue mNamedTicks;
+    NeighborChangeQueue mNeighborChanges;
+    std::vector<std::string> mExperiments;
     int64_t mLiquidTick = 0;
     bool mBatchLight = false;
     std::unordered_set<int64_t> mBatchedLightColumns;
