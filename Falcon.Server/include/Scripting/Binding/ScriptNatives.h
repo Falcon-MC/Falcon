@@ -200,6 +200,10 @@ struct ScriptSoundState {
     double unitsPerSecond() const {
         return mRealTime ? 1000.0 : 20.0;
     }
+
+    float durationSeconds() const {
+        return (float) mDurationUnits / (mRealTime ? 1000.0f : 20.0f);
+    }
 };
 
 // SoundInstance and its SoundDurationInfo share the state

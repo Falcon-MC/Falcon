@@ -21,12 +21,9 @@ struct ScriptSoundDefinition {
     bool mHasTags = false;
     std::vector<std::pair<std::string, std::vector<std::string>>> mTags;
 
-    double unitsPerSecond() const {
-        return mRealTime ? 1000.0 : 20.0;
-    }
-
-    double durationSeconds() const {
-        return (double) mDurationUnits / unitsPerSecond();
+    // the float the game exposes and filters on (sub_14BA00470, 26.60)
+    float durationSeconds() const {
+        return (float) mDurationUnits / (mRealTime ? 1000.0f : 20.0f);
     }
 };
 
@@ -44,7 +41,7 @@ public:
     // namespace:name; a name without one is in minecraft
     static std::string normalize(const std::string &eventId);
 
-    // a pack's document; the first definition of an event wins, later ones are ignored like the game does
+    // a pack's document; an event already defined keeps its first definition, as the game warns
     void addPack(const std::string &packRoot);
 
     // nullptr when no pack declares the event

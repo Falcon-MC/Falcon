@@ -1,5 +1,6 @@
 #include "Scripting/Binding/ScriptApi.h"
 
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ClientboundUpdateSoundDataPacket.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
@@ -47,12 +48,16 @@ namespace {
         return std::fmod(state.mElapsedUnits, (double) state.mDurationUnits);
     }
 
-    double playbackPosition(const ScriptSoundState &state) {
-        return playbackUnits(state) / state.unitsPerSecond();
+    // only sounds with a duration and a finite loop count are tracked (sub_141ECB3C0, sub_14C555130, 26.60)
+    bool isActive(const ScriptSoundState &state) {
+        return state.mHasDuration && state.mLoopCount >= 0 && !state.mStopped && !state.mCompleted;
     }
 
-    double durationOf(const ScriptSoundState &state) {
-        return (double) state.mDurationUnits / state.unitsPerSecond();
+    // whole ticks or milliseconds; untracked, it reports the full duration (sub_14380C5C0, 26.60)
+    float playbackPosition(const ScriptSoundState &state) {
+        if (!isActive(state))
+            return state.durationSeconds();
+        return (float) std::floor(playbackUnits(state)) / (state.mRealTime ? 1000.0f : 20.0f);
     }
 
     bool readNumberArgument(JSContext *ctx, int argc, JSValueConst *argv, int index, double &value) {
@@ -67,10 +72,6 @@ namespace {
             if (player != nullptr)
                 api->host().sendPacketTo(player->getNetworkIdentifier(), packet);
         }
-    }
-
-    bool isActive(const ScriptSoundState &state) {
-        return !state.mStopped && !state.mCompleted;
     }
 
     JSValue soundGetId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -142,8 +143,9 @@ namespace {
         double seconds = 0.0;
         if (state == nullptr || !readNumberArgument(ctx, argc, argv, 0, seconds))
             return typeError(ctx);
-        const double maxValue = state->mHasDuration ? durationOf(*state) : MAX_SEEK;
-        if (seconds < 0.0 || seconds > maxValue)
+        // the known duration bounds the float seconds (sub_14C55BBC0, 26.60)
+        const double maxValue = state->mHasDuration ? (double) state->durationSeconds() : MAX_SEEK;
+        if (seconds < 0.0 || (state->mHasDuration ? (float) seconds > state->durationSeconds() : seconds > MAX_SEEK))
             return outOfBounds(ctx, "ArgumentOutOfBoundsError", seconds, 0.0, maxValue, true, 0);
         ClientboundUpdateSoundDataPacket packet;
         packet.mType = SoundDataUpdateType::SeekTo;
@@ -202,7 +204,8 @@ namespace {
 
     JSValue durationGetDuration(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptSoundState *state = soundOf(ctx, thisVal);
-        return state == nullptr ? typeError(ctx) : JS_NewFloat64(ctx, durationOf(*state));
+        // a float of ticks / 20 or milliseconds / 1000 (sub_14C554800, 26.60)
+        return state == nullptr ? typeError(ctx) : JS_NewFloat64(ctx, state->durationSeconds());
     }
 
     JSValue durationGetIsActive(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -240,7 +243,7 @@ namespace {
         if (!definition->mHasDuration)
             return JS_UNDEFINED;
         JSValue info = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, info, "duration", JS_NewFloat64(ctx, definition->durationSeconds()));
+        JS_SetPropertyStr(ctx, info, "duration", JS_NewFloat64(ctx, (double) definition->durationSeconds()));
         return info;
     }
 
@@ -413,9 +416,12 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
         state->mDurationUnits = definition->mDurationUnits;
         state->mRealTime = definition->mRealTime;
     }
-    // isBroadcast with a declared broadcast_range: only players within it horizontally (sub_14B53D880, 26.60)
+    // isBroadcast: only players whose chunk view covers the sound, within a declared broadcast_range horizontally
+    // Dimension::playSound (sub_14B53D880, 26.60)
     const bool ranged = options.mBroadcast && definition != nullptr && definition->mHasBroadcastRange;
     const float rangeSquared = ranged ? definition->mBroadcastRange * definition->mBroadcastRange : 0.0f;
+    const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                         (int32_t) std::floor(position.z));
 
     PlaySoundPacket packet;
     packet.mSound = eventId;
@@ -441,6 +447,8 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
                 if (dx * dx + dz * dz > rangeSquared)
                     continue;
             }
+            if (options.mBroadcast && !ChunkStreamHandler::isPositionRelevant(entry.second, level, block))
+                continue;
             state->mListeners.push_back(mPlayers.acquire(entry.first));
             mHost.sendPacketTo(entry.first, packet);
         }

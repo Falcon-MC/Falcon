@@ -32,6 +32,8 @@
 #include "Protocol/Packets/ServerboundDataStorePacket.h"
 #include "Protocol/Packets/UpdateClientOptionsPacket.h"
 #include "Protocol/Packets/DimensionDataPacket.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
@@ -614,7 +616,8 @@ system.runTimeout(() => {
     const player = world.getPlayers()[0];
     const sound = player.playSound(jingle, { loopCount: 1 });
     world.afterEvents.soundCompleted.subscribe((e) => {
-        r.completed = (e.soundInstanceId === sound.id) + ":" + sound.durationInfo.isActive;
+        r.completed = (e.soundInstanceId === sound.id) + ":" + sound.durationInfo.isActive + ":"
+            + sound.durationInfo.getPlaybackPosition();
         world.setDynamicProperty("sounds", JSON.stringify(r));
     });
     r.instance = (sound instanceof SoundInstance) + ":" + sound.soundEventId + ":" + (sound.recipient.id === player.id)
@@ -631,11 +634,25 @@ system.runTimeout(() => {
         orb.seekTo(3); orb.stop(); });
     sound.seekTo(0.05);
     r.seek = sound.durationInfo.getPlaybackPosition().toFixed(2);
+    const endless = player.playSound(all[2], { loopCount: -1 });
+    r.endless = endless.durationInfo.isActive + ":" + endless.durationInfo.getPlaybackPosition() + ":"
+        + /^[0-9]+$/.test(endless.id);
+    endless.stop();
   } catch (e) {
     r.error = e.name + ":" + e.message + ":" + e.stack;
   }
     world.setDynamicProperty("sounds", JSON.stringify(r));
 }, 2);
+system.afterEvents.scriptEventReceive.subscribe((e) => {
+  if (e.id !== "sounds:broadcast")
+    return;
+  const overworld = world.getDimension("overworld");
+  overworld.playSound("test:ranged", { x: 2, y: 100, z: 0 }, { isBroadcast: true });
+  overworld.playSound("test:ranged", { x: 9, y: 100, z: 0 }, { isBroadcast: true });
+  overworld.playSound("random.orb", { x: 20, y: 100, z: 0 }, { isBroadcast: true });
+  overworld.playSound("random.orb", { x: 5000, y: 100, z: 0 }, { isBroadcast: true });
+  overworld.playSound("random.pop", { x: 5000, y: 100, z: 0 });
+});
 )JS";
 
     const char *const ITEMS = R"JS(
@@ -1590,7 +1607,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                       {"sound_event_name": "random.orb"},
                       {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 0.125}},
                       {"sound_event_name": "test:clock", "duration_info": {"mode": "real_time", "seconds": 1.2345}},
-                      {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 9}}]})");
+                      {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 9}},
+                      {"sound_event_name": "test:ranged", "broadcast_range": 4}]})");
         const std::string gemTable = "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", "
                                      "\"name\": \"minecraft:diamond\", \"functions\": [{\"function\": "
                                      "\"set_count\", \"count\": 3}]}]}]}";
@@ -2126,19 +2144,46 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
         const std::unique_ptr<json::Value> sounds = result(owner, "sounds");
         expect(*sounds, "registry", "true:true");
-        expect(*sounds, "definitions", "test:jingle,minecraft:random.orb,test:ticks,test:clock:true");
-        expect(*sounds, "jingle", "0.1:Someone:Pop|Folk:Tune:undefined:calm");
+        expect(*sounds, "definitions", "test:jingle,minecraft:random.orb,test:ticks,test:clock,test:ranged:true");
+        expect(*sounds, "jingle", "0.10000000149011612:Someone:Pop|Folk:Tune:undefined:calm");
         expect(*sounds, "plain", "undefined:undefined:undefined");
-        expect(*sounds, "quantized", "0.1:1.234");
+        expect(*sounds, "quantized", "0.10000000149011612:1.2339999675750732");
         expect(*sounds, "filters", "1:1:2:1:0:InvalidArgumentError");
-        expect(*sounds, "instance", "true:test:jingle:true:true:0.1:true:0");
+        expect(*sounds, "instance", "true:test:jingle:true:true:0.10000000149011612:true:0");
         expect(*sounds, "dimension", "true:undefined:undefined:true");
         expect(*sounds, "bounds",
                "ArgumentOutOfBoundsError:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError:"
                "PropertyOutOfBoundsError:PropertyOutOfBoundsError");
         expect(*sounds, "controls", "ok");
         expect(*sounds, "seek", "0.05");
-        expect(*sounds, "completed", "true:false");
+        expect(*sounds, "endless", "false:0.10000000149011612:true");
+        expect(*sounds, "completed", "true:false:0.10000000149011612");
+
+        // isBroadcast reaches only players whose streamed view covers the sound, and broadcast_range if declared
+        player.setPosition(Vector3f(0.5f, 100.0f, 0.5f));
+        player.getChunkStreamState().mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
+        std::vector<std::pair<MinecraftPacketIds, std::string>> sounds;
+        owner.getNetworkHandler().setOutboundFilter([&sounds](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            sounds.emplace_back(Packet::peekId(header, sender, client), data);
+            return false;
+        });
+        scriptEvent.execute(console, {"sounds:broadcast"});
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        std::string heard;
+        for (const auto &packet: sounds) {
+            if (packet.first != MinecraftPacketIds::PlaySound)
+                continue;
+            ReadOnlyBinaryStream body(packet.second);
+            PlaySoundPacket decoded;
+            decoded.readHeader(body);
+            decoded.read(body, owner.getCodecContext());
+            heard += decoded.mSound + "@" + std::to_string((int) decoded.mPosition.x) + ":"
+                     + (decoded.mBypassListenerRangeCheck ? "b" : "-") + ";";
+        }
+        require(heard == "test:ranged@2:b;random.orb@20:b;random.pop@5000:-;",
+                "broadcast sounds reached the wrong players: " + heard);
         expect(*loot, "override", "minecraft:emerald");
 
         // custom commands: in the command map under both names, parsed from a player and gated by cheats
