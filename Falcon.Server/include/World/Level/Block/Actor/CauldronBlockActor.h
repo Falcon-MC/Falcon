@@ -26,6 +26,25 @@ public:
     // mixes one item into the water color; a non-dye adds nothing but the color is mixed again all the same
     void addDye(int32_t dyeColor);
 
+    bool hasPotion() const {
+        return mPotionId >= 0;
+    }
+
+    bool hasColor() const {
+        return mHasColor;
+    }
+
+    // 0xAARRGGBB
+    int32_t getColor() const {
+        return mColor;
+    }
+
+    // the water as the level events show it: the custom color with full alpha, else the game's fallback
+    uint32_t getEventColor() const;
+
+    // an emptied cauldron forgets its potion and its color (sub_14A2EEEA0, sub_14330C860)
+    void clearContents();
+
 private:
     void _putFields(Tag &data) const;
 
