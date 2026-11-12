@@ -2162,17 +2162,17 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         // isBroadcast reaches only players whose streamed view covers the sound, and broadcast_range if declared
         player.setPosition(Vector3f(0.5f, 100.0f, 0.5f));
         player.getChunkStreamState().mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
-        std::vector<std::pair<MinecraftPacketIds, std::string>> sounds;
-        owner.getNetworkHandler().setOutboundFilter([&sounds](const NetworkIdentifier &, std::string &data) {
+        std::vector<std::pair<MinecraftPacketIds, std::string>> played;
+        owner.getNetworkHandler().setOutboundFilter([&played](const NetworkIdentifier &, std::string &data) {
             ReadOnlyBinaryStream header(data);
             unsigned char sender = 0, client = 0;
-            sounds.emplace_back(Packet::peekId(header, sender, client), data);
+            played.emplace_back(Packet::peekId(header, sender, client), data);
             return false;
         });
         scriptEvent.execute(console, {"sounds:broadcast"});
         owner.getNetworkHandler().setOutboundFilter(nullptr);
         std::string heard;
-        for (const auto &packet: sounds) {
+        for (const auto &packet: played) {
             if (packet.first != MinecraftPacketIds::PlaySound)
                 continue;
             ReadOnlyBinaryStream body(packet.second);
@@ -2704,7 +2704,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "test:ping|hello world|Server|false|true|true;other:pong||Entity|true|true|true;ui:forms||Server|false|true|true;"
                "ui:ddui||Server|false|true|true;ui:filter|slow|Server|false|true|true;ui:filter|on|Server|false|true|true;"
                "ui:filter|off|Server|false|true|true;ui:legacy||Server|false|true|true;gfx:apply||Server|false|true|true;"
-               "test:event|m|Server|false|true|true;");
+               "sounds:broadcast||Server|false|true|true;test:event|m|Server|false|true|true;");
         expect(*stable2, "filtered", "other:pong;");
         require(stable2->get("removed") == nullptr, "an unsubscribed scriptEventReceive callback ran");
         expect(*stable2, "prototypeBound",
