@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 namespace {
     std::string readText(const std::filesystem::path &path) {
@@ -117,6 +118,30 @@ namespace {
             return false;
         min = max = constant->integer();
         return true;
+    }
+
+    // start_height: {"type": "constant", "value": {"absolute" | "above_bottom" | "below_top": n}}, the height
+    // provider schema (sub_14930A460, 26.60); uniform and from_sea are left out: their fields and sea level unproven
+    bool readStartHeight(const json::Value *value, PackJigsaw::Anchor &anchor, int32_t &offset) {
+        if (value == nullptr || !value->isObject())
+            return false;
+        const json::Value *type = value->get("type");
+        const json::Value *constant = value->get("value");
+        if (type == nullptr || type->string() != "constant" || constant == nullptr || !constant->isObject())
+            return false;
+        static const std::pair<const char *, PackJigsaw::Anchor> KINDS[] = {
+                {"absolute", PackJigsaw::Anchor::Absolute},
+                {"above_bottom", PackJigsaw::Anchor::AboveBottom},
+                {"below_top", PackJigsaw::Anchor::BelowTop}};
+        for (const auto &kind: KINDS) {
+            const json::Value *number = constant->get(kind.first);
+            if (number != nullptr && number->isNumber()) {
+                anchor = kind.second;
+                offset = number->integer();
+                return true;
+            }
+        }
+        return false;
     }
 
     std::vector<std::string> blockNames(const json::Value *value) {
@@ -277,6 +302,8 @@ namespace {
     }
 }
 
+// field names from the 26.60 schemas: template pool sub_1492F7D00, jigsaw structure sub_1492DB6B0, processor
+// sub_149301D80, rule sub_149301BE0, predicates sub_14930F4D0
 void PackJigsaw::addPack(const std::string &packRoot) {
     const std::filesystem::path root = std::filesystem::path(packRoot) / "worldgen";
     eachJson(root / "template_pools", [&](const json::Value &file) {
@@ -319,8 +346,8 @@ void PackJigsaw::addPack(const std::string &packRoot) {
         const json::Value *depth = body->get("max_depth");
         structure.mStartPool = pool != nullptr ? pool->string() : std::string();
         structure.mMaxDepth = depth != nullptr ? depth->integer(1) : 1;
-        structure.mHasStartHeight = readIntProvider(body->get("start_height"), structure.mStartHeightMin,
-                                                    structure.mStartHeightMax);
+        structure.mHasStartHeight = readStartHeight(body->get("start_height"), structure.mStartAnchor,
+                                                    structure.mStartOffset);
         mStructures[identifier] = structure;
     });
     eachJson(root / "processors", [&](const json::Value &file) {
@@ -341,6 +368,19 @@ void PackJigsaw::addPack(const std::string &packRoot) {
         }
         mProcessors[identifier] = std::move(list);
     });
+}
+
+// VerticalAnchor resolvers (sub_140EE4B30, sub_14383EBF0, sub_14383EC00, 26.60): below_top counts down from the
+// top block
+int32_t PackJigsaw::resolveAnchor(Anchor anchor, int32_t offset, int32_t minY, int32_t maxY) {
+    switch (anchor) {
+        case Anchor::AboveBottom:
+            return minY + offset;
+        case Anchor::BelowTop:
+            return maxY - offset;
+        default:
+            return offset;
+    }
 }
 
 const PackJigsaw::Pool *PackJigsaw::pool(const std::string &identifier) const {

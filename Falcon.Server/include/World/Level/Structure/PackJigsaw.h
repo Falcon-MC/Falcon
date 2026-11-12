@@ -51,14 +51,19 @@ public:
         std::string mFallback;
     };
 
+    enum class Anchor { Absolute, AboveBottom, BelowTop };
+
+    // the anchor's y in a dimension spanning minY to maxY inclusive
+    static int32_t resolveAnchor(Anchor anchor, int32_t offset, int32_t minY, int32_t maxY);
+
     struct Structure {
         std::string mStartPool;
         int32_t mMaxDepth = 1;
         // nothing set: the placement height stays
         bool mHasStartHeight = false;
-        // an int provider: constant gives min == max, uniform both bounds inclusive
-        int32_t mStartHeightMin = 0;
-        int32_t mStartHeightMax = 0;
+        // a constant height provider's vertical anchor
+        Anchor mStartAnchor = Anchor::Absolute;
+        int32_t mStartOffset = 0;
     };
 
     struct Options {
