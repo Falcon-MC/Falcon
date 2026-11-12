@@ -13,11 +13,12 @@ class ServerNetworkHandler;
 // trip wires and target blocks: the two detectors RedstoneSystem asks for power
 class DetectorSystem {
 public:
-    // wires a hook reaches along its direction
-    static constexpr int32_t MAX_WIRE_LENGTH = 40;
-    // a tripped wire rechecks for entities after this many ticks
+    // cells a hook scans for the facing hook: 40 wires between them at most; TripWireHookBlock::calculateState
+    // (sub_1449BF670, 26.60)
+    static constexpr int32_t MAX_HOOK_REACH = 41;
+    // a tripped wire's scheduled recheck; TripWireBlock::_checkPressed (sub_1449C0D50, 26.60)
     static constexpr int32_t WIRE_RECHECK_TICKS = 10;
-    // a target stays powered this long: arrows and tridents, then other projectiles
+    // a target's scheduled reset: arrows and tridents, then other projectiles; TargetBlock (sub_14B273550, 26.60)
     static constexpr int32_t TARGET_ARROW_TICKS = 20;
     static constexpr int32_t TARGET_OTHER_TICKS = 8;
 
@@ -35,13 +36,20 @@ public:
 
     static int strongPower(Level &level, const Vector3i &position, const BlockState &state, int face);
 
-    // entities on wires, wire rechecks and target expiry; from RedstoneSystem::tick
+    // entities stepping on wires and target expiry; from RedstoneSystem::tick
     static void tick(ServerNetworkHandler &owner, Level &level);
+
+    // a wire's scheduled recheck
+    static void onWireScheduled(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state);
 
     // a projectile struck a target; at: where it was, previous: where it came from
     static void onTargetHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const Vector3f &at,
                             const Vector3f &previous, Actor &projectile, bool arrowLike);
 
-    // the power a hit at a face point gives: 15 at the centre, 1 at the rim
-    static int targetPowerFor(const Vector3i &position, const Vector3f &at, const Vector3f &previous);
+    // the power a hit at a point on the block's surface gives: 15 at a face centre, 1 at its corners
+    static int targetPowerFor(const Vector3i &position, const Vector3f &hit);
+
+    // where the segment from previous to at enters the block; at when it never crosses it
+    static Vector3f targetHitPoint(const Vector3i &position, const Vector3f &at, const Vector3f &previous);
 };

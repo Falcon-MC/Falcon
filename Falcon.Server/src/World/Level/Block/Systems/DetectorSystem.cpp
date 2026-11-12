@@ -11,7 +11,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -24,10 +26,8 @@ namespace {
         int64_t mExpires = 0;
     };
 
+    // the game keeps a target's power in its redstone producer, not in the block: lost with the chunk
     struct DetectorState {
-        // powered wires and the last tick an entity stood on them
-        std::unordered_map<int64_t, int64_t> mPoweredWires;
-        std::unordered_map<int64_t, Vector3i> mWirePositions;
         std::unordered_map<int64_t, TargetPower> mTargets;
         std::unordered_map<int64_t, Vector3i> mTargetPositions;
         // RedstoneSystem ticks each level once a game tick
@@ -46,44 +46,85 @@ namespace {
         return level.getBlockState(position.x, position.y, position.z);
     }
 
-    void setPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
-                    bool powered) {
+    void setBits(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                 std::initializer_list<std::pair<const char *, bool>> bits) {
         Tag states = state.mStates;
-        states.putByte("powered_bit", powered ? 1 : 0);
+        bool changed = false;
+        for (const auto &bit: bits) {
+            if (states.getBool(bit.first, false) == bit.second)
+                continue;
+            states.putByte(bit.first, bit.second ? 1 : 0);
+            changed = true;
+        }
+        if (!changed)
+            return;
         const BlockState updated(state.mName, states);
         level.setBlock(position, updated, false);
         BlockActionHandler::broadcastBlockUpdate(owner, level, position, updated);
     }
 
-    // a hook is powered while a wire on its line is
-    void refreshHook(ServerNetworkHandler &owner, Level &level, const Vector3i &hook) {
-        const BlockState state = stateAt(level, hook);
-        if (!DetectorSystem::isHook(state))
-            return;
-        const int facing = DetectorSystem::hookFacing(state);
-        bool powered = false;
-        Vector3i cursor = hook;
-        for (int32_t step = 0; step < DetectorSystem::MAX_WIRE_LENGTH; ++step) {
-            cursor = RedstoneFace::relative(cursor, facing);
-            const BlockState wire = stateAt(level, cursor);
-            if (!DetectorSystem::isWire(wire))
-                break;
-            if (wire.mStates.getBool("powered_bit", false))
-                powered = true;
-        }
-        if (state.mStates.getBool("powered_bit", false) == powered)
-            return;
-        setPowered(owner, level, hook, state, powered);
+    void notifyHook(ServerNetworkHandler &owner, Level &level, const Vector3i &hook, int facing) {
         RedstoneSystem::updateAroundRedstone(owner, level, hook);
         RedstoneSystem::updateAroundRedstone(owner, level,
                                              RedstoneFace::relative(hook, RedstoneFace::opposite(facing)));
     }
 
-    // the hooks looking down the wire's line from either side
+    // TripWireHookBlock::calculateState (sub_1449BF670, 26.60): attached only to a facing hook over unbroken wire,
+    // powered only while attached and a wire that isn't disarmed is
+    void refreshHook(ServerNetworkHandler &owner, Level &level, const Vector3i &hook) {
+        const BlockState state = stateAt(level, hook);
+        if (!DetectorSystem::isHook(state))
+            return;
+        const int facing = DetectorSystem::hookFacing(state);
+        bool unbroken = true;
+        bool tripped = false;
+        int32_t other = 0;
+        std::vector<Vector3i> wires;
+        for (int32_t step = 1; step <= DetectorSystem::MAX_HOOK_REACH; ++step) {
+            const Vector3i at(hook.x + RedstoneFace::offset(facing).x * step, hook.y,
+                              hook.z + RedstoneFace::offset(facing).z * step);
+            const BlockState found = stateAt(level, at);
+            if (DetectorSystem::isHook(found)) {
+                if (DetectorSystem::hookFacing(found) == RedstoneFace::opposite(facing))
+                    other = step;
+                break;
+            }
+            if (!DetectorSystem::isWire(found)) {
+                unbroken = false;
+                continue;
+            }
+            wires.push_back(at);
+            if (found.mStates.getBool("powered_bit", false) && !found.mStates.getBool("disarmed_bit", false))
+                tripped = true;
+        }
+        const bool attached = unbroken && other > 1;
+        const bool powered = attached && tripped;
+        const bool wasAttached = state.mStates.getBool("attached_bit", false);
+        const bool wasPowered = state.mStates.getBool("powered_bit", false);
+        setBits(owner, level, hook, state, {{"attached_bit", attached}, {"powered_bit", powered}});
+        if (wasPowered != powered || wasAttached != attached)
+            notifyHook(owner, level, hook, facing);
+        if (other > 0) {
+            const Vector3i farHook(hook.x + RedstoneFace::offset(facing).x * other, hook.y,
+                               hook.z + RedstoneFace::offset(facing).z * other);
+            const BlockState farState = stateAt(level, farHook);
+            const bool farChanged = farState.mStates.getBool("attached_bit", false) != attached
+                                    || farState.mStates.getBool("powered_bit", false) != powered;
+            setBits(owner, level, farHook, farState, {{"attached_bit", attached}, {"powered_bit", powered}});
+            if (farChanged)
+                notifyHook(owner, level, farHook, RedstoneFace::opposite(facing));
+        }
+        if (other > 1 && attached != wasAttached) {
+            for (const Vector3i &wire: wires)
+                setBits(owner, level, wire, stateAt(level, wire), {{"attached_bit", attached}});
+        }
+    }
+
+    // TripWireBlock::_updateSource (sub_1449BEE30, 26.60): only south and west; calculateState sets both ends
     void refreshHooksOf(ServerNetworkHandler &owner, Level &level, const Vector3i &wire) {
-        for (const int face: {RedstoneFace::NORTH, RedstoneFace::SOUTH, RedstoneFace::WEST, RedstoneFace::EAST}) {
+        for (const int face: {RedstoneFace::SOUTH, RedstoneFace::WEST}) {
             Vector3i cursor = wire;
-            for (int32_t step = 0; step < DetectorSystem::MAX_WIRE_LENGTH; ++step) {
+            for (int32_t step = 0; step < DetectorSystem::MAX_HOOK_REACH; ++step) {
                 cursor = RedstoneFace::relative(cursor, face);
                 const BlockState state = stateAt(level, cursor);
                 if (DetectorSystem::isHook(state)) {
@@ -151,33 +192,40 @@ int DetectorSystem::strongPower(Level &level, const Vector3i &position, const Bl
     if (isHook(state)) {
         if (!state.mStates.getBool("powered_bit", false))
             return 0;
-        return face == RedstoneFace::opposite(hookFacing(state)) ? RedstoneSystem::MAX_SIGNAL : 0;
+        // the producer's strong face is the support behind the hook (sub_1449C3260, 26.60)
+        return face == hookFacing(state) ? RedstoneSystem::MAX_SIGNAL : 0;
     }
     if (isTarget(state))
         return 0;
     return -1;
 }
 
+namespace {
+    // TripWireBlock::_checkPressed (sub_1449C0D50, 26.60): the after event only on a change, a recheck while occupied
+    void checkPressed(ServerNetworkHandler &owner, Level &level, const Vector3i &cell, const BlockState &state) {
+        std::vector<Actor *> sources = actorsOn(owner, level, cell);
+        const bool pressed = !sources.empty();
+        if (state.mStates.getBool("powered_bit", false) != pressed) {
+            setBits(owner, level, cell, state, {{"powered_bit", pressed}});
+            refreshHooksOf(owner, level, cell);
+            owner.getScriptEngine().onTripWireTrip(level, cell, pressed, sources);
+        }
+        if (pressed)
+            level.scheduleUpdate(cell, DetectorSystem::WIRE_RECHECK_TICKS);
+    }
+}
+
 void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
     DetectorState &detectors = stateOf(level);
     const int64_t now = ++detectors.mTick;
 
+    // TripWireBlock::entityInside (sub_1449C0D10, 26.60): an unpowered wire only, disarmed or not
     const auto visit = [&](Actor &actor) {
         const Vector3f &feet = actor.getPosition();
         const Vector3i cell((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y), (int32_t) std::floor(feet.z));
         const BlockState state = stateAt(level, cell);
-        if (!isWire(state) || state.mStates.getBool("disarmed_bit", false))
-            return;
-        const int64_t key = RedstoneSystem::packPosition(cell);
-        const bool known = detectors.mPoweredWires.count(key) != 0;
-        detectors.mPoweredWires[key] = now;
-        detectors.mWirePositions[key] = cell;
-        if (known && state.mStates.getBool("powered_bit", false))
-            return;
-        setPowered(owner, level, cell, state, true);
-        refreshHooksOf(owner, level, cell);
-        std::vector<Actor *> sources = actorsOn(owner, level, cell);
-        owner.getScriptEngine().onTripWireTrip(level, cell, true, sources);
+        if (isWire(state) && !state.mStates.getBool("powered_bit", false))
+            checkPressed(owner, level, cell, state);
     };
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
@@ -188,23 +236,6 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
         ServerActor *actor = entry.second.get();
         if (actor != nullptr && !actor->isDead() && actor->isIn(level))
             visit(*actor);
-    }
-
-    std::vector<int64_t> released;
-    for (const auto &entry: detectors.mPoweredWires) {
-        if (now - entry.second >= WIRE_RECHECK_TICKS)
-            released.push_back(entry.first);
-    }
-    for (const int64_t key: released) {
-        const Vector3i cell = detectors.mWirePositions[key];
-        detectors.mPoweredWires.erase(key);
-        detectors.mWirePositions.erase(key);
-        const BlockState state = stateAt(level, cell);
-        if (!isWire(state))
-            continue;
-        setPowered(owner, level, cell, state, false);
-        refreshHooksOf(owner, level, cell);
-        owner.getScriptEngine().onTripWireTrip(level, cell, false, std::vector<Actor *>());
     }
 
     std::vector<int64_t> expired;
@@ -220,22 +251,63 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
-int DetectorSystem::targetPowerFor(const Vector3i &position, const Vector3f &at, const Vector3f &previous) {
-    const float local[3] = {at.x - (float) position.x, at.y - (float) position.y, at.z - (float) position.z};
-    const float travel[3] = {at.x - previous.x, at.y - previous.y, at.z - previous.z};
-    // the struck face is across the axis the projectile moved most along
-    int axis = 0;
-    for (int candidate = 1; candidate < 3; ++candidate) {
-        if (std::fabs(travel[candidate]) > std::fabs(travel[axis]))
-            axis = candidate;
+// TripWireBlock::tick (sub_1449BEA40, 26.60)
+void DetectorSystem::onWireScheduled(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) {
+    if (isWire(state) && state.mStates.getBool("powered_bit", false))
+        checkPressed(owner, level, position, state);
+}
+
+// TargetBlock (sub_14B273550, 26.60): the struck face is the axis farthest from the centre; power falls with the
+// distance from the face centre over sqrt(0.5)
+int DetectorSystem::targetPowerFor(const Vector3i &position, const Vector3f &hit) {
+    const float epsilon = 1.1920929e-7f;
+    const float dx = hit.x - ((float) position.x + 0.5f);
+    const float dy = hit.y - ((float) position.y + 0.5f);
+    const float dz = hit.z - ((float) position.z + 0.5f);
+    const float largest = std::max(std::max(std::fabs(dx), std::fabs(dy)), std::fabs(dz));
+    const bool xFace = std::fabs(std::fabs(dx) - largest) <= epsilon;
+    const bool yFace = std::fabs(std::fabs(dy) - largest) <= epsilon;
+    const bool zFace = std::fabs(std::fabs(dz) - largest) <= epsilon;
+    // the game's own tie order between faces
+    float first = xFace ? dy : dx;
+    if (yFace)
+        first = xFace ? 0.0f : dx;
+    float second = (xFace || yFace) ? 0.0f : dy;
+    const int kept = (xFace ? 0 : 1) + (yFace ? 0 : 1);
+    if (kept <= 1 && !zFace) {
+        if (kept == 1)
+            second = dz;
+        else
+            first = dz;
     }
-    float distance = 0.0f;
-    for (int other = 0; other < 3; ++other) {
-        if (other != axis)
-            distance = std::max(distance, std::fabs(std::clamp(local[other], 0.0f, 1.0f) - 0.5f));
+    const float reach = 0.70710677f;
+    const int power = (int) ((reach - std::sqrt(second * second + first * first)) * 16.0f / reach);
+    return std::min(15, power >= 2 ? power : 1);
+}
+
+Vector3f DetectorSystem::targetHitPoint(const Vector3i &position, const Vector3f &at, const Vector3f &previous) {
+    const float from[3] = {previous.x, previous.y, previous.z};
+    const float delta[3] = {at.x - previous.x, at.y - previous.y, at.z - previous.z};
+    const float low[3] = {(float) position.x, (float) position.y, (float) position.z};
+    float enter = 0.0f;
+    float leave = 1.0f;
+    for (int axis = 0; axis < 3; ++axis) {
+        if (std::fabs(delta[axis]) < 1e-7f) {
+            if (from[axis] < low[axis] || from[axis] > low[axis] + 1.0f)
+                return at;
+            continue;
+        }
+        float closest = (low[axis] - from[axis]) / delta[axis];
+        float farthest = (low[axis] + 1.0f - from[axis]) / delta[axis];
+        if (closest > farthest)
+            std::swap(closest, farthest);
+        enter = std::max(enter, closest);
+        leave = std::min(leave, farthest);
+        if (enter > leave)
+            return at;
     }
-    const float precision = std::clamp((0.5f - distance) / 0.5f, 0.0f, 1.0f);
-    return std::max(1, (int) std::ceil(15.0f * precision));
+    return Vector3f(from[0] + delta[0] * enter, from[1] + delta[1] * enter, from[2] + delta[2] * enter);
 }
 
 void DetectorSystem::onTargetHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -244,10 +316,11 @@ void DetectorSystem::onTargetHit(ServerNetworkHandler &owner, Level &level, cons
     const int64_t key = RedstoneSystem::packPosition(position);
     const auto known = detectors.mTargets.find(key);
     const int32_t previousPower = known == detectors.mTargets.end() ? 0 : known->second.mPower;
-    const int32_t power = targetPowerFor(position, at, previous);
+    const Vector3f hit = targetHitPoint(position, at, previous);
+    const int32_t power = targetPowerFor(position, hit);
     detectors.mTargets[key] = TargetPower{power,
                                           detectors.mTick + (arrowLike ? TARGET_ARROW_TICKS : TARGET_OTHER_TICKS)};
     detectors.mTargetPositions[key] = position;
     RedstoneSystem::updateAroundRedstone(owner, level, position);
-    owner.getScriptEngine().onTargetBlockHit(level, position, at, previousPower, power, &projectile);
+    owner.getScriptEngine().onTargetBlockHit(level, position, hit, previousPower, power, &projectile);
 }
