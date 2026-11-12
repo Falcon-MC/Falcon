@@ -55,6 +55,7 @@ namespace {
 
         const json::Value *duration = entry.get("duration_info");
         if (duration != nullptr && duration->isObject()) {
+            // mode 0 game_time, 1 real_time (schema sub_1486E2450, read by sub_143809380)
             const json::Value *mode = duration->get("mode");
             definition.mRealTime = mode != nullptr && mode->isString() && mode->string() == "real_time";
             const json::Value *seconds = duration->get("seconds");

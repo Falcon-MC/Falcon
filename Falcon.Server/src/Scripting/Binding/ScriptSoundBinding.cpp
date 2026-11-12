@@ -364,7 +364,8 @@ namespace {
     }
 }
 
-// one counter for every pack: the handles reach the same clients
+// one counter for every pack: the handles reach the same clients; the sound manager starts it at 1 (sub_141EC70D0)
+// and hands out the value before its increment (sub_141ECB3C0)
 int64_t ScriptApi::nextSoundHandle() {
     static int64_t next = 0;
     return ++next;

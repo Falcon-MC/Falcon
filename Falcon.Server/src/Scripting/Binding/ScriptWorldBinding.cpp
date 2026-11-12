@@ -97,7 +97,8 @@ namespace {
         return JS_FALSE;
     }
 
-    // MemoryTier by the ceilings the typings give: 1.5, 2, 4 and 8 GiB, above is SuperHigh
+    // the server tier (sub_1430151B0, read by the script system info sub_14C568150): total physical memory up to
+    // 1.5, 2, 4 and 8 GiB, above is SuperHigh; the platform reads ullTotalPhys (sub_140083100)
     int32_t memoryTierOf(uint64_t bytes) {
         const uint64_t gib = 1024ull * 1024ull * 1024ull;
         if (bytes <= gib * 3 / 2)
