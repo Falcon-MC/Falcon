@@ -411,10 +411,13 @@ void ScriptEngine::_installConsole(JSContext *context) {
 
 size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     size_t loaded = 0;
+    // the game reads sound definitions from the end of the pack stack and keeps the first: the last pack wins
+    // (sub_143808EB0, 26.60)
+    for (auto pack = packs.rbegin(); pack != packs.rend(); ++pack)
+        mSounds.addPack(pack->mPath);
     for (const BehaviorPack &pack: packs) {
-        // structures, loot tables and server sound definitions come from every pack, scripted or not
+        // structures and loot tables come from every pack, scripted or not
         mStructures.addPack(pack.mPath);
-        mSounds.addPack(pack.mPath);
         LootTableRegistry::getInstance().addPack(pack.mPath);
         if (pack.hasScript() && _loadPack(pack))
             loaded++;

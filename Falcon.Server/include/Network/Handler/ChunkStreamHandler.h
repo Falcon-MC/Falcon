@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -84,6 +85,10 @@ public:
     // actors and players a client hears about: 57 chunks around its own, not the streamed view
     // sub_14292F0B0 adds the offsets of sub_1430054F0 to the viewer chunk (sub_142FD2AF0)
     static bool isInActorRange(const Vector3f &viewer, const Vector3f &position);
+
+    // the streamed view covers the block, 46 blocks of margin: Dimension::isPositionRelevantForPlayer
+    // (sub_142940100, 26.60) against the publisher view of sub_142563440
+    static bool isPositionRelevant(ServerPlayer &player, const Level &level, const Vector3i &position);
 
     static int64_t packChunk(int32_t chunkX, int32_t chunkZ);
 

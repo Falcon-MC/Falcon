@@ -174,9 +174,10 @@ std::vector<const ScriptSoundDefinition *> ScriptSoundRegistry::definitions(cons
     for (const ScriptSoundDefinition &definition: mDefinitions) {
         if ((filter.mHasMinDuration || filter.mHasMaxDuration) && !definition.mHasDuration)
             continue;
-        if (filter.mHasMinDuration && definition.durationSeconds() < filter.mMinDuration)
+        // compared as floats (sub_14B835FD0, 26.60)
+        if (filter.mHasMinDuration && (float) filter.mMinDuration > definition.durationSeconds())
             continue;
-        if (filter.mHasMaxDuration && definition.durationSeconds() > filter.mMaxDuration)
+        if (filter.mHasMaxDuration && definition.durationSeconds() > (float) filter.mMaxDuration)
             continue;
         if (!matchesOne(filter.mArtists, definition.mArtist, definition.mHasArtist)
             || !matchesOne(filter.mTitles, definition.mTitle, definition.mHasTitle)

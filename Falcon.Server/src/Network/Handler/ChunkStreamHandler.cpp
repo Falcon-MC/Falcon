@@ -563,6 +563,17 @@ int64_t ChunkStreamHandler::packChunk(int32_t chunkX, int32_t chunkZ) {
     return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 }
 
+bool ChunkStreamHandler::isPositionRelevant(ServerPlayer &player, const Level &level, const Vector3i &position) {
+    const ChunkStreamState &state = player.getChunkStreamState();
+    if (state.mLastLoaderChunk == INT64_MAX || !player.isIn(level))
+        return false;
+    // the view centre is the corner of its chunk, its radius in blocks
+    const int64_t dx = (int64_t) position.x - 16 * (int64_t) unpackChunkX(state.mLastLoaderChunk);
+    const int64_t dz = (int64_t) position.z - 16 * (int64_t) unpackChunkZ(state.mLastLoaderChunk);
+    const int64_t reach = 16 * (int64_t) streamRadius(state, level) + 46;
+    return dx * dx + dz * dz < reach * reach;
+}
+
 int32_t ChunkStreamHandler::unpackChunkX(int64_t hash) {
     return (int32_t) (hash >> 32);
 }

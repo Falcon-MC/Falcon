@@ -200,7 +200,8 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
     }
 
     const std::filesystem::path base(pack.mPath);
-    const bool hasContent = std::filesystem::exists(base / "items") || std::filesystem::exists(base / "blocks");
+    const bool hasContent = std::filesystem::exists(base / "items") || std::filesystem::exists(base / "blocks")
+                            || std::filesystem::exists(base / "sounds" / "sound_definitions.json");
     if (!pack.hasScript() && !hasContent)
         return;
 
