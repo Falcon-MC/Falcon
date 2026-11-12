@@ -111,8 +111,17 @@ BlockState Block::applyPlacementOrientation(const BlockState &state, const Block
     if (states.contains("coral_fan_direction"))
         states.putInt("coral_fan_direction", face >= FACE_NORTH ? face - FACE_NORTH : 0);
 
-    if (states.contains("multi_face_direction_bits"))
-        states.putInt("multi_face_direction_bits", 1 << face);
+    // clings to the block that was clicked: the side opposite the clicked face, added to the sides already there
+    if (states.contains("multi_face_direction_bits")) {
+        int bits = multiFaceBit(face ^ 1);
+        if (context.mLevel != nullptr) {
+            const BlockState existing = context.mLevel->getBlockState(context.mBlockPosition.x, context.mBlockPosition.y,
+                                                                     context.mBlockPosition.z);
+            if (existing.mName == state.mName)
+                bits |= existing.mStates.getInt("multi_face_direction_bits", 0);
+        }
+        states.putInt("multi_face_direction_bits", bits);
+    }
 
     if (states.contains("pillar_axis"))
         states.putString("pillar_axis", pillarAxis(face));
