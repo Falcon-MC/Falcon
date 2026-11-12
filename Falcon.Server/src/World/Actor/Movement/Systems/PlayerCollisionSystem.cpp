@@ -1,5 +1,7 @@
 #include "World/Actor/Movement/Systems/PlayerCollisionSystem.h"
 #include "World/Actor/Movement/Systems/ClientAcceptanceSystem.h"
+#include "World/Actor/Movement/BlockCollisionEngine.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -182,15 +184,25 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
         && state.velocity.y <= 0.0f)
         avoidEdge(context.level, context.player, travel.box, state.velocity);
 
+    bool keepsHorizontalVelocity = false;
     if (abilities.spectator) {
         travel.box = travel.box.offset(state.velocity.x, state.velocity.y, state.velocity.z);
         travel.moved.mMoved = state.velocity;
     } else {
-        travel.moved = ActorCollisionSystem::move(context.level, travel.box, state.velocity, STEP_HEIGHT,
-                                                  state.onGround, &context.player);
+        const BlockCollisionEngine::Result moved = BlockCollisionEngine::move(
+                context.level, travel.box, state.velocity, STEP_HEIGHT, state.onGround, abilities.flying,
+                context.player.getFlags().get(ActorFlag::PushTowardsClosestSpace),
+                context.player.getCollisionRecovery(), &context.player);
+        travel.box = moved.mBox;
+        travel.moved.mRequested = moved.mRequested;
+        travel.moved.mMoved = moved.mMoved;
+        travel.moved.mCollidedX = moved.mCollidedX;
+        travel.moved.mCollidedY = moved.mCollidedY;
+        travel.moved.mCollidedZ = moved.mCollidedZ;
+        travel.moved.mOnGround = moved.mOnGround;
+        keepsHorizontalVelocity = moved.mKeepsHorizontalVelocity;
     }
-    state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY,
-                               travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+    state.simulated = BlockCollisionEngine::feetOf(travel.box);
     context.player.setSimulatedBox(travel.box, state.simulated);
     const bool wasOnGround = state.onGround;
     state.onGround = travel.moved.mOnGround;
@@ -204,9 +216,9 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
         state.velocity = Vector3f(0.0f, 0.0f, 0.0f);
     context.player.setHorizontalCollision(travel.moved.mCollidedX || travel.moved.mCollidedZ);
 
-    if (travel.moved.mCollidedX)
+    if (travel.moved.mCollidedX && !keepsHorizontalVelocity)
         state.velocity.x = 0.0f;
-    if (travel.moved.mCollidedZ)
+    if (travel.moved.mCollidedZ && !keepsHorizontalVelocity)
         state.velocity.z = 0.0f;
     if (travel.moved.mCollidedY)
         state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak

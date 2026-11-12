@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "World/Actor/Actor.h"
+#include "World/Actor/Movement/BlockCollisionEngine.h"
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/Movement/PlayerMovementValidator.h"
 #include "World/Actor/Movement/Components/SwimAmountComponent.h"
@@ -434,6 +435,10 @@ public:
             return false;
         box = mSimulatedBox;
         return true;
+    }
+
+    BlockCollisionEngine::RecoveryState &getCollisionRecovery() {
+        return mCollisionRecovery;
     }
 
     void clearMovementSimulation() {
@@ -1262,6 +1267,7 @@ private:
     AxisAlignedBB mSimulatedBox;
     Vector3f mSimulatedBoxFeet;
     bool mHasSimulatedBox = false;
+    BlockCollisionEngine::RecoveryState mCollisionRecovery;
     bool mHasSimulatedGround = false;
     bool mSimulatedOnGround = false;
     int32_t mJumpDelay = 0;

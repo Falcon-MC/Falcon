@@ -46,6 +46,14 @@ public:
 };
 
 namespace {
+    // the game keeps a mover's horizontal velocity next to a missing chunk: fixtures need their neighbours
+    void loadChunksAround(Level &level, int32_t chunkX, int32_t chunkZ) {
+        for (int32_t x = chunkX - 1; x <= chunkX + 1; ++x) {
+            for (int32_t z = chunkZ - 1; z <= chunkZ + 1; ++z)
+                level.getChunk(x, z);
+        }
+    }
+
     void require(bool condition, const char *message) {
         if (!condition)
             throw std::runtime_error(message);
@@ -360,7 +368,7 @@ namespace {
         player.setFlying(true);
         player.setPosition(Vector3f(134.5f, 250.0f, 2.5f));
         Level &level = owner.getLevelFor(player);
-        level.getChunk(8, 0);
+        loadChunksAround(level, 8, 0);
         level.getBlockActors().loadChunk(8, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 20;
@@ -388,7 +396,7 @@ namespace {
         ServerPlayer immediate(id, 2002);
         ServerPlayer delayed(id, 2003);
         Level &level = owner.getLevelFor(immediate);
-        level.getChunk(2, 0);
+        loadChunksAround(level, 2, 0);
         level.getBlockActors().loadChunk(2, 0, {}, owner.getCodecContext());
         for (int x = 33; x <= 40; ++x)
             for (int y = 245; y <= 253; ++y)
@@ -435,7 +443,7 @@ namespace {
             player.getAttributes() = ActorAttributes::createPlayerDefaults();
             Level &level = owner.getLevelFor(player);
             for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
-                level.getChunk(4, chunkZ);
+                loadChunksAround(level, 4, chunkZ);
                 level.getBlockActors().loadChunk(4, chunkZ, {}, owner.getCodecContext());
             }
             for (int x = 69; x <= 72; ++x)
@@ -507,7 +515,7 @@ namespace {
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         Level &level = owner.getLevelFor(player);
         for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
-            level.getChunk(4, chunkZ);
+            loadChunksAround(level, 4, chunkZ);
             level.getBlockActors().loadChunk(4, chunkZ, {}, owner.getCodecContext());
         }
         const float edgeZ = 10.0f;
@@ -584,7 +592,7 @@ namespace {
         ServerPlayer locator(id, 7000);
         Level &level = owner.getLevelFor(locator);
         for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
-            level.getChunk(6, chunkZ);
+            loadChunksAround(level, 6, chunkZ);
             level.getBlockActors().loadChunk(6, chunkZ, {}, owner.getCodecContext());
         }
         for (PlayerInputMode mode: {PlayerInputMode::Mouse, PlayerInputMode::Touch, PlayerInputMode::Gamepad}) {
@@ -730,7 +738,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 7360);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(10, 0);
+        loadChunksAround(level, 10, 0);
         level.getBlockActors().loadChunk(10, 0, {}, owner.getCodecContext());
         for (bool wet: {false, true}) {
             for (int x = 164; x <= 168; ++x)
@@ -777,7 +785,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer player(id, 7370);
         Level &level = owner.getLevelFor(player);
-        level.getChunk(11, 0);
+        loadChunksAround(level, 11, 0);
         level.getBlockActors().loadChunk(11, 0, {}, owner.getCodecContext());
         for (int x = 179; x <= 183; ++x)
             for (int y = 249; y <= 253; ++y)
@@ -881,7 +889,7 @@ namespace {
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
         player.getMovementValidator().onMovementEffect(100);
         Level &level = owner.getLevelFor(player);
-        level.getChunk(9, 0);
+        loadChunksAround(level, 9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 100;
@@ -940,7 +948,7 @@ namespace {
         // transition timing only; prediction feedback is tested separately
         player.getMovementValidator().onMovementEffect(100);
         Level &level = owner.getLevelFor(player);
-        level.getChunk(9, 0);
+        loadChunksAround(level, 9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 99;
@@ -1002,7 +1010,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 7100);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(7, 0);
+        loadChunksAround(level, 7, 0);
         level.getBlockActors().loadChunk(7, 0, {}, owner.getCodecContext());
         for (bool ceiling: {false, true}) {
             for (int x = 116; x <= 120; ++x)
@@ -1062,7 +1070,7 @@ namespace {
         ServerPlayer locator(id, 6000);
         Level &level = owner.getLevelFor(locator);
         for (int chunkZ = 0; chunkZ < 2; ++chunkZ) {
-            level.getChunk(5, chunkZ);
+            loadChunksAround(level, 5, chunkZ);
             level.getBlockActors().loadChunk(5, chunkZ, {}, owner.getCodecContext());
         }
         for (bool slab: {false, true}) {
@@ -1118,7 +1126,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 4000);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(4, 0);
+        loadChunksAround(level, 4, 0);
         level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
         for (int scenario = 0; scenario < 5; ++scenario) {
             const BlockState liquid(scenario == 2   ? "minecraft:water"
@@ -1280,7 +1288,7 @@ namespace {
             NetworkIdentifier id;
             ServerPlayer player(id, 4001);
             Level &level = owner.getLevelFor(player);
-            level.getChunk(4, 0);
+            loadChunksAround(level, 4, 0);
             level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
             for (int x = 65; x <= 68; ++x)
                 for (int z = 1; z <= 4; ++z)
@@ -1330,7 +1338,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 3000);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(3, 0);
+        loadChunksAround(level, 3, 0);
         level.getBlockActors().loadChunk(3, 0, {}, owner.getCodecContext());
         int64_t nextId = 3001;
         const auto terrain = [&](const BlockState &floor, const BlockState &body) {
