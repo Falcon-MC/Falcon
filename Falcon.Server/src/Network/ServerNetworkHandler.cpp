@@ -1770,6 +1770,12 @@ metadata.mEntries.push_back(flags3);
     visibleEffects.mLongValue = player.getVisibleEffectsData();
     metadata.mEntries.push_back(visibleEffects);
 
+    EntityDataEntry bedEnterPosition;
+    bedEnterPosition.mId = ActorFlags::BED_ENTER_POSITION_DATA_ID;
+    bedEnterPosition.mFormat = EntityDataFormat::Vector3f;
+    bedEnterPosition.mVector3fValue = player.getBedEnterPosition();
+    metadata.mEntries.push_back(bedEnterPosition);
+
     if (player.isSleeping()) {
         EntityDataEntry bedPosition;
         bedPosition.mId = ActorFlags::BED_POSITION_DATA_ID;
