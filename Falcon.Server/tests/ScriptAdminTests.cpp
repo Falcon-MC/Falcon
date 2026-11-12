@@ -3,6 +3,7 @@
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
+#include "Scripting/ScriptPackConfiguration.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -71,6 +73,29 @@ r.earlyKick = capture(() => admin.kickPlayer(undefined));
 r.serverConstructor = capture(() => new admin.ServerVariables());
 r.dedicated = admin.dedicatedServer instanceof admin.DedicatedServerUtils;
 r.earlySubscribe = capture(() => admin.beforeEvents.asyncPlayerJoin.subscribe(async () => {}));
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "admin:host")
+        return;
+    const host = world.getAllPlayers()[0];
+    r.badNetherNet = capture(() => admin.transferPlayer(host, { netherNetId: "12ab" }));
+    try {
+        admin.transferPlayer(host, { netherNetId: "x" });
+    } catch (e) {
+        r.badNetherNetKind = e.type + ":" + e.index;
+    }
+    r.netherNet = capture(() => admin.transferPlayer(host, { netherNetId: "00042" }));
+    r.netherNetUuid = capture(() => admin.transferPlayer(host, { netherNetId: "0123456789ABCDEF0123456789ABCDEF" }));
+    r.left = host;
+    world.setDynamicProperty("admin", JSON.stringify(r));
+});
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "admin:left")
+        return;
+    r.leftAdd = capture(() => admin.dedicatedServer.allowList.add(r.left));
+    r.leftContains = capture(() => admin.dedicatedServer.allowList.contains(r.left));
+    delete r.left;
+    world.setDynamicProperty("admin", JSON.stringify(r));
+});
 world.afterEvents.worldLoad.subscribe(() => {
     r.variableNames = admin.variables.names.join(",");
     r.secretNames = admin.secrets.names.join(",");
@@ -84,6 +109,8 @@ world.afterEvents.worldLoad.subscribe(() => {
             }));
         r.joinName = event.name;
         r.joinValid = event.isValid();
+        r.persistentId = event.persistentId;
+        r.split = ("splitScreenSlot" in event) + "," + event.splitScreenSlot;
         return new Promise((resolve) => system.run(() => {
             r.allow = capture(() => event.allowJoin());
             world.setDynamicProperty("admin", JSON.stringify(r));
@@ -99,6 +126,12 @@ world.afterEvents.worldLoad.subscribe(() => {
     r.removeAgain = capture(() => list.remove({ name: "Steve" }));
     r.enabled = list.enabled;
     r.badDetails = capture(() => list.contains(5));
+    r.emptyEntry = capture(() => list.add({}));
+    try {
+        list.contains({ name: "", xuid: "" });
+    } catch (e) {
+        r.emptyEntryKind = e.type + ":" + e.index;
+    }
     r.reload = capture(() => list.reloadFile());
     const storage = admin.dedicatedServer.levelStorage;
     storage.saveResume().then(() => { r.resumeFirst = "ok"; }, (e) => { r.resumeFirst = e.name + ": " + e.message; });
@@ -172,6 +205,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
         NetworkIdentifier guest;
         ServerPlayer &player = owner.getPlayers().try_emplace(guest, guest, 2001).first->second;
         player.setName("Guest");
+        player.setPlayFabId("pf-guest");
         engine.startup();
         engine.tick(0);
 
@@ -191,6 +225,22 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
         engine.tick(4);
         require(!intruderJoined && owner.getPlayers().find(intruderId) == owner.getPlayers().end(),
                 "disallowJoin let the player in");
+
+        // a paused world lets the join through without the scripts
+        owner.tick(true);
+        NetworkIdentifier pausedId(std::string("10.0.0.10"), 19132);
+        ServerPlayer &paused = owner.getPlayers().try_emplace(pausedId, pausedId, 2003).first->second;
+        paused.setName("Paused");
+        require(!engine.holdPlayerJoin(paused, []() {}), "a paused world held the join");
+        owner.tick(false);
+
+        NetworkIdentifier hostId(std::string("10.0.0.11"), 19132);
+        ServerPlayer &host = owner.getPlayers().try_emplace(hostId, hostId, 2004).first->second;
+        host.setName("Host");
+        host.setLoginState(ServerPlayer::LoginState::Spawned);
+        engine.emitScriptEvent("admin:host", "");
+        owner.erasePlayer(hostId);
+        engine.emitScriptEvent("admin:left", "");
 
         const std::unique_ptr<json::Value> values = result(owner);
         require(owner.getWorldDynamicProperties().count("blocked") == 0, "the blocked pack ran");
@@ -212,6 +262,20 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
                "execution.");
         expect(*values, "joinName", "Guest");
         expect(*values, "joinValid", "true");
+        expect(*values, "persistentId", "pf-guest");
+        expect(*values, "split", "true,undefined");
+        expect(*values, "emptyEntry", "InvalidArgumentError: Entry data must contain a name and/or a xuid");
+        expect(*values, "emptyEntryKind", "Empty:0");
+        expect(*values, "badNetherNet",
+               "InvalidArgumentError: NetherNet Id provided '12ab' does not match expected format.");
+        expect(*values, "badNetherNetKind", "Unknown:1");
+        expect(*values, "netherNet", "ok");
+        expect(*values, "netherNetUuid", "ok");
+        expect(*values, "leftAdd",
+               "InvalidEntityError: Failed to call 'add' due to Entity being invalid (has the Entity been removed?).");
+        expect(*values, "leftContains",
+               "InvalidEntityError: Failed to call 'contains' due to Entity being invalid (has the Entity been "
+               "removed?).");
         expect(*values, "allow", "ok");
         expect(*values, "lateAllow",
                "DisconnectedError: Tried to disconnect client after client was already disconnected.");
@@ -231,6 +295,19 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
         expect(*values, "query", "true");
         expect(*values, "resumed", "ok");
         require(owner.isAutoSaveEnabled(), "save resume did not turn saving back on");
+
+        // a config folder without default/permissions.json gets the dedicated server's default list
+        const std::filesystem::path fresh = directory / "fresh-config";
+        ScriptPackConfigurationManager configs;
+        configs.load(fresh.string());
+        std::ifstream created(fresh / "default" / "permissions.json");
+        std::stringstream text;
+        text << created.rdbuf();
+        require(text.str().find("\"@minecraft/server-editor\"") != std::string::npos,
+                "the default permissions.json was not written");
+        require(!configs.get("anything").allowsModule("@minecraft/server-net")
+                        && configs.get("anything").allowsModule("@minecraft/server-admin"),
+                "the default permissions.json does not hold the default module list");
     }
 }
 
