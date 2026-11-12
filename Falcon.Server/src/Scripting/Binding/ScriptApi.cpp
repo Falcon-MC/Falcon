@@ -1280,7 +1280,7 @@ bool ScriptApi::keepsSubscribeOptions(const std::string &key) {
            || key == "before.entityItemPickup" || key == "after.entityContainerOpened"
            || key == "after.entityContainerClosed" || key == "after.blockContainerOpened"
            || key == "after.blockContainerClosed" || key == "after.playerStartBreakingBlock"
-           || key == "after.playerCancelBreakingBlock";
+           || key == "after.playerCancelBreakingBlock" || key == "after.entityItemDrop" || _readsEventOptions(key);
 }
 
 void ScriptApi::keepSubscribeOptions(JSValueConst callback, JSValueConst options) {
@@ -1349,9 +1349,11 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
             continue;
         if (!mEmitClock.empty() && !_acceptsClockEvent(callback))
             continue;
-        if (mEmitAccepts != nullptr) {
-            const auto options = mSubscribeOptions.find(JS_VALUE_GET_PTR(callback));
-            if (options != mSubscribeOptions.end() && !(*mEmitAccepts)(options->second))
+        const auto options = mSubscribeOptions.find(JS_VALUE_GET_PTR(callback));
+        if (options != mSubscribeOptions.end()) {
+            const bool accepted = mEmitAccepts != nullptr ? (*mEmitAccepts)(options->second)
+                                                          : _acceptsEventOptions(key, options->second, eventObject);
+            if (!accepted)
                 continue;
         }
 
