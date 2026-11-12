@@ -632,9 +632,12 @@ void ScriptEngine::onEntityHitBlock(Actor &damagingEntity, const Vector3i &posit
     _emit("after.entityHitBlock", "WorldAfterEvents.entityHitBlock", false, [&](ScriptApi &api, JSValue event) {
         JSContext *ctx = api.context();
         JS_SetPropertyStr(ctx, event, "damagingEntity", api.makeEntity(damagingEntity));
-        JS_SetPropertyStr(ctx, event, "hitBlock",
-                          api.makeBlock(api.host().getLevelFor(damagingEntity), position.x, position.y, position.z));
+        Level &level = api.host().getLevelFor(damagingEntity);
+        JS_SetPropertyStr(ctx, event, "hitBlock", api.makeBlock(level, position.x, position.y, position.z));
         JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
+        if (api.surface().has("EntityHitBlockAfterEvent.hitBlockPermutation"))
+            JS_SetPropertyStr(ctx, event, "hitBlockPermutation",
+                              api.makePermutation(level.getBlockState(position.x, position.y, position.z)));
     });
 }
 

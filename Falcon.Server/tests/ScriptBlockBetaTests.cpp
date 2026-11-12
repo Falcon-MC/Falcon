@@ -71,6 +71,11 @@ system.beforeEvents.startup.subscribe((event) => {
     });
 });
 
+world.afterEvents.entityHitBlock.subscribe((e) => {
+    r.hit = e.hitBlockPermutation.type.id + ":" + e.hitBlock.typeId + ":" + e.blockFace;
+    save();
+});
+
 system.afterEvents.scriptEventReceive.subscribe((event) => {
     if (event.id !== "named:schedule")
         return;
@@ -167,9 +172,10 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         World &world = owner.getWorlds().getDefault();
         Level &level = world.getOverworld();
         level.insertChunk(LevelChunk(0, 0));
-        addPlayer(owner, level, "Alex", Vector3f(0.5f, 100.0f, 0.5f));
+        ServerPlayer &player = addPlayer(owner, level, "Alex", Vector3f(0.5f, 100.0f, 0.5f));
         level.setBlock(Vector3i(1, 100, 1), BlockState("test:timer"), false);
         engine.tick(0);
+        engine.onEntityHitBlock(player, Vector3i(1, 100, 1), 1);
 
         engine.emitScriptEvent("named:schedule", "");
         for (int tick = 0; tick < 8; ++tick)
@@ -182,6 +188,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
                "ArgumentOutOfBoundsError:|ok|ok|Error:A block cannot have more than four scheduled events.|"
                "TypeError:Native type conversion failed.");
         expect(*r, "removed", "false");
+        expect(*r, "hit", "test:timer:test:timer:Up");
         expect(*r, "fired", "3:true:false:test:timer:true;5:false:true:test:timer:true;");
     }
 }
