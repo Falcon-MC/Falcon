@@ -31,6 +31,8 @@ namespace {
             return "debug:";
         if (module == "@minecraft/server-gametest")
             return "gametest:";
+        if (module == "@minecraft/diagnostics")
+            return "diagnostics:";
         return "server:";
     }
 }
