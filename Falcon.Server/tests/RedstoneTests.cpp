@@ -125,6 +125,30 @@ namespace {
         require(fixture.signal(chestPosition) == 1, "a full stack of sixteen in a chest did not give 1");
     }
 
+    void comparatorThroughBlock() {
+        RedstoneFixture fixture;
+
+        const Vector3i solid(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z);
+        const Vector3i hopperPosition(ORIGIN.x + 2, ORIGIN.y, ORIGIN.z);
+        fixture.set(solid, VanillaBlocks::STONE().toBlockState());
+        fixture.set(hopperPosition, VanillaBlocks::HOPPER().toBlockState());
+        HopperBlockActor &hopper = fixture.mLevel.getBlockActors().getOrCreate<HopperBlockActor>(hopperPosition);
+        for (int slot = 0; slot < 5; ++slot)
+            hopper.getContainer()->setContainerItem(slot, fixture.mOwner.createItemStack("minecraft:dirt", 64));
+
+        BlockState comparator = VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState();
+        comparator.mStates.putString("minecraft:cardinal_direction", "east");
+        fixture.set(ORIGIN, comparator);
+        RedstoneSystem::onRedstonePlaced(fixture.mOwner, fixture.mLevel, ORIGIN, comparator);
+        require(RedstoneSystem::getComparatorOutput(fixture.mLevel, ORIGIN) == 15,
+                "a comparator did not read a full hopper through a solid block");
+
+        fixture.set(solid, BlockState(BlockNames::AIR));
+        RedstoneSystem::onRedstonePlaced(fixture.mOwner, fixture.mLevel, ORIGIN, comparator);
+        require(RedstoneSystem::getComparatorOutput(fixture.mLevel, ORIGIN) == 0,
+                "a comparator read a hopper two blocks away through air");
+    }
+
     void hopperLock() {
         RedstoneFixture fixture;
 
@@ -210,6 +234,7 @@ int main() {
         EntityDefinitions::initialize();
         stateSignals();
         containerSignals();
+        comparatorThroughBlock();
         hopperLock();
         copperBulb();
         detectorRail();

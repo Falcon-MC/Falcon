@@ -12,7 +12,7 @@ FALCON_REGISTER_BLOCK(CopperBulbBlock, 100);
 namespace {
     const char *STATE_POWERED = "powered_bit";
     const char *STATE_LIT = "lit";
-    // LevelSoundEvent 490 and 491, the bulb sounds 0x1EA | was lit
+    // LevelSoundEvent 490 and 491 (0x1EA | was lit), named in sub_141D35580 through sub_141E2E710 and sub_141E2E7B0
     const char *SOUND_TURN_ON = "block.copper_bulb.turn_on";
     const char *SOUND_TURN_OFF = "block.copper_bulb.turn_off";
 }
