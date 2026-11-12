@@ -125,8 +125,10 @@ namespace {
         if (modules != nullptr && modules->isArray()) {
             for (const std::unique_ptr<json::Value> &module: modules->mArray) {
                 if (module->isObject() && module->get("type") != nullptr && module->get("type")->string() == "script"
-                    && module->get("uuid") != nullptr)
+                    && module->get("uuid") != nullptr) {
                     out.mScriptModuleUuid = module->get("uuid")->string();
+                    out.mScriptModuleVersion = versionText(module->get("version"));
+                }
             }
         }
 

@@ -428,6 +428,28 @@ public:
         return mScriptModuleUuid;
     }
 
+    void setScriptModuleVersion(std::string version) {
+        mScriptModuleVersion = std::move(version);
+    }
+
+    const std::string &scriptModuleVersion() const {
+        return mScriptModuleVersion;
+    }
+
+    const ScriptSurface &diagnosticsSurface() const {
+        return mDiagnosticsSurface;
+    }
+
+    // server-admin's SecretString table, undefined without that module
+    JSValue secretOf() const {
+        return mSecretOf;
+    }
+
+    // requests no script waits on: their ids stay clear of the ones server-net hands out
+    uint32_t nextUntrackedRequestId() {
+        return mUntrackedRequestId++;
+    }
+
     const ScriptSurface &gameTestSurface() const {
         return mGameTestSurface;
     }
@@ -744,6 +766,9 @@ private:
     // @minecraft/debug-utilities: the drawer, the diagnostics manager and the stats functions
     void _installDebugUtilities();
 
+    // @minecraft/diagnostics: the sentry client
+    void _installDiagnostics();
+
     // @minecraft/server-gametest: registrations, the Test helper and the hooks the runner drives
     void _installGameTest();
 
@@ -762,6 +787,7 @@ private:
     ScriptSurface mAdminSurface;
     ScriptSurface mNetSurface;
     ScriptSurface mDebugSurface;
+    ScriptSurface mDiagnosticsSurface;
     ScriptSurface mGameTestSurface;
     ScriptPrivilege mPrivilege = ScriptPrivilege::Normal;
 
@@ -795,7 +821,11 @@ private:
     bool mWantsPacketReceive = false;
     bool mWantsPacketSend = false;
     std::string mScriptModuleUuid;
+    std::string mScriptModuleVersion;
+    JSValue mSecretOf = JS_UNDEFINED;
+    uint32_t mUntrackedRequestId = 0x80000000u;
     std::vector<std::pair<std::string, JSValue>> mDebugExports;
+    std::vector<std::pair<std::string, JSValue>> mDiagnosticsExports;
     std::vector<std::pair<std::string, JSValue>> mGameTestExports;
     JSValue mGameTestHooks = JS_UNDEFINED;
     JSValue mSimulatedPlayerPrototype = JS_UNDEFINED;
