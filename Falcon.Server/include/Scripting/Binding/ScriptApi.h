@@ -352,6 +352,27 @@ public:
         return mPackSettings;
     }
 
+    // the manifest's script module uuid: names its config/ folder
+    void setScriptModuleUuid(std::string uuid) {
+        mScriptModuleUuid = std::move(uuid);
+    }
+
+    const std::string &scriptModuleUuid() const {
+        return mScriptModuleUuid;
+    }
+
+    const ScriptSurface &adminSurface() const {
+        return mAdminSurface;
+    }
+
+    // { classes, make } of the error bootstrap
+    JSValue errors() const {
+        return mErrors;
+    }
+
+    // asyncPlayerJoin of @minecraft/server-admin; false when the pack lacks the module or a subscriber
+    bool emitPlayerJoin(uint32_t token, const std::string &name, const std::string &persistentId);
+
     void forgetEntity(uint64_t runtimeId);
 
     void forgetPlayer(ServerPlayer &player);
@@ -597,6 +618,8 @@ private:
     ScriptSurface mUiSurface;
     ScriptSurface mCommonSurface;
     ScriptSurface mGraphicsSurface;
+    ScriptSurface mAdminSurface;
+    ScriptSurface mNetSurface;
     ScriptPrivilege mPrivilege = ScriptPrivilege::Normal;
 
     struct SteppedBlock {
@@ -617,6 +640,11 @@ private:
     std::vector<std::pair<std::string, JSValue>> mUiExports;
     std::vector<std::pair<std::string, JSValue>> mCommonExports;
     std::vector<std::pair<std::string, JSValue>> mGraphicsExports;
+    std::vector<std::pair<std::string, JSValue>> mAdminExports;
+    std::vector<std::pair<std::string, JSValue>> mNetExports;
+    // what the admin bootstrap hands back to the engine: emitJoin
+    JSValue mAdminHooks = JS_UNDEFINED;
+    std::string mScriptModuleUuid;
 
     // same entity, same object: scripts compare and key maps by them
     std::unordered_map<int64_t, JSValue> mActorObjects;

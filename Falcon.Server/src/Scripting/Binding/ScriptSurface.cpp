@@ -23,6 +23,10 @@ namespace {
             return "common:";
         if (module == "@minecraft/server-graphics")
             return "graphics:";
+        if (module == "@minecraft/server-admin")
+            return "admin:";
+        if (module == "@minecraft/server-net")
+            return "net:";
         return "server:";
     }
 }

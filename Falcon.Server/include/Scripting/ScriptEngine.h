@@ -2,13 +2,16 @@
 
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "Network/NetworkIdentifier.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
+#include "Scripting/ScriptPackConfiguration.h"
 #include "Scripting/ScriptSoundRegistry.h"
 #include "Scripting/ScriptStructureRegistry.h"
 #include "Scripting/WorldClockSystem.h"
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <random>
 #include <string>
@@ -305,6 +308,26 @@ public:
         return mStructures;
     }
 
+    // config/ of the server root: the module permissions, variables and secrets of each script module
+    ScriptPackConfigurationManager &packConfigs() {
+        return mPackConfigs;
+    }
+
+    // asyncPlayerJoin: true when a pack holds the join; done runs once every subscriber settled and no script
+    // refused the player, with the player still connected
+    bool holdPlayerJoin(ServerPlayer &player, std::function<void()> done);
+
+    bool isHoldingJoin(const NetworkIdentifier &id) const;
+
+    // the join event's natives; false once the player left or a script already turned it away
+    bool isJoinPending(uint32_t token) const;
+
+    // refuse: disallowJoin or disconnect; a refused join ends now, an allowed one when every promise settled
+    bool decideJoin(uint32_t token, bool refuse, const std::string &reason);
+
+    // one pack's promises settled; rejected turns the player away
+    void settleJoin(uint32_t token, bool rejected);
+
     // InitializeRegistry for a player who just spawned
     void sendWorldClocks(ServerPlayer &player);
 
@@ -372,6 +395,18 @@ private:
     int64_t mLastClockSync = 0;
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;
+    struct PendingJoin {
+        NetworkIdentifier mId;
+        int32_t mOutstanding = 0;
+        bool mRefused = false;
+        std::function<void()> mDone;
+    };
+
+    void _refuseJoin(PendingJoin &join, const std::string &reason);
+
+    ScriptPackConfigurationManager mPackConfigs;
+    std::map<uint32_t, PendingJoin> mPendingJoins;
+    uint32_t mNextJoinToken = 1;
     int64_t mExecutionDeadlineMs;
     int32_t mGuardDepth = 0;
 };

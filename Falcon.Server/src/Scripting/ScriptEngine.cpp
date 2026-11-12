@@ -21,6 +21,7 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
+#include "Server/ServerPaths.h"
 
 #include <chrono>
 #include <cmath>
@@ -277,6 +278,7 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
         return;
 
     mHost = &host;
+    mPackConfigs.load(ServerPaths::file("config"));
     MobEffectManager::setAddFilter(
             [this](Actor &actor, MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
     MobEffectManager::setAddListener(
@@ -431,6 +433,17 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
         return false;
     }
 
+    // the module permission filter of the plugin manager (sub_147DBA5C0)
+    const ScriptPackConfig &config = mPackConfigs.get(pack.mScriptModuleUuid);
+    for (const ScriptModuleVersion &module: modules.getModules()) {
+        if (!config.allowsModule(module.mName)) {
+            LOG_ERROR(LogAreaID::Script,
+                      "Plugin [%s] - requesting dependency on module [%s] but it is not configured to use it.",
+                      pack.mName.c_str(), module.mName.c_str());
+            return false;
+        }
+    }
+
     for (const ScriptModuleVersion &module: modules.getModules()) {
         if (!module.mImplemented)
             LOG_WARN(LogAreaID::Script, "[%s] module [%s] is not available on this server: importing it fails",
@@ -453,6 +466,7 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
     std::unique_ptr<ScriptApi> api(
             new ScriptApi(context, *mHost, mPlayers, mNativeClassId, pack.mName, canonicalPath(pack.mPath), modules));
     api->setPackSettings(pack.mSettings);
+    api->setScriptModuleUuid(pack.mScriptModuleUuid);
     _arm();
     api->install();
 
@@ -1940,4 +1954,84 @@ void ScriptEngine::onTargetBlockHit(Level &level, const Vector3i &position, cons
         if (source != nullptr)
             JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*source));
     });
+}
+
+bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> done) {
+    if (mHost == nullptr)
+        return false;
+
+    const uint32_t token = mNextJoinToken++;
+    PendingJoin &join = mPendingJoins[token];
+    join.mId = player.getNetworkIdentifier();
+    join.mDone = std::move(done);
+    // counted before the first emit: a callback that settles at once must not finish the join early
+    join.mOutstanding = 1;
+    const std::string persistentId = player.getXuid().empty() ? player.getUuid() : player.getXuid();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        _arm();
+        if (api->emitPlayerJoin(token, player.getName(), persistentId))
+            mPendingJoins[token].mOutstanding++;
+        _pumpJobs();
+    }
+    if (mPendingJoins[token].mOutstanding == 1) {
+        mPendingJoins.erase(token);
+        return false;
+    }
+    settleJoin(token, false);
+    return true;
+}
+
+bool ScriptEngine::isHoldingJoin(const NetworkIdentifier &id) const {
+    for (const auto &entry: mPendingJoins) {
+        if (entry.second.mId == id)
+            return true;
+    }
+    return false;
+}
+
+bool ScriptEngine::isJoinPending(uint32_t token) const {
+    const auto it = mPendingJoins.find(token);
+    return it != mPendingJoins.end() && !it->second.mRefused && mHost != nullptr
+           && mHost->getPlayers().find(it->second.mId) != mHost->getPlayers().end();
+}
+
+void ScriptEngine::_refuseJoin(PendingJoin &join, const std::string &reason) {
+    join.mRefused = true;
+    if (mHost->getPlayers().find(join.mId) == mHost->getPlayers().end())
+        return;
+    mHost->_disconnect(join.mId, DisconnectReason::NotAllowed,
+                       reason.empty() ? std::string("disconnectionScreen.noReason") : reason);
+    mHost->erasePlayer(join.mId);
+}
+
+bool ScriptEngine::decideJoin(uint32_t token, bool refuse, const std::string &reason) {
+    if (!isJoinPending(token))
+        return false;
+    if (refuse) {
+        // the other packs' promises no longer matter
+        _refuseJoin(mPendingJoins[token], reason);
+        mPendingJoins.erase(token);
+    }
+    return true;
+}
+
+void ScriptEngine::settleJoin(uint32_t token, bool rejected) {
+    const auto it = mPendingJoins.find(token);
+    if (it == mPendingJoins.end())
+        return;
+    PendingJoin &join = it->second;
+    if (rejected) {
+        if (isJoinPending(token))
+            _refuseJoin(join, std::string());
+        mPendingJoins.erase(it);
+        return;
+    }
+    if (--join.mOutstanding > 0)
+        return;
+
+    const bool proceed = isJoinPending(token);
+    std::function<void()> done = std::move(join.mDone);
+    mPendingJoins.erase(it);
+    if (proceed && done)
+        done();
 }
