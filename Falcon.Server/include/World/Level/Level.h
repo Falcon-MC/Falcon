@@ -430,6 +430,9 @@ public:
 
     std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor = nullptr);
 
+    // actors others stand on like a block, the mover and its vehicle left out
+    void appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *actor, std::vector<AxisAlignedBB> &out);
+
     void setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash);
 
     void setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state);

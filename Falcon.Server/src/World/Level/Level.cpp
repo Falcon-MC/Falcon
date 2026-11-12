@@ -1551,6 +1551,12 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, c
         }
     }
 
+    appendCollidableActorBoxes(area, actor, boxes);
+    return boxes;
+}
+
+void Level::appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *actor,
+                                       std::vector<AxisAlignedBB> &out) {
     // a mob with minecraft:is_collidable carries actor flag 121 (sub_147C52140): others stand on it like a block
     if (mOwner != nullptr) {
         const Vector3f center((area.mMinX + area.mMaxX) * 0.5f, (area.mMinY + area.mMaxY) * 0.5f,
@@ -1563,11 +1569,9 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, c
                 return;
             const AxisAlignedBB shape = ActorPushSystem::boundingBoxOf(other);
             if (shape.intersectsWith(area))
-                boxes.push_back(shape);
+                out.push_back(shape);
         });
     }
-
-    return boxes;
 }
 
 void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state) {
