@@ -694,7 +694,12 @@ namespace {
         }
     }
 
-    const options = (value, key) => (value !== null && typeof value === "object") ? value : { [key]: value };
+    // sub_14A3D16F0: an options interface takes only an object; undefined and null mean none
+    const optionBag = (value) => {
+        if (value === undefined || value === null) return {};
+        if (typeof value === "object" || typeof value === "function") return value;
+        throw new TypeError("Native optional type conversion failed.");
+    };
     // 1.x: positional defaults; 2.0.0 moved them into options and added label
     const legacy = !native.has("ModalFormData.label");
     const tooltip = (entry, source) => {
@@ -710,27 +715,25 @@ namespace {
         }
         textField(label, placeholder, textFieldOptions) {
             // 1.x takes the default text itself, a raw message included
-            const o = legacy ? { defaultValue: textFieldOptions } : options(textFieldOptions, "defaultValue");
+            const o = legacy ? { defaultValue: textFieldOptions } : optionBag(textFieldOptions);
             const def = o.defaultValue === undefined ? "" : (typeof o.defaultValue === "object" ? ft(o.defaultValue) : String(o.defaultValue));
             this.#data.content.push(tooltip({ type: "input", text: ft(label), placeholder: placeholder === undefined ? "" : ft(placeholder), default: def }, o));
             return this;
         }
         toggle(label, toggleOptions) {
-            const o = options(toggleOptions, "defaultValue");
+            const o = legacy ? { defaultValue: toggleOptions } : optionBag(toggleOptions);
             this.#data.content.push(tooltip({ type: "toggle", text: ft(label), default: o.defaultValue === true }, o));
             return this;
         }
         slider(label, min, max, sliderOptions, defaultValue) {
-            let o = {};
-            if (sliderOptions !== null && typeof sliderOptions === "object") o = sliderOptions;
-            else o = { valueStep: sliderOptions, defaultValue };
+            const o = legacy ? { valueStep: sliderOptions, defaultValue } : optionBag(sliderOptions);
             const step = o.valueStep === undefined ? 1 : Number(o.valueStep);
             const def = o.defaultValue === undefined ? Number(min) : Number(o.defaultValue);
             this.#data.content.push(tooltip({ type: "slider", text: ft(label), min: Number(min), max: Number(max), step, default: def }, o));
             return this;
         }
         dropdown(label, items, dropdownOptions) {
-            const o = options(dropdownOptions, "defaultValueIndex");
+            const o = legacy ? { defaultValueIndex: dropdownOptions } : optionBag(dropdownOptions);
             const def = o.defaultValueIndex === undefined ? 0 : Number(o.defaultValueIndex);
             this.#data.content.push(tooltip({ type: "dropdown", text: ft(label), options: items.map(ft), default: def }, o));
             return this;
@@ -799,7 +802,7 @@ namespace {
         const cls = class {
             constructor(data, options) {
                 if (!check(data)) throw conversion();
-                const writable = options !== undefined && options !== null && options.clientWritable === true;
+                const writable = optionBag(options).clientWritable === true;
                 observed.set(this, { data, writable, callbacks: [], owners: new Set() });
             }
             getData() {
@@ -871,6 +874,7 @@ namespace {
             throw conversion();
         }
     }
+    // a nested options bag (ButtonData.options) is read as given
     const optionsOf = (options) => (options === undefined || options === null) ? {} : options;
     // lists are objects keyed by decimal index with a length, as the game writes the layout
     const list = (entries) => {
@@ -1009,6 +1013,7 @@ namespace {
         constructor(player, title, options) {
             if (!native.isPlayer(player)) throw invalidPlayer(player, "constructor");
             if (typeof title !== "string" && !isRawMessage(title)) throw conversion();
+            optionBag(options);
             this.#title = title;
             this.#screen = new Screen(player, "minecraft:custom_form", "custom_form_data_", (reader, writable) => {
                 const layout = this.#elements.map((build, index) => build(reader, "layout[" + index + "]", writable));
@@ -1027,6 +1032,7 @@ namespace {
         button(label, onClick, options) {
             this.#screen.guard();
             if (typeof onClick !== "function") throw conversion();
+            optionBag(options);
             return this.#add((reader, path, writable) => {
                 writable(path + ".onClick", action(onClick));
                 return layoutButton(reader, label, options);
@@ -1042,14 +1048,14 @@ namespace {
         }
         divider(options) {
             this.#screen.guard();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader) => ({ divider_visible: true, visible: reader.flag(o.visible, true) }));
         }
         dropdown(label, value, items, options) {
             this.#screen.guard();
             writableObservable(value, ObservableNumber, "dropdown value");
             if (!Array.isArray(items)) throw conversion();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader, path, writable) => {
                 writable(path + ".value", binding(value));
                 const entry = { dropdown_visible: true, label: reader.text(label), value: reader.read(value),
@@ -1062,13 +1068,13 @@ namespace {
         }
         header(text, options) {
             this.#screen.guard();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader) =>
                 tooltipOf(reader, { header_visible: true, text: reader.text(text), visible: reader.flag(o.visible, true) }, o.tooltip));
         }
         image(src, pack, options) {
             this.#screen.guard();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             if (o.onClick !== undefined && typeof o.onClick !== "function") throw conversion();
             return this.#add((reader, path, writable) => {
                 const entry = { image_visible: true, image_src: reader.string(src), image_pack: reader.string(pack),
@@ -1083,7 +1089,7 @@ namespace {
         }
         label(text, options) {
             this.#screen.guard();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader) =>
                 tooltipOf(reader, { label_visible: true, text: reader.text(text), visible: reader.flag(o.visible, true) }, o.tooltip));
         }
@@ -1092,7 +1098,7 @@ namespace {
             if (!Array.isArray(buttons)) throw conversion();
             for (const button of buttons)
                 if (button === null || typeof button !== "object" || typeof button.onClick !== "function") throw conversion();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader, path, writable) => {
                 const row = buttons.map((button, index) => {
                     writable(path + ".layout[" + index + "].onClick", action(button.onClick));
@@ -1107,7 +1113,7 @@ namespace {
         slider(label, value, min, max, options) {
             this.#screen.guard();
             writableObservable(value, ObservableNumber, "slider value");
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader, path, writable) => {
                 writable(path + ".value", binding(value));
                 const entry = { slider_visible: true, label: reader.text(label), value: reader.read(value),
@@ -1121,13 +1127,13 @@ namespace {
         }
         spacer(options) {
             this.#screen.guard();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader) => ({ spacer_visible: true, visible: reader.flag(o.visible, true) }));
         }
         textField(label, text, options) {
             this.#screen.guard();
             writableObservable(text, ObservableString, "text");
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader, path, writable) => {
                 writable(path + ".text", binding(text));
                 const entry = { textfield_visible: true, label: reader.text(label), text: reader.read(text),
@@ -1139,7 +1145,7 @@ namespace {
         toggle(label, toggled, options) {
             this.#screen.guard();
             writableObservable(toggled, ObservableBoolean, "toggled value");
-            const o = optionsOf(options);
+            const o = optionBag(options);
             return this.#add((reader, path, writable) => {
                 writable(path + ".toggled", binding(toggled));
                 const entry = { toggle_visible: true, label: reader.text(label), toggled: reader.read(toggled),
@@ -1161,7 +1167,7 @@ namespace {
             if (!native.isPlayer(player)) throw invalidPlayer(player, "constructor");
             if (typeof title !== "string" && !isRawMessage(title)) throw conversion();
             this.#title = title;
-            this.#horizontal = options !== undefined && options !== null && options.showHorizontalButtons === true;
+            this.#horizontal = optionBag(options).showHorizontalButtons === true;
             this.#screen = new Screen(player, "minecraft:message_box", "message_box_data_", (reader, writable) => {
                 const value = { title: reader.text(this.#title), body: reader.text(this.#body),
                     is_vertical: !this.#horizontal, is_horizontal: this.#horizontal };
@@ -1191,7 +1197,7 @@ namespace {
         }
         #button(index, label, options) {
             this.#screen.guard();
-            const o = optionsOf(options);
+            const o = optionBag(options);
             this.#buttons[index] = { label, tooltip: o.tooltip, imageDetails: o.imageDetails };
             return this;
         }
