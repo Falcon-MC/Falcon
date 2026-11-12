@@ -628,6 +628,7 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mGraphicsSurface("@minecraft/server-graphics", moduleOrDefault(mModules, "@minecraft/server-graphics")),
           mAdminSurface("@minecraft/server-admin", moduleOrDefault(mModules, "@minecraft/server-admin")),
           mNetSurface("@minecraft/server-net", moduleOrDefault(mModules, "@minecraft/server-net")),
+          mDebugSurface("@minecraft/debug-utilities", moduleOrDefault(mModules, "@minecraft/debug-utilities")),
           mScheduler(context),
           mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
@@ -636,6 +637,8 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
 ScriptApi::~ScriptApi() {
     mScheduler.clearAll();
     unregisterCustomCommands();
+    mTickJobs.clear();
+    JS_FreeValue(mContext, mDebugTick);
 
     for (auto &entry: mSubscribers) {
         for (JSValue callback: entry.second)
@@ -670,8 +673,8 @@ ScriptApi::~ScriptApi() {
     for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
     JS_FreeValue(mContext, mAdminHooks);
-    for (auto *exports:
-         {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports}) {
+    for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports,
+                         &mDebugExports}) {
         for (auto &entry: *exports)
             JS_FreeValue(mContext, entry.second);
     }
@@ -883,6 +886,9 @@ JSValue ScriptApi::makeInstance(const std::string &className, ScriptNative *data
         prototype = defineClass(className);
 
     JSValue object = JS_NewObjectProtoClass(mContext, prototype, mNativeClassId);
+    data->mHandleCounts = mHandleCounts;
+    data->mHandleCount = &(*mHandleCounts)[className];
+    ++*data->mHandleCount;
     JS_SetOpaque(object, data);
     return object;
 }
@@ -1650,9 +1656,13 @@ void ScriptApi::_installBootstraps() {
     const std::vector<std::string> netErrors = mModules.find("@minecraft/server-net") != nullptr
                                                        ? mNetSurface.errorClasses()
                                                        : std::vector<std::string>();
+    const std::vector<std::string> debugErrors = mModules.find("@minecraft/debug-utilities") != nullptr
+                                                         ? mDebugSurface.errorClasses()
+                                                         : std::vector<std::string>();
     JSValue names = JS_NewArray(mContext);
     uint32_t count = 0;
-    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors, &uiErrors, &adminErrors, &netErrors}) {
+    for (const std::vector<std::string> *list:
+         {&commonErrors, &serverErrors, &uiErrors, &adminErrors, &netErrors, &debugErrors}) {
         for (const std::string &error: *list)
             JS_SetPropertyUint32(mContext, names, count++, string(mContext, error));
     }
@@ -1669,6 +1679,8 @@ void ScriptApi::_installBootstraps() {
         mAdminExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     for (const std::string &error: netErrors)
         mNetExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: debugErrors)
+        mDebugExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     JS_FreeValue(mContext, classes);
 
     JSValue data = JS_NewObject(mContext);
@@ -1751,6 +1763,9 @@ void ScriptApi::_installBootstraps() {
         mAdminHooks = JS_GetPropertyStr(mContext, adminExports, "hooks");
         JS_FreeValue(mContext, adminExports);
     }
+
+    if (mModules.find("@minecraft/debug-utilities") != nullptr)
+        _installDebugUtilities();
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;
@@ -1848,6 +1863,8 @@ const std::vector<std::pair<std::string, JSValue>> &ScriptApi::moduleExports(con
         return mAdminExports;
     if (module == "@minecraft/server-net")
         return mNetExports;
+    if (module == "@minecraft/debug-utilities")
+        return mDebugExports;
     if (module == "@minecraft/common")
         return mCommonExports;
     return mServerExports;

@@ -22,7 +22,7 @@ namespace {
             {"@minecraft/server-gametest", -1, -1, "1.0.0-beta", false},
             {"@minecraft/server-admin", -1, -1, "1.0.0-beta", true},
             {"@minecraft/server-net", -1, -1, "1.0.0-beta", false},
-            {"@minecraft/debug-utilities", -1, -1, "1.0.0-beta", false},
+            {"@minecraft/debug-utilities", -1, -1, "1.0.0-beta", true},
     };
 
     const KnownModule *findKnown(const std::string &name) {

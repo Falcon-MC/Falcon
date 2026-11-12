@@ -19,6 +19,7 @@ MODULES = {
     'server-graphics': ('minecraft-server-graphics-', 'graphics'),
     'server-admin': ('minecraft-server-admin-', 'admin'),
     'server-net': ('minecraft-server-net-', 'net'),
+    'debug-utilities': ('minecraft-debug-utilities-', 'debug'),
 }
 
 # classes, enums and constants the scripting layer binds; anything else stays out of the table
@@ -86,6 +87,7 @@ BOUND = {
     'server-graphics': None,
     'server-admin': None,
     'server-net': None,
+    'debug-utilities': None,
 }
 
 # every signal of these classes is subscribable; their signal and event classes join the bound set

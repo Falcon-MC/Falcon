@@ -467,6 +467,7 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
             new ScriptApi(context, *mHost, mPlayers, mNativeClassId, pack.mName, canonicalPath(pack.mPath), modules));
     api->setPackSettings(pack.mSettings);
     api->setScriptModuleUuid(pack.mScriptModuleUuid);
+    api->setPackUuid(pack.mUuid);
     _arm();
     api->install();
 

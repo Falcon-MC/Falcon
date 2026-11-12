@@ -27,6 +27,8 @@ namespace {
             return "admin:";
         if (module == "@minecraft/server-net")
             return "net:";
+        if (module == "@minecraft/debug-utilities")
+            return "debug:";
         return "server:";
     }
 }
