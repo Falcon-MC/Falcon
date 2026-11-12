@@ -9,4 +9,7 @@ public:
     explicit WallBannerBlock(const Block &block) : WallAttachedBlock(block) {}
 
     static bool matches(const std::string &identifier);
+
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 };

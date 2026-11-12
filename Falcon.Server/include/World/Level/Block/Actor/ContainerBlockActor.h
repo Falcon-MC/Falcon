@@ -280,6 +280,24 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    Tag saveNbt() const override;
+
+    Tag getSpawnCompound() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    // the four sherd or brick item names, kept as the game saves them
+    const Tag *getSherds() const {
+        return mSherds.isList() ? &mSherds : nullptr;
+    }
+
+    void setSherds(const Tag &sherds) {
+        mSherds = sherds;
+    }
+
+private:
+    Tag mSherds;
 };
 
 class JukeboxBlockActor final : public ContainerBlockActor {

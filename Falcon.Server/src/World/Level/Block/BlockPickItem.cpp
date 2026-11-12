@@ -1,11 +1,15 @@
 #include "World/Level/Block/BlockPickItem.h"
 
+#include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/BedBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/DoubleSlabBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <algorithm>
 #include <string_view>
 #include <unordered_map>
 
@@ -138,4 +142,41 @@ void BlockPickItem::restoreBlockData(BlockActor &actor, const ItemStack &item, c
     }
 
     actor.loadNbt(data, context);
+}
+
+void BlockPickItem::applyActorItemData(ItemStack &item, const BlockActor &actor) {
+    if (const BedBlockActor *bed = dynamic_cast<const BedBlockActor *>(&actor)) {
+        item.mDamage = std::max<int>(bed->getColor(), 0);
+        return;
+    }
+
+    // the pot's saved data without its item, animation and loot table (sub_149C52680): the sherds
+    if (const DecoratedPotBlockActor *pot = dynamic_cast<const DecoratedPotBlockActor *>(&actor)) {
+        if (pot->getSherds() == nullptr)
+            return;
+        if (!item.mTag.isCompound())
+            item.mTag = Tag::ofCompound();
+        item.mTag.put("sherds", *pot->getSherds());
+        return;
+    }
+
+    if (dynamic_cast<const BannerBlockActor *>(&actor) != nullptr) {
+        const Tag saved = actor.saveNbt();
+        item.mDamage = saved.getInt("Base", 0);
+
+        Tag data = Tag::ofCompound();
+        const std::vector<std::string> &keys = saved.getKeys();
+        const std::vector<Tag> &values = saved.getValues();
+        for (size_t index = 0; index < keys.size(); ++index) {
+            if (!BlockIdentifier::equalsAny(keys[index], {"x", "y", "z", "id", "isMovable", "Base"}))
+                data.put(keys[index], values[index]);
+        }
+
+        if (data.getKeys().empty())
+            return;
+        if (!item.mTag.isCompound())
+            item.mTag = Tag::ofCompound();
+        for (size_t index = 0; index < data.getKeys().size(); ++index)
+            item.mTag.put(data.getKeys()[index], data.getValues()[index]);
+    }
 }

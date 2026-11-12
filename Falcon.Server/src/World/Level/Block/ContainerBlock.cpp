@@ -276,6 +276,13 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
         }
     }
 
+    // the pot item keeps its sherds in its tag (sub_149C525A0 writes them back on breaking)
+    if (DecoratedPotBlockActor *pot = dynamic_cast<DecoratedPotBlockActor *>(created.get())) {
+        const Tag *sherds = usedItem.mTag.isCompound() ? usedItem.mTag.get("sherds") : nullptr;
+        if (sherds != nullptr && sherds->isList())
+            pot->setSherds(*sherds);
+    }
+
     blockActors.insert(std::move(created));
 }
 

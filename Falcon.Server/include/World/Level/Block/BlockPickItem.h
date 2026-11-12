@@ -15,4 +15,9 @@ namespace BlockPickItem {
     void attachBlockData(ItemStack &item, const BlockActor &actor);
 
     void restoreBlockData(BlockActor &actor, const ItemStack &item, const PacketCodecContext &context);
+
+    // the item's data value and tag the block actor gives, as the block's asItemInstance does: the bed color
+    // (sub_143156620), the banner base color with its other saved fields (sub_143149EA0), the pot sherds
+    // (sub_149C525A0)
+    void applyActorItemData(ItemStack &item, const BlockActor &actor);
 }
