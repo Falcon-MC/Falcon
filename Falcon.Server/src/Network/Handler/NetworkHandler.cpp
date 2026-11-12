@@ -248,7 +248,28 @@ Compressibility NetworkHandler::_toPeerCompressibility(const Packet &packet) {
                                                                            : Compressibility::Compressible;
 }
 
+void NetworkHandler::addLocalSession(const NetworkIdentifier &id) {
+    std::lock_guard<std::mutex> lock(mLocalSessionsMutex);
+    if (mLocalSessions.insert(id).second)
+        mLocalSessionCount.fetch_add(1);
+}
+
+void NetworkHandler::removeLocalSession(const NetworkIdentifier &id) {
+    std::lock_guard<std::mutex> lock(mLocalSessionsMutex);
+    if (mLocalSessions.erase(id) != 0)
+        mLocalSessionCount.fetch_sub(1);
+}
+
+bool NetworkHandler::isLocalSession(const NetworkIdentifier &id) const {
+    if (mLocalSessionCount.load() == 0)
+        return false;
+    std::lock_guard<std::mutex> lock(mLocalSessionsMutex);
+    return mLocalSessions.count(id) != 0;
+}
+
 void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context) {
+    if (isLocalSession(id))
+        return;
     const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
     const PacketCodecContext &session = own != nullptr ? *own : context;
     if (!session.getCodec().supports(packet.getId()))
@@ -280,6 +301,8 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
         return;
 
     for (const NetworkIdentifier &id: ids) {
+        if (isLocalSession(id))
+            continue;
         const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
         const PacketCodecContext &session = own != nullptr ? *own : context;
         if (!session.getCodec().supports(packet.getId()))
@@ -343,7 +366,7 @@ void NetworkHandler::setContextResolver(ContextResolver resolver) {
 
 void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,
                           Compressibility compressibility) {
-    if (mSendHook && !_allowRaw({id}, data))
+    if (isLocalSession(id) || (mSendHook && !_allowRaw({id}, data)))
         return;
     _queueData(id, data, reliability, compressibility);
 }
@@ -362,7 +385,7 @@ void NetworkHandler::_queueData(const NetworkIdentifier &id, const std::string &
 
 void NetworkHandler::sendShared(const NetworkIdentifier &id, const std::shared_ptr<const SharedPacket> &packet,
                                 NetworkPeer::Reliability reliability) {
-    if (packet == nullptr || (mSendHook && !_allowRaw({id}, packet->getPacket())))
+    if (packet == nullptr || isLocalSession(id) || (mSendHook && !_allowRaw({id}, packet->getPacket())))
         return;
 
     // a filter may rewrite the bytes: that copy can't be shared
