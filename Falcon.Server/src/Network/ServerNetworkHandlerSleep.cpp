@@ -78,6 +78,18 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
     wakeUp.mRuntimeActorId = player.getRuntimeId();
     wakeUp.mAction = AnimatePacket::Action::WakeUp;
     mNetworkHandler->send(player.getNetworkIdentifier(), wakeUp, mCodecContext);
+
+    // the client stands itself up the same way on the wake up (sub_1402BE690)
+    Level &level = getLevelFor(player);
+    Vector3i standUp = head;
+    const BlockState bedState = level.getBlockState(head.x, head.y, head.z);
+    if (BedBlock::matches(bedState.mName)) {
+        standUp = Vector3i(head.x, head.y + 1, head.z);
+        Vector3i found;
+        if (BedBlock::findStandUpPosition(level, head, player.getBedEnterPosition(), found))
+            standUp = found;
+    }
+    player.teleport(*this, Vector3f((float) standUp.x + 0.5f, (float) standUp.y + 0.1f, (float) standUp.z + 0.5f));
 }
 
 void ServerNetworkHandler::wakeSleepersAt(const Vector3i &head) {

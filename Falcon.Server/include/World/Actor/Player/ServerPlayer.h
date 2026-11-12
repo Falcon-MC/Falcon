@@ -781,6 +781,15 @@ public:
         mSleeping = false;
     }
 
+    // actor data 133, the position before lying down (sub_143155010)
+    const Vector3f &getBedEnterPosition() const {
+        return mBedEnterPosition;
+    }
+
+    void setBedEnterPosition(const Vector3f &position) {
+        mBedEnterPosition = position;
+    }
+
     void resetSleepCounter() {
         mSleepCounter = 0;
     }
@@ -1185,6 +1194,7 @@ private:
     bool mSleeping = false;
     int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
+    Vector3f mBedEnterPosition;
     bool mHasSpawnPoint = false;
     bool mHasSpawnBlock = false;
     Vector3i mSpawnPoint;

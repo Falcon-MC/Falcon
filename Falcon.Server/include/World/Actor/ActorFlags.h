@@ -84,6 +84,7 @@ public:
     static const int32_t MARK_VARIANT_DATA_ID = 43;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
     static const int32_t BED_POSITION_DATA_ID = 28;
+    static const int32_t BED_ENTER_POSITION_DATA_ID = 133;
     static const int32_t FUSE_LENGTH_DATA_ID = 55;
     static const int32_t AIR_SUPPLY_DATA_ID = 7;
     static const int32_t AIR_SUPPLY_MAX_DATA_ID = 42;
