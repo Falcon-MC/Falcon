@@ -919,9 +919,9 @@ namespace {
             case ProjectileField::Gravity:
                 return JS_NewFloat64(ctx, projectile->mGravity);
             case ProjectileField::HitEntitySound:
-                return optionalText(ctx, projectile->mHitSound);
+                return optionalText(ctx, LevelSoundEventIds::nameOf(projectile->mHitSound));
             case ProjectileField::HitGroundSound:
-                return optionalText(ctx, projectile->mHitGroundSound);
+                return optionalText(ctx, LevelSoundEventIds::nameOf(projectile->mHitGroundSound));
             case ProjectileField::HitParticle:
                 // ParticleType 0 and a type without a name read as undefined (sub_14C6A7B50, 26.60)
                 return optionalText(ctx, ProjectileComponent::particleName(projectile->mParticle));
@@ -978,11 +978,16 @@ namespace {
                 projectile->mGravity = (float) amount;
                 break;
             case ProjectileField::HitEntitySound:
-                projectile->mHitSound = name;
+            case ProjectileField::HitGroundSound: {
+                // undefined clears the sound; a name that maps to Undefined throws, "undefined" too (sub_14C6A5960)
+                const int32_t sound = JS_IsUndefined(value) ? LevelSoundEventIds::UNDEFINED
+                                                            : LevelSoundEventIds::fromName(name);
+                if (sound == LevelSoundEventIds::UNDEFINED && !JS_IsUndefined(value))
+                    return target.mApi->throwError("InvalidArgumentError", "Invalid sound identifier.");
+                (field == ProjectileField::HitEntitySound ? projectile->mHitSound
+                                                          : projectile->mHitGroundSound) = sound;
                 break;
-            case ProjectileField::HitGroundSound:
-                projectile->mHitGroundSound = name;
-                break;
+            }
             case ProjectileField::HitParticle: {
                 // undefined clears the particle, a name without a type throws (sub_14C6A8150, 26.60)
                 const int32_t type = JS_IsUndefined(value) ? 0 : ProjectileComponent::particleType(name);

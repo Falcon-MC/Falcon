@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/LevelSoundEventIds.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Actor/ActorClassRegistry.h"
@@ -491,7 +492,13 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         ProjectileData &data = projectile.getProjectileData();
         const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
-        playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT, hitPosition);
+        // hit_ground_sound (ProjectileComponent::onHit, sub_143CB0330, 26.60); arrow.json defines none and keeps
+        // its bow.hit
+        const int32_t groundSound = projectile.getProjectileComponent().mHitGroundSound;
+        if (groundSound != LevelSoundEventIds::UNDEFINED)
+            playLevelSound(level, LevelSoundEventIds::nameOf(groundSound), hitPosition);
+        else if (!isTrident)
+            playLevelSound(level, LevelSoundEvent::BOW_HIT, hitPosition);
 
         if (isTrident && data.mLoyaltyLevel > 0) {
             data.mReturning = true;
@@ -800,7 +807,10 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     }
 
     Level &level = getLevelFor(projectile);
-    playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT : LevelSoundEvent::BOW_HIT, hitPosition);
+    // hit_sound (sub_143CB0330, 26.60): bow.hit and item.trident.hit in the vanilla definitions
+    const int32_t hitSound = projectile.getProjectileComponent().mHitSound;
+    if (hitSound != LevelSoundEventIds::UNDEFINED)
+        playLevelSound(level, LevelSoundEventIds::nameOf(hitSound), hitPosition);
 
     if (isTrident) {
         data.mHadCollision = true;
