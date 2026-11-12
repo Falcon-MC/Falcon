@@ -2093,6 +2093,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const UpdateClien
 
     if (packet.mHasFilterProfanityChange)
         player->setProfanityFilterEnabled(packet.mFilterProfanityChange);
+    if (packet.mHasGraphicsMode)
+        player->getClientDevice().mGraphicsMode = (int32_t) packet.mGraphicsMode;
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) {

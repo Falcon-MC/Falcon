@@ -5,6 +5,7 @@
 #include "Core/NBT/Tag.h"
 #include "World/Scores/Scoreboard.h"
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -237,6 +238,25 @@ struct ScriptMolangMap : ScriptNative {
     std::vector<Variable> mVariables;
 
     std::string toJson() const;
+};
+
+// a player's FogSettings: the player it reads on every call
+struct ScriptFogRef : ScriptNative {
+    ScriptEntityRef mEntity;
+};
+
+// a CatmullRomSpline or a LinearSpline: only its control points
+struct ScriptSplineRef : ScriptNative {
+    bool mLinear = false;
+    std::vector<std::array<float, 3>> mPoints;
+};
+
+// a read-only record copied out of an entity definition: Seat, FeedItem, FeedItemEffect, EntityDefinitionFeedItem
+struct ScriptRecordRef : ScriptNative {
+    std::unordered_map<std::string, double> mNumbers;
+    std::unordered_map<std::string, std::string> mStrings;
+    float mVector[3] = {0.0f, 0.0f, 0.0f};
+    std::vector<std::shared_ptr<ScriptRecordRef>> mChildren;
 };
 
 namespace ScriptValues {

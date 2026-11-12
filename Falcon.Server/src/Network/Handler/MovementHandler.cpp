@@ -409,6 +409,7 @@ static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const
             scripts.onPlayerInputModeChange(player, previousMode, inputModeName(mode));
     }
 
+    state.mTouchOnlyHotbar = packet.hasInputFlag((int32_t) PlayerAuthInputData::HotbarOnlyTouch);
     state.mMoveX = packet.mRawMoveVectorX;
     state.mMoveY = packet.mRawMoveVectorY;
     state.mJumping = packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping);

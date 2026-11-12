@@ -163,6 +163,7 @@ void ScriptApi::install() {
     _bindWaypoints();
     _bindSounds();
     _bindMolang();
+    _bindFog();
     _bindCommands();
     _installBootstraps();
     _defineEnums();

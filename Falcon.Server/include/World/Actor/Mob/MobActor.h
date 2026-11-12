@@ -44,6 +44,9 @@ class ServerPlayer;
 
 class MobActor : public ServerActor {
 public:
+    // the share of the ageable duration one feed item takes off when its growth is left out
+    static constexpr float DEFAULT_FEED_GROWTH = 0.1f;
+
     bool canFreeze() const override {
         return true;
     }

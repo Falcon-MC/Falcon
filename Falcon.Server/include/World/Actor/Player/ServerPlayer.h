@@ -36,6 +36,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
+class CameraInstructionPacket;
 class ServerNetworkHandler;
 
 class ServerPlayer : public Actor {
@@ -268,7 +269,54 @@ public:
         bool mJumping = false;
         float mMoveX = 0.0f;
         float mMoveY = 0.0f;
+        // PlayerAuthInputData::HotbarOnlyTouch
+        bool mTouchOnlyHotbar = false;
     };
+
+    // the device the client reported in its login client data (sub_143A10DC0, 26.60), graphics mode updated by
+    // UpdateClientOptionsPacket: memory tier clamped to 0-4, Fancy until told otherwise
+    struct ClientDevice {
+        int32_t mMemoryTier = 0;
+        int32_t mMaxViewDistance = 0;
+        int32_t mPlatformType = 0;
+        int32_t mGraphicsMode = 1;
+    };
+
+    ClientDevice &getClientDevice() {
+        return mClientDevice;
+    }
+
+    // the server camera state (sub_14C918000, sub_145EB0C60, 26.60): the first camera instruction creates it unnamed,
+    // a set names it after the preset, a clear puts it back on first person
+    struct CameraState {
+        bool mPresent = false;
+        std::string mPreset;
+    };
+
+    const CameraState &getCameraState() const {
+        return mCameraState;
+    }
+
+    void recordCamera(const CameraInstructionPacket &packet);
+
+    // one entry of the scripted fog stack (sub_142BC95B0, 26.60), bottom first
+    struct FogEntry {
+        std::string mId;
+        std::string mTag;
+    };
+
+    std::vector<FogEntry> &getFogStack() {
+        return mFogStack;
+    }
+
+    // ControlSchemeComponent, LockedPlayerRelativeStrafe until set (sub_145D0FD90)
+    int32_t getControlScheme() const {
+        return mControlScheme;
+    }
+
+    void setControlScheme(int32_t scheme) {
+        mControlScheme = scheme;
+    }
 
     InputState &getInputState() {
         return mInputState;
@@ -1155,6 +1203,10 @@ private:
     bool mIsOp = false;
     bool mFlying = false;
     InputState mInputState;
+    ClientDevice mClientDevice;
+    CameraState mCameraState;
+    std::vector<FogEntry> mFogStack;
+    int32_t mControlScheme = 0;
     ChatStyle mChatStyle;
     bool mHasSimulatedVelocity = false;
     Vector3f mSimulatedVelocity;

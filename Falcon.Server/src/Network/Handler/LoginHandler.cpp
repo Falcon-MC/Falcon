@@ -391,6 +391,12 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     player.setClientSideGenerationCompatible(
             ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
     player.setLocale(request.getLanguageCode());
+    ServerPlayer::ClientDevice &device = player.getClientDevice();
+    const std::string &clientData = request.getClientData();
+    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
+    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
+    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
+    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
     player.readSyncedClientOptions(request.getClientData());
 
     if (owner.getProperties().getNetworkEncryption()) {

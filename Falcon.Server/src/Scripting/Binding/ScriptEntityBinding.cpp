@@ -1,4 +1,5 @@
 #include "Scripting/Binding/ScriptApi.h"
+#include "Protocol/Packets/PlayerUpdateEntityOverridesPacket.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/MobEffect.h"
@@ -28,6 +29,7 @@
 
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/CameraShakePacket.h"
+#include "Protocol/Packets/ClientboundControlSchemeSetPacket.h"
 #include "Protocol/Types/CameraPresets.h"
 
 #include <algorithm>
@@ -1283,6 +1285,31 @@ namespace {
         return target.mApi->runCommand(target.mApi->host().getLevelFor(*target.mActor), target.mActor, line);
     }
 
+    // the entity's inventory component container takes it (sub_14C4ADC70, 26.60)
+    JSValue entityAddItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        // the entity's own getComponent: the inventory component has its own binding path
+        JSValue getComponent = JS_GetPropertyStr(ctx, thisVal, "getComponent");
+        JSValue id = JS_NewString(ctx, "minecraft:inventory");
+        JSValue component = JS_Call(ctx, getComponent, thisVal, 1, &id);
+        JS_FreeValue(ctx, id);
+        JS_FreeValue(ctx, getComponent);
+        if (JS_IsException(component))
+            return component;
+        if (!JS_IsObject(component))
+            return target.mApi->throwError("InvalidEntityComponentError",
+                                           "Attempting to access invalid entity component minecraft:inventory.");
+        JSValue container = JS_GetPropertyStr(ctx, component, "container");
+        JS_FreeValue(ctx, component);
+        if (JS_IsException(container))
+            return container;
+        JSValue add = JS_GetPropertyStr(ctx, container, "addItem");
+        JSValue result = JS_Call(ctx, add, container, argc >= 1 ? 1 : 0, argv);
+        JS_FreeValue(ctx, add);
+        JS_FreeValue(ctx, container);
+        return result;
+    }
+
     JSValue entityAddTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 1)
             return JS_FALSE;
@@ -1735,6 +1762,231 @@ namespace {
     }
 
     const char *const INPUT_MODES[] = {nullptr, "KeyboardAndMouse", "Touch", "Gamepad", "MotionController"};
+
+    JSValue inputGetTouchOnlyHotbar(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ServerPlayer *player = inputOwner(ctx, thisVal);
+        if (player == nullptr)
+            return JS_EXCEPTION;
+        return JS_NewBool(ctx, player->getInputState().mTouchOnlyHotbar);
+    }
+
+    // GraphicsMode and PlatformType by native value (sub_14D819AD0, sub_14C6FFF30, 26.60)
+    const char *const GRAPHICS_MODES[] = {"Simple", "Fancy", "Deferred", "RayTraced"};
+    const char *const PLATFORM_TYPES[] = {"Desktop", "Mobile", "Console"};
+
+    // the overridden entity and its property, with the game's errors (sub_14D5422A0, 26.60)
+    const ActorPropertyDescription *overrideTarget(JSContext *ctx, JSValueConst entity, JSValueConst identifier,
+                                                   ServerActor *&actor, JSValue &error) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptEntityRef *ref = api->native<ScriptEntityRef>(entity);
+        if (ref == nullptr || !JS_IsString(identifier)) {
+            error = JS_ThrowTypeError(ctx, "Native type conversion failed.");
+            return nullptr;
+        }
+        actor = dynamic_cast<ServerActor *>(api->resolveEntity(*ref));
+        if (actor == nullptr) {
+            error = api->throwInvalidEntity("call function", "setPropertyOverrideForEntity", *ref);
+            return nullptr;
+        }
+        const std::string name = toString(ctx, identifier);
+        const ActorPropertyDescription *descriptor = actor->findPropertyDescription(name);
+        if (descriptor == nullptr) {
+            error = api->throwError("Error", "Property \"" + name + "\" does not exist on Entity of type \""
+                                                     + actor->getTypeId() + "\".");
+            return nullptr;
+        }
+        if (!descriptor->mClientSync) {
+            error = api->throwError("Error",
+                                    "To override property \"" + name + "\", it must have client sync enabled.");
+            return nullptr;
+        }
+        return descriptor;
+    }
+
+    void sendOverride(ServerPlayer &player, ServerActor &actor, const ActorPropertyDescription *descriptor,
+                      PlayerUpdateEntityOverrideType type, int32_t intValue, float floatValue, ScriptApi &api) {
+        PlayerUpdateEntityOverridesPacket packet;
+        packet.mActorUniqueId = actor.getUniqueId();
+        packet.mPropertyIndex = descriptor == nullptr ? 0 : descriptor->mIndex;
+        packet.mUpdateType = type;
+        packet.mIntValue = intValue;
+        packet.mFloatValue = floatValue;
+        api.host().sendPacketTo(player.getNetworkIdentifier(), packet);
+    }
+
+    // the value must fit the property: an int truncated then ranged, a float ranged, a bool, an enum name
+    // (sub_14D541720, 26.60)
+    JSValue playerSetPropertyOverride(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        if (argc < 3)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerActor *actor = nullptr;
+        JSValue error = JS_UNDEFINED;
+        const ActorPropertyDescription *descriptor = overrideTarget(ctx, argv[0], argv[1], actor, error);
+        if (descriptor == nullptr)
+            return error;
+
+        bool fits = false;
+        int32_t intValue = 0;
+        float floatValue = 0.0f;
+        PlayerUpdateEntityOverrideType type = PlayerUpdateEntityOverrideType::SetIntOverride;
+        double number = 0.0;
+        switch (descriptor->mType) {
+            case ActorPropertyDescription::Type::Int:
+                if (JS_IsNumber(argv[2]) && JS_ToFloat64(ctx, &number, argv[2]) == 0) {
+                    intValue = (int32_t) (float) number;
+                    fits = intValue >= descriptor->mMinInt && intValue <= descriptor->mMaxInt;
+                }
+                break;
+            case ActorPropertyDescription::Type::Float:
+                if (JS_IsNumber(argv[2]) && JS_ToFloat64(ctx, &number, argv[2]) == 0) {
+                    floatValue = (float) number;
+                    fits = floatValue >= descriptor->mMinFloat && floatValue <= descriptor->mMaxFloat;
+                    type = PlayerUpdateEntityOverrideType::SetFloatOverride;
+                }
+                break;
+            case ActorPropertyDescription::Type::Bool:
+                if (JS_IsBool(argv[2])) {
+                    intValue = JS_ToBool(ctx, argv[2]) == 1 ? 1 : 0;
+                    fits = true;
+                }
+                break;
+            case ActorPropertyDescription::Type::Enum:
+                if (JS_IsString(argv[2])) {
+                    intValue = descriptor->findEnumIndex(toString(ctx, argv[2]));
+                    fits = intValue >= 0;
+                }
+                break;
+        }
+        if (!fits)
+            return target.mApi->throwError("Error", "Provided value does not match the expected type or range for "
+                                                    "property \""
+                                                            + descriptor->mName + "\".");
+        sendOverride(*target.mPlayer, *actor, descriptor, type, intValue, floatValue, *target.mApi);
+        return JS_UNDEFINED;
+    }
+
+    JSValue playerRemovePropertyOverride(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        if (argc < 2)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerActor *actor = nullptr;
+        JSValue error = JS_UNDEFINED;
+        const ActorPropertyDescription *descriptor = overrideTarget(ctx, argv[0], argv[1], actor, error);
+        if (descriptor == nullptr)
+            return error;
+        sendOverride(*target.mPlayer, *actor, descriptor, PlayerUpdateEntityOverrideType::RemoveOverride, 0, 0.0f,
+                     *target.mApi);
+        return JS_UNDEFINED;
+    }
+
+    JSValue playerClearPropertyOverrides(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        const ScriptEntityRef *ref = argc >= 1 ? target.mApi->native<ScriptEntityRef>(argv[0]) : nullptr;
+        if (ref == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ServerActor *actor = dynamic_cast<ServerActor *>(target.mApi->resolveEntity(*ref));
+        if (actor == nullptr)
+            return target.mApi->throwInvalidEntity("call function", "clearPropertyOverridesForEntity", *ref);
+        sendOverride(*target.mPlayer, *actor, nullptr, PlayerUpdateEntityOverrideType::ClearOverrides, 0, 0.0f,
+                     *target.mApi);
+        return JS_UNDEFINED;
+    }
+
+    JSValue playerGetGraphicsMode(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const int32_t mode = entityOf(ctx, thisVal).mPlayer->getClientDevice().mGraphicsMode;
+        return JS_NewString(ctx, mode >= 0 && mode <= 3 ? GRAPHICS_MODES[mode] : GRAPHICS_MODES[1]);
+    }
+
+    // ControlScheme::Scheme in the order the game reflects it (sub_142D31E30, sub_145D0FBB0)
+    const char *const CONTROL_SCHEMES[] = {"LockedPlayerRelativeStrafe", "CameraRelative", "CameraRelativeStrafe",
+                                           "PlayerRelative", "PlayerRelativeStrafe"};
+
+    // the schemes each vanilla camera allows, its default first (sub_145D336F0, sub_145D0E980, 26.60)
+    std::vector<int32_t> allowedControlSchemes(const std::string &preset) {
+        if (preset == "minecraft:free")
+            return {0, 4, 3, 1, 2};
+        if (preset == "minecraft:follow_orbit")
+            return {0, 3, 1};
+        if (preset == "minecraft:fixed_boom")
+            return {0, 1, 2, 4, 3};
+        if (preset == "minecraft:first_person" || preset == "minecraft:third_person"
+            || preset == "minecraft:third_person_front")
+            return {0};
+        return {};
+    }
+
+    JSValue playerGetControlScheme(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const int32_t scheme = entityOf(ctx, thisVal).mPlayer->getControlScheme();
+        return JS_NewString(ctx, CONTROL_SCHEMES[scheme >= 0 && scheme <= 4 ? scheme : 0]);
+    }
+
+    // ScriptPlayer::setControlScheme (sub_14D5E2CB0, 26.60): needs a camera state; no scheme falls back to the
+    // camera's default, a given one must be allowed by the active camera
+    JSValue playerSetControlScheme(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        int32_t scheme = -1;
+        if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+            const std::string name = JS_IsString(argv[0]) ? toString(ctx, argv[0]) : std::string();
+            for (int32_t index = 0; index < 5; ++index) {
+                if (name == CONTROL_SCHEMES[index])
+                    scheme = index;
+            }
+            if (scheme < 0)
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        }
+        const ServerPlayer::CameraState &camera = target.mPlayer->getCameraState();
+        if (!camera.mPresent)
+            return target.mApi->throwError("EngineError", "An internal engine error occurred.");
+        const std::vector<int32_t> allowed = allowedControlSchemes(camera.mPreset);
+        if (scheme < 0) {
+            if (allowed.empty())
+                return target.mApi->throwError("EngineError", "An internal engine error occurred.");
+            scheme = allowed.front();
+        } else if (std::find(allowed.begin(), allowed.end(), scheme) == allowed.end()) {
+            return target.mApi->throwError("InvalidArgumentError", std::string("Invalid value passed. Control Scheme '")
+                                                                           + CONTROL_SCHEMES[scheme]
+                                                                           + "' is not allowed for current camera: ["
+                                                                           + camera.mPreset + "]");
+        }
+        target.mPlayer->setControlScheme(scheme);
+        ClientboundControlSchemeSetPacket packet;
+        packet.mScheme = (ControlScheme) scheme;
+        target.mApi->host().sendPacketTo(target.mPlayer->getNetworkIdentifier(), packet);
+        return JS_UNDEFINED;
+    }
+
+    JSValue playerGetClientSystemInfo(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const EntityTarget target = entityOf(ctx, thisVal);
+        ScriptPlayerPart *part = new ScriptPlayerPart();
+        part->mHandle = (uint32_t) target.mRef->mId;
+        part->mSlot = "clientSystemInfo";
+        return target.mApi->makeInstance("ClientSystemInfo", part);
+    }
+
+    ServerPlayer *clientInfoOwner(JSContext *ctx, JSValueConst thisVal) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal);
+        ServerPlayer *player = part == nullptr ? nullptr : api->resolvePlayerByHandle(part->mHandle);
+        if (player == nullptr)
+            api->throwError("InvalidEntityError", "The player has left.");
+        return player;
+    }
+
+    // magic 0: maxRenderDistance, 1: platformType, 2: locale
+    JSValue clientInfoGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        ServerPlayer *player = clientInfoOwner(ctx, thisVal);
+        if (player == nullptr)
+            return JS_EXCEPTION;
+        const ServerPlayer::ClientDevice &device = player->getClientDevice();
+        if (magic == 0)
+            return JS_NewInt32(ctx, device.mMaxViewDistance);
+        if (magic == 1)
+            return JS_NewString(ctx, device.mPlatformType >= 0 && device.mPlatformType <= 2
+                                             ? PLATFORM_TYPES[device.mPlatformType]
+                                             : PLATFORM_TYPES[0]);
+        return string(ctx, player->getLocale());
+    }
 
     JSValue inputGetLastMode(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ServerPlayer *player = inputOwner(ctx, thisVal);
@@ -2324,6 +2576,7 @@ namespace {
 
     void sendCamera(JSContext *ctx, ServerPlayer &player, const CameraInstructionPacket &packet) {
         ScriptApi::fromContext(ctx)->host().sendPacketTo(player.getNetworkIdentifier(), packet);
+        player.recordCamera(packet);
     }
 
     // ScriptCamera::setCamera (sub_14C871D00): the preset, then whichever options the bag holds
@@ -2485,6 +2738,174 @@ namespace {
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         if (error != nullptr)
             return api->throwError("Error", error);
+        if (player != nullptr)
+            sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // an array whose entries the callback reads; anything else fails the conversion
+    template <typename Read>
+    bool readArray(JSContext *ctx, JSValueConst list, Read read) {
+        if (!JS_IsArray(list))
+            return false;
+        uint32_t length = 0;
+        JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+        JS_ToUint32(ctx, &length, lengthValue);
+        JS_FreeValue(ctx, lengthValue);
+        bool ok = true;
+        for (uint32_t i = 0; ok && i < length; ++i) {
+            JSValue entry = JS_GetPropertyUint32(ctx, list, i);
+            ok = read(entry);
+            JS_FreeValue(ctx, entry);
+        }
+        return ok;
+    }
+
+    bool readField(JSContext *ctx, JSValueConst object, const char *key, double &out) {
+        JSValue value = JS_GetPropertyStr(ctx, object, key);
+        const bool ok = readNumber(ctx, value, out);
+        JS_FreeValue(ctx, value);
+        return ok;
+    }
+
+    // an absent easing keeps the previous frame's, starting from Linear
+    bool readFrameEase(JSContext *ctx, JSValueConst frame, CameraEase &ease) {
+        JSValue value = JS_GetPropertyStr(ctx, frame, "easingFunc");
+        const bool ok = JS_IsUndefined(value) || readEase(ctx, value, ease);
+        JS_FreeValue(ctx, value);
+        return ok;
+    }
+
+    ScriptSplineRef *splineOf(JSContext *ctx, JSValueConst value) {
+        return ScriptApi::fromContext(ctx)->native<ScriptSplineRef>(value);
+    }
+
+    JSValue splineConstructor(JSContext *ctx, JSValueConst, int, JSValueConst *, bool linear) {
+        auto *spline = new ScriptSplineRef();
+        spline->mLinear = linear;
+        return ScriptApi::fromContext(ctx)->makeInstance(linear ? "LinearSpline" : "CatmullRomSpline", spline);
+    }
+
+    JSValue catmullRomConstructor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        return splineConstructor(ctx, thisVal, argc, argv, false);
+    }
+
+    JSValue linearConstructor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        return splineConstructor(ctx, thisVal, argc, argv, true);
+    }
+
+    JSValue splineGetControlPoints(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ScriptSplineRef *spline = splineOf(ctx, thisVal);
+        JSValue list = JS_NewArray(ctx);
+        if (spline != nullptr) {
+            for (size_t i = 0; i < spline->mPoints.size(); ++i) {
+                const std::array<float, 3> &point = spline->mPoints[i];
+                JS_SetPropertyUint32(ctx, list, (uint32_t) i, vector3(ctx, point[0], point[1], point[2]));
+            }
+        }
+        return list;
+    }
+
+    JSValue splineSetControlPoints(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ScriptSplineRef *spline = splineOf(ctx, thisVal);
+        std::vector<std::array<float, 3>> points;
+        const bool ok = spline != nullptr && argc >= 1 && readArray(ctx, argv[0], [&](JSValueConst entry) {
+                            Vector3f point;
+                            if (!readVector3f(ctx, entry, point))
+                                return false;
+                            points.push_back({point.x, point.y, point.z});
+                            return true;
+                        });
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        spline->mPoints = std::move(points);
+        return JS_UNDEFINED;
+    }
+
+    // frames sorted by time, the first at 0 and each over 0.05 s after the previous one
+    template <typename Frame>
+    const char *checkFrames(std::vector<Frame> &frames, float Frame::*time, const char *first, const char *gap) {
+        std::stable_sort(frames.begin(), frames.end(),
+                         [time](const Frame &a, const Frame &b) { return a.*time < b.*time; });
+        if (!frames.empty() && frames.front().*time > 0.0f)
+            return first;
+        for (size_t i = 1; i < frames.size(); ++i) {
+            if (frames[i].*time <= frames[i - 1].*time + 0.05f)
+                return gap;
+        }
+        return nullptr;
+    }
+
+    // ScriptCamera::playAnimation (sub_14C90B920, 26.60): rotation frames, then progress frames with alpha
+    // clamped to [0, 1], then the curve size
+    JSValue cameraPlayAnimation(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptSplineRef *spline = argc >= 1 ? splineOf(ctx, argv[0]) : nullptr;
+        const JSValueConst options = argc >= 2 ? argv[1] : JS_UNDEFINED;
+        if (spline == nullptr || !JS_IsObject(options))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        CameraInstructionPacket packet;
+        packet.mHasSplineInstruction = true;
+        CameraSplineInstruction &instruction = packet.mSplineInstruction;
+        double total = 0.0;
+        bool ok = readField(ctx, options, "totalTimeSeconds", total);
+        instruction.mTotalTime = (float) total;
+
+        JSValue animation = JS_GetPropertyStr(ctx, options, "animation");
+        JSValue progress = JS_IsObject(animation) ? JS_GetPropertyStr(ctx, animation, "progressKeyFrames")
+                                                  : JS_UNDEFINED;
+        JSValue rotation = JS_IsObject(animation) ? JS_GetPropertyStr(ctx, animation, "rotationKeyFrames")
+                                                  : JS_UNDEFINED;
+        CameraEase ease = CameraEase::Linear;
+        ok = ok && readArray(ctx, rotation, [&](JSValueConst frame) {
+                 CameraSplineRotationOption option;
+                 double seconds = 0.0;
+                 JSValue value = JS_GetPropertyStr(ctx, frame, "rotation");
+                 const bool read = JS_IsObject(frame) && readVector3f(ctx, value, option.mKeyFrameValues)
+                                   && readField(ctx, frame, "timeSeconds", seconds) && readFrameEase(ctx, frame, ease);
+                 JS_FreeValue(ctx, value);
+                 option.mKeyFrameTimes = (float) seconds;
+                 option.mEase = ease;
+                 instruction.mRotationOption.push_back(option);
+                 return read;
+             });
+        ease = CameraEase::Linear;
+        ok = ok && readArray(ctx, progress, [&](JSValueConst frame) {
+                 CameraSplineProgressOption option;
+                 double alpha = 0.0, seconds = 0.0;
+                 const bool read = JS_IsObject(frame) && readField(ctx, frame, "alpha", alpha)
+                                   && readField(ctx, frame, "timeSeconds", seconds) && readFrameEase(ctx, frame, ease);
+                 option.mValue = std::min(1.0f, std::max(0.0f, (float) alpha));
+                 option.mTime = (float) seconds;
+                 option.mEase = ease;
+                 instruction.mProgressKeyFrames.push_back(option);
+                 return read;
+             });
+        JS_FreeValue(ctx, rotation);
+        JS_FreeValue(ctx, progress);
+        JS_FreeValue(ctx, animation);
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        const char *error = checkFrames(instruction.mRotationOption, &CameraSplineRotationOption::mKeyFrameTimes,
+                                        "First rotation key frame must be at time 0.0",
+                                        "Time between rotation frames must be greater than 0.05");
+        if (error == nullptr)
+            error = checkFrames(instruction.mProgressKeyFrames, &CameraSplineProgressOption::mTime,
+                                "First progress key frame must be at time 0.0",
+                                "Time between progress frames must be greater than 0.05");
+        if (error == nullptr && spline->mLinear && spline->mPoints.size() < 2)
+            error = "Linear needs at least 2 control points";
+        if (error == nullptr && !spline->mLinear && spline->mPoints.size() < 3)
+            error = "CatmullRom needs at least 3 control points";
+        if (error != nullptr)
+            return api->throwError("Error", error);
+
+        instruction.mType = spline->mLinear ? CameraSplineType::Linear : CameraSplineType::CatmullRom;
+        for (const std::array<float, 3> &point: spline->mPoints)
+            instruction.mCurve.emplace_back(point[0], point[1], point[2]);
         if (player != nullptr)
             sendCamera(ctx, *player, packet);
         return JS_UNDEFINED;
@@ -2890,6 +3311,7 @@ void ScriptApi::_bindEntity() {
     method(entity, "Entity", "extinguishFire", entityExtinguishFire, 1);
     method(entity, "Entity", "playAnimation", entityPlayAnimation, 2);
     method(entity, "Entity", "runCommand", entityRunCommand, 1);
+    method(entity, "Entity", "addItem", entityAddItem, 1);
     method(entity, "Entity", "addTag", entityAddTag, 1);
     method(entity, "Entity", "removeTag", entityRemoveTag, 1);
     method(entity, "Entity", "hasTag", entityHasTag, 1);
@@ -2936,12 +3358,26 @@ void ScriptApi::_bindEntity() {
 
     JSValue input = defineClass("InputInfo");
     property(input, "InputInfo", "lastInputModeUsed", inputGetLastMode);
+    property(input, "InputInfo", "touchOnlyAffectsHotbar", inputGetTouchOnlyHotbar);
     method(input, "InputInfo", "getButtonState", inputGetButtonState, 1);
     method(input, "InputInfo", "getMovementVector", inputGetMovementVector, 0);
 }
 
 void ScriptApi::_bindPlayer() {
     JSValue player = defineClass("Player");
+    property(player, "Player", "graphicsMode", playerGetGraphicsMode);
+    method(player, "Player", "getControlScheme", playerGetControlScheme, 0);
+    method(player, "Player", "setControlScheme", playerSetControlScheme, 1);
+    method(player, "Player", "setPropertyOverrideForEntity", playerSetPropertyOverride, 3);
+    method(player, "Player", "removePropertyOverrideForEntity", playerRemovePropertyOverride, 2);
+    method(player, "Player", "clearPropertyOverridesForEntity", playerClearPropertyOverrides, 1);
+    property(player, "Player", "clientSystemInfo", playerGetClientSystemInfo);
+    if (mSurface.has("ClientSystemInfo")) {
+        JSValue info = defineClass("ClientSystemInfo");
+        propertyMagic(info, "ClientSystemInfo", "maxRenderDistance", clientInfoGet, 0);
+        propertyMagic(info, "ClientSystemInfo", "platformType", clientInfoGet, 1);
+        propertyMagic(info, "ClientSystemInfo", "locale", clientInfoGet, 2);
+    }
     property(player, "Player", "name", playerGetName);
     property(player, "Player", "persistentId", playerGetPersistentId);
     property(player, "Player", "level", playerGetLevel);
@@ -3008,6 +3444,13 @@ void ScriptApi::_bindPlayer() {
     method(camera, "Camera", "attachToEntity", cameraAttachToEntity, 1);
     method(camera, "Camera", "addShake", cameraAddShake, 1);
     method(camera, "Camera", "stopShaking", cameraStopShaking, 0);
+    method(camera, "Camera", "playAnimation", cameraPlayAnimation, 2);
+    if (mSurface.has("CatmullRomSpline")) {
+        JSValue catmullRom = defineClass("CatmullRomSpline", catmullRomConstructor, 0);
+        property(catmullRom, "CatmullRomSpline", "controlPoints", splineGetControlPoints, splineSetControlPoints);
+        JSValue linear = defineClass("LinearSpline", linearConstructor, 0);
+        property(linear, "LinearSpline", "controlPoints", splineGetControlPoints, splineSetControlPoints);
+    }
 
     JSValue permissions = defineClass("PlayerInputPermissions");
     method(permissions, "PlayerInputPermissions", "setPermissionCategory", inputPermissionSet, 2);
