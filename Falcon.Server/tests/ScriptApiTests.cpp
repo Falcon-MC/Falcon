@@ -432,7 +432,9 @@ system.runTimeout(() => {
     const feed = horse.getComponent("healable").getFeedItems();
     r.feed = [feed.length, feed[0] instanceof FeedItem, feed[0].item, feed[0].healAmount, feed[0].resultItem,
               feed[0].getEffects().length].join(":");
-    const calf = overworld.getEntities({ type: "minecraft:cow" }).find((cow) => cow.hasComponent("ageable"));
+    // the fixture's cow grew up above: its born event makes it a calf again
+    const calf = overworld.getEntities({ type: "minecraft:cow" })[0];
+    calf.triggerEvent("minecraft:entity_born");
     const ageable = calf.getComponent("ageable");
     r.ageable = ageable.getFeedItems().map((item) => item.item + "@" + (item.growth === Math.fround(0.1))).join("|")
         + ":" + ageable.growUp.eventName + ":" + (ageable.growUp instanceof Trigger);
