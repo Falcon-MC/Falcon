@@ -527,6 +527,12 @@ system.runTimeout(() => {
         from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } }); return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
     manager.removeTickingArea("test:area");
     r.tickingRemoved = manager.hasTickingArea("test:area");
+    const propertyError = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ": " + e.message; } };
+    r.propertyChecks = [propertyError(() => cow.setProperty("test:none", 1)),
+                        propertyError(() => cow.setProperty("minecraft:climate_variant", 3)),
+                        propertyError(() => cow.setProperty("minecraft:climate_variant", "hot")),
+                        propertyError(() => cow.setProperty("minecraft:climate_variant", "warm")),
+                        cow.getProperty("minecraft:climate_variant")].join("|");
     r.killed = cow.kill();
   } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
     world.setDynamicProperty("entities", JSON.stringify(r));
@@ -2694,6 +2700,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "cancelledEffect", "true");
         expect(e, "effects", "speed");
         expect(e, "removedEffect", "false");
+        expect(e, "propertyChecks",
+               "InvalidArgumentError: Invalid value passed to argument [0]. Property \"test:none\" does not exist on "
+               "Entity of type \"minecraft:cow\".|InvalidArgumentError: Invalid type passed to argument [0]. Expected "
+               "type: string property|InvalidArgumentError: Invalid type passed to argument [1]. Expected type: enum "
+               "property|ok|warm");
         expect(e, "aabb", "true:true");
         expect(e, "sneaking", "true");
         expect(e, "hurt", "true");
