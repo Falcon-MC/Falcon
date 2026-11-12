@@ -3,8 +3,9 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Network/NetworkIdentifier.h"
-#include "Scripting/GameTestRunner.h"
+#include "Protocol/MinecraftPacketIds.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
+#include "Scripting/GameTestRunner.h"
 #include "Scripting/ScriptPackConfiguration.h"
 #include "Scripting/ScriptSoundRegistry.h"
 #include "Scripting/ScriptStructureRegistry.h"
@@ -337,6 +338,15 @@ public:
 
     // one pack's promises settled; rejected turns the player away
     void settleJoin(uint32_t token, bool rejected);
+
+    // beforeEvents.packetReceive of @minecraft/server-net; true when a script cancelled it
+    bool beforePacketReceive(const NetworkIdentifier &id, MinecraftPacketIds packetId, size_t size);
+
+    // beforeEvents.packetSend; true when a script cancelled it for every recipient
+    bool beforePacketSend(const std::vector<NetworkIdentifier> &recipients, MinecraftPacketIds packetId);
+
+    // a pack subscribed or unsubscribed: the send hook is only installed while one listens
+    void updatePacketHooks();
 
     // InitializeRegistry for a player who just spawned
     void sendWorldClocks(ServerPlayer &player);

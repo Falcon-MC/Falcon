@@ -1636,12 +1636,6 @@ import { ActionFormData } from "@minecraft/server-ui";
 world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("undeclared", "ran"));
 )JS";
 
-    const char *const NOT_IMPLEMENTED = R"JS(
-import { world } from "@minecraft/server";
-import { http } from "@minecraft/server-net";
-world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("net", "ran"));
-)JS";
-
     const char *const NEVER_RUNS = R"JS(
 import { world } from "@minecraft/server";
 world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected", "ran"));
@@ -1773,8 +1767,6 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writePack(packs, "legacy", "{\"module_name\": \"@minecraft/server\", \"version\": \"1.8.0\"}",
                   std::string(PRELUDE) + LEGACY);
         writePack(packs, "undeclared", server2, UNDECLARED);
-        writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
-                  NOT_IMPLEMENTED);
         writePack(packs, "badversion", "{\"module_name\": \"@minecraft/server\", \"version\": \"2.99.0\"}", NEVER_RUNS);
         writePack(packs, "unknown",
                   server2 + ", {\"module_name\": \"@minecraft/server-unknown\", \"version\": \"1.0.0\"}", NEVER_RUNS);
@@ -3192,7 +3184,6 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
         const auto &properties = owner.getWorldDynamicProperties();
         require(properties.find("undeclared") == properties.end(), "an undeclared module was importable");
-        require(properties.find("net") == properties.end(), "an unimplemented module was importable");
         require(properties.find("rejected") == properties.end(), "a pack with an invalid manifest ran");
     }
 }

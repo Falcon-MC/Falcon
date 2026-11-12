@@ -14,12 +14,14 @@
 #include "Scripting/Binding/ScriptNatives.h"
 #include "Scripting/Binding/ScriptSurface.h"
 #include "Scripting/ScriptModules.h"
+#include "Scripting/ScriptPackConfiguration.h"
 #include "Scripting/ScriptScheduler.h"
 
 #include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -49,6 +51,8 @@ struct ScriptSoundOptions {
 };
 
 // one behavior pack's scripts: its own context, module versions and official surface
+class ScriptNetService;
+
 class ScriptApi {
 public:
     static constexpr const char *SCRIPT_EVENT_KEY = "system.after.scriptEventReceive";
@@ -421,6 +425,42 @@ public:
         return mAdminSurface;
     }
 
+    const ScriptSurface &netSurface() const {
+        return mNetSurface;
+    }
+
+    // module_permissions of @minecraft/server-net, read when the module was installed
+    const ScriptNetModuleConfig &netConfig() const {
+        return mNetConfig;
+    }
+
+    ScriptNetService &netService();
+
+    // { httpDone, httpFail, wsOpened, ... } of the net bootstrap
+    JSValue netHooks() const {
+        return mNetHooks;
+    }
+
+    void setPacketInterest(bool receive, bool interested) {
+        (receive ? mWantsPacketReceive : mWantsPacketSend) = interested;
+    }
+
+    bool wantsPacketReceive() const {
+        return mWantsPacketReceive;
+    }
+
+    bool wantsPacketSend() const {
+        return mWantsPacketSend;
+    }
+
+    // beforeEvents.packetReceive and packetSend of @minecraft/server-net; true when cancelled
+    bool emitPacketReceive(const char *packetId, size_t size, ServerPlayer *sender);
+
+    bool emitPacketSend(const char *packetId, const std::vector<ServerPlayer *> &recipients);
+
+    // an object of no official class holding data for the natives
+    JSValue makeOpaque(ScriptNative *data);
+
     // { classes, make } of the error bootstrap
     JSValue errors() const {
         return mErrors;
@@ -730,6 +770,11 @@ private:
     std::vector<std::pair<std::string, JSValue>> mNetExports;
     // what the admin bootstrap hands back to the engine: emitJoin
     JSValue mAdminHooks = JS_UNDEFINED;
+    JSValue mNetHooks = JS_UNDEFINED;
+    ScriptNetModuleConfig mNetConfig;
+    std::unique_ptr<ScriptNetService> mNetService;
+    bool mWantsPacketReceive = false;
+    bool mWantsPacketSend = false;
     std::string mScriptModuleUuid;
     std::vector<std::pair<std::string, JSValue>> mDebugExports;
     std::vector<std::pair<std::string, JSValue>> mGameTestExports;

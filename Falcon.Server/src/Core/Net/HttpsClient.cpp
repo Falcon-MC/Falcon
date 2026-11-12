@@ -1,337 +1,232 @@
 #include "Core/Net/HttpsClient.h"
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <wincrypt.h>
-#undef X509_NAME
-#undef X509_EXTENSIONS
-#undef PKCS7_ISSUER_AND_SERIAL
-#undef PKCS7_SIGNER_INFO
-#undef OCSP_REQUEST
-#undef OCSP_RESPONSE
-#else
-
-#include <netdb.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <sys/time.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-
-#endif
-
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Net/NetStream.h"
+#include "Core/Net/NetUri.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
-#include <cstring>
-
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/x509.h>
-#include <openssl/x509v3.h>
-
-#ifdef _WIN32
-typedef SOCKET FalconHttpSocket;
-#define FALCON_HTTP_INVALID_SOCKET INVALID_SOCKET
-#define FALCON_HTTP_CLOSE_SOCKET ::closesocket
-#else
-typedef int FalconHttpSocket;
-#define FALCON_HTTP_INVALID_SOCKET (-1)
-#define FALCON_HTTP_CLOSE_SOCKET ::close
-#endif
 
 namespace {
+    const size_t MAX_GET_RESPONSE_SIZE = 1024 * 1024;
+    const size_t MAX_HEAD_SIZE = 64 * 1024;
 
-    const size_t MAX_RESPONSE_SIZE = 1024 * 1024;
+    std::string lower(std::string text) {
+        for (char &c: text)
+            c = (char) std::tolower((unsigned char) c);
+        return text;
+    }
 
-    bool parseUrl(const std::string &url, std::string &host, std::string &port, std::string &path) {
-        const std::string scheme = "https://";
-        if (url.compare(0, scheme.size(), scheme) != 0)
+    std::string trim(const std::string &text) {
+        size_t start = 0;
+        size_t end = text.size();
+        while (start < end && (text[start] == ' ' || text[start] == '\t'))
+            ++start;
+        while (end > start && (text[end - 1] == ' ' || text[end - 1] == '\t'))
+            --end;
+        return text.substr(start, end - start);
+    }
+
+    const std::string *findHeader(const HttpsClient::Headers &headers, const std::string &name) {
+        for (const auto &header: headers) {
+            if (lower(header.first) == name)
+                return &header.second;
+        }
+        return nullptr;
+    }
+
+    bool fill(NetStream &stream, std::string &buffer) {
+        char chunk[16384];
+        const int read = stream.read(chunk, sizeof(chunk));
+        if (read <= 0)
             return false;
-
-        const size_t authorityStart = scheme.size();
-        size_t authorityEnd = url.find('/', authorityStart);
-        if (authorityEnd == std::string::npos) {
-            path = "/";
-            authorityEnd = url.size();
-        } else {
-            path = url.substr(authorityEnd);
-        }
-
-        std::string authority = url.substr(authorityStart, authorityEnd - authorityStart);
-        if (authority.empty())
-            return false;
-
-        const size_t colon = authority.find(':');
-        if (colon == std::string::npos) {
-            host = authority;
-            port = "443";
-        } else {
-            host = authority.substr(0, colon);
-            port = authority.substr(colon + 1);
-        }
-
-        return !host.empty() && !port.empty();
-    }
-
-    void initialiseSockets() {
-#ifdef _WIN32
-        static bool started = false;
-        if (started)
-            return;
-
-        WSADATA data;
-        WSAStartup(MAKEWORD(2, 2), &data);
-        started = true;
-#endif
-    }
-
-    void setSocketBlocking(FalconHttpSocket descriptor, bool blocking) {
-#ifdef _WIN32
-        u_long mode = blocking ? 0 : 1;
-        ioctlsocket(descriptor, FIONBIO, &mode);
-#else
-        int flags = fcntl(descriptor, F_GETFL, 0);
-        if (flags < 0)
-            return;
-
-        if (blocking)
-            flags &= ~O_NONBLOCK;
-        else
-            flags |= O_NONBLOCK;
-
-        fcntl(descriptor, F_SETFL, flags);
-#endif
-    }
-
-    void setSocketTimeouts(FalconHttpSocket descriptor, int seconds) {
-#ifdef _WIN32
-        DWORD milliseconds = (DWORD) (seconds * 1000);
-        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, (const char *) &milliseconds, sizeof(milliseconds));
-        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, (const char *) &milliseconds, sizeof(milliseconds));
-#else
-        struct timeval value;
-        value.tv_sec = seconds;
-        value.tv_usec = 0;
-        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &value, sizeof(value));
-        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &value, sizeof(value));
-#endif
-    }
-
-    FalconHttpSocket connectWithTimeout(const std::string &host, const std::string &port, int seconds) {
-        initialiseSockets();
-
-        struct addrinfo hints;
-        std::memset(&hints, 0, sizeof(hints));
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-
-        struct addrinfo *results = nullptr;
-        if (getaddrinfo(host.c_str(), port.c_str(), &hints, &results) != 0)
-            return FALCON_HTTP_INVALID_SOCKET;
-
-        FalconHttpSocket connected = FALCON_HTTP_INVALID_SOCKET;
-
-        for (struct addrinfo *entry = results; entry != nullptr; entry = entry->ai_next) {
-            FalconHttpSocket descriptor = socket(entry->ai_family, entry->ai_socktype, entry->ai_protocol);
-            if (descriptor == FALCON_HTTP_INVALID_SOCKET)
-                continue;
-
-            setSocketBlocking(descriptor, false);
-
-            bool established = connect(descriptor, entry->ai_addr, (int) entry->ai_addrlen) == 0;
-
-            if (!established) {
-                fd_set writable;
-                FD_ZERO(&writable);
-                FD_SET(descriptor, &writable);
-
-                struct timeval timeout;
-                timeout.tv_sec = seconds;
-                timeout.tv_usec = 0;
-
-                if (select((int) descriptor + 1, nullptr, &writable, nullptr, &timeout) > 0) {
-                    int error = 0;
-                    socklen_t length = sizeof(error);
-                    if (getsockopt(descriptor, SOL_SOCKET, SO_ERROR, (char *) &error, &length) == 0 && error == 0)
-                        established = true;
-                }
-            }
-
-            if (!established) {
-                FALCON_HTTP_CLOSE_SOCKET(descriptor);
-                continue;
-            }
-
-            setSocketBlocking(descriptor, true);
-            setSocketTimeouts(descriptor, seconds);
-            connected = descriptor;
-            break;
-        }
-
-        freeaddrinfo(results);
-        return connected;
-    }
-
-    void loadSystemTrustStore(SSL_CTX *context) {
-#ifdef _WIN32
-        HCERTSTORE store = CertOpenSystemStoreA(0, "ROOT");
-        if (store == nullptr)
-            return;
-
-        X509_STORE *target = SSL_CTX_get_cert_store(context);
-        PCCERT_CONTEXT entry = nullptr;
-
-        while ((entry = CertEnumCertificatesInStore(store, entry)) != nullptr) {
-            const unsigned char *pointer = entry->pbCertEncoded;
-            X509 *certificate = d2i_X509(nullptr, &pointer, (long) entry->cbCertEncoded);
-            if (certificate != nullptr) {
-                X509_STORE_add_cert(target, certificate);
-                X509_free(certificate);
-            }
-        }
-
-        CertCloseStore(store, 0);
-#else
-        SSL_CTX_set_default_verify_paths(context);
-#endif
-    }
-
-    bool decodeChunkedBody(const std::string &raw, std::string &body) {
-        size_t position = 0;
-
-        for (;;) {
-            const size_t lineEnd = raw.find("\r\n", position);
-            if (lineEnd == std::string::npos)
-                return false;
-
-            const std::string sizeLine = raw.substr(position, lineEnd - position);
-            const size_t chunkSize = (size_t) strtoul(sizeLine.c_str(), nullptr, 16);
-            position = lineEnd + 2;
-
-            if (chunkSize == 0)
-                return true;
-
-            if (position + chunkSize > raw.size())
-                return false;
-
-            body.append(raw, position, chunkSize);
-            position += chunkSize + 2;
-        }
-    }
-
-    bool parseHttpResponse(const std::string &raw, int &statusCode, std::string &body) {
-        const size_t headerEnd = raw.find("\r\n\r\n");
-        if (headerEnd == std::string::npos)
-            return false;
-
-        const std::string head = raw.substr(0, headerEnd);
-        const size_t firstSpace = head.find(' ');
-        if (firstSpace == std::string::npos)
-            return false;
-
-        statusCode = atoi(head.c_str() + firstSpace + 1);
-
-        std::string lowered = head;
-        for (size_t i = 0; i < lowered.size(); i++)
-            lowered[i] = (char) tolower((unsigned char) lowered[i]);
-
-        const std::string payload = raw.substr(headerEnd + 4);
-
-        if (lowered.find("transfer-encoding: chunked") != std::string::npos)
-            return decodeChunkedBody(payload, body);
-
-        body = payload;
+        buffer.append(chunk, (size_t) read);
         return true;
     }
 
+    bool readChunked(NetStream &stream, std::string &pending, std::string &body, size_t limit) {
+        for (;;) {
+            size_t lineEnd;
+            while ((lineEnd = pending.find("\r\n")) == std::string::npos) {
+                if (pending.size() > MAX_HEAD_SIZE || !fill(stream, pending))
+                    return false;
+            }
+            const size_t size = (size_t) std::strtoul(pending.substr(0, lineEnd).c_str(), nullptr, 16);
+            pending.erase(0, lineEnd + 2);
+            if (size == 0) {
+                // trailer fields end with an empty line
+                for (;;) {
+                    while ((lineEnd = pending.find("\r\n")) == std::string::npos) {
+                        if (pending.size() > MAX_HEAD_SIZE || !fill(stream, pending))
+                            return true;
+                    }
+                    const bool last = lineEnd == 0;
+                    pending.erase(0, lineEnd + 2);
+                    if (last)
+                        return true;
+                }
+            }
+            if (limit != 0 && body.size() + size > limit)
+                return false;
+            while (pending.size() < size + 2) {
+                if (!fill(stream, pending))
+                    return false;
+            }
+            body.append(pending, 0, size);
+            pending.erase(0, size + 2);
+        }
+    }
+}
+
+bool HttpsClient::readHead(NetStream &stream, std::string &head, std::string &rest, size_t limit) {
+    std::string buffer = rest;
+    rest.clear();
+    for (;;) {
+        const size_t end = buffer.find("\r\n\r\n");
+        if (end != std::string::npos) {
+            head = buffer.substr(0, end);
+            rest = buffer.substr(end + 4);
+            return true;
+        }
+        if (buffer.size() > limit || !fill(stream, buffer))
+            return false;
+    }
+}
+
+bool HttpsClient::parseHead(const std::string &head, int &status, Headers &headers) {
+    const size_t lineEnd = head.find("\r\n");
+    const std::string statusLine = head.substr(0, lineEnd);
+    const size_t space = statusLine.find(' ');
+    if (statusLine.compare(0, 5, "HTTP/") != 0 || space == std::string::npos)
+        return false;
+    status = std::atoi(statusLine.c_str() + space + 1);
+
+    size_t position = lineEnd == std::string::npos ? head.size() : lineEnd + 2;
+    while (position < head.size()) {
+        size_t next = head.find("\r\n", position);
+        if (next == std::string::npos)
+            next = head.size();
+        const std::string line = head.substr(position, next - position);
+        const size_t colon = line.find(':');
+        if (colon != std::string::npos)
+            headers.emplace_back(trim(line.substr(0, colon)), trim(line.substr(colon + 1)));
+        position = next + 2;
+    }
+    return true;
+}
+
+HttpsClient::Response HttpsClient::perform(const Request &request, NetStream &stream) {
+    Response response;
+    const NetUri uri = NetUri::split(request.mUrl);
+    const std::string scheme = lower(uri.mScheme);
+    const bool secure = scheme == "https";
+    std::string host;
+    std::string port;
+    uri.hostAndPort(host, port);
+    if ((!secure && scheme != "http") || host.empty()) {
+        response.mErrorCode = -1;
+        response.mErrorMessage = "invalid url";
+        return response;
+    }
+    if (port.empty())
+        port = secure ? "443" : "80";
+
+    if (!stream.open(host, port, secure, request.mTimeoutSeconds)) {
+        response.mErrorCode = stream.getErrorCode();
+        response.mErrorMessage = stream.getErrorMessage();
+        return response;
+    }
+
+    std::string message = request.mMethod + " " + uri.target() + " HTTP/1.1\r\n";
+    const bool hasHost = findHeader(request.mHeaders, "host") != nullptr;
+    if (!hasHost)
+        message += "Host: " + uri.mAuthority + "\r\n";
+    for (const auto &header: request.mHeaders)
+        message += header.first + ": " + header.second + "\r\n";
+    if (!request.mBody.empty() || (request.mMethod != "GET" && request.mMethod != "HEAD"))
+        message += "Content-Length: " + std::to_string(request.mBody.size()) + "\r\n";
+    message += "Connection: close\r\n\r\n";
+    message += request.mBody;
+
+    std::string head;
+    std::string rest;
+    if (!stream.writeAll(message.data(), message.size()) || !readHead(stream, head, rest, MAX_HEAD_SIZE)
+        || !parseHead(head, response.mStatus, response.mHeaders)) {
+        response.mErrorCode = stream.getErrorCode() != 0 ? stream.getErrorCode() : -1;
+        response.mErrorMessage = !stream.getErrorMessage().empty() ? stream.getErrorMessage()
+                                                                   : std::string("malformed response");
+        response.mHeaders.clear();
+        response.mStatus = 0;
+        return response;
+    }
+
+    const bool noBody = request.mMethod == "HEAD" || response.mStatus == 204 || response.mStatus == 304
+                        || (response.mStatus >= 100 && response.mStatus < 200);
+    const std::string *encoding = findHeader(response.mHeaders, "transfer-encoding");
+    const std::string *length = findHeader(response.mHeaders, "content-length");
+    bool complete = true;
+    if (noBody) {
+    } else if (encoding != nullptr && lower(*encoding).find("chunked") != std::string::npos) {
+        complete = readChunked(stream, rest, response.mBody, request.mMaxResponseBytes);
+    } else if (length != nullptr) {
+        const size_t wanted = (size_t) std::strtoull(length->c_str(), nullptr, 10);
+        if (request.mMaxResponseBytes != 0 && wanted > request.mMaxResponseBytes) {
+            complete = false;
+        } else {
+            response.mBody = rest;
+            while (response.mBody.size() < wanted && fill(stream, response.mBody)) {
+            }
+            complete = response.mBody.size() >= wanted;
+            response.mBody.resize(std::min(response.mBody.size(), wanted));
+        }
+    } else {
+        response.mBody = rest;
+        while (fill(stream, response.mBody)) {
+            if (request.mMaxResponseBytes != 0 && response.mBody.size() > request.mMaxResponseBytes) {
+                complete = false;
+                break;
+            }
+        }
+        if (stream.getErrorCode() != 0 || !stream.getErrorMessage().empty())
+            complete = false;
+    }
+
+    if (!complete) {
+        response.mErrorCode = stream.getErrorCode() != 0 ? stream.getErrorCode() : -1;
+        response.mErrorMessage = !stream.getErrorMessage().empty() ? stream.getErrorMessage()
+                                                                   : std::string("incomplete response");
+        response.mHeaders.clear();
+        response.mBody.clear();
+        response.mStatus = 0;
+        return response;
+    }
+    response.mCompleted = true;
+    return response;
 }
 
 bool HttpsClient::get(const std::string &url, std::string &body, int timeoutSeconds) {
-    std::string host;
-    std::string port;
-    std::string path;
-
-    if (!parseUrl(url, host, port, path)) {
+    if (NetUri::split(url).mScheme != "https") {
         LOG_WARN(LogAreaID::Network, "Cannot fetch %s because the url is malformed", url.c_str());
         return false;
     }
 
-    FalconHttpSocket descriptor = connectWithTimeout(host, port, timeoutSeconds);
-    if (descriptor == FALCON_HTTP_INVALID_SOCKET) {
-        LOG_WARN(LogAreaID::Network, "Failed to connect to %s", host.c_str());
+    Request request;
+    request.mUrl = url;
+    request.mHeaders = {{"User-Agent", "Falcon"}, {"Accept", "application/json"}};
+    request.mTimeoutSeconds = (uint32_t) (timeoutSeconds < 0 ? 0 : timeoutSeconds);
+    request.mMaxResponseBytes = MAX_GET_RESPONSE_SIZE;
+
+    NetStream stream;
+    const Response response = perform(request, stream);
+    if (!response.mCompleted) {
+        LOG_WARN(LogAreaID::Network, "Failed to fetch %s: %s", url.c_str(), response.mErrorMessage.c_str());
         return false;
     }
-
-    SSL_CTX *context = SSL_CTX_new(TLS_client_method());
-    if (context == nullptr) {
-        FALCON_HTTP_CLOSE_SOCKET(descriptor);
+    if (response.mStatus != 200) {
+        LOG_WARN(LogAreaID::Network, "Unexpected http status %d while fetching %s", response.mStatus, url.c_str());
         return false;
     }
-
-    SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION);
-    loadSystemTrustStore(context);
-    SSL_CTX_set_verify(context, SSL_VERIFY_PEER, nullptr);
-
-    SSL *ssl = SSL_new(context);
-    if (ssl == nullptr) {
-        SSL_CTX_free(context);
-        FALCON_HTTP_CLOSE_SOCKET(descriptor);
-        return false;
-    }
-
-    SSL_set_fd(ssl, (int) descriptor);
-    SSL_set_tlsext_host_name(ssl, host.c_str());
-    SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-    SSL_set1_host(ssl, host.c_str());
-
-    bool success = false;
-
-    if (SSL_connect(ssl) == 1) {
-        std::string request = "GET " + path + " HTTP/1.1\r\n";
-        request += "Host: " + host + "\r\n";
-        request += "User-Agent: Falcon\r\n";
-        request += "Accept: application/json\r\n";
-        request += "Connection: close\r\n\r\n";
-
-        if (SSL_write(ssl, request.data(), (int) request.size()) > 0) {
-            std::string raw;
-            char buffer[4096];
-
-            for (;;) {
-                const int read = SSL_read(ssl, buffer, sizeof(buffer));
-                if (read <= 0)
-                    break;
-
-                raw.append(buffer, (size_t) read);
-                if (raw.size() > MAX_RESPONSE_SIZE)
-                    break;
-            }
-
-            int statusCode = 0;
-            std::string payload;
-
-            if (parseHttpResponse(raw, statusCode, payload)) {
-                if (statusCode == 200) {
-                    body = payload;
-                    success = true;
-                } else {
-                    LOG_WARN(LogAreaID::Network, "Unexpected http status %d while fetching %s", statusCode,
-                             url.c_str());
-                }
-            }
-        }
-    } else {
-        LOG_WARN(LogAreaID::Network, "Tls handshake with %s failed", host.c_str());
-    }
-
-    SSL_shutdown(ssl);
-    SSL_free(ssl);
-    SSL_CTX_free(context);
-    FALCON_HTTP_CLOSE_SOCKET(descriptor);
-    return success;
+    body = response.mBody;
+    return true;
 }
