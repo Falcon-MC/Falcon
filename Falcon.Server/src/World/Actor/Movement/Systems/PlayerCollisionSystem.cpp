@@ -191,7 +191,7 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     } else {
         const BlockCollisionEngine::Result moved = BlockCollisionEngine::move(
                 context.level, travel.box, state.velocity, STEP_HEIGHT, state.onGround, abilities.flying,
-                context.player.getFlags().get(ActorFlag::PushTowardsClosestSpace),
+                context.player.getFlags().get(ActorFlag::PushTowardsClosestSpace), context.autoClimb.scaffoldDescend,
                 context.player.getCollisionRecovery(), &context.player);
         travel.box = moved.mBox;
         travel.moved.mRequested = moved.mRequested;

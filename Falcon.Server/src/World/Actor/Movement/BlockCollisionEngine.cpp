@@ -1,6 +1,8 @@
 #include "World/Actor/Movement/BlockCollisionEngine.h"
 
+#include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 
@@ -266,7 +268,8 @@ namespace {
     }
 
     // unloaded chunks first, then the terrain one column at a time, then actors that collide like blocks
-    bool gatherShapes(Level &level, const Box &region, const Actor *actor, std::vector<Box> &shapes) {
+    bool gatherShapes(Level &level, const Box &region, const AxisAlignedBB &mover, bool descending,
+                      const Actor *actor, std::vector<Box> &shapes) {
         bool unloaded = false;
         const int32_t minChunkX = (floorCoordinate(region[0]) - 8) >> 4;
         const int32_t minChunkZ = (floorCoordinate(region[2]) - 8) >> 4;
@@ -311,7 +314,10 @@ namespace {
                         if (state == nullptr)
                             continue;
                         cell.clear();
-                        BlockShape::appendShapesAt(*state, x, y, z, actor, neighbours, cell);
+                        const Block *block = VanillaBlocks::fromIdentifier(state->mName);
+                        if (block == nullptr
+                            || !block->getMoverCollisionShapes(*state, Vector3i(x, y, z), mover, descending, cell))
+                            BlockShape::appendShapesAt(*state, x, y, z, actor, neighbours, cell);
                         for (const AxisAlignedBB &shape: cell) {
                             const Box box = toBox(shape);
                             if (accepted(box, region))
@@ -342,13 +348,13 @@ namespace {
 }
 
 BlockCollisionEngine::Result BlockCollisionEngine::move(Level &level, const AxisAlignedBB &start, const Vector3f &delta,
-                                                        float stepHeight, bool wasOnGround, bool canFly,
-                                                        bool pushedToClosestSpace, RecoveryState &recovery,
-                                                        const Actor *actor) {
+                                                        float stepHeight, bool wasOnGround, bool flying,
+                                                        bool pushedToClosestSpace, bool descending,
+                                                        RecoveryState &recovery, const Actor *actor) {
     const Box box = toBox(start);
     const Search search = searchMovement(box, {delta.x, delta.y, delta.z}, stepHeight);
     std::vector<Box> shapes;
-    const bool unloaded = gatherShapes(level, search.region, actor, shapes);
+    const bool unloaded = gatherShapes(level, search.region, start, descending, actor, shapes);
 
     const Vector &requested = search.movement;
     const Vector limits = recoveryLimits(recovery);
@@ -357,7 +363,7 @@ BlockCollisionEngine::Result BlockCollisionEngine::move(Level &level, const Axis
     Resolved resolved = resolveMoves(box, moves, shapes, limits);
 
     Result result;
-    if (shouldStepUp(stepHeight, requested, resolved.displacement, wasOnGround, canFly))
+    if (shouldStepUp(stepHeight, requested, resolved.displacement, wasOnGround, flying))
         result.mStepped = tryStepUp(box, requested, stepHeight, shapes, limits, resolved);
     updateRecovery(recovery, resolved.penetration >= CONTACT_SNAP, pushedToClosestSpace);
 
