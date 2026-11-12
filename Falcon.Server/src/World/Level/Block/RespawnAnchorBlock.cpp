@@ -14,6 +14,7 @@
 #include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
+#include <cmath>
 
 FALCON_REGISTER_BLOCK(RespawnAnchorBlock, 405);
 
@@ -173,4 +174,11 @@ bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &p
 int RespawnAnchorBlock::getLightEmission(const BlockState &state, int dataEmission) const {
     (void) dataEmission;
     return (int) ((float) getCharge(state) / (float) MAX_CHARGE * 15.0f);
+}
+
+// RespawnAnchorBlock::getComparatorSignal (sub_14A24E0C0, 26.60): the charge scaled to 15, rounded down
+int RespawnAnchorBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return (int) std::floor((float) getCharge(state) / (float) MAX_CHARGE * 15.0f);
 }

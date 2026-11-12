@@ -21,6 +21,7 @@ FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 
 #include <utility>
 
@@ -386,4 +387,40 @@ uint8_t ContainerBlock::getLiquidBlockedFaces(const BlockState &state) const {
                      : direction == "west"  ? LiquidFace::DOWN
                                             : LiquidFace::UP;
     return (uint8_t) (1 << face);
+}
+
+// each class reads its container: Hopper (sub_146D7CBF0), Dispenser (sub_149C58F60), BrewingStand (sub_1435B2C20),
+// DecoratedPot (sub_149C532A0) and Barrel through ChestBlock (sub_14314BD30), 26.60
+int ContainerBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition == nullptr)
+        return -1;
+
+    switch (definition->mKind) {
+        case ContainerBlockKind::Barrel:
+        case ContainerBlockKind::Hopper:
+        case ContainerBlockKind::Dispenser:
+        case ContainerBlockKind::Dropper:
+        case ContainerBlockKind::BrewingStand:
+        case ContainerBlockKind::DecoratedPot:
+            return containerSignal(level, position);
+        default:
+            return -1;
+    }
+}
+
+// HopperBlock::onRedstoneUpdate (sub_146D7BA60, 26.60): toggle_bit follows the power and locks the hopper
+void ContainerBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::Hopper)
+        return;
+
+    const bool powered = RedstoneSystem::isGettingPower(owner, level, position);
+    if ((state.mStates.getByte("toggle_bit", 0) != 0) == powered)
+        return;
+
+    Tag states = state.mStates;
+    states.putByte("toggle_bit", powered ? 1 : 0);
+    level.setBlock(position, BlockState(state.mName, states), false);
 }

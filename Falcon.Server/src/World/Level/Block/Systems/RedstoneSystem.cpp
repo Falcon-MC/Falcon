@@ -755,6 +755,16 @@ int64_t RedstoneSystem::packPosition(const Vector3i &position) {
     return (x << 38) | (y << 26) | z;
 }
 
+Vector3i RedstoneSystem::unpackPosition(int64_t packed) {
+    const auto signExtend = [](int64_t value, int bits) {
+        const int64_t sign = (int64_t) 1 << (bits - 1);
+        return (int32_t) ((value ^ sign) - sign);
+    };
+
+    return Vector3i(signExtend((packed >> 38) & 0x3ffffff, 26), signExtend((packed >> 26) & 0xfff, 12),
+                    signExtend(packed & 0x3ffffff, 26));
+}
+
 bool RedstoneSystem::canConnectWireTo(Level &level, const Vector3i &position, int side) {
     return canConnectTo(level, position, side);
 }
@@ -1151,6 +1161,8 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
     } else if (DetectorSystem::isWire(state)) {
         if (type == BlockUpdateType::Scheduled)
             DetectorSystem::onWireScheduled(owner, level, position, state);
+    } else if (block != nullptr && (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)) {
+        block->onRedstonePower(owner, level, position, state);
     }
 }
 
@@ -1367,6 +1379,23 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
 
         for (const Vector3i &position: notifications)
             updateAroundRedstone(owner, level, position);
+    }
+
+    // a container has no change hook: a comparator reading one re-checks it every tick
+    for (const auto &entry: redstone.mComparatorOutputs) {
+        const Vector3i position = unpackPosition(entry.first);
+        if (!isChunkReady(level, position))
+            continue;
+
+        const BlockState state = stateAt(level, position);
+        if (!isA<RedstoneComparatorBlock>(state))
+            continue;
+
+        const Vector3i front = RedstoneFace::relative(position, diodeFacing(state));
+        const BlockState frontState = stateAt(level, front);
+        const Block *frontBlock = VanillaBlocks::fromIdentifier(frontState.mName);
+        if (frontBlock != nullptr && frontBlock->getComparatorSignal(level, front, frontState) >= 0)
+            diodeUpdateState(owner, level, position, state);
     }
 
     std::unordered_set<int64_t> visited;
