@@ -629,8 +629,8 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mAdminSurface("@minecraft/server-admin", moduleOrDefault(mModules, "@minecraft/server-admin")),
           mNetSurface("@minecraft/server-net", moduleOrDefault(mModules, "@minecraft/server-net")),
           mDebugSurface("@minecraft/debug-utilities", moduleOrDefault(mModules, "@minecraft/debug-utilities")),
-          mScheduler(context),
-          mPlayers(players) {
+          mGameTestSurface("@minecraft/server-gametest", moduleOrDefault(mModules, "@minecraft/server-gametest")),
+          mScheduler(context), mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
 }
 
@@ -673,8 +673,9 @@ ScriptApi::~ScriptApi() {
     for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
     JS_FreeValue(mContext, mAdminHooks);
+    JS_FreeValue(mContext, mGameTestHooks);
     for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports,
-                         &mDebugExports}) {
+                         &mDebugExports, &mGameTestExports}) {
         for (auto &entry: *exports)
             JS_FreeValue(mContext, entry.second);
     }
@@ -1659,10 +1660,13 @@ void ScriptApi::_installBootstraps() {
     const std::vector<std::string> debugErrors = mModules.find("@minecraft/debug-utilities") != nullptr
                                                          ? mDebugSurface.errorClasses()
                                                          : std::vector<std::string>();
+    const std::vector<std::string> gameTestErrors = mModules.find("@minecraft/server-gametest") != nullptr
+                                                            ? mGameTestSurface.errorClasses()
+                                                            : std::vector<std::string>();
     JSValue names = JS_NewArray(mContext);
     uint32_t count = 0;
     for (const std::vector<std::string> *list:
-         {&commonErrors, &serverErrors, &uiErrors, &adminErrors, &netErrors, &debugErrors}) {
+         {&commonErrors, &serverErrors, &uiErrors, &adminErrors, &netErrors, &debugErrors, &gameTestErrors}) {
         for (const std::string &error: *list)
             JS_SetPropertyUint32(mContext, names, count++, string(mContext, error));
     }
@@ -1681,6 +1685,8 @@ void ScriptApi::_installBootstraps() {
         mNetExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     for (const std::string &error: debugErrors)
         mDebugExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: gameTestErrors)
+        mGameTestExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     JS_FreeValue(mContext, classes);
 
     JSValue data = JS_NewObject(mContext);
@@ -1766,6 +1772,9 @@ void ScriptApi::_installBootstraps() {
 
     if (mModules.find("@minecraft/debug-utilities") != nullptr)
         _installDebugUtilities();
+
+    if (mModules.find("@minecraft/server-gametest") != nullptr)
+        _installGameTest();
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;
@@ -1866,6 +1875,8 @@ const std::vector<std::pair<std::string, JSValue>> &ScriptApi::moduleExports(con
         return mNetExports;
     if (module == "@minecraft/debug-utilities")
         return mDebugExports;
+    if (module == "@minecraft/server-gametest")
+        return mGameTestExports;
     if (module == "@minecraft/common")
         return mCommonExports;
     return mServerExports;

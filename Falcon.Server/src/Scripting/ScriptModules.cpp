@@ -19,7 +19,7 @@ namespace {
             {"@minecraft/server-ui", 3, 3, "2.4.0-beta", true},
             {"@minecraft/common", 3, -1, nullptr, true},
             {"@minecraft/server-graphics", 0, -1, "1.1.0-beta", true},
-            {"@minecraft/server-gametest", -1, -1, "1.0.0-beta", false},
+            {"@minecraft/server-gametest", -1, -1, "1.0.0-beta", true},
             {"@minecraft/server-admin", -1, -1, "1.0.0-beta", true},
             {"@minecraft/server-net", -1, -1, "1.0.0-beta", false},
             {"@minecraft/debug-utilities", -1, -1, "1.0.0-beta", true},

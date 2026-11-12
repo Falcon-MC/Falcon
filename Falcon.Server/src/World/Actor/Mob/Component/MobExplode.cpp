@@ -44,16 +44,9 @@ bool MobExplode::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (mExploded)
         return false;
 
-    const json::Value *component = mob.getComponent(EXPLODE_COMPONENT);
-    if (component != mComponent) {
-        mComponent = component;
-        mFuseTicks = -1;
-        const bool lit = component != nullptr && flagIn(*component, "fuse_lit", false);
-        if (lit)
-            mFuseTicks = (int32_t) (fuseSeconds(component->get("fuse_length")) * TICKS_PER_SECOND);
-        _setIgnited(owner, mob, lit);
-    }
-    if (component == nullptr || mFuseTicks < 0)
+    _sync(owner, mob);
+    const json::Value *component = mComponent;
+    if (component == nullptr || !mLit)
         return true;
 
     if (mFuseTicks > 0) {
@@ -63,6 +56,22 @@ bool MobExplode::tick(ServerNetworkHandler &owner, MobActor &mob) {
 
     _explode(owner, mob, *component);
     return false;
+}
+
+void MobExplode::_sync(ServerNetworkHandler &owner, MobActor &mob) {
+    const json::Value *component = mob.getComponent(EXPLODE_COMPONENT);
+    if (component == mComponent)
+        return;
+    mComponent = component;
+    mFuseTicks = component == nullptr ? -1 : (int32_t) (fuseSeconds(component->get("fuse_length")) * TICKS_PER_SECOND);
+    mLit = component != nullptr && flagIn(*component, "fuse_lit", false);
+    _setIgnited(owner, mob, mLit);
+}
+
+void MobExplode::setFuseLength(ServerNetworkHandler &owner, MobActor &mob, int32_t ticks) {
+    _sync(owner, mob);
+    if (mComponent != nullptr)
+        mFuseTicks = ticks;
 }
 
 void MobExplode::_setIgnited(ServerNetworkHandler &owner, MobActor &mob, bool ignited) {
