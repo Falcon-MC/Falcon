@@ -6,6 +6,7 @@
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/DetectorRailBlock.h"
+#include "World/Level/Block/LightningRodBlock.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Inventory/Container.h"
@@ -14,6 +15,7 @@
 #include "World/Level/World.h"
 
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -149,6 +151,38 @@ namespace {
                 "a comparator read a hopper two blocks away through air");
     }
 
+    void lightningRod() {
+        RedstoneFixture fixture;
+
+        BlockState rod = BlockState(BlockNames::EXPOSED_LIGHTNING_ROD);
+        rod.mStates.putInt("facing_direction", RedstoneFace::UP);
+        rod.mStates.putByte("powered_bit", 0);
+        fixture.set(ORIGIN, rod);
+
+        const std::optional<Vector3i> found = LightningRodBlock::findAttractingRod(
+                fixture.mLevel, Vector3i(ORIGIN.x + 3, ORIGIN.y, ORIGIN.z + 2));
+        require(found.has_value() && *found == ORIGIN, "an open lightning rod did not attract the bolt");
+
+        LightningRodBlock::onLightningHit(fixture.mOwner, fixture.mLevel, ORIGIN);
+        const BlockState hit = fixture.at(ORIGIN);
+        require(hit.mName == BlockNames::LIGHTNING_ROD, "a struck exposed rod kept its oxidation");
+        require(hit.mStates.getByte("powered_bit", 0) == 1, "a struck rod was not powered");
+
+        const Block *block = VanillaBlocks::fromIdentifier(BlockNames::LIGHTNING_ROD);
+        require(block != nullptr, "the lightning rod has no block class");
+        require(block->getEmittedSignal(fixture.mLevel, ORIGIN, hit, RedstoneFace::NORTH, false) == 15
+                        && block->getEmittedSignal(fixture.mLevel, ORIGIN, hit, RedstoneFace::NORTH, true) == 0
+                        && block->getEmittedSignal(fixture.mLevel, ORIGIN, hit, RedstoneFace::UP, true) == 15,
+                "a struck rod did not give 15 around and charge only its support");
+
+        block->onScheduledUpdate(fixture.mOwner, fixture.mLevel, ORIGIN, hit);
+        require(fixture.at(ORIGIN).mStates.getByte("powered_bit", 0) == 0, "a rod stayed powered after its tick");
+
+        fixture.set(Vector3i(ORIGIN.x, ORIGIN.y + 3, ORIGIN.z), VanillaBlocks::STONE().toBlockState());
+        require(!LightningRodBlock::findAttractingRod(fixture.mLevel, ORIGIN).has_value(),
+                "a covered lightning rod attracted the bolt");
+    }
+
     void hopperLock() {
         RedstoneFixture fixture;
 
@@ -236,6 +270,7 @@ int main() {
         containerSignals();
         comparatorThroughBlock();
         hopperLock();
+        lightningRod();
         copperBulb();
         detectorRail();
         std::cout << "redstone checks passed\n";

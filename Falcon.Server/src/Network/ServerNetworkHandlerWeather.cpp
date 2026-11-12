@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/LightningRodBlock.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -10,6 +11,7 @@
 #include "Scripting/ScriptEngine.h"
 
 #include <cmath>
+#include <optional>
 #include <random>
 #include <string>
 
@@ -246,12 +248,21 @@ void ServerNetworkHandler::_tickWeather(World &world) {
         const int32_t targetX = chunkX + offset(weatherRandom());
         const int32_t targetZ = chunkZ + offset(weatherRandom());
 
-        if (!level.canRainAt(targetX, targetZ))
-            continue;
-
         int32_t surfaceY = (int32_t) std::floor(playerPosition.y) + 16;
         while (surfaceY > 0 && !level.isSolidAt(targetX, surfaceY, targetZ))
             --surfaceY;
+
+        // a lightning rod near the top block takes the bolt at its own position (sub_143858510)
+        const std::optional<Vector3i> rod = LightningRodBlock::findAttractingRod(
+                level, Vector3i(targetX, surfaceY + 1, targetZ));
+        if (rod.has_value()) {
+            strikeLightning(level, Vector3f((float) rod->x, (float) rod->y, (float) rod->z));
+            LightningRodBlock::onLightningHit(*this, level, *rod);
+            continue;
+        }
+
+        if (!level.canRainAt(targetX, targetZ))
+            continue;
 
         strikeLightning(level, Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
     }
