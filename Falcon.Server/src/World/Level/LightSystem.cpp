@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/BlockLightProperties.h"
 #include "Core/Math/MathConstants.h"
+#include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -12,7 +13,6 @@
 
 namespace {
     const float SKY_LIGHT_SCALE = 11.0f;
-    const float WEATHER_REDUCTION = 5.0f / 16.0f;
 
     const int32_t NEIGHBOUR_OFFSETS[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}};
 
@@ -22,10 +22,6 @@ namespace {
         int32_t mZ;
         int mLight;
     };
-
-    float clampFloat(float value, float minimum, float maximum) {
-        return std::max(minimum, std::min(maximum, value));
-    }
 
     int attenuation(const BlockState &state) {
         return std::max(1, BlockLightProperties::lightFilter(BlockLightProperties::packed(state)));
@@ -164,17 +160,30 @@ float LightSystem::calculateCelestialAngle(int64_t time) {
     return angle + (smoothed - angle) / 3.0f;
 }
 
+// Dimension::tick (sub_142938180) writes it to the byte the sleep check reads (sub_1402BDB80)
 int32_t LightSystem::calculateSkyLightSubtracted(const Level &level, bool includeWeather) {
-    const float rain = includeWeather && level.isRaining() ? 1.0f : 0.0f;
-    const float thunder = includeWeather && level.isThundering() ? 1.0f : 0.0f;
+    // the time of day (sub_14293F500) one tick ahead while the day moves (game rule 1)
+    const float alpha = level.getGameRules().getBool("dodaylightcycle") ? 1.0f : 0.0f;
+    float angle = ((float) ((int32_t) level.getTime() % 24000) + alpha) / 24000.0f + -0.25f;
+    if (angle < 0.0f)
+        angle = angle + 1.0f;
+    if (angle > 1.0f)
+        angle = angle + -1.0f;
+    const float halfCos = FeatureMath::sineAt(3.1415927f * angle * 10430.378f + 16384.0f);
+    const float timeOfDay = ((halfCos + 1.0f) * -0.5f + 1.0f - angle) / 3.0f + angle;
 
-    const float rainFactor = 1.0f - rain * WEATHER_REDUCTION;
-    const float thunderFactor = 1.0f - thunder * WEATHER_REDUCTION;
+    const float turn = timeOfDay * 3.1415927f;
+    const float cosine = FeatureMath::sineAt((turn + turn) * 10430.378f + 16384.0f);
+    const float dark = std::min(1.0f, std::max(0.0f, 1.0f - (cosine + cosine + 0.5f)));
+    float brightness = 1.0f - dark;
 
-    const float angle = calculateCelestialAngle(level.getTime());
-    const float brightness = 0.5f + 2.0f * clampFloat(std::cos(angle * MathConstants::TWO_PI_F), -0.25f, 0.25f);
+    // the fog level term (Weather +0x4C) has no writer and no wither darkens the sky: both stay neutral
+    if (includeWeather && Dimension::hasWeather(level.getDimensionType())) {
+        brightness *= 1.0f - level.getRainLevel() * 5.0f * 0.0625f;
+        brightness *= 1.0f - level.getLightningLevel() * 5.0f * 0.0625f;
+    }
 
-    return (int32_t) ((1.0f - brightness * rainFactor * thunderFactor) * SKY_LIGHT_SCALE);
+    return (int32_t) ((1.0f - brightness) * SKY_LIGHT_SCALE);
 }
 
 void LightSystem::updateHeightAt(LevelChunk &chunk, int x, int z) {

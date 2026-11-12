@@ -871,9 +871,12 @@ void ServerNetworkHandler::tick(bool paused) {
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
-    for (World *world: mWorlds.getWorlds())
-        world->getOverworld().updateSkyLightSubtracted();
+    // the dimension ticks its weather before it darkens the sky (sub_142938180)
     tickWeather();
+    for (World *world: mWorlds.getWorlds()) {
+        for (Level *level: world->getLevels())
+            level->updateSkyLightSubtracted();
+    }
     mProfiler.endSection(ProfilerSection::Weather);
 
     mProfiler.beginSection(ProfilerSection::ConsoleCommands);

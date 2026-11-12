@@ -5,6 +5,7 @@
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
+#include "World/Level/LightSystem.h"
 #include "World/Level/World.h"
 
 #include <cmath>
@@ -92,6 +93,35 @@ namespace {
                         && std::fabs(position.z - 8.5f) < 0.001f,
                 "the player did not stand up beside the bed");
     }
+
+    bool liesDownAt(int64_t time, bool thunderStorm) {
+        BedFixture fixture;
+        fixture.mLevel.setTime(time);
+        if (thunderStorm) {
+            fixture.mLevel.setRainingState(true);
+            fixture.mLevel.setThunderingState(true);
+            for (int i = 0; i < 100; ++i)
+                fixture.mLevel.tickWeatherLevels();
+        }
+        fixture.mLevel.updateSkyLightSubtracted();
+        BedBlock::use(fixture.mOwner, fixture.mPlayer, HEAD, fixture.mLevel.getBlockState(HEAD.x, HEAD.y, HEAD.z));
+        return fixture.mPlayer.isSleeping();
+    }
+
+    void sleepTime() {
+        // the sky darkening of sub_142938180: 3 at 12540, 4 at 12550, 6 at 13000
+        BedFixture fixture;
+        fixture.mLevel.setTime(12540);
+        require(LightSystem::calculateSkyLightSubtracted(fixture.mLevel) == 3, "the dusk darkening is not 3");
+        fixture.mLevel.setTime(12550);
+        require(LightSystem::calculateSkyLightSubtracted(fixture.mLevel) == 4, "the darkening did not reach 4");
+        fixture.mLevel.setTime(13000);
+        require(LightSystem::calculateSkyLightSubtracted(fixture.mLevel) == 6, "the night darkening is not 6");
+
+        require(liesDownAt(13000, false), "the player could not sleep at 13000 under a clear sky");
+        require(!liesDownAt(12000, false), "the player slept at 12000 under a clear sky");
+        require(liesDownAt(6000, true), "a thunderstorm at noon did not let the player sleep");
+    }
 }
 
 int main() {
@@ -99,6 +129,7 @@ int main() {
         EntityDefinitions::initialize();
         standUpPosition();
         wakeUp();
+        sleepTime();
         std::cout << "bed checks passed\n";
         return 0;
     } catch (const std::exception &error) {
