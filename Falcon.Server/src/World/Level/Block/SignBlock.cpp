@@ -5,6 +5,7 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/OrientationHelpers.h"
+#include "World/Level/Block/SignEditing.h"
 
 FALCON_REGISTER_BLOCK(SignBlock, 186);
 
@@ -37,4 +38,16 @@ BlockState SignBlock::applyPlacementOrientation(const BlockState &state, const B
     Tag states = *defaults;
     OrientationHelpers::setFacingDirection(states, context.mFace);
     return BlockState(wall, states);
+}
+
+bool SignBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                           const BlockState &state) const {
+    return SignEditing::interact(owner, player, position, state);
+}
+
+void SignBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                         const BlockState &state, const ItemStack &usedItem, int blockFace) const {
+    (void) state;
+    (void) blockFace;
+    SignEditing::onPlaced(owner, player, position, usedItem);
 }
