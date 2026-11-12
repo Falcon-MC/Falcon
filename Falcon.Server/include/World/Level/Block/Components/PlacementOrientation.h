@@ -2,6 +2,7 @@
 
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 #include <string>
@@ -14,7 +15,7 @@ namespace PlacementOrientation {
     constexpr int FACE_WEST = 4;
     constexpr int FACE_EAST = 5;
 
-    constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 
     inline int horizontalFacing(float yaw) {
         float angle = std::fmod(yaw, 360.0f);

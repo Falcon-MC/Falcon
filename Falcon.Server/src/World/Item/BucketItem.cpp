@@ -22,6 +22,7 @@
 #include "Protocol/Types/ItemStack.h"
 #include "Protocol/Types/ItemUseTransaction.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <string>
 #include <vector>
@@ -51,7 +52,7 @@ bool BucketItem::isBucket(const ItemStack &item) {
 }
 
 bool BucketItem::isReplaceable(const BlockState &state) {
-    if (state.mName == "minecraft:air")
+    if (state.mName == BlockNames::AIR)
         return true;
 
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
@@ -99,7 +100,7 @@ bool BucketItem::applyResult(ServerNetworkHandler &owner, ServerPlayer &player, 
         return false;
     result.mCount = 1;
 
-    if (player.getGameType() == (int32_t) GameType::Creative) {
+    if (player.isCreative()) {
         InventoryHandler::sendHeldItem(owner, player);
         return true;
     }
@@ -207,7 +208,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
 
         if (clickedState.mName == "minecraft:powder_snow") {
             sendArmSwing(owner, player, clickedPosition);
-            level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState("minecraft:air"));
+            level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState(BlockNames::AIR));
             sendBlockState(owner, level, clickedPosition);
             sendSound(owner, level, clickedPosition, "bucket_fill_powder_snow");
             applyResult(owner, player, heldItem, "minecraft:powder_snow_bucket");
@@ -237,7 +238,7 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
             return false;
 
         sendArmSwing(owner, player, clickedPosition);
-        level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState("minecraft:air"));
+        level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState(BlockNames::AIR));
         sendBlockState(owner, level, clickedPosition);
         const LiquidBlock &source = clickedLiquid;
         const char *sound = filledContent == Content::Water ? WaterBlock(source).getBucketFillSound()

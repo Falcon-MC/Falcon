@@ -111,7 +111,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(actor)
-            || player.getGameType() == (int32_t) GameType::Spectator)
+            || player.isSpectator())
             continue;
 
         const AxisAlignedBB box = boxAround(player.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);

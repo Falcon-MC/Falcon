@@ -14,6 +14,7 @@ FALCON_REGISTER_ITEM(MapItem, 100);
 #include "World/Level/World.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <unordered_map>
@@ -84,7 +85,7 @@ namespace {
         }
 
     private:
-        static constexpr const char *AIR = "minecraft:air";
+        static constexpr const char *AIR = BlockNames::AIR;
 
         MapBiomeColors _colorsOf(uint32_t biomeId) {
             const auto cached = mCache.find(biomeId);
@@ -240,7 +241,7 @@ bool MapItem::updateTrackedDecoration(ServerNetworkHandler &owner, World &world,
             MapDecorationType type = MapDecorationType::MarkerWhite;
             if (!holding
                 && (player->getFlags().get(ActorFlag::Invisible)
-                    || player->getGameType() == (int32_t) GameType::Spectator))
+                    || player->isSpectator()))
                 type = MapDecorationType::NoDraw;
 
             if (holding || dimension != mapDimension) {

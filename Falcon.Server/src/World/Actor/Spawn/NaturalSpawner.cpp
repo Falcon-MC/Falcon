@@ -141,7 +141,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.isIn(level)
-            || player.getGameType() == (int32_t) GameType::Spectator)
+            || player.isSpectator())
             continue;
         players.push_back(player.getPosition());
     }

@@ -7,6 +7,7 @@
 #include "World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +31,7 @@ namespace {
     }
 
     bool isAirState(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 }
 

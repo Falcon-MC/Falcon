@@ -152,8 +152,8 @@ int64_t LightSystem::packPosition(int32_t x, int32_t y, int32_t z) {
 }
 
 float LightSystem::calculateCelestialAngle(int64_t time) {
-    const int32_t dayTime = (int32_t) (time % 24000);
-    float angle = (float) dayTime / 24000.0f - 0.25f;
+    const int32_t dayTime = (int32_t) (time % Level::TICKS_PER_DAY);
+    float angle = (float) dayTime / (float) Level::TICKS_PER_DAY - 0.25f;
 
     if (angle < 0.0f)
         ++angle;

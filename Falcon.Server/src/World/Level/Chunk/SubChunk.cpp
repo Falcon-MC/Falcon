@@ -7,6 +7,7 @@
 #include "World/Level/Storage/BlockStateUpgrades.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Core/NBT/NbtIo.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -85,11 +86,11 @@ namespace {
     // asked for every section of every ticked chunk each tick: address first, the length check rejects
     // almost every other name
     bool isAir(const BlockState *state, const BlockState *air) {
-        return state == air || (state->mName.size() == 13 && state->mName == "minecraft:air");
+        return state == air || (state->mName.size() == 13 && state->mName == BlockNames::AIR);
     }
 
     const BlockState *airState() {
-        static const BlockState *air = internState(BlockState("minecraft:air"));
+        static const BlockState *air = internState(BlockState(BlockNames::AIR));
         return air;
     }
 }
@@ -567,7 +568,7 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
 
         bool hasContent = false;
         for (int i = 0; i < BLOCK_COUNT; i++) {
-            if (palette[blocks[i]]->mName != "minecraft:air") {
+            if (palette[blocks[i]]->mName != BlockNames::AIR) {
                 hasContent = true;
                 break;
             }

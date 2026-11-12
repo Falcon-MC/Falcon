@@ -4,12 +4,13 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <memory>
 
 namespace {
 
-    const char *const AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *const POST_1_18 = "version.post_1_18";
 
     // worlds here always span the post-1.18 height: legacy stacks get the 64 air layers the game inserts to keep

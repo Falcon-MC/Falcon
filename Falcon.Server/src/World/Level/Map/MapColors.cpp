@@ -1,6 +1,7 @@
 #include "World/Level/Map/MapColors.h"
 
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cstring>
@@ -1322,9 +1323,9 @@ void MapColors::getColor(const BlockState &state, const MapBiomeColors &biome, f
 }
 
 bool MapColors::isWater(const std::string &name) {
-    return name == "minecraft:water" || name == "minecraft:flowing_water";
+    return name == BlockNames::WATER || name == "minecraft:flowing_water";
 }
 
 bool MapColors::isLiquid(const std::string &name) {
-    return isWater(name) || name == "minecraft:lava" || name == "minecraft:flowing_lava";
+    return isWater(name) || name == BlockNames::LAVA || name == "minecraft:flowing_lava";
 }

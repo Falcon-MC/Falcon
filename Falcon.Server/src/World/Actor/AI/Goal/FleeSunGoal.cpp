@@ -9,7 +9,7 @@
 #include <random>
 
 namespace {
-    const int64_t DAY_LENGTH = 24000;
+    const int64_t DAY_LENGTH = Level::TICKS_PER_DAY;
     const int64_t DAYTIME_END = 12000;
     const int32_t ATTEMPTS = 10;
     const int32_t HORIZONTAL_RANGE = 10;

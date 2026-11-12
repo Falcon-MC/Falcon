@@ -39,6 +39,7 @@
 #include "World/Level/LevelGen/Structure/StructureProcessors.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <deque>
 #include <mutex>
@@ -322,7 +323,7 @@ namespace {
             static const BlockState DIRT = VanillaBlocks::DIRT().toBlockState();
             const SurfaceBuilderComponent *surface = SurfaceBuilderComponent::getForBiome(biome);
             const BlockState *top = surface != nullptr ? surface->mSurfaceMaterial.mTopBlock : nullptr;
-            return top == nullptr || top->mName == "minecraft:grass_block" ? DIRT : *top;
+            return top == nullptr || top->mName == BlockNames::GRASS_BLOCK ? DIRT : *top;
         }
 
         void _foundation() {
@@ -342,7 +343,7 @@ namespace {
 
                     for (int32_t y = box.mMinY - 1; y > box.mMinY - depth - 3; --y) {
                         const BlockState below = _world({x, y, z});
-                        if (!DecorationSupport::isAir(below) && below.mName != "minecraft:water")
+                        if (!DecorationSupport::isAir(below) && below.mName != BlockNames::WATER)
                             break;
                         _set({x, y, z}, foundationBlock(mGenerator.pickBiome(x, box.mMinY, z)));
                     }

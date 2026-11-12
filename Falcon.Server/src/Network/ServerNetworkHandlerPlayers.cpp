@@ -9,11 +9,12 @@
 #include "Protocol/Packets/MobEquipmentPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 
 namespace {
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 }
 
 bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) {

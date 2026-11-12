@@ -12,6 +12,8 @@
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -88,12 +90,7 @@ namespace {
                                          "minecraft:structure_block",
                                          "minecraft:jigsaw"};
 
-    float wrapDegrees(float degrees) {
-        float wrapped = std::fmod(degrees + 180.0f, 360.0f);
-        if (wrapped < 0.0f)
-            wrapped += 360.0f;
-        return wrapped - 180.0f;
-    }
+    using VectorMath::wrapDegrees;
 
     float clampf(float value, float minimum, float maximum) {
         return std::max(minimum, std::min(maximum, value));
@@ -109,7 +106,7 @@ namespace {
     }
 
     bool passesThrough(const std::string &name) {
-        return name == "minecraft:air" || name == "minecraft:structure_void" || name == "minecraft:fire"
+        return name == BlockNames::AIR || name == "minecraft:structure_void" || name == "minecraft:fire"
                || name == "minecraft:soul_fire";
     }
 
@@ -261,7 +258,7 @@ Vector3f EnderDragon::getPartCenter(Part part) const {
 int32_t EnderDragon::getPortalY(Level &level) {
     for (int32_t y = level.getMaxY(); y >= level.getMinY(); --y) {
         const BlockState *state = level.peekBlockPtr(0, y, 0);
-        if (state != nullptr && state->mName != "minecraft:air")
+        if (state != nullptr && state->mName != BlockNames::AIR)
             return y + 1;
     }
 
@@ -343,7 +340,7 @@ bool EnderDragon::_ensureNodes(ServerNetworkHandler &owner) {
             [&level](int32_t x, int32_t z) {
                 for (int32_t y = level.getMaxY(); y >= level.getMinY(); --y) {
                     const BlockState *state = level.peekBlockPtr(x, y, z);
-                    if (state != nullptr && state->mName != "minecraft:air")
+                    if (state != nullptr && state->mName != BlockNames::AIR)
                         return y + 1;
                 }
                 return level.getMinY();

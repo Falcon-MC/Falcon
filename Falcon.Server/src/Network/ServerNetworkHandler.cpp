@@ -1922,7 +1922,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
                 onPlayerDimensionChangeAck(*player);
                 return;
             }
-            if (player->getGameType() == (int32_t) GameType::Creative)
+            if (player->isCreative())
                 BlockActionHandler::completeBreakingBlock(*this, *player, packet.mBlockPosition);
             return;
         case PlayerActionType::DimensionChangeSuccess:
@@ -2253,7 +2253,7 @@ namespace {
             return;
         }
 
-        if (player.getGameType() != (int32_t) GameType::Creative)
+        if (!player.isCreative())
             return;
 
         const int slot = hotbarSlot >= 0 && hotbarSlot < PlayerInventory::HOTBAR_SIZE ? hotbarSlot

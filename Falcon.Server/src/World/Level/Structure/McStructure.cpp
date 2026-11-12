@@ -10,6 +10,7 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,7 +76,7 @@ void McStructure::setBlock(const Vector3i &local, const BlockState *state, int32
 
 bool McStructure::isWaterlogged(const Vector3i &local) const {
     const BlockState *overlay = getBlock(local, 1);
-    return overlay != nullptr && (overlay->mName == "minecraft:water" || overlay->mName == "minecraft:flowing_water");
+    return overlay != nullptr && (overlay->mName == BlockNames::WATER || overlay->mName == "minecraft:flowing_water");
 }
 
 const Tag *McStructure::getBlockEntity(const Vector3i &local) const {
@@ -237,7 +238,7 @@ McStructure McStructure::capture(ServerNetworkHandler &owner, Level &level, cons
                     const BlockState state = level.getBlockState(x, y, z);
                     structure.setBlock(local, &state);
                     const BlockState overlay = level.getBlockStateAtLayer(x, y, z, 1);
-                    if (overlay.mName != "minecraft:air")
+                    if (overlay.mName != BlockNames::AIR)
                         structure.setBlock(local, &overlay, 1);
                     if (BlockActor *actor = level.getBlockActors().find(Vector3i(x, y, z)))
                         structure.setBlockEntity(local, actor->saveNbt());
@@ -323,7 +324,7 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
                         continue;
                     state = &chosen;
                     const bool inWater = options.mKeepWorldWater
-                                         && level.getBlockState(target.x, target.y, target.z).mName == "minecraft:water"
+                                         && level.getBlockState(target.x, target.y, target.z).mName == BlockNames::WATER
                                          && LiquidPhysicsSystem::getWaterloggingLevel(*state) > 0;
                     level.getBlockActors().remove(target);
                     level.setBlock(target, *state, true);

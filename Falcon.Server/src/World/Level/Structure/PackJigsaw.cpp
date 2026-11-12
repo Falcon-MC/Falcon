@@ -3,6 +3,7 @@
 #include "Core/Json/Json.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -73,7 +74,7 @@ namespace {
 
     BlockState stateOf(const json::Value *value) {
         if (value == nullptr)
-            return BlockState("minecraft:air");
+            return BlockState(BlockNames::AIR);
         if (value->isString())
             return BlockState(value->string());
         const json::Value *name = value->get("name");
@@ -189,7 +190,7 @@ namespace {
         std::string mName;
         std::string mTarget;
         std::string mPool;
-        BlockState mFinal = BlockState("minecraft:air");
+        BlockState mFinal = BlockState(BlockNames::AIR);
     };
 
     struct Piece {
@@ -487,7 +488,7 @@ bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::str
                         return true;
                     }
                 }
-                state = BlockState("minecraft:air");
+                state = BlockState(BlockNames::AIR);
                 return true;
             }
             if (list == nullptr)

@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,13 +25,13 @@ namespace {
     }
 
     bool canPlaceOn(const std::string &id) {
-        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:dirt"
-               || id == "minecraft:grass_block" || id == "minecraft:ice" || id == "minecraft:packed_ice";
+        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == BlockNames::DIRT
+               || id == BlockNames::GRASS_BLOCK || id == "minecraft:ice" || id == "minecraft:packed_ice";
     }
 
     bool canReplace(const std::string &id) {
-        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:ice" || id == "minecraft:air"
-               || id == "minecraft:dirt" || id == "minecraft:grass_block";
+        return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:ice" || id == BlockNames::AIR
+               || id == BlockNames::DIRT || id == BlockNames::GRASS_BLOCK;
     }
 
 }
@@ -89,7 +90,7 @@ void IceSpikeFeature::apply(ChunkGenerateContext &context) {
                     const int32_t py = originY + yOff;
                     const int32_t pz = originZ + zo;
                     std::string state = manager.getBlockAt(px, py, pz).mName;
-                    if (state == "minecraft:air" || canReplace(state))
+                    if (state == BlockNames::AIR || canReplace(state))
                         manager.setBlockStateAt(px, py, pz, spikeState());
 
                     if (yOff != 0 && newWidth > 1) {
@@ -97,7 +98,7 @@ void IceSpikeFeature::apply(ChunkGenerateContext &context) {
                         const int32_t ny = originY - yOff;
                         const int32_t nz = originZ + zo;
                         state = manager.getBlockAt(nx, ny, nz).mName;
-                        if (state == "minecraft:air" || canReplace(state))
+                        if (state == BlockNames::AIR || canReplace(state))
                             manager.setBlockStateAt(nx, ny, nz, spikeState());
                     }
                 }
@@ -121,7 +122,7 @@ void IceSpikeFeature::apply(ChunkGenerateContext &context) {
 
                 while (cy > 50) {
                     const std::string state = manager.getBlockAt(cx, cy, cz).mName;
-                    if (state != "minecraft:air" && !canReplace(state) && state != "minecraft:packed_ice")
+                    if (state != BlockNames::AIR && !canReplace(state) && state != "minecraft:packed_ice")
                         break;
 
                     manager.setBlockStateAt(cx, cy, cz, spikeState());
@@ -144,13 +145,13 @@ void IceSpikeFeature::apply(ChunkGenerateContext &context) {
                     const std::string here = manager.getBlockAt(x, y, z).mName;
                     if (here == "minecraft:packed_ice") {
                         const std::string above = manager.getBlockAt(x, y + 1, z).mName;
-                        if (above == "minecraft:air")
+                        if (above == BlockNames::AIR)
                             manager.setBlockStateAt(x, y + 1, z, snowLayerState());
 
                         break;
                     }
 
-                    if (here != "minecraft:air" && here != "minecraft:snow_layer")
+                    if (here != BlockNames::AIR && here != "minecraft:snow_layer")
                         break;
                 }
             }

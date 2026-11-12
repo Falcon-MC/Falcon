@@ -1,18 +1,14 @@
 #include "World/Item/ItemEnchantments.h"
 
 #include "World/Item/ItemData.h"
+#include "World/Level/Block/BlockIdentifier.h"
 
 const char *ItemEnchantments::TAG_ENCHANTMENTS = "ench";
 const char *ItemEnchantments::TAG_ENCHANTMENT_ID = "id";
 const char *ItemEnchantments::TAG_ENCHANTMENT_LEVEL = "lvl";
 
 namespace {
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size()) {
-            return false;
-        }
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     uint32_t targetsFromToolType(ToolType toolType) {
         switch (toolType) {

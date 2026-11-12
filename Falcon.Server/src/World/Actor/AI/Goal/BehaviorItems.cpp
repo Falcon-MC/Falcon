@@ -60,7 +60,7 @@ ServerPlayer *BehaviorItems::findNearestHolder(ServerNetworkHandler &owner, cons
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(mob)
-            || player.getGameType() == (int32_t) GameType::Spectator)
+            || player.isSpectator())
             continue;
 
         const float distance = mob.distanceSquaredTo(player);

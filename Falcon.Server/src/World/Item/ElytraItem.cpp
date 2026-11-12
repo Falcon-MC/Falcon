@@ -42,7 +42,7 @@ void ElytraItem::tickGliding(ServerNetworkHandler &owner, ServerPlayer &player) 
     if (std::fabs(player.getMotion().y) < GLIDE_FALL_RESET_SPEED && player.getRotation().x <= GLIDE_FALL_RESET_PITCH)
         player.resetFallDistance();
 
-    if (player.getGameType() == (int32_t) GameType::Creative)
+    if (player.isCreative())
         return;
 
     PlayerInventory &inventory = player.getInventory();

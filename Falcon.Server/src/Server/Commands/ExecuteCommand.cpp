@@ -9,6 +9,8 @@
 #include "Core/Math/MathConstants.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <climits>
@@ -21,7 +23,7 @@ namespace {
     const std::vector<std::string> SUBCOMMANDS = {"align", "anchored",   "as",      "at",  "facing", "if",
                                                   "in",    "positioned", "rotated", "run", "unless"};
 
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 
     bool parseScoreValue(const std::string &value, int32_t &out) {
         char *end = nullptr;
@@ -260,7 +262,7 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
                     continue;
                 }
 
-                if (masked && source.mName == "minecraft:air")
+                if (masked && source.mName == BlockNames::AIR)
                     continue;
 
                 matched = false;

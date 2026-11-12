@@ -14,6 +14,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Scripting/ScriptEngine.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cctype>
@@ -273,10 +274,10 @@ namespace {
             case 1:
                 return JS_NewInt64(ctx, level.getDayTime());
             case 2:
-                return JS_NewInt64(ctx, level.getTime() / 24000);
+                return JS_NewInt64(ctx, level.getTime() / Level::TICKS_PER_DAY);
             default:
                 // MoonPhase counts from the full moon, one phase a day
-                return JS_NewInt32(ctx, (int32_t) ((level.getTime() / 24000) % 8));
+                return JS_NewInt32(ctx, (int32_t) ((level.getTime() / Level::TICKS_PER_DAY) % 8));
         }
     }
 
@@ -291,10 +292,10 @@ namespace {
         if (magic == 0) {
             level.setTime((int64_t) time);
         } else {
-            if (time < 0.0 || time > 24000.0)
+            if (time < 0.0 || time > (double) Level::TICKS_PER_DAY)
                 return api->throwError("Error", "");
             // keeps the day count: only the time of day moves
-            level.setTime(level.getTime() / 24000 * 24000 + (int64_t) time);
+            level.setTime(level.getTime() / Level::TICKS_PER_DAY * Level::TICKS_PER_DAY + (int64_t) time);
         }
         api->host().broadcastWorldTime(world);
         return JS_UNDEFINED;
@@ -528,7 +529,7 @@ namespace {
     }
 
     JSValue blockGetIsAir(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == "minecraft:air");
+        return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == BlockNames::AIR);
     }
 
     JSValue blockGetIsValid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {

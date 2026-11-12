@@ -4,6 +4,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemTypes.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -14,7 +15,7 @@
 
 namespace {
 
-    const char *AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *BOOKSHELF = "minecraft:bookshelf";
     const char *BOOK = "minecraft:book";
 

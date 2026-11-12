@@ -28,6 +28,7 @@
 #include "Server/Debug/DebugHud.h"
 #include "World/Actor/Player/PlayerBossBars.h"
 #include "World/Actor/Player/PlayerRaidState.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
 #include <memory>
@@ -228,6 +229,22 @@ public:
 
     void setGameType(int32_t gameType) {
         mGameType = gameType;
+    }
+
+    bool isSurvival() const {
+        return mGameType == (int32_t) GameType::Survival;
+    }
+
+    bool isCreative() const {
+        return mGameType == (int32_t) GameType::Creative;
+    }
+
+    bool isAdventure() const {
+        return mGameType == (int32_t) GameType::Adventure;
+    }
+
+    bool isSpectator() const {
+        return mGameType == (int32_t) GameType::Spectator;
     }
 
     int64_t getLastActiveTick() const {

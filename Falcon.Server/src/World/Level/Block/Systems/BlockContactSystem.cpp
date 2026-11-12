@@ -8,6 +8,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -94,7 +95,7 @@ bool BlockContactSystem::touchInsideBlocks(ServerNetworkHandler &owner, Actor &a
                     continue;
 
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                if (state == nullptr || state->mName == "minecraft:air")
+                if (state == nullptr || state->mName == BlockNames::AIR)
                     continue;
 
                 const Block *block = VanillaBlocks::fromIdentifier(state->mName);

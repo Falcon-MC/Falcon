@@ -5,6 +5,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -87,7 +88,7 @@ std::optional<Vector3f> PanicGoal::_findTarget(ServerNetworkHandler &owner, MobA
             continue;
 
         // Animal's walk target value: grass beneath is worth 10
-        const float value = level.getBlockState(x, y - 1, z).mName == "minecraft:grass_block" ? 10.0f : 0.0f;
+        const float value = level.getBlockState(x, y - 1, z).mName == BlockNames::GRASS_BLOCK ? 10.0f : 0.0f;
         if (value > bestValue) {
             bestValue = value;
             best = Vector3f((float) x, (float) y, (float) z);

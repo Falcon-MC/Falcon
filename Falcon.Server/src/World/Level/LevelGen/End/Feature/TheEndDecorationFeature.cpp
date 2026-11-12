@@ -11,6 +11,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldRulePlacer.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/ChunkGenerateContext.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -59,7 +60,7 @@ namespace {
     }
 
     bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 
     int32_t nextInt(std::mt19937 &random, uint32_t bound) {

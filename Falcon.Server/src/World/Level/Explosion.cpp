@@ -18,6 +18,7 @@
 #include "World/Level/Particle/ExplodeParticle.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,7 +50,7 @@ namespace {
     }
 
     bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 
     AxisAlignedBB boundingBoxOf(const Vector3f &position, const ActorSize &size) {

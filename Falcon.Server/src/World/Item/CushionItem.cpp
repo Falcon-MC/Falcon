@@ -54,7 +54,7 @@ bool CushionItem::matches(const std::string &identifier) {
 
 bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                                const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
-    if (player.getGameType() == (int32_t) GameType::Spectator)
+    if (player.isSpectator())
         return false;
 
     const uint8_t color = DyeColor::fromIdentifier(getIdentifier(), SUFFIX);
@@ -88,16 +88,7 @@ bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player
 
     owner.playLevelSound(level, LevelSoundEvent::SPAWN, spawnPosition, CushionActor::IDENTIFIER, -1);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
-        ItemStack remaining = item;
-        remaining.mCount--;
-        if (remaining.mCount <= 0)
-            remaining = ItemStack::air();
-
-        PlayerInventory &inventory = player.getInventory();
-        inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
-    }
+    player.consumeOneHeldItem();
 
     return true;
 }

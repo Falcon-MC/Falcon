@@ -9,6 +9,8 @@
 #include "World/Level/Particle/CreakingHeartTrailParticle.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <initializer_list>
@@ -25,7 +27,7 @@ namespace {
     const char *const PILLAR_AXIS_STATE = "pillar_axis";
     const char *const DEFAULT_AXIS = "y";
     const char *const MULTI_FACE_STATE = "multi_face_direction_bits";
-    const char *const AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *const PALE_OAK_LOG = "minecraft:pale_oak_log";
     const char *const CREAKING = "minecraft:creaking";
     const char *const INSTANT_DESPAWN_COMPONENT = "minecraft:instant_despawn";
@@ -59,9 +61,7 @@ namespace {
         return generator;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool isAir(const BlockState *state) {
         return state != nullptr && state->mName == AIR;

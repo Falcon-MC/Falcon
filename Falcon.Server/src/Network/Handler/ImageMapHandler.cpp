@@ -12,9 +12,10 @@
 #include "World/Level/Block/ItemFrameBlock.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
-    const char *const AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *const FRAME = "minecraft:frame";
     const char *const GLOW_FRAME = "minecraft:glow_frame";
 

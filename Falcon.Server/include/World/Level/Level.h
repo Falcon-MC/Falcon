@@ -41,6 +41,9 @@ class Level {
     friend class LevelPersistenceProbe;
 
 public:
+    // ticks in a day
+    static constexpr int64_t TICKS_PER_DAY = 24000;
+
     struct ChunkPosition {
         int32_t mX;
         int32_t mZ;
@@ -94,7 +97,7 @@ public:
     }
 
     int64_t getDayTime() const {
-        return mTime % 24000;
+        return mTime % TICKS_PER_DAY;
     }
 
     void setTime(int64_t time) {

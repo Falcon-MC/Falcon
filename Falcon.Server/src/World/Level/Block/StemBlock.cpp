@@ -10,6 +10,7 @@ FALCON_REGISTER_BLOCK(StemBlock, 250);
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 using namespace GrowthHelpers;
 
@@ -75,7 +76,7 @@ void StemBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     const int chosen = RandomTickSystem::nextInt(4);
     const Vector3i target(position.x + STEM_SIDES[chosen][0], position.y, position.z + STEM_SIDES[chosen][1]);
 
-    if (level.getBlockState(target.x, target.y, target.z).mName != "minecraft:air")
+    if (level.getBlockState(target.x, target.y, target.z).mName != BlockNames::AIR)
         return;
 
     const BlockState below = level.getBlockState(target.x, target.y - 1, target.z);

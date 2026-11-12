@@ -27,6 +27,7 @@
 #include "Scripting/ScriptEngine.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -63,7 +64,7 @@ namespace {
     }
 
     void freezeWaterUnderfoot(Level &level, const ServerPlayer &player, const Vector3f &feetPosition) {
-        if (player.getGameType() == (int32_t) GameType::Spectator)
+        if (player.isSpectator())
             return;
 
         const int32_t frostWalker = ItemEnchantments::getLevel(
@@ -81,10 +82,10 @@ namespace {
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
             for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
                 const BlockState water = level.getBlockState(x, y, z);
-                if (water.mName != "minecraft:water" || water.mStates.getInt("liquid_depth", 0) != 0)
+                if (water.mName != BlockNames::WATER || water.mStates.getInt("liquid_depth", 0) != 0)
                     continue;
 
-                if (level.getBlockState(x, y + 1, z).mName != "minecraft:air")
+                if (level.getBlockState(x, y + 1, z).mName != BlockNames::AIR)
                     continue;
 
                 Tag states = Tag::ofCompound();
@@ -97,7 +98,7 @@ namespace {
         }
     }
 
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const float PLAYER_HALF_WIDTH = 0.3f;
     const float PLAYER_HEIGHT = 1.8f;
     const float GROUND_PROBE_DEPTH = 0.5f;
@@ -274,7 +275,7 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     WaterMoveSystem::tick(player, contact);
     LavaResetFallDistanceSystem::tick(player, contact);
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     const bool fireResistance = player.hasEffect(MobEffectId::FireResistance);
     if (contact.lava || fireContact.fire)
         ignitePlayer(player);

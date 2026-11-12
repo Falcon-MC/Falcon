@@ -97,7 +97,7 @@ namespace {
     }
 
     constexpr float MAX_REACH = 8.0f;
-    constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     constexpr float FACING_MIN_DISTANCE = 1.0e-4f;
     constexpr float SPIN_ATTACK_DAMAGE = 8.0f;
     constexpr float SPIN_ATTACK_REACH = 1.0f;
@@ -162,7 +162,7 @@ namespace {
     }
 
     void damageHeldItem(ServerPlayer &attacker) {
-        if (attacker.getGameType() == (int32_t) GameType::Creative)
+        if (attacker.isCreative())
             return;
 
         PlayerInventory &inventory = attacker.getInventory();
@@ -259,7 +259,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), swing, owner.getCodecContext());
     }
 
-    if (!isSpawned() || isDead() || getGameType() == (int32_t) GameType::Spectator)
+    if (!isSpawned() || isDead() || isSpectator())
         return false;
 
     interruptShieldForAttack(owner);
@@ -342,8 +342,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     }
 
     if (victim == nullptr || victim == this || !victim->isSpawned() || victim->isDead()
-        || victim->getGameType() == (int32_t) GameType::Spectator
-        || victim->getGameType() == (int32_t) GameType::Creative)
+        || victim->isSpectator()
+        || victim->isCreative())
         return false;
 
     // pvp is read from the victim's world: a victim in a pvp-disabled world must be protected
@@ -489,7 +489,7 @@ bool ServerPlayer::_hasShieldReady(int64_t currentTick) const {
 
 bool ServerPlayer::_shouldRaiseShield(int64_t currentTick) const {
     return isSpawned() && !isDead() && getFlags().get(ActorFlag::Sneaking) && mShieldInterruptTicks <= 0
-           && getGameType() != (int32_t) GameType::Spectator && _hasShieldReady(currentTick);
+           && !isSpectator() && _hasShieldReady(currentTick);
 }
 
 bool ServerPlayer::isBlockingWithShield() const {
@@ -544,7 +544,7 @@ void ServerPlayer::interruptShieldForAttack(ServerNetworkHandler &owner) {
 }
 
 void ServerPlayer::_damageShield(ServerNetworkHandler &owner, float damage) {
-    if (damage < SHIELD_MIN_DURABILITY_DAMAGE || getGameType() == (int32_t) GameType::Creative)
+    if (damage < SHIELD_MIN_DURABILITY_DAMAGE || isCreative())
         return;
 
     const int amount = 1 + (int) std::floor(damage);
@@ -644,8 +644,8 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
         ServerPlayer &target = entry.second;
         if (&target == this || !target.isSpawned() || target.isDead() || target.getNoDamageTicks() > 0)
             continue;
-        if (target.getGameType() == (int32_t) GameType::Creative
-            || target.getGameType() == (int32_t) GameType::Spectator)
+        if (target.isCreative()
+            || target.isSpectator())
             continue;
 
         if (reaches(target.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
@@ -669,7 +669,7 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
 
     MovePlayerPacket packet;
     packet.mRuntimeActorId = (int64_t) getRuntimeId();
-    packet.mPosition = Vector3f(getPosition().x, getPosition().y + 1.62f, getPosition().z);
+    packet.mPosition = Vector3f(getPosition().x, getPosition().y + MovementPhysics::PLAYER_EYE_HEIGHT, getPosition().z);
     packet.mRotation = getRotation();
     packet.mMode = MovePlayerMode::Teleport;
     packet.mOnGround = isOnGround();
@@ -775,7 +775,7 @@ Vector3i ServerPlayer::getSpawnStandPositionHere() const {
 }
 
 void ServerPlayer::consumeOneHeldItem() {
-    if (getGameType() == (int32_t) GameType::Creative)
+    if (isCreative())
         return;
 
     ItemStack held = mInventory.getItemInHand();

@@ -5,6 +5,7 @@
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/LevelGen/Random/GameRandom.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -20,7 +21,7 @@ namespace {
     constexpr int32_t MAX_HEIGHT = 128;
 
     bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 
     bool isAirAt(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
@@ -32,7 +33,7 @@ namespace {
     }
 
     bool isLava(const BlockState &state) {
-        return state.mName == "minecraft:lava" || state.mName == "minecraft:flowing_lava";
+        return state.mName == BlockNames::LAVA || state.mName == "minecraft:flowing_lava";
     }
 
     bool isNetherrackOrWart(const BlockState &state) {

@@ -10,6 +10,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const int PRECIPITATION_CHANCE = 16;
@@ -80,7 +81,7 @@ void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
         const BlockState *state = level.peekBlockPtr(x, surface, z);
         if (state == nullptr)
             return;
-        if (state->mName != "minecraft:air")
+        if (state->mName != BlockNames::AIR)
             break;
         --surface;
     }
@@ -126,7 +127,7 @@ bool PrecipitationSystem::shouldSnow(Level &level, const Vector3i &position) {
         return false;
 
     const BlockState *state = stateAt(level, position);
-    if (state == nullptr || state->mName != "minecraft:air")
+    if (state == nullptr || state->mName != BlockNames::AIR)
         return false;
 
     return canHoldSnow(level, Vector3i(position.x, position.y - 1, position.z));

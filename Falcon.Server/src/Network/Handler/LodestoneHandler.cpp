@@ -81,7 +81,7 @@ bool LodestoneHandler::useCompassOn(ServerNetworkHandler &owner, ServerPlayer &p
     }
     link(owner, level, position, compass);
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     ItemStack remaining = held;
     if (!creative)
         remaining.mCount -= 1;

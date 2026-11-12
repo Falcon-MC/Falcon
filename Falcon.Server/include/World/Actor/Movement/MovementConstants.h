@@ -24,6 +24,9 @@ namespace MovementPhysics {
     inline constexpr float PLAYER_HEIGHT = 1.8f;
     inline constexpr float PLAYER_SNEAKING_HEIGHT = 1.49f;
     inline constexpr float PLAYER_CRAWLING_HEIGHT = 0.6f;
+    // eyes above the feet; also how far above the feet a player's network position is
+    inline constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    inline constexpr float PLAYER_BASE_OFFSET = PLAYER_EYE_HEIGHT;
     inline constexpr int32_t JUMP_DELAY_TICKS = 10;
     inline constexpr float EDGE_INSET = 0.025f;
     inline constexpr float EDGE_STEP = 0.05f;

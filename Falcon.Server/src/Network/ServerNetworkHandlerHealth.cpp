@@ -25,6 +25,7 @@
 #include "Protocol/Packets/RespawnPacket.h"
 #include "Protocol/Packets/SetHealthPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,7 +35,7 @@
 #include <vector>
 
 namespace {
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const float BED_HEIGHT = 0.5625f;
     const float THROW_SPEED = 0.3f;
     const int THROW_PICKUP_DELAY = 40;
@@ -266,7 +267,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     if (!keepInventory) {
         _dropInventoryOnDeath(player);
 
-        if (player.getGameType() != (int32_t) GameType::Creative) {
+        if (!player.isCreative()) {
             const int droppedExperience = player.getExperience().getXpDropAmount();
             if (droppedExperience > 0)
                 spawnExperienceOrbs(getLevelFor(player), player.getPosition(), droppedExperience);

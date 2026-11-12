@@ -17,6 +17,7 @@ FALCON_REGISTER_BLOCK(ItemFrameBlock, 60);
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
 
 #include <cstdlib>
 #include <utility>
@@ -29,9 +30,7 @@ namespace {
 
     const int FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
-    Vector3f centreOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool rollsDrop(float chance) {
         if (chance >= 1.0f)
@@ -158,7 +157,7 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
         frame->setItem(std::move(framed));
         frame->setRotation(0);
 
-        if (player.getGameType() != (int32_t) GameType::Creative) {
+        if (!player.isCreative()) {
             ItemStack remaining = held;
             remaining.mCount -= 1;
             inventory.setItemInHand(remaining.mCount <= 0 ? ItemStack::air() : std::move(remaining));
@@ -167,11 +166,11 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
         }
 
         setStoringMap(owner, level, position, state, isFilledMap(held));
-        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameAddItem, centreOf(position), 0);
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameAddItem, centerOf(position), 0);
     } else {
         frame->setRotation(frame->getRotation() + 1);
         setStoringMap(owner, level, position, state, false);
-        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameRotateItem, centreOf(position), 0);
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameRotateItem, centerOf(position), 0);
     }
 
     BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
@@ -185,7 +184,7 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
     if (frame == nullptr || frame->isEmpty())
         return false;
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     if (!creative)
         dropFramedItem(owner, level, position, *frame);
 
@@ -196,7 +195,7 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
 
     owner.broadcastLevelEvent(
             level, creative ? LevelEventPacket::SoundItemFrameRemoveItem : LevelEventPacket::SoundItemFrameBreak,
-            centreOf(position), 0);
+            centerOf(position), 0);
 
     BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
     return true;
@@ -216,7 +215,7 @@ void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     created->setState(state);
     blockActors.insert(std::move(created));
 
-    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFramePlace, centreOf(position), 0);
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFramePlace, centerOf(position), 0);
 }
 
 void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -231,5 +230,5 @@ void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
     MapHandler::onFrameItemChanged(owner, level, position, frame->getItem(), ItemStack::air());
     level.getBlockActors().remove(position);
 
-    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centreOf(position), 0);
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centerOf(position), 0);
 }

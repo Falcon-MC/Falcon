@@ -49,7 +49,7 @@ bool KillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         if (target->isDead())
             continue;
 
-        if (target->getGameType() == (int32_t) GameType::Creative) {
+        if (target->isCreative()) {
             sender.sendTranslation("commands.kill.attemptKillPlayerCreative", {});
             continue;
         }

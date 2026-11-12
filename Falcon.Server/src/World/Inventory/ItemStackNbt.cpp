@@ -6,6 +6,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const char *TAG_SLOT = "Slot";
@@ -19,7 +20,7 @@ namespace {
     const char *TAG_CAN_PLACE = "CanPlaceOn";
     const char *TAG_CAN_BREAK = "CanDestroy";
 
-    const char *AIR_IDENTIFIER = "minecraft:air";
+    const char *AIR_IDENTIFIER = BlockNames::AIR;
 
     Tag stringList(const std::vector<std::string> &values) {
         Tag list = Tag::ofList(Tag::Type::String);

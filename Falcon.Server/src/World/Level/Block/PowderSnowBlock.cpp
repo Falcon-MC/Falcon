@@ -10,6 +10,7 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -24,7 +25,7 @@ namespace {
 
     // sub_14A23B050: melts with the destroy particles and no break sound
     void melt(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
-        level.setBlock(position, BlockState("minecraft:air"), true);
+        level.setBlock(position, BlockState(BlockNames::AIR), true);
         owner.broadcastLevelEvent(level, LEVEL_EVENT_DESTROY_NO_SOUND,
                                   Vector3f((float) position.x, (float) position.y, (float) position.z),
                                   (int32_t) BlockStateHasher::hash(state.mName, state.mStates));
@@ -75,7 +76,7 @@ void PowderSnowBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
     if (!actor.isOnFire())
         return;
     const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
-    if (player != nullptr && player->getGameType() == (int32_t) GameType::Spectator)
+    if (player != nullptr && player->isSpectator())
         return;
 
     // sub_143611E40, sub_143531350: put out with a fizz sized to the box

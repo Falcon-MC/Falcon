@@ -8,6 +8,7 @@
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +24,7 @@ namespace {
     const char *const FEET_LOCATION = "feet";
     const float DEFAULT_SEARCH_RADIUS = 10.0f;
     const float DEFAULT_FIELD_OF_VIEW = 26.0f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float HEAD_HEIGHT_RATIO = 0.85f;
     const float BODY_HEIGHT_RATIO = 0.5f;
     const double SIGHT_STEP = 0.25;

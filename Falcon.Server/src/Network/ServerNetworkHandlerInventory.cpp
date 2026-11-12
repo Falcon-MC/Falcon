@@ -77,7 +77,7 @@ void ServerNetworkHandler::setPlayerEquipment(ServerPlayer &player, const std::s
 }
 
 void ServerNetworkHandler::damagePlayerHeldItem(ServerPlayer &player, int32_t amount) {
-    if (amount <= 0 || player.getGameType() == (int32_t) GameType::Creative)
+    if (amount <= 0 || player.isCreative())
         return;
 
     PlayerInventory &inventory = player.getInventory();

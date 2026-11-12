@@ -4,6 +4,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemProperties.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Level/Block/BlockIdentifier.h"
 
 #include <algorithm>
 #include <cctype>
@@ -37,10 +38,7 @@ namespace {
         return item.isAir() ? empty : item.mDefinition->getIdentifier();
     }
 
-    bool endsWith(const std::string &value, const char *suffix) {
-        const std::string tail(suffix);
-        return value.size() >= tail.size() && value.compare(value.size() - tail.size(), tail.size(), tail) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     template <size_t N>
     bool isOneOf(const std::string &identifier, const char *const (&list)[N]) {

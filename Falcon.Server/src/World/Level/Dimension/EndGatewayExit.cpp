@@ -3,13 +3,14 @@
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
 
 namespace {
 
-    const char *const AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *const BEDROCK = "minecraft:bedrock";
     const char *const END_STONE = "minecraft:end_stone";
     const char *const END_GATEWAY = "minecraft:end_gateway";

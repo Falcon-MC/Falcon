@@ -20,6 +20,7 @@ FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockIdentifier.h"
 
 #include <utility>
 
@@ -59,12 +60,7 @@ namespace {
         return DEFINITIONS[0];
     }
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size())
-            return false;
-
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool kindOf(const std::string &identifier, ContainerBlockKind &outKind) {
         if (identifier == "minecraft:barrel") {
@@ -146,7 +142,7 @@ namespace {
         if (!campfire.addFood(held))
             return false;
 
-        if (player.getGameType() != (int32_t) GameType::Creative) {
+        if (!player.isCreative()) {
             --held.mCount;
             if (held.mCount <= 0)
                 held = ItemStack::air();

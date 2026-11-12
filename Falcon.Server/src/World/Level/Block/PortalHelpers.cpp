@@ -4,10 +4,11 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 namespace PortalHelpers {
     Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        return VectorMath::centerOf(position);
     }
 
     bool isInsideLevel(Level &level, const Vector3i &position) {

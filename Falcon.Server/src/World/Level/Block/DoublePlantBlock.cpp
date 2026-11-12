@@ -8,6 +8,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(DoublePlantBlock, 240);
 
@@ -39,7 +40,7 @@ bool DoublePlantBlock::canPlaceAt(Level &level, const Vector3i &position, int bl
         return false;
 
     const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
-    if (above.mName != "minecraft:air")
+    if (above.mName != BlockNames::AIR)
         return false;
 
     const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);

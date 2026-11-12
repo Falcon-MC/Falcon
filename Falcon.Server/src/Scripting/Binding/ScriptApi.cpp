@@ -1823,7 +1823,8 @@ void ScriptApi::_defineEnums() {
 
     // the typings declare these as plain constants, with these values
     for (const auto &constant: {std::make_pair("HudElementsCount", ServerPlayer::HUD_ELEMENT_COUNT),
-                                std::make_pair("HudVisibilityCount", 2), std::make_pair("TicksPerDay", 24000),
+                                std::make_pair("HudVisibilityCount", 2),
+                                std::make_pair("TicksPerDay", (int) Level::TICKS_PER_DAY),
                                 std::make_pair("TicksPerSecond", 20), std::make_pair("MoonPhaseCount", 8)}) {
         if (mSurface.has(constant.first))
             mServerExports.emplace_back(constant.first, JS_NewInt32(mContext, constant.second));

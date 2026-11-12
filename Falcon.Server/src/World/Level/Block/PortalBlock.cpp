@@ -73,7 +73,7 @@ void PortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const
     actor.setPortalTicks(ticks);
 
     const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor);
-    const bool instant = player != nullptr && player->getGameType() == (int32_t) GameType::Creative;
+    const bool instant = player != nullptr && player->isCreative();
     if (ticks < (instant ? 1 : PORTAL_DELAY_TICKS))
         return;
 

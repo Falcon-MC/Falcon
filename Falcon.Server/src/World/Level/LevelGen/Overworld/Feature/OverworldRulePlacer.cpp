@@ -38,6 +38,7 @@
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <array>
@@ -3422,7 +3423,7 @@ bool OverworldRulePlacer::_placeSulfurPool(BlockManager &blocks, int32_t x, int3
                 const BlockState &state = blocks.getBlockAt(cornerX + lakeX, cornerY + lakeY, cornerZ + lakeZ);
                 if (lakeY >= 4 && DecorationSupport::isLiquid(state))
                     return false;
-                if (lakeY < 4 && !BlockSupport::isSolid(state) && state.mName != "minecraft:water")
+                if (lakeY < 4 && !BlockSupport::isSolid(state) && state.mName != BlockNames::WATER)
                     return false;
                 if (state.mName == "minecraft:sulfur_spike")
                     return false;
@@ -3478,7 +3479,7 @@ bool OverworldRulePlacer::_placePotentSulfurSearch(BlockManager &blocks, int32_t
                 const int32_t blockX = x + offsetX;
                 const int32_t blockY = y + offsetY;
                 const int32_t blockZ = z + offsetZ;
-                if (blocks.getBlockAt(blockX, blockY + 1, blockZ).mName != "minecraft:water"
+                if (blocks.getBlockAt(blockX, blockY + 1, blockZ).mName != BlockNames::WATER
                     || blocks.getBlockAt(blockX, blockY, blockZ).mName != "minecraft:sulfur")
                     continue;
 

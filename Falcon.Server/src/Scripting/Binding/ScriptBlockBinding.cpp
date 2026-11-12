@@ -24,6 +24,7 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
 #include "World/Level/Map/MapColors.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cstring>
@@ -187,7 +188,7 @@ namespace {
 
     JSValue itemOfBlock(ScriptApi &api, const BlockState &state, int32_t amount) {
         const std::string identifier = BlockPickItem::identifierFor(state.mName);
-        if (identifier.empty() || identifier == "minecraft:air")
+        if (identifier.empty() || identifier == BlockNames::AIR)
             return JS_UNDEFINED;
         ScriptItemData data;
         data.mTypeId = identifier;
@@ -275,9 +276,9 @@ namespace {
         if (waterlogged && !liquidAnswers(at.state()).mCanContain)
             return at.mApi->throwError("Error", "Block type cannot be waterlogged.");
 
-        BlockState overlay = BlockState("minecraft:air");
+        BlockState overlay = BlockState(BlockNames::AIR);
         if (waterlogged) {
-            overlay = BlockState("minecraft:water");
+            overlay = BlockState(BlockNames::WATER);
             overlay.mStates.putInt("liquid_depth", 0);
         }
         at.mLevel->setBlockStateAtLayer(at.mPosition.x, at.mPosition.y, at.mPosition.z, 1, overlay);
@@ -933,7 +934,7 @@ namespace {
         Vector3i target(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
         for (const int *side: SIDES) {
             const Vector3i candidate(at.mPosition.x + side[0], at.mPosition.y + side[1], at.mPosition.z + side[2]);
-            if (at.mLevel->getBlockState(candidate.x, candidate.y, candidate.z).mName == "minecraft:air") {
+            if (at.mLevel->getBlockState(candidate.x, candidate.y, candidate.z).mName == BlockNames::AIR) {
                 target = candidate;
                 break;
             }

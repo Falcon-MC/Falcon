@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -61,7 +62,7 @@ namespace {
         if (state == nullptr)
             return true;
 
-        return state->mName == "minecraft:air";
+        return state->mName == BlockNames::AIR;
     }
 }
 

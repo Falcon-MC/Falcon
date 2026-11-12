@@ -529,10 +529,10 @@ namespace {
         if (!state.mShowSneaking && actor->getFlags().get(ActorFlag::Sneaking))
             return false;
         const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(actor);
-        if (player != nullptr && player->getGameType() == (int32_t) GameType::Spectator) {
+        if (player != nullptr && player->isSpectator()) {
             if (!state.mShowSpectator)
                 return false;
-            if (!state.mShowSpectatorToSpectator && viewer.getGameType() == (int32_t) GameType::Spectator)
+            if (!state.mShowSpectatorToSpectator && viewer.isSpectator())
                 return false;
         }
         return true;

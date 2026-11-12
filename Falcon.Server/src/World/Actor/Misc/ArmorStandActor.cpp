@@ -239,7 +239,7 @@ bool ArmorStandActor::_canInteract(ServerNetworkHandler &owner, ServerPlayer &pl
     if (mExpired || isDead() || !player.isSpawned() || player.isDead() || !player.sharesLevelWith(*this))
         return false;
 
-    if (player.getGameType() == (int32_t) GameType::Spectator)
+    if (player.isSpectator())
         return false;
 
     if (!std::isfinite(clickPosition.x) || !std::isfinite(clickPosition.y) || !std::isfinite(clickPosition.z))
@@ -297,7 +297,7 @@ bool ArmorStandActor::onInteractAt(ServerNetworkHandler &owner, ServerPlayer &pl
     }
 
     ItemStack worn = mEquipment.getSlot(slot);
-    if (!exchange(worn, held, player.getGameType() == (int32_t) GameType::Creative)) {
+    if (!exchange(worn, held, player.isCreative())) {
         _resync(owner, player);
         return false;
     }

@@ -841,7 +841,7 @@ bool RideControlSystem::tryBoost(ServerNetworkHandler &owner, ServerPlayer &play
         state.mBoostTicks = (int32_t) std::lround(numberIn(boostable, "duration", DEFAULT_BOOST_SECONDS)
                                                   * (float) TICKS_PER_SECOND);
 
-        if (player.getGameType() == (int32_t) GameType::Creative)
+        if (player.isCreative())
             return true;
 
         ItemDurability::apply(&player, held, (int32_t) numberIn(entry.get(), "damage", 1.0f));
