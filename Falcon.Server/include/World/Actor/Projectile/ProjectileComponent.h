@@ -9,6 +9,9 @@ struct CustomActorDefinition;
 
 // minecraft:projectile as one entity carries it; scripts read and change it through EntityProjectileComponent
 struct ProjectileComponent {
+    // ParticleType::IconCrack, the loader's default particle (sub_143CADDC0, 26.60)
+    static constexpr int32_t PARTICLE_ICON_CRACK = 14;
+
     // should_bounce: "no", "if_invulnerable", "if_no_damage_dealt" (sub_143CADDC0, 26.60)
     enum class Bounce : uint8_t { No = 0, IfInvulnerable = 1, IfNoDamageDealt = 2 };
 
@@ -25,10 +28,16 @@ struct ProjectileComponent {
     Bounce mShouldBounce = Bounce::No;
     std::string mHitSound;
     std::string mHitGroundSound;
-    // ParticleType by name; "none" is ParticleType 0, which scripts read as undefined
-    std::string mParticle = "iconcrack";
+    // ParticleType; 0 has no name, scripts read it as undefined
+    int32_t mParticle = PARTICLE_ICON_CRACK;
 
     static ProjectileComponent read(const json::Value &component);
+
+    // ParticleType by its exact name, 0 for any other name (sub_141D318C0, 26.60)
+    static int32_t particleType(const std::string &name);
+
+    // the name of a ParticleType, empty for 0 or an unknown type (sub_141D304A0, 26.60)
+    static const char *particleName(int32_t type);
 
     // the entity's own definition: a behavior pack one first, else the vanilla one; false when it has none
     static bool find(const std::string &identifier, const CustomActorDefinition *custom, ProjectileComponent &out);
