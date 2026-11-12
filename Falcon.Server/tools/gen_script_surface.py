@@ -17,6 +17,8 @@ MODULES = {
     'server-ui': ('minecraft-server-ui-', 'ui'),
     'common': ('minecraft-common-', 'common'),
     'server-graphics': ('minecraft-server-graphics-', 'graphics'),
+    'server-admin': ('minecraft-server-admin-', 'admin'),
+    'server-net': ('minecraft-server-net-', 'net'),
 }
 
 # classes, enums and constants the scripting layer binds; anything else stays out of the table
@@ -77,6 +79,8 @@ BOUND = {
     'server-ui': None,
     'common': None,
     'server-graphics': None,
+    'server-admin': None,
+    'server-net': None,
 }
 
 # every signal of these classes is subscribable; their signal and event classes join the bound set
@@ -125,6 +129,12 @@ def parse(path):
                              blocked or (previous is not None and previous[2]), signature)
         classes[match.group(1)] = (match.group(2), members)
 
+    # free functions carry their privileges in the doc right above them
+    functions = {}
+    for match in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)\s*\nexport function (\w+)', raw, re.S):
+        tags = set(re.findall(r'@privilege ([a-z-]+)', match.group(1)))
+        functions[match.group(2)] = ('early-execution-allowed' in tags, 'no-restricted-execution' in tags)
+
     enums = {}
     for match in re.finditer(r'\nexport enum (\w+) \{(.*?)\}', strip_comments(raw), re.S):
         values = []
@@ -135,7 +145,7 @@ def parse(path):
                 # a reserved word is quoted as a key: void = 'void'
                 values.append((key.strip("'"), value.strip("'")))
         enums[match.group(1)] = values
-    return exports, classes, enums
+    return exports, classes, enums, functions
 
 
 def collect(root, prefix):
@@ -183,7 +193,7 @@ def main():
 
     bound_events = set()
     for version, path in collect(root, MODULES['server'][0]):
-        _, classes, _ = parse(path)
+        _, classes, _, _ = parse(path)
         for owner in SIGNAL_OWNERS:
             if owner not in classes:
                 continue
@@ -198,7 +208,7 @@ def main():
     for module, (prefix, short) in MODULES.items():
         bound = BOUND[module]
         for version, path in collect(root, prefix):
-            exports, classes, enums = parse(path)
+            exports, classes, enums, functions = parse(path)
             beta = bool(version_key(version)[3])
             for name, kind in exports.items():
                 is_error = kind == 'class' and name.endswith('Error')
@@ -208,6 +218,8 @@ def main():
                 if bound is not None and name not in bound and not is_error and not payload and not component:
                     continue
                 entry('%s:%s' % (short, name)).add(version)
+                if kind == 'function' and name in functions:
+                    entries['%s:%s' % (short, name)].early, entries['%s:%s' % (short, name)].blocked = functions[name]
                 if kind == 'class' and name in classes:
                     parent, members = classes[name]
                     if parent is not None and (beta or name not in parents):
@@ -230,7 +242,7 @@ def main():
         if short != 'server':
             continue
         for version, path in collect(root, prefix):
-            _, classes, _ = parse(path)
+            _, classes, _, _ = parse(path)
             for name, (_, members) in classes.items():
                 subscribe = members.get('subscribe')
                 if name.endswith('Signal') and subscribe is not None:

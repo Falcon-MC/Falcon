@@ -16,6 +16,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/GraphicsOverrideParameterPacket.h"
+#include "Scripting/Binding/ScriptAdminBinding.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 
 #include <algorithm>
@@ -587,6 +588,8 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mUiSurface("@minecraft/server-ui", moduleOrDefault(mModules, "@minecraft/server-ui")),
           mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")),
           mGraphicsSurface("@minecraft/server-graphics", moduleOrDefault(mModules, "@minecraft/server-graphics")),
+          mAdminSurface("@minecraft/server-admin", moduleOrDefault(mModules, "@minecraft/server-admin")),
+          mNetSurface("@minecraft/server-net", moduleOrDefault(mModules, "@minecraft/server-net")),
           mScheduler(context),
           mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
@@ -628,7 +631,9 @@ ScriptApi::~ScriptApi() {
     }
     for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
-    for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports}) {
+    JS_FreeValue(mContext, mAdminHooks);
+    for (auto *exports:
+         {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports}) {
         for (auto &entry: *exports)
             JS_FreeValue(mContext, entry.second);
     }
@@ -1552,9 +1557,15 @@ void ScriptApi::_installBootstraps() {
     const std::vector<std::string> uiErrors = mModules.find("@minecraft/server-ui") != nullptr
                                                       ? mUiSurface.errorClasses()
                                                       : std::vector<std::string>();
+    const std::vector<std::string> adminErrors = mModules.find("@minecraft/server-admin") != nullptr
+                                                         ? mAdminSurface.errorClasses()
+                                                         : std::vector<std::string>();
+    const std::vector<std::string> netErrors = mModules.find("@minecraft/server-net") != nullptr
+                                                       ? mNetSurface.errorClasses()
+                                                       : std::vector<std::string>();
     JSValue names = JS_NewArray(mContext);
     uint32_t count = 0;
-    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors, &uiErrors}) {
+    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors, &uiErrors, &adminErrors, &netErrors}) {
         for (const std::string &error: *list)
             JS_SetPropertyUint32(mContext, names, count++, string(mContext, error));
     }
@@ -1567,6 +1578,10 @@ void ScriptApi::_installBootstraps() {
         mServerExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     for (const std::string &error: uiErrors)
         mUiExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: adminErrors)
+        mAdminExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: netErrors)
+        mNetExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     JS_FreeValue(mContext, classes);
 
     JSValue data = JS_NewObject(mContext);
@@ -1635,6 +1650,16 @@ void ScriptApi::_installBootstraps() {
                 mGraphicsExports.emplace_back(name, JS_GetPropertyStr(mContext, graphicsExports, name));
         }
         JS_FreeValue(mContext, graphicsExports);
+    }
+
+    if (mModules.find("@minecraft/server-admin") != nullptr) {
+        JSValue adminExports = ScriptAdminBinding::install(*this);
+        for (const char *name: ScriptAdminBinding::exportNames()) {
+            if (mAdminSurface.has(name))
+                mAdminExports.emplace_back(name, JS_GetPropertyStr(mContext, adminExports, name));
+        }
+        mAdminHooks = JS_GetPropertyStr(mContext, adminExports, "hooks");
+        JS_FreeValue(mContext, adminExports);
     }
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
@@ -1728,6 +1753,10 @@ const std::vector<std::pair<std::string, JSValue>> &ScriptApi::moduleExports(con
         return mUiExports;
     if (module == "@minecraft/server-graphics")
         return mGraphicsExports;
+    if (module == "@minecraft/server-admin")
+        return mAdminExports;
+    if (module == "@minecraft/server-net")
+        return mNetExports;
     if (module == "@minecraft/common")
         return mCommonExports;
     return mServerExports;
@@ -1763,4 +1792,23 @@ namespace {
             JS_SetModuleExport(ctx, module, entry.first.c_str(), JS_DupValue(ctx, entry.second));
         return 0;
     }
+}
+
+bool ScriptApi::emitPlayerJoin(uint32_t token, const std::string &name, const std::string &persistentId) {
+    if (!JS_IsObject(mAdminHooks))
+        return false;
+    JSValue emit = JS_GetPropertyStr(mContext, mAdminHooks, "emitJoin");
+    JSValue args[3] = {JS_NewUint32(mContext, token), JS_NewString(mContext, name.c_str()),
+                       JS_NewString(mContext, persistentId.c_str())};
+    JSValue result = JS_Call(mContext, emit, mAdminHooks, 3, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
+    JS_FreeValue(mContext, emit);
+    if (JS_IsException(result)) {
+        logPendingException("asyncPlayerJoin");
+        return false;
+    }
+    const bool emitted = JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return emitted;
 }

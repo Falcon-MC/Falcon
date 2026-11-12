@@ -431,6 +431,20 @@ void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, co
 }
 
 void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
+    ScriptEngine &scripts = owner.getScriptEngine();
+    if (scripts.isHoldingJoin(id))
+        return;
+    // asyncPlayerJoin: the login goes on once every subscriber's promise settled
+    const bool held = scripts.holdPlayerJoin(player, [&owner, id]() {
+        const auto it = owner.getPlayers().find(id);
+        if (it != owner.getPlayers().end())
+            _finishLogin(owner, id, it->second);
+    });
+    if (!held)
+        _finishLogin(owner, id, player);
+}
+
+void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);
     player.setLoggedInTick(owner.getCurrentTick());
 

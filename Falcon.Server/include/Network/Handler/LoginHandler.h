@@ -27,7 +27,11 @@ public:
     static void startEncryption(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                 const std::string &clientPublicKey);
 
+    // scripts may hold it first: asyncPlayerJoin
     static void completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player);
+
+    // login success and the resource packs
+    static void _finishLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player);
 
     static void handleResourcePackClientResponse(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                  ServerPlayer &player, const ResourcePackClientResponsePacket &packet);
