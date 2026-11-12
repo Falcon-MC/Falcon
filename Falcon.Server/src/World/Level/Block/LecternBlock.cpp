@@ -47,7 +47,7 @@ bool LecternBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
         return false;
 
     lectern.setBook(held);
-    if (player.getGameType() != (int32_t) GameType::Creative) {
+    if (!player.isCreative()) {
         --held.mCount;
         if (held.mCount <= 0)
             held = ItemStack::air();
@@ -74,7 +74,7 @@ bool LecternBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, co
                                book, ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
     BlockActionHandler::broadcastBlockActorData(owner, level, *lectern);
     RedstoneSystem::queueRedstoneNotification(level, position);
-    return player.getGameType() == (int32_t) GameType::Creative;
+    return player.isCreative();
 }
 
 void LecternBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

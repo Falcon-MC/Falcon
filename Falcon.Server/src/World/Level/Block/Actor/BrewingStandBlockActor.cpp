@@ -11,6 +11,7 @@
 #include "Protocol/Packets/ContainerSetDataPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
+#include "Core/Math/VectorMath.h"
 
 #include <memory>
 #include <string>
@@ -40,9 +41,7 @@ namespace {
                || identifier == "minecraft:lingering_potion";
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 }
 
 Tag BrewingStandBlockActor::saveNbt() const {

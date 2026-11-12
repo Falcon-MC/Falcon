@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cstdint>
 #include <string>
@@ -11,7 +12,7 @@ class Level;
 class ServerNetworkHandler;
 
 namespace PortalHelpers {
-    inline const char *AIR_IDENTIFIER = "minecraft:air";
+    inline const char *AIR_IDENTIFIER = BlockNames::AIR;
     inline const char *OBSIDIAN_IDENTIFIER = "minecraft:obsidian";
     inline const char *PORTAL_IDENTIFIER = "minecraft:portal";
     inline const char *END_PORTAL_IDENTIFIER = "minecraft:end_portal";

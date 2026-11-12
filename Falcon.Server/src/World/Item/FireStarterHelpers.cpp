@@ -3,6 +3,8 @@
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Level/Level.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace FireStarterHelpers {
     Vector3i relativeToFace(const Vector3i &position, int32_t face) {
@@ -23,7 +25,7 @@ namespace FireStarterHelpers {
     }
 
     Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        return VectorMath::centerOf(position);
     }
 
     bool isObsidian(Level &level, const Vector3i &position) {
@@ -31,7 +33,7 @@ namespace FireStarterHelpers {
     }
 
     bool canIgniteAgainst(Level &level, const Vector3i &target, const Vector3i &placement) {
-        if (level.getBlockState(placement.x, placement.y, placement.z).mName != "minecraft:air")
+        if (level.getBlockState(placement.x, placement.y, placement.z).mName != BlockNames::AIR)
             return false;
 
         const BlockState state = level.getBlockState(target.x, target.y, target.z);

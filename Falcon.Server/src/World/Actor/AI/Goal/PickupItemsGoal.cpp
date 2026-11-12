@@ -6,16 +6,12 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 namespace {
     const int32_t REPATH_INTERVAL = 10;
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 }
 
 PickupItemsGoal::PickupItemsGoal(float speed, float maxDistance, float goalRadius, int32_t hurtCooldownTicks,

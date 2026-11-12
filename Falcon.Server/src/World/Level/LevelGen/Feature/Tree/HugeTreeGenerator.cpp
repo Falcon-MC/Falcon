@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/Feature/Tree/HugeTreeGenerator.h"
 
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 HugeTreeGenerator::HugeTreeGenerator(int32_t baseHeight, int32_t extraRandomHeight, const BlockState &woodMetadata,
                                      const BlockState &leavesMetadata)
@@ -45,7 +46,7 @@ bool HugeTreeGenerator::_isSpaceAt(BlockManager &manager, int32_t x, int32_t y, 
 bool HugeTreeGenerator::_ensureDirtsUnderneath(BlockManager &manager, int32_t x, int32_t y, int32_t z) {
     const std::string identifier = manager.getBlockAt(x, y - 1, z).mName;
 
-    if ((identifier == "minecraft:grass_block" || identifier == "minecraft:dirt") && y >= 2) {
+    if ((identifier == BlockNames::GRASS_BLOCK || identifier == BlockNames::DIRT) && y >= 2) {
         setDirtAt(manager, x, y - 1, z);
         setDirtAt(manager, x + 1, y - 1, z);
         setDirtAt(manager, x, y - 1, z + 1);

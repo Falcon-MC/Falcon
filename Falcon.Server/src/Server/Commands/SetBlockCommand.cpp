@@ -8,6 +8,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -73,7 +74,7 @@ bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, co
     if (mode == "keep" && !BlockSupport::isReplaceable(existing))
         return false;
 
-    if (mode == "destroy" && existing.mName != "minecraft:air") {
+    if (mode == "destroy" && existing.mName != BlockNames::AIR) {
         BlockActionHandler::destroyBlock(handler, level, position, existing, true, ItemStack::air());
     } else {
         level.onBlockBroken(position, existing);

@@ -6,6 +6,7 @@
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 
@@ -69,5 +70,5 @@ void SnowLayerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     (void) state;
 
     if (RandomTickSystem::getBlockLight(level, position) >= SNOW_MELT_LIGHT_LEVEL)
-        BlockChangeSystem::change(level, position, BlockState("minecraft:air"), BlockChangeCause::Fade, true);
+        BlockChangeSystem::change(level, position, BlockState(BlockNames::AIR), BlockChangeCause::Fade, true);
 }

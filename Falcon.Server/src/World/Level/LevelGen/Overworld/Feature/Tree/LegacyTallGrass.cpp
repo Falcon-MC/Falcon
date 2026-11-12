@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <vector>
@@ -45,8 +46,8 @@ void LegacyTallGrass::growGrass(BlockManager &manager, int32_t x, int32_t y, int
             if (!random.nextBoolean())
                 continue;
 
-            if (manager.getBlockAt(currentX, newY, currentZ).mName != "minecraft:air"
-                || manager.getBlockAt(currentX, newY - 1, currentZ).mName != "minecraft:grass_block")
+            if (manager.getBlockAt(currentX, newY, currentZ).mName != BlockNames::AIR
+                || manager.getBlockAt(currentX, newY - 1, currentZ).mName != BlockNames::GRASS_BLOCK)
                 continue;
 
             const int32_t ranNumber = javaRound(random.nextGaussian() * 1000);

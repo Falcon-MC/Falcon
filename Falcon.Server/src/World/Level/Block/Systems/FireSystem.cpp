@@ -16,6 +16,8 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <array>
@@ -91,12 +93,7 @@ namespace {
         return distribution(fireRandom());
     }
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size())
-            return false;
-
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool isChunkReady(Level &level, const Vector3i &position) {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
@@ -107,7 +104,7 @@ namespace {
 
     BlockState stateAt(Level &level, const Vector3i &position) {
         if (!isChunkReady(level, position))
-            return BlockState("minecraft:air");
+            return BlockState(BlockNames::AIR);
 
         return level.getBlockState(position.x, position.y, position.z);
     }
@@ -171,7 +168,7 @@ namespace {
 
     void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
         const BlockState previous = stateAt(level, position);
-        level.setBlock(position, BlockState("minecraft:air"), false);
+        level.setBlock(position, BlockState(BlockNames::AIR), false);
         level.onBlockBroken(position, previous);
     }
 
@@ -203,7 +200,7 @@ namespace {
     }
 
     int chanceOfNeighboursEncouragingFire(Level &level, const Vector3i &position) {
-        if (stateAt(level, position).mName != "minecraft:air")
+        if (stateAt(level, position).mName != BlockNames::AIR)
             return 0;
 
         int chance = 0;
@@ -343,7 +340,7 @@ bool FireSystem::ignite(ServerNetworkHandler &owner, Level &level, const Vector3
     if (!isChunkReady(level, position))
         return false;
 
-    if (stateAt(level, position).mName != "minecraft:air")
+    if (stateAt(level, position).mName != BlockNames::AIR)
         return false;
 
     if (canLightPortal && ObsidianBlock::tryLightPortal(level, position, &owner))

@@ -4,6 +4,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -249,7 +250,7 @@ void SurfaceOverwriteBuilder::_makeBands(IRandom &random, int32_t baseWidth, con
 }
 
 bool SurfaceOverwriteBuilder::_isWaterState(const BlockState &state) {
-    return state.mName == "minecraft:water" || state.mName == "minecraft:flowing_water";
+    return state.mName == BlockNames::WATER || state.mName == "minecraft:flowing_water";
 }
 
 bool SurfaceOverwriteBuilder::_isSolidState(const BlockState &state) {

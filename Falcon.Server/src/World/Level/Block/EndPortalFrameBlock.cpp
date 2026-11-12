@@ -81,7 +81,7 @@ bool EndPortalFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &
 
     owner.playNamedSound(level, PlaySoundName::END_PORTAL_FRAME_FILL, centerOf(position), 1.0f, 1.0f);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
+    if (!player.isCreative()) {
         ItemStack updated = inventory.getItemInHand();
         updated.mCount -= 1;
 

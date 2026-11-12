@@ -50,7 +50,7 @@ bool EmptyMapItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     MapHandler::broadcastCreation(owner, owner.getWorldFor(player), data);
 
     PlayerInventory &inventory = player.getInventory();
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     ItemStack remaining = item;
     if (!creative)
         remaining.mCount -= 1;

@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Ore/InfestedOreFeature.h"
 
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const BlockState &infestedStoneState() {
@@ -15,7 +16,7 @@ namespace {
 }
 
 const BlockState &InfestedOreFeature::getState(const BlockState &original) const {
-    if (original.mName == "minecraft:stone")
+    if (original.mName == BlockNames::STONE)
         return infestedStoneState();
 
     if (original.mName == "minecraft:deepslate")

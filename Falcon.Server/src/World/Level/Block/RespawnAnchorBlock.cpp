@@ -10,6 +10,8 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/BlockDefinition.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 
@@ -26,9 +28,7 @@ namespace {
 
     const int NEIGHBOURS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool isSolidAt(Level &level, int32_t x, int32_t y, int32_t z) {
         if (y < level.getMinY() || y > level.getMaxY())
@@ -128,7 +128,7 @@ std::optional<Vector3f> RespawnAnchorBlock::findRespawnPosition(Level &level, co
 }
 
 void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    level.setBlock(position, BlockState("minecraft:air"), true);
+    level.setBlock(position, BlockState(BlockNames::AIR), true);
 
     Explosion explosion(owner, level, centerOf(position), EXPLOSION_RADIUS, nullptr, false);
     explosion.setIncendiary(true);

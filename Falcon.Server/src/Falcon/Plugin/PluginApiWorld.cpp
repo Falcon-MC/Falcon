@@ -13,6 +13,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <memory>
 #include <string>
@@ -183,7 +184,7 @@ namespace {
             return 0;
 
         const BlockState existing = value->getBlockState(position.x, position.y, position.z);
-        if (existing.mName == "minecraft:air")
+        if (existing.mName == BlockNames::AIR)
             return 0;
 
         BlockActionHandler::destroyBlock(owner(), *value, toVector3i(position), existing, dropItems != 0,
@@ -202,7 +203,7 @@ namespace {
 
         for (int32_t y = value->getMaxY(); y >= value->getMinY(); --y) {
             const BlockState *state = value->peekBlockPtr(x, y, z);
-            if (state != nullptr && state->mName != "minecraft:air")
+            if (state != nullptr && state->mName != BlockNames::AIR)
                 return y;
         }
 

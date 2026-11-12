@@ -25,7 +25,7 @@ void LecternHandler::handleUpdate(ServerNetworkHandler &owner, ServerPlayer &pla
 
     const Vector3f &from = player.getPosition();
     const float dx = from.x - (float) position.x, dy = from.y - (float) position.y, dz = from.z - (float) position.z;
-    const float reach = player.getGameType() == (int32_t) GameType::Creative ? CREATIVE_REACH : SURVIVAL_REACH;
+    const float reach = player.isCreative() ? CREATIVE_REACH : SURVIVAL_REACH;
     if (!(std::sqrt(dx * dx + dy * dy + dz * dz) <= reach))
         return;
 

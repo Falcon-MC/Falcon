@@ -96,8 +96,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     const size_t steps = player.isRiding() ? 1 : 1 + ServerPlayerMovementComponent::catchupSteps(previousTickMs);
     const auto applyFlightRequest = [&](bool flying) {
         // a server-side game mode change can revoke an already validated queued request
-        if (flying && player.getGameType() != (int32_t) GameType::Creative
-            && player.getGameType() != (int32_t) GameType::Spectator)
+        if (flying && !player.isCreative()
+            && !player.isSpectator())
             return;
         MovementHandler::requestFlight(*this, player.getNetworkIdentifier(), player, flying);
     };
@@ -138,11 +138,11 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     const bool fireTickDamage = !player.isDead() && player.tickFire();
 
-    if (player.getGameType() == (int32_t) GameType::Creative && player.getFireTicks() > 1)
+    if (player.isCreative() && player.getFireTicks() > 1)
         player.setFireTicks(1);
 
-    if (fireTickDamage && player.getGameType() != (int32_t) GameType::Creative
-        && player.getGameType() != (int32_t) GameType::Spectator && !player.hasEffect(MobEffectId::FireResistance))
+    if (fireTickDamage && !player.isCreative()
+        && !player.isSpectator() && !player.hasEffect(MobEffectId::FireResistance))
         hurt(player, 1.0f, ActorDamageSource::environment("death.attack.inFire", player.getName()));
 
     if (wasOnFire != player.isOnFire())

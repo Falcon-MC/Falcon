@@ -23,6 +23,7 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Core/Json/Json.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <functional>
@@ -930,7 +931,7 @@ namespace {
     }
 
     std::vector<std::string> tagsOf(const ScriptItemData &data) {
-        if (data.mTypeId == "minecraft:air")
+        if (data.mTypeId == BlockNames::AIR)
             return {};
         return CraftingRecipeTable::getItemTags(data.mTypeId);
     }

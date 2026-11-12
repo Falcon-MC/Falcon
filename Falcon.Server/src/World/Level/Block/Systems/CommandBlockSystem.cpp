@@ -264,7 +264,7 @@ void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, Serve
 
     // operator-only in the game, screen only in creative: both required, or a non-op creative player
     // runs commands at the internal permission level
-    if (!player.isOp() || player.getGameType() != (int32_t) GameType::Creative) {
+    if (!player.isOp() || !player.isCreative()) {
         LOG_INFO(LogAreaID::Server, "Rejected command block update from %s: missing permission",
                  player.getName().c_str());
         return;

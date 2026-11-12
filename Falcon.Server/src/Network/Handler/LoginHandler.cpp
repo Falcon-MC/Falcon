@@ -74,7 +74,7 @@
 
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
 
     // sub_14C703FD0: the definition the game gives every script dimension
@@ -570,8 +570,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     owner._loadPlayerData(player);
     if (owner.getProperties().getForceGameType())
         player.setGameType((int32_t) owner.getProperties().getGameType());
-    player.setHungerEnabled(player.getGameType() == (int32_t) GameType::Survival
-                            || player.getGameType() == (int32_t) GameType::Adventure);
+    player.setHungerEnabled(player.isSurvival()
+                            || player.isAdventure());
 
     Level &world = owner.getWorldFor(player).getOverworld();
     StartGamePacket startGame;

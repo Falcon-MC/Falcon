@@ -34,7 +34,7 @@
 #include <vector>
 
 namespace {
-    const int64_t DAY_LENGTH = 24000;
+    const int64_t DAY_LENGTH = Level::TICKS_PER_DAY;
     const int64_t DAYTIME_END = 12000;
     const float MAX_LIGHT = 15.0f;
     const char *const EFFECT_COMPONENT_PREFIX = "minecraft:effect.";

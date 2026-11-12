@@ -14,6 +14,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const char *HEAD_PIECE_BIT = "head_piece_bit";
@@ -151,7 +152,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         if (!willExplode)
             return true;
 
-        level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
+        level.setBlockState(position.x, position.y, position.z, BlockState(BlockNames::AIR));
         BlockActionHandler::broadcastBlockUpdate(owner, level, position,
                                                  level.getBlockState(position.x, position.y, position.z));
         breakOtherHalf(owner, level, position, state);
@@ -181,7 +182,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
-    if (player.getGameType() != (int32_t) GameType::Creative && isMonsterNearby(owner, level, head, footOffset)) {
+    if (!player.isCreative() && isMonsterNearby(owner, level, head, footOffset)) {
         player.sendTranslation("§7%tile.bed.notSafe", {});
         return true;
     }

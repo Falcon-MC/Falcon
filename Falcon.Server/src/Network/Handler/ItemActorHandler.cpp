@@ -332,7 +332,7 @@ add.mMetadata.mEntries.push_back(flags3);
             if (!player.isSpawned() || player.isDead())
                 continue;
 
-            if (player.getGameType() == (int32_t) GameType::Spectator)
+            if (player.isSpectator())
                 continue;
 
             if (!player.sharesLevelWith(actor))

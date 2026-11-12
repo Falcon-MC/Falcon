@@ -37,16 +37,7 @@ bool HoneycombItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &play
             Vector3f((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f, (float) blockPosition.z + 0.5f),
             0);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
-        ItemStack remaining = item;
-        remaining.mCount--;
-        if (remaining.mCount <= 0)
-            remaining = ItemStack::air();
-
-        PlayerInventory &inventory = player.getInventory();
-        inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
-    }
+    player.consumeOneHeldItem();
 
     return true;
 }

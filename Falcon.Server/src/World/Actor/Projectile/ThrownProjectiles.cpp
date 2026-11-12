@@ -7,6 +7,7 @@
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
+#include "Core/Math/VectorMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -41,12 +42,7 @@ namespace {
     const float SPLASH_POTION_MIN_SCALE = 0.25f;
     const char *SPLASH_POTION_PARTICLE = "minecraft:splash_spell_emitter";
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
     void knockBackFrom(ServerNetworkHandler &owner, Actor &target, const Vector3f &hitPosition, float force) {
         const Vector3f position = target.getPosition();

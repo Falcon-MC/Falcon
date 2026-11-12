@@ -6,6 +6,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 
@@ -13,7 +14,7 @@ FALCON_REGISTER_ACTOR(ExperienceOrbActor, "minecraft:xp_orb");
 
 namespace {
     const float PLAYER_HEIGHT = 1.8f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const int32_t MAX_AGE = 6000;
     const float ATTRACT_RANGE_SQUARED = 64.0f;
     const float ATTRACT_DIVISOR = 8.0f;
@@ -44,7 +45,7 @@ void ExperienceOrbActor::tick(ServerNetworkHandler &owner) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead())
             continue;
-        if (player.getGameType() == (int32_t) GameType::Spectator)
+        if (player.isSpectator())
             continue;
         if (!player.sharesLevelWith(*this))
             continue;

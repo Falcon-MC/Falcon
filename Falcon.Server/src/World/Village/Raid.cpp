@@ -9,6 +9,7 @@
 #include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/OnScreenTextureAnimationPacket.h"
+#include "Core/Math/VectorMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -79,12 +80,7 @@ namespace {
         return bound == 0 ? 0 : (uint32_t) raidRandom()() % bound;
     }
 
-    float distanceSquared(const Vector3f &a, const Vector3f &b) {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        const float dz = a.z - b.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
     ServerPlayer *closestPlayer(ServerNetworkHandler &owner, Level &level, const Vector3f &position, float range) {
         ServerPlayer *closest = nullptr;

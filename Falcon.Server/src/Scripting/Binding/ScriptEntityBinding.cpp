@@ -29,6 +29,8 @@
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/CameraShakePacket.h"
 #include "Protocol/Types/CameraPresets.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -498,7 +500,7 @@ namespace {
             for (int32_t z = (int32_t) std::floor(position.z - half); z <= (int32_t) std::floor(position.z + half);
                  ++z) {
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                if (state == nullptr || state->mName == "minecraft:air" || !blockStatePassesFilter(ctx, *state, filter))
+                if (state == nullptr || state->mName == BlockNames::AIR || !blockStatePassesFilter(ctx, *state, filter))
                     continue;
                 blocks.emplace_back(x, y, z);
             }
@@ -612,12 +614,7 @@ namespace {
                         position.z + ahead * std::cos(yaw));
     }
 
-    float wrapDegrees(float angle) {
-        float wrapped = std::fmod(angle + 180.0f, 360.0f);
-        if (wrapped < 0.0f)
-            wrapped += 360.0f;
-        return wrapped - 180.0f;
-    }
+    using VectorMath::wrapDegrees;
 
     // both angles wrapped to [-180, 180), never clamped (sub_14C351740)
     void applyRotation(const EntityTarget &target, float pitch, float yaw) {

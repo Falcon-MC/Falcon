@@ -90,7 +90,7 @@ bool CushionActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPlaye
     if (mExpired)
         return true;
 
-    const bool creative = source != nullptr && source->getGameType() == (int32_t) GameType::Creative;
+    const bool creative = source != nullptr && source->isCreative();
     breakCushion(owner, !creative);
     return true;
 }

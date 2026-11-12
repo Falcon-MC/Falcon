@@ -13,6 +13,7 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <unordered_map>
 #include <algorithm>
@@ -25,7 +26,7 @@ namespace {
     const char *STICKY_PISTON = "minecraft:sticky_piston";
     const char *PISTON_ARM_COLLISION = "minecraft:piston_arm_collision";
     const char *STICKY_PISTON_ARM_COLLISION = "minecraft:sticky_piston_arm_collision";
-    const char *AIR = "minecraft:air";
+    using BlockNames::AIR;
 
     const std::unordered_set<std::string> UNPUSHABLE = {"minecraft:bedrock",
                                                         "minecraft:obsidian",

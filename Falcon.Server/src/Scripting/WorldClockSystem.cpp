@@ -1,13 +1,14 @@
 #include "Scripting/WorldClockSystem.h"
 
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
+#include "World/Level/Level.h"
 
 #include <algorithm>
 #include <cctype>
 #include <climits>
 
 namespace {
-    const int32_t DAY_LENGTH = 24000;
+    const int32_t DAY_LENGTH = (int32_t) Level::TICKS_PER_DAY;
     const char *const OVERWORLD = "minecraft:overworld";
 
     // sub_142CA2AF0: one colon, two non-empty parts, no whitespace, case-insensitive, no minecraft namespace

@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -57,8 +58,8 @@ BuoyancySettings BuoyancySystem::read(const json::Value *component) {
         settings.mWater = false;
         for (const std::unique_ptr<json::Value> &liquid: liquids->mArray) {
             const std::string &name = liquid->string();
-            settings.mWater = settings.mWater || name == "minecraft:water" || name == "minecraft:flowing_water";
-            settings.mLava = settings.mLava || name == "minecraft:lava" || name == "minecraft:flowing_lava";
+            settings.mWater = settings.mWater || name == BlockNames::WATER || name == "minecraft:flowing_water";
+            settings.mLava = settings.mLava || name == BlockNames::LAVA || name == "minecraft:flowing_lava";
         }
     }
     return settings;

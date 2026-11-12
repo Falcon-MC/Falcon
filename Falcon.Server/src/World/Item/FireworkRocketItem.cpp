@@ -117,7 +117,7 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
     (void) item;
     (void) clickPosition;
 
-    if (player.getGameType() == (int32_t) GameType::Adventure)
+    if (player.isAdventure())
         return false;
 
     Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,

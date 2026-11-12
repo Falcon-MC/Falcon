@@ -93,7 +93,7 @@ bool BeehiveBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
     setHoneyLevel(level, position, 0);
 
     if (owner.getProperties().getDifficulty() == Difficulty::Peaceful
-        || player.getGameType() == (int32_t) GameType::Creative || isCalmedBySmoke(level, position))
+        || player.isCreative() || isCalmedBySmoke(level, position))
         return true;
 
     BeehiveBlockActor *hive = level.getBlockActors().find<BeehiveBlockActor>(position);

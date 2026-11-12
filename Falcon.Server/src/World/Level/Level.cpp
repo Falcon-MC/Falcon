@@ -18,6 +18,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <bitset>
@@ -404,7 +405,7 @@ Vector3f Level::getSpawnPositionForPlayer() {
 }
 
 int32_t Level::getMoonPhase() const {
-    return (int32_t) (((mTime / 24000) % 8 + 8) % 8);
+    return (int32_t) (((mTime / TICKS_PER_DAY) % 8 + 8) % 8);
 }
 
 float Level::getMoonBrightness() const {
@@ -432,12 +433,12 @@ float Level::getRegionalDifficulty(int32_t difficulty) const {
 
 bool Level::isStandable(int32_t x, int32_t y, int32_t z) {
     const auto isLiquid = [](const std::string &name) {
-        return name == "minecraft:water" || name == "minecraft:flowing_water" || name == "minecraft:lava"
+        return name == BlockNames::WATER || name == "minecraft:flowing_water" || name == BlockNames::LAVA
                || name == "minecraft:flowing_lava";
     };
 
     const std::string below = getBlockState(x, y - 1, z).mName;
-    const bool supported = isSolidAt(x, y - 1, z) || below == "minecraft:water" || below == "minecraft:flowing_water";
+    const bool supported = isSolidAt(x, y - 1, z) || below == BlockNames::WATER || below == "minecraft:flowing_water";
 
     return supported && !isSolidAt(x, y, z) && !isLiquid(getBlockState(x, y, z).mName) && !isSolidAt(x, y + 1, z)
            && !isLiquid(getBlockState(x, y + 1, z).mName);
@@ -458,7 +459,7 @@ Vector3i Level::findSafeSpawn(const Vector3i &around) {
 
 int32_t Level::_topSolidOrLiquidY(int32_t x, int32_t z) {
     for (int32_t y = LevelChunk::MAX_Y; y > LevelChunk::MIN_Y; --y) {
-        if (getBlockState(x, y, z).mName != "minecraft:air")
+        if (getBlockState(x, y, z).mName != BlockNames::AIR)
             return y;
     }
 
@@ -1468,7 +1469,7 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
         return false;
 
     const BlockState &state = getChunk(x >> 4, z >> 4).getBlock(x & 15, y, z & 15);
-    if (state.mName == "minecraft:air")
+    if (state.mName == BlockNames::AIR)
         return false;
 
     const BlockData *data = BlockDataTable::find(state.mName.c_str());

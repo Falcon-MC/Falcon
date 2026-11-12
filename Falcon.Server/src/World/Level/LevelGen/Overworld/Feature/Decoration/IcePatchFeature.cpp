@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
 
@@ -16,7 +17,7 @@ namespace {
 
     bool isReplaceable(const std::string &id) {
         return id == "minecraft:snow" || id == "minecraft:snow_layer" || id == "minecraft:ice"
-               || id == "minecraft:packed_ice" || id == "minecraft:dirt" || id == "minecraft:grass_block";
+               || id == "minecraft:packed_ice" || id == BlockNames::DIRT || id == BlockNames::GRASS_BLOCK;
     }
 
 }
@@ -62,7 +63,7 @@ void IcePatchFeature::populate(ChunkGenerateContext &context, IRandom &random) {
                 const std::string id = manager.getBlockAt(x, y, z).mName;
                 if (isReplaceable(id))
                     manager.setBlockStateAt(x, y, z, patchState());
-                else if (id != "minecraft:air")
+                else if (id != BlockNames::AIR)
                     break;
             }
         }

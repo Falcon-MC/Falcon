@@ -153,7 +153,7 @@ namespace {
     const float DEFAULT_JUMP_POWER = 0.42f;
     const double SIGHT_STEP = 0.25;
     const float SIGHT_EYE_RATIO = 0.85f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
     const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
     const char *const ADD_RIDER_COMPONENT = "minecraft:addrider";
@@ -977,7 +977,7 @@ ServerPlayer *MobActor::getOwner(ServerNetworkHandler &owner) const {
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (isOwnedBy(player) && player.isSpawned() && !player.isDead() && player.sharesLevelWith(*this)
-            && player.getGameType() != (int32_t) GameType::Spectator)
+            && !player.isSpectator())
             return &player;
     }
     return nullptr;
@@ -1272,7 +1272,7 @@ bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, cons
         if (mLeash.getHolderId() != player.getUniqueId())
             return false;
 
-        mLeash.detach(owner, *this, player.getGameType() != (int32_t) GameType::Creative);
+        mLeash.detach(owner, *this, !player.isCreative());
         return true;
     }
 

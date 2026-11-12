@@ -9,6 +9,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 
 namespace {
@@ -70,7 +71,7 @@ namespace IceCavesSupport {
     }
 
     bool isNaturalBaseBlock(const BlockState &state) {
-        return state.mName == "minecraft:stone" || state.mName == "minecraft:deepslate"
+        return state.mName == BlockNames::STONE || state.mName == "minecraft:deepslate"
                || state.mName == "minecraft:tuff";
     }
 

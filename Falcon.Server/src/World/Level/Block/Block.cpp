@@ -8,6 +8,7 @@
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cstdlib>
 
@@ -19,7 +20,7 @@ namespace {
             return false;
 
         const BlockState state = level->getBlockState(position.x, position.y, position.z);
-        if (state.mName == "minecraft:air")
+        if (state.mName == BlockNames::AIR)
             return false;
 
         const BlockData *data = BlockDataTable::find(state.mName.c_str());

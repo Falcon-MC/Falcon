@@ -8,6 +8,7 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockIdentifier.h"
 
 FALCON_REGISTER_BLOCK(CoralBlock, 185);
 
@@ -20,9 +21,7 @@ namespace {
     const Vector3i NEIGHBOUR_OFFSETS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
                                           Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        return value.size() >= suffix.size() && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool isCoralBlock(const std::string &identifier) {
         return endsWith(identifier, "_coral_block");

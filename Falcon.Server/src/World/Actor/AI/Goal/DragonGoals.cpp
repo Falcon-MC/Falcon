@@ -4,6 +4,8 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "Protocol/Packets/LevelEventPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -51,19 +53,9 @@ namespace {
     const float DEGREES_TO_RADIANS = 0.017453292f;
     const float RADIANS_TO_DEGREES = 57.295776f;
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
-    float wrapDegrees(float degrees) {
-        float wrapped = std::fmod(degrees + 180.0f, 360.0f);
-        if (wrapped < 0.0f)
-            wrapped += 360.0f;
-        return wrapped - 180.0f;
-    }
+    using VectorMath::wrapDegrees;
 
     // the angle in degrees between the dragon's flight direction and the target, plus the game's half degree
     float angleTo(const EnderDragon &dragon, const Vector3f &target) {
@@ -542,14 +534,14 @@ void DragonFlamingGoal::_breathe(ServerNetworkHandler &owner, EnderDragon &drago
 
     float y = std::floor(head.y);
     const BlockState *state = level.peekBlockPtr(blockX, (int32_t) y, blockZ);
-    if (state == nullptr || state->mName == "minecraft:air") {
+    if (state == nullptr || state->mName == BlockNames::AIR) {
         while (true) {
             y -= 1.0f;
             if ((int32_t) std::floor(y) < level.getMinY())
                 break;
 
             state = level.peekBlockPtr(blockX, (int32_t) std::floor(y), blockZ);
-            if (state != nullptr && state->mName != "minecraft:air")
+            if (state != nullptr && state->mName != BlockNames::AIR)
                 break;
         }
     }

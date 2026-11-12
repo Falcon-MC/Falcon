@@ -4,6 +4,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 #include <cmath>
 
@@ -14,12 +15,7 @@ namespace {
     // a partial path must bring the mob at least this much closer to an unreachable target
     const float PARTIAL_PATH_MIN_GAIN = 1.0f;
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 }
 
 void PathNavigation::moveTo(const Vector3f &target, float speed) {

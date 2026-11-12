@@ -174,7 +174,7 @@ void InstantDamageMobEffect::tick(Actor &actor, const MobEffectInstance &instanc
 
 void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
-    if (player == nullptr || player->getGameType() == (int32_t) GameType::Spectator)
+    if (player == nullptr || player->isSpectator())
         return;
 
     const Vector3f &position = player->getPosition();
@@ -185,7 +185,7 @@ void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
 // any removal asks for the raid, milk and death included: the game does not check for expiry (sub_14355FD20)
 void RaidOmenMobEffect::onRemove(Actor &actor, const MobEffectInstance &) const {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
-    if (player != nullptr && player->getGameType() != (int32_t) GameType::Spectator)
+    if (player != nullptr && !player->isSpectator())
         player->getRaidState().onRaidOmenRemoved();
 }
 

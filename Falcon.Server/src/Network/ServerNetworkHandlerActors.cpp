@@ -56,6 +56,7 @@
 
 #include <algorithm>
 #include "Network/Handler/ChunkStreamHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -139,7 +140,7 @@ namespace {
     const float LINGERING_CLOUD_MIN_RADIUS = 1.5f;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PROJECTILE_HIT_GROW = 0.3f;
     const int32_t EXPERIENCE_ORB_PICKUP_DELAY = 10;
 
@@ -650,7 +651,7 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(projectile)
-            || player.getGameType() == (int32_t) GameType::Spectator)
+            || player.isSpectator())
             continue;
 
         const Vector3f &feet = player.getPosition();
@@ -660,7 +661,7 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
             continue;
 
         // nothing to give outside creative: the arrow stays until it expires
-        const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+        const bool creative = player.isCreative();
         if (!creative && (data.mPickupCreativeOnly || data.mPickupItem.isAir()))
             continue;
 

@@ -16,6 +16,8 @@
 #include "World/Level/LevelGen/End/TheEndGenerator.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Random/XoroshiroRandom.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <limits>
@@ -63,7 +65,7 @@ namespace {
     const uint64_t GATEWAY_LOADER_ID = (1ULL << 62) | 0x47415445ULL;
 
     bool isAir(const BlockState *state) {
-        return state == nullptr || state->mName == "minecraft:air";
+        return state == nullptr || state->mName == BlockNames::AIR;
     }
 
     bool isBedrock(const BlockState *state) {
@@ -105,9 +107,7 @@ namespace {
         return [&level](int32_t x, int32_t y, int32_t z) { return level.peekBlockPtr(x, y, z); };
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
-    }
+    using VectorMath::bottomCenterOf;
 
     Tag intList(const std::vector<int32_t> &values) {
         Tag list = Tag::ofList(Tag::Type::Int);
@@ -836,7 +836,7 @@ void EndDragonFight::_tickRespawn(ServerNetworkHandler &owner, Level &level) {
         _rebuildSpike(owner, level, spikes[(size_t) step.mRebuildSpike]);
 
     if (step.mPlaySummonSound)
-        owner.playLevelSound(level, SUMMON_SOUND, centerOf(getSummonPoint()), EnderDragon::IDENTIFIER);
+        owner.playLevelSound(level, SUMMON_SOUND, bottomCenterOf(getSummonPoint()), EnderDragon::IDENTIFIER);
 
     if (step.mSummonDragon)
         _finishRespawn(owner, level);

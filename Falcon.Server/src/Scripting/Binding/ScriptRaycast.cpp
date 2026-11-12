@@ -4,6 +4,7 @@
 #include "World/Level/Block/LiquidBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,7 +39,7 @@ namespace ScriptRaycast {
         void boxesOf(Level &level, const BlockState &state, int32_t x, int32_t y, int32_t z,
                      const BlockOptions &options, std::vector<AxisAlignedBB> &boxes) {
             boxes.clear();
-            if (state.mName == "minecraft:air")
+            if (state.mName == BlockNames::AIR)
                 return;
             if (isLiquid(state)) {
                 if (options.mIncludeLiquids)

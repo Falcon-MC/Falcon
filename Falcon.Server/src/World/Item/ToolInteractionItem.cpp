@@ -11,6 +11,8 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <string>
 
@@ -34,10 +36,7 @@ namespace {
         return value.compare(0, prefix.size(), prefix) == 0;
     }
 
-    bool endsWith(const std::string &value, const char *suffix) {
-        const std::string tail(suffix);
-        return value.size() >= tail.size() && value.compare(value.size() - tail.size(), tail.size(), tail) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool exists(const std::string &identifier) {
         return BlockDataTable::find(identifier.c_str()) != nullptr;
@@ -63,8 +62,8 @@ namespace {
     bool transformationFor(ToolType tool, const std::string &identifier, Transformation &out) {
         if (tool == ToolType::Hoe) {
             out.mNeedsAirAbove = true;
-            if (identifier == "minecraft:dirt" || identifier == "minecraft:coarse_dirt"
-                || identifier == "minecraft:grass_block" || identifier == "minecraft:grass_path") {
+            if (identifier == BlockNames::DIRT || identifier == "minecraft:coarse_dirt"
+                || identifier == BlockNames::GRASS_BLOCK || identifier == "minecraft:grass_path") {
                 out.mIdentifier = "minecraft:farmland";
                 return true;
             }
@@ -78,7 +77,7 @@ namespace {
 
         if (tool == ToolType::Shovel) {
             out.mNeedsAirAbove = true;
-            if (identifier == "minecraft:grass_block" || identifier == "minecraft:dirt"
+            if (identifier == BlockNames::GRASS_BLOCK || identifier == BlockNames::DIRT
                 || identifier == "minecraft:coarse_dirt" || identifier == "minecraft:podzol"
                 || identifier == "minecraft:mycelium" || identifier == "minecraft:dirt_with_roots") {
                 out.mIdentifier = "minecraft:grass_path";
@@ -134,7 +133,7 @@ bool ToolInteractionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer
         return false;
 
     if (transformation.mNeedsAirAbove
-        && level.getBlockState(blockPosition.x, blockPosition.y + 1, blockPosition.z).mName != "minecraft:air")
+        && level.getBlockState(blockPosition.x, blockPosition.y + 1, blockPosition.z).mName != BlockNames::AIR)
         return false;
 
     const BlockState result = CopperSystem::replaceWithPair(owner, level, blockPosition, clicked,

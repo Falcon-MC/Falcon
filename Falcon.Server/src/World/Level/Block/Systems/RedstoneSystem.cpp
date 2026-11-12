@@ -44,6 +44,8 @@
 #include "Protocol/Packets/UpdateBlockPacket.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <array>
@@ -221,7 +223,7 @@ namespace {
     // unloaded reads as air: no forced chunk load; a border circuit sees no power from the missing side
     BlockState stateAt(Level &level, const Vector3i &position) {
         if (!isChunkReady(level, position))
-            return BlockState("minecraft:air");
+            return BlockState(BlockNames::AIR);
 
         return level.getBlockState(position.x, position.y, position.z);
     }
@@ -319,9 +321,7 @@ namespace {
         return blockAs<RedstoneDiodeBlock>(state)->getUnpoweredState(state);
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     int wireSignal(const BlockState &state) {
         return std::clamp(stateInt(state, "redstone_signal", 0), 0, RedstoneSystem::MAX_SIGNAL);

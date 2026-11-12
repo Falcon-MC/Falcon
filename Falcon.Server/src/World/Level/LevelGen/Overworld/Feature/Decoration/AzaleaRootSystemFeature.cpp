@@ -8,6 +8,7 @@
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <memory>
@@ -45,8 +46,8 @@ namespace {
     }
 
     bool isRootReplaceable(const std::string &id) {
-        return id == "minecraft:stone" || id == "minecraft:deepslate" || id == "minecraft:tuff"
-               || id == "minecraft:dirt" || id == "minecraft:clay" || id == "minecraft:moss_block"
+        return id == BlockNames::STONE || id == "minecraft:deepslate" || id == "minecraft:tuff"
+               || id == BlockNames::DIRT || id == "minecraft:clay" || id == "minecraft:moss_block"
                || id == "minecraft:dirt_with_roots";
     }
 
@@ -76,7 +77,7 @@ namespace {
 
     bool spaceForTree(BlockManager &manager, int32_t x, int32_t y, int32_t z) {
         for (int32_t i = 1; i <= REQUIRED_VERTICAL_SPACE_FOR_TREE; i++) {
-            if (manager.getBlockAt(x, y + i, z).mName != "minecraft:air")
+            if (manager.getBlockAt(x, y + i, z).mName != BlockNames::AIR)
                 return false;
         }
 
@@ -117,7 +118,7 @@ void AzaleaRootSystemFeature::_placeHangingRoots(BlockManager &manager, int32_t 
                           - mRandom.nextInt(HANGING_ROOT_VERTICAL_SPAN);
         const int32_t z = originZ + mRandom.nextInt(HANGING_ROOT_RADIUS) - mRandom.nextInt(HANGING_ROOT_RADIUS);
 
-        if (manager.getBlockAt(x, y, z).mName != "minecraft:air")
+        if (manager.getBlockAt(x, y, z).mName != BlockNames::AIR)
             continue;
 
         if (!DecorationSupport::isSolid(manager.getBlockAt(x, y + 1, z)))
@@ -133,7 +134,7 @@ bool AzaleaRootSystemFeature::_placeDirtAndTree(BlockManager &manager, int32_t o
     const int32_t maxTreeY = std::min(originY + ROOT_COLUMN_MAX_HEIGHT, surfaceY);
 
     for (int32_t treeY = maxTreeY; treeY > originY; treeY--) {
-        if (manager.getBlockAt(originX, treeY, originZ).mName == "minecraft:air"
+        if (manager.getBlockAt(originX, treeY, originZ).mName == BlockNames::AIR
             && spaceForTree(manager, originX, treeY, originZ)
             && !hasNearbyTree(manager, originX, treeY, originZ, MIN_TREE_XZ_DISTANCE)) {
             chosenTreeY = treeY;
@@ -146,7 +147,7 @@ bool AzaleaRootSystemFeature::_placeDirtAndTree(BlockManager &manager, int32_t o
 
     const int32_t belowY = chosenTreeY - 1;
     const std::string belowId = manager.getBlockAt(originX, belowY, originZ).mName;
-    if (belowId == "minecraft:lava" || belowId == "minecraft:flowing_lava"
+    if (belowId == BlockNames::LAVA || belowId == "minecraft:flowing_lava"
         || !DecorationSupport::isSolid(manager.getBlockAt(originX, belowY, originZ)))
         return false;
 

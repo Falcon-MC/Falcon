@@ -7,6 +7,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <random>
 #include <string>
@@ -35,7 +36,7 @@ namespace {
     }
 
     bool stateTicksRandomly(const BlockState &state) {
-        if (state.mName == "minecraft:air")
+        if (state.mName == BlockNames::AIR)
             return false;
 
         const Block *block = VanillaBlocks::fromState(state);
@@ -136,7 +137,7 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                 const int localZ = (int) ((lcg >> 16) & 0x0f);
 
                 const BlockState &state = subChunk.getBlock(localX, localY, localZ);
-                if (state.mName == "minecraft:air")
+                if (state.mName == BlockNames::AIR)
                     continue;
 
                 const Block *block = VanillaBlocks::fromState(state);

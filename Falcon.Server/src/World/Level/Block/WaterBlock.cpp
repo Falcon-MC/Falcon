@@ -1,11 +1,12 @@
 #include "World/Level/Block/WaterBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(WaterBlock, 324);
 
 bool WaterBlock::matches(const std::string &identifier) {
-    return identifier == "minecraft:water" || identifier == "minecraft:flowing_water";
+    return identifier == BlockNames::WATER || identifier == "minecraft:flowing_water";
 }
 
 bool WaterBlock::isDynamic(const std::string &identifier) {

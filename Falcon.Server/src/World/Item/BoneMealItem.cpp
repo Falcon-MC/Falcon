@@ -23,6 +23,8 @@ FALCON_REGISTER_ITEM(BoneMealItem, 100);
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <chrono>
 #include <string>
@@ -35,9 +37,7 @@ namespace {
         return (int64_t) std::chrono::steady_clock::now().time_since_epoch().count();
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     const char *growthStateOf(const BlockState &state) {
         return state.mName == "minecraft:nether_wart" ? "age" : "growth";
@@ -131,7 +131,7 @@ bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, con
 }
 
 bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    if (level.getBlockState(position.x, position.y + 1, position.z).mName != "minecraft:air")
+    if (level.getBlockState(position.x, position.y + 1, position.z).mName != BlockNames::AIR)
         return false;
 
     TrackingBlockManager manager(level);
@@ -144,7 +144,7 @@ bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const
 bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state) {
     const Vector3i above(position.x, position.y + 1, position.z);
-    if (level.getBlockState(above.x, above.y, above.z).mName != "minecraft:air")
+    if (level.getBlockState(above.x, above.y, above.z).mName != BlockNames::AIR)
         return false;
 
     const bool crimson = state.mName == "minecraft:crimson_nylium";
@@ -164,7 +164,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     (void) face;
     (void) clickPosition;
 
-    if (player.getGameType() == (int32_t) GameType::Spectator)
+    if (player.isSpectator())
         return false;
 
     Level &level = owner.getLevelFor(player);
@@ -175,7 +175,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
         applied = applyToCrop(owner, level, blockPosition, state);
     else if (SaplingBlock::matches(state.mName))
         applied = applyToSapling(owner, level, blockPosition, state);
-    else if (state.mName == "minecraft:grass_block")
+    else if (state.mName == BlockNames::GRASS_BLOCK)
         applied = applyToGrass(owner, level, blockPosition);
     else if (NyliumBlock::matches(state.mName))
         applied = applyToNylium(owner, level, blockPosition, state);
@@ -187,16 +187,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
 
     owner.broadcastLevelEvent(level, BONE_MEAL_USE_EVENT, centerOf(blockPosition), 0);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
-        ItemStack remaining = item;
-        remaining.mCount--;
-        if (remaining.mCount <= 0)
-            remaining = ItemStack::air();
-
-        PlayerInventory &inventory = player.getInventory();
-        inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
-    }
+    player.consumeOneHeldItem();
 
     return true;
 }

@@ -14,7 +14,7 @@
 bool FreezingSystem::isSuppressed(Level &level, const Actor &actor) {
     // sub_145E14260: spectators always thaw
     const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
-    if (player != nullptr && player->getGameType() == (int32_t) GameType::Spectator)
+    if (player != nullptr && player->isSpectator())
         return true;
     bool suppressed = FreezingMobEffect::isProtected(actor) || FreezingMobEffect::isImmune(actor);
     const auto *serverActor = dynamic_cast<const ServerActor *>(&actor);

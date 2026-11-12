@@ -10,6 +10,8 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <unordered_set>
 
@@ -51,9 +53,7 @@ namespace {
         return blocks;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool isChunkReady(Level &level, const Vector3i &position) {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
@@ -101,11 +101,11 @@ std::string FallingBlockSystem::getNextAnvilDamage(const std::string &identifier
 }
 
 bool FallingBlockSystem::isWater(const std::string &identifier) {
-    return identifier == "minecraft:water" || identifier == "minecraft:flowing_water";
+    return identifier == BlockNames::WATER || identifier == "minecraft:flowing_water";
 }
 
 bool FallingBlockSystem::isLava(const std::string &identifier) {
-    return identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
+    return identifier == BlockNames::LAVA || identifier == "minecraft:flowing_lava";
 }
 
 bool FallingBlockSystem::isTransparent(const BlockState &state) {
@@ -120,7 +120,7 @@ bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     const std::string &identifier = state.mName;
 
-    if (identifier == "minecraft:air" || identifier == "minecraft:fire" || identifier == "minecraft:soul_fire")
+    if (identifier == BlockNames::AIR || identifier == "minecraft:fire" || identifier == "minecraft:soul_fire")
         return true;
 
     if (isWater(identifier) || isLava(identifier))
@@ -176,7 +176,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
     if (!isChunkReady(level, position))
         return;
 
-    setBlockState(owner, level, position, BlockState("minecraft:air"));
+    setBlockState(owner, level, position, BlockState(BlockNames::AIR));
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
 

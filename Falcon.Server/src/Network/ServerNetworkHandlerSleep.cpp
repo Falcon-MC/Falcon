@@ -10,10 +10,10 @@
 #include <cmath>
 
 namespace {
-    const int64_t DAY_LENGTH_TICKS = 24000;
+    const int64_t DAY_LENGTH_TICKS = Level::TICKS_PER_DAY;
 
     bool countsForSleep(const ServerPlayer &player, const Level &level) {
-        return player.isSpawned() && player.isIn(level) && player.getGameType() != (int32_t) GameType::Spectator;
+        return player.isSpawned() && player.isIn(level) && !player.isSpectator();
     }
 }
 

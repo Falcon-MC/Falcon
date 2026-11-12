@@ -1,6 +1,7 @@
 #include "World/Level/Block/BlockQuery.h"
 
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace BlockQuery {
     BlockState stateAt(Level &level, const Vector3i &position) {
@@ -8,7 +9,7 @@ namespace BlockQuery {
     }
 
     bool isAirAt(Level &level, const Vector3i &position) {
-        return stateAt(level, position).mName == "minecraft:air";
+        return stateAt(level, position).mName == BlockNames::AIR;
     }
 
     bool isInRange(Level &level, const Vector3i &position) {

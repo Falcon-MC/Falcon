@@ -16,6 +16,8 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/EntityDataMap.h"
+#include "World/Actor/Movement/MovementConstants.h"
+#include "Core/Math/VectorMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -41,7 +43,7 @@ namespace {
     const float CAST_AIM_SPEED = 0.4f;
     const float CAST_POWER = 1.5f;
     const float CAST_SPREAD = 0.0075f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 
     const int32_t WATER_SLICES = 5;
     const float WATER_PULL = 0.04f;
@@ -124,12 +126,7 @@ namespace {
                && point.z <= feet.z + halfWidth;
     }
 
-    float distanceSquared(const Vector3f &a, const Vector3f &b) {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        const float dz = a.z - b.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 }
 
 FishingHookActor::FishingHookActor(uint64_t runtimeId, const std::string &identifier)

@@ -86,7 +86,7 @@ Actor *FollowMobGoal::_findLeader(ServerNetworkHandler &owner, const MobActor &m
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.getGameType() == (int32_t) GameType::Spectator
+        if (!player.isSpawned() || player.isSpectator()
             || !_accepts(owner, mob, player))
             continue;
 

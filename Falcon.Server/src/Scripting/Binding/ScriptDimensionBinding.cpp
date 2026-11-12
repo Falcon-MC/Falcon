@@ -21,6 +21,7 @@
 #include "World/Level/LevelGen/Feature/Tree/LegacyTreeObject.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/World.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <chrono>
@@ -179,7 +180,7 @@ namespace {
             return JS_UNDEFINED;
         for (int32_t y = level.getMaxY(); y >= std::max(minHeight, level.getMinY()); --y) {
             const BlockState *state = level.peekBlockPtr(bx, y, bz);
-            if (state != nullptr && state->mName != "minecraft:air")
+            if (state != nullptr && state->mName != BlockNames::AIR)
                 return api->makeBlock(level, bx, y, bz);
         }
         return JS_UNDEFINED;
@@ -373,7 +374,7 @@ namespace {
             for (const Copied &entry: copied) {
                 const Vector3i source(low.x + entry.mOffset.x, low.y + entry.mOffset.y, low.z + entry.mOffset.z);
                 level.getBlockActors().remove(source);
-                api->setBlock(level, source.x, source.y, source.z, BlockState("minecraft:air"));
+                api->setBlock(level, source.x, source.y, source.z, BlockState(BlockNames::AIR));
             }
         }
         for (const Copied &entry: copied) {

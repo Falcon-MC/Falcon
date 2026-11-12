@@ -4,6 +4,7 @@
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <random>
@@ -76,6 +77,6 @@ bool TakeBlockGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob)
 void TakeBlockGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     Level &level = owner.getLevelFor(mob);
     const BlockState taken = level.getBlockState(mPosition.x, mPosition.y, mPosition.z);
-    level.setBlock(mPosition, BlockState("minecraft:air"), true);
+    level.setBlock(mPosition, BlockState(BlockNames::AIR), true);
     mob.setCarriedBlock(owner, taken);
 }

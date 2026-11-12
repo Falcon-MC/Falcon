@@ -11,6 +11,7 @@ FALCON_REGISTER_BLOCK(DispenserBlock, 60);
 #include "World/Level/Level.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 #include <random>
 
@@ -76,9 +77,7 @@ namespace {
         return picked;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 }
 
 DispenserBlock::DispenserBlock(const Block &base) : ContainerBlock(base) {}
