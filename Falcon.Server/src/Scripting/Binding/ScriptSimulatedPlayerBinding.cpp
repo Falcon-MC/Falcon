@@ -1,6 +1,8 @@
 #include "Scripting/Binding/ScriptSimulatedPlayerBinding.h"
 
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/LoginHandler.h"
+#include "Protocol/Packets/PlayerSkinPacket.h"
 #include "Protocol/Packets/TextPacket.h"
 #include "Scripting/Binding/ScriptApi.h"
 #include "Scripting/Binding/ScriptNatives.h"
@@ -10,7 +12,9 @@
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
+#include <algorithm>
 #include <cstring>
+#include <vector>
 
 using namespace ScriptValues;
 
@@ -113,7 +117,7 @@ namespace {
     JSValue spJump(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
-        return JS_NewBool(ctx, player != nullptr && player->getSimulatedController()->jump(*player));
+        return JS_NewBool(ctx, player != nullptr && player->getSimulatedController()->jump(api->host(), *player));
     }
 
     // (player) the sprint flag, (player, value) sets the order
@@ -305,15 +309,14 @@ namespace {
                                                             hit.mFaceLocation));
     }
 
-    // (player, x, y, z, face, click x, y, z)
-    JSValue spInteractBlock(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    // (player, x, y, z, face)
+    JSValue spUseBlock(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        ServerPlayer *player = argc >= 8 ? simulatedOf(*api, argv[0]) : nullptr;
+        ServerPlayer *player = argc >= 5 ? simulatedOf(*api, argv[0]) : nullptr;
         if (player == nullptr)
             return JS_FALSE;
-        return JS_NewBool(ctx, player->getSimulatedController()->interactWithBlock(
-                                       api->host(), *player, blockOf(ctx, argv + 1), intOf(ctx, argv[4]),
-                                       Vector3f(floatOf(ctx, argv[5]), floatOf(ctx, argv[6]), floatOf(ctx, argv[7]))));
+        return JS_NewBool(ctx, player->getSimulatedController()->useBlock(api->host(), *player, blockOf(ctx, argv + 1),
+                                                                          intOf(ctx, argv[4])));
     }
 
     // (player, item): null for no ItemStack
@@ -471,6 +474,209 @@ namespace {
         return JS_TRUE;
     }
 
+    // (player, slot)
+    JSValue spStartBuild(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 2 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player != nullptr)
+            player->getSimulatedController()->startBuild(api->host(), *player, intOf(ctx, argv[1]));
+        return JS_UNDEFINED;
+    }
+
+    JSValue spStopBuild(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player != nullptr)
+            player->getSimulatedController()->stopBuild();
+        return JS_UNDEFINED;
+    }
+
+    // Player vtable +0x6E0 (sub_1402C7640): the open container closes
+    JSValue spStopInteracting(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        InventoryManager &manager = player->getInventoryManager();
+        if (manager.isContainerOpen() || manager.isFurnaceOpen() || manager.isCraftingTableOpen()
+            || manager.isAnvilOpen())
+            manager.onClientRemoveWindow(manager.getCurrentWindowId());
+        return JS_UNDEFINED;
+    }
+
+    // mce::Color to ARGB: each channel clamped to [0, 1], times 255, truncated (sub_141996440)
+    int32_t argbOf(float red, float green, float blue, float alpha) {
+        const auto channel = [](float value) { return (uint32_t) (std::min(1.0f, std::max(0.0f, value)) * 255.0f); };
+        return (int32_t) ((channel(alpha) << 24) | (channel(red) << 16) | (channel(green) << 8) | channel(blue));
+    }
+
+    // (player, arm size 0 slim / 1 wide, { red, green, blue } or null, [{ id, type, packId, productId,
+    // isDefaultPiece }] or null): sub_14DCFE3B0, the tints dropped, wide arms and white skin by default
+    JSValue spSetSkin(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 4 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_FALSE;
+        SerializedSkin skin = player->getSkin();
+        skin.mArmsWide = intOf(ctx, argv[1]) != 0;
+        float red = 1.0f, green = 1.0f, blue = 1.0f;
+        if (JS_IsObject(argv[2])) {
+            JSValue value = JS_GetPropertyStr(ctx, argv[2], "red");
+            red = floatOf(ctx, value);
+            JS_FreeValue(ctx, value);
+            value = JS_GetPropertyStr(ctx, argv[2], "green");
+            green = floatOf(ctx, value);
+            JS_FreeValue(ctx, value);
+            value = JS_GetPropertyStr(ctx, argv[2], "blue");
+            blue = floatOf(ctx, value);
+            JS_FreeValue(ctx, value);
+        }
+        skin.mColorArgb = argbOf(red, green, blue, 1.0f);
+        skin.mPersonaPieces.clear();
+        skin.mTintColors.clear();
+        if (JS_IsObject(argv[3])) {
+            JSValue length = JS_GetPropertyStr(ctx, argv[3], "length");
+            const int32_t count = intOf(ctx, length);
+            JS_FreeValue(ctx, length);
+            for (int32_t index = 0; index < count; ++index) {
+                JSValue entry = JS_GetPropertyUint32(ctx, argv[3], (uint32_t) index);
+                PersonaPieceData piece;
+                JSValue field = JS_GetPropertyStr(ctx, entry, "id");
+                piece.mId = toString(ctx, field);
+                JS_FreeValue(ctx, field);
+                field = JS_GetPropertyStr(ctx, entry, "type");
+                piece.mPieceType = intOf(ctx, field);
+                JS_FreeValue(ctx, field);
+                field = JS_GetPropertyStr(ctx, entry, "packId");
+                piece.mPackId = Uuid::fromString(toString(ctx, field));
+                JS_FreeValue(ctx, field);
+                field = JS_GetPropertyStr(ctx, entry, "productId");
+                piece.mProductId = toString(ctx, field);
+                JS_FreeValue(ctx, field);
+                field = JS_GetPropertyStr(ctx, entry, "isDefaultPiece");
+                piece.mIsDefault = JS_ToBool(ctx, field) == 1;
+                JS_FreeValue(ctx, field);
+                JS_FreeValue(ctx, entry);
+                skin.mPersonaPieces.push_back(piece);
+            }
+        }
+        player->setSkin(skin);
+        // a PlayerSkinPacket to everyone, its names "new_id" and "old_id" (sub_14404E3F0)
+        PlayerSkinPacket packet;
+        packet.mUuid = LoginHandler::playerListUuid(*player);
+        packet.mSkin = player->getSkin();
+        packet.mNewSkinName = "new_id";
+        packet.mOldSkinName = "old_id";
+        packet.mTrustedSkin = packet.mSkin.mTrusted;
+        ServerNetworkHandler &host = api->host();
+        for (auto &entry: host.getPlayers()) {
+            if (entry.second.isSpawned() && !entry.second.isSimulated())
+                host.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet,
+                                              host.getCodecContext(entry.second.getNetworkIdentifier()));
+        }
+        return JS_TRUE;
+    }
+
+    // (player): { armSize, color: { red, green, blue }, pieces: [...] }, undefined for anything but a player
+    JSValue spSkinOf(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 1 ? api->resolvePlayer(argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        const SerializedSkin &skin = player->getSkin();
+        JSValue result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "armSize", JS_NewInt32(ctx, skin.mArmsWide ? 1 : 0));
+        const uint32_t argb = (uint32_t) skin.mColorArgb;
+        JSValue color = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, color, "red", JS_NewFloat64(ctx, (float) ((argb >> 16) & 0xFF) / 255.0f));
+        JS_SetPropertyStr(ctx, color, "green", JS_NewFloat64(ctx, (float) ((argb >> 8) & 0xFF) / 255.0f));
+        JS_SetPropertyStr(ctx, color, "blue", JS_NewFloat64(ctx, (float) (argb & 0xFF) / 255.0f));
+        JS_SetPropertyStr(ctx, result, "color", color);
+        JSValue pieces = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const PersonaPieceData &piece: skin.mPersonaPieces) {
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "id", JS_NewString(ctx, piece.mId.c_str()));
+            JS_SetPropertyStr(ctx, entry, "type", JS_NewInt32(ctx, piece.mPieceType));
+            JS_SetPropertyStr(ctx, entry, "packId", JS_NewString(ctx, piece.mPackId.toString().c_str()));
+            JS_SetPropertyStr(ctx, entry, "productId", JS_NewString(ctx, piece.mProductId.c_str()));
+            JS_SetPropertyStr(ctx, entry, "isDefaultPiece", JS_NewBool(ctx, piece.mIsDefault));
+            JS_SetPropertyUint32(ctx, pieces, index++, entry);
+        }
+        JS_SetPropertyStr(ctx, result, "pieces", pieces);
+        return result;
+    }
+
+    JSValue navigationResult(JSContext *ctx, bool fullPath, const std::vector<Vector3i> &path) {
+        JSValue result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "full", JS_NewBool(ctx, fullPath));
+        JSValue points = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const Vector3i &point: path) {
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "x", JS_NewInt32(ctx, point.x));
+            JS_SetPropertyStr(ctx, entry, "y", JS_NewInt32(ctx, point.y));
+            JS_SetPropertyStr(ctx, entry, "z", JS_NewInt32(ctx, point.z));
+            JS_SetPropertyUint32(ctx, points, index++, entry);
+        }
+        JS_SetPropertyStr(ctx, result, "path", points);
+        return result;
+    }
+
+    // (player, x, y, z, speed): { full, path }
+    JSValue spNavigate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 5 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        std::vector<Vector3i> path;
+        bool fullPath = false;
+        player->getSimulatedController()->navigateToLocation(
+                api->host(), *player, Vector3f(floatOf(ctx, argv[1]), floatOf(ctx, argv[2]), floatOf(ctx, argv[3])),
+                floatOf(ctx, argv[4]), path, fullPath);
+        return navigationResult(ctx, fullPath, path);
+    }
+
+    // (player, entity, speed): undefined when the entity is gone
+    JSValue spNavigateEntity(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 3 ? simulatedOf(*api, argv[0]) : nullptr;
+        Actor *target = argc >= 3 ? api->resolveEntity(argv[1]) : nullptr;
+        if (player == nullptr || target == nullptr)
+            return JS_UNDEFINED;
+        std::vector<Vector3i> path;
+        bool fullPath = false;
+        player->getSimulatedController()->navigateToEntity(api->host(), *player, target->getUniqueId(),
+                                                           target->getPosition(), floatOf(ctx, argv[2]), path,
+                                                           fullPath);
+        return navigationResult(ctx, fullPath, path);
+    }
+
+    // (player, [{ x, y, z }], speed)
+    JSValue spNavigateRoute(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 3 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        std::vector<Vector3f> route;
+        JSValue length = JS_GetPropertyStr(ctx, argv[1], "length");
+        const int32_t count = intOf(ctx, length);
+        JS_FreeValue(ctx, length);
+        for (int32_t index = 0; index < count; ++index) {
+            JSValue entry = JS_GetPropertyUint32(ctx, argv[1], (uint32_t) index);
+            JSValue x = JS_GetPropertyStr(ctx, entry, "x");
+            JSValue y = JS_GetPropertyStr(ctx, entry, "y");
+            JSValue z = JS_GetPropertyStr(ctx, entry, "z");
+            route.emplace_back(floatOf(ctx, x), floatOf(ctx, y), floatOf(ctx, z));
+            JS_FreeValue(ctx, x);
+            JS_FreeValue(ctx, y);
+            JS_FreeValue(ctx, z);
+            JS_FreeValue(ctx, entry);
+        }
+        player->getSimulatedController()->navigateToLocations(route, floatOf(ctx, argv[2]));
+        return JS_UNDEFINED;
+    }
+
     JSValue spGameMode(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         return JS_NewInt32(ctx, argc >= 1 ? api->parseGameMode(toString(ctx, argv[0])) : -1);
@@ -506,7 +712,7 @@ namespace ScriptSimulatedPlayerBinding {
         addFunction(ctx, sp, "attackEntity", spAttackEntity, 2);
         addFunction(ctx, sp, "interact", spInteract, 1);
         addFunction(ctx, sp, "interactEntity", spInteractEntity, 2);
-        addFunction(ctx, sp, "interactBlock", spInteractBlock, 8);
+        addFunction(ctx, sp, "useBlock", spUseBlock, 5);
         addFunction(ctx, sp, "useItem", spUseItem, 2);
         addFunction(ctx, sp, "useSlot", spUseSlot, 2);
         addFunction(ctx, sp, "useItemOnBlock", spUseItemOnBlock, 9);
@@ -520,6 +726,14 @@ namespace ScriptSimulatedPlayerBinding {
         addFunction(ctx, sp, "give", spGive, 3);
         addFunction(ctx, sp, "setItem", spSetItem, 4);
         addFunction(ctx, sp, "respawn", spRespawn, 1);
+        addFunction(ctx, sp, "startBuild", spStartBuild, 2);
+        addFunction(ctx, sp, "stopBuild", spStopBuild, 1);
+        addFunction(ctx, sp, "stopInteracting", spStopInteracting, 1);
+        addFunction(ctx, sp, "setSkin", spSetSkin, 4);
+        addFunction(ctx, sp, "skinOf", spSkinOf, 1);
+        addFunction(ctx, sp, "navigate", spNavigate, 5);
+        addFunction(ctx, sp, "navigateEntity", spNavigateEntity, 3);
+        addFunction(ctx, sp, "navigateRoute", spNavigateRoute, 3);
         addFunction(ctx, sp, "gameMode", spGameMode, 1);
         addFunction(ctx, sp, "prototype", spPrototype, 1);
         JS_SetPropertyStr(ctx, native, "sp", sp);

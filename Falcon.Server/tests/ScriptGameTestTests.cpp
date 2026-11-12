@@ -133,6 +133,15 @@ gt.register("Suite", "sim", (test) => {
     r.simRespawn = String(p.respawn());
     r.simBreak = String(p.breakBlock({ x: 1, y: 5, z: 1 }));
     r.simUsing = String(p.stopUsingItem());
+    r.simInteract = String(p.interactWithBlock({ x: 1, y: 1, z: 1 }));
+    r.simBuild = errorOf(() => { p.startBuild(); p.stopBuild(); p.stopInteracting(); });
+    p.setSkin({ armSize: "Slim", skinColor: { red: 1, green: 0, blue: 0 } });
+    const skin = gt.getPlayerSkin(p);
+    r.simSkin = skin.armSize + "|" + skin.skinColor.red + "|" + skin.skinColor.green + "|" + skin.personaPieces.length;
+    const nav = p.navigateToBlock({ x: 1, y: 1, z: 2 });
+    r.simNav = (nav instanceof gt.NavigationResult) + "|" + typeof nav.isFullPath + "|" + Array.isArray(nav.getPath());
+    r.simNavEntity = errorOf(() => p.navigateToEntity({}));
+    p.moveRelative(0, 1);
     p.fly();
     r.simInvalid = errorOf(() => gt.SimulatedPlayer.prototype.jump.call({}));
     r.simEnums = gt.LookDuration.UntilMove + "|" + gt.PersonaArmSize.Slim + "|" + gt.PersonaPieceType.Skin;
@@ -377,6 +386,11 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "simRespawn", "false");
         expect(*report, "simBreak", "false");
         expect(*report, "simUsing", "undefined");
+        expect(*report, "simInteract", "false");
+        expect(*report, "simBuild", "ok");
+        expect(*report, "simSkin", "Slim|1|0|0");
+        expect(*report, "simNav", "true|boolean|true");
+        expect(*report, "simNavEntity", "TypeError:Native type conversion failed.");
         expect(*report, "fuse",
                "Assert|gameTest.assert.missingExplosionComponent|minecraft:cow|{\"x\":0,\"y\":0,\"z\":0}");
     }

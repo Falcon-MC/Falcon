@@ -77,8 +77,13 @@ void ServerNetworkHandler::_removeSimulatedPlayers() {
 // the input a client would send this tick, played by the same movement pipeline
 void ServerNetworkHandler::_tickSimulatedPlayer(ServerPlayer &player) {
     SimulatedPlayerController *controller = player.getSimulatedController();
-    if (controller == nullptr || !player.isSpawned() || player.isDead())
+    if (controller == nullptr || !player.isSpawned())
         return;
+    // sub_141031D90: a dead player's build stops
+    if (player.isDead()) {
+        controller->stopBuild();
+        return;
+    }
     PlayerAuthInputPacket packet;
     controller->buildInput(*this, player, packet);
     player.getMovementInputs().enqueue(packet);

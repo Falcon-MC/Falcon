@@ -52,6 +52,11 @@ bool PathFinder::tryReserveSearch(int64_t tick) {
 
 bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
                           Path &path) {
+    return findPath(level, mob, mob.getSize(), target, options, path);
+}
+
+bool PathFinder::findPath(Level &level, const Actor &actor, const ActorSize &size, const Vector3f &target,
+                          const PathOptions &options, Path &path) {
     path.clear();
     mNodes.clear();
     mHeap.clear();
@@ -66,10 +71,9 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
         mStamp = 1;
     }
 
-    const Vector3f position = mob.getPosition();
-    const ActorSize size = mob.getSize();
+    const Vector3f position = actor.getPosition();
     const bool inWater = LiquidBlocksFetch::at(level, position).water;
-    mEvaluator.prepare(level, mob, size.mWidth, size.mHeight, position, inWater, options);
+    mEvaluator.prepare(level, actor, size.mWidth, size.mHeight, position, inWater, options);
 
     mTargetX = (int32_t) std::floor(target.x);
     mTargetY = (int32_t) std::floor(target.y);

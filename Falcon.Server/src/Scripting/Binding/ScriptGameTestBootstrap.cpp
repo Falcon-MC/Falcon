@@ -814,13 +814,22 @@ namespace {
                 throw invalidPlayer(self, member);
             return run(self, ...args);
         }, getter);
+    // sub_144AF1740: a test whose structure block is gone converts nothing
+    const structureOf = (inst) => {
+        const block = inst.dimension.getBlock(inst.origin);
+        if (block === undefined || block.typeId !== "minecraft:structure_block")
+            throw gameTestError("AssertAtPosition", "Could not find StructureBlockActor associated to this test", [],
+                { absolutePosition: { x: inst.origin.x, y: inst.origin.y, z: inst.origin.z },
+                    relativePosition: { x: 0, y: 0, z: 0 }, tickCount: inst.tickCount });
+        return inst;
+    };
     const playerWorld = (self, location) => {
         const inst = playerTests.get(self);
-        return inst === undefined ? vector3(location) : worldVec(inst, location);
+        return inst === undefined ? vector3(location) : worldVec(structureOf(inst), location);
     };
     const playerBlock = (self, location) => {
         const inst = playerTests.get(self);
-        return inst === undefined ? blockVector(location) : worldBlock(inst, location);
+        return inst === undefined ? blockVector(location) : worldBlock(structureOf(inst), location);
     };
     const lookDuration = (duration) => {
         if (duration === undefined)
@@ -940,7 +949,10 @@ namespace {
             face = DIRECTIONS[(index + inst.rotation) % 4];
         return FACES.indexOf(face);
     };
-    const clickOf = (faceLocation) => (faceLocation === undefined || faceLocation === null ? { x: 0, y: 0, z: 0 }
+    // sub_14DD00E50: without a face location the centre of the (turned) face, a given one unchanged
+    const FACE_CENTRES = [{ x: 0.5, y: 0, z: 0.5 }, { x: 0.5, y: 1, z: 0.5 }, { x: 0.5, y: 0.5, z: 0 },
+        { x: 0.5, y: 0.5, z: 1 }, { x: 0, y: 0.5, z: 0.5 }, { x: 1, y: 0.5, z: 0.5 }];
+    const clickOf = (faceLocation, face) => (faceLocation === undefined || faceLocation === null ? FACE_CENTRES[face]
         : vector3(faceLocation));
     const itemStack = (value) => {
         if (!(value instanceof S.ItemStack))
@@ -977,9 +989,16 @@ namespace {
     simulatedMethod("setItem", (self, item, slot, selectSlot) => native.sp.setItem(self, itemStack(item),
         integer(slot), selectSlot === undefined ? false : bool(selectSlot)));
     simulatedMethod("interact", (self) => native.sp.interact(self));
+    // sub_14DD00600: the face is not turned with the test
     simulatedMethod("interactWithBlock", (self, blockLocation, direction) => {
+        let face = 1;
+        if (direction !== undefined) {
+            face = FACES.indexOf(string(direction));
+            if (face < 0)
+                throw conversion();
+        }
         const at = playerBlock(self, blockLocation);
-        return native.sp.interactBlock(self, at.x, at.y, at.z, playerFace(self, direction), 0, 0, 0);
+        return native.sp.useBlock(self, at.x, at.y, at.z, face);
     });
     simulatedMethod("interactWithEntity", (self, entity) => {
         const result = native.sp.interactEntity(self, liveEntity(entity, "interactWithEntity"));
@@ -993,18 +1012,126 @@ namespace {
     simulatedMethod("useItemOnBlock", (self, item, blockLocation, direction, faceLocation) => {
         const stack = itemStack(item);
         const at = playerBlock(self, blockLocation);
-        const click = clickOf(faceLocation);
-        return native.sp.useItemOnBlock(self, stack, at.x, at.y, at.z, playerFace(self, direction), click.x,
-            click.y, click.z);
+        const face = playerFace(self, direction);
+        const click = clickOf(faceLocation, face);
+        return native.sp.useItemOnBlock(self, stack, at.x, at.y, at.z, face, click.x, click.y, click.z);
     });
     simulatedMethod("useItemInSlotOnBlock", (self, slot, blockLocation, direction, faceLocation) => {
         const index = integer(slot);
         const at = playerBlock(self, blockLocation);
-        const click = clickOf(faceLocation);
-        return native.sp.useSlotOnBlock(self, index, at.x, at.y, at.z, playerFace(self, direction), click.x,
-            click.y, click.z);
+        const face = playerFace(self, direction);
+        const click = clickOf(faceLocation, face);
+        return native.sp.useSlotOnBlock(self, index, at.x, at.y, at.z, face, click.x, click.y, click.z);
     });
     simulatedMethod("stopUsingItem", (self) => native.sp.stopUsing(self));
+    simulatedMethod("startBuild", (self, slot) => { native.sp.startBuild(self, slot === undefined ? 0 : integer(slot)); });
+    simulatedMethod("stopBuild", (self) => { native.sp.stopBuild(self); });
+    simulatedMethod("stopInteracting", (self) => { native.sp.stopInteracting(self); });
+
+    // PlayerSkinData: persona::ArmSize and persona::PieceType in the game's order (sub_14BA81B50)
+    const ARM_SIZES = ["Slim", "Wide"];
+    const PIECE_TYPES = ["Unknown", "Skeleton", "Body", "Skin", "Bottom", "Feet", "Dress", "Top", "HighPants", "Hands",
+        "Outerwear", "FacialHair", "Mouth", "Eyes", "Hair", "Hood", "Back", "FaceAccessory", "Head", "Legs", "LeftLeg",
+        "RightLeg", "Arms", "LeftArm", "RightArm", "Capes"];
+    const skinOptions = (options) => {
+        if (options === null || typeof options !== "object")
+            throw conversion();
+        let armSize = 1;
+        if (options.armSize !== undefined) {
+            armSize = ARM_SIZES.indexOf(options.armSize);
+            if (armSize < 0)
+                throw conversion();
+        }
+        let color = null;
+        if (options.skinColor !== undefined) {
+            const c = options.skinColor;
+            if (c === null || typeof c !== "object")
+                throw conversion();
+            color = { red: number(c.red), green: number(c.green), blue: number(c.blue) };
+        }
+        let pieces = null;
+        if (options.personaPieces !== undefined) {
+            if (!Array.isArray(options.personaPieces))
+                throw conversion();
+            pieces = options.personaPieces.map((piece) => {
+                if (piece === null || typeof piece !== "object")
+                    throw conversion();
+                const type = PIECE_TYPES.indexOf(piece.type);
+                if (type <= 0)
+                    throw conversion();
+                return { id: string(piece.id), type, packId: string(piece.packId), productId: string(piece.productId),
+                    isDefaultPiece: piece.isDefaultPiece === undefined ? false : bool(piece.isDefaultPiece) };
+            });
+        }
+        return { armSize, color, pieces };
+    };
+    simulatedMethod("setSkin", (self, options) => {
+        const skin = skinOptions(options);
+        native.sp.setSkin(self, skin.armSize, skin.color, skin.pieces);
+    });
+    const getPlayerSkin = function (player) {
+        guard("Native function", undefined, "getPlayerSkin");
+        if (!(player instanceof S.Player))
+            throw conversion();
+        const skin = native.sp.skinOf(player);
+        if (skin === undefined)
+            throw invalidPlayer(player, "getPlayerSkin");
+        return { armSize: ARM_SIZES[skin.armSize], skinColor: skin.color,
+            personaPieces: skin.pieces.map((piece) => ({ id: piece.id, isDefaultPiece: piece.isDefaultPiece,
+                packId: piece.packId, productId: piece.productId, type: PIECE_TYPES[piece.type] })) };
+    };
+
+    // NavigationResult: the path in block positions, relative to the player's test (sub_14DD020A0)
+    const NavigationResult = privateClass("NavigationResult");
+    const navigations = new WeakMap();
+    const navigationOf = (self, member) => {
+        const data = navigations.get(self);
+        if (data === undefined)
+            throw new ReferenceError("Native function [NavigationResult::" + member
+                + "] object bound to prototype does not exist.");
+        return data;
+    };
+    define(NavigationResult, "NavigationResult", "isFullPath", (self) => navigationOf(self, "isFullPath").full, true);
+    define(NavigationResult, "NavigationResult", "getPath",
+        (self) => navigationOf(self, "getPath").path.map((point) => ({ x: point.x, y: point.y, z: point.z })));
+    const navigationResult = (self, result) => {
+        const inst = playerTests.get(self);
+        const path = result.path.map((point) => (inst === undefined ? point : relativeBlock(inst, point)));
+        const value = new NavigationResult(token);
+        navigations.set(value, { full: result.full, path });
+        return value;
+    };
+    const navigationSpeed = (speed) => (speed === undefined ? 1 : number(speed));
+    simulatedMethod("navigateToLocation", (self, location, speed) => {
+        const at = playerWorld(self, location);
+        return navigationResult(self, native.sp.navigate(self, at.x, at.y, at.z, navigationSpeed(speed)));
+    });
+    // sub_14DCFBD20: the bottom centre of the block
+    simulatedMethod("navigateToBlock", (self, blockLocation, speed) => {
+        const at = playerBlock(self, blockLocation);
+        return navigationResult(self, native.sp.navigate(self, at.x + 0.5, at.y, at.z + 0.5, navigationSpeed(speed)));
+    });
+    simulatedMethod("navigateToEntity", (self, entity, speed) => {
+        if (!isEntity(entity))
+            throw conversion();
+        const pace = navigationSpeed(speed);
+        const result = entity.isValid ? native.sp.navigateEntity(self, entity, pace) : undefined;
+        // sub_148549BD0: InvalidArgumentErrorType.Unspecified on the "entity" argument, no index
+        if (result === undefined) {
+            const error = new native.errors.classes.InvalidArgumentError(undefined, undefined, "Unspecified",
+                undefined);
+            Object.defineProperty(error, "message", { value: "Invalid value passed. entity", writable: true,
+                configurable: true });
+            throw error;
+        }
+        return navigationResult(self, result);
+    });
+    simulatedMethod("navigateToLocations", (self, locations, speed) => {
+        if (!Array.isArray(locations))
+            throw conversion();
+        const route = locations.map((location) => playerWorld(self, location));
+        native.sp.navigateRoute(self, route, navigationSpeed(speed));
+    });
 
     const spawnPlayer = (dimension, at, yaw, name, gameMode, rotation) => {
         const mode = native.sp.gameMode(string(gameMode));
@@ -1132,7 +1259,8 @@ namespace {
     };
 
     return {
-        GameTestSequence, RegistrationBuilder, SimulatedPlayer, Tags, Test, spawnSimulatedPlayer,
+        GameTestSequence, NavigationResult, RegistrationBuilder, SimulatedPlayer, Tags, Test, getPlayerSkin,
+        spawnSimulatedPlayer,
         register: registerTest("register", false),
         registerAsync: registerTest("registerAsync", true),
         setAfterBatchCallback: setBatchCallback("after", "setAfterBatchCallback"),

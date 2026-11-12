@@ -991,7 +991,8 @@ bool BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     if (transaction.mBlockFace < 0 || transaction.mBlockFace >= 6)
         return false;
 
-    if (isDuplicateRightClick(player, transaction))
+    // a simulated player's clicks come from the server: no resent packet to drop
+    if (!player.isSimulated() && isDuplicateRightClick(player, transaction))
         return false;
 
     if (!player.isSpawned() || player.isDead() || player.isSpectator())
@@ -1010,7 +1011,8 @@ bool BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     bool handled = false;
 
-    if (canInteractWithBlock(player, transaction.mBlockPosition)) {
+    // GameMode::useItemOn (sub_141038440) checks no reach for a simulated player
+    if (player.isSimulated() || canInteractWithBlock(player, transaction.mBlockPosition)) {
         if (player.isCreative())
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
         else if (matchesTransactionItem(owner.getCodecContext(player.getNetworkIdentifier()), inventory.getItemInHand(),

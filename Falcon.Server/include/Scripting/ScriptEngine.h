@@ -101,6 +101,10 @@ public:
     void onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
                                    int32_t face, const Vector3f &clickPosition);
 
+    // Block::use: the custom block's onPlayerInteract, without the world's playerInteractWithBlock event
+    void onCustomBlockUse(ServerPlayer &player, const std::string &blockId, const Vector3i &position, int32_t face,
+                          const Vector3f &clickPosition);
+
     void onCustomBlockTick(Level &level, const std::string &blockId, const Vector3i &position);
 
     void onCustomBlockRandomTick(Level &level, const std::string &blockId, const Vector3i &position);

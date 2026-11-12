@@ -4,7 +4,9 @@
 #include "Core/Math/Vector3i.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <chrono>
 #include <cstdint>
+#include <vector>
 
 class Actor;
 class PlayerAuthInputPacket;
@@ -33,7 +35,8 @@ public:
 
     void stopMoving();
 
-    bool jump(ServerPlayer &player);
+    // sub_141036BB0: the jump goes out now and the delay starts, a second jump the same tick does nothing
+    bool jump(ServerNetworkHandler &owner, ServerPlayer &player);
 
     void setSprinting(bool sprinting) {
         mSprinting = sprinting;
@@ -72,6 +75,8 @@ public:
     bool interactWithBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face,
                            const Vector3f &clickPosition);
 
+    bool useBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face);
+
     // sub_14DCFD060, sub_141038670: false when dead, without an item or still cooling down
     bool useItem(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item);
 
@@ -92,13 +97,33 @@ public:
 
     void stopBreakingBlock();
 
+    // sub_1410325B0: the slot selected, then the held item used on the block in view and used again while it
+    // stays in view (GameMode::continueBuildBlock, sub_14376BB80)
+    void startBuild(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot);
+
+    // sub_14DD01AB0: GameMode::stopBuildBlock
+    void stopBuild() {
+        mBuilding = false;
+    }
+
+    // sub_141037660: a path from the navigation, then walked; false with no path at all
+    bool navigateToLocation(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &target, float speed,
+                            std::vector<Vector3i> &path, bool &fullPath);
+
+    // sub_141036D90: the entity followed to within a block, its path made again as it moves away
+    bool navigateToEntity(ServerNetworkHandler &owner, ServerPlayer &player, int64_t uniqueId, const Vector3f &target,
+                          float speed, std::vector<Vector3i> &path, bool &fullPath);
+
+    // sub_141037990: each location in turn, a path to the next once the last is walked
+    void navigateToLocations(const std::vector<Vector3f> &route, float speed);
+
     // the next input, built from the current orders
     void buildInput(ServerNetworkHandler &owner, ServerPlayer &player, PlayerAuthInputPacket &packet);
 
     static float wrapDegrees(float angle);
 
 private:
-    enum class Move : uint8_t { None, Direction, ToLocation };
+    enum class Move : uint8_t { None, Direction, ToLocation, Navigate };
     enum class Look : uint8_t { None, Location, Entity };
     enum class Request : uint8_t { None, Start, Stop };
 
@@ -111,6 +136,20 @@ private:
     void _markAction(ServerNetworkHandler &owner);
 
     void _breakingActions(ServerNetworkHandler &owner, ServerPlayer &player, PlayerAuthInputPacket &packet);
+
+    bool _buildOn(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face,
+                  const Vector3f &clickPosition, bool continued);
+
+    void _continueBuild(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _findPath(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &target);
+
+    // the move vector towards a point, as moveToLocation and the navigation walk it
+    void _stepTowards(ServerPlayer &player, const Vector3f &target, float speed, bool faceTarget, float &sideways,
+                      float &forward, float &vertical);
+
+    void _tickNavigation(ServerNetworkHandler &owner, ServerPlayer &player, float &sideways, float &forward,
+                         float &vertical);
 
     Move mMove = Move::None;
     Vector3f mDirection;
@@ -126,6 +165,7 @@ private:
     int32_t mLookTicks = 0;
 
     bool mJump = false;
+    int64_t mJumpTick = -1;
     bool mSprinting = false;
     Request mSwimRequest = Request::None;
     Request mGlideRequest = Request::None;
@@ -138,4 +178,17 @@ private:
     bool mAbortBreak = false;
     Vector3i mBreakBlock;
     int32_t mBreakFace = 1;
+
+    bool mBuilding = false;
+    bool mHasBuilt = false;
+    std::chrono::steady_clock::time_point mLastBuild;
+
+    std::vector<Vector3f> mWaypoints;
+    size_t mWaypoint = 0;
+    std::vector<Vector3f> mRoute;
+    size_t mRouteIndex = 0;
+    int64_t mFollowEntity = 0;
+    Vector3f mNavigationTarget;
+    Vector3f mLastNavigationPosition;
+    int32_t mStuckTicks = 0;
 };

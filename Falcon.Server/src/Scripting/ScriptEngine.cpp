@@ -712,7 +712,11 @@ void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::st
                                              int32_t face, const Vector3f &clickPosition) {
     _emit("after.playerInteractWithBlock", "WorldAfterEvents.playerInteractWithBlock", false,
           [&](ScriptApi &api, JSValue event) { fillBlockInteraction(api, event, player, position, face); });
+    onCustomBlockUse(player, blockId, position, face, clickPosition);
+}
 
+void ScriptEngine::onCustomBlockUse(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
+                                    int32_t face, const Vector3f &clickPosition) {
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
     if (block == nullptr)
         return;
