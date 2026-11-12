@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <unordered_map>
 
@@ -1386,33 +1387,75 @@ namespace {
         return propertyValue(ctx, actor, *descriptor);
     }
 
+    // a bound as the binding prints it (sub_148552370): whole numbers bare, others with two decimals
+    std::string boundText(double value) {
+        if (std::fabs((double) (int32_t) value - value) < 0.00001)
+            return std::to_string((int32_t) value);
+        char text[64];
+        std::snprintf(text, sizeof(text), "%.2f", value);
+        return text;
+    }
+
+    JSValue invalidPropertyType(ScriptApi *api, const char *expected, int argument) {
+        return api->throwError("InvalidArgumentError", "Invalid type passed to argument [" + std::to_string(argument)
+                                                               + "]. Expected type: " + expected);
+    }
+
+    JSValue propertyOutOfBounds(ScriptApi *api, double value, double minValue, double maxValue) {
+        return api->throwError("ArgumentOutOfBoundsError",
+                               "Unsupported or out of bounds value passed to function argument [1]: number property, "
+                               "Value: "
+                                       + boundText(value) + ", Argument bounds: [" + boundText(minValue) + ", "
+                                       + boundText(maxValue) + "]");
+    }
+
+    // ScriptActor::setProperty (sub_14C34F070, 26.60): the value arrives as a float, bool or string; an int is the
+    // truncated float, and every mismatch names the property kind the game expected
     JSValue entitySetProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        if (argc < 2 || target.mServerActor == nullptr)
+        if (argc < 2 || !JS_IsString(argv[0]) || !(JS_IsNumber(argv[1]) || JS_IsBool(argv[1]) || JS_IsString(argv[1])))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (target.mServerActor == nullptr)
             return JS_UNDEFINED;
 
+        ScriptApi *api = target.mApi;
         const std::string name = toString(ctx, argv[0]);
         const ActorPropertyDescription *descriptor = target.mServerActor->findPropertyDescription(name);
         if (descriptor == nullptr)
-            return JS_UNDEFINED;
+            return api->throwError("InvalidArgumentError", "Invalid value passed to argument [0]. Property \"" + name
+                                                                   + "\" does not exist on Entity of type \""
+                                                                   + target.mRef->mTypeId + "\".");
 
         ServerActor &actor = *target.mServerActor;
-        if (descriptor->mType == ActorPropertyDescription::Type::Float) {
-            double value = 0.0;
-            JS_ToFloat64(ctx, &value, argv[1]);
-            actor.setFloatProperty(name, (float) value);
-        } else if (descriptor->mType == ActorPropertyDescription::Type::Bool) {
-            actor.setIntProperty(name, JS_ToBool(ctx, argv[1]) == 1 ? 1 : 0);
-        } else if (descriptor->mType == ActorPropertyDescription::Type::Enum) {
-            const std::string value = toString(ctx, argv[1]);
-            for (size_t i = 0; i < descriptor->mEnumValues.size(); ++i) {
-                if (descriptor->mEnumValues[i] == value)
-                    actor.setIntProperty(name, (int32_t) i);
+        const JSValueConst value = argv[1];
+        if (descriptor->mType == ActorPropertyDescription::Type::Int
+            || descriptor->mType == ActorPropertyDescription::Type::Float) {
+            if (!JS_IsNumber(value))
+                return invalidPropertyType(api, "string property", 0);
+            double number = 0.0;
+            JS_ToFloat64(ctx, &number, value);
+            const float read = (float) number;
+            if (descriptor->mType == ActorPropertyDescription::Type::Int) {
+                const int32_t whole = (int32_t) read;
+                if (whole < descriptor->mMinInt || whole > descriptor->mMaxInt)
+                    return propertyOutOfBounds(api, whole, descriptor->mMinInt, descriptor->mMaxInt);
+                actor.setIntProperty(name, whole);
+            } else {
+                if (read < descriptor->mMinFloat || descriptor->mMaxFloat < read)
+                    return propertyOutOfBounds(api, read, descriptor->mMinFloat, descriptor->mMaxFloat);
+                actor.setFloatProperty(name, read);
             }
+        } else if (descriptor->mType == ActorPropertyDescription::Type::Bool) {
+            if (!JS_IsBool(value))
+                return invalidPropertyType(api, "string property", 0);
+            actor.setIntProperty(name, JS_ToBool(ctx, value) == 1 ? 1 : 0);
         } else {
-            int32_t value = 0;
-            JS_ToInt32(ctx, &value, argv[1]);
-            actor.setIntProperty(name, value);
+            if (!JS_IsString(value))
+                return invalidPropertyType(api, "string property", 0);
+            const int32_t index = descriptor->findEnumIndex(toString(ctx, value));
+            if (index < 0)
+                return invalidPropertyType(api, "enum property", 1);
+            actor.setIntProperty(name, index);
         }
 
         target.mApi->host().syncActorProperties(actor);
