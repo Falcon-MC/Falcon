@@ -765,7 +765,7 @@ void ServerNetworkHandler::stopServerListening() {
             ServerPlayer &player = entry.second;
 
             finish([this, &player]() {
-                if (!player.getName().empty())
+                if (!player.getName().empty() && !player.isSimulated())
                     _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
@@ -912,14 +912,18 @@ void ServerNetworkHandler::tick(bool paused) {
     }
 
     mNetworkHandler->runEvents();
+    _removeSimulatedPlayers();
 
     for (World *world: mWorlds.getWorlds())
         _tickOverworld(*world);
     _tickSpawnWarmup();
 
     mProfiler.beginSection(ProfilerSection::Players);
-    for (auto &entry: mPlayers)
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSimulated())
+            _tickSimulatedPlayer(entry.second);
         _tickPlayer(entry.second);
+    }
     mProfiler.endSection(ProfilerSection::Players);
 
     mProfiler.beginSection(ProfilerSection::BlockActors);
@@ -982,6 +986,11 @@ void ServerNetworkHandler::tick(bool paused) {
     std::vector<std::pair<NetworkIdentifier, int>> unanswered;
     const bool unofficialClientsAllowed = mProperties.getAllowUnofficialClients();
     for (auto &entry: mPlayers) {
+        // no client to probe, time out or idle
+        if (entry.second.isSimulated()) {
+            entry.second.getAcknowledgements().acknowledgeAll();
+            continue;
+        }
         const int failedCheck = unofficialClientsAllowed ? 0 : mClientProbes.tick(*this, entry.second, mCurrentTick);
         if (failedCheck != 0)
             unanswered.emplace_back(entry.first, failedCheck);
@@ -1188,7 +1197,8 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         RideSystem::ejectAll(*this, *player);
         if (player->isSpawned())
             InventoryHandler::resetInventory(*this, *player);
-        _savePlayerData(*player);
+        if (!player->isSimulated())
+            _savePlayerData(*player);
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
         if (player->isSpawned()) {
@@ -1562,6 +1572,11 @@ ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
 
 void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectReason reason,
                                        const std::string &message) {
+    ServerPlayer *simulated = _getPlayer(id);
+    if (simulated != nullptr && simulated->isSimulated()) {
+        removeSimulatedPlayer(id);
+        return;
+    }
     // a player who never made it into the world: the reason is what an operator would ask about
     const ServerPlayer *leaving = _getPlayer(id);
     if (leaving == nullptr || !leaving->isSpawned())

@@ -562,6 +562,13 @@ public:
 
     int64_t allocateActorUniqueId();
 
+    // gametest: a player with no client, fed inputs by the server; nothing is sent to it
+    ServerPlayer &spawnSimulatedPlayer(const std::string &name, Level &level, const Vector3f &position, float yaw,
+                                       int32_t gameType);
+
+    // leaves at the next safe point of the tick, as a closed connection would
+    void removeSimulatedPlayer(const NetworkIdentifier &id);
+
 
     BlockDefinitionRegistry &getBlockDefinitions() {
         return mBlockDefinitions;
@@ -1141,6 +1148,11 @@ private:
         int64_t mDeadline;
     };
     std::vector<PendingRemoval> mPendingRemovals;
+
+    void _tickSimulatedPlayer(ServerPlayer &player);
+    void _removeSimulatedPlayers();
+    unsigned long long mSimulatedPlayerCount = 0;
+    std::vector<NetworkIdentifier> mSimulatedRemovals;
 
     struct LingeringCloud {
         int32_t mPotionId;

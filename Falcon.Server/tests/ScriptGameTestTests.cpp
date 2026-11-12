@@ -1,5 +1,6 @@
 #include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Protocol/Packets/TextPacket.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/ScriptApi.h"
@@ -15,6 +16,7 @@
 #include "World/Level/WorldManager.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -50,7 +52,7 @@ namespace {
     }
 
     const char *const GAMETEST = R"JS(
-import { world, system, BlockPermutation } from "@minecraft/server";
+import { world, system, BlockPermutation, Player } from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 
 const r = {};
@@ -106,6 +108,23 @@ gt.register("Suite", "fuse", (test) => {
     } catch (e) {
         r.fuse = e.type + "|" + e.message + "|" + e.messageParameters + "|" + JSON.stringify(e.context.relativePosition);
     }
+    test.succeed();
+}).structureName("gt:box");
+gt.register("Suite", "sim", (test) => {
+    const p = test.spawnSimulatedPlayer({ x: 1, y: 1, z: 1 }, "Bot");
+    r.simType = (p instanceof gt.SimulatedPlayer) + "|" + (p instanceof Player) + "|" + p.name + "|"
+        + (JSON.stringify(p.location) === JSON.stringify(test.worldLocation({ x: 1.5, y: 1, z: 1.5 })));
+    r.simYaw = String(p.getRotation().y);
+    p.setBodyRotation(45);
+    r.simBody = String(p.getRotation().y);
+    p.rotateBody(10);
+    r.simRotate = String(p.getRotation().y);
+    p.lookAtLocation({ x: 5, y: 2.62, z: 1.5 });
+    r.simLook = String(p.headRotation.y);
+    r.simJump = String(p.jump());
+    p.moveRelative(0, 1);
+    r.simInvalid = errorOf(() => gt.SimulatedPlayer.prototype.jump.call({}));
+    r.simEnums = gt.LookDuration.UntilMove + "|" + gt.PersonaArmSize.Slim + "|" + gt.PersonaPieceType.Skin;
     test.succeed();
 }).structureName("gt:box");
 gt.setBeforeBatchCallback("", () => { r.before = String(Number(r.before || 0) + 1); });
@@ -205,7 +224,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         engine.tick(++tick);
 
         GameTestRunner &runner = engine.gameTests();
-        require(runner.testNames().size() == 9, "the registered tests are not listed");
+        require(runner.testNames().size() == 10, "the registered tests are not listed");
         require(!runner.run(level, Vector3i(0, 100, 0), "Suite:none", 0, false, 1).mSuccess, "an unknown test ran");
         require(runner.run(level, Vector3i(0, 100, 0), "Suite:passes", 0, false, 0).mKey
                         == "gameTest.error.repeatCountTooSmall",
@@ -269,6 +288,26 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
                 "cauldron did not run");
         tickAndRead(owner, engine, tick, 2);
 
+        // a simulated player: no client, its inputs come from its orders, nothing is sent to it
+        require(runner.run(level, Vector3i(60, 100, 0), "Suite:sim", 0, false, 1).mSuccess, "sim did not run");
+        tickAndRead(owner, engine, tick, 2);
+        ServerPlayer *bot = nullptr;
+        for (auto &entry: owner.getPlayers()) {
+            if (entry.second.isSimulated())
+                bot = &entry.second;
+        }
+        require(bot != nullptr && bot->getName() == "Bot" && bot->isSpawned(), "no simulated player");
+        require(owner.getNetworkHandler().isLocalSession(bot->getNetworkIdentifier()), "the bot has a network session");
+        PlayerAuthInputPacket input;
+        bot->getSimulatedController()->buildInput(owner, *bot, input);
+        require(input.mMotionX == 0.0f && input.mMotionY == 1.0f, "moveRelative did not walk forward");
+        bot->getSimulatedController()->moveInDirection(Vector3f(1.0f, 0.0f, 0.0f), true);
+        PlayerAuthInputPacket east;
+        bot->getSimulatedController()->buildInput(owner, *bot, east);
+        // facing east (yaw -90): east is straight ahead
+        require(std::fabs(east.mMotionY - 1.0f) < 0.001f && std::fabs(east.mMotionX) < 0.001f,
+                "a world move was not turned by the yaw");
+
         const GameTestRunner::Outcome created = runner.create(level, Vector3i(0, 100, 60), "Made:here", 4, 0, 0);
         require(created.mSuccess, "create failed");
         const StructureBlockActor *made = level.getBlockActors().find<StructureBlockActor>(Vector3i(0, 100, 63));
@@ -309,6 +348,15 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "registrationBuilder", "ReferenceError:No constructor for native class 'RegistrationBuilder'.");
         expect(*report, "before", "1");
         expect(*report, "cauldron", "lava|AssertAtPosition|gameTest.assert.expectCauldron");
+        expect(*report, "simType", "true|true|Bot|true");
+        expect(*report, "simYaw", "0");
+        expect(*report, "simBody", "45");
+        expect(*report, "simRotate", "55");
+        expect(*report, "simLook", "-90");
+        expect(*report, "simJump", "false");
+        expect(*report, "simInvalid",
+               "ReferenceError:Native function [SimulatedPlayer::jump] object bound to prototype does not exist.");
+        expect(*report, "simEnums", "UntilMove|Slim|Skin");
         expect(*report, "fuse",
                "Assert|gameTest.assert.missingExplosionComponent|minecraft:cow|{\"x\":0,\"y\":0,\"z\":0}");
     }

@@ -679,6 +679,7 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second);
     JS_FreeValue(mContext, mAdminHooks);
     JS_FreeValue(mContext, mGameTestHooks);
+    JS_FreeValue(mContext, mSimulatedPlayerPrototype);
     JS_FreeValue(mContext, mNetHooks);
     for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports,
                          &mDebugExports, &mGameTestExports}) {
@@ -1020,7 +1021,16 @@ JSValue ScriptApi::makePlayer(ServerPlayer &player) {
     ref->mId = handle;
     ref->mEntityId = std::to_string(player.getUniqueId());
     ref->mTypeId = "minecraft:player";
-    JSValue object = makeInstance("Player", ref);
+    JSValue object = JS_UNDEFINED;
+    if (player.isSimulated() && JS_IsObject(mSimulatedPlayerPrototype)) {
+        object = JS_NewObjectProtoClass(mContext, mSimulatedPlayerPrototype, mNativeClassId);
+        ref->mHandleCounts = mHandleCounts;
+        ref->mHandleCount = &(*mHandleCounts)["SimulatedPlayer"];
+        ++*ref->mHandleCount;
+        JS_SetOpaque(object, ref);
+    } else {
+        object = makeInstance("Player", ref);
+    }
     mPlayerObjects[handle] = JS_DupValue(mContext, object);
     return object;
 }

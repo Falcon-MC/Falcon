@@ -293,6 +293,9 @@ namespace {
             }
         }
         inst.cleaning = false;
+        // the test's simulated players leave with it
+        for (const player of inst.players.splice(0))
+            native.sp.remove(player);
         native.finished(inst.id, error === undefined ? undefined : describeError(inst, error));
     };
     const succeed = (inst) => finish(inst, undefined);
@@ -783,6 +786,180 @@ namespace {
     testMethod("worldBlockLocation", (inst, location) => worldBlock(inst, location), world);
     testMethod("worldLocation", (inst, location) => worldVec(inst, location), world);
 
+    // SimulatedPlayer: a Player the server moves; its locations are relative to the test that spawned it
+    const SimulatedPlayer = privateClass("SimulatedPlayer");
+    Object.setPrototypeOf(SimulatedPlayer.prototype, S.Player.prototype);
+    Object.setPrototypeOf(SimulatedPlayer, S.Player);
+    native.sp.prototype(SimulatedPlayer.prototype);
+    const playerTests = new WeakMap();
+    // sub_144B06CD0, qword_14F1FC468: the body faces the test's turn
+    const TEST_YAWS = [0, 90, 180, -90];
+    const LOOK_DURATIONS = ["Instant", "Continuous", "UntilMove"];
+    const invalidPlayer = (self, member) => {
+        const fields = { type: "minecraft:player" };
+        try {
+            fields.id = S.Player.prototype.__lookupGetter__("id").call(self);
+        } catch (error) {
+            fields.id = "";
+        }
+        return native.errors.make("InvalidEntityError", "Failed to call function '" + member
+            + "' due to Entity being invalid (has the Entity been removed?).", fields);
+    };
+    const simulatedMethod = (member, run, getter) => define(SimulatedPlayer, "SimulatedPlayer", member,
+        (self, ...args) => {
+            if (!(self instanceof SimulatedPlayer))
+                throw new ReferenceError("Native function [SimulatedPlayer::" + member
+                    + "] object bound to prototype does not exist.");
+            if (!native.sp.is(self))
+                throw invalidPlayer(self, member);
+            return run(self, ...args);
+        }, getter);
+    const playerWorld = (self, location) => {
+        const inst = playerTests.get(self);
+        return inst === undefined ? vector3(location) : worldVec(inst, location);
+    };
+    const playerBlock = (self, location) => {
+        const inst = playerTests.get(self);
+        return inst === undefined ? blockVector(location) : worldBlock(inst, location);
+    };
+    const lookDuration = (duration) => {
+        if (duration === undefined)
+            return 2;
+        const index = LOOK_DURATIONS.indexOf(duration);
+        if (index < 0)
+            throw conversion();
+        return index;
+    };
+    simulatedMethod("headRotation", (self) => {
+        const rotation = native.sp.rotationOf(self);
+        return { x: rotation.x, y: rotation.y };
+    }, true);
+    Object.defineProperty(SimulatedPlayer.prototype, "isSprinting", {
+        configurable: true, enumerable: false,
+        get: function () {
+            guard("Native property getter", "SimulatedPlayer", "isSprinting");
+            if (!native.sp.is(this))
+                throw invalidPlayer(this, "isSprinting");
+            return native.sp.sprint(this);
+        },
+        set: function (value) {
+            guard("Native property setter", "SimulatedPlayer", "isSprinting");
+            if (!native.sp.is(this))
+                throw invalidPlayer(this, "isSprinting");
+            native.sp.sprint(this, bool(value));
+        },
+    });
+    simulatedMethod("disconnect", (self) => { native.sp.remove(self); });
+    simulatedMethod("jump", (self) => native.sp.jump(self));
+    simulatedMethod("lookAtBlock", (self, blockLocation, duration) => {
+        const at = playerBlock(self, blockLocation);
+        native.sp.look(self, at.x + 0.5, at.y + 0.5, at.z + 0.5, lookDuration(duration));
+    });
+    simulatedMethod("lookAtEntity", (self, entity, duration) => {
+        if (!isEntity(entity))
+            throw conversion();
+        const index = lookDuration(duration);
+        if (!native.sp.lookEntity(self, entity, index))
+            throw native.errors.make("InvalidEntityError", "Failed to call function 'lookAtEntity' due to Entity "
+                + "being invalid (has the Entity been removed?).", { id: "", type: "" });
+    });
+    simulatedMethod("lookAtLocation", (self, location, duration) => {
+        const at = playerWorld(self, location);
+        native.sp.look(self, at.x, at.y, at.z, lookDuration(duration));
+    });
+    // sub_14DCF9ED0: west-east and north-south turned with the test
+    simulatedMethod("move", (self, westEast, northSouth, speed) => {
+        let x = number(westEast);
+        let z = number(northSouth);
+        if (speed !== undefined)
+            number(speed);
+        const inst = playerTests.get(self);
+        switch (inst === undefined ? 0 : inst.rotation) {
+            case 1: [x, z] = [-z, x]; break;
+            case 2: [x, z] = [-x, -z]; break;
+            case 3: [x, z] = [z, -x]; break;
+            default: break;
+        }
+        native.sp.move(self, x, 0, z, true);
+    });
+    simulatedMethod("moveRelative", (self, leftRight, backwardForward, speed) => {
+        const x = number(leftRight);
+        const z = number(backwardForward);
+        if (speed !== undefined)
+            number(speed);
+        native.sp.move(self, x, 0, z, false);
+    });
+    const moveOptions = (options) => {
+        if (options === undefined)
+            return { faceTarget: true, speed: 1 };
+        if (options === null || typeof options !== "object")
+            throw conversion();
+        return { faceTarget: options.faceTarget === undefined ? true : bool(options.faceTarget),
+            speed: options.speed === undefined ? 1 : number(options.speed) };
+    };
+    // sub_14DCFA890: the bottom centre of the block
+    simulatedMethod("moveToBlock", (self, blockLocation, options) => {
+        const block = blockVector(blockLocation);
+        const opts = moveOptions(options);
+        const at = playerWorld(self, { x: block.x + 0.5, y: block.y, z: block.z + 0.5 });
+        native.sp.moveTo(self, at.x, at.y, at.z, opts.faceTarget, opts.speed);
+    });
+    simulatedMethod("moveToLocation", (self, location, options) => {
+        const opts = moveOptions(options);
+        const at = playerWorld(self, location);
+        native.sp.moveTo(self, at.x, at.y, at.z, opts.faceTarget, opts.speed);
+    });
+    // sub_14DCF80B0: added to the current yaw
+    simulatedMethod("rotateBody", (self, angleInDegrees) => {
+        const angle = number(angleInDegrees);
+        native.sp.yaw(self, native.sp.rotationOf(self).body + angle);
+    });
+    // sub_14DCF8120: turned with the test
+    simulatedMethod("setBodyRotation", (self, angleInDegrees) => {
+        const angle = number(angleInDegrees);
+        const rotation = native.sp.rotation(self);
+        native.sp.yaw(self, angle + (rotation > 0 && rotation < 4 ? TEST_YAWS[rotation] : 0));
+    });
+    simulatedMethod("stopMoving", (self) => { native.sp.stop(self); });
+
+    const spawnPlayer = (dimension, at, yaw, name, gameMode, rotation) => {
+        const mode = native.sp.gameMode(string(gameMode));
+        if (mode < 0)
+            throw conversion();
+        return native.sp.spawn(dimension, at.x, at.y, at.z, yaw, name, mode, rotation);
+    };
+    testMethod("spawnSimulatedPlayer", (inst, blockLocation, name, gameMode) => {
+        const block = blockVector(blockLocation);
+        const playerName = name === undefined ? "Simulated Player" : string(name);
+        const at = worldBlock(inst, block);
+        const player = spawnPlayer(inst.dimension, { x: at.x + 0.5, y: at.y, z: at.z + 0.5 },
+            TEST_YAWS[inst.rotation] || 0, playerName, gameMode === undefined ? "Survival" : gameMode, inst.rotation);
+        if (player === undefined)
+            throw atPosition(inst, "gameTest.assert.couldNotSpawnEntity", ["Simulated Player"], block,
+                "LevelStateModificationFailed");
+        playerTests.set(player, inst);
+        inst.players.push(player);
+        return player;
+    }, world);
+    testMethod("removeSimulatedPlayer", (inst, simulatedPlayer) => {
+        if (!(simulatedPlayer instanceof SimulatedPlayer))
+            throw conversion();
+        native.sp.remove(simulatedPlayer);
+        const index = inst.players.indexOf(simulatedPlayer);
+        if (index >= 0)
+            inst.players.splice(index, 1);
+    }, world);
+    const spawnSimulatedPlayer = function (location, name, gameMode) {
+        guard("Native function", undefined, "spawnSimulatedPlayer");
+        if (location === null || typeof location !== "object" || !(location.dimension instanceof S.Dimension))
+            throw conversion();
+        const at = vector3(location);
+        const player = spawnPlayer(location.dimension, at, 0, string(name), gameMode, 0);
+        if (player === undefined)
+            throw native.errors.make("EngineError", "Failed to spawn simulated player");
+        return player;
+    };
+
     const Tags = privateClass("Tags");
     for (const [key, value] of [["suiteAll", "suite:all"], ["suiteDebug", "suite:debug"],
         ["suiteDefault", "suite:default"], ["suiteDisabled", "suite:disabled"], ["suiteNextUpdate", "suite:nextupdate"]])
@@ -802,7 +979,7 @@ namespace {
                 return false;
             // the first tick after the setup ticks is tick 0, when the test function runs
             const inst = { id, reg, origin, rotation, size, dimension, tickCount: -reg.setupTicks - 1, runAt: [],
-                sequences: [], onFinish: [], done: false, cleaning: false, error: undefined };
+                sequences: [], onFinish: [], players: [], done: false, cleaning: false, error: undefined };
             inst.test = new Test(token);
             testOf.set(inst.test, inst);
             instances.set(id, inst);
@@ -814,6 +991,8 @@ namespace {
                 return;
             instances.delete(id);
             inst.done = true;
+            for (const player of inst.players.splice(0))
+                native.sp.remove(player);
         },
         batch: (kind, name) => {
             const callback = batchCallbacks[kind].get(name);
@@ -869,7 +1048,7 @@ namespace {
     };
 
     return {
-        GameTestSequence, RegistrationBuilder, Tags, Test,
+        GameTestSequence, RegistrationBuilder, SimulatedPlayer, Tags, Test, spawnSimulatedPlayer,
         register: registerTest("register", false),
         registerAsync: registerTest("registerAsync", true),
         setAfterBatchCallback: setBatchCallback("after", "setAfterBatchCallback"),

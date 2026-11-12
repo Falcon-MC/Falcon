@@ -28,6 +28,7 @@
 #include "Server/Debug/DebugHud.h"
 #include "World/Actor/Player/PlayerBossBars.h"
 #include "World/Actor/Player/PlayerRaidState.h"
+#include "World/Actor/Player/SimulatedPlayerController.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
@@ -78,6 +79,19 @@ public:
 
     const NetworkIdentifier &getNetworkIdentifier() const {
         return mId;
+    }
+
+    // a gametest simulated player: no client behind it, the server writes its inputs
+    bool isSimulated() const {
+        return mSimulated != nullptr;
+    }
+
+    void makeSimulated() {
+        mSimulated = std::make_shared<SimulatedPlayerController>();
+    }
+
+    SimulatedPlayerController *getSimulatedController() {
+        return mSimulated.get();
     }
 
     LoginState getLoginState() const {
@@ -1247,6 +1261,7 @@ private:
     bool mHasSupportingBlock = false;
     Vector3i mSupportingBlock;
     PlayerAcknowledgements mAcknowledgements;
+    std::shared_ptr<SimulatedPlayerController> mSimulated;
     int32_t mPendingMovementChanges = 0;
     static constexpr int32_t MAX_INPUTS_WHILE_PENDING = 20;
     bool mAwaitingTeleport = false;

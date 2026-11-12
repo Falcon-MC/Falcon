@@ -4,6 +4,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Binding/ScriptGameTestBootstrap.h"
+#include "Scripting/Binding/ScriptSimulatedPlayerBinding.h"
 #include "Scripting/ScriptEngine.h"
 #include "World/Actor/Actor.h"
 #include "World/Actor/ActorClassRegistry.h"
@@ -434,6 +435,7 @@ void ScriptApi::_installGameTest() {
     addFunction(mContext, native, "setFuse", gtSetFuse, 2);
     addFunction(mContext, native, "spawn", gtSpawn, 6);
     addFunction(mContext, native, "setCauldron", gtSetCauldron, 5);
+    ScriptSimulatedPlayerBinding::install(mContext, native);
     JS_SetPropertyStr(mContext, native, "errors", JS_DupValue(mContext, mErrors));
     JSValue server = JS_NewObject(mContext);
     for (const auto &entry: mServerExports)
@@ -459,7 +461,8 @@ void ScriptApi::_installGameTest() {
         JS_FreePropertyEnum(mContext, names, count);
     }
 
-    for (const char *name: {"GameTestErrorType", "GameTestCompletedErrorReason"}) {
+    for (const char *name:
+         {"GameTestErrorType", "GameTestCompletedErrorReason", "LookDuration", "PersonaArmSize", "PersonaPieceType"}) {
         if (!mGameTestSurface.has(name))
             continue;
         JSValue object = JS_NewObject(mContext);

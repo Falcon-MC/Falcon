@@ -48,6 +48,19 @@ bool PlayerAcknowledgements::acknowledge(uint64_t timestamp) {
     return true;
 }
 
+void PlayerAcknowledgements::acknowledgeAll() {
+    std::vector<std::function<void()>> actions = std::move(mCurrent);
+    mCurrent.clear();
+    while (!mPending.empty()) {
+        std::vector<std::function<void()>> batch = std::move(mPending.front().mActions);
+        mPending.pop_front();
+        for (const std::function<void()> &action: batch)
+            action();
+    }
+    for (const std::function<void()> &action: actions)
+        action();
+}
+
 void PlayerAcknowledgements::clear() {
     mCurrent.clear();
     mPending.clear();

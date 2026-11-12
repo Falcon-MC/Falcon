@@ -226,6 +226,13 @@ public:
 
     void removeListener(Listener *listener);
 
+    // a session served in process (a gametest simulated player): nothing sent to it leaves the server
+    void addLocalSession(const NetworkIdentifier &id);
+
+    void removeLocalSession(const NetworkIdentifier &id);
+
+    bool isLocalSession(const NetworkIdentifier &id) const;
+
 private:
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
 
@@ -292,6 +299,9 @@ private:
     OutboundFilter mOutboundFilter;
     SendHook mSendHook;
     ContextResolver mContextResolver;
+    mutable std::mutex mLocalSessionsMutex;
+    std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mLocalSessions;
+    std::atomic<size_t> mLocalSessionCount{0};
 
     TaskQueue<InboundEvent> mInbound;
     // held back by runEventsFor; a connection with one held keeps all its later events behind it

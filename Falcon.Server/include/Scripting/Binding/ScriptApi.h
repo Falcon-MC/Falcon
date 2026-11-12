@@ -190,6 +190,12 @@ public:
 
     JSValue makePlayer(ServerPlayer &player);
 
+    // the gametest SimulatedPlayer prototype: a simulated player's handle is made from it
+    void setSimulatedPlayerPrototype(JSValueConst prototype) {
+        JS_FreeValue(mContext, mSimulatedPlayerPrototype);
+        mSimulatedPlayerPrototype = JS_DupValue(mContext, prototype);
+    }
+
     JSValue makeChatTargets(const std::vector<ServerPlayer *> &players);
 
     JSValue makeActor(ServerActor &actor);
@@ -792,6 +798,7 @@ private:
     std::vector<std::pair<std::string, JSValue>> mDebugExports;
     std::vector<std::pair<std::string, JSValue>> mGameTestExports;
     JSValue mGameTestHooks = JS_UNDEFINED;
+    JSValue mSimulatedPlayerPrototype = JS_UNDEFINED;
     std::shared_ptr<ScriptHandleCounts> mHandleCounts = std::make_shared<ScriptHandleCounts>();
     bool mTimingWarningsDisabled = false;
     JSValue mDebugTick = JS_UNDEFINED;

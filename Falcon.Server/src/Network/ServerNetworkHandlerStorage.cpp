@@ -239,7 +239,7 @@ void ServerNetworkHandler::autoSave(bool wait) {
 
     for (auto &entry: mPlayers) {
         const ServerPlayer &player = entry.second;
-        if (player.isSpawned() && !player.getName().empty())
+        if (player.isSpawned() && !player.getName().empty() && !player.isSimulated())
             _savePlayerData(player, wait);
     }
 
