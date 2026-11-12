@@ -569,6 +569,12 @@ public:
     // leaves at the next safe point of the tick, as a closed connection would
     void removeSimulatedPlayer(const NetworkIdentifier &id);
 
+    // pick block: selects the stack in the hotbar, swaps it in from the inventory, or puts it there in creative
+    void pickItem(ServerPlayer &player, ItemStack item, int hotbarSlot);
+
+    // a simulated player's dead: the respawn a client asks for
+    void respawnSimulatedPlayer(ServerPlayer &player);
+
 
     BlockDefinitionRegistry &getBlockDefinitions() {
         return mBlockDefinitions;

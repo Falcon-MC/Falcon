@@ -986,19 +986,19 @@ bool BlockActionHandler::isBlockedByActor(ServerNetworkHandler &owner, Level &le
     return false;
 }
 
-void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &player,
+bool BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                                     const ItemUseTransaction &transaction) {
     if (transaction.mBlockFace < 0 || transaction.mBlockFace >= 6)
-        return;
+        return false;
 
     if (isDuplicateRightClick(player, transaction))
-        return;
+        return false;
 
     if (!player.isSpawned() || player.isDead() || player.isSpectator())
-        return;
+        return false;
 
     if (transaction.mHotbarSlot < 0 || transaction.mHotbarSlot >= PlayerInventory::HOTBAR_SIZE)
-        return;
+        return false;
 
     PlayerInventory &inventory = player.getInventory();
     bool selectedSlotChanged = false;
@@ -1019,7 +1019,7 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     }
 
     if (handled)
-        return;
+        return true;
 
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
 
@@ -1032,9 +1032,10 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const float deltaZ = (float) transaction.mBlockPosition.z - playerPosition.z;
 
     if (deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ > MAX_SYNC_DISTANCE_SQUARED)
-        return;
+        return false;
 
     syncBlocksNearby(owner, player, transaction.mBlockPosition, transaction.mBlockFace);
+    return false;
 }
 
 bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,

@@ -52,7 +52,7 @@ namespace {
     }
 
     const char *const GAMETEST = R"JS(
-import { world, system, BlockPermutation, Player } from "@minecraft/server";
+import { world, system, BlockPermutation, ItemStack, Player } from "@minecraft/server";
 import * as gt from "@minecraft/server-gametest";
 
 const r = {};
@@ -125,6 +125,15 @@ gt.register("Suite", "sim", (test) => {
     r.simGlide = String(p.glide());
     p.swim();
     p.moveRelative(0, 1);
+    const cow = test.spawnWithoutBehaviors("minecraft:cow", { x: 3, y: 1, z: 3 });
+    r.simAttack = p.attackEntity(cow) + "|" + p.attack();
+    r.simGive = p.giveItem(new ItemStack("minecraft:stone", 3), true) + "|" + p.setItem(new ItemStack("minecraft:dirt"), 5,
+        true) + "|" + p.selectedSlotIndex + "|" + p.setItem(new ItemStack("minecraft:dirt"), 40);
+    r.simDrop = p.dropSelectedItem() + "|" + p.dropSelectedItem();
+    r.simRespawn = String(p.respawn());
+    r.simBreak = String(p.breakBlock({ x: 1, y: 5, z: 1 }));
+    r.simUsing = String(p.stopUsingItem());
+    p.fly();
     r.simInvalid = errorOf(() => gt.SimulatedPlayer.prototype.jump.call({}));
     r.simEnums = gt.LookDuration.UntilMove + "|" + gt.PersonaArmSize.Slim + "|" + gt.PersonaPieceType.Skin;
     test.succeed();
@@ -304,6 +313,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         bot->getSimulatedController()->buildInput(owner, *bot, input);
         require(input.mMotionX == 0.0f && input.mMotionY == 1.0f, "moveRelative did not walk forward");
         require(input.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming), "swim sent no swim input");
+        require(bot->isFlying(), "fly did not set the flying ability");
         bot->getSimulatedController()->moveInDirection(Vector3f(1.0f, 0.0f, 0.0f), true);
         PlayerAuthInputPacket east;
         bot->getSimulatedController()->buildInput(owner, *bot, east);
@@ -361,6 +371,12 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "simInvalid",
                "ReferenceError:Native function [SimulatedPlayer::jump] object bound to prototype does not exist.");
         expect(*report, "simEnums", "UntilMove|Slim|Skin");
+        expect(*report, "simAttack", "true|false");
+        expect(*report, "simGive", "true|true|5|false");
+        expect(*report, "simDrop", "true|false");
+        expect(*report, "simRespawn", "false");
+        expect(*report, "simBreak", "false");
+        expect(*report, "simUsing", "undefined");
         expect(*report, "fuse",
                "Assert|gameTest.assert.missingExplosionComponent|minecraft:cow|{\"x\":0,\"y\":0,\"z\":0}");
     }

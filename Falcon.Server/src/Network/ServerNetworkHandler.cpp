@@ -2286,6 +2286,10 @@ namespace {
     }
 }
 
+void ServerNetworkHandler::pickItem(ServerPlayer &player, ItemStack item, int hotbarSlot) {
+    putPickedItem(player, std::move(item), hotbarSlot);
+}
+
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorDataPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned())

@@ -85,7 +85,8 @@ public:
 
     static bool canBreakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
-    static void placeBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
+    // true when the click interacted or placed
+    static bool placeBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemUseTransaction &transaction);
 
 private:
     static bool _canInteractWithBlock(ServerPlayer &player, const Vector3i &position, float rangeScalar);
