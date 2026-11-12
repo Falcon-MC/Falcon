@@ -692,7 +692,9 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
 
     MovePlayerPacket packet;
     packet.mRuntimeActorId = (int64_t) getRuntimeId();
-    packet.mPosition = Vector3f(getPosition().x, getPosition().y + MovementPhysics::PLAYER_EYE_HEIGHT, getPosition().z);
+    const float baseOffset = isSleeping() ? MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET
+                                          : MovementPhysics::PLAYER_BASE_OFFSET;
+    packet.mPosition = Vector3f(getPosition().x, getPosition().y + baseOffset, getPosition().z);
     packet.mRotation = getRotation();
     packet.mMode = MovePlayerMode::Teleport;
     packet.mOnGround = isOnGround();
