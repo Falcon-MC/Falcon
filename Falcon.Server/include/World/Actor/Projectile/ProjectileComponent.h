@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Level/LevelSoundEventIds.h"
 
 #include <cstdint>
 #include <string>
@@ -26,8 +27,9 @@ struct ProjectileComponent {
     bool mLightning = false;
     bool mStopOnHurt = false;
     Bounce mShouldBounce = Bounce::No;
-    std::string mHitSound;
-    std::string mHitGroundSound;
+    // LevelSoundEvent numbers, UNDEFINED for none
+    int32_t mHitSound = LevelSoundEventIds::UNDEFINED;
+    int32_t mHitGroundSound = LevelSoundEventIds::UNDEFINED;
     // ParticleType; 0 has no name, scripts read it as undefined
     int32_t mParticle = PARTICLE_ICON_CRACK;
 

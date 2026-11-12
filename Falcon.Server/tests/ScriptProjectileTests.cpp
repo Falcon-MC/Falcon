@@ -75,7 +75,12 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
     p.hitParticle = "crit";
     r.crit = String(p.hitParticle);
     p.hitParticle = undefined;
-    p.hitEntitySound = "random.pop";
+    r.badSound = fail(() => { p.hitEntitySound = "random.pop"; }) + ":"
+        + fail(() => { p.hitEntitySound = "undefined"; });
+    p.hitGroundSound = "BOW.HIT";
+    r.groundSound = String(p.hitGroundSound);
+    p.hitGroundSound = undefined;
+    p.hitEntitySound = "bow.hit";
     p.shouldBounceOnHit = true;
     p.lightningStrikeOnHit = true;
     r.written = read("minecraft:snowball");
@@ -139,7 +144,10 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         expect(*r, "trident",
                "0.1,0.99,0.99,5,false,false,false,false,true,true,item.trident.hit,item.trident.hit_ground,iconcrack");
         expect(*r, "bullet", "0.05,0.99,0.6,5,false,true,true,false,false,true,bullet.hit,undefined,iconcrack");
-        expect(*r, "written", "0,0.5,0.6,5,false,false,false,true,false,true,random.pop,undefined,undefined");
+        expect(*r, "written", "0,0.5,0.6,5,false,false,false,true,false,true,bow.hit,undefined,undefined");
+        // sounds are LevelSoundEvent numbers: names are lowercased, an unknown one and "undefined" throw
+        expect(*r, "badSound", "InvalidArgumentError:InvalidArgumentError");
+        expect(*r, "groundSound", "bow.hit");
         expect(*r, "badType", "TypeError:TypeError");
         // none and unknown names are ParticleType 0, which the setter refuses; names are case sensitive
         expect(*r, "badParticle", "InvalidArgumentError:InvalidArgumentError:InvalidArgumentError");
