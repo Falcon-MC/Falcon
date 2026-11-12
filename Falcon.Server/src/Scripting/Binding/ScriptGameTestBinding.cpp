@@ -1,5 +1,6 @@
 #include "Scripting/Binding/ScriptApi.h"
 
+#include "Core/Debug/BedrockLog.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Binding/ScriptGameTestBootstrap.h"
@@ -24,7 +25,6 @@
 
 #include <cmath>
 #include <cstring>
-#include <iostream>
 
 using namespace ScriptValues;
 
@@ -93,7 +93,7 @@ namespace {
     JSValue gtLog(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc >= 1)
-            std::cerr << "[" << api->packName() << "] " << toString(ctx, argv[0]) << std::endl;
+            LOG_ERROR(LogAreaID::Script, "[%s] %s", api->packName().c_str(), toString(ctx, argv[0]).c_str());
         return JS_UNDEFINED;
     }
 
