@@ -945,6 +945,21 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    // ScriptBlockFluidContainerComponent::addDye (sub_14C8D2390, 26.60): the dye as a one item stack in dye slot 2
+    JSValue fluidAddDye(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        JSValue id = argc >= 1 && JS_IsObject(argv[0]) ? JS_GetPropertyStr(ctx, argv[0], "id") : JS_UNDEFINED;
+        const bool named = JS_IsString(id);
+        const std::string item = named ? toString(ctx, id) : std::string();
+        JS_FreeValue(ctx, id);
+        if (!named)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        CauldronBlockActor *actor = cauldronActorAt(at);
+        actor->addDye(CauldronBlockActor::dyeColorOf(item));
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *actor);
+        return JS_UNDEFINED;
+    }
+
     JSValue redstoneGetPower(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         int power = 0;
@@ -1403,6 +1418,7 @@ void ScriptApi::_bindBlockSurface() {
         method(fluid, "BlockFluidContainerComponent", "setFluidType", fluidSetFluidType, 1);
         property(fluid, "BlockFluidContainerComponent", "fluidColor", fluidGetColor, fluidSetColor);
         method(fluid, "BlockFluidContainerComponent", "setPotion", fluidSetPotion, 1);
+        method(fluid, "BlockFluidContainerComponent", "addDye", fluidAddDye, 1);
     }
     if (mSurface.has("BlockRedstoneProducerComponent")) {
         JSValue producer = defineClass("BlockRedstoneProducerComponent");

@@ -262,6 +262,12 @@ system.runTimeout(() => {
     fluid.setPotion(new ItemStack("minecraft:potion"));
     r.fluid = fluidColor.red + "," + fluidColor.green + "," + fluidColor.alpha + ":" + fluid.getFluidType() + ":"
         + capture(() => fluid.setPotion(new ItemStack("minecraft:stone")));
+    const bytes = (c) => [c.red, c.green, c.blue, c.alpha].map((v) => Math.round(v * 255)).join(",");
+    fluid.fluidColor = { red: 1, green: 0, blue: 0, alpha: 1 };
+    fluid.addDye(new ItemStack("minecraft:blue_dye").type);
+    const dyed = bytes(fluid.fluidColor);
+    fluid.addDye(new ItemStack("minecraft:stone").type);
+    r.dye = dyed + ":" + bytes(fluid.fluidColor) + ":" + capture(() => fluid.addDye("minecraft:blue_dye"));
 
     const record = dim.getBlock({ x: 7, y: 100, z: 7 }).getComponent("record_player");
     record.setRecord("minecraft:music_disc_cat");
@@ -680,6 +686,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "parts", "22,100,2|22,101,2:true");
         expect(r, "snow", "true");
         expect(r, "fluid", "1,0,1:Potion:throw:Error");
+        // red mixed with blue dye 0x3C44AA: each channel averaged, then truncated
+        expect(r, "dye", "157,34,85,255:157,34,85,255:throw:TypeError");
         expect(r, "jukebox", "true:false:true");
         expect(r, "dye", "ok:ok:Red");
         expect(r, "dynamic", "3:abc:true:throw:Error:true");
