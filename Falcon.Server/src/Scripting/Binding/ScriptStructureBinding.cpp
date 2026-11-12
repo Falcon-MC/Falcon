@@ -342,13 +342,13 @@ namespace {
             return typeError(ctx);
         const std::string id = toString(ctx, argv[0]);
         const PackJigsaw::Structure *structure = registryOf(*api).jigsaw().structure(id);
+        // commands.place.invalidstructure.error (sub_14BEF2320)
         if (structure == nullptr)
-            return api->throwError("Error", "Unknown jigsaw structure " + id);
+            return api->throwError("PlaceJigsawError", "Invalid structure name.");
         JSValueConst options = argc >= 4 ? argv[3] : JS_UNDEFINED;
         Level &level = api->levelOf(argv[1]);
         if (structure->mHasStartHeight && !optionBool(ctx, options, "ignoreStartHeight", false))
-            at.y = PackJigsaw::resolveAnchor(structure->mStartAnchor, structure->mStartOffset, level.getMinY(),
-                                             level.getMaxY());
+            at.y = PackJigsaw::startHeight(*structure, level.getSeed(), at, level.getMinY(), level.getMaxY());
         return runJigsaw(*api, level, structure->mStartPool, std::string(), structure->mMaxDepth, at,
                          jigsawOptions(ctx, options));
     }
