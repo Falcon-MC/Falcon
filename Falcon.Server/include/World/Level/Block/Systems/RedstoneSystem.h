@@ -48,6 +48,8 @@ public:
 
     static int64_t packPosition(const Vector3i &position);
 
+    static Vector3i unpackPosition(int64_t packed);
+
     static bool isNormalBlock(const BlockState &state);
 
     static bool canConnectWireTo(Level &level, const Vector3i &position, int side);

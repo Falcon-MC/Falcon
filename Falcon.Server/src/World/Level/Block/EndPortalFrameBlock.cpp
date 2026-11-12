@@ -162,3 +162,10 @@ bool EndPortalFrameBlock::tryCompletePortal(Level &level, const Vector3i &frameP
 
     return true;
 }
+
+// EndPortalFrameBlock::getComparatorSignal (sub_14A42B8D0, 26.60)
+int EndPortalFrameBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return stateFlag(state, "end_portal_eye_bit") != 0 ? 15 : 0;
+}

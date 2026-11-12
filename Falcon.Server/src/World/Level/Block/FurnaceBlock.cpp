@@ -66,3 +66,9 @@ void FurnaceBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vec
 
     InventoryManager::onFurnaceBroken(owner, level, position);
 }
+
+// FurnaceBlock::getComparatorSignal (sub_14A444570, 26.60)
+int FurnaceBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    return containerSignal(level, position);
+}

@@ -46,3 +46,10 @@ BlockState CauldronBlock::makeState(Liquid liquid, int fillLevel) {
     states.putInt("fill_level", std::clamp(fillLevel, 0, 6));
     return BlockState("minecraft:cauldron", states);
 }
+
+// CauldronBlock::getComparatorSignal (sub_14A2F3F80, 26.60): half the fill level, rounded up
+int CauldronBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return (std::clamp(state.mStates.getInt("fill_level", 0), 0, 6) + 1) / 2;
+}

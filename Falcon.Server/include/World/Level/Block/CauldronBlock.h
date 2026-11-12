@@ -25,4 +25,6 @@ public:
     BlockState withFillLevel(Liquid liquid, int fillLevel) const;
 
     static BlockState makeState(Liquid liquid, int fillLevel);
+
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 };

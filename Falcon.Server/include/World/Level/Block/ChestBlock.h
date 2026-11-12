@@ -22,6 +22,8 @@ public:
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
 
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
+
     static ChestBlockActor &getOrCreate(Level &level, const Vector3i &position);
 
     static void pair(Level &level, const Vector3i &position);

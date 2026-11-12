@@ -406,8 +406,20 @@ public:
         return -1;
     }
 
+    // what a comparator reads from the container of the block actor here, 0 without one
+    static int containerSignal(Level &level, const Vector3i &position);
+
     virtual bool isSignalSource() const {
         return false;
+    }
+
+    // a normal or redstone update reached this block; the power around it may have changed
+    virtual void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
     }
 
     // block light of a state; `dataEmission` is the value the block data gives every state

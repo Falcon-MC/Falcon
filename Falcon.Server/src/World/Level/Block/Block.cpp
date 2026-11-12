@@ -1,15 +1,21 @@
 #include "World/Level/Block/Block.h"
 
+#include "World/Level/Block/Actor/BlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Block/Components/BlockBehaviorRegistry.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Inventory/Container.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
 #include "World/Level/Block/BlockNames.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace {
@@ -26,6 +32,28 @@ namespace {
         const BlockData *data = BlockDataTable::find(state.mName.c_str());
         return data != nullptr && data->mSolid;
     }
+}
+
+// Container::getRedstoneSignalFromContainer (sub_1417030A0, 26.60): fullness over 14, plus one once anything is in
+int Block::containerSignal(Level &level, const Vector3i &position) {
+    BlockActor *actor = level.getBlockActors().find(position);
+    Container *container = actor == nullptr ? nullptr : actor->getContainer();
+    if (container == nullptr || container->getContainerSize() <= 0)
+        return 0;
+
+    float fullness = 0.0f;
+    bool any = false;
+    for (int slot = 0; slot < container->getContainerSize(); ++slot) {
+        const ItemStack &item = container->getContainerItem(slot);
+        if (item.isAir() || item.mCount <= 0)
+            continue;
+
+        fullness += (float) item.mCount / (float) std::max(1, PlayerInventory::getMaxStackSize(item));
+        any = true;
+    }
+
+    fullness = fullness / (float) container->getContainerSize() * 14.0f;
+    return (int) std::floor(fullness) + (any ? 1 : 0);
 }
 
 const BlockData *Block::getData() const {
