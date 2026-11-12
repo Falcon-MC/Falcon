@@ -6,6 +6,7 @@
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/DynamicPropertyValue.h"
 #include "World/Actor/Movement/PhysicsComponent.h"
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/PacketCodecContext.h"
@@ -36,7 +37,6 @@ struct ProjectileData {
     int32_t mImpalingLevel = 0;
     int32_t mPiercingLevel = 0;
     int32_t mLootingLevel = 0;
-    bool mChanneling = false;
     bool mReturning = false;
     bool mHadCollision = false;
     // arrows and tridents planted in a block: they stay until picked up, the block goes, or 1200 ticks pass
@@ -320,6 +320,11 @@ public:
         return mProjectileData;
     }
 
+    // read from the definition on first use; scripts may change it afterwards
+    ProjectileComponent &getProjectileComponent();
+
+    const ProjectileComponent &getProjectileComponent() const;
+
     int32_t getLifetimeTicks() const {
         return mLifetimeTicks;
     }
@@ -415,6 +420,12 @@ public:
 
     virtual void loadNbt(const Tag &data);
 
+protected:
+    // the component of an entity whose definition has no minecraft:projectile
+    virtual ProjectileComponent _undefinedProjectileComponent() const {
+        return ProjectileComponent();
+    }
+
 private:
     std::string mIdentifier;
     double mBuoyancyTimer = 0.0;
@@ -431,6 +442,8 @@ private:
     int32_t mExperienceValue = 0;
     int32_t mPickupDelay = 0;
     ProjectileData mProjectileData;
+    mutable ProjectileComponent mProjectileComponent;
+    mutable bool mProjectileComponentRead = false;
     std::string mNameTag;
     bool mPersistent = true;
     int32_t mFarFromPlayerTicks = 0;

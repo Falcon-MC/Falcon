@@ -1,5 +1,6 @@
 #pragma once
 
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Level/Block/BlockPlacementFilter.h"
 #include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
@@ -113,6 +114,8 @@ struct CustomActorDefinition {
     bool mIsSpawnable = false;
     bool mIsExperimental = false;
     bool mIsProjectile = false;
+    bool mHasProjectileComponent = false;
+    ProjectileComponent mProjectileComponent;
     float mCollisionWidth = 0.6f;
     float mCollisionHeight = 1.8f;
     std::vector<std::string> mTypeFamilies;

@@ -42,6 +42,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Actor/Misc/ExperienceOrbActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
+#include "World/Level/Block/LiquidView.h"
 #include "World/Item/FireworkRocketItem.h"
 #include "World/Item/PotionEffects.h"
 #include "World/Item/StringToItemParser.h"
@@ -804,7 +805,8 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     if (isTrident) {
         data.mHadCollision = true;
 
-        if (data.mChanneling && level.hasSkyLight() && getWorldOf(level).getOverworld().isThundering())
+        if (projectile.getProjectileComponent().mLightning && level.hasSkyLight()
+            && getWorldOf(level).getOverworld().isThundering())
             strikeLightning(level, targetPosition);
 
         if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
@@ -1639,8 +1641,16 @@ void ServerNetworkHandler::tickActors() {
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
             const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
-            const float gravity = projectile != nullptr ? projectile->getGravity() : ProjectileActor::DEFAULT_GRAVITY;
-            const float inertia = projectile != nullptr ? projectile->getInertia() : 1.0f;
+            const ProjectileComponent &settings = actor.getProjectileComponent();
+            const Vector3f &at = actor.getPosition();
+            const int32_t atX = (int32_t) std::floor(at.x);
+            const int32_t atY = (int32_t) std::floor(at.y);
+            const int32_t atZ = (int32_t) std::floor(at.z);
+            // liquid_inertia replaces inertia while the projectile is in water
+            const bool inWater = LiquidView(level.getBlockState(atX, atY, atZ)).isWater()
+                                 || LiquidView(level.getBlockStateAtLayer(atX, atY, atZ, 1)).isWater();
+            const float gravity = settings.mGravity;
+            const float inertia = inWater ? settings.mLiquidInertia : settings.mInertia;
             const bool arrowLike = dynamic_cast<const ArrowActor *>(&actor) != nullptr;
 
             if (arrowLike && actor.getProjectileData().mReturning) {
