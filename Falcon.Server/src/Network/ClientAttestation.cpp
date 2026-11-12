@@ -15,11 +15,12 @@ namespace {
     const size_t MAX_TRANSCRIPT = 16 * 1024;
     const size_t MAX_OFFER = 12 * 1024;
     const size_t MAX_REQUEST = 2 * 1024;
+    const size_t MAX_CANDIDATES = 2 * 1024;
     // a flood of connections must not grow a queue of questions
     const size_t MAX_QUESTIONS = 256;
 
     // evidence is a run of sections: what it is, three bytes of length, the bytes
-    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2, JoinRequest = 3, Batches = 4 };
+    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2, JoinRequest = 3, Batches = 4, Candidates = 5, Channels = 6 };
 
     void append(std::string &evidence, Section section, const std::string &bytes) {
         evidence.push_back((char) section);
@@ -31,6 +32,52 @@ namespace {
 
     bool startsWith(const std::string &line, const char *prefix) {
         return line.compare(0, std::strlen(prefix), prefix) == 0;
+    }
+
+    // a candidate as the client wrote it, its addresses replaced by their family
+    std::string withoutAddresses(const std::string &line) {
+        // foundation, component, protocol, priority, address, port, then pairs
+        std::string masked;
+        size_t index = 0;
+        size_t token = 0;
+        bool afterRelated = false;
+        while (index <= line.size()) {
+            size_t space = line.find(' ', index);
+            if (space == std::string::npos)
+                space = line.size();
+            const std::string word = line.substr(index, space - index);
+            const bool address = token == 4 || afterRelated;
+            if (!masked.empty())
+                masked.push_back(' ');
+            masked += address ? (word.find(':') != std::string::npos ? "v6" : "v4") : word;
+            afterRelated = word == "raddr";
+            token++;
+            index = space + 1;
+        }
+        return masked;
+    }
+
+    // the candidates a client signalled, a line each, without their addresses
+    std::string candidatesWithoutAddresses(const std::string &candidates) {
+        std::string out;
+        size_t start = 0;
+        while (start < candidates.size()) {
+            size_t end = candidates.find('\n', start);
+            if (end == std::string::npos)
+                end = candidates.size();
+            std::string line = candidates.substr(start, end - start);
+            start = end + 1;
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+            if (line.empty())
+                continue;
+            line = withoutAddresses(line);
+            if (out.size() + line.size() + 1 > MAX_CANDIDATES)
+                break;
+            out += line;
+            out.push_back('\n');
+        }
+        return out;
     }
 
     // the offer as the client wrote it, without what belongs to the player: the identity assertion
@@ -52,25 +99,7 @@ namespace {
             } else if (startsWith(line, "c=")) {
                 line = "c=-";
             } else if (startsWith(line, "a=candidate:")) {
-                // foundation, component, protocol, priority, address, port, then pairs
-                std::string masked;
-                size_t index = 0;
-                size_t token = 0;
-                bool afterRelated = false;
-                while (index <= line.size()) {
-                    size_t space = line.find(' ', index);
-                    if (space == std::string::npos)
-                        space = line.size();
-                    const std::string word = line.substr(index, space - index);
-                    const bool address = token == 4 || afterRelated;
-                    if (!masked.empty())
-                        masked.push_back(' ');
-                    masked += address ? (word.find(':') != std::string::npos ? "v6" : "v4") : word;
-                    afterRelated = word == "raddr";
-                    token++;
-                    index = space + 1;
-                }
-                line = masked;
+                line = withoutAddresses(line);
             }
 
             if (out.size() + line.size() + 1 > MAX_OFFER)
@@ -136,6 +165,8 @@ void ClientAttestation::inspect(const nethernet::Connection &connection) {
     append(evidence, Section::TransportTranscript, transcript);
     append(evidence, Section::Offer, withoutPersonalData(connection.getRemoteOffer()));
     append(evidence, Section::JoinRequest, withoutServerAddress(connection.getRemoteRequest()));
+    append(evidence, Section::Candidates, candidatesWithoutAddresses(connection.getRemoteCandidates()));
+    append(evidence, Section::Channels, connection.getRemoteChannels());
 
     {
         std::lock_guard<std::mutex> lock(mMutex);
