@@ -224,6 +224,15 @@ public:
         mRandomTicks = std::move(record);
     }
 
+    // the script named ticks (tag 'z'); empty when none waits
+    const std::string &getNamedTicks() const {
+        return mNamedTicks;
+    }
+
+    void setNamedTicks(std::string record) {
+        mNamedTicks = std::move(record);
+    }
+
     // saved by Falcon before data version 2: its flowing blocks are rewritten on load
     bool needsLiquidMigration() const {
         return mNeedsLiquidMigration;
@@ -252,6 +261,7 @@ private:
     bool mPopulated = false;
     std::string mPendingTicks;
     std::string mRandomTicks;
+    std::string mNamedTicks;
     bool mNeedsLiquidMigration = false;
     uint64_t mBaseSequence = 0;
     uint64_t mDecorationSequence = 0;

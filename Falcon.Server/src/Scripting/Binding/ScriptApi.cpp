@@ -138,6 +138,8 @@ namespace {
             return accepts<ScriptMolangMap>;
         if (cls == "BlockCustomComponentInstance")
             return accepts<ScriptBlockPart>;
+        if (cls == "BlockComponentNamedTickEvent")
+            return accepts<ScriptNamedTickEvent>;
         if (cls == "InputInfo")
             return accepts<ScriptInputInfoRef>;
         if (hasSuffix(cls, "Waypoint"))

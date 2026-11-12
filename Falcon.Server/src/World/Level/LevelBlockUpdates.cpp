@@ -2,6 +2,7 @@
 
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
+#include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/CommandBlockSystem.h"
 #include "World/Level/Block/Systems/FallingBlockSystem.h"
@@ -140,6 +141,29 @@ void Level::cancelUpdate(const Vector3i &position) {
 void Level::tickBlockUpdates() {
     mBlockUpdates.tick([this](const Vector3i &position) { updateAt(position, BlockUpdateType::Scheduled); },
                        [this](int32_t chunkX, int32_t chunkZ) { return isColumnActive(chunkX, chunkZ); });
+    _tickNamedTicks();
+}
+
+void Level::_tickNamedTicks() {
+    if (mOwner == nullptr || !mNamedTicks.hasColumns())
+        return;
+
+    ServerNetworkHandler &owner = *mOwner;
+    const int64_t levelTick = owner.getCurrentTick();
+    for (const std::pair<int32_t, int32_t> &column: mNamedTicks.getColumns()) {
+        if (!isColumnActive(column.first, column.second))
+            continue;
+        mNamedTicks.tickColumn(column.first, column.second, levelTick,
+                               [&](const NamedTickQueue::Entry &entry, const std::string &eventNamespace) {
+                                   // the event belongs to the block type it was scheduled on (sub_1432C6B20)
+                                   const BlockState state = getBlockState(entry.position.x, entry.position.y,
+                                                                          entry.position.z);
+                                   if (state.mName != entry.blockType || state.mName == BlockNames::AIR)
+                                       return;
+                                   owner.getScriptEngine().onCustomBlockNamedTick(*this, entry.position, state,
+                                                                                  eventNamespace, entry.eventName);
+                               });
+    }
 }
 
 void Level::onBlockPlaced(const Vector3i &position, const BlockState &state) {
