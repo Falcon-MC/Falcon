@@ -18,6 +18,7 @@ namespace {
     const char *STABILITY_CHECK = "stability_check";
     const char *STABILITY = "stability";
     const int UNSTABLE_STABILITY = 7;
+    const float SUPPORT_EPSILON = 0.000001f;
 }
 
 bool ScaffoldingBlock::matches(const std::string &identifier) {
@@ -118,4 +119,18 @@ void ScaffoldingBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &le
     states.putInt(STABILITY, stability);
     states.putByte(STABILITY_CHECK, 0);
     level.setBlock(position, BlockState(state.mName, states), false);
+}
+
+bool ScaffoldingBlock::getMoverCollisionShapes(const BlockState &state, const Vector3i &position,
+                                               const AxisAlignedBB &mover, bool descending,
+                                               std::vector<AxisAlignedBB> &shapes) const {
+    const float x = (float) position.x;
+    const float y = (float) position.y;
+    const float z = (float) position.z;
+    if (state.mStates.getInt(STABILITY, 0) == UNSTABLE_STABILITY || descending
+        || mover.mMinY < y + 1.0f - SUPPORT_EPSILON)
+        return true;
+    if (mover.mMaxX > x && mover.mMinX < x + 1.0f && mover.mMaxZ > z && mover.mMinZ < z + 1.0f)
+        shapes.push_back(AxisAlignedBB(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f));
+    return true;
 }

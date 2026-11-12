@@ -31,8 +31,10 @@ namespace BlockCollisionEngine {
     };
 
     // flying: a flying mover steps up without standing on the ground
+    // descending: the mover climbs down through the blocks that would carry it
     Result move(Level &level, const AxisAlignedBB &start, const Vector3f &delta, float stepHeight, bool wasOnGround,
-                bool flying, bool pushedToClosestSpace, RecoveryState &recovery, const Actor *actor);
+                bool flying, bool pushedToClosestSpace, bool descending, RecoveryState &recovery,
+                const Actor *actor);
 
     // feet centre of a moved box, rounded the way the game does
     Vector3f feetOf(const AxisAlignedBB &box);

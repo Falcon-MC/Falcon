@@ -357,6 +357,18 @@ public:
         return false;
     }
 
+    // boxes, in world coordinates, for a mover whose box is known before it moves: a block that only carries what
+    // already stands above it. false leaves the usual shapes
+    virtual bool getMoverCollisionShapes(const BlockState &state, const Vector3i &position, const AxisAlignedBB &mover,
+                                         bool descending, std::vector<AxisAlignedBB> &shapes) const {
+        (void) state;
+        (void) position;
+        (void) mover;
+        (void) descending;
+        (void) shapes;
+        return false;
+    }
+
     // actor null outside a move: placement, explosions, block rays
     // shapes that depend on where the actor stands against the block
     virtual bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
