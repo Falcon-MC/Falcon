@@ -6,6 +6,8 @@
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Item/ElytraItem.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 
 #include <cmath>
 
@@ -84,6 +86,15 @@ bool SimulatedPlayerController::jump(ServerPlayer &player) {
         return false;
     mJump = true;
     return player.getJumpDelay() == 0;
+}
+
+bool SimulatedPlayerController::glide(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround() : player.isOnGround();
+    const LiquidContact liquid = LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition());
+    if (player.getFlags().get(ActorFlag::Gliding) || !ElytraItem::isWearingElytra(player) || liquid.water || onGround)
+        return false;
+    mGlideRequest = Request::Start;
+    return true;
 }
 
 void SimulatedPlayerController::_faceYaw(ServerPlayer &player, const Vector3f &target) {
@@ -205,6 +216,14 @@ void SimulatedPlayerController::buildInput(ServerNetworkHandler &owner, ServerPl
         packet.mInputData.push_back((int32_t) PlayerAuthInputData::Jumping);
         mJump = false;
     }
+    if (mSwimRequest != Request::None)
+        packet.mInputData.push_back((int32_t) (mSwimRequest == Request::Start ? PlayerAuthInputData::StartSwimming
+                                                                              : PlayerAuthInputData::StopSwimming));
+    if (mGlideRequest != Request::None)
+        packet.mInputData.push_back((int32_t) (mGlideRequest == Request::Start ? PlayerAuthInputData::StartGliding
+                                                                               : PlayerAuthInputData::StopGliding));
+    mSwimRequest = Request::None;
+    mGlideRequest = Request::None;
     const bool sprinting = player.getFlags().get(ActorFlag::Sprinting);
     if (mSprinting) {
         packet.mInputData.push_back((int32_t) PlayerAuthInputData::Sprinting);

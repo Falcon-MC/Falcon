@@ -36,6 +36,19 @@ public:
         mSprinting = sprinting;
     }
 
+    // Actor::startSwimming and stopSwimming (vtable +0x310, +0x318), played as the client's swim inputs
+    void setSwimming(bool swimming) {
+        mSwimRequest = swimming ? Request::Start : Request::Stop;
+    }
+
+    // false when already gliding, without an elytra, in water or on the ground
+    bool glide(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    // sub_1402C7EF0
+    void stopGliding() {
+        mGlideRequest = Request::Stop;
+    }
+
     void lookAtLocation(ServerPlayer &player, const Vector3f &location, LookDuration duration);
 
     void lookAtEntity(ServerPlayer &player, int64_t uniqueId, const Vector3f &eyes, LookDuration duration);
@@ -51,6 +64,7 @@ public:
 private:
     enum class Move : uint8_t { None, Direction, ToLocation };
     enum class Look : uint8_t { None, Location, Entity };
+    enum class Request : uint8_t { None, Start, Stop };
 
     void _faceYaw(ServerPlayer &player, const Vector3f &target);
 
@@ -71,5 +85,7 @@ private:
 
     bool mJump = false;
     bool mSprinting = false;
+    Request mSwimRequest = Request::None;
+    Request mGlideRequest = Request::None;
     int32_t mTestRotation = 0;
 };
