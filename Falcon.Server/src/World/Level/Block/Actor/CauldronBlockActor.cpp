@@ -70,6 +70,20 @@ void CauldronBlockActor::addDye(int32_t dyeColor) {
     mColor = (int32_t) (byteOf(color[3]) << 24 | byteOf(color[0]) << 16 | byteOf(color[1]) << 8 | byteOf(color[2]));
 }
 
+// the float color packed as ARGB, each channel truncated (sub_14A2F26F0, 26.60)
+uint32_t CauldronBlockActor::getEventColor() const {
+    if (!mHasColor)
+        return byteOf(NO_DYE_COLOR[3]) << 24 | byteOf(NO_DYE_COLOR[0]) << 16 | byteOf(NO_DYE_COLOR[1]) << 8
+               | byteOf(NO_DYE_COLOR[2]);
+    return 0xFF000000u | ((uint32_t) mColor & 0xFFFFFFu);
+}
+
+void CauldronBlockActor::clearContents() {
+    mPotionId = -1;
+    mHasColor = false;
+    mColor = 0;
+}
+
 void CauldronBlockActor::_putFields(Tag &data) const {
     data.put(TAG_ITEMS, mItems);
     data.putShort(TAG_POTION_ID, mPotionId);

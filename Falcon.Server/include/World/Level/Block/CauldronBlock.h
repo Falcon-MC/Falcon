@@ -27,4 +27,8 @@ public:
     static BlockState makeState(Liquid liquid, int fillLevel);
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    // dyes the water, or dyes or washes a dyeable item in it
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                    const BlockState &state) const override;
 };
