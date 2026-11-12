@@ -180,3 +180,27 @@ int CrafterBlockActor::getComparatorSignal() const {
     }
     return signal;
 }
+
+namespace {
+    const char *TAG_SHERDS = "sherds";
+}
+
+Tag DecoratedPotBlockActor::saveNbt() const {
+    Tag data = ContainerBlockActor::saveNbt();
+    if (mSherds.isList())
+        data.put(TAG_SHERDS, mSherds);
+    return data;
+}
+
+Tag DecoratedPotBlockActor::getSpawnCompound() const {
+    Tag data = ContainerBlockActor::getSpawnCompound();
+    if (mSherds.isList())
+        data.put(TAG_SHERDS, mSherds);
+    return data;
+}
+
+void DecoratedPotBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    ContainerBlockActor::loadNbt(data, context);
+    const Tag *sherds = data.get(TAG_SHERDS);
+    mSherds = sherds != nullptr && sherds->isList() ? *sherds : Tag();
+}

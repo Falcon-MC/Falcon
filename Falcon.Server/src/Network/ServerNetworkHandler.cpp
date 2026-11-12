@@ -1740,7 +1740,7 @@ EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     flags3.mFormat = EntityDataFormat::Long;
 
     flags3.mLongValue = player.getFlags().getExtendedBits();
-metadata.mEntries.push_back(flags3);
+    metadata.mEntries.push_back(flags3);
 
 
     EntityDataEntry nameplateDistance;
@@ -2405,9 +2405,10 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     picked.mBlockDefinition = std::move(blockDefinition);
     picked.mCount = 1;
 
-    if (packet.mAddUserData) {
-        const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
-        if (blockActor != nullptr)
+    const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
+    if (blockActor != nullptr) {
+        BlockPickItem::applyActorItemData(picked, *blockActor);
+        if (packet.mAddUserData)
             BlockPickItem::attachBlockData(picked, *blockActor);
     }
 

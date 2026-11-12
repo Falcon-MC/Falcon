@@ -265,6 +265,18 @@ namespace {
         return identifier;
     }
 
+    // the undyed shulker box is its own item: the placement alias read backwards gives "minecraft:shulker_box",
+    // the white one; wall signs and wall banners drop the item their standing form places
+    std::string selfDropIdentifier(const std::string &identifier) {
+        if (identifier == BlockNames::UNDYED_SHULKER_BOX)
+            return identifier;
+        if (identifier == BlockNames::WALL_BANNER || identifier == "minecraft:wall_sign"
+            || BlockIdentifier::endsWith(identifier, "_wall_sign"))
+            return BlockPickItem::identifierFor(identifier);
+
+        return furnaceDropIdentifier(identifier);
+    }
+
     bool isBreakableInCreative(const ServerPlayer &player, const std::string &identifier) {
         if (BlockIdentifier::equalsAny(identifier,
                                        {"minecraft:end_gateway", "minecraft:fire", "minecraft:soul_fire",
@@ -559,6 +571,7 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
     const bool silkTouch = ItemEnchantments::getLevel(tool, EnchantmentIds::SILK_TOUCH) > 0;
     const int32_t fortuneLevel = ItemEnchantments::getLevel(tool, EnchantmentIds::FORTUNE);
 
+    bool ownItem = false;
     auto addDrop = [&](const std::string &identifier, int32_t count) {
         if (identifier.empty() || count <= 0)
             return;
@@ -574,6 +587,11 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
 
         if (brokenBlock != nullptr && level != nullptr)
             brokenBlock->writeDropContents(*level, position, drop);
+        // the block's own item carries what its block actor holds (bed color, banner patterns)
+        if (level != nullptr && ownItem) {
+            if (const BlockActor *actor = level->getBlockActors().find(position))
+                BlockPickItem::applyActorItemData(drop, *actor);
+        }
         drops.push_back(std::move(drop));
     };
 
@@ -589,7 +607,7 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
 
     std::string dropIdentifier;
     int32_t dropCount = 0;
-    const std::string normalizedDropIdentifier = furnaceDropIdentifier(
+    const std::string normalizedDropIdentifier = selfDropIdentifier(
             brokenBlock != nullptr ? brokenBlock->getResourceItem(brokenState) : brokenState.mName);
     const int32_t resourceCount = brokenBlock != nullptr ? brokenBlock->getResourceCount(brokenState) : 1;
 
@@ -608,6 +626,7 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
             dropCount += rand() % (fortuneLevel + 1);
     }
 
+    ownItem = dropIdentifier == normalizedDropIdentifier;
     addDrop(dropIdentifier, dropCount);
     return drops;
 }
@@ -624,8 +643,8 @@ bool BlockActionHandler::canHarvest(const BlockData &block, const ItemStack &too
         const bool standardTool = block.mToolType == BlockToolType::Pickaxe || block.mToolType == BlockToolType::Shovel
                                   || block.mToolType == BlockToolType::Axe || block.mToolType == BlockToolType::Hoe;
         bool useEfficiency = false;
-        return CustomContentRegistry::getInstance().getDiggerSpeed(identifier, block.mName, standardTool,
-                                                                   useEfficiency) > 0;
+        return CustomContentRegistry::getInstance().getDiggerSpeed(identifier, block.mName, standardTool, useEfficiency)
+               > 0;
     }
     if ((int32_t) itemData->mToolType == (int32_t) block.mToolType && itemData->mToolTier >= (int32_t) block.mToolTier)
         return true;
