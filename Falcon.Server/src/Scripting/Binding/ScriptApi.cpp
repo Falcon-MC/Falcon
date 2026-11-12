@@ -685,10 +685,27 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second.mPrototype);
     }
 
-    for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
-                         mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
-                         mClockRegistry, mDimensionRegistry, mStructureManager, mListVolume, mCommandRegistry,
-                         mLootTableManager, mSoundDefinitionRegistry})
+    for (JSValue value: {mWorld,
+                         mSystem,
+                         mAfterEvents,
+                         mBeforeEvents,
+                         mSystemAfterEvents,
+                         mSystemBeforeEvents,
+                         mScoreboard,
+                         mTickingAreas,
+                         mGameRules,
+                         mSystemInfo,
+                         mErrors,
+                         mBlockRegistry,
+                         mItemRegistry,
+                         mClockRegistry,
+                         mDimensionRegistry,
+                         mStructureManager,
+                         mListVolume,
+                         mCommandRegistry,
+                         mLootTableManager,
+                         mSoundDefinitionRegistry,
+                         mPrimitiveShapes})
         JS_FreeValue(mContext, value);
 }
 
@@ -1764,7 +1781,8 @@ void ScriptApi::_installBootstraps() {
         JS_FreeValue(mContext, adminExports);
     }
 
-    if (mModules.find("@minecraft/debug-utilities") != nullptr)
+    // the server's PrimitiveShapesManager draws through the debug shape stream
+    if (mModules.find("@minecraft/debug-utilities") != nullptr || mSurface.has("PrimitiveShapesManager"))
         _installDebugUtilities();
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
