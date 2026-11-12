@@ -512,7 +512,8 @@ public:
         return mPrimitiveShapes;
     }
 
-    void emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z);
+    void emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z, const Vector3f &from,
+                                const Vector3f &to);
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
 

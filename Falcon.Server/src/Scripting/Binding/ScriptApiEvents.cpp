@@ -1,5 +1,6 @@
 #include "Scripting/Binding/ScriptApi.h"
 #include "Scripting/Binding/ScriptNetBinding.h"
+#include "Scripting/Binding/ScriptRaycast.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -443,7 +444,8 @@ JSValue ScriptApi::makePermutation(const std::string &identifier) {
     return JS_UNDEFINED;
 }
 
-void ScriptApi::emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z) {
+void ScriptApi::emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z, const Vector3f &from,
+                                       const Vector3f &to) {
     if (!hasSubscribers("after.projectileHitBlock"))
         return;
 
@@ -463,21 +465,19 @@ void ScriptApi::emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32
 
     JSValue hit = JS_NewObject(mContext);
     JS_SetPropertyStr(mContext, hit, "block", makeBlock(mHost.getLevelFor(projectile), x, y, z));
+    // the face the path from the last position crosses into the cell, faceLocation from the block's corner
+    const Vector3f path(to.x - from.x, to.y - from.y, to.z - from.z);
+    int axis = 1;
+    float at = ScriptRaycast::intersectBox(from, path, Vector3f((float) x, (float) y, (float) z),
+                                           Vector3f((float) x + 1.0f, (float) y + 1.0f, (float) z + 1.0f), &axis);
+    if (at < 0.0f)
+        at = 1.0f;
+    const Vector3f entry(from.x + path.x * at, from.y + path.y * at, from.z + path.z * at);
     JS_SetPropertyStr(mContext, hit, "faceLocation",
-                      vector3(mContext, (float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f));
-
-    // TODO: the contact face from the collision, the motion's dominant axis for now
-    const Vector3f &motion = projectile.getMotion();
-    const float absX = std::fabs(motion.x);
-    const float absY = std::fabs(motion.y);
-    const float absZ = std::fabs(motion.z);
-    const char *face;
-    if (absY >= absX && absY >= absZ)
-        face = motion.y < 0.0f ? "Up" : "Down";
-    else if (absX >= absZ)
-        face = motion.x > 0.0f ? "West" : "East";
-    else
-        face = motion.z > 0.0f ? "North" : "South";
+                      vector3(mContext, entry.x - (float) x, entry.y - (float) y, entry.z - (float) z));
+    static const char *FACES[3][2] = {{"East", "West"}, {"Up", "Down"}, {"South", "North"}};
+    const float along[3] = {path.x, path.y, path.z};
+    const char *face = FACES[axis][along[axis] > 0.0f ? 1 : 0];
     JS_SetPropertyStr(mContext, hit, "face", JS_NewString(mContext, face));
 
     JS_SetPropertyStr(mContext, event, "getBlockHit", makeHitGetter(mContext, "getBlockHit", hit));
