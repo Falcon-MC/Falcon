@@ -1349,13 +1349,25 @@ void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::str
 }
 
 void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position) {
+    spawnParticleEffect(level, identifier, position, nullptr, nullptr);
+}
+
+void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position,
+                                               const std::string *molangJson, ServerPlayer *viewer) {
     SpawnParticleEffectPacket packet;
     packet.mDimensionId = level.getDimensionId();
     packet.mUniqueActorId = -1;
     packet.mPosition = position;
     packet.mIdentifier = identifier;
-    packet.mHasMolangVariablesJson = false;
+    packet.mHasMolangVariablesJson = molangJson != nullptr;
+    if (molangJson != nullptr)
+        packet.mMolangVariablesJson = *molangJson;
 
+    if (viewer != nullptr) {
+        if (viewer->isSpawned())
+            mNetworkHandler->send(viewer->getNetworkIdentifier(), packet, mCodecContext);
+        return;
+    }
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned() && entry.second.isIn(level))
             mNetworkHandler->send(entry.first, packet, mCodecContext);

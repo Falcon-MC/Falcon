@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -123,6 +124,21 @@ public:
 
     // an instance of an official class; owns data
     JSValue makeInstance(const std::string &className, ScriptNative *data);
+
+    // the params JSON of the custom component the block binds where it stands
+    std::optional<std::string> customBlockComponent(Level &level, const Vector3i &position, const std::string &id);
+
+    // the custom component an item type's JSON binds, null without one
+    const CustomComponentUse *customItemComponent(const std::string &typeId, const std::string &id) const;
+
+    // a CustomComponentParameters holding the parsed params JSON, undefined params when empty
+    JSValue makeComponentParameters(const std::string &paramsJson);
+
+    // queue target.runCommand(line) for the next tick; the promise settles with its result
+    JSValue queueCommand(JSValueConst target, JSValueConst line);
+
+    // an optional MolangVariableMap argument: false when value is something else
+    bool readMolang(JSValueConst value, std::string &json, bool &present);
 
     // an event object of the class the signal fires
     JSValue makeEvent(const std::string &signalKey);
@@ -600,6 +616,19 @@ private:
 
     void _bindSounds();
 
+    // a 1.x runCommandAsync waiting for the next tick
+    struct QueuedCommand {
+        JSValue mTarget = JS_UNDEFINED;
+        JSValue mLine = JS_UNDEFINED;
+        JSValue mResolvers[2] = {JS_UNDEFINED, JS_UNDEFINED};
+    };
+
+    void _bindMolang();
+
+    void _runQueuedCommands();
+
+    void _freeQueuedCommand(QueuedCommand &command);
+
     void _tickSounds();
 
     // the natives the loot bootstrap reads its tables and rolls through; takes itemTypes
@@ -631,6 +660,8 @@ private:
     std::unordered_map<int64_t, SteppedBlock> mStepping;
     ScriptScheduler mScheduler;
     std::vector<std::function<bool()>> mTickJobs;
+
+    std::vector<QueuedCommand> mQueuedCommands;
     PlayerHandleRegistry &mPlayers;
 
     // a deque: a native may define a class, and so a binding, while its own binding is in use
@@ -712,4 +743,9 @@ namespace ScriptBlockData {
     JSCFunction *blockInfo();
 
     JSCFunction *permutationItem();
+}
+
+namespace ScriptItemTypeData {
+    // the localization key of an item type id, as a fresh stack of it has
+    JSCFunction *localizationKey();
 }

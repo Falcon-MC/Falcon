@@ -129,8 +129,13 @@ namespace {
             return accepts<ScriptEntityPart>;
         if (cls == "Effect")
             return accepts<ScriptEffectRef>;
-        if (cls == "EffectType" || cls == "EntityType" || cls == "EntityHealSource")
+        if (cls == "EffectType" || cls == "EntityType" || cls == "EntityHealSource" || cls == "Trigger"
+            || cls == "DimensionType")
             return accepts<ScriptNamedRef>;
+        if (cls == "MolangVariableMap")
+            return accepts<ScriptMolangMap>;
+        if (cls == "BlockCustomComponentInstance")
+            return accepts<ScriptBlockPart>;
         if (cls == "InputInfo")
             return accepts<ScriptInputInfoRef>;
         if (hasSuffix(cls, "Waypoint"))
@@ -232,6 +237,27 @@ namespace {
         if (registry == nullptr || argc < 2 || !JS_IsString(argv[0]) || !JS_IsObject(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         return api->registerCustomComponent(registry->mBlocks, toString(ctx, argv[0]), argv[1]);
+    }
+
+    JSValue triggerConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptNamedRef *ref = new ScriptNamedRef();
+        ref->mName = toString(ctx, argv[0]);
+        return ScriptApi::fromContext(ctx)->makeInstance("Trigger", ref);
+    }
+
+    JSValue triggerGetEventName(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ScriptNamedRef *ref = ScriptApi::fromContext(ctx)->native<ScriptNamedRef>(thisVal);
+        return ref == nullptr ? JS_UNDEFINED : string(ctx, ref->mName);
+    }
+
+    JSValue triggerSetEventName(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ScriptNamedRef *ref = ScriptApi::fromContext(ctx)->native<ScriptNamedRef>(thisVal);
+        if (ref == nullptr || argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ref->mName = toString(ctx, argv[0]);
+        return JS_UNDEFINED;
     }
 
     JSValue registryRegisterDimension(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -445,6 +471,11 @@ namespace {
         return result;
     }
 
+    // whether the pack's server version declares a name: bootstraps drop the members it lacks
+    JSValue surfaceHas(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        return JS_NewBool(ctx, argc >= 1 && ScriptApi::fromContext(ctx)->surface().has(toString(ctx, argv[0])));
+    }
+
     void addFunction(JSContext *ctx, JSValue object, const char *name, JSCFunction *function, int length) {
         JS_SetPropertyStr(ctx, object, name, JS_NewCFunction(ctx, function, name, length));
     }
@@ -487,6 +518,13 @@ namespace {
                                         "ScriptEventSource",
                                         "GameRule",
                                         "MemoryTier",
+                                        "HeldItemOption",
+                                        "LiquidSettings",
+                                        "PlayerSplitScreenSlot",
+                                        "PlatformType",
+                                        "GraphicsMode",
+                                        "ControlScheme",
+                                        "AimAssistTargetMode",
                                         "CustomComponentNameErrorReason",
                                         "NamespaceNameErrorReason",
                                         "EnchantmentSlot",
@@ -637,6 +675,8 @@ ScriptApi::~ScriptApi() {
         for (auto &entry: *exports)
             JS_FreeValue(mContext, entry.second);
     }
+    for (QueuedCommand &command: mQueuedCommands)
+        _freeQueuedCommand(command);
     for (auto &entry: mClasses) {
         JS_FreeValue(mContext, entry.second.mConstructor);
         JS_FreeValue(mContext, entry.second.mPrototype);
@@ -1401,6 +1441,31 @@ void ScriptApi::fillBlockEvent(JSValueConst event, const Level &level, const Vec
     JS_SetPropertyStr(mContext, event, "dimension", makeDimension(level));
 }
 
+JSValue ScriptApi::makeComponentParameters(const std::string &paramsJson) {
+    JSValue params = JS_UNDEFINED;
+    if (!paramsJson.empty()) {
+        params = JS_ParseJSON(mContext, paramsJson.c_str(), paramsJson.size(), "<params>");
+        if (JS_IsException(params)) {
+            JS_FreeValue(mContext, JS_GetException(mContext));
+            params = JS_UNDEFINED;
+        }
+    }
+    JSValue parameters = makeInstance("CustomComponentParameters", new ScriptNative());
+    JS_DefinePropertyValueStr(mContext, parameters, "params", params, JS_PROP_ENUMERABLE);
+    return parameters;
+}
+
+const CustomComponentUse *ScriptApi::customItemComponent(const std::string &typeId, const std::string &id) const {
+    const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(typeId);
+    if (custom == nullptr)
+        return nullptr;
+    for (const CustomComponentUse &use: custom->mCustomComponents) {
+        if (use.mName == id)
+            return &use;
+    }
+    return nullptr;
+}
+
 void ScriptApi::fireComponents(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook,
                                JSValueConst event) {
     std::unordered_map<std::string, JSValue> &registry = blocks ? mBlockComponents : mItemComponents;
@@ -1418,16 +1483,7 @@ void ScriptApi::fireComponents(bool blocks, const std::vector<CustomComponentUse
 
         JSValue args[2] = {JS_DupValue(mContext, event), JS_UNDEFINED};
         if (withParams) {
-            JSValue params = JS_UNDEFINED;
-            if (!use.mParams.empty()) {
-                params = JS_ParseJSON(mContext, use.mParams.c_str(), use.mParams.size(), "<params>");
-                if (JS_IsException(params)) {
-                    JS_FreeValue(mContext, JS_GetException(mContext));
-                    params = JS_UNDEFINED;
-                }
-            }
-            args[1] = makeInstance("CustomComponentParameters", new ScriptNative());
-            JS_DefinePropertyValueStr(mContext, args[1], "params", params, JS_PROP_ENUMERABLE);
+            args[1] = makeComponentParameters(use.mParams);
         }
 
         JSValue result = JS_Call(mContext, function, handler->second, withParams ? 2 : 1, args);
@@ -1521,6 +1577,22 @@ void ScriptApi::_bindEvents() {
         mSystemAfterEvents = _makeSignalHolder("SystemAfterEvents", "SystemAfterEvents", "system.after.");
     if (mSurface.has("System.beforeEvents"))
         mSystemBeforeEvents = _makeSignalHolder("SystemBeforeEvents", "SystemBeforeEvents", "system.before.");
+
+    // some versions export signal and event classes no holder carries (1.3 IButtonPushAfterEventSignal, 1.8
+    // EffectAddAfterEvent): still classes a script can import and test against
+    for (const std::string &name: mSurface.exports()) {
+        const bool signal = hasSuffix(name, "Signal");
+        if (!signal && !hasSuffix(name, "Event"))
+            continue;
+        JSValue prototype = defineClass(name);
+        if (!signal)
+            continue;
+        for (const char *member: {"subscribe", "unsubscribe"}) {
+            if (mSurface.has(name + "." + member))
+                signalMethod(prototype, name.c_str(), member,
+                             std::strcmp(member, "subscribe") == 0 ? signalSubscribe : signalUnsubscribe);
+        }
+    }
 }
 
 void ScriptApi::_bindRegistries() {
@@ -1545,6 +1617,21 @@ void ScriptApi::_bindRegistries() {
         if (mSurface.has(name))
             defineClass(name);
     }
+    if (mSurface.has("Trigger")) {
+        JSValue trigger = defineClass("Trigger", triggerConstructor, 1);
+        property(trigger, "Trigger", "eventName", triggerGetEventName, triggerSetEventName);
+    }
+    // the typings fix the fill levels: 0 to 6
+    if (mSurface.has("FluidContainer")) {
+        defineClass("FluidContainer");
+        JSValue fluid = constructorOf("FluidContainer");
+        if (mSurface.has("FluidContainer.static maxFillLevel"))
+            JS_DefinePropertyValueStr(mContext, fluid, "maxFillLevel", JS_NewInt32(mContext, 6), JS_PROP_ENUMERABLE);
+        if (mSurface.has("FluidContainer.static minFillLevel"))
+            JS_DefinePropertyValueStr(mContext, fluid, "minFillLevel", JS_NewInt32(mContext, 0), JS_PROP_ENUMERABLE);
+    }
+    if (mSurface.has("ISerializable"))
+        defineClass("ISerializable");
     if (mSurface.has("StartupEvent"))
         defineClass("StartupEvent");
     if (mSurface.has("ShutdownEvent"))
@@ -1590,6 +1677,8 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, data, "itemTypeNames", itemTypeNames, 0);
     addFunction(mContext, data, "blockInfo", ScriptBlockData::blockInfo(), 2);
     addFunction(mContext, data, "permutationItem", ScriptBlockData::permutationItem(), 3);
+    addFunction(mContext, data, "itemLocalizationKey", ScriptItemTypeData::localizationKey(), 1);
+    addFunction(mContext, data, "has", surfaceHas, 1);
     JSValue dataExports = runBootstrap(mContext, mPackName, ScriptBootstraps::data(), "<data>", data);
     for (const char *name:
          {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates", "ItemType", "ItemTypes"}) {
@@ -1625,6 +1714,7 @@ void ScriptApi::_installBootstraps() {
 
     JSValue volumes = JS_NewObject(mContext);
     JS_SetPropertyStr(mContext, volumes, "error", JS_GetPropertyStr(mContext, mErrors, "make"));
+    addFunction(mContext, volumes, "has", surfaceHas, 1);
     JSValue volumeExports = runBootstrap(mContext, mPackName, ScriptBootstraps::volumes(), "<volumes>", volumes);
     for (const char *name: {"BlockVolumeBase", "BlockVolume", "ListBlockVolume", "BlockLocationIterator"}) {
         if (mSurface.has(name))
@@ -1716,9 +1806,10 @@ void ScriptApi::_defineEnums() {
         mServerExports.emplace_back(name, object);
     }
 
-    // the typings declare these as plain constants
+    // the typings declare these as plain constants, with these values
     for (const auto &constant: {std::make_pair("HudElementsCount", ServerPlayer::HUD_ELEMENT_COUNT),
-                                std::make_pair("HudVisibilityCount", 2)}) {
+                                std::make_pair("HudVisibilityCount", 2), std::make_pair("TicksPerDay", 24000),
+                                std::make_pair("TicksPerSecond", 20), std::make_pair("MoonPhaseCount", 8)}) {
         if (mSurface.has(constant.first))
             mServerExports.emplace_back(constant.first, JS_NewInt32(mContext, constant.second));
     }

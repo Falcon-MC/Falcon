@@ -75,6 +75,11 @@ BOUND = {
         'SetItemLoreFunction', 'SetItemNameFunction', 'SetOminousBottleFunction', 'SetPotionFunction',
         'SetSpawnEggFunction', 'SetStewEffectFunction', 'SmeltItemFunction', 'SpecificEnchantFunction',
         'SoundInstance', 'SoundDurationInfo', 'SoundDefinition', 'SoundDefinitionRegistry', 'BlockInstrumentComponent',
+        'MolangVariableMap', 'TicksPerDay', 'TicksPerSecond', 'MoonPhaseCount', 'FluidContainer', 'HeldItemOption',
+        'LiquidSettings', 'PlayerSplitScreenSlot', 'PlatformType', 'GraphicsMode', 'ControlScheme', 'AimAssistTargetMode',
+        'Trigger', 'DimensionType',
+        'DimensionTypes', 'MinecraftDimensionTypes', 'ISerializable', 'BlockCustomComponentInstance',
+        'ItemCustomComponentInstance',
     },
     'server-ui': None,
     'common': None,
@@ -103,7 +108,9 @@ def parse(path):
         exports[match.group(2)] = match.group(1)
 
     classes = {}
-    for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))? \{(.*?)\n\}', raw, re.S):
+    # BlockLocationIterator also implements Iterable<Vector3>
+    for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))?(?: implements [^{\n]+)? \{(.*?)\n\}', raw,
+                             re.S):
         members = {}
         # a reserved word is quoted as a member name: readonly 'type': ItemType
         for member in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)?\s*\n {4}((?:readonly |static |private )*)'
@@ -127,6 +134,9 @@ def parse(path):
             previous = members.get(name)
             members[name] = (kind, early or (previous is not None and previous[1]),
                              blocked or (previous is not None and previous[2]), signature)
+        # no constructor declared at all: the implicit public one (MolangVariableMap, the splines)
+        if 'constructor(' not in match.group(3):
+            members['constructor'] = ('method', False, False, '')
         classes[match.group(1)] = (match.group(2), members)
 
     # free functions carry their privileges in the doc right above them

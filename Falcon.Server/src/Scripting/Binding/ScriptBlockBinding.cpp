@@ -26,6 +26,8 @@
 #include "World/Level/Map/MapColors.h"
 
 #include <algorithm>
+#include <cstring>
+#include <optional>
 #include <cmath>
 #include <unordered_map>
 
@@ -404,21 +406,22 @@ namespace {
         return ids;
     }
 
+    const char *const COMPONENT_CLASSES[][2] = {
+            {"minecraft:dynamic_properties", "BlockDynamicPropertiesComponent"},
+            {"minecraft:fluid_container", "BlockFluidContainerComponent"},
+            {"minecraft:instrument_sound", "BlockInstrumentComponent"},
+            {"minecraft:inventory", "BlockInventoryComponent"},
+            {"minecraft:map_color", "BlockMapColorComponent"},
+            {"minecraft:movable", "BlockMovableComponent"},
+            {"minecraft:piston", "BlockPistonComponent"},
+            {"minecraft:precipitation_interactions", "BlockPrecipitationInteractionsComponent"},
+            {"minecraft:record_player", "BlockRecordPlayerComponent"},
+            {"minecraft:redstone_producer", "BlockRedstoneProducerComponent"},
+            {"minecraft:sign", "BlockSignComponent"},
+    };
+
     const char *componentClassOf(const std::string &id) {
-        static const char *const CLASSES[][2] = {
-                {"minecraft:dynamic_properties", "BlockDynamicPropertiesComponent"},
-                {"minecraft:fluid_container", "BlockFluidContainerComponent"},
-                {"minecraft:instrument_sound", "BlockInstrumentComponent"},
-                {"minecraft:inventory", "BlockInventoryComponent"},
-                {"minecraft:map_color", "BlockMapColorComponent"},
-                {"minecraft:movable", "BlockMovableComponent"},
-                {"minecraft:piston", "BlockPistonComponent"},
-                {"minecraft:precipitation_interactions", "BlockPrecipitationInteractionsComponent"},
-                {"minecraft:record_player", "BlockRecordPlayerComponent"},
-                {"minecraft:redstone_producer", "BlockRedstoneProducerComponent"},
-                {"minecraft:sign", "BlockSignComponent"},
-        };
-        for (const auto &entry: CLASSES) {
+        for (const auto &entry: COMPONENT_CLASSES) {
             if (id == entry[0])
                 return entry[1];
         }
@@ -445,7 +448,14 @@ namespace {
         const BlockAt at = blockAt(ctx, thisVal);
         JSValue array = JS_NewArray(ctx);
         uint32_t index = 0;
-        for (const std::string &id: componentIdsAt(*at.mLevel, at.mPosition)) {
+        std::vector<std::string> ids = componentIdsAt(*at.mLevel, at.mPosition);
+        const BlockState state = at.mLevel->getBlockState(at.mPosition.x, at.mPosition.y, at.mPosition.z);
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        if (custom != nullptr) {
+            for (const CustomComponentUse &use: CustomContentRegistry::componentsFor(*custom, state.mStates))
+                ids.push_back(use.mName);
+        }
+        for (const std::string &id: ids) {
             JSValue component = at.mApi->makeBlockComponent(*at.mLevel, at.mPosition, id);
             if (JS_IsUndefined(component))
                 continue;
@@ -456,6 +466,13 @@ namespace {
 
     const ScriptBlockPart &partOf(JSContext *ctx, JSValueConst thisVal) {
         return *ScriptApi::fromContext(ctx)->native<ScriptBlockPart>(thisVal);
+    }
+
+    JSValue blockCustomGetParameters(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const std::optional<std::string> params = at.mApi->customBlockComponent(*at.mLevel, at.mPosition,
+                                                                                partOf(ctx, thisVal).mComponentId);
+        return params.has_value() ? at.mApi->makeComponentParameters(*params) : JS_UNDEFINED;
     }
 
     JSValue componentGetBlock(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -1099,12 +1116,28 @@ namespace ScriptBlockData {
     }
 }
 
+std::optional<std::string> ScriptApi::customBlockComponent(Level &level, const Vector3i &position,
+                                                           const std::string &id) {
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+    if (custom == nullptr)
+        return std::nullopt;
+    for (const CustomComponentUse &use: CustomContentRegistry::componentsFor(*custom, state.mStates)) {
+        if (use.mName == id)
+            return use.mParams;
+    }
+    return std::nullopt;
+}
+
 JSValue ScriptApi::makeBlockComponent(Level &level, const Vector3i &position, const std::string &id) {
     const char *cls = componentClassOf(id);
+    // any other id: the custom component the block binds where it stands (BlockComponentReturnType)
+    if (cls == nullptr && customBlockComponent(level, position, id).has_value())
+        cls = "BlockCustomComponentInstance";
     if (cls == nullptr || !mSurface.has(cls))
         return JS_UNDEFINED;
     const std::vector<std::string> ids = componentIdsAt(level, position);
-    if (std::find(ids.begin(), ids.end(), id) == ids.end())
+    if (std::strcmp(cls, "BlockCustomComponentInstance") != 0 && std::find(ids.begin(), ids.end(), id) == ids.end())
         return JS_UNDEFINED;
 
     ScriptBlockPart *part = new ScriptBlockPart();
@@ -1147,6 +1180,10 @@ void ScriptApi::_bindBlockSurface() {
     if (mSurface.has("BlockComponent")) {
         JSValue base = defineClass("BlockComponent");
         property(base, "BlockComponent", "block", componentGetBlock);
+    }
+    if (mSurface.has("BlockCustomComponentInstance")) {
+        JSValue custom = defineClass("BlockCustomComponentInstance");
+        property(custom, "BlockCustomComponentInstance", "customComponentParameters", blockCustomGetParameters);
     }
     if (mSurface.has("BlockInventoryComponent")) {
         JSValue inventory = defineClass("BlockInventoryComponent");
@@ -1222,5 +1259,13 @@ void ScriptApi::_bindBlockSurface() {
         method(dynamic, "BlockDynamicPropertiesComponent", "get", dynamicGet, 1);
         method(dynamic, "BlockDynamicPropertiesComponent", "set", dynamicSet, 2);
         method(dynamic, "BlockDynamicPropertiesComponent", "totalByteCount", dynamicByteCount, 0);
+    }
+
+    // the 1.x typings declare componentId before BlockComponentTypes lists the component
+    for (const auto &entry: COMPONENT_CLASSES) {
+        JSValue constructor = constructorOf(entry[1]);
+        if (!JS_IsUndefined(constructor) && mSurface.has(std::string(entry[1]) + ".static componentId"))
+            JS_DefinePropertyValueStr(mContext, constructor, "componentId", string(mContext, entry[0]),
+                                      JS_PROP_ENUMERABLE);
     }
 }

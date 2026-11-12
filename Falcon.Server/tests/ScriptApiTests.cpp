@@ -6,6 +6,7 @@
 #include "Scripting/ScriptEngine.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
 #include "Scripting/Binding/ScriptCustomCommand.h"
+#include "Scripting/Binding/ScriptNatives.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ScriptCommandOrigin.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
@@ -887,7 +888,8 @@ system.runTimeout(() => world.setDynamicProperty("items", JSON.stringify(r)), 7)
 )JS";
 
     const char *const BETA_ENTITIES = R"JS(
-import { world, system, Entity, Player, ItemStack, BlockInstrumentComponent } from "@minecraft/server";
+import { world, system, Entity, Player, ItemStack, BlockInstrumentComponent, BlockCustomComponentInstance,
+         ItemCustomComponentInstance } from "@minecraft/server";
 r.target = "target" in Entity.prototype;
 world.afterEvents.playerCursorItemGrab.subscribe((e) => { r.cursor = (r.cursor || "") + "grab:" + e.item.typeId + ";"; });
 world.afterEvents.playerCursorItemRelease.subscribe((e) => {
@@ -924,6 +926,14 @@ system.runTimeout(() => {
         + failure(() => instrument.playInstrumentSound("Up", { volume: 0.5 })) + ":"
         + failure(() => instrument.playInstrumentSound("Down", { pitch: 0 })) + ":"
         + (dimension.getBlock({ x: 0, y: 101, z: 8 }).getComponent("instrument_sound") === undefined);
+    const block = dimension.getBlock({ x: 1, y: 101, z: 8 });
+    const custom = block.getComponent("test:hooks");
+    const wand = new ItemStack("test:wand").getComponent("test:wand");
+    r.customInstance = (custom instanceof BlockCustomComponentInstance) + ":"
+        + JSON.stringify(custom.customComponentParameters.params) + ":" + (block.getComponent("test:none") === undefined)
+        + ":" + block.getComponents().some((component) => component.typeId === "test:hooks") + ":"
+        + (wand instanceof ItemCustomComponentInstance) + ":" + JSON.stringify(wand.customComponentParameters.params)
+        + ":" + (new ItemStack("minecraft:apple").getComponent("test:wand") === undefined);
     world.setDynamicProperty("betaEntities", JSON.stringify(r));
 }, 3);
 )JS";
@@ -1461,6 +1471,67 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 });
 )JS";
 
+    const char *const GAPS = R"JS(
+import { world, system, MolangVariableMap, TicksPerSecond, TicksPerDay, MoonPhaseCount, FluidContainer, Trigger,
+         DimensionTypes, ItemTypes, BlockVolume, BlockVolumeBase, HeldItemOption, PlatformType, GraphicsMode,
+         ControlScheme, LiquidSettings, ISerializable, Structure } from "@minecraft/server";
+r.molangEarly = capture(() => new MolangVariableMap());
+r.triggerEarly = capture(() => new Trigger("a:b"));
+system.run(() => {
+    r.constants = [TicksPerSecond, TicksPerDay, MoonPhaseCount, FluidContainer.minFillLevel, FluidContainer.maxFillLevel]
+        .join(",");
+    const trigger = new Trigger("minecraft:entity_born");
+    trigger.eventName = "test:grow";
+    r.trigger = trigger.eventName + "," + (trigger instanceof Trigger);
+    r.enums = [HeldItemOption.AnyItem, PlatformType.Console, GraphicsMode.Deferred, ControlScheme.PlayerRelativeStrafe,
+               LiquidSettings.IgnoreWaterlogging].join(",");
+    r.serializable = Object.getPrototypeOf(Structure.prototype) === ISerializable.prototype;
+    const map = new MolangVariableMap();
+    map.setFloat("speed", 2);
+    map.setColorRGB("variable.tint", { red: 1, green: 0.5, blue: 0 });
+    r.molang = map instanceof MolangVariableMap;
+    r.molangDot = capture(() => map.setFloat("a.b", 1));
+    r.molangType = capture(() => map.setVector3("v", 3));
+    r.dimensionTypes = DimensionTypes.getAll().map((type) => type.typeId).join(",");
+    r.nether = DimensionTypes.get("minecraft:nether").typeId + "," + DimensionTypes.get("nether");
+    r.itemKey = ItemTypes.get("minecraft:apple").localizationKey + "," + ItemTypes.get("minecraft:stone").localizationKey;
+    const volume = new BlockVolume({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 1 });
+    volume.to = { x: 2, y: 0, z: 1 };
+    r.volume = [Object.getOwnPropertyNames(volume).length, "getMin" in BlockVolumeBase.prototype,
+                Object.getOwnPropertyNames(BlockVolume.prototype).includes("getMin"), volume.getCapacity(),
+                volume.to.x].join("|");
+    r.music = capture(() => world.playMusic("record.cat", { volume: -1 }));
+    r.musicOk = capture(() => world.playMusic("record.cat", { fade: 1, loop: true })) + ","
+        + capture(() => world.queueMusic("record.cat")) + "," + capture(() => world.stopMusic());
+    r.particle = capture(() => world.getDimension("overworld").spawnParticle("minecraft:basic_flame_particle",
+                                                                             { x: 0, y: 100, z: 0 }, map));
+    r.particleBadMap = capture(() => world.getDimension("overworld").spawnParticle("minecraft:basic_flame_particle",
+                                                                                   { x: 0, y: 100, z: 0 }, {}));
+    world.setDynamicProperty("gaps", JSON.stringify(r));
+});
+)JS";
+
+    const char *const LEGACY = R"JS(
+import { world, system, MinecraftDimensionTypes, EntityCanClimbComponent, BlockInventoryComponent,
+         EffectAddAfterEvent, ExplosionBeforeEventSignal } from "@minecraft/server";
+r.dimensions = [MinecraftDimensionTypes.overworld, MinecraftDimensionTypes.nether, MinecraftDimensionTypes.theEnd]
+    .join(",");
+r.componentIds = EntityCanClimbComponent.componentId + "," + BlockInventoryComponent.componentId;
+r.orphans = typeof EffectAddAfterEvent + "," + typeof ExplosionBeforeEventSignal.prototype.subscribe;
+system.run(() => {
+    const dimension = world.getDimension("overworld");
+    const pending = dimension.runCommandAsync("time set 1000");
+    r.immediate = pending instanceof Promise;
+    pending.then((result) => {
+        r.async = "resolved:" + result.successCount;
+        return dimension.runCommandAsync("notacommand");
+    }).then(() => { r.asyncError = "resolved"; }, (error) => {
+        r.asyncError = error.name;
+        world.setDynamicProperty("legacy", JSON.stringify(r));
+    });
+});
+)JS";
+
     const char *const UNDECLARED = R"JS(
 import { world } from "@minecraft/server";
 import { ActionFormData } from "@minecraft/server-ui";
@@ -1598,6 +1669,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "loot" / "loot_tables" / "chests" / "igloo_chest.json",
                   "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", "
                   "\"name\": \"minecraft:emerald\"}]}]}");
+        writePack(packs, "gaps", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  std::string(PRELUDE) + GAPS);
+        writePack(packs, "legacy", "{\"module_name\": \"@minecraft/server\", \"version\": \"1.8.0\"}",
+                  std::string(PRELUDE) + LEGACY);
         writePack(packs, "undeclared", server2, UNDECLARED);
         writePack(packs, "net", server2 + ", {\"module_name\": \"@minecraft/server-net\", \"version\": \"1.0.0-beta\"}",
                   NOT_IMPLEMENTED);
@@ -1646,7 +1721,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 14, "only the fourteen valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -2625,6 +2700,46 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*betaEntities, "eat", "true");
         expect(*betaEntities, "eatStone", "Error");
         expect(*betaEntities, "ping", "EngineError");
+        expect(*betaEntities, "customInstance", "true:{\"value\":42,\"list\":[\"a\",true]}:true:true:true:{}:true");
+
+        const std::unique_ptr<json::Value> gaps = result(owner, "gaps");
+        expect(*gaps, "molangEarly",
+               "ReferenceError: Native constructor for [MolangVariableMap::constructor] cannot be used in early execution.");
+        expect(*gaps, "triggerEarly",
+               "ReferenceError: Native constructor for [Trigger::constructor] cannot be used in early execution.");
+        expect(*gaps, "molang", "true");
+        expect(*gaps, "molangDot", "Error: Variable name cannot contain '.' unless it is preceded by 'variable'.");
+        expect(*gaps, "molangType", "TypeError: Native type conversion failed.");
+        expect(*gaps, "constants", "20,24000,8,0,6");
+        expect(*gaps, "trigger", "test:grow,true");
+        expect(*gaps, "enums", "AnyItem,Console,Deferred,PlayerRelativeStrafe,IgnoreWaterlogging");
+        expect(*gaps, "serializable", "true");
+        expect(*gaps, "dimensionTypes", "minecraft:overworld,minecraft:nether,minecraft:the_end,test:void");
+        expect(*gaps, "nether", "minecraft:nether,undefined");
+        expect(*gaps, "itemKey", "item.apple.name,tile.stone.name");
+        expect(*gaps, "volume", "0|true|false|6|2");
+        expect(*gaps, "music", "PropertyOutOfBoundsError: ");
+        expect(*gaps, "musicOk", "ok,ok,ok");
+        expect(*gaps, "particle", "ok");
+        expect(*gaps, "particleBadMap", "TypeError: Native type conversion failed.");
+
+        const std::unique_ptr<json::Value> legacyPack = result(owner, "legacy");
+        expect(*legacyPack, "dimensions", "minecraft:overworld,minecraft:nether,minecraft:the_end");
+        expect(*legacyPack, "componentIds", "minecraft:can_climb,minecraft:inventory");
+        expect(*legacyPack, "orphans", "function,function");
+        expect(*legacyPack, "immediate", "true");
+        expect(*legacyPack, "async", "resolved:1");
+        expect(*legacyPack, "asyncError", "CommandError");
+
+        ScriptMolangMap molang;
+        molang.mVariables.push_back({"variable.size", 0.5f, false, {}});
+        molang.mVariables.push_back({"variable.tint", 0.0f, true, {{".r", 1.0f}, {".g", 0.25f}}});
+        require(molang.toJson()
+                        == "[{\"name\":\"variable.size\",\"value\":{\"type\":\"float\",\"value\":0.5}},"
+                           "{\"name\":\"variable.tint\",\"value\":{\"type\":\"member_array\",\"value\":["
+                           "{\"name\":\".r\",\"value\":{\"type\":\"float\",\"value\":1}},"
+                           "{\"name\":\".g\",\"value\":{\"type\":\"float\",\"value\":0.25}}]}}]",
+                "the molang map JSON is not the game's: " + molang.toJson());
 
         const std::unique_ptr<json::Value> stable2 = result(owner, "stable2");
         expect(*stable2, "alone", "true");

@@ -96,6 +96,19 @@ std::vector<std::string> ScriptSurface::errorClasses() const {
     return names;
 }
 
+std::vector<std::string> ScriptSurface::exports() const {
+    std::vector<std::string> names;
+    for (const ScriptSurfaceEntry &entry: SCRIPT_SURFACE) {
+        if (std::strncmp(entry.mName, mPrefix.c_str(), mPrefix.size()) != 0)
+            continue;
+
+        const std::string name = entry.mName + mPrefix.size();
+        if (name.find('.') == std::string::npos && has(name))
+            names.push_back(name);
+    }
+    return names;
+}
+
 const ScriptSignalEntry *ScriptSurface::findSignal(const std::string &property) {
     for (const ScriptSignalEntry &entry: SCRIPT_SIGNALS) {
         if (property == entry.mProperty)

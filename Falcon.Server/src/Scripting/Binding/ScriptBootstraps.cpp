@@ -288,7 +288,12 @@ namespace {
         get id() {
             return this.#id;
         }
+        get localizationKey() {
+            return native.itemLocalizationKey(this.#id);
+        }
     }
+    if (!native.has("ItemType.localizationKey"))
+        delete ItemType.prototype.localizationKey;
 
     let itemTypes = null;
     const allItemTypes = () => {
@@ -385,13 +390,33 @@ namespace {
         }
     }
 
+    // the subclasses fill these in: the methods themselves belong to BlockVolumeBase, as the typings declare
+    const MIN = Symbol(), MAX = Symbol(), INSIDE = Symbol(), MOVE = Symbol(), ITERATE = Symbol(), CAPACITY = Symbol(), EACH = Symbol();
+
     class BlockVolumeBase {
         constructor(key) {
             guard(key, "BlockVolumeBase");
         }
+        getBlockLocationIterator() {
+            return this[ITERATE]();
+        }
         getCapacity() {
+            if (this[CAPACITY] !== undefined)
+                return this[CAPACITY]();
             const span = this.getSpan();
             return span.x * span.y * span.z;
+        }
+        getMax() {
+            return this[MAX]();
+        }
+        getMin() {
+            return this[MIN]();
+        }
+        isInside(location) {
+            return this[INSIDE](location);
+        }
+        translate(delta) {
+            this[MOVE](delta);
         }
         getSpan() {
             const min = this.getMin(), max = this.getMax();
@@ -409,7 +434,7 @@ namespace {
             const less = (a, b) => a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1]
                 : a[2] !== b[2] ? a[2] < b[2] : a[3] < b[3];
             const kept = [];
-            this.forEachLocation((p) => {
+            this[EACH]((p) => {
                 const dx = f(p.x - at.x), dy = f(p.y - at.y), dz = f(p.z - at.z);
                 const d = f(f(dz * dz) + f(f(dy * dy) + f(dx * dx)));
                 const entry = [sign < 0 ? -d : d, p.x, p.y, p.z];
@@ -426,7 +451,7 @@ namespace {
             });
             return kept.sort((a, b) => (less(a, b) ? 1 : less(b, a) ? -1 : 0)).map((e) => ({ x: e[1], y: e[2], z: e[3] }));
         }
-        forEachLocation(visit) {
+        [EACH](visit) {
             for (const location of this.getBlockLocationIterator())
                 visit(location);
         }
@@ -439,24 +464,38 @@ namespace {
     }
 
     class BlockVolume extends BlockVolumeBase {
+        #from;
+        #to;
         constructor(from, to) {
             super(token);
-            this.from = vector(from);
-            this.to = vector(to);
+            this.#from = vector(from);
+            this.#to = vector(to);
         }
-        getMin() {
+        get from() {
+            return this.#from;
+        }
+        set from(value) {
+            this.#from = vector(value);
+        }
+        get to() {
+            return this.#to;
+        }
+        set to(value) {
+            this.#to = vector(value);
+        }
+        [MIN]() {
             const a = vector(this.from), b = vector(this.to);
             return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) };
         }
-        getMax() {
+        [MAX]() {
             const a = vector(this.from), b = vector(this.to);
             return { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) };
         }
-        isInside(location) {
+        [INSIDE](location) {
             const at = vector(location), min = this.getMin(), max = this.getMax();
             return at.x >= min.x && at.x <= max.x && at.y >= min.y && at.y <= max.y && at.z >= min.z && at.z <= max.z;
         }
-        translate(delta) {
+        [MOVE](delta) {
             const d = vector(delta), a = vector(this.from), b = vector(this.to);
             this.from = { x: a.x + d.x, y: a.y + d.y, z: a.z + d.z };
             this.to = { x: b.x + d.x, y: b.y + d.y, z: b.z + d.z };
@@ -492,7 +531,7 @@ namespace {
             return 2;
         }
         // forEach runs x, then z, then y innermost: sub_148F88D80
-        forEachLocation(visit) {
+        [EACH](visit) {
             const min = this.getMin(), max = this.getMax();
             for (let x = min.x; x <= max.x; ++x)
                 for (let z = min.z; z <= max.z; ++z)
@@ -500,7 +539,7 @@ namespace {
                         visit({ x, y, z });
         }
         // x, then z, then y outermost: sub_14314C1B0
-        getBlockLocationIterator() {
+        [ITERATE]() {
             const min = this.getMin(), max = this.getMax();
             let x = min.x, y = min.y, z = min.z;
             return new BlockLocationIterator(token, () => {
@@ -537,27 +576,27 @@ namespace {
             for (const location of locations)
                 this.#locations.delete(keyOf(vector(location)));
         }
-        getCapacity() {
+        [CAPACITY]() {
             return this.#locations.size;
         }
-        getMin() {
+        [MIN]() {
             const all = Array.from(this.#locations.values());
             if (all.length === 0)
                 return { x: 0, y: 0, z: 0 };
             return { x: Math.min(...all.map((v) => v.x)), y: Math.min(...all.map((v) => v.y)),
                      z: Math.min(...all.map((v) => v.z)) };
         }
-        getMax() {
+        [MAX]() {
             const all = Array.from(this.#locations.values());
             if (all.length === 0)
                 return { x: 0, y: 0, z: 0 };
             return { x: Math.max(...all.map((v) => v.x)), y: Math.max(...all.map((v) => v.y)),
                      z: Math.max(...all.map((v) => v.z)) };
         }
-        isInside(location) {
+        [INSIDE](location) {
             return this.#locations.has(keyOf(vector(location)));
         }
-        translate(delta) {
+        [MOVE](delta) {
             const d = vector(delta);
             const moved = new Map();
             for (const v of this.#locations.values()) {
@@ -566,13 +605,19 @@ namespace {
             }
             this.#locations = moved;
         }
-        getBlockLocationIterator() {
+        [ITERATE]() {
             const values = Array.from(this.#locations.values()).map((v) => ({ x: v.x, y: v.y, z: v.z }));
             let index = 0;
             return new BlockLocationIterator(token, () => (index < values.length ? values[index++] : undefined));
         }
     }
 
+    for (const cls of [BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator]) {
+        for (const key of Object.getOwnPropertyNames(cls.prototype)) {
+            if (key !== "constructor" && !native.has(cls.name + "." + key))
+                delete cls.prototype[key];
+        }
+    }
     return { BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator };
 })
 )JS";
