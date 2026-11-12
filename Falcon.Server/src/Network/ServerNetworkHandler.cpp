@@ -1,4 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/SignEditing.h"
+#include "World/Level/Block/Actor/SignBlockActor.h"
 
 #include "Core/Text/StringUtil.h"
 
@@ -2318,16 +2320,19 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
     if (!packet.mData.isCompound())
         return;
 
-    // rebuilt from the fields a sign has: the client's compound goes to every player, so nothing else
-    // in it may ride along
-    BlockActorDataPacket relayed;
-    relayed.mBlockPosition = packet.mBlockPosition;
-    relayed.mData = sanitizedSignData(packet.mData, packet.mBlockPosition,
-                                      statePtr->mName.find("hanging") != std::string::npos);
+    Level &level = getLevelFor(*player);
+    SignBlockActor *sign = level.getBlockActors().find<SignBlockActor>(packet.mBlockPosition);
+    if (sign == nullptr)
+        return;
+
+    // only the sign fields are read from the client's compound
+    Tag incoming = sanitizedSignData(packet.mData, packet.mBlockPosition,
+                                     statePtr->mName.find("hanging") != std::string::npos);
+    bool cancelled = false;
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SIGN_CHANGE)) {
         const char *const sides[] = {"FrontText", "BackText"};
         for (const char *side: sides) {
-            Tag *sideData = relayed.mData.get(side);
+            Tag *sideData = incoming.get(side);
             if (sideData == nullptr || !sideData->isCompound())
                 continue;
 
@@ -2336,21 +2341,31 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockActorD
             signEvent.mType = FALCON_EVENT_SIGN_CHANGE;
             signEvent.mCancellable = true;
             signEvent.mPlayer = player;
-            signEvent.mLevel = &getLevelFor(*player);
+            signEvent.mLevel = &level;
             signEvent.mBlockPosition = packet.mBlockPosition;
             signEvent.mState = side == sides[0];
             signEvent.mMessage = &text;
             plugins->dispatch(signEvent);
-            if (signEvent.mCancelled)
-                return;
+            if (signEvent.mCancelled) {
+                cancelled = true;
+                break;
+            }
             sideData->putString("Text", text);
         }
     }
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned() && entry.second.sharesLevelWith(*player))
-            mNetworkHandler->send(entry.second.getNetworkIdentifier(), relayed, mCodecContext);
+    // a refused write puts the sender's sign back as the server has it
+    if (cancelled || !SignEditing::applyUpdate(*this, *player, *sign, incoming)) {
+        if (cancelled && sign->getEditor() == player->getUniqueId())
+            sign->setEditor(-1);
+        BlockActorDataPacket current;
+        current.mBlockPosition = packet.mBlockPosition;
+        current.mData = sign->getSpawnCompound();
+        mNetworkHandler->send(player->getNetworkIdentifier(), current, mCodecContext);
+        return;
     }
+
+    BlockActionHandler::broadcastBlockActorData(*this, level, *sign);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const CommandBlockUpdatePacket &packet) {
