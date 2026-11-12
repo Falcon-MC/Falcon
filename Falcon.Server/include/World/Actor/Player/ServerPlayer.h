@@ -262,7 +262,8 @@ public:
         return changed;
     }
 
-    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId);
+    // hitPosition: where the client says it hit, in world space; null when unknown
+    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition = nullptr);
 
     Vector3f getLookDirection() const;
 
@@ -1129,6 +1130,9 @@ private:
     bool _isCriticalHit() const;
 
     bool _isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const;
+
+    // the playerItemAttackEntity before event; true when a script cancelled the attack
+    bool _scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition);
 
     bool _hasShieldReady(int64_t currentTick) const;
 

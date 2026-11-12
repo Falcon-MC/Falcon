@@ -1634,6 +1634,17 @@ void Level::initializeWeather() {
         mRainTime = clearDuration(generator) + 12000;
     if (mThunderTime <= 0)
         mThunderTime = clearDuration(generator) + 12000;
+    mRainLevel = mRaining ? 1.0f : 0.0f;
+    mLightningLevel = mThundering ? 1.0f : 0.0f;
+}
+
+void Level::tickWeatherLevels() {
+    const auto approach = [](float level, float target) {
+        const float next = target >= level ? std::min(level + 0.01f, target) : std::max(level - 0.01f, target);
+        return std::clamp(next, 0.0f, 1.0f);
+    };
+    mLightningLevel = approach(mLightningLevel, mThundering ? 1.0f : 0.0f);
+    mRainLevel = approach(mRainLevel, mRaining ? 1.0f : 0.0f);
 }
 
 void Level::saveWeather() {

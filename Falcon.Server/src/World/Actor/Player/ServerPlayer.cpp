@@ -248,7 +248,24 @@ bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &target
     return (look.x * toTarget.x + look.y * toTarget.y + look.z * toTarget.z) / length >= threshold;
 }
 
-bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
+bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition) {
+    // the aim runs from the server-side eye to the client's hit position
+    Vector3f aim;
+    bool aimed = false;
+    if (hitPosition != nullptr && std::isfinite(hitPosition->x) && std::isfinite(hitPosition->y)
+        && std::isfinite(hitPosition->z)) {
+        const Vector3f delta(hitPosition->x - getPosition().x, hitPosition->y - (getPosition().y + PLAYER_EYE_HEIGHT),
+                             hitPosition->z - getPosition().z);
+        const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+        if (length > 0.0f) {
+            aim = Vector3f(delta.x / length, delta.y / length, delta.z / length);
+            aimed = true;
+        }
+    }
+    return owner.getScriptEngine().beforePlayerItemAttackEntity(*this, target, aimed ? &aim : nullptr);
+}
+
+bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition) {
     ActorEventPacket swing;
     swing.mRuntimeActorId = getRuntimeId();
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
@@ -292,6 +309,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
                 return false;
 
             owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
+            if (_scriptsCancelAttack(owner, target, hitPosition))
+                return false;
             owner.getScriptEngine().onEntityHitEntity(*this, target);
             if (!target.isAlive())
                 return false;
@@ -359,6 +378,8 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
         return false;
 
     owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
+    if (_scriptsCancelAttack(owner, *victim, hitPosition))
+        return false;
     owner.getScriptEngine().onEntityHitEntity(*this, *victim);
     if (victim->isDead())
         return false;

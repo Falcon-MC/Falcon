@@ -214,6 +214,8 @@ void ServerNetworkHandler::tickWeather() {
 
 void ServerNetworkHandler::_tickWeather(World &world) {
     Level &level = world.getOverworld();
+    // the levels move before the states change: the game ticks Weather ahead of its server update
+    level.tickWeatherLevels();
     if (level.getGameRules().getBool("doweathercycle")) {
         level.setRainTime(level.getRainTime() - 1);
         if (level.getRainTime() <= 0)

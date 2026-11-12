@@ -115,6 +115,10 @@ public:
     bool beforeCustomBlockPlace(ServerPlayer &player, Level &level, const Vector3i &position, int32_t face,
                                 BlockState &placed);
 
+    // world before event of a valid player placement; true when cancelled
+    bool beforePlayerPlaceBlock(ServerPlayer &player, Level &level, const Vector3i &position, int32_t face,
+                                const Vector3f &faceLocation, const BlockState &placed);
+
     // any placement; previous is the block it replaced
     void onCustomBlockPlaced(Level &level, const Vector3i &position, const BlockState &placed,
                              const BlockState &previous);
@@ -210,6 +214,13 @@ public:
     void onEffectAdd(Actor &entity, const MobEffectInstance &effect);
 
     bool beforePlayerInteractWithEntity(ServerPlayer &player, Actor &target);
+
+    // a melee attack about to land; aim is null when the attack has no direction; true when cancelled
+    bool beforePlayerItemAttackEntity(ServerPlayer &player, Actor &target, const Vector3f *aim);
+
+    // after a name tag named the entity; previous is empty when it had no name
+    void onPlayerUseNameTag(ServerPlayer &player, Actor &named, const std::string &newName,
+                            const std::string &previousName);
 
     void onPlayerInteractWithEntity(ServerPlayer &player, Actor &target, const ItemStack &before);
 

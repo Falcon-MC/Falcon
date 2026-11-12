@@ -674,6 +674,9 @@ public:
     // saves it and sends it to every spawned player
     void changeDifficulty(Difficulty difficulty);
 
+    // stored as allow-cheats and sent to every player
+    void setCommandsEnabled(bool enabled);
+
     // overworld levels only; saves level.dat and sends it to every spawned player
     void changeWorldSpawn(Level &level, const Vector3i &spawn);
 

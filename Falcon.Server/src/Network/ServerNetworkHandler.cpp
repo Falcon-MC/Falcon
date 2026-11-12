@@ -96,6 +96,7 @@
 #include "World/Actor/Player/PlayerAbility.h"
 #include "Protocol/Packets/StartGamePacket.h"
 #include "Protocol/Packets/SetTimePacket.h"
+#include "Protocol/Packets/SetCommandsEnabledPacket.h"
 #include "Protocol/Packets/SetDifficultyPacket.h"
 #include "Protocol/Packets/SetSpawnPositionPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
@@ -2487,6 +2488,17 @@ void ServerNetworkHandler::setDefaultGameType(GameType gameType) {
 
 void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {
     mProperties.setProperty("difficulty", difficulty);
+}
+
+void ServerNetworkHandler::setCommandsEnabled(bool enabled) {
+    mProperties.setProperty("allow-cheats", enabled ? "true" : "false");
+
+    SetCommandsEnabledPacket packet;
+    packet.mCommandsEnabled = enabled;
+    for (auto &entry: mPlayers) {
+        if (entry.second.isSpawned())
+            mNetworkHandler->send(entry.first, packet, mCodecContext);
+    }
 }
 
 void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {

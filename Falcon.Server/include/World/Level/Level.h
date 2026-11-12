@@ -156,6 +156,17 @@ public:
 
     void initializeWeather();
 
+    // Weather::tick (sub_145E27530, 26.60): each level moves 0.01 a tick toward its state, within [0, 1]
+    void tickWeatherLevels();
+
+    float getRainLevel() const {
+        return mRainLevel;
+    }
+
+    float getLightningLevel() const {
+        return mLightningLevel;
+    }
+
     void saveWeather();
 
     using PacketBroadcaster = std::function<void(Level &, const Vector3f &, const Packet &)>;
@@ -676,6 +687,8 @@ private:
     bool mRaining = false;
     int32_t mRainTime = 0;
     bool mThundering = false;
+    float mRainLevel = 0.0f;
+    float mLightningLevel = 0.0f;
     int32_t mThunderTime = 0;
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;

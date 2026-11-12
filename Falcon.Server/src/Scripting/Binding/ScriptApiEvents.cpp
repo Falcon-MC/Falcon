@@ -646,6 +646,8 @@ void ScriptApi::_subscribeGameEvents() {
         JSValue object = makeEvent("WorldAfterEvents.chatSend");
         JS_SetPropertyStr(mContext, object, "sender", makePlayer(event.mSender));
         JS_SetPropertyStr(mContext, object, "message", string(mContext, event.mMessage));
+        if (event.mTargets != nullptr)
+            JS_SetPropertyStr(mContext, object, "targets", makeChatTargets(*event.mTargets));
         emit("after.chatSend", object);
     });
 
@@ -689,6 +691,8 @@ void ScriptApi::_subscribeGameEvents() {
         JSValue object = makeEvent("WorldBeforeEvents.chatSend");
         JS_SetPropertyStr(mContext, object, "sender", makePlayer(event.mSender));
         JS_SetPropertyStr(mContext, object, "message", string(mContext, event.mMessage));
+        if (event.mTargets != nullptr)
+            JS_SetPropertyStr(mContext, object, "targets", makeChatTargets(*event.mTargets));
         JS_SetPropertyStr(mContext, object, "cancel", JS_FALSE);
         if (emit("before.chatSend", object))
             event.cancel();
@@ -857,4 +861,12 @@ void ScriptApi::_emitCursorChanges() {
         current[key] = cursor;
     }
     mCursorSnapshots = std::move(current);
+}
+
+JSValue ScriptApi::makeChatTargets(const std::vector<ServerPlayer *> &players) {
+    JSValue list = JS_NewArray(mContext);
+    uint32_t index = 0;
+    for (ServerPlayer *player: players)
+        JS_SetPropertyUint32(mContext, list, index++, makePlayer(*player));
+    return list;
 }
