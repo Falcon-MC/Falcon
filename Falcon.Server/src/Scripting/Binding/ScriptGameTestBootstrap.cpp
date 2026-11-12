@@ -921,6 +921,10 @@ namespace {
         native.sp.yaw(self, angle + (rotation > 0 && rotation < 4 ? TEST_YAWS[rotation] : 0));
     });
     simulatedMethod("stopMoving", (self) => { native.sp.stop(self); });
+    simulatedMethod("swim", (self) => { native.sp.swim(self, true); });
+    simulatedMethod("stopSwimming", (self) => { native.sp.swim(self, false); });
+    simulatedMethod("glide", (self) => native.sp.glide(self));
+    simulatedMethod("stopGliding", (self) => { native.sp.stopGliding(self); });
 
     const spawnPlayer = (dimension, at, yaw, name, gameMode, rotation) => {
         const mode = native.sp.gameMode(string(gameMode));

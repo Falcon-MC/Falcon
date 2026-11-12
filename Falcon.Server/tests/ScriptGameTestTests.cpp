@@ -122,6 +122,8 @@ gt.register("Suite", "sim", (test) => {
     p.lookAtLocation({ x: 5, y: 2.62, z: 1.5 });
     r.simLook = String(p.headRotation.y);
     r.simJump = String(p.jump());
+    r.simGlide = String(p.glide());
+    p.swim();
     p.moveRelative(0, 1);
     r.simInvalid = errorOf(() => gt.SimulatedPlayer.prototype.jump.call({}));
     r.simEnums = gt.LookDuration.UntilMove + "|" + gt.PersonaArmSize.Slim + "|" + gt.PersonaPieceType.Skin;
@@ -301,6 +303,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         PlayerAuthInputPacket input;
         bot->getSimulatedController()->buildInput(owner, *bot, input);
         require(input.mMotionX == 0.0f && input.mMotionY == 1.0f, "moveRelative did not walk forward");
+        require(input.hasInputFlag((int32_t) PlayerAuthInputData::StartSwimming), "swim sent no swim input");
         bot->getSimulatedController()->moveInDirection(Vector3f(1.0f, 0.0f, 0.0f), true);
         PlayerAuthInputPacket east;
         bot->getSimulatedController()->buildInput(owner, *bot, east);
@@ -354,6 +357,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "simRotate", "55");
         expect(*report, "simLook", "-90");
         expect(*report, "simJump", "false");
+        expect(*report, "simGlide", "false");
         expect(*report, "simInvalid",
                "ReferenceError:Native function [SimulatedPlayer::jump] object bound to prototype does not exist.");
         expect(*report, "simEnums", "UntilMove|Slim|Skin");

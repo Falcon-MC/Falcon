@@ -120,6 +120,31 @@ namespace {
         return JS_NewBool(ctx, player->getFlags().get(ActorFlag::Sprinting));
     }
 
+    // (player, swimming)
+    JSValue spSwim(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 2 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_FALSE;
+        player->getSimulatedController()->setSwimming(JS_ToBool(ctx, argv[1]) == 1);
+        return JS_TRUE;
+    }
+
+    JSValue spGlide(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
+        return JS_NewBool(ctx, player != nullptr && player->getSimulatedController()->glide(api->host(), *player));
+    }
+
+    JSValue spStopGliding(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
+        if (player == nullptr)
+            return JS_FALSE;
+        player->getSimulatedController()->stopGliding();
+        return JS_TRUE;
+    }
+
     // (player, x, y, z, duration)
     JSValue spLook(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -194,6 +219,9 @@ namespace ScriptSimulatedPlayerBinding {
         addFunction(ctx, sp, "stop", spStop, 1);
         addFunction(ctx, sp, "jump", spJump, 1);
         addFunction(ctx, sp, "sprint", spSprint, 2);
+        addFunction(ctx, sp, "swim", spSwim, 2);
+        addFunction(ctx, sp, "glide", spGlide, 1);
+        addFunction(ctx, sp, "stopGliding", spStopGliding, 1);
         addFunction(ctx, sp, "look", spLook, 5);
         addFunction(ctx, sp, "lookEntity", spLookEntity, 3);
         addFunction(ctx, sp, "yaw", spYaw, 2);
