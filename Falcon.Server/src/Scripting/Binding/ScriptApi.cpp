@@ -17,6 +17,8 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/GraphicsOverrideParameterPacket.h"
 #include "Scripting/Binding/ScriptAdminBinding.h"
+#include "Scripting/Binding/ScriptNetBinding.h"
+#include "Scripting/Net/ScriptNetService.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 
 #include <algorithm>
@@ -675,6 +677,7 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, entry.second);
     JS_FreeValue(mContext, mAdminHooks);
     JS_FreeValue(mContext, mGameTestHooks);
+    JS_FreeValue(mContext, mNetHooks);
     for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports,
                          &mDebugExports, &mGameTestExports}) {
         for (auto &entry: *exports)
@@ -1794,6 +1797,19 @@ void ScriptApi::_installBootstraps() {
 
     if (mModules.find("@minecraft/server-gametest") != nullptr)
         _installGameTest();
+    if (mModules.find("@minecraft/server-net") != nullptr) {
+        mNetConfig = mHost.getScriptEngine().packConfigs().get(mScriptModuleUuid).netConfig();
+        JSValue secretOf =
+                JS_IsObject(mAdminHooks) ? JS_GetPropertyStr(mContext, mAdminHooks, "secretOf") : JS_UNDEFINED;
+        JSValue netExports = ScriptNetBinding::install(*this, secretOf);
+        JS_FreeValue(mContext, secretOf);
+        for (const char *name: ScriptNetBinding::exportNames()) {
+            if (mNetSurface.has(name))
+                mNetExports.emplace_back(name, JS_GetPropertyStr(mContext, netExports, name));
+        }
+        mNetHooks = JS_GetPropertyStr(mContext, netExports, "hooks");
+        JS_FreeValue(mContext, netExports);
+    }
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;
@@ -1950,4 +1966,64 @@ bool ScriptApi::emitPlayerJoin(uint32_t token, const std::string &name, const st
     const bool emitted = JS_ToBool(mContext, result) == 1;
     JS_FreeValue(mContext, result);
     return emitted;
+}
+
+ScriptNetService &ScriptApi::netService() {
+    if (mNetService == nullptr)
+        mNetService = std::make_unique<ScriptNetService>();
+    return *mNetService;
+}
+
+JSValue ScriptApi::makeOpaque(ScriptNative *data) {
+    JSValue object = JS_NewObjectClass(mContext, (int) mNativeClassId);
+    JS_SetOpaque(object, data);
+    return object;
+}
+
+bool ScriptApi::emitPacketReceive(const char *packetId, size_t size, ServerPlayer *sender) {
+    if (!mWantsPacketReceive || !JS_IsObject(mNetHooks))
+        return false;
+    // the closures run restricted, like every before event
+    const ScriptPrivilege previous = mPrivilege;
+    mPrivilege = ScriptPrivilege::Restricted;
+    JSValue emit = JS_GetPropertyStr(mContext, mNetHooks, "emitReceive");
+    JSValue args[3] = {JS_NewString(mContext, packetId), JS_NewFloat64(mContext, (double) size),
+                       sender == nullptr ? JS_UNDEFINED : makePlayer(*sender)};
+    JSValue result = JS_Call(mContext, emit, mNetHooks, 3, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
+    JS_FreeValue(mContext, emit);
+    mPrivilege = previous;
+    if (JS_IsException(result)) {
+        logPendingException("packetReceive");
+        return false;
+    }
+    const bool cancelled = JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return cancelled;
+}
+
+bool ScriptApi::emitPacketSend(const char *packetId, const std::vector<ServerPlayer *> &recipients) {
+    if (!mWantsPacketSend || !JS_IsObject(mNetHooks))
+        return false;
+    const ScriptPrivilege previous = mPrivilege;
+    mPrivilege = ScriptPrivilege::Restricted;
+    JSValue emit = JS_GetPropertyStr(mContext, mNetHooks, "emitSend");
+    JSValue list = JS_NewArray(mContext);
+    for (size_t index = 0; index < recipients.size(); ++index)
+        JS_SetPropertyUint32(mContext, list, (uint32_t) index,
+                             recipients[index] == nullptr ? JS_UNDEFINED : makePlayer(*recipients[index]));
+    JSValue args[2] = {JS_NewString(mContext, packetId), list};
+    JSValue result = JS_Call(mContext, emit, mNetHooks, 2, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
+    JS_FreeValue(mContext, emit);
+    mPrivilege = previous;
+    if (JS_IsException(result)) {
+        logPendingException("packetSend");
+        return false;
+    }
+    const bool cancelled = JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return cancelled;
 }

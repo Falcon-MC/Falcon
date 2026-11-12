@@ -1,6 +1,7 @@
 #include "Network/Handler/NetworkHandler.h"
 
 #include "Core/Utility/BinaryStream.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Packet.h"
 
@@ -252,12 +253,14 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
     const PacketCodecContext &session = own != nullptr ? *own : context;
     if (!session.getCodec().supports(packet.getId()))
         return;
+    if (mSendHook && !mSendHook({id}, packet.getId()))
+        return;
 
     BinaryStream stream;
     packet.writeWithHeader(stream, session);
 
     if (!mOutboundFilter) {
-        send(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
+        _queueData(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
         return;
     }
 
@@ -265,7 +268,7 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
     if (!mOutboundFilter(id, data))
         return;
 
-    send(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
+    _queueData(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
 }
 
 void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
@@ -273,6 +276,8 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
     // same-protocol sessions share a codec context: most recipients reuse one encoding
     std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
     std::vector<std::vector<OutboundCommand>> commands(mShards.size());
+    if (mSendHook && !ids.empty() && !mSendHook(ids, packet.getId()))
+        return;
 
     for (const NetworkIdentifier &id: ids) {
         const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
@@ -315,12 +320,36 @@ void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
     mOutboundFilter = std::move(filter);
 }
 
+void NetworkHandler::setSendHook(SendHook hook) {
+    mSendHook = std::move(hook);
+}
+
+bool NetworkHandler::_allowRaw(const std::vector<NetworkIdentifier> &ids, const std::string &data) {
+    if (!mSendHook || ids.empty() || data.empty())
+        return true;
+    try {
+        ReadOnlyBinaryStream stream(data);
+        unsigned char senderSubId;
+        unsigned char clientSubId;
+        return mSendHook(ids, Packet::peekId(stream, senderSubId, clientSubId));
+    } catch (const std::exception &) {
+        return true;
+    }
+}
+
 void NetworkHandler::setContextResolver(ContextResolver resolver) {
     mContextResolver = std::move(resolver);
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,
                           Compressibility compressibility) {
+    if (mSendHook && !_allowRaw({id}, data))
+        return;
+    _queueData(id, data, reliability, compressibility);
+}
+
+void NetworkHandler::_queueData(const NetworkIdentifier &id, const std::string &data,
+                                NetworkPeer::Reliability reliability, Compressibility compressibility) {
     OutboundCommand command;
     command.mKind = OutboundCommand::Kind::Data;
     command.mId = id;
@@ -333,14 +362,14 @@ void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, 
 
 void NetworkHandler::sendShared(const NetworkIdentifier &id, const std::shared_ptr<const SharedPacket> &packet,
                                 NetworkPeer::Reliability reliability) {
-    if (packet == nullptr)
+    if (packet == nullptr || (mSendHook && !_allowRaw({id}, packet->getPacket())))
         return;
 
     // a filter may rewrite the bytes: that copy can't be shared
     if (mOutboundFilter) {
         std::string data = packet->getPacket();
         if (mOutboundFilter(id, data))
-            send(id, data, reliability, Compressibility::Compressible);
+            _queueData(id, data, reliability, Compressibility::Compressible);
         return;
     }
 
@@ -355,6 +384,13 @@ void NetworkHandler::sendShared(const NetworkIdentifier &id, const std::shared_p
 
 void NetworkHandler::sendToAll(const std::string &data, NetworkPeer::Reliability reliability,
                                Compressibility compressibility) {
+    if (mSendHook) {
+        std::vector<NetworkIdentifier> ids;
+        for (const auto &entry: mPendingBytes)
+            ids.push_back(entry.first);
+        if (!_allowRaw(ids, data))
+            return;
+    }
     for (std::unique_ptr<Shard> &shard: mShards) {
         OutboundCommand command;
         command.mKind = OutboundCommand::Kind::Data;

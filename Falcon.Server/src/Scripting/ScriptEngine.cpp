@@ -16,6 +16,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/ScriptApi.h"
+#include "Scripting/Binding/ScriptNetBinding.h"
 #include "Scripting/Binding/ScriptRayQueries.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
@@ -257,6 +258,8 @@ ScriptEngine::ScriptEngine() : mRuntime(nullptr), mWatchdogMs(DEFAULT_WATCHDOG_M
 }
 
 ScriptEngine::~ScriptEngine() {
+    if (mHost != nullptr && mHost->isTransportReady())
+        mHost->getNetworkHandler().setSendHook(nullptr);
     MobEffectManager::setAddFilter(nullptr);
     MobEffectManager::setAddListener(nullptr);
     Actor::setHealHooks(nullptr, nullptr);
@@ -2091,4 +2094,58 @@ void ScriptEngine::settleJoin(uint32_t token, bool rejected) {
     mPendingJoins.erase(it);
     if (proceed && done)
         done();
+}
+
+bool ScriptEngine::beforePacketReceive(const NetworkIdentifier &id, MinecraftPacketIds packetId, size_t size) {
+    const char *name = ScriptNetBinding::packetName(packetId);
+    if (name == nullptr || mHost == nullptr)
+        return false;
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->wantsPacketReceive())
+            continue;
+        const auto player = mHost->getPlayers().find(id);
+        _arm();
+        cancelled = api->emitPacketReceive(name, size, player == mHost->getPlayers().end() ? nullptr : &player->second)
+                    || cancelled;
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+bool ScriptEngine::beforePacketSend(const std::vector<NetworkIdentifier> &recipients, MinecraftPacketIds packetId) {
+    const char *name = ScriptNetBinding::packetName(packetId);
+    if (name == nullptr || mHost == nullptr)
+        return false;
+    std::vector<ServerPlayer *> players;
+    players.reserve(recipients.size());
+    for (const NetworkIdentifier &id: recipients) {
+        const auto player = mHost->getPlayers().find(id);
+        players.push_back(player == mHost->getPlayers().end() ? nullptr : &player->second);
+    }
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->wantsPacketSend())
+            continue;
+        _arm();
+        cancelled = api->emitPacketSend(name, players) || cancelled;
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::updatePacketHooks() {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    bool wanted = false;
+    for (const std::unique_ptr<ScriptApi> &api: mApis)
+        wanted = wanted || api->wantsPacketSend();
+    if (!wanted) {
+        mHost->getNetworkHandler().setSendHook(nullptr);
+        return;
+    }
+    mHost->getNetworkHandler().setSendHook(
+            [this](const std::vector<NetworkIdentifier> &recipients, MinecraftPacketIds packetId) {
+                return !beforePacketSend(recipients, packetId);
+            });
 }

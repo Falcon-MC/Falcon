@@ -21,7 +21,7 @@ namespace {
             {"@minecraft/server-graphics", 0, -1, "1.1.0-beta", true},
             {"@minecraft/server-gametest", -1, -1, "1.0.0-beta", true},
             {"@minecraft/server-admin", -1, -1, "1.0.0-beta", true},
-            {"@minecraft/server-net", -1, -1, "1.0.0-beta", false},
+            {"@minecraft/server-net", -1, -1, "1.0.0-beta", true},
             {"@minecraft/debug-utilities", -1, -1, "1.0.0-beta", true},
     };
 

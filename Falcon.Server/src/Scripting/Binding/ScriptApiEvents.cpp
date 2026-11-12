@@ -1,4 +1,5 @@
 #include "Scripting/Binding/ScriptApi.h"
+#include "Scripting/Binding/ScriptNetBinding.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -172,6 +173,7 @@ void ScriptApi::install() {
 }
 
 void ScriptApi::tick(int64_t currentTick) {
+    ScriptNetBinding::tick(*this);
     mScheduler.tick(currentTick);
     _runQueuedCommands();
     for (size_t index = 0; index < mTickJobs.size();) {

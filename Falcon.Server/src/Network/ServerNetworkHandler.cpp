@@ -1312,6 +1312,9 @@ void ServerNetworkHandler::onDataReceived(const NetworkIdentifier &id, const std
         unsigned char senderSubId;
         unsigned char clientSubId;
         const MinecraftPacketIds packetId = Packet::peekId(stream, senderSubId, clientSubId);
+        // PacketReceivedBeforeEvent: a cancelled packet is never parsed
+        if (mScriptEngine.beforePacketReceive(id, packetId, source->size()))
+            return;
         const LoginGate gate = _checkLoginState(id, packetId);
         if (gate == LoginGate::Reject) {
             _rejectBadPacket(id, "packet " + std::to_string((int) packetId) + " is not expected at this login step");

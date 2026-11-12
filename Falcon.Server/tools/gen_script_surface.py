@@ -133,7 +133,7 @@ def parse(path):
                 early = 'early-execution-allowed' in tags or 'can be called in early-execution' in doc
                 blocked = 'no-restricted-execution' in tags or "can't be called in read-only mode" in doc
             else:
-                early = 'early-execution-readable' in tags
+                early = 'early-execution-readable' in tags or 'early-execution-editable' in tags
                 blocked = 'restricted-execution-read-only' in tags
             if 'static ' in modifiers:
                 name = 'static ' + name

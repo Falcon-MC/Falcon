@@ -6,6 +6,7 @@
 #include "Network/Connector.h"
 #include "Network/EncryptedNetworkPeer.h"
 #include "Network/SharedPacket.h"
+#include "Protocol/MinecraftPacketIds.h"
 #include "Server/Profiler.h"
 
 #include <atomic>
@@ -130,6 +131,9 @@ public:
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
 
+    // every send from the game thread, before encoding; false drops it for all its recipients
+    using SendHook = std::function<bool(const std::vector<NetworkIdentifier> &, MinecraftPacketIds)>;
+
     // nullptr: keep the caller's context
     using ContextResolver = std::function<const PacketCodecContext *(const NetworkIdentifier &)>;
 
@@ -213,6 +217,8 @@ public:
 
     void setOutboundFilter(OutboundFilter filter);
 
+    void setSendHook(SendHook hook);
+
     // callers keep passing the server's context whatever version the client speaks
     void setContextResolver(ContextResolver resolver);
 
@@ -250,6 +256,12 @@ private:
 
     void _pushOutbound(OutboundCommand command);
 
+    void _queueData(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,
+                    Compressibility compressibility);
+
+    // false: the hook dropped the packet these bytes start with
+    bool _allowRaw(const std::vector<NetworkIdentifier> &ids, const std::string &data);
+
     void _trackPending(OutboundCommand &command);
 
     static size_t _pendingSize(const OutboundCommand &command);
@@ -278,6 +290,7 @@ private:
     TaskQueue<NetworkIdentifier> mServerClosed;
     std::vector<Listener *> mListeners;
     OutboundFilter mOutboundFilter;
+    SendHook mSendHook;
     ContextResolver mContextResolver;
 
     TaskQueue<InboundEvent> mInbound;
