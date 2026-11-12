@@ -246,7 +246,9 @@ world.beforeEvents.effectAdd.subscribe(() => {
 
 system.runTimeout(() => {
     r.stableRules = world.gameRules === world.gameRules;
-    r.memoryTier = system.serverSystemInfo.memoryTier === MemoryTier.High;
+    // the tier follows the machine's memory: any of the five values
+    r.memoryTier = [MemoryTier.SuperLow, MemoryTier.Low, MemoryTier.Mid, MemoryTier.High, MemoryTier.SuperHigh]
+        .includes(system.serverSystemInfo.memoryTier);
     r.pvp = world.gameRules.pvp;
     world.gameRules.pvp = false;
     world.gameRules.randomTickSpeed = 3;
