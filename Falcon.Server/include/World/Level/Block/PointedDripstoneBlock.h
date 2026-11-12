@@ -17,6 +17,9 @@ public:
         return true;
     }
 
+    bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                             AxisAlignedBB &shape) const override;
+
 private:
     void growStalagmiteBelow(Level &level, const Vector3i &tip) const;
 };
