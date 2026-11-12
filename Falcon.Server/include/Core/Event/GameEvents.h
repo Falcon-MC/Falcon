@@ -2,6 +2,9 @@
 
 #include "Core/Event/Event.h"
 #include "Core/Math/Vector3i.h"
+#include "World/Level/Block/BlockState.h"
+
+#include <optional>
 
 #include <string>
 #include <vector>
@@ -38,8 +41,14 @@ struct PlayerBreakBlockAfterEvent : public Event {
     Vector3i mBlockPosition;
     std::string mBrokenBlockIdentifier;
 
+    // the block as it stood, states included; unset when only the identifier is known
+    std::optional<BlockState> mBrokenState;
+
     PlayerBreakBlockAfterEvent(ServerPlayer &player, const Vector3i &position, std::string identifier)
             : mPlayer(player), mBlockPosition(position), mBrokenBlockIdentifier(std::move(identifier)) {}
+
+    PlayerBreakBlockAfterEvent(ServerPlayer &player, const Vector3i &position, const BlockState &state)
+            : mPlayer(player), mBlockPosition(position), mBrokenBlockIdentifier(state.mName), mBrokenState(state) {}
 };
 
 struct PlayerSpawnAfterEvent : public Event {

@@ -522,7 +522,7 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
-    PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenIdentifier);
+    PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenState);
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
 
     if (brokenData != nullptr && brokenData->mHardness > 0.0f)
