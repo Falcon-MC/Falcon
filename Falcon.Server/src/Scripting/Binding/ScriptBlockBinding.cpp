@@ -21,6 +21,7 @@
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Level/Block/Systems/PrecipitationSystem.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
+#include "World/Level/Block/Systems/CircuitComponents.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
 #include "World/Level/Map/MapColors.h"
@@ -520,10 +521,11 @@ namespace {
         return JS_NewInt32(ctx, at.mLevel->getSkyLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z));
     }
 
+    // undefined without a circuit component (sub_14A752ED0)
     JSValue blockGetRedstonePower(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
-        return JS_NewInt32(ctx,
-                           RedstoneSystem::isBlockIndirectlyGettingPowered(at.mApi->host(), *at.mLevel, at.mPosition));
+        const std::optional<int> strength = CircuitComponents::strengthAt(at.mApi->host(), *at.mLevel, at.mPosition);
+        return strength.has_value() ? JS_NewInt32(ctx, *strength) : JS_UNDEFINED;
     }
 
     JSValue blockGetItemStack(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
