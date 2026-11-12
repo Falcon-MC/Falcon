@@ -34,6 +34,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -342,6 +343,19 @@ public:
 
     std::vector<FogEntry> &getFogStack() {
         return mFogStack;
+    }
+
+    // PlayerAimAssist.settings: the last settings a script activated, empty once cleared
+    struct AimAssistSettings {
+        std::string mPresetId;
+        bool mDistanceMode = false;
+        float mViewAngleX = 0.0f;
+        float mViewAngleY = 0.0f;
+        float mDistance = 0.0f;
+    };
+
+    std::optional<AimAssistSettings> &getAimAssist() {
+        return mAimAssist;
     }
 
     // ControlSchemeComponent, LockedPlayerRelativeStrafe until set (sub_145D0FD90)
@@ -1258,6 +1272,7 @@ private:
     ClientDevice mClientDevice;
     CameraState mCameraState;
     std::vector<FogEntry> mFogStack;
+    std::optional<AimAssistSettings> mAimAssist;
     int32_t mControlScheme = 0;
     ChatStyle mChatStyle;
     bool mHasSimulatedVelocity = false;

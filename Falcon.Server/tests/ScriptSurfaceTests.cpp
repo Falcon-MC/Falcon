@@ -38,12 +38,6 @@ namespace {
         return out + "\"";
     }
 
-    // the only official names allowed to stay unbound; each needs its reason
-    bool excepted(const std::string &name) {
-        // aim assist reads its presets and categories from DataGen data, whose publish workflow is off for now
-        return name.find("AimAssist") != std::string::npos;
-    }
-
     // every server name the version declares and the table binds
     std::vector<std::string> declared(const ScriptModuleVersion &version) {
         const ScriptSurface surface("@minecraft/server", version);
@@ -200,8 +194,6 @@ int main() {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
         for (const ScriptUnboundEntry &entry: SCRIPT_UNBOUND) {
-            if (excepted(entry.mName))
-                continue;
             std::clog << entry.mName << " is official but outside the bound set\n";
             result = 1;
         }
@@ -209,8 +201,6 @@ int main() {
             if (std::getenv("SURFACE_ONLY") != nullptr && version.mVersion != std::getenv("SURFACE_ONLY"))
                 continue;
             for (const std::string &name: missingIn(directory, version)) {
-                if (excepted(name))
-                    continue;
                 std::clog << version.mVersion << ": " << name << " is declared but not bound\n";
                 result = 1;
             }

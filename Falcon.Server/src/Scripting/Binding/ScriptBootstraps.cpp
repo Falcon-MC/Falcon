@@ -36,14 +36,16 @@ namespace {
         if (cls === undefined) {
             error = new Error(message);
         } else if (name === "InvalidArgumentError") {
-            error = new cls();
+            // its constructor fixes type and index
+            error = fields ? new cls(undefined, undefined, fields.type, fields.index) : new cls();
             Object.defineProperty(error, "message", { value: message, writable: true, configurable: true });
         } else {
             error = new cls(token, message);
         }
         if (fields)
             for (const key of Object.keys(fields))
-                Object.defineProperty(error, key, { value: fields[key], enumerable: true });
+                if (!Object.prototype.hasOwnProperty.call(error, key))
+                    Object.defineProperty(error, key, { value: fields[key], enumerable: true });
         return error;
     };
     return { classes, make };

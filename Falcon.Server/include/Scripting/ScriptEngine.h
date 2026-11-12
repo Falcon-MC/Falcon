@@ -4,6 +4,7 @@
 #include "Core/Math/Vector3i.h"
 #include "Network/NetworkIdentifier.h"
 #include "Protocol/MinecraftPacketIds.h"
+#include "Scripting/AimAssistRegistry.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/GameTestRunner.h"
 #include "Scripting/ScriptPackConfiguration.h"
@@ -335,6 +336,16 @@ public:
         return mSounds;
     }
 
+    // world.getAimAssist() of every pack
+    AimAssistRegistry &aimAssist() {
+        return mAimAssist;
+    }
+
+    // a script-added entry: every spawned player receives it (sub_14ACE5E90, 26.60)
+    void broadcastAimAssist(const CameraAimAssistPresetsPacket &packet);
+
+    void sendAimAssist(ServerPlayer &player);
+
     // world.structureManager of every pack
     ScriptStructureRegistry &structures() {
         return mStructures;
@@ -439,6 +450,7 @@ private:
     ScriptStructureRegistry mStructures;
     GameTestRunner mGameTests;
     ScriptSoundRegistry mSounds;
+    AimAssistRegistry mAimAssist;
     int64_t mLastClockSync = 0;
     // last power each redstone consumer custom block received, per level
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;

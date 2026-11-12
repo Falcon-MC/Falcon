@@ -706,6 +706,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     owner.sendScoreboard(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
+    // sub_1422AA6C0 (26.60): the whole aim assist registry, sub_143779AE0
+    owner.getScriptEngine().sendAimAssist(player);
     sendSharedLoginPacket(
             owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
             [](const PacketCodecContext &context) { return encodePacket(ArmorTrims::getPacket(), context); });
