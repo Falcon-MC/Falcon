@@ -1,5 +1,6 @@
 #include "Server/Commands/TellCommand.h"
 
+#include "Core/Event/EventBus.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 
@@ -44,6 +45,17 @@ bool TellCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     ServerPlayer *self = sender.asPlayer();
     const std::string senderName = sender.getSenderName();
 
+    // a player's message goes through the chat event with its targets, and stops if cancelled (sub_14BE1E6E0)
+    if (self != nullptr) {
+        PlayerChatBeforeEvent before(*self, message);
+        before.mTargets = &targets;
+        mHandler.getEventBus().before().mChatSend.emit(before);
+        if (before.isCancelled()) {
+            sender.sendTranslation("commands.generic.canceled", {});
+            return false;
+        }
+    }
+
     bool delivered = false;
     for (ServerPlayer *target: targets) {
         if (self != nullptr && target == self) {
@@ -56,5 +68,10 @@ bool TellCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         delivered = true;
     }
 
+    if (self != nullptr) {
+        PlayerChatAfterEvent after(*self, message);
+        after.mTargets = &targets;
+        mHandler.getEventBus().after().mChatSend.emit(after);
+    }
     return delivered;
 }

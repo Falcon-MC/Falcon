@@ -258,6 +258,35 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    // PlayerWaypointsMode in its registration order (sub_14B557A90): Off is 0, Everyone 1
+    JSValue gameRulesGetPlayerWaypoints(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        const GameRules::Rule *rule = defaultWorld(ctx).getOverworld().getGameRules().find("playerwaypoints");
+        if (rule == nullptr)
+            return JS_UNDEFINED;
+        return string(ctx, rule->mIntValue == 0 ? "Off" : "Everyone");
+    }
+
+    JSValue gameRulesSetPlayerWaypoints(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        const std::string mode = argc >= 1 && JS_IsString(argv[0]) ? toString(ctx, argv[0]) : std::string();
+        if (mode != "Off" && mode != "Everyone")
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        World &world = defaultWorld(ctx);
+        ScriptApi::fromContext(ctx)->host().changeGameRule(world, "playerwaypoints", mode == "Off" ? "0" : "1");
+        return JS_UNDEFINED;
+    }
+
+    JSValue worldGetAllowCheats(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        return JS_NewBool(ctx, ScriptApi::fromContext(ctx)->host().getProperties().getAllowCheats());
+    }
+
+    // the level's commands flag (sub_14C418400); the clients learn it from a set commands enabled packet
+    JSValue worldSetAllowCheats(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsBool(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptApi::fromContext(ctx)->host().setCommandsEnabled(JS_ToBool(ctx, argv[0]) == 1);
+        return JS_UNDEFINED;
+    }
+
     JSValue worldGetIsHardcore(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_FALSE;
     }
@@ -1090,6 +1119,7 @@ void ScriptApi::_bindWorld() {
     propertyMagic(world, "World", "tickingAreaManager", holderGetter, 5);
     propertyMagic(world, "World", "gameRules", holderGetter, 6);
     property(world, "World", "isHardcore", worldGetIsHardcore);
+    property(world, "World", "allowCheats", worldGetAllowCheats, worldSetAllowCheats);
     property(world, "World", "seed", worldGetSeed);
     methodMagic(world, "World", "getAbsoluteTime", worldGetTime, 0, 0);
     methodMagic(world, "World", "getTimeOfDay", worldGetTime, 0, 1);
@@ -1110,6 +1140,7 @@ void ScriptApi::_bindWorld() {
         JSValue rules = defineClass("GameRules");
         for (int i = 0; i < (int) (sizeof(GAME_RULES) / sizeof(GAME_RULES[0])); ++i)
             propertyMagic(rules, "GameRules", GAME_RULES[i], gameRulesGet, i, gameRulesSet);
+        property(rules, "GameRules", "playerWaypoints", gameRulesGetPlayerWaypoints, gameRulesSetPlayerWaypoints);
         mGameRules = makeInstance("GameRules", new ScriptNative());
     }
 

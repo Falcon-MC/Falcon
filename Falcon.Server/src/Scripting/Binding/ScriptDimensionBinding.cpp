@@ -2,6 +2,7 @@
 
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/StopSoundPacket.h"
 #include "Scripting/Binding/ScriptRayQueries.h"
 #include "Scripting/ScriptEngine.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -461,6 +462,35 @@ namespace {
         if (type != "Rain")
             overworld.setThunderTime(duration);
         host.broadcastWeather(world);
+        return JS_UNDEFINED;
+    }
+
+    // the dimension's weather levels (sub_14B5E0440): only the overworld has weather
+    JSValue dimensionGetWeather(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        Level &level = levelOf(ctx, thisVal);
+        if (&api->host().getWorldOf(level).getOverworld() != &level)
+            return string(ctx, "Clear");
+        const float rain = level.getRainLevel();
+        if (rain <= 0.2f)
+            return string(ctx, "Clear");
+        return string(ctx, rain * level.getLightningLevel() > 0.9f ? "Thunder" : "Rain");
+    }
+
+    // a stop sound packet to each player of the dimension (sub_14B5E0800)
+    JSValue dimensionStopSound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int all) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (all == 0 && (argc < 1 || !JS_IsString(argv[0])))
+            return typeError(ctx);
+        StopSoundPacket packet;
+        packet.mSoundName = all != 0 ? std::string() : toString(ctx, argv[0]);
+        packet.mStoppingAllSound = all != 0;
+        packet.mStopMusicLegacy = false;
+        Level &level = levelOf(ctx, thisVal);
+        for (auto &entry: api->host().getPlayers()) {
+            if (entry.second.isSpawned() && entry.second.isIn(level))
+                api->host().sendPacketTo(entry.second.getNetworkIdentifier(), packet);
+        }
         return JS_UNDEFINED;
     }
 
@@ -938,6 +968,9 @@ void ScriptApi::_bindDimensionSurface() {
     method(dimension, "Dimension", "createExplosion", dimensionCreateExplosion, 3);
     method(dimension, "Dimension", "setWeather", dimensionSetWeather, 2);
     method(dimension, "Dimension", "spawnXp", dimensionSpawnXp, 2);
+    method(dimension, "Dimension", "getWeather", dimensionGetWeather, 0);
+    methodMagic(dimension, "Dimension", "stopSound", dimensionStopSound, 1, 0);
+    methodMagic(dimension, "Dimension", "stopAllSounds", dimensionStopSound, 0, 1);
     method(dimension, "Dimension", "getBiome", dimensionGetBiome, 1);
     method(dimension, "Dimension", "containsBiomes", dimensionContainsBiomes, 3);
     method(dimension, "Dimension", "calculateClosestBiomeFromSeed", dimensionClosestBiome, 3);

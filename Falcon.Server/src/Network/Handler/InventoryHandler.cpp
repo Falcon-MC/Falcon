@@ -619,7 +619,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
         }
 
         if (packet.mActionType == 1 || packet.mActionType == 2) {
-            player.attackActor(owner, (uint64_t) packet.mRuntimeActorId);
+            player.attackActor(owner, (uint64_t) packet.mRuntimeActorId, &packet.mClickPosition);
             return;
         }
 

@@ -548,7 +548,8 @@ namespace {
                                         "TintMethod",
                                         "MovementType",
                                         "StickyType",
-                                        "CloneMode"};
+                                        "CloneMode",
+                                        "PlayerWaypointsMode"};
 
     const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
                                                     "BlockComponentBlockBreakEvent",

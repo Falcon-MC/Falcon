@@ -503,6 +503,10 @@ void PluginManager::_hookEventBus() {
     });
 
     mChatHook = bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {
+        // the plugin chat event is the public chat only
+        if (source.mTargets != nullptr)
+            return;
+
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_CHAT;
         event.mCancellable = true;

@@ -1243,6 +1243,7 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (name.empty())
         return false;
 
+    const std::string previous = getNameTag();
     setNameTag(name);
     owner.sendActorNameTag(*this);
     _setFlag(owner, ActorFlag::CanShowName, true);
@@ -1267,6 +1268,7 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     EntityEvents::fireTrigger(owner, *this, trigger, &player);
 
     player.consumeOneHeldItem();
+    owner.getScriptEngine().onPlayerUseNameTag(player, *this, name, previous);
     return true;
 }
 

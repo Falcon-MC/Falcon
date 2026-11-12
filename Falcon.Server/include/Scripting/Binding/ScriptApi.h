@@ -186,6 +186,8 @@ public:
 
     JSValue makePlayer(ServerPlayer &player);
 
+    JSValue makeChatTargets(const std::vector<ServerPlayer *> &players);
+
     JSValue makeActor(ServerActor &actor);
 
     JSValue makeEntity(Actor &actor);

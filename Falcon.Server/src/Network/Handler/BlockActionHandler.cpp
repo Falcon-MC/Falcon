@@ -1219,6 +1219,9 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (isBlockedByActor(owner, level, target, placedState, player))
         return false;
 
+    if (scripts.beforePlayerPlaceBlock(player, level, target, face, transaction.mClickPosition, placedState))
+        return false;
+
     PluginEvent placePluginEvent;
     placePluginEvent.mType = FALCON_EVENT_BLOCK_PLACE;
     placePluginEvent.mCancellable = true;

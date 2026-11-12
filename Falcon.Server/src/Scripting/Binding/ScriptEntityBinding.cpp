@@ -2248,6 +2248,11 @@ namespace {
         return JS_NewInt32(ctx, ping);
     }
 
+    // the connection's split screen slot (sub_14D5F2540); every Falcon connection carries one player alone
+    JSValue playerGetSplitScreenSlot(JSContext *, JSValueConst, int, JSValueConst *) {
+        return JS_UNDEFINED;
+    }
+
     JSValue playerEatItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         const ScriptItemRef *item = argc >= 1 ? target.mApi->native<ScriptItemRef>(argv[0]) : nullptr;
@@ -2653,6 +2658,51 @@ namespace {
         if (error != nullptr)
             return api->throwError("Error", error);
         sendCamera(ctx, *player, packet);
+        return JS_UNDEFINED;
+    }
+
+    // ScriptCamera::setCameraWithEase (sub_14C916830); an ease to a minecraft preset outside this list throws
+    // (sub_14C8748D0); first_person joins it only with the experimental cameras toggle (sub_142FB6880)
+    const char *const EASE_TARGETS[] = {"minecraft:free", "minecraft:follow_orbit", "minecraft:fixed_boom",
+                                        "minecraft:third_person", "minecraft:third_person_front"};
+
+    JSValue cameraSetCameraWithEase(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ServerPlayer *player = partOwner(ctx, thisVal);
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 2 || !JS_IsString(argv[0]) || !JS_IsObject(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const std::string name = toString(ctx, argv[0]);
+        CameraInstructionPacket packet;
+        packet.mHasSetInstruction = true;
+        CameraEaseData &ease = packet.mSetInstruction.mEase;
+        JSValue time = JS_GetPropertyStr(ctx, argv[1], "easeTime");
+        JSValue type = JS_GetPropertyStr(ctx, argv[1], "easeType");
+        const bool hasTime = !JS_IsUndefined(time);
+        const bool hasType = !JS_IsUndefined(type);
+        double seconds = 0.0;
+        bool ok = !hasTime || readNumber(ctx, time, seconds);
+        if (ok && hasType)
+            ok = readEase(ctx, type, ease.mEaseType);
+        JS_FreeValue(ctx, time);
+        JS_FreeValue(ctx, type);
+        if (!ok)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        const int preset = cameraPresetRuntimeId(name);
+        if (preset < 0)
+            return api->throwError("Error", "Invalid camera preset!");
+        packet.mSetInstruction.mPresetRuntimeId = preset;
+        if (hasTime || hasType) {
+            const bool vanilla = name.compare(0, 10, "minecraft:") == 0;
+            if (vanilla && std::find(std::begin(EASE_TARGETS), std::end(EASE_TARGETS), name) == std::end(EASE_TARGETS))
+                return api->throwError("Error", "The camera preset selected is not an allowed ease target.");
+            if (seconds < 0.0)
+                return api->throwError("Error", "Easing time cannot be less than 0.");
+            ease.mHasValue = true;
+            ease.mTime = (float) seconds;
+        }
+        if (player != nullptr)
+            sendCamera(ctx, *player, packet);
         return JS_UNDEFINED;
     }
 
@@ -3398,6 +3448,7 @@ void ScriptApi::_bindPlayer() {
     method(player, "Player", "postClientMessage", playerPostClientMessage, 2);
     method(player, "Player", "eatItem", playerEatItem, 1);
     method(player, "Player", "getPing", playerGetPing, 0);
+    method(player, "Player", "getSplitScreenSlot", playerGetSplitScreenSlot, 0);
     property(player, "Player", "playerPermissionLevel", playerGetPlayerPermissionLevel);
     property(player, "Player", "inputInfo", playerGetInputInfo);
     methodMagic(player, "Player", "getTotalXp", playerGetExperience, 0, (int) PlayerExperience::Total);
@@ -3435,6 +3486,7 @@ void ScriptApi::_bindPlayer() {
     property(camera, "Camera", "isValid", partGetIsValid);
     method(camera, "Camera", "clear", cameraClear, 0);
     method(camera, "Camera", "setCamera", cameraSetCamera, 2);
+    method(camera, "Camera", "setCameraWithEase", cameraSetCameraWithEase, 2);
     method(camera, "Camera", "setDefaultCamera", cameraSetDefaultCamera, 2);
     method(camera, "Camera", "fade", cameraFade, 1);
     method(camera, "Camera", "setFov", cameraSetFov, 1);

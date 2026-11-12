@@ -4,12 +4,15 @@
 #include "Core/Math/Vector3i.h"
 
 #include <string>
+#include <vector>
 
 class ServerPlayer;
 
 struct PlayerChatBeforeEvent : public CancellableEvent {
     ServerPlayer &mSender;
     std::string mMessage;
+    // a message sent to these players only (/tell); broadcast chat leaves it null
+    const std::vector<ServerPlayer *> *mTargets = nullptr;
 
     PlayerChatBeforeEvent(ServerPlayer &sender, std::string message) : mSender(sender), mMessage(std::move(message)) {}
 };
@@ -17,6 +20,7 @@ struct PlayerChatBeforeEvent : public CancellableEvent {
 struct PlayerChatAfterEvent : public Event {
     ServerPlayer &mSender;
     std::string mMessage;
+    const std::vector<ServerPlayer *> *mTargets = nullptr;
 
     PlayerChatAfterEvent(ServerPlayer &sender, std::string message) : mSender(sender), mMessage(std::move(message)) {}
 };

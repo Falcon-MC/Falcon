@@ -84,6 +84,7 @@ BOUND = {
         'ItemCustomComponentInstance', 'ClientSystemInfo', 'Seat', 'FeedItem', 'FeedItemEffect',
         'EntityDefinitionFeedItem', 'CatmullRomSpline', 'LinearSpline', 'FogSettings',
         'FogSettingsError', 'PrimitiveShape', 'TextPrimitive', 'PrimitiveShapesManager',
+        'PlayerWaypointsMode',
     },
     'server-ui': None,
     'common': None,

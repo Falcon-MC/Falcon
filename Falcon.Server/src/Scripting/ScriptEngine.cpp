@@ -894,6 +894,20 @@ bool ScriptEngine::beforeCustomBlockPlace(ServerPlayer &player, Level &level, co
     return cancelled;
 }
 
+bool ScriptEngine::beforePlayerPlaceBlock(ServerPlayer &player, Level &level, const Vector3i &position, int32_t face,
+                                          const Vector3f &faceLocation, const BlockState &placed) {
+    return _emit("before.playerPlaceBlock", "WorldBeforeEvents.playerPlaceBlock", true,
+                 [&](ScriptApi &api, JSValue event) {
+                     JSContext *ctx = api.context();
+                     api.fillBlockEvent(event, level, position);
+                     JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+                     JS_SetPropertyStr(ctx, event, "face", JS_NewString(ctx, directionName(face)));
+                     JS_SetPropertyStr(ctx, event, "faceLocation",
+                                       vector3(ctx, faceLocation.x, faceLocation.y, faceLocation.z));
+                     JS_SetPropertyStr(ctx, event, "permutationToPlace", api.makePermutation(placed));
+                 });
+}
+
 void ScriptEngine::onCustomBlockPlaced(Level &level, const Vector3i &position, const BlockState &placed,
                                        const BlockState &previous) {
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(placed.mName);
@@ -1473,6 +1487,32 @@ bool ScriptEngine::beforePlayerInteractWithEntity(ServerPlayer &player, Actor &t
                      JS_SetPropertyStr(ctx, event, "target", api.makeEntity(target));
                      JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
                  });
+}
+
+bool ScriptEngine::beforePlayerItemAttackEntity(ServerPlayer &player, Actor &target, const Vector3f *aim) {
+    return _emit("before.playerItemAttackEntity", "WorldBeforeEvents.playerItemAttackEntity", true,
+                 [&](ScriptApi &api, JSValue event) {
+                     JSContext *ctx = api.context();
+                     JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+                     JS_SetPropertyStr(ctx, event, "target", api.makeEntity(target));
+                     const ItemStack &held = player.getInventory().getItemInHand();
+                     if (!held.isAir() && held.mDefinition != nullptr)
+                         JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+                     if (aim != nullptr)
+                         JS_SetPropertyStr(ctx, event, "aimDirection", vector3(ctx, aim->x, aim->y, aim->z));
+                 });
+}
+
+void ScriptEngine::onPlayerUseNameTag(ServerPlayer &player, Actor &named, const std::string &newName,
+                                      const std::string &previousName) {
+    _emit("after.playerUseNameTag", "WorldAfterEvents.playerUseNameTag", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "entityNamed", api.makeEntity(named));
+        JS_SetPropertyStr(ctx, event, "newName", JS_NewString(ctx, newName.c_str()));
+        if (!previousName.empty())
+            JS_SetPropertyStr(ctx, event, "previousName", JS_NewString(ctx, previousName.c_str()));
+    });
 }
 
 bool ScriptEngine::beforeItemUse(ServerPlayer &player) {
