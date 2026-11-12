@@ -359,6 +359,9 @@ public:
 
     void keepSubscribeOptions(JSValueConst callback, JSValueConst options);
 
+    // Entity.matches against an EntityFilter; a missing filter matches
+    static bool entityMatches(JSContext *ctx, JSValueConst entity, JSValueConst filter);
+
     // emit skipping the callbacks whose kept options accepts refuses
     bool emitFiltered(const std::string &key, JSValue eventObject,
                       const std::function<bool(JSValueConst options)> &accepts);
@@ -692,6 +695,11 @@ private:
     bool _acceptsScriptEvent(JSValueConst callback, const std::string &eventNamespace) const;
 
     bool _acceptsClockEvent(JSValueConst callback) const;
+
+    // signals whose kept options the event object itself answers: entity, block, input, hotbar and swing filters
+    static bool _readsEventOptions(const std::string &key);
+
+    bool _acceptsEventOptions(const std::string &key, JSValueConst options, JSValueConst event);
 
     void _bindClocks();
 

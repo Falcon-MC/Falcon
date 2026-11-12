@@ -780,6 +780,231 @@ namespace {
     }
 }
 
+bool ScriptApi::entityMatches(JSContext *ctx, JSValueConst entity, JSValueConst filter) {
+    if (!JS_IsObject(filter))
+        return true;
+    JSValue matches = JS_GetPropertyStr(ctx, entity, "matches");
+    JSValue result = JS_IsFunction(ctx, matches) ? JS_Call(ctx, matches, entity, 1, &filter) : JS_UNDEFINED;
+    if (JS_IsException(result))
+        JS_FreeValue(ctx, JS_GetException(ctx));
+    const bool matched = JS_ToBool(ctx, result) == 1;
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, matches);
+    return matched;
+}
+
+namespace {
+    // the event field each entity filter looks at: ScriptFilteredEventSignal<Event, ..., ScriptActor*EventFilter>
+    struct EntityFilterSubject {
+        const char *mKey;
+        const char *mField;
+    };
+
+    const EntityFilterSubject ENTITY_FILTER_SUBJECTS[] = {
+            {"after.effectAdd", "entity"},
+            {"after.entityDie", "deadEntity"},
+            {"after.entityHealthChanged", "entity"},
+            {"after.entityHitBlock", "damagingEntity"},
+            {"after.entityHitEntity", "damagingEntity"},
+            {"after.entityHurt", "hurtEntity"},
+            {"before.entityHurt", "hurtEntity"},
+            {"after.entityHeal", "healedEntity"},
+            {"before.entityHeal", "healedEntity"},
+            {"after.dataDrivenEntityTrigger", "entity"},
+            {"after.entityUpgrade", "entity"},
+            {"after.entityStartSneaking", "entity"},
+            {"after.entityStopSneaking", "entity"},
+            {"after.entityTamed", "entity"},
+            {"before.entityTamed", "entity"},
+    };
+
+    const char *entityFilterSubject(const std::string &key) {
+        for (const EntityFilterSubject &subject: ENTITY_FILTER_SUBJECTS) {
+            if (key == subject.mKey)
+                return subject.mField;
+        }
+        return nullptr;
+    }
+
+    // a getter that throws reads as empty: the filter then refuses
+    std::string stringField(JSContext *ctx, JSValueConst object, const char *name) {
+        if (!JS_IsObject(object))
+            return std::string();
+        JSValue value = JS_GetPropertyStr(ctx, object, name);
+        if (JS_IsException(value)) {
+            JS_FreeValue(ctx, JS_GetException(ctx));
+            return std::string();
+        }
+        const std::string text = JS_IsUndefined(value) ? std::string() : toString(ctx, value);
+        JS_FreeValue(ctx, value);
+        return text;
+    }
+
+    std::string nestedStringField(JSContext *ctx, JSValueConst object, const char *outer, const char *inner) {
+        JSValue value = JS_GetPropertyStr(ctx, object, outer);
+        const std::string text = stringField(ctx, value, inner);
+        JS_FreeValue(ctx, value);
+        return text;
+    }
+
+    bool listedIn(const std::vector<std::string> &values, const std::string &value) {
+        return std::find(values.begin(), values.end(), value) != values.end();
+    }
+
+    // EntityEventOptions.entities by entity id, entityTypes by type id
+    bool acceptsEntityList(JSContext *ctx, JSValueConst options, const std::string &id, const std::string &typeId) {
+        JSValue entities = JS_GetPropertyStr(ctx, options, "entities");
+        bool accepted = true;
+        if (JS_IsArray(entities)) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, entities, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            accepted = false;
+            for (uint32_t index = 0; index < length && !accepted; ++index) {
+                JSValue entity = JS_GetPropertyUint32(ctx, entities, index);
+                accepted = !id.empty() && stringField(ctx, entity, "id") == id;
+                JS_FreeValue(ctx, entity);
+            }
+        }
+        JS_FreeValue(ctx, entities);
+        if (!accepted)
+            return false;
+        bool present = false;
+        const std::vector<std::string> types = optionStrings(ctx, options, "entityTypes", present);
+        return !present || namedIn(types, typeId);
+    }
+
+    bool acceptsEntityFilter(JSContext *ctx, JSValueConst options, const char *option, JSValueConst entity) {
+        JSValue filter = JS_GetPropertyStr(ctx, options, option);
+        const bool accepted = ScriptApi::entityMatches(ctx, entity, filter);
+        JS_FreeValue(ctx, filter);
+        return accepted;
+    }
+}
+
+bool ScriptApi::_readsEventOptions(const std::string &key) {
+    return entityFilterSubject(key) != nullptr || key == "after.entityRemove" || key == "after.playerBreakBlock"
+           || key == "before.playerBreakBlock" || key == "after.playerPlaceBlock" || key == "after.playerButtonInput"
+           || key == "after.playerHotbarSelectedSlotChange" || key == "after.playerSwingStart";
+}
+
+bool ScriptApi::_acceptsEventOptions(const std::string &key, JSValueConst options, JSValueConst event) {
+    JSContext *ctx = mContext;
+    bool present = false;
+    if (const char *field = entityFilterSubject(key)) {
+        JSValue entity = JS_GetPropertyStr(ctx, event, field);
+        bool accepted = acceptsEntityList(ctx, options, stringField(ctx, entity, "id"),
+                                          stringField(ctx, entity, "typeId"))
+                        && acceptsEntityFilter(ctx, options, "entityFilter", entity);
+        JS_FreeValue(ctx, entity);
+        if (!accepted)
+            return false;
+
+        if (key == "after.entityTamed" || key == "before.entityTamed") {
+            JSValue tamer = JS_GetPropertyStr(ctx, event, "tamingEntity");
+            accepted = acceptsEntityFilter(ctx, options, "tamingEntityFilter", tamer);
+            JS_FreeValue(ctx, tamer);
+            return accepted;
+        }
+        if (key == "after.entityHurt" || key == "before.entityHurt") {
+            const std::vector<std::string> causes = optionStrings(ctx, options, "allowedDamageCauses", present);
+            return !present || listedIn(causes, nestedStringField(ctx, event, "damageSource", "cause"));
+        }
+        if (key == "after.entityHeal" || key == "before.entityHeal") {
+            const std::vector<std::string> causes = optionStrings(ctx, options, "allowedHealCauses", present);
+            return !present || listedIn(causes, nestedStringField(ctx, event, "healSource", "cause"));
+        }
+        if (key == "after.dataDrivenEntityTrigger" || key == "after.entityUpgrade") {
+            const std::vector<std::string> events = optionStrings(ctx, options, "eventTypes", present);
+            const char *name = key == "after.entityUpgrade" ? "upgradeId" : "eventId";
+            return !present || listedIn(events, stringField(ctx, event, name));
+        }
+        return true;
+    }
+
+    // the entity is gone: its id and type are on the event
+    if (key == "after.entityRemove")
+        return acceptsEntityList(ctx, options, stringField(ctx, event, "removedEntityId"),
+                                 stringField(ctx, event, "typeId"));
+
+    if (key == "after.playerBreakBlock" || key == "before.playerBreakBlock" || key == "after.playerPlaceBlock") {
+        // BlockEventOptions: the broken permutation once the block is air, else the block as it stands
+        JSValue permutation;
+        if (key == "after.playerBreakBlock") {
+            permutation = JS_GetPropertyStr(ctx, event, "brokenBlockPermutation");
+        } else {
+            JSValue block = JS_GetPropertyStr(ctx, event, "block");
+            permutation = JS_IsObject(block) ? JS_GetPropertyStr(ctx, block, "permutation") : JS_UNDEFINED;
+            JS_FreeValue(ctx, block);
+        }
+        if (JS_IsException(permutation)) {
+            JS_FreeValue(ctx, JS_GetException(ctx));
+            permutation = JS_UNDEFINED;
+        }
+        BlockState state;
+        const bool known = readPermutation(permutation, state);
+        JS_FreeValue(ctx, permutation);
+
+        const std::vector<std::string> types = optionStrings(ctx, options, "blockTypes", present);
+        if (present && (!known || !namedIn(types, state.mName)))
+            return false;
+        JSValue permutations = JS_GetPropertyStr(ctx, options, "permutations");
+        bool accepted = true;
+        if (JS_IsArray(permutations)) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, permutations, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            accepted = false;
+            for (uint32_t index = 0; index < length && !accepted && known; ++index) {
+                JSValue candidate = JS_GetPropertyUint32(ctx, permutations, index);
+                BlockState wanted;
+                accepted = readPermutation(candidate, wanted) && wanted == state;
+                JS_FreeValue(ctx, candidate);
+            }
+        }
+        JS_FreeValue(ctx, permutations);
+        return accepted;
+    }
+
+    if (key == "after.playerButtonInput") {
+        const std::vector<std::string> buttons = optionStrings(ctx, options, "buttons", present);
+        if (present && !listedIn(buttons, stringField(ctx, event, "button")))
+            return false;
+        JSValue state = JS_GetPropertyStr(ctx, options, "state");
+        const bool accepted = JS_IsUndefined(state)
+                              || toString(ctx, state) == stringField(ctx, event, "newButtonState");
+        JS_FreeValue(ctx, state);
+        return accepted;
+    }
+
+    if (key == "after.playerHotbarSelectedSlotChange") {
+        const std::vector<std::string> slots = optionStrings(ctx, options, "allowedSlots", present);
+        return !present || listedIn(slots, stringField(ctx, event, "newSlotSelected"));
+    }
+
+    if (key == "after.playerSwingStart") {
+        JSValue held = JS_GetPropertyStr(ctx, options, "heldItemOption");
+        bool accepted = true;
+        if (!JS_IsUndefined(held)) {
+            JSValue stack = JS_GetPropertyStr(ctx, event, "heldItemStack");
+            const bool holding = JS_IsObject(stack);
+            JS_FreeValue(ctx, stack);
+            const std::string option = toString(ctx, held);
+            accepted = option == "AnyItem" ? holding : option != "NoItem" || !holding;
+        }
+        JS_FreeValue(ctx, held);
+        if (!accepted)
+            return false;
+        JSValue source = JS_GetPropertyStr(ctx, options, "swingSource");
+        accepted = JS_IsUndefined(source) || toString(ctx, source) == stringField(ctx, event, "swingSource");
+        JS_FreeValue(ctx, source);
+        return accepted;
+    }
+    return true;
+}
+
 // slots 0 to 8 are the hotbar; the same absolute indexes for both types, not checked against the game
 void ScriptApi::_emitInventoryChanges() {
     if (!hasSubscribers("after.playerInventoryItemChange")) {

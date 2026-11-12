@@ -644,15 +644,64 @@ void ScriptEngine::onEntityHitEntity(Actor &damagingEntity, Actor &hitEntity) {
     });
 }
 
+namespace {
+    // ItemFilter.includeTypes by type id, ItemType or name; a missing filter matches
+    bool itemPassesFilter(JSContext *ctx, JSValueConst itemFilter, const ItemStack &item) {
+        JSValue types = JS_IsObject(itemFilter) ? JS_GetPropertyStr(ctx, itemFilter, "includeTypes") : JS_UNDEFINED;
+        bool accepted = true;
+        if (JS_IsArray(types) && item.mDefinition != nullptr) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, types, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            bool found = false;
+            for (uint32_t index = 0; index < length && !found; ++index) {
+                JSValue type = JS_GetPropertyUint32(ctx, types, index);
+                JSValue id = JS_IsObject(type) ? JS_GetPropertyStr(ctx, type, "id") : JS_DupValue(ctx, type);
+                std::string name = toString(ctx, id);
+                if (name.find(':') == std::string::npos)
+                    name = "minecraft:" + name;
+                found = name == item.mDefinition->getIdentifier();
+                JS_FreeValue(ctx, id);
+                JS_FreeValue(ctx, type);
+            }
+            accepted = found;
+        }
+        JS_FreeValue(ctx, types);
+        return accepted;
+    }
+
+    // EntityItemPickupEventOptions and EntityItemDropEventOptions: entityFilter on the entity, itemFilter on the item
+    bool acceptsEntityItem(JSContext *ctx, JSValueConst options, JSValueConst entity, const ItemStack &item) {
+        JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
+        bool accepted = ScriptApi::entityMatches(ctx, entity, entityFilter);
+        JS_FreeValue(ctx, entityFilter);
+        JSValue itemFilter = JS_GetPropertyStr(ctx, options, "itemFilter");
+        accepted = accepted && itemPassesFilter(ctx, itemFilter, item);
+        JS_FreeValue(ctx, itemFilter);
+        return accepted;
+    }
+}
+
 void ScriptEngine::onEntityItemDrop(Actor &entity, ItemActor *dropped) {
-    _emit("after.entityItemDrop", "WorldAfterEvents.entityItemDrop", false, [&](ScriptApi &api, JSValue event) {
-        JSContext *ctx = api.context();
-        JS_SetPropertyStr(ctx, event, "entity", api.makeEntity(entity));
+    const ItemStack item = dropped != nullptr ? dropped->getItem() : ItemStack();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("after.entityItemDrop"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldAfterEvents.entityItemDrop");
+        JSValue dropper = api->makeEntity(entity);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, dropper));
         JSValue items = JS_NewArray(ctx);
         if (dropped != nullptr)
-            JS_SetPropertyUint32(ctx, items, 0, api.makeEntity(*dropped));
+            JS_SetPropertyUint32(ctx, items, 0, api->makeEntity(*dropped));
         JS_SetPropertyStr(ctx, event, "items", items);
-    });
+        api->emitFiltered("after.entityItemDrop", event,
+                          [&](JSValueConst options) { return acceptsEntityItem(ctx, options, dropper, item); });
+        JS_FreeValue(ctx, dropper);
+        _pumpJobs();
+    }
 }
 
 void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
@@ -975,73 +1024,15 @@ void ScriptEngine::onItemUse(ServerPlayer &player) {
 }
 
 namespace {
-    // EntityItemPickupEventOptions: entityFilter through Entity.matches, itemFilter.includeTypes by type id
-    bool acceptsPickup(ScriptApi &api, JSValueConst options, JSValueConst entity, const ItemStack &picked) {
-        JSContext *ctx = api.context();
-        JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
-        bool accepted = true;
-        if (JS_IsObject(entityFilter)) {
-            JSValue matches = JS_GetPropertyStr(ctx, entity, "matches");
-            JSValue result = JS_IsFunction(ctx, matches) ? JS_Call(ctx, matches, entity, 1, &entityFilter)
-                                                         : JS_UNDEFINED;
-            if (JS_IsException(result))
-                JS_FreeValue(ctx, JS_GetException(ctx));
-            accepted = JS_ToBool(ctx, result) == 1;
-            JS_FreeValue(ctx, result);
-            JS_FreeValue(ctx, matches);
-        }
-        JS_FreeValue(ctx, entityFilter);
-
-        JSValue itemFilter = JS_GetPropertyStr(ctx, options, "itemFilter");
-        JSValue types = JS_IsObject(itemFilter) ? JS_GetPropertyStr(ctx, itemFilter, "includeTypes") : JS_UNDEFINED;
-        if (accepted && JS_IsArray(types) && picked.mDefinition != nullptr) {
-            uint32_t length = 0;
-            JSValue lengthValue = JS_GetPropertyStr(ctx, types, "length");
-            JS_ToUint32(ctx, &length, lengthValue);
-            JS_FreeValue(ctx, lengthValue);
-            bool found = false;
-            for (uint32_t index = 0; index < length && !found; ++index) {
-                JSValue type = JS_GetPropertyUint32(ctx, types, index);
-                JSValue id = JS_IsObject(type) ? JS_GetPropertyStr(ctx, type, "id") : JS_DupValue(ctx, type);
-                std::string name = toString(ctx, id);
-                if (name.find(':') == std::string::npos)
-                    name = "minecraft:" + name;
-                found = name == picked.mDefinition->getIdentifier();
-                JS_FreeValue(ctx, id);
-                JS_FreeValue(ctx, type);
-            }
-            accepted = found;
-        }
-        JS_FreeValue(ctx, types);
-        JS_FreeValue(ctx, itemFilter);
-        return accepted;
-    }
-}
-
-namespace {
-    // Entity.matches against an EntityFilter; a missing filter matches
-    bool entityMatches(JSContext *ctx, JSValueConst entity, JSValueConst filter) {
-        if (!JS_IsObject(filter))
-            return true;
-        JSValue matches = JS_GetPropertyStr(ctx, entity, "matches");
-        JSValue result = JS_IsFunction(ctx, matches) ? JS_Call(ctx, matches, entity, 1, &filter) : JS_UNDEFINED;
-        if (JS_IsException(result))
-            JS_FreeValue(ctx, JS_GetException(ctx));
-        const bool matched = JS_ToBool(ctx, result) == 1;
-        JS_FreeValue(ctx, result);
-        JS_FreeValue(ctx, matches);
-        return matched;
-    }
-
     // EntityContainerAccessEventOptions: entityFilter on the container, accessSourceFilter on who opened it
     bool acceptsContainerAccess(JSContext *ctx, JSValueConst options, JSValueConst container, JSValueConst source) {
         JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
-        bool accepted = entityMatches(ctx, container, entityFilter);
+        bool accepted = ScriptApi::entityMatches(ctx, container, entityFilter);
         JS_FreeValue(ctx, entityFilter);
         JSValue sourceFilter = JS_GetPropertyStr(ctx, options, "accessSourceFilter");
         if (accepted && JS_IsObject(sourceFilter)) {
             JSValue filter = JS_GetPropertyStr(ctx, sourceFilter, "entityFilter");
-            accepted = entityMatches(ctx, source, filter);
+            accepted = ScriptApi::entityMatches(ctx, source, filter);
             JS_FreeValue(ctx, filter);
         }
         JS_FreeValue(ctx, sourceFilter);
@@ -1098,7 +1089,7 @@ namespace {
         bool accepted = true;
         if (JS_IsObject(sourceFilter)) {
             JSValue filter = JS_GetPropertyStr(ctx, sourceFilter, "entityFilter");
-            accepted = entityMatches(ctx, source, filter);
+            accepted = ScriptApi::entityMatches(ctx, source, filter);
             JS_FreeValue(ctx, filter);
         }
         JS_FreeValue(ctx, sourceFilter);
@@ -1110,7 +1101,7 @@ namespace {
         if (!blockMatches(ctx, options, state))
             return false;
         JSValue filter = JS_GetPropertyStr(ctx, options, "playerFilter");
-        const bool accepted = entityMatches(ctx, player, filter);
+        const bool accepted = ScriptApi::entityMatches(ctx, player, filter);
         JS_FreeValue(ctx, filter);
         return accepted;
     }
@@ -1267,9 +1258,8 @@ bool ScriptEngine::beforeEntityItemPickup(Actor &collector, Actor &item, const I
         JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
         JS_SetPropertyStr(ctx, event, "item", api->makeEntity(item));
         JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
-        ScriptApi &target = *api;
         cancelled = api->emitFiltered("before.entityItemPickup", event, [&](JSValueConst options) {
-            return acceptsPickup(target, options, entity, picked);
+            return acceptsEntityItem(ctx, options, entity, picked);
         }) || cancelled;
         JS_FreeValue(ctx, entity);
         _pumpJobs();
@@ -1289,9 +1279,8 @@ void ScriptEngine::onEntityItemPickup(Actor &collector, const ItemStack &picked)
         JSValue items = JS_NewArray(ctx);
         JS_SetPropertyUint32(ctx, items, 0, api->makeItem(picked));
         JS_SetPropertyStr(ctx, event, "items", items);
-        ScriptApi &target = *api;
         api->emitFiltered("after.entityItemPickup", event,
-                          [&](JSValueConst options) { return acceptsPickup(target, options, entity, picked); });
+                          [&](JSValueConst options) { return acceptsEntityItem(ctx, options, entity, picked); });
         JS_FreeValue(ctx, entity);
         _pumpJobs();
     }
