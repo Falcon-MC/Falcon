@@ -265,7 +265,8 @@ bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &targ
     return owner.getScriptEngine().beforePlayerItemAttackEntity(*this, target, aimed ? &aim : nullptr);
 }
 
-bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition) {
+bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition,
+                               bool checkReach) {
     ActorEventPacket swing;
     swing.mRuntimeActorId = getRuntimeId();
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
@@ -300,12 +301,13 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const Vector3f actorDelta(target.getPosition().x - getPosition().x,
                                       target.getPosition().y - getPosition().y,
                                       target.getPosition().z - getPosition().z);
-            if (actorDelta.x * actorDelta.x + actorDelta.y * actorDelta.y + actorDelta.z * actorDelta.z
-                > MAX_REACH * MAX_REACH)
+            if (checkReach
+                && actorDelta.x * actorDelta.x + actorDelta.y * actorDelta.y + actorDelta.z * actorDelta.z
+                           > MAX_REACH * MAX_REACH)
                 return false;
 
             const ActorSize size = target.getSize();
-            if (!_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
+            if (checkReach && !_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
                 return false;
 
             owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
@@ -371,10 +373,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
 
     const Vector3f delta(victim->getPosition().x - getPosition().x, victim->getPosition().y - getPosition().y,
                          victim->getPosition().z - getPosition().z);
-    if (delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
+    if (checkReach && delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
         return false;
 
-    if (!_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+    if (checkReach && !_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
         return false;
 
     owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");

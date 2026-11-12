@@ -610,6 +610,48 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
 }
 
+bool InventoryHandler::interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId,
+                                          const Vector3f &clickPosition) {
+    ServerActor *target = owner.getActorByRuntimeId(runtimeId);
+    // the click was predicted: the actor may be gone since
+    if (target == nullptr) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                              player.getInventory().getSelectedSlot());
+        return false;
+    }
+
+    if (owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target))
+        return false;
+    target = owner.getActorByRuntimeId(runtimeId);
+    if (target == nullptr)
+        return false;
+
+    PluginEvent event;
+    event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
+    event.mCancellable = true;
+    event.mPlayer = &player;
+    event.mEntity = target;
+    PluginManager::getInstance().dispatch(event);
+    if (event.mCancelled)
+        return false;
+
+    target = owner.getActorByRuntimeId(runtimeId);
+    // a sneaking click opens a tamed mount's inventory instead of riding it
+    if (target != nullptr && dynamic_cast<MobActor *>(target) != nullptr && player.getFlags().get(ActorFlag::Sneaking)
+        && target->getEntityContainer() != nullptr
+        && player.getInventoryManager().openEntityContainer(*target, ContainerType::Horse))
+        return true;
+    if (target == nullptr)
+        return false;
+    const ItemStack before = player.getInventory().getItemInHand();
+    if (!target->onInteractAt(owner, player, clickPosition))
+        return false;
+    target = owner.getActorByRuntimeId(runtimeId);
+    if (target != nullptr)
+        owner.getScriptEngine().onPlayerInteractWithEntity(player, *target, before);
+    return true;
+}
+
 void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlayer &player,
                                          const InventoryTransactionPacket &packet) {
     if (packet.mTransactionType == InventoryTransactionType::ItemUseOnEntity) {
@@ -623,45 +665,8 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
             return;
         }
 
-        if (packet.mActionType == 0) {
-            ServerActor *target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-            // the click was predicted: the actor may be gone since
-            if (target == nullptr) {
-                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                                      player.getInventory().getSelectedSlot());
-                return;
-            }
-
-            if (!owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
-                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                if (target == nullptr)
-                    return;
-
-                PluginEvent event;
-                event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
-                event.mCancellable = true;
-                event.mPlayer = &player;
-                event.mEntity = target;
-                PluginManager::getInstance().dispatch(event);
-                if (event.mCancelled)
-                    return;
-
-                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                // a sneaking click opens a tamed mount's inventory instead of riding it
-                if (target != nullptr && dynamic_cast<MobActor *>(target) != nullptr
-                    && player.getFlags().get(ActorFlag::Sneaking) && target->getEntityContainer() != nullptr
-                    && player.getInventoryManager().openEntityContainer(*target, ContainerType::Horse))
-                    return;
-                if (target != nullptr) {
-                    const ItemStack before = player.getInventory().getItemInHand();
-                    if (target->onInteractAt(owner, player, packet.mClickPosition)) {
-                        target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                        if (target != nullptr)
-                            owner.getScriptEngine().onPlayerInteractWithEntity(player, *target, before);
-                    }
-                }
-            }
-        }
+        if (packet.mActionType == 0)
+            interactWithEntity(owner, player, (uint64_t) packet.mRuntimeActorId, packet.mClickPosition);
         return;
     }
 

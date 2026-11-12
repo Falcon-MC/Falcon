@@ -1,13 +1,19 @@
 #include "World/Actor/Player/SimulatedPlayerController.h"
 
+#include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/InventoryTransactionPacket.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ElytraItem.h"
+#include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Level.h"
 
 #include <cmath>
 
@@ -147,6 +153,178 @@ void SimulatedPlayerController::setBodyRotation(ServerPlayer &player, float yaw)
     mLook = Look::None;
 }
 
+bool SimulatedPlayerController::_actionReady(ServerNetworkHandler &owner) const {
+    return !mActed || owner.getCurrentTick() - mLastActionTick >= ACTION_COOLDOWN_TICKS;
+}
+
+void SimulatedPlayerController::_markAction(ServerNetworkHandler &owner) {
+    mActed = true;
+    mLastActionTick = owner.getCurrentTick();
+}
+
+bool SimulatedPlayerController::attack(ServerNetworkHandler &owner, ServerPlayer &player, Actor *target) {
+    if (!player.isAlive() || !_actionReady(owner))
+        return false;
+    _markAction(owner);
+    // its own id: the swing goes out, no target is found
+    return player.attackActor(owner, target == nullptr ? player.getRuntimeId() : target->getRuntimeId(), nullptr,
+                              false);
+}
+
+bool SimulatedPlayerController::interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, Actor &target) {
+    if (!player.isAlive())
+        return false;
+    return InventoryHandler::interactWithEntity(owner, player, target.getRuntimeId(), Vector3f(0.0f, 0.0f, 0.0f));
+}
+
+bool SimulatedPlayerController::interactWithBlock(ServerNetworkHandler &owner, ServerPlayer &player,
+                                                  const Vector3i &block, int32_t face, const Vector3f &clickPosition) {
+    if (!player.isAlive())
+        return false;
+    ItemUseTransaction transaction;
+    transaction.mActionType = 0;
+    transaction.mBlockPosition = block;
+    transaction.mBlockFace = face;
+    transaction.mHotbarSlot = player.getInventory().getSelectedSlot();
+    transaction.mItemInHand = player.getInventory().getItemInHand();
+    transaction.mPlayerPosition = player.getPosition();
+    transaction.mClickPosition = clickPosition;
+    transaction.mTriggerType = ItemUseTriggerType::PlayerInput;
+    return BlockActionHandler::placeBlock(owner, player, transaction);
+}
+
+bool SimulatedPlayerController::useItem(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) {
+    if (!player.isAlive() || item.isAir() || !_actionReady(owner))
+        return false;
+    // the stack is used from the hand and never taken from the inventory
+    PlayerInventory &inventory = player.getInventory();
+    const ItemStack held = inventory.getItemInHand();
+    inventory.setItemInHand(item);
+    owner._useHeldItem(player);
+    inventory.setItemInHand(held);
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
+    _markAction(owner);
+    return true;
+}
+
+bool SimulatedPlayerController::useItemInSlot(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot) {
+    PlayerInventory &inventory = player.getInventory();
+    if (slot >= 0 && slot < PlayerInventory::HOTBAR_SIZE) {
+        inventory.setSelectedSlot(slot);
+        player.getInventoryManager().syncSelectedHotbarSlot();
+    }
+    if (!player.isAlive() || inventory.getItemInHand().isAir() || !_actionReady(owner))
+        return false;
+    owner._useHeldItem(player);
+    _markAction(owner);
+    return true;
+}
+
+bool SimulatedPlayerController::useItemOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                                               const Vector3i &block, int32_t face, const Vector3f &clickPosition) {
+    if (!player.isAlive() || item.isAir() || !_actionReady(owner))
+        return false;
+    PlayerInventory &inventory = player.getInventory();
+    const ItemStack held = inventory.getItemInHand();
+    inventory.setItemInHand(item);
+    interactWithBlock(owner, player, block, face, clickPosition);
+    inventory.setItemInHand(held);
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
+    _markAction(owner);
+    return true;
+}
+
+bool SimulatedPlayerController::useItemInSlotOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot,
+                                                     const Vector3i &block, int32_t face,
+                                                     const Vector3f &clickPosition) {
+    PlayerInventory &inventory = player.getInventory();
+    if (slot >= 0 && slot < PlayerInventory::HOTBAR_SIZE) {
+        inventory.setSelectedSlot(slot);
+        player.getInventoryManager().syncSelectedHotbarSlot();
+    }
+    if (!player.isAlive() || inventory.getItemInHand().isAir() || !_actionReady(owner))
+        return false;
+    interactWithBlock(owner, player, block, face, clickPosition);
+    _markAction(owner);
+    return true;
+}
+
+ItemStack SimulatedPlayerController::stopUsingItem(ServerNetworkHandler &owner, ServerPlayer &player) {
+    if (!player.getFlags().get(ActorFlag::UsingItem))
+        return ItemStack::air();
+    const ItemStack used = player.getInventory().getItemInHand();
+    if (!player.isAlive())
+        return used;
+    // the release a client sends when it lets go of the use button
+    InventoryTransactionPacket release;
+    release.mTransactionType = InventoryTransactionType::ItemRelease;
+    release.mActionType = 0;
+    release.mHotbarSlot = player.getInventory().getSelectedSlot();
+    release.mItemInHand = used;
+    release.mPlayerPosition = player.getPosition();
+    InventoryHandler::handleTransaction(owner, player, release);
+    return used;
+}
+
+bool SimulatedPlayerController::breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block,
+                                           int32_t face) {
+    if (!player.isAlive())
+        return false;
+    if (mBreaking) {
+        if (mBreakBlock == block && mBreakFace == face)
+            return true;
+        stopBreakingBlock();
+    }
+    const BlockState state = owner.getLevelFor(player).getBlockState(block.x, block.y, block.z);
+    if (!BlockSupport::isSolid(state) || player.getFlags().get(ActorFlag::UsingItem))
+        return false;
+    mBreaking = true;
+    mBreakBlock = block;
+    mBreakFace = face;
+    return true;
+}
+
+void SimulatedPlayerController::stopBreakingBlock() {
+    if (mBreaking)
+        mAbortBreak = true;
+    mBreaking = false;
+}
+
+// the block actions a client sends while it holds the attack button on a block
+void SimulatedPlayerController::_breakingActions(ServerNetworkHandler &owner, ServerPlayer &player,
+                                                 PlayerAuthInputPacket &packet) {
+    if (mAbortBreak) {
+        PlayerBlockActionData abort;
+        abort.mAction = PlayerActionType::AbortBreak;
+        abort.mBlockPosition = player.isBreakingBlock() ? player.getBreakingBlockPosition() : mBreakBlock;
+        packet.mPlayerActions.push_back(abort);
+        mAbortBreak = false;
+    }
+    if (!mBreaking)
+        return;
+    const BlockState state = owner.getLevelFor(player).getBlockState(mBreakBlock.x, mBreakBlock.y, mBreakBlock.z);
+    if (state.mName == "minecraft:air") {
+        mBreaking = false;
+        return;
+    }
+    PlayerBlockActionData action;
+    action.mBlockPosition = mBreakBlock;
+    action.mFace = mBreakFace;
+    if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != mBreakBlock) {
+        action.mAction = PlayerActionType::StartBreak;
+        packet.mPlayerActions.push_back(action);
+        if (!player.isCreative())
+            return;
+        action.mAction = PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock;
+        packet.mPlayerActions.push_back(action);
+        return;
+    }
+    if (player.getBreakProgress() < 1.0)
+        return;
+    action.mAction = PlayerActionType::BlockPredictDestroy;
+    packet.mPlayerActions.push_back(action);
+}
+
 // sub_141035590: the order becomes a move vector relative to the yaw, then the look target turns the head
 void SimulatedPlayerController::buildInput(ServerNetworkHandler &owner, ServerPlayer &player,
                                            PlayerAuthInputPacket &packet) {
@@ -224,6 +402,7 @@ void SimulatedPlayerController::buildInput(ServerNetworkHandler &owner, ServerPl
                                                                                : PlayerAuthInputData::StopGliding));
     mSwimRequest = Request::None;
     mGlideRequest = Request::None;
+    _breakingActions(owner, player, packet);
     const bool sprinting = player.getFlags().get(ActorFlag::Sprinting);
     if (mSprinting) {
         packet.mInputData.push_back((int32_t) PlayerAuthInputData::Sprinting);

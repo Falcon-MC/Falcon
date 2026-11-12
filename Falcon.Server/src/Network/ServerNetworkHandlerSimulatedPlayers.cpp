@@ -84,3 +84,8 @@ void ServerNetworkHandler::_tickSimulatedPlayer(ServerPlayer &player) {
     player.getMovementInputs().enqueue(packet);
     player.markActive(mCurrentTick);
 }
+
+// sub_14DCFDFA0: Player::respawn, as a client's ready respawn runs it
+void ServerNetworkHandler::respawnSimulatedPlayer(ServerPlayer &player) {
+    _respawnPlayer(player);
+}

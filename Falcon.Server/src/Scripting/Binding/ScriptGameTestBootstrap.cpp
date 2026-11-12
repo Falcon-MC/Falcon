@@ -926,6 +926,86 @@ namespace {
     simulatedMethod("glide", (self) => native.sp.glide(self));
     simulatedMethod("stopGliding", (self) => { native.sp.stopGliding(self); });
 
+    // Direction as the block face index, turned with the test (sub_144B1C800)
+    const FACES = ["Down", "Up", "North", "South", "West", "East"];
+    const playerFace = (self, direction) => {
+        if (direction === undefined)
+            return 1;
+        let face = string(direction);
+        if (FACES.indexOf(face) < 0)
+            throw conversion();
+        const inst = playerTests.get(self);
+        const index = DIRECTIONS.indexOf(face);
+        if (inst !== undefined && index >= 0)
+            face = DIRECTIONS[(index + inst.rotation) % 4];
+        return FACES.indexOf(face);
+    };
+    const clickOf = (faceLocation) => (faceLocation === undefined || faceLocation === null ? { x: 0, y: 0, z: 0 }
+        : vector3(faceLocation));
+    const itemStack = (value) => {
+        if (!(value instanceof S.ItemStack))
+            throw conversion();
+        return value;
+    };
+    const goneEntity = (member) => native.errors.make("InvalidEntityError", "Failed to call function '" + member
+        + "' due to Entity being invalid (has the Entity been removed?).", { id: "", type: "" });
+    const liveEntity = (entity, member) => {
+        if (!isEntity(entity))
+            throw conversion();
+        if (!entity.isValid)
+            throw goneEntity(member);
+        return entity;
+    };
+    simulatedMethod("attack", (self) => native.sp.attack(self));
+    simulatedMethod("attackEntity", (self, entity) => {
+        const result = native.sp.attackEntity(self, liveEntity(entity, "attackEntity"));
+        if (result === undefined)
+            throw goneEntity("attackEntity");
+        return result;
+    });
+    simulatedMethod("breakBlock", (self, blockLocation, direction) => {
+        const at = playerBlock(self, blockLocation);
+        return native.sp.breakBlock(self, at.x, at.y, at.z, playerFace(self, direction));
+    });
+    simulatedMethod("stopBreakingBlock", (self) => { native.sp.stopBreaking(self); });
+    simulatedMethod("chat", (self, message) => { native.sp.chat(self, string(message)); });
+    simulatedMethod("dropSelectedItem", (self) => native.sp.drop(self));
+    simulatedMethod("fly", (self) => { native.sp.fly(self, true); });
+    simulatedMethod("stopFlying", (self) => { native.sp.fly(self, false); });
+    simulatedMethod("giveItem", (self, item, selectSlot) => native.sp.give(self, itemStack(item),
+        selectSlot === undefined ? false : bool(selectSlot)));
+    simulatedMethod("setItem", (self, item, slot, selectSlot) => native.sp.setItem(self, itemStack(item),
+        integer(slot), selectSlot === undefined ? false : bool(selectSlot)));
+    simulatedMethod("interact", (self) => native.sp.interact(self));
+    simulatedMethod("interactWithBlock", (self, blockLocation, direction) => {
+        const at = playerBlock(self, blockLocation);
+        return native.sp.interactBlock(self, at.x, at.y, at.z, playerFace(self, direction), 0, 0, 0);
+    });
+    simulatedMethod("interactWithEntity", (self, entity) => {
+        const result = native.sp.interactEntity(self, liveEntity(entity, "interactWithEntity"));
+        if (result === undefined)
+            throw goneEntity("interactWithEntity");
+        return result;
+    });
+    simulatedMethod("respawn", (self) => native.sp.respawn(self));
+    simulatedMethod("useItem", (self, item) => native.sp.useItem(self, itemStack(item)));
+    simulatedMethod("useItemInSlot", (self, slot) => native.sp.useSlot(self, integer(slot)));
+    simulatedMethod("useItemOnBlock", (self, item, blockLocation, direction, faceLocation) => {
+        const stack = itemStack(item);
+        const at = playerBlock(self, blockLocation);
+        const click = clickOf(faceLocation);
+        return native.sp.useItemOnBlock(self, stack, at.x, at.y, at.z, playerFace(self, direction), click.x,
+            click.y, click.z);
+    });
+    simulatedMethod("useItemInSlotOnBlock", (self, slot, blockLocation, direction, faceLocation) => {
+        const index = integer(slot);
+        const at = playerBlock(self, blockLocation);
+        const click = clickOf(faceLocation);
+        return native.sp.useSlotOnBlock(self, index, at.x, at.y, at.z, playerFace(self, direction), click.x,
+            click.y, click.z);
+    });
+    simulatedMethod("stopUsingItem", (self) => native.sp.stopUsing(self));
+
     const spawnPlayer = (dimension, at, yaw, name, gameMode, rotation) => {
         const mode = native.sp.gameMode(string(gameMode));
         if (mode < 0)

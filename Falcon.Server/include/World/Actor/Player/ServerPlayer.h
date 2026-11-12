@@ -277,7 +277,9 @@ public:
     }
 
     // hitPosition: where the client says it hit, in world space; null when unknown
-    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition = nullptr);
+    // checkReach false: a gametest simulated player attacks at any distance, facing anywhere (sub_141038210)
+    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition = nullptr,
+                     bool checkReach = true);
 
     Vector3f getLookDirection() const;
 

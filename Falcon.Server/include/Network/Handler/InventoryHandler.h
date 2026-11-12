@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
+
+#include <cstdint>
+
 class ServerNetworkHandler;
 class ServerPlayer;
 class NetworkIdentifier;
@@ -31,6 +35,10 @@ public:
 
     static void handleTransaction(ServerNetworkHandler &owner, ServerPlayer &player,
                                   const InventoryTransactionPacket &packet);
+
+    // a click on an entity: false when it is gone, cancelled or ignores the click
+    static bool interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId,
+                                   const Vector3f &clickPosition);
 
     static void handleContainerClose(ServerPlayer &player, const ContainerClosePacket &packet);
 

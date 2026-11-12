@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
+#include "Protocol/Types/ItemStack.h"
 
 #include <cstdint>
 
+class Actor;
 class PlayerAuthInputPacket;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -56,6 +59,39 @@ public:
     // sets the yaw and drops any look target (sub_141037CD0)
     void setBodyRotation(ServerPlayer &player, float yaw);
 
+    // attacks and item uses wait this many ticks after the previous one (sub_141038210, sub_141038670)
+    static constexpr int64_t ACTION_COOLDOWN_TICKS = 10;
+
+    // sub_141038210: the swing, then the target if any; no reach nor facing check
+    bool attack(ServerNetworkHandler &owner, ServerPlayer &player, Actor *target);
+
+    // Player::interact with no click position (sub_1402D2520)
+    bool interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, Actor &target);
+
+    // a click on a block face with the held item: the client's ItemUse transaction
+    bool interactWithBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face,
+                           const Vector3f &clickPosition);
+
+    // sub_14DCFD060, sub_141038670: false when dead, without an item or still cooling down
+    bool useItem(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item);
+
+    bool useItemInSlot(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot);
+
+    // sub_141038440: the item held for the click, the selected slot restored after
+    bool useItemOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item, const Vector3i &block,
+                        int32_t face, const Vector3f &clickPosition);
+
+    bool useItemInSlotOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot, const Vector3i &block,
+                              int32_t face, const Vector3f &clickPosition);
+
+    // the item in use as it was before the release, air when none (sub_14DCFD8B0)
+    ItemStack stopUsingItem(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    // sub_141039180: true while it hits the block; a solid block and no item in use to start
+    bool breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face);
+
+    void stopBreakingBlock();
+
     // the next input, built from the current orders
     void buildInput(ServerNetworkHandler &owner, ServerPlayer &player, PlayerAuthInputPacket &packet);
 
@@ -69,6 +105,12 @@ private:
     void _faceYaw(ServerPlayer &player, const Vector3f &target);
 
     void _lookAt(ServerPlayer &player, const Vector3f &target);
+
+    bool _actionReady(ServerNetworkHandler &owner) const;
+
+    void _markAction(ServerNetworkHandler &owner);
+
+    void _breakingActions(ServerNetworkHandler &owner, ServerPlayer &player, PlayerAuthInputPacket &packet);
 
     Move mMove = Move::None;
     Vector3f mDirection;
@@ -88,4 +130,12 @@ private:
     Request mSwimRequest = Request::None;
     Request mGlideRequest = Request::None;
     int32_t mTestRotation = 0;
+
+    bool mActed = false;
+    int64_t mLastActionTick = 0;
+
+    bool mBreaking = false;
+    bool mAbortBreak = false;
+    Vector3i mBreakBlock;
+    int32_t mBreakFace = 1;
 };
