@@ -16,6 +16,8 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Level/Block/Actor/CauldronBlockActor.h"
+#include "World/Level/Block/CauldronBlock.h"
 #include "World/Level/Block/ButtonBlock.h"
 #include "World/Level/Block/LeverBlock.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
@@ -362,6 +364,33 @@ namespace {
         return actor == nullptr ? JS_UNDEFINED : api->makeActor(*actor);
     }
 
+    // (dimension, xyz, fluid): false when the block is no cauldron; the fluid as FluidType counts it, Water 0,
+    // Lava 1, PowderSnow 2, Potion 3; the cauldron keeps its fill level (sub_144B02590)
+    JSValue gtSetCauldron(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 5)
+            return typeError(ctx);
+        Level &level = api->levelOf(argv[0]);
+        const Vector3i position(intOf(ctx, argv[1]), intOf(ctx, argv[2]), intOf(ctx, argv[3]));
+        const int32_t fluid = intOf(ctx, argv[4]);
+        const BlockState state = level.getBlockState(position.x, position.y, position.z);
+        if (!CauldronBlock::matches(state.mName))
+            return JS_FALSE;
+        const CauldronBlock::Liquid liquid = fluid == 1   ? CauldronBlock::Liquid::Lava
+                                             : fluid == 2 ? CauldronBlock::Liquid::PowderSnow
+                                                          : CauldronBlock::Liquid::Water;
+        const int fill = CauldronBlock(state).getFillLevel();
+        api->setBlock(level, position.x, position.y, position.z, CauldronBlock::makeState(liquid, fill));
+        // a potion cauldron is water with a potion id on its block actor, any other liquid clears it
+        CauldronBlockActor &actor = level.getBlockActors().getOrCreate<CauldronBlockActor>(position);
+        Tag data = actor.saveNbt();
+        data.putShort("PotionId", fluid == 3 ? 0 : -1);
+        data.putShort("PotionType", fluid == 3 ? 0 : -1);
+        actor.loadNbt(data, api->host().getCodecContext());
+        BlockActionHandler::broadcastBlockActorData(api->host(), level, actor);
+        return JS_TRUE;
+    }
+
     JSValue runBootstrap(JSContext *ctx, const char *source, JSValue argument) {
         JSValue factory = JS_Eval(ctx, source, std::strlen(source), "<gametest>", JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(factory)) {
@@ -404,6 +433,7 @@ void ScriptApi::_installGameTest() {
     addFunction(mContext, native, "pullLever", gtPullLever, 4);
     addFunction(mContext, native, "setFuse", gtSetFuse, 2);
     addFunction(mContext, native, "spawn", gtSpawn, 6);
+    addFunction(mContext, native, "setCauldron", gtSetCauldron, 5);
     JS_SetPropertyStr(mContext, native, "errors", JS_DupValue(mContext, mErrors));
     JSValue server = JS_NewObject(mContext);
     for (const auto &entry: mServerExports)
