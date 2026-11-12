@@ -16,6 +16,10 @@
 using namespace ScriptValues;
 
 namespace {
+    JSValue lootHas(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        return JS_NewBool(ctx, argc >= 1 && ScriptApi::fromContext(ctx)->surface().has(toString(ctx, argv[0])));
+    }
+
     JSValue typeError(JSContext *ctx) {
         return JS_ThrowTypeError(ctx, "Native type conversion failed.");
     }
@@ -178,6 +182,7 @@ JSValue ScriptApi::_lootNatives(JSValue itemTypes) {
     JSValue natives = JS_NewObject(mContext);
     JS_SetPropertyStr(mContext, natives, "ItemTypes", itemTypes);
     addNative(mContext, natives, "definition", lootDefinition, 1);
+    addNative(mContext, natives, "has", lootHas, 1);
     addNative(mContext, natives, "isItemStack", lootIsItemStack, 1);
     addNative(mContext, natives, "fromTable", lootFromTable, 2);
     addNative(mContext, natives, "fromBlock", lootFromBlock, 2);

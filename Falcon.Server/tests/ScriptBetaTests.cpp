@@ -49,7 +49,8 @@ namespace {
     }
 
     const char *const BETA = R"JS(
-import { world, system } from "@minecraft/server";
+import { world, system, BlockBoundingBoxUtils, BlockVolume, ListBlockVolume, PoiBlockOccupancyFilter,
+    WatchdogTerminateReason } from "@minecraft/server";
 
 const r = {};
 const log = (line) => { r.events = (r.events || "") + line + ";"; };
@@ -85,6 +86,26 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         r.netherWeather = world.getDimension("nether").getWeather();
     } else if (event.id === "beta:thunder") {
         overworld.setWeather("Thunder");
+    } else if (event.id === "beta:boxes") {
+        const U = BlockBoundingBoxUtils;
+        const v = (p) => p.x + "," + p.y + "," + p.z;
+        const b = (box) => box === undefined ? "undefined" : v(box.min) + ">" + v(box.max);
+        const box = U.createValid({ x: 3.9, y: -1.5, z: 0 }, { x: -2.2, y: 4, z: 1 });
+        const other = { min: { x: 1, y: 1, z: 1 }, max: { x: 6, y: 6, z: 6 } };
+        r.boxes = [b(box), b(U.dilate(box, { x: 1, y: 1.9, z: -3 })), U.equals(box, box), U.equals(box, other),
+            b(U.expand(box, other)), v(U.getCenter(other)), b(U.getIntersection(box, other)),
+            b(U.getIntersection(box, { min: { x: 9, y: 9, z: 9 }, max: { x: 10, y: 10, z: 10 } })),
+            v(U.getSpan(box)), U.intersects(box, other), U.isInside(box, { x: -1.9, y: 4.9, z: 1 }),
+            U.isInside(box, { x: 4, y: 0, z: 0 }), U.isValid(box),
+            U.isValid({ min: { x: 1, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }),
+            b(U.translate(box, { x: 1.5, y: -2.5, z: 0 }))].join("|");
+        r.volumeBox = b(new BlockVolume({ x: 2, y: 5, z: 1 }, { x: -1, y: 3, z: 4 }).getBoundingBox());
+        try { new ListBlockVolume([]).getBoundingBox(); r.emptyBox = "ok"; } catch (e) { r.emptyBox = e.name + ":" + e.message; }
+        r.boxCtor = (() => { try { new U(); return "ok"; } catch (e) { return e.name; } })();
+        r.enums = PoiBlockOccupancyFilter.Any + ":" + WatchdogTerminateReason.Hang;
+        world.broadcastClientMessage("test:id", "hello");
+        const carried = world.getLootTableManager().getLootTable("test/carry").pools[0].entries[0].functions;
+        r.carry = carried.map((f) => f.constructor.name + ":" + f.dynamicProperties).join(",");
     } else if (event.id === "beta:settings") {
         const rules = world.gameRules;
         r.waypoints = rules.playerWaypoints;
@@ -145,6 +166,10 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     void run(const std::filesystem::path &directory) {
         const std::filesystem::path packs = directory / "packs";
         writePack(packs, "beta", BETA);
+        writeFile(packs / "beta" / "loot_tables" / "test" / "carry.json",
+                  "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", \"name\": \"minecraft:chest\","
+                  " \"functions\": [{\"function\": \"carry_over_block_entity_data\", \"dynamic_properties\": true},"
+                  " {\"function\": \"carry_over_block_entity_data\", \"dynamic_properties\": 1}]}]}]}");
 
         ServerNetworkHandler owner("Script beta", "", 1);
         ScriptEngine &engine = owner.getScriptEngine();
@@ -210,6 +235,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 
         require(owner.getProperties().getAllowCheats(), "the fixture starts without cheats");
         engine.emitScriptEvent("beta:settings", "");
+        engine.emitScriptEvent("beta:boxes", "");
         require(!owner.getProperties().getAllowCheats(), "allowCheats did not turn cheats off");
         const GameRules::Rule *waypoints = level.getGameRules().find("playerwaypoints");
         require(waypoints != nullptr && waypoints->mIntValue == 0, "playerWaypoints did not reach the game rule");
@@ -231,6 +257,14 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*r, "cheatsBad", "TypeError");
         expect(*r, "stopped", "ok");
         expect(*r, "splitScreen", "undefined");
+        expect(*r, "boxes",
+               "-2,-1,0>3,4,1|-3,-2,-2>4,5,3|true|false|-2,-1,0>6,6,6|4,4,4|1,1,1>3,4,1|undefined|6,6,2|true|true|false|"
+               "true|false|-1,-3,0>4,2,1");
+        expect(*r, "volumeBox", "-1,3,1>2,5,4");
+        expect(*r, "emptyBox", "Error:Cannot get bounding box of empty block volume.");
+        expect(*r, "boxCtor", "ReferenceError");
+        expect(*r, "enums", "Any:Hang");
+        expect(*r, "carry", "CarryOverBlockEntityDataFunction:true,CarryOverBlockEntityDataFunction:false");
         expect(*r, "ease",
                "ok|Error:The camera preset selected is not an allowed ease target.|Error:Easing time cannot be less "
                "than 0.|Error:Invalid camera preset!|ok|TypeError:Native type conversion failed.");

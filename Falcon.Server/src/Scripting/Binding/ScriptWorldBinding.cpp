@@ -13,6 +13,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
+#include "Protocol/Packets/ScriptMessagePacket.h"
 #include "Scripting/ScriptEngine.h"
 #include "World/Level/Block/BlockNames.h"
 
@@ -284,6 +285,21 @@ namespace {
         if (argc < 1 || !JS_IsBool(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         ScriptApi::fromContext(ctx)->host().setCommandsEnabled(JS_ToBool(ctx, argv[0]) == 1);
+        return JS_UNDEFINED;
+    }
+
+    // the level's packet sender carries a script message packet to every client (sub_14C3FF0A0)
+    JSValue worldBroadcastClientMessage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 2 || !JS_IsString(argv[0]) || !JS_IsString(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptMessagePacket packet;
+        packet.mChannel = toString(ctx, argv[0]);
+        packet.mMessage = toString(ctx, argv[1]);
+        ServerNetworkHandler &host = ScriptApi::fromContext(ctx)->host();
+        for (auto &entry: host.getPlayers()) {
+            if (entry.second.isSpawned())
+                host.sendPacketTo(entry.second.getNetworkIdentifier(), packet);
+        }
         return JS_UNDEFINED;
     }
 
@@ -1120,6 +1136,7 @@ void ScriptApi::_bindWorld() {
     propertyMagic(world, "World", "gameRules", holderGetter, 6);
     property(world, "World", "isHardcore", worldGetIsHardcore);
     property(world, "World", "allowCheats", worldGetAllowCheats, worldSetAllowCheats);
+    method(world, "World", "broadcastClientMessage", worldBroadcastClientMessage, 2);
     property(world, "World", "seed", worldGetSeed);
     methodMagic(world, "World", "getAbsoluteTime", worldGetTime, 0, 0);
     methodMagic(world, "World", "getTimeOfDay", worldGetTime, 0, 1);

@@ -551,7 +551,9 @@ namespace {
                                         "MovementType",
                                         "StickyType",
                                         "CloneMode",
-                                        "PlayerWaypointsMode"};
+                                        "PlayerWaypointsMode",
+                                        "PoiBlockOccupancyFilter",
+                                        "WatchdogTerminateReason"};
 
     const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
                                                     "BlockComponentBlockBreakEvent",

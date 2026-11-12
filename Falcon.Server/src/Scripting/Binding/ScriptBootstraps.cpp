@@ -422,6 +422,13 @@ namespace {
             const min = this.getMin(), max = this.getMax();
             return { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
         }
+        // sub_14DD56160: the volume's own bounds, refused while it holds no location
+        getBoundingBox() {
+            if (this[CAPACITY] !== undefined && this[CAPACITY]() === 0)
+                throw native.error("Error", "Cannot get bounding box of empty block volume.");
+            const min = this[MIN](), max = this[MAX]();
+            return { min: { x: min.x, y: min.y, z: min.z }, max: { x: max.x, y: max.y, z: max.z } };
+        }
         // sub_14DD6ADE0, sub_14DD6B520: a bounded min-heap over (key, x, y, z) as floats; a location replaces
         // the least kept one only on a strictly larger key, then all come out from the largest
         #nearest(count, location, sign) {
@@ -1548,6 +1555,9 @@ namespace {
         set_name: ["SetItemNameFunction", (j) => ({ name: String(j.name ?? "") })],
         set_actor_id: ["SetSpawnEggFunction", (j) => ({ id: String(j.id ?? "") })],
         fill_container: ["FillContainerFunction", (j) => ({ lootTable: String(j.loot_table ?? "") })],
+        // sub_1455570E0: a dynamic_properties that is not a bool reads as false
+        carry_over_block_entity_data: ["CarryOverBlockEntityDataFunction",
+            (j) => ({ dynamicProperties: j.dynamic_properties === true })],
     };
     for (const spec of Object.values(CONDITIONS))
         add(spec[0], LootItemCondition, Object.keys(spec[1]({})));
@@ -1559,8 +1569,10 @@ namespace {
         return spec ? new classes[spec[0]](token, spec[1](json)) : new LootItemCondition(token, {});
     };
     const conditions = (list) => (Array.isArray(list) ? list.map(condition) : []);
+    // a function class the module version lacks reads as the base class
     const lootFunction = (json) => {
-        const spec = FUNCTIONS[unprefixed(json && json.function)];
+        const found = FUNCTIONS[unprefixed(json && json.function)];
+        const spec = found && native.has(found[0]) ? found : undefined;
         const data = spec ? spec[1](json) : {};
         data.conditions = conditions(json && json.conditions);
         return new (spec ? classes[spec[0]] : LootItemFunction)(token, data);
