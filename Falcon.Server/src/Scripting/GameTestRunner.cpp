@@ -9,6 +9,7 @@
 #include "Scripting/Binding/ScriptApi.h"
 #include "Scripting/ScriptEngine.h"
 #include "Scripting/VanillaTexts.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Actor/CommandBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
@@ -168,10 +169,49 @@ void GameTestRunner::_setBlock(Level &level, const Vector3i &position, const Blo
             update);
 }
 
-void GameTestRunner::_clearCells(Level &level, const std::vector<Vector3i> &cells) {
-    for (const Vector3i &cell: cells) {
-        level.getBlockActors().remove(cell);
-        _setBlock(level, cell, "minecraft:air");
+void GameTestRunner::_clearSpace(Level &level, const Vector3i &low, const Vector3i &high, int32_t floor) {
+    const BlockState air = ScriptApi::defaultBlockState("minecraft:air");
+    const BlockState dirt = ScriptApi::defaultBlockState("minecraft:dirt");
+    const Vector3i from(low.x - 2, low.y - 3, low.z - 3), to(high.x + 3, high.y + 20, high.z + 3);
+    for (int32_t x = from.x; x <= to.x; ++x) {
+        for (int32_t y = from.y; y <= to.y; ++y) {
+            for (int32_t z = from.z; z <= to.z; ++z) {
+                if (level.peekBlockPtr(x, y, z) == nullptr)
+                    continue;
+                const Vector3i cell(x, y, z);
+                level.getBlockActors().remove(cell);
+                // the extra layer first, so no water stays behind
+                const BlockState *extra = level.peekBlockPtr(x, y, z, 1);
+                if (y >= floor && extra != nullptr && extra->mName != "minecraft:air") {
+                    level.setBlockStateAtLayer(x, y, z, 1, air);
+                    UpdateBlockPacket update;
+                    update.mBlockPosition = cell;
+                    update.mRuntimeId = (uint32_t) BlockStateHasher::hash(air.mName, air.mStates);
+                    update.mFlags = UpdateBlockPacket::Flag::All;
+                    update.mDataLayer = 1;
+                    BlockActionHandler::broadcastToViewers(
+                            *mHost, level, Vector3f((float) x + 0.5f, (float) y + 0.5f, (float) z + 0.5f), update);
+                }
+                _setBlock(level, cell, y >= floor ? air : dirt);
+            }
+        }
+    }
+
+    // every entity in the space but the players
+    std::vector<int64_t> removed;
+    const auto inside = [&from, &to](const Vector3f &position) {
+        return position.x >= (float) from.x && position.x < (float) (to.x + 1) && position.y >= (float) from.y
+               && position.y < (float) (to.y + 1) && position.z >= (float) from.z && position.z < (float) (to.z + 1);
+    };
+    for (auto &entry: mHost->getActors()) {
+        if (entry.second->isIn(level) && inside(entry.second->getPosition()))
+            removed.push_back(entry.first);
+    }
+    for (const int64_t id: removed)
+        mHost->removeActor(id);
+    for (std::unique_ptr<ItemActor> &item: mHost->getItemEntities()) {
+        if (item != nullptr && item->isIn(level) && inside(item->getPosition()))
+            item->setRemoved(true);
     }
 }
 
@@ -198,15 +238,13 @@ bool GameTestRunner::_spawn(Instance &instance) {
     const Vector3i corner(at.x, at.y + 1, at.z);
     structure->place(*mHost, level, corner, options);
 
+    // GameTestInstanceLedger::testStructureLoaded (sub_144B234B0): the loaded structure's bounds
+    const Vector3i box = rotatedSize(instance.mSize, instance.mRotation);
     Ledger ledger;
     ledger.mLevel = &level;
-    const Vector3i box = rotatedSize(instance.mSize, instance.mRotation);
-    for (int32_t x = 0; x < box.x; ++x) {
-        for (int32_t y = 0; y < box.y; ++y) {
-            for (int32_t z = 0; z < box.z; ++z)
-                ledger.mCells.emplace_back(corner.x + x, corner.y + y, corner.z + z);
-        }
-    }
+    ledger.mLow = corner;
+    ledger.mHigh = Vector3i(corner.x + box.x - 1, corner.y + box.y - 1, corner.z + box.z - 1);
+    mLedger.push_back(ledger);
 
     _setBlock(level, Vector3i(at.x, at.y - 1, at.z), "minecraft:redstone_block");
     _setBlock(level, at, "minecraft:structure_block");
@@ -231,10 +269,6 @@ bool GameTestRunner::_spawn(Instance &instance) {
     BlockState stone = ScriptApi::defaultBlockState("minecraft:stone_button");
     stone.mStates.putInt("facing_direction", 2);
     _setBlock(level, button, stone);
-
-    for (const Vector3i &cell: {Vector3i(at.x, at.y - 1, at.z), at, commandBlock, button})
-        ledger.mCells.push_back(cell);
-    mLedger.push_back(std::move(ledger));
 
     instance.mRunning = true;
     ScriptApi *api = instance.mDescriptor.mApi;
@@ -284,23 +318,12 @@ void GameTestRunner::_beacon(Instance &instance, const char *glass) {
     Level &level = *instance.mLevel;
     const Vector3i beacon(instance.mStructureBlock.x - 1, instance.mStructureBlock.y - 1,
                           instance.mStructureBlock.z - 1);
-    std::vector<Vector3i> cells;
     _setBlock(level, beacon, "minecraft:beacon");
-    cells.push_back(beacon);
-    const Vector3i over(beacon.x, beacon.y + 1, beacon.z);
-    _setBlock(level, over, glass);
-    cells.push_back(over);
+    _setBlock(level, Vector3i(beacon.x, beacon.y + 1, beacon.z), glass);
     for (int32_t x = -1; x <= 1; ++x) {
-        for (int32_t z = -1; z <= 1; ++z) {
-            const Vector3i iron(beacon.x + x, beacon.y - 1, beacon.z + z);
-            _setBlock(level, iron, "minecraft:iron_block");
-            cells.push_back(iron);
-        }
+        for (int32_t z = -1; z <= 1; ++z)
+            _setBlock(level, Vector3i(beacon.x + x, beacon.y - 1, beacon.z + z), "minecraft:iron_block");
     }
-    Ledger ledger;
-    ledger.mLevel = &level;
-    ledger.mCells = std::move(cells);
-    mLedger.push_back(std::move(ledger));
 }
 
 // the failure report on a lectern west, up and north of the structure block (sub_144B0E160)
@@ -326,10 +349,6 @@ void GameTestRunner::_lectern(Instance &instance, const std::string &page) {
         lectern.setBook(std::move(book));
         BlockActionHandler::broadcastBlockActorData(*mHost, level, lectern);
     }
-    Ledger ledger;
-    ledger.mLevel = &level;
-    ledger.mCells.push_back(position);
-    mLedger.push_back(std::move(ledger));
 }
 
 // ClientboundDebugRendererPacket: a red cube for a day where the error happened
@@ -506,7 +525,9 @@ void GameTestRunner::_startBatch() {
 
         int32_t x = run.mCorner.x, z = run.mCorner.z, rowDepth = 0, placed = 0;
         std::vector<Instance *> started;
-        for (const Descriptor &test: batch.mTests) {
+        for (size_t index = 0; index < batch.mTests.size(); ++index) {
+            const Descriptor &test = batch.mTests[index];
+            const int32_t rotation = batch.mRotations[index];
             Vector3i at(x, run.mCorner.y, z);
             Level *level = run.mLevel;
             if (test.mHasStructureLocation) {
@@ -515,7 +536,7 @@ void GameTestRunner::_startBatch() {
                 std::shared_ptr<McStructure> structure = mHost->getScriptEngine().structures().find(
                         test.mStructureName);
                 const Vector3i size = structure == nullptr ? Vector3i(1, 1, 1)
-                                                           : rotatedSize(structure->getSize(), run.mRotation);
+                                                           : rotatedSize(structure->getSize(), rotation);
                 const int32_t padding = std::max(test.mPadding, 0);
                 at = Vector3i(x + padding, run.mCorner.y, z + padding);
                 rowDepth = std::max(rowDepth, size.z - 1 + 2 * padding + 7);
@@ -527,7 +548,7 @@ void GameTestRunner::_startBatch() {
                     rowDepth = 0;
                 }
             }
-            Instance &instance = _make(test, *level, at, run.mRotation, run.mTracker);
+            Instance &instance = _make(test, *level, at, rotation, run.mTracker);
             instance.mUntilFail = run.mUntilFail;
             instance.mBatch = (int32_t) run.mNext - 1;
             run.mInstances.push_back(instance.mId);
@@ -676,8 +697,9 @@ GameTestRunner::Outcome GameTestRunner::runSet(Level &level, const Vector3i &ori
     run->mRotation = rotation & 3;
     run->mUntilFail = untilFail;
     run->mTracker = std::make_shared<Tracker>();
-    run->mTracker->mTotal = (int32_t) tagged.size();
-    std::vector<std::pair<std::pair<ScriptApi *, std::string>, std::vector<Descriptor>>> groups;
+    // a rotateTest test runs once per rotation: the started count adds three for it (sub_14BE848F0)
+    std::vector<std::pair<std::pair<ScriptApi *, std::string>, std::vector<std::pair<Descriptor, int32_t>>>> groups;
+    int32_t started = 0;
     for (const Descriptor &test: tagged) {
         auto group = std::find_if(groups.begin(), groups.end(), [&test](const auto &entry) {
             return entry.first.first == test.mApi && entry.first.second == test.mBatch;
@@ -686,8 +708,15 @@ GameTestRunner::Outcome GameTestRunner::runSet(Level &level, const Vector3i &ori
             groups.push_back({{test.mApi, test.mBatch}, {}});
             group = groups.end() - 1;
         }
-        group->second.push_back(test);
+        if (test.mRotateTest) {
+            for (int32_t step = 0; step < 4; ++step)
+                group->second.emplace_back(test, step);
+        } else {
+            group->second.emplace_back(test, run->mRotation);
+        }
+        started += test.mRotateTest ? 4 : 1;
     }
+    run->mTracker->mTotal = started;
     for (auto &group: groups) {
         for (size_t first = 0, index = 0; first < group.second.size(); first += MAX_TESTS_PER_BATCH, ++index) {
             Batch batch;
@@ -695,14 +724,16 @@ GameTestRunner::Outcome GameTestRunner::runSet(Level &level, const Vector3i &ori
             batch.mCallbackName = group.first.second;
             batch.mName = group.first.second + ":" + std::to_string(index);
             const size_t last = std::min(group.second.size(), first + (size_t) MAX_TESTS_PER_BATCH);
-            batch.mTests.assign(group.second.begin() + (std::ptrdiff_t) first,
-                                group.second.begin() + (std::ptrdiff_t) last);
+            for (size_t index = first; index < last; ++index) {
+                batch.mTests.push_back(group.second[index].first);
+                batch.mRotations.push_back(group.second[index].second);
+            }
             run->mBatches.push_back(std::move(batch));
         }
     }
     mBatchRuns.push_back(std::move(run));
     _startBatch();
-    return Outcome{true, "gameTest.success.testsStarted", {number((int32_t) tagged.size()), tag}};
+    return Outcome{true, "gameTest.success.testsStarted", {number(started), tag}};
 }
 
 // StructureUtils::createNewEmptyStructureBlock (sub_144B28530) and the polished andesite floor of sub_14BE80D30
@@ -749,14 +780,20 @@ GameTestRunner::Outcome GameTestRunner::clearAll(Level &level) {
         if (entry.second.isSpawned())
             mHost->sendPacketTo(entry.second.getNetworkIdentifier(), clear);
     }
+    // MinecraftGameTest::clearAllTests (sub_144AEBE20): the running tests go, then the space of every structure
+    // the ledger holds in this dimension, its floor the structure's lowest layer
+    stopAll();
+    std::vector<Ledger> cleared;
     for (auto it = mLedger.begin(); it != mLedger.end();) {
         if (it->mLevel != &level) {
             ++it;
             continue;
         }
-        _clearCells(level, it->mCells);
+        cleared.push_back(*it);
         it = mLedger.erase(it);
     }
+    for (const Ledger &entry: cleared)
+        _clearSpace(level, entry.mLow, entry.mHigh, entry.mLow.y);
     return Outcome{true, "", {}};
 }
 
@@ -783,9 +820,22 @@ GameTestRunner::Outcome GameTestRunner::position(Level &level, const Vector3i &t
     const Vector3i relative = unrotate(
             Vector3i(target.x - hit.mPosition.x, target.y - hit.mPosition.y, target.z - hit.mPosition.z), hit.mRotation,
             hit.mSize);
-    return Outcome{true,
-                   "gameTest.success.relativePosition",
-                   {hit.mName, number(relative.x) + ", " + number(relative.y) + ", " + number(relative.z)}};
+    const std::string where = number(relative.x) + ", " + number(relative.y) + ", " + number(relative.z);
+    // a green cube on the block for ten seconds, the relative position over it (sub_14BE80D30)
+    ClientboundDebugRendererPacket marker;
+    marker.mDebugMarkerType = ClientboundDebugRendererType::AddDebugMarkerCube;
+    marker.mMarkerText = where;
+    marker.mMarkerPosition = Vector3f((float) target.x, (float) target.y, (float) target.z);
+    marker.mMarkerColorRed = 0.0f;
+    marker.mMarkerColorGreen = 1.0f;
+    marker.mMarkerColorBlue = 0.0f;
+    marker.mMarkerColorAlpha = 1.0f;
+    marker.mMarkerDuration = 10000;
+    for (auto &entry: mHost->getPlayers()) {
+        if (entry.second.isSpawned())
+            mHost->sendPacketTo(entry.second.getNetworkIdentifier(), marker);
+    }
+    return Outcome{true, "gameTest.success.relativePosition", {hit.mName, where}};
 }
 
 void GameTestRunner::finished(int32_t id, const Failure *failure) {

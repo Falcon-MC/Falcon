@@ -82,6 +82,17 @@ gt.registerAsync("Suite", "async", async (test) => {
     test.succeed();
 }).structureName("gt:box").tag("suite:default");
 gt.register("Suite", "missing", (test) => test.succeed()).structureName("gt:nothing");
+gt.register("Suite", "turns", (test) => test.succeed()).structureName("gt:box").rotateTest(true).tag("gt:turns").batch("turns");
+gt.register("Suite", "fuse", (test) => {
+    const cow = test.spawn("minecraft:cow", { x: 1, y: 1, z: 1 });
+    try {
+        test.setTntFuse(cow, 5);
+        r.fuse = "set";
+    } catch (e) {
+        r.fuse = e.type + "|" + e.message + "|" + e.messageParameters + "|" + JSON.stringify(e.context.relativePosition);
+    }
+    test.succeed();
+}).structureName("gt:box");
 gt.setBeforeBatchCallback("", () => { r.before = String(Number(r.before || 0) + 1); });
 r.twice = errorOf(() => gt.setBeforeBatchCallback("", () => {}));
 r.tags = gt.Tags.suiteDefault + "|" + gt.Tags.suiteAll;
@@ -179,7 +190,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         engine.tick(++tick);
 
         GameTestRunner &runner = engine.gameTests();
-        require(runner.testNames().size() == 6, "the registered tests are not listed");
+        require(runner.testNames().size() == 8, "the registered tests are not listed");
         require(!runner.run(level, Vector3i(0, 100, 0), "Suite:none", 0, false, 1).mSuccess, "an unknown test ran");
         require(runner.run(level, Vector3i(0, 100, 0), "Suite:passes", 0, false, 0).mKey
                         == "gameTest.error.repeatCountTooSmall",
@@ -231,6 +242,15 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         require(runner.runSet(level, Vector3i(0, 100, 30), "nope", 0, false).mKey == "gameTest.error.noTestsFound",
                 "an unknown tag found tests");
 
+        // a rotateTest test runs in all four rotations
+        const GameTestRunner::Outcome turns = runner.runSet(level, Vector3i(0, 100, 45), "gt:turns", 0, false);
+        require(turns.mSuccess && turns.mParameters[0] == "4", "rotateTest did not start four runs");
+        chat = tickAndRead(owner, engine, tick, 4);
+        require(contains(chat, "gameTest.report.testCount") && contains(chat, "\"4\""), "no four runs: " + chat);
+
+        require(runner.run(level, Vector3i(40, 100, 45), "Suite:fuse", 0, false, 1).mSuccess, "fuse did not run");
+        tickAndRead(owner, engine, tick, 2);
+
         const GameTestRunner::Outcome created = runner.create(level, Vector3i(0, 100, 60), "Made:here", 4, 0, 0);
         require(created.mSuccess, "create failed");
         const StructureBlockActor *made = level.getBlockActors().find<StructureBlockActor>(Vector3i(0, 100, 63));
@@ -244,9 +264,12 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         require(where.mSuccess && where.mParameters[0] == "gt:box" && where.mParameters[1] == "1, 1, 1",
                 "pos is wrong");
 
+        // the space of each structure: air from its lowest layer up, dirt under it
         runner.clearAll(level);
-        require(level.getBlockState(0, 100, 3).mName == "minecraft:air"
-                        && level.getBlockState(-1, 99, 2).mName == "minecraft:air",
+        require(level.getBlockState(1, 101, 4).mName == "minecraft:air", "clearall left the structure");
+        require(level.getBlockState(0, 100, 3).mName == "minecraft:dirt"
+                        && level.getBlockState(-1, 99, 2).mName == "minecraft:dirt"
+                        && level.getBlockState(-1, 101, 2).mName == "minecraft:air",
                 "clearall left the test blocks");
 
         engine.queueScriptEvent("gt:report", "");
@@ -267,6 +290,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "tags", "suite:default|suite:all");
         expect(*report, "registrationBuilder", "ReferenceError:No constructor for native class 'RegistrationBuilder'.");
         expect(*report, "before", "1");
+        expect(*report, "fuse",
+               "Assert|gameTest.assert.missingExplosionComponent|minecraft:cow|{\"x\":0,\"y\":0,\"z\":0}");
     }
 }
 

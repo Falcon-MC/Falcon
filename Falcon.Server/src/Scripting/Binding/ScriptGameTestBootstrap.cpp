@@ -658,12 +658,14 @@ namespace {
         if (!isEntity(entity))
             throw conversion();
         const ticks = integer(fuseLength);
-        // sub_144AF6240: the explode component first, then the length, both naming the entity type
+        // sub_144AF6240: the explode component first, then the length, both naming the entity type at the
+        // test's relative origin (sub_144B199E0)
         const result = native.setFuse(entity, ticks);
+        const origin = { x: 0, y: 0, z: 0 };
         if (result === 1)
-            throw gameTestError("Assert", "gameTest.assert.missingExplosionComponent", [entity.typeId]);
+            throw atPosition(inst, "gameTest.assert.missingExplosionComponent", [entity.typeId], origin, "Assert");
         if (result === 2)
-            throw gameTestError("Assert", "gameTest.assert.invalidFuseLength", [entity.typeId]);
+            throw atPosition(inst, "gameTest.assert.invalidFuseLength", [entity.typeId], origin, "Assert");
     }, world);
     const spawnAt = (inst, typeId, at, behaviors, relative) => {
         const type = withNamespace(string(typeId));

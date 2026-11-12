@@ -335,7 +335,7 @@ namespace {
         if (tnt != nullptr)
             tnt->setFuse(ticks);
         else
-            mob->getExplode().setFuseLength(ticks);
+            mob->getExplode().setFuseLength(api->host(), *mob, ticks);
         return JS_NewInt32(ctx, 0);
     }
 

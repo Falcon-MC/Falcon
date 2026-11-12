@@ -135,6 +135,8 @@ private:
         std::string mCallbackName;
         ScriptApi *mApi = nullptr;
         std::vector<Descriptor> mTests;
+        // the rotation of each test, a rotateTest one once per rotation
+        std::vector<int32_t> mRotations;
     };
 
     struct BatchRun {
@@ -180,7 +182,8 @@ private:
 
     void _setBlock(Level &level, const Vector3i &position, const BlockState &state);
 
-    void _clearCells(Level &level, const std::vector<Vector3i> &cells);
+    // StructureUtils::clearSpaceForStructure (sub_144B1DFA0): air from the floor up, dirt under it
+    void _clearSpace(Level &level, const Vector3i &low, const Vector3i &high, int32_t floor);
 
     const Descriptor *_find(const std::string &name, const std::vector<Descriptor> &all) const;
 
@@ -203,10 +206,11 @@ private:
     std::map<int32_t, std::unique_ptr<Instance>> mInstances;
     std::vector<std::unique_ptr<BatchRun>> mBatchRuns;
 
-    // GameTestInstanceLedger: every block a test placed, cleared by clearall
+    // GameTestInstanceLedger: the bounds of every structure a test loaded, cleared by clearall
     struct Ledger {
         Level *mLevel = nullptr;
-        std::vector<Vector3i> mCells;
+        Vector3i mLow;
+        Vector3i mHigh;
     };
     std::vector<Ledger> mLedger;
 };

@@ -13,18 +13,19 @@ public:
     // false once the actor exploded
     bool tick(ServerNetworkHandler &owner, MobActor &mob);
 
-    // ExplodeComponent's fuse length (sub_144AF6240 writes it): a lit fuse goes on from there
-    void setFuseLength(int32_t ticks) {
-        if (mFuseTicks >= 0)
-            mFuseTicks = ticks;
-    }
+    // ExplodeComponent's fuse length (sub_144AF6240 writes it): the fuse burns from it once lit
+    void setFuseLength(ServerNetworkHandler &owner, MobActor &mob, int32_t ticks);
 
 private:
+    // the fuse length is drawn when the component arrives, lit or not
+    void _sync(ServerNetworkHandler &owner, MobActor &mob);
+
     void _setIgnited(ServerNetworkHandler &owner, MobActor &mob, bool ignited);
 
     void _explode(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component);
 
     const json::Value *mComponent = nullptr;
     int32_t mFuseTicks = -1;
+    bool mLit = false;
     bool mExploded = false;
 };
