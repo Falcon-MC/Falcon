@@ -596,8 +596,9 @@ namespace {
     class FormResponse {
         constructor(key, canceled, reason) {
             if (key !== token) sealed(new.target === undefined ? "FormResponse" : new.target.name);
-            field(this, "canceled", canceled);
-            if (reason !== undefined) field(this, "cancelationReason", reason);
+            // 1.0.0 responses carry neither
+            if (native.has("FormResponse.canceled")) field(this, "canceled", canceled);
+            if (reason !== undefined && native.has("FormResponse.cancelationReason")) field(this, "cancelationReason", reason);
         }
     }
     class ActionFormResponse extends FormResponse {
@@ -694,6 +695,8 @@ namespace {
     }
 
     const options = (value, key) => (value !== null && typeof value === "object") ? value : { [key]: value };
+    // 1.x: positional defaults; 2.0.0 moved them into options and added label
+    const legacy = !native.has("ModalFormData.label");
     const tooltip = (entry, source) => {
         if (source.tooltip !== undefined) entry.tooltip = ft(source.tooltip);
         return entry;
@@ -706,7 +709,8 @@ namespace {
             return this;
         }
         textField(label, placeholder, textFieldOptions) {
-            const o = options(textFieldOptions, "defaultValue");
+            // 1.x takes the default text itself, a raw message included
+            const o = legacy ? { defaultValue: textFieldOptions } : options(textFieldOptions, "defaultValue");
             const def = o.defaultValue === undefined ? "" : (typeof o.defaultValue === "object" ? ft(o.defaultValue) : String(o.defaultValue));
             this.#data.content.push(tooltip({ type: "input", text: ft(label), placeholder: placeholder === undefined ? "" : ft(placeholder), default: def }, o));
             return this;
@@ -827,9 +831,11 @@ namespace {
     const ObservableUIRawMessage = makeObservable("ObservableUIRawMessage", isRawMessage);
     const ObservableStringBase = makeObservable("ObservableString", (v) => typeof v === "string");
     class ObservableString extends ObservableStringBase {
-        // DDUITextFiltering.cpp: without a text filter on the player the native throws the entity error
+        // DDUITextFiltering.cpp: the text as it is now, filtered for that player
         getFilteredText(player) {
-            throw invalidPlayer(player, "getFilteredText");
+            const filtered = native.filterText(player, observed.get(this).data);
+            if (filtered === undefined) throw invalidPlayer(player, "getFilteredText");
+            return filtered;
         }
     }
 

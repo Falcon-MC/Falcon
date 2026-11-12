@@ -179,6 +179,8 @@ void ScriptApi::tick(int64_t currentTick) {
     }
     if (!mPendingTickingAreas.empty())
         resolveTickingAreas();
+    if (!mPendingFilteredTexts.empty())
+        _resolveFilteredTexts();
     _emitInventoryChanges();
     _emitCursorChanges();
     _tickLocatorBars();
@@ -290,6 +292,52 @@ void ScriptApi::closeScreen(JSValueConst playerValue, int32_t formId) {
     ServerPlayer *player = resolvePlayer(playerValue);
     if (player != nullptr)
         mHost.closeDataDrivenScreen(*player, formId);
+}
+
+// getFilteredText (sub_14B65D150) through TextFilteringUtils::processMessagesWithClientsideDebugTimingsAsync
+// (sub_145A2E9D0, 26.60): without a text processor the text comes back as sent, after the client's debug
+// timeout when it set one; a player who turned the filter off gets DisabledByPlayer (error 5, sub_14B6C7190)
+JSValue ScriptApi::filterText(JSValueConst playerValue, const std::string &text) {
+    ServerPlayer *player = resolvePlayer(playerValue);
+    if (player == nullptr)
+        return JS_UNDEFINED;
+
+    JSValue resolvingFuncs[2];
+    JSValue promise = JS_NewPromiseCapability(mContext, resolvingFuncs);
+    JS_FreeValue(mContext, resolvingFuncs[1]);
+
+    PendingFilteredText pending;
+    pending.mResolve = resolvingFuncs[0];
+    pending.mReadyAt = std::chrono::steady_clock::now();
+    if (player->isProfanityFilterEnabled()) {
+        pending.mValue = string(mContext, text);
+        if (player->getTextFilteringDebugTimeout() > 0)
+            pending.mReadyAt += std::chrono::milliseconds(player->getTextFilteringDebugTimeout());
+    } else {
+        pending.mValue = JS_NewArray(mContext);
+        JS_SetPropertyUint32(mContext, pending.mValue, 0, string(mContext, "DisabledByPlayer"));
+    }
+    mPendingFilteredTexts.push_back(pending);
+    return promise;
+}
+
+void ScriptApi::_resolveFilteredTexts() {
+    const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+    std::vector<PendingFilteredText> ready;
+    for (size_t index = 0; index < mPendingFilteredTexts.size();) {
+        if (mPendingFilteredTexts[index].mReadyAt > now) {
+            ++index;
+            continue;
+        }
+        ready.push_back(mPendingFilteredTexts[index]);
+        mPendingFilteredTexts.erase(mPendingFilteredTexts.begin() + (std::ptrdiff_t) index);
+    }
+    for (PendingFilteredText &pending: ready) {
+        JSValue result = JS_Call(mContext, pending.mResolve, JS_UNDEFINED, 1, &pending.mValue);
+        JS_FreeValue(mContext, result);
+        JS_FreeValue(mContext, pending.mValue);
+        JS_FreeValue(mContext, pending.mResolve);
+    }
 }
 
 void ScriptApi::_resolveForm(uint32_t formId, const std::string &response, const char *status) {

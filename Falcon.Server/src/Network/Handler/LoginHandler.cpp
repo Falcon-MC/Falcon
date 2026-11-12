@@ -391,6 +391,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     player.setClientSideGenerationCompatible(
             ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
     player.setLocale(request.getLanguageCode());
+    player.readSyncedClientOptions(request.getClientData());
 
     if (owner.getProperties().getNetworkEncryption()) {
         startEncryption(owner, id, player, verifier.getIdentityPublicKey());

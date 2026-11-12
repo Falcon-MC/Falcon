@@ -15,6 +15,7 @@
 #include "Scripting/ScriptModules.h"
 #include "Scripting/ScriptScheduler.h"
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -89,6 +90,10 @@ public:
 
     const std::string &packRoot() const {
         return mPackRoot;
+    }
+
+    const ScriptSurface &uiSurface() const {
+        return mUiSurface;
     }
 
     const ScriptModuleSet &modules() const {
@@ -263,6 +268,9 @@ public:
     JSValue updateScreen(JSValueConst playerValue, int32_t formId, JSValueConst value, JSValueConst writable);
 
     void closeScreen(JSValueConst playerValue, int32_t formId);
+
+    // ObservableString.getFilteredText: undefined when the player is gone, else a promise for the text or its errors
+    JSValue filterText(JSValueConst playerValue, const std::string &text);
 
     void addSubscriber(const std::string &key, JSValue callback);
 
@@ -548,6 +556,8 @@ private:
 
     void _resolveForm(uint32_t formId, const std::string &response, const char *status);
 
+    void _resolveFilteredTexts();
+
     void _fireStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position,
                    const char *hook, const char *eventClass);
 
@@ -625,6 +635,12 @@ private:
     JSValue mTickingAreas = JS_UNDEFINED;
     std::vector<std::string> mTickingAreaNames;
     std::vector<PendingTickingArea> mPendingTickingAreas;
+    struct PendingFilteredText {
+        JSValue mResolve;
+        JSValue mValue;
+        std::chrono::steady_clock::time_point mReadyAt;
+    };
+    std::vector<PendingFilteredText> mPendingFilteredTexts;
     JSValue mGameRules = JS_UNDEFINED;
     JSValue mSystemInfo = JS_UNDEFINED;
     std::vector<PackSetting> mPackSettings;

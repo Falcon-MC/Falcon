@@ -317,6 +317,37 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    JSValue uiHas(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && api->uiSurface().has(toString(ctx, argv[0])));
+    }
+
+    // a bootstrap class carries every version's methods: drop the ones this module version lacks
+    void pruneMembers(JSContext *ctx, JSValueConst cls, const std::string &name, const ScriptSurface &surface) {
+        JSValue prototype = JS_GetPropertyStr(ctx, cls, "prototype");
+        JSPropertyEnum *members = nullptr;
+        uint32_t count = 0;
+        if (JS_IsObject(prototype)
+            && JS_GetOwnPropertyNames(ctx, &members, &count, prototype, JS_GPN_STRING_MASK) == 0) {
+            for (uint32_t index = 0; index < count; ++index) {
+                const char *member = JS_AtomToCString(ctx, members[index].atom);
+                if (member != nullptr && std::strcmp(member, "constructor") != 0 && !surface.has(name + "." + member))
+                    JS_DeleteProperty(ctx, prototype, members[index].atom, 0);
+                if (member != nullptr)
+                    JS_FreeCString(ctx, member);
+            }
+            JS_FreePropertyEnum(ctx, members, count);
+        }
+        JS_FreeValue(ctx, prototype);
+    }
+
+    JSValue uiFilterText(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 2)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->filterText(argv[0], toString(ctx, argv[1]));
+    }
+
     JSValue graphicsIsBiome(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         return JS_NewBool(ctx, argc >= 1 && JS_IsObject(argv[0]) && api->native<ScriptNamedRef>(argv[0]) != nullptr);
@@ -580,6 +611,10 @@ ScriptApi::~ScriptApi() {
     for (PendingTickingArea &pending: mPendingTickingAreas) {
         JS_FreeValue(mContext, pending.mResolve);
         JS_FreeValue(mContext, pending.mReject);
+    }
+    for (PendingFilteredText &pending: mPendingFilteredTexts) {
+        JS_FreeValue(mContext, pending.mResolve);
+        JS_FreeValue(mContext, pending.mValue);
     }
     for (auto &entry: mActorObjects)
         JS_FreeValue(mContext, entry.second);
@@ -1612,14 +1647,20 @@ void ScriptApi::_installBootstraps() {
     addFunction(mContext, ui, "updateScreen", uiUpdateScreen, 4);
     addFunction(mContext, ui, "closeScreen", uiCloseScreen, 2);
     addFunction(mContext, ui, "isPlayer", uiIsPlayer, 1);
+    addFunction(mContext, ui, "filterText", uiFilterText, 2);
+    addFunction(mContext, ui, "has", uiHas, 1);
     JS_SetPropertyStr(mContext, ui, "errors", JS_DupValue(mContext, mErrors));
     JSValue uiExports = runBootstrap(mContext, mPackName, ScriptBootstraps::ui(), "<ui>", ui);
     for (const char *name:
          {"ActionFormData", "MessageFormData", "ModalFormData", "FormResponse", "ActionFormResponse",
           "MessageFormResponse", "ModalFormResponse", "UIManager", "uiManager", "CustomForm", "MessageBox",
           "ObservableBoolean", "ObservableNumber", "ObservableString", "ObservableUIRawMessage"}) {
-        if (mUiSurface.has(name))
-            mUiExports.emplace_back(name, JS_GetPropertyStr(mContext, uiExports, name));
+        if (!mUiSurface.has(name))
+            continue;
+        JSValue exported = JS_GetPropertyStr(mContext, uiExports, name);
+        if (JS_IsFunction(mContext, exported))
+            pruneMembers(mContext, exported, name, mUiSurface);
+        mUiExports.emplace_back(name, exported);
     }
     JS_FreeValue(mContext, uiExports);
 

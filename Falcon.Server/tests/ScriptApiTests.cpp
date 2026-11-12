@@ -30,6 +30,7 @@
 #include "Protocol/Packets/GraphicsOverrideParameterPacket.h"
 #include "Protocol/Packets/ServerboundDataDrivenScreenClosedPacket.h"
 #include "Protocol/Packets/ServerboundDataStorePacket.h"
+#include "Protocol/Packets/UpdateClientOptionsPacket.h"
 #include "Protocol/Packets/DimensionDataPacket.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -1419,6 +1420,38 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     ui.observable = [new ObservableNumber(3).getData(), errorOf(() => new ObservableNumber("3"))].join("|");
     save();
 });
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "ui:filter") return;
+    const text = new ObservableString("hello");
+    const pending = text.getFilteredText(world.getAllPlayers()[0]);
+    // the text is read when asked: a later write does not change the answer
+    text.setData("changed");
+    ui["filterAsync_" + event.message] = pending instanceof Promise && ui["filter_" + event.message] === undefined;
+    pending.then((value) => {
+        ui["filter_" + event.message] = JSON.stringify(value);
+        save();
+    });
+    save();
+});
+)JS";
+
+    // server-ui 1.0.0: only that version's members, and the positional textField default
+    const char *const LEGACY_UI = R"JS(
+import { world, system } from "@minecraft/server";
+import * as ui from "@minecraft/server-ui";
+r.members = [typeof ui.ActionFormData.prototype.header, typeof ui.ModalFormData.prototype.submitButton,
+             typeof ui.ModalFormData.prototype.label, "uiManager" in ui, typeof ui.ActionFormData.prototype.button]
+    .join("|");
+const save = () => world.setDynamicProperty("legacyUi", JSON.stringify(r));
+world.afterEvents.worldInitialize.subscribe(save);
+system.afterEvents.scriptEventReceive.subscribe((event) => {
+    if (event.id !== "ui:legacy") return;
+    new ui.ModalFormData().textField("f", "ph", { rawtext: [{ text: "d" }] }).show(world.getAllPlayers()[0])
+        .then((res) => {
+            r.response = ["canceled" in res, "cancelationReason" in res, JSON.stringify(res.formValues)].join("|");
+            save();
+        });
+});
 )JS";
 
     const char *const UNDECLARED = R"JS(
@@ -1517,6 +1550,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                   "{\"module_name\": \"@minecraft/server\", \"version\": \"beta\"},"
                   " {\"module_name\": \"@minecraft/server-ui\", \"version\": \"2.4.0-beta\"}",
                   std::string(PRELUDE) + BETA);
+        writePack(packs, "legacyui",
+                  "{\"module_name\": \"@minecraft/server\", \"version\": \"1.19.0\"},"
+                  " {\"module_name\": \"@minecraft/server-ui\", \"version\": \"1.0.0\"}",
+                  std::string(PRELUDE) + LEGACY_UI);
         writePack(
                 packs, "world", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
                 std::string(PRELUDE) + WORLD,
@@ -1602,7 +1639,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 13, "only the thirteen valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 14, "only the fourteen valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -1970,6 +2007,50 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*ddui, "box", "ClientClosed|1");
         expect(*ddui, "observable", "3|TypeError:Native type conversion failed.");
 
+        // getFilteredText: no text processor, so the text comes back as sent unless the player turned filtering off
+        player.readSyncedClientOptions("{\"TextFilteringDebugTimeoutMilliSeconds\":600000}");
+        require(player.isProfanityFilterEnabled() && player.getTextFilteringDebugTimeout() == 600000,
+                "the login client options were not read");
+        scriptEvent.execute(console, {"ui:filter", "slow"});
+        player.readSyncedClientOptions("");
+        scriptEvent.execute(console, {"ui:filter", "on"});
+        UpdateClientOptionsPacket options;
+        options.mHasFilterProfanityChange = true;
+        options.mFilterProfanityChange = false;
+        BinaryStream optionsStream;
+        options.writeWithHeader(optionsStream, owner.getCodecContext());
+        static_cast<NetworkHandler::Listener &>(owner).onDataReceived(id, optionsStream.getBuffer());
+        require(!player.isProfanityFilterEnabled(), "UpdateClientOptionsPacket did not turn the filter off");
+        scriptEvent.execute(console, {"ui:filter", "off"});
+        player.setProfanityFilterEnabled(true);
+
+        sent.clear();
+        owner.getNetworkHandler().setOutboundFilter([&sent](const NetworkIdentifier &, std::string &data) {
+            ReadOnlyBinaryStream header(data);
+            unsigned char sender = 0, client = 0;
+            sent.emplace_back(Packet::peekId(header, sender, client), data);
+            return false;
+        });
+        scriptEvent.execute(console, {"ui:legacy"});
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        std::vector<ModalFormRequestPacket> legacyForms;
+        for (const auto &packet: sent) {
+            if (packet.first != MinecraftPacketIds::ModalFormRequest)
+                continue;
+            ReadOnlyBinaryStream body(packet.second);
+            ModalFormRequestPacket request;
+            request.readHeader(body);
+            request.read(body, owner.getCodecContext());
+            legacyForms.push_back(request);
+        }
+        require(legacyForms.size() == 1, "the 1.0.0 form was not sent");
+        const std::unique_ptr<json::Value> legacyForm = json::parse(legacyForms[0].mFormData);
+        const json::Value *legacyDefault = legacyForm->get("content")->mArray[0]->get("default");
+        require(legacyDefault != nullptr && legacyDefault->get("rawtext") != nullptr,
+                "a 1.x raw message default was read as options");
+        // answered here, settled by the ticks below: an extra tick would move the script clock
+        answer(legacyForms[0], "[\"x\"]", false);
+
         // graphics: a single value goes out as one keyframe at time 0, a player override to that player only
         std::vector<GraphicsOverrideParameterPacket> overrides;
         owner.getNetworkHandler().setOutboundFilter([&overrides, &owner](const NetworkIdentifier &, std::string &data) {
@@ -2275,6 +2356,15 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         for (int64_t tick = 4; tick <= 8; ++tick)
             engine.tick(tick);
 
+        const std::unique_ptr<json::Value> filtered = result(owner, "ui");
+        expect(*filtered, "filterAsync_on", "true");
+        expect(*filtered, "filter_on", "\"hello\"");
+        expect(*filtered, "filter_off", "[\"DisabledByPlayer\"]");
+        require(filtered->get("filter_slow") == nullptr, "the client debug timeout did not hold the answer back");
+        const std::unique_ptr<json::Value> legacyUi = result(owner, "legacyUi");
+        expect(*legacyUi, "members", "undefined|undefined|undefined|false|function");
+        expect(*legacyUi, "response", "false|false|[\"x\"]");
+
         const BlockState stateful = level.getBlockState(at.x, at.y, at.z);
         require(stateful.mName == "test:stateful" && stateful.mStates.get("test:lit") != nullptr
                         && stateful.mStates.get("test:lit")->asByte() == 1
@@ -2556,7 +2646,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*stable2, "weatherAfter", "minecraft:overworld|Clear|Thunder;");
         expect(*stable2, "scriptEvents",
                "test:ping|hello world|Server|false|true|true;other:pong||Entity|true|true|true;ui:forms||Server|false|true|true;"
-               "ui:ddui||Server|false|true|true;gfx:apply||Server|false|true|true;"
+               "ui:ddui||Server|false|true|true;ui:filter|slow|Server|false|true|true;ui:filter|on|Server|false|true|true;"
+               "ui:filter|off|Server|false|true|true;ui:legacy||Server|false|true|true;gfx:apply||Server|false|true|true;"
                "test:event|m|Server|false|true|true;");
         expect(*stable2, "filtered", "other:pong;");
         require(stable2->get("removed") == nullptr, "an unsubscribed scriptEventReceive callback ran");
