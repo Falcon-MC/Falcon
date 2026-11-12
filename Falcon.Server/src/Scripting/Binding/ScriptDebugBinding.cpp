@@ -301,6 +301,10 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    JSValue worldGetPrimitiveShapesManager(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        return JS_DupValue(ctx, ScriptApi::fromContext(ctx)->primitiveShapesManager());
+    }
+
     JSValue runBootstrap(JSContext *ctx, const char *source, JSValue argument) {
         JSValue factory = JS_Eval(ctx, source, std::strlen(source), "<debug>", JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(factory)) {
@@ -315,6 +319,7 @@ namespace {
 }
 
 void ScriptApi::_installDebugUtilities() {
+    const bool debug = mModules.find("@minecraft/debug-utilities") != nullptr;
     JSValue native = JS_NewObject(mContext);
     addFunction(mContext, native, "privilege", debugPrivilege, 0);
     addFunction(mContext, native, "players", debugPlayers, 0);
@@ -341,7 +346,7 @@ void ScriptApi::_installDebugUtilities() {
     if (JS_GetOwnPropertyNames(mContext, &names, &count, exports, JS_GPN_STRING_MASK) == 0) {
         for (uint32_t index = 0; index < count; ++index) {
             const char *name = JS_AtomToCString(mContext, names[index].atom);
-            if (name != nullptr && mDebugSurface.has(name))
+            if (name != nullptr && debug && mDebugSurface.has(name))
                 mDebugExports.emplace_back(name, JS_GetProperty(mContext, exports, names[index].atom));
             if (name != nullptr)
                 JS_FreeCString(mContext, name);
@@ -349,8 +354,17 @@ void ScriptApi::_installDebugUtilities() {
         JS_FreePropertyEnum(mContext, names, count);
     }
 
+    for (const char *name: {"PrimitiveShape", "TextPrimitive", "PrimitiveShapesManager"}) {
+        if (mSurface.has(name))
+            mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, exports, name));
+    }
+    if (mSurface.has("World.primitiveShapesManager")) {
+        mPrimitiveShapes = JS_GetPropertyStr(mContext, exports, "primitiveShapesManager");
+        property(prototypeOf("World"), "World", "primitiveShapesManager", worldGetPrimitiveShapesManager);
+    }
+
     for (const char *name: {"DiagnosticsChartDisplayType", "DiagnosticsErrorReason", "DiagnosticsTableDisplayType"}) {
-        if (!mDebugSurface.has(name))
+        if (!debug || !mDebugSurface.has(name))
             continue;
         JSValue object = JS_NewObject(mContext);
         for (const auto &value: mDebugSurface.enumValues(name)) {

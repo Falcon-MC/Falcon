@@ -466,6 +466,10 @@ public:
         return mLootTableManager;
     }
 
+    JSValue primitiveShapesManager() const {
+        return mPrimitiveShapes;
+    }
+
     void emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z);
 
     void emitItemUseOnBlock(ServerPlayer &player, int32_t x, int32_t y, int32_t z);
@@ -767,6 +771,7 @@ private:
     JSValue mListVolume = JS_UNDEFINED;
     JSValue mLootTableManager = JS_UNDEFINED;
     JSValue mSoundDefinitionRegistry = JS_UNDEFINED;
+    JSValue mPrimitiveShapes = JS_UNDEFINED;
     std::vector<std::shared_ptr<ScriptSoundState>> mTrackedSounds;
 
     std::unordered_map<std::string, std::vector<JSValue>> mSubscribers;

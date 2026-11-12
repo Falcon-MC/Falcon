@@ -1545,7 +1545,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     const char *const GAPS = R"JS(
 import { world, system, MolangVariableMap, TicksPerSecond, TicksPerDay, MoonPhaseCount, FluidContainer, Trigger,
          DimensionTypes, ItemTypes, BlockVolume, BlockVolumeBase, HeldItemOption, PlatformType, GraphicsMode,
-         ControlScheme, LiquidSettings, ISerializable, Structure } from "@minecraft/server";
+         ControlScheme, LiquidSettings, ISerializable, Structure, TextPrimitive, PrimitiveShape } from "@minecraft/server";
 r.molangEarly = capture(() => new MolangVariableMap());
 r.triggerEarly = capture(() => new Trigger("a:b"));
 system.run(() => {
@@ -1578,6 +1578,24 @@ system.run(() => {
                                                                              { x: 0, y: 100, z: 0 }, map));
     r.particleBadMap = capture(() => world.getDimension("overworld").spawnParticle("minecraft:basic_flame_particle",
                                                                                    { x: 0, y: 100, z: 0 }, {}));
+    const manager = world.primitiveShapesManager;
+    const label = new TextPrimitive({ x: 1, y: 2, z: 3 }, "hello");
+    manager.addText(label);
+    manager.addText(label);
+    const far = new TextPrimitive({ x: 50, y: 2, z: 3 }, { text: "far" });
+    manager.addText(far);
+    r.primitives = [manager.maxShapes, label instanceof PrimitiveShape, "hiddenFrom" in label,
+                    manager.getShapes().length,
+                    manager.getShapes({ location: { x: 0, y: 2, z: 3 }, maxDistance: 10 }).length,
+                    manager.getShapes({ location: { x: 0, y: 2, z: 3 }, minDistance: 10 })[0] === far,
+                    capture(() => manager.addText({})), label.text, JSON.stringify(far.text)].join("|");
+    manager.removeText(label);
+    r.primitivesLeft = manager.getShapes().length;
+    for (let i = manager.getShapes().length; i < manager.maxShapes; i++)
+        manager.addText(new TextPrimitive({ x: 0, y: 0, z: 0 }, "x"));
+    r.primitiveLimit = capture(() => manager.addText(new TextPrimitive({ x: 0, y: 0, z: 0 }, "x")));
+    manager.removeAll();
+    r.primitivesCleared = manager.getShapes().length;
     world.setDynamicProperty("gaps", JSON.stringify(r));
 });
 )JS";
@@ -2857,6 +2875,13 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*gaps, "music", "PropertyOutOfBoundsError: ");
         expect(*gaps, "musicOk", "ok,ok,ok");
         expect(*gaps, "particle", "ok");
+        expect(*gaps, "primitives",
+               "1000|true|false|2|1|true|TypeError: Native type conversion failed.|hello|"
+               "{\"text\":\"far\"}");
+        expect(*gaps, "primitivesLeft", "1");
+        expect(*gaps, "primitiveLimit",
+               "PrimitiveShapeError: PrimitiveShapesManager cannot add more shapes, limit reached: 1000");
+        expect(*gaps, "primitivesCleared", "0");
         expect(*gaps, "particleBadMap", "TypeError: Native type conversion failed.");
 
         const std::unique_ptr<json::Value> legacyPack = result(owner, "legacy");

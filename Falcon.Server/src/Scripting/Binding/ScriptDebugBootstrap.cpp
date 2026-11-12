@@ -111,53 +111,61 @@ namespace {
         state.viewers = new Set();
     };
 
-    class DebugShape {
-        constructor(key, type, location, extra) {
-            if (key !== token)
-                throw new ReferenceError("No constructor for native class 'DebugShape'.");
+    // DebugShape and the server's PrimitiveShape are one native shape (sub_14B8CF080); only the debug one has
+    // defaultVisibleToAll and hiddenFrom
+    const baseClass = (name, debug) => {
+        const cls = class {
+            constructor(key, type, location, extra) {
+                if (key !== token)
+                    throw new ReferenceError("No constructor for native class '" + name + "'.");
+                const read = readLocation(location);
+                states.set(this, Object.assign({ type, location: read.location, dimension: read.dimension, scale: 1,
+                    rotation: { x: 0, y: 0, z: 0 }, color: { red: 1, green: 1, blue: 1, alpha: 1 },
+                    timeLeft: undefined, totalTimeLeft: undefined, maximumRenderDistance: undefined,
+                    attachedTo: undefined, visibleTo: [], hiddenFrom: [], defaultVisibleToAll: true, id: 0,
+                    viewers: new Set(), dirty: true, shape: this, server: false }, extra));
+            }
+        };
+        named(cls, name);
+        accessor(cls, name, "attachedTo", (s) => s.attachedTo, (s, value) => {
+            if (value !== undefined && !native.isEntity(value))
+                throw conversion();
+            s.attachedTo = value;
+        });
+        accessor(cls, name, "color", (s) => Object.assign({}, s.color),
+            (s, value) => { s.color = rgba(value); });
+        accessor(cls, name, "dimension", (s) => s.dimension);
+        accessor(cls, name, "hasDuration", (s) => s.timeLeft !== undefined);
+        accessor(cls, name, "location", (s) => Object.assign({}, s.location));
+        accessor(cls, name, "maximumRenderDistance", (s) => s.maximumRenderDistance, (s, value) => {
+            s.maximumRenderDistance = value === undefined ? undefined : bounded(value, 0);
+        });
+        accessor(cls, name, "rotation", (s) => Object.assign({}, s.rotation),
+            (s, value) => { s.rotation = vector3(value); });
+        accessor(cls, name, "scale", (s) => s.scale, (s, value) => { s.scale = number(value); });
+        accessor(cls, name, "timeLeft", (s) => s.timeLeft, (s, value) => {
+            s.timeLeft = value === undefined ? undefined : number(value);
+            s.totalTimeLeft = s.timeLeft;
+        });
+        accessor(cls, name, "totalTimeLeft", (s) => s.totalTimeLeft);
+        accessor(cls, name, "visibleTo", (s) => s.visibleTo.slice(),
+            (s, value) => { s.visibleTo = players(value); });
+        method(cls, name, "remove", (s) => { removeShape(s); });
+        method(cls, name, "setLocation", (s, self, location) => {
             const read = readLocation(location);
-            states.set(this, Object.assign({ type, location: read.location, dimension: read.dimension, scale: 1,
-                rotation: { x: 0, y: 0, z: 0 }, color: { red: 1, green: 1, blue: 1, alpha: 1 },
-                timeLeft: undefined, totalTimeLeft: undefined, maximumRenderDistance: undefined,
-                attachedTo: undefined, visibleTo: [], hiddenFrom: [], defaultVisibleToAll: true, id: 0,
-                viewers: new Set(), dirty: true }, extra));
+            s.location = read.location;
+            s.dimension = read.dimension;
+            s.dirty = true;
+        });
+        if (debug) {
+            accessor(cls, name, "defaultVisibleToAll", (s) => s.defaultVisibleToAll,
+                (s, value) => { s.defaultVisibleToAll = bool(value); });
+            accessor(cls, name, "hiddenFrom", (s) => s.hiddenFrom.slice(),
+                (s, value) => { s.hiddenFrom = players(value); });
         }
-    }
-    named(DebugShape, "DebugShape");
-    accessor(DebugShape, "DebugShape", "attachedTo", (s) => s.attachedTo, (s, value) => {
-        if (value !== undefined && !native.isEntity(value))
-            throw conversion();
-        s.attachedTo = value;
-    });
-    accessor(DebugShape, "DebugShape", "color", (s) => Object.assign({}, s.color),
-        (s, value) => { s.color = rgba(value); });
-    accessor(DebugShape, "DebugShape", "defaultVisibleToAll", (s) => s.defaultVisibleToAll,
-        (s, value) => { s.defaultVisibleToAll = bool(value); });
-    accessor(DebugShape, "DebugShape", "dimension", (s) => s.dimension);
-    accessor(DebugShape, "DebugShape", "hasDuration", (s) => s.timeLeft !== undefined);
-    accessor(DebugShape, "DebugShape", "hiddenFrom", (s) => s.hiddenFrom.slice(),
-        (s, value) => { s.hiddenFrom = players(value); });
-    accessor(DebugShape, "DebugShape", "location", (s) => Object.assign({}, s.location));
-    accessor(DebugShape, "DebugShape", "maximumRenderDistance", (s) => s.maximumRenderDistance, (s, value) => {
-        s.maximumRenderDistance = value === undefined ? undefined : bounded(value, 0);
-    });
-    accessor(DebugShape, "DebugShape", "rotation", (s) => Object.assign({}, s.rotation),
-        (s, value) => { s.rotation = vector3(value); });
-    accessor(DebugShape, "DebugShape", "scale", (s) => s.scale, (s, value) => { s.scale = number(value); });
-    accessor(DebugShape, "DebugShape", "timeLeft", (s) => s.timeLeft, (s, value) => {
-        s.timeLeft = value === undefined ? undefined : number(value);
-        s.totalTimeLeft = s.timeLeft;
-    });
-    accessor(DebugShape, "DebugShape", "totalTimeLeft", (s) => s.totalTimeLeft);
-    accessor(DebugShape, "DebugShape", "visibleTo", (s) => s.visibleTo.slice(),
-        (s, value) => { s.visibleTo = players(value); });
-    method(DebugShape, "DebugShape", "remove", (s) => { removeShape(s); });
-    method(DebugShape, "DebugShape", "setLocation", (s, self, location) => {
-        const read = readLocation(location);
-        s.location = read.location;
-        s.dimension = read.dimension;
-        s.dirty = true;
-    });
+        return cls;
+    };
+    const DebugShape = baseClass("DebugShape", true);
 
     const shapeClass = (name, parent, type, extra, build) => {
         const cls = class extends parent {
@@ -234,30 +242,39 @@ namespace {
         return native.rawText(value);
     };
     const copyText = (value) => (typeof value === "string" ? value : JSON.parse(JSON.stringify(value)));
-    const DebugText = shapeClass("DebugText", DebugShape, TYPES.Text, { useRotation: false,
-        backgroundColorOverride: undefined, depthTest: false, backfaceVisible: true, textBackfaceVisible: false,
-        lineGapHeight: 0 }, (fields, location, text) => {
+    const TEXT_DEFAULTS = { useRotation: false, backgroundColorOverride: undefined, depthTest: false,
+        backfaceVisible: true, textBackfaceVisible: false, lineGapHeight: 0 };
+    const textFields = (fields, location, text) => {
         fields.wire = textOf(text);
         fields.text = copyText(text);
-    });
-    accessor(DebugText, "DebugText", "backfaceVisible", (s) => s.backfaceVisible,
-        (s, value) => { s.backfaceVisible = bool(value); });
-    accessor(DebugText, "DebugText", "backgroundColorOverride",
-        (s) => (s.backgroundColorOverride === undefined ? undefined : Object.assign({}, s.backgroundColorOverride)),
-        (s, value) => { s.backgroundColorOverride = value === undefined ? undefined : rgba(value); });
-    accessor(DebugText, "DebugText", "depthTest", (s) => s.depthTest, (s, value) => { s.depthTest = bool(value); });
-    accessor(DebugText, "DebugText", "lineGapHeight", (s) => s.lineGapHeight,
-        (s, value) => { s.lineGapHeight = number(value); });
-    accessor(DebugText, "DebugText", "text", (s) => copyText(s.text));
-    accessor(DebugText, "DebugText", "textBackfaceVisible", (s) => s.textBackfaceVisible,
-        (s, value) => { s.textBackfaceVisible = bool(value); });
-    accessor(DebugText, "DebugText", "useRotation", (s) => s.useRotation,
-        (s, value) => { s.useRotation = bool(value); });
-    method(DebugText, "DebugText", "setText", (s, self, text) => {
-        s.wire = textOf(text);
-        s.text = copyText(text);
-        s.dirty = true;
-    });
+    };
+    const DebugText = shapeClass("DebugText", DebugShape, TYPES.Text, TEXT_DEFAULTS, textFields);
+    const textMembers = (cls, name) => {
+        accessor(cls, name, "backfaceVisible", (s) => s.backfaceVisible,
+            (s, value) => { s.backfaceVisible = bool(value); });
+        accessor(cls, name, "backgroundColorOverride",
+            (s) => (s.backgroundColorOverride === undefined ? undefined : Object.assign({}, s.backgroundColorOverride)),
+            (s, value) => { s.backgroundColorOverride = value === undefined ? undefined : rgba(value); });
+        accessor(cls, name, "depthTest", (s) => s.depthTest, (s, value) => { s.depthTest = bool(value); });
+        accessor(cls, name, "lineGapHeight", (s) => s.lineGapHeight,
+            (s, value) => { s.lineGapHeight = number(value); });
+        accessor(cls, name, "text", (s) => copyText(s.text));
+        accessor(cls, name, "textBackfaceVisible", (s) => s.textBackfaceVisible,
+            (s, value) => { s.textBackfaceVisible = bool(value); });
+        accessor(cls, name, "useRotation", (s) => s.useRotation,
+            (s, value) => { s.useRotation = bool(value); });
+        method(cls, name, "setText", (s, self, text) => {
+            s.wire = textOf(text);
+            s.text = copyText(text);
+            s.dirty = true;
+        });
+    };
+    textMembers(DebugText, "DebugText");
+
+    // the server module's text label (sub_14B8D4360), drawn by the same stream as the debug shapes
+    const PrimitiveShape = baseClass("PrimitiveShape", false);
+    const TextPrimitive = shapeClass("TextPrimitive", PrimitiveShape, TYPES.Text, TEXT_DEFAULTS, textFields);
+    textMembers(TextPrimitive, "TextPrimitive");
 
     const isShape = (value) => value !== null && typeof value === "object" && states.has(value);
 
@@ -275,8 +292,10 @@ namespace {
                 return run(...args);
             } });
     };
+    // each drawer keeps to its own module's shapes
+    const isDebugShape = (value) => isShape(value) && value instanceof DebugShape;
     drawerMethod("addShape", (shape, dimension) => {
-        if (!isShape(shape))
+        if (!isDebugShape(shape))
             throw conversion();
         const state = states.get(shape);
         if (dimension !== undefined) {
@@ -290,15 +309,95 @@ namespace {
         drawn.add(state);
     });
     drawerMethod("removeAll", () => {
-        for (const state of Array.from(drawn))
+        for (const state of Array.from(drawn).filter((entry) => !entry.server))
             removeShape(state);
     });
     drawerMethod("removeShape", (shape) => {
-        if (!isShape(shape))
+        if (!isDebugShape(shape))
             throw conversion();
         removeShape(states.get(shape));
     });
     const debugDrawer = new DebugDrawer(token);
+
+    // PrimitiveShapesManager (sub_14B966010 and its siblings, 26.60): only its own text shapes, at most 1000 of them
+    const MAX_SHAPES = 1000;
+    class PrimitiveShapesManager {
+        constructor(key) {
+            if (key !== token)
+                throw new ReferenceError("No constructor for native class 'PrimitiveShapesManager'.");
+        }
+    }
+    named(PrimitiveShapesManager, "PrimitiveShapesManager");
+    const managerMethod = (name, run) => {
+        Object.defineProperty(PrimitiveShapesManager.prototype, name, { configurable: true, writable: true,
+            enumerable: false, value: function (...args) {
+                guard("Native function", "PrimitiveShapesManager::" + name);
+                return run(...args);
+            } });
+    };
+    Object.defineProperty(PrimitiveShapesManager.prototype, "maxShapes", { configurable: true, enumerable: false,
+        get: function () {
+            guard("Native property getter", "PrimitiveShapesManager::maxShapes");
+            return MAX_SHAPES;
+        } });
+    const isText = (value) => isShape(value) && value instanceof TextPrimitive;
+    const managed = () => Array.from(drawn).filter((state) => state.server);
+    // a shape already in the manager is left as is; a new one needs room
+    managerMethod("addText", (text, dimension) => {
+        if (!isText(text))
+            throw conversion();
+        if (dimension !== undefined && native.dimensionId(dimension) < 0)
+            throw conversion();
+        const state = states.get(text);
+        if (drawn.has(state) && state.server)
+            return;
+        if (managed().length >= MAX_SHAPES)
+            throw native.errors.make("PrimitiveShapeError",
+                "PrimitiveShapesManager cannot add more shapes, limit reached: " + MAX_SHAPES);
+        if (dimension !== undefined)
+            state.dimension = dimension;
+        if (state.id === 0)
+            state.id = native.nextShapeId();
+        state.server = true;
+        state.dirty = true;
+        drawn.add(state);
+    });
+    managerMethod("removeAll", () => {
+        for (const state of managed())
+            removeShape(state);
+    });
+    managerMethod("removeText", (text) => {
+        if (!isText(text))
+            throw conversion();
+        removeShape(states.get(text));
+    });
+    // sub_14B96CE70: attachedTo must match, and with a location the shape lies within [minDistance, maxDistance]
+    managerMethod("getShapes", (options) => {
+        if (options !== undefined && (options === null || typeof options !== "object"))
+            throw conversion();
+        const query = options === undefined ? {} : options;
+        if (query.attachedTo !== undefined && !native.isEntity(query.attachedTo))
+            throw conversion();
+        const location = query.location === undefined ? undefined : vector3(query.location);
+        const minDistance = query.minDistance === undefined ? undefined : number(query.minDistance);
+        const maxDistance = query.maxDistance === undefined ? undefined : number(query.maxDistance);
+        const attachedId = query.attachedTo === undefined ? undefined : native.entityId(query.attachedTo);
+        return managed().filter((state) => {
+            if (query.attachedTo !== undefined
+                && (state.attachedTo === undefined || native.entityId(state.attachedTo) !== attachedId))
+                return false;
+            if (location !== undefined) {
+                const dx = state.location.x - location.x, dy = state.location.y - location.y,
+                    dz = state.location.z - location.z;
+                const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if ((minDistance !== undefined && minDistance > distance)
+                    || (maxDistance !== undefined && distance > maxDistance))
+                    return false;
+            }
+            return true;
+        }).map((state) => state.shape);
+    });
+    const primitiveShapesManager = new PrimitiveShapesManager(token);
 
     // DiagnosticsManager: tabs and views of this pack for the script debugger's live diagnostics
     const diagnosticsError = (reason, message) => native.errors.make("DiagnosticsError", message, { reason });
@@ -537,7 +636,8 @@ namespace {
         collectPluginStats: fn("collectPluginStats", () => native.pluginStats()),
         collectRuntimeStats: fn("collectRuntimeStats", () => native.runtimeStats()),
         disableWatchdogTimingWarnings: fn("disableWatchdogTimingWarnings", (disable) => native.timingWarnings(disable)),
-        debugDrawer, diagnosticsManager, tick,
+        debugDrawer, diagnosticsManager, tick, PrimitiveShape, PrimitiveShapesManager, TextPrimitive,
+        primitiveShapesManager,
     };
 })
 )JS";

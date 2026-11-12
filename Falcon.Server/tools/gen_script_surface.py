@@ -83,7 +83,7 @@ BOUND = {
         'DimensionTypes', 'MinecraftDimensionTypes', 'ISerializable', 'BlockCustomComponentInstance',
         'ItemCustomComponentInstance', 'ClientSystemInfo', 'Seat', 'FeedItem', 'FeedItemEffect',
         'EntityDefinitionFeedItem', 'CatmullRomSpline', 'LinearSpline', 'FogSettings',
-        'FogSettingsError',
+        'FogSettingsError', 'PrimitiveShape', 'TextPrimitive', 'PrimitiveShapesManager',
     },
     'server-ui': None,
     'common': None,
