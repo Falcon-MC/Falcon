@@ -35,6 +35,179 @@
 using namespace ScriptValues;
 
 namespace {
+    // BlockBoundingBoxUtils (sub_14DD4B0F0): a box is two block positions; vectors given to the utils truncate toward
+    // zero (cvttps), the corners read as block positions, which BlockPos(Vec3) floors
+    struct BlockBox {
+        int32_t mMin[3];
+        int32_t mMax[3];
+    };
+
+    bool readTruncated(JSContext *ctx, JSValueConst value, int32_t out[3]) {
+        double x = 0.0, y = 0.0, z = 0.0;
+        if (!readVector3(ctx, value, x, y, z) || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+            return false;
+        out[0] = (int32_t) (float) x;
+        out[1] = (int32_t) (float) y;
+        out[2] = (int32_t) (float) z;
+        return true;
+    }
+
+    bool readCorner(JSContext *ctx, JSValueConst box, const char *key, int32_t out[3]) {
+        JSValue corner = JS_GetPropertyStr(ctx, box, key);
+        double x = 0.0, y = 0.0, z = 0.0;
+        const bool ok = readVector3(ctx, corner, x, y, z) && std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+        JS_FreeValue(ctx, corner);
+        if (!ok)
+            return false;
+        out[0] = (int32_t) std::floor(x);
+        out[1] = (int32_t) std::floor(y);
+        out[2] = (int32_t) std::floor(z);
+        return true;
+    }
+
+    bool readBox(JSContext *ctx, JSValueConst value, BlockBox &box) {
+        return JS_IsObject(value) && readCorner(ctx, value, "min", box.mMin) && readCorner(ctx, value, "max", box.mMax);
+    }
+
+    JSValue makeBox(JSContext *ctx, const BlockBox &box) {
+        JSValue object = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, object, "min",
+                          vector3(ctx, (float) box.mMin[0], (float) box.mMin[1], (float) box.mMin[2]));
+        JS_SetPropertyStr(ctx, object, "max",
+                          vector3(ctx, (float) box.mMax[0], (float) box.mMax[1], (float) box.mMax[2]));
+        return object;
+    }
+
+    bool boxesIntersect(const BlockBox &a, const BlockBox &b) {
+        for (int axis = 0; axis < 3; ++axis) {
+            if (b.mMax[axis] < a.mMin[axis] || b.mMin[axis] > a.mMax[axis])
+                return false;
+        }
+        return true;
+    }
+
+    JSValue boxCreateValid(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        int32_t a[3], b[3];
+        if (argc < 2 || !readTruncated(ctx, argv[0], a) || !readTruncated(ctx, argv[1], b))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockBox box;
+        for (int axis = 0; axis < 3; ++axis) {
+            box.mMin[axis] = std::min(a[axis], b[axis]);
+            box.mMax[axis] = std::max(a[axis], b[axis]);
+        }
+        return makeBox(ctx, box);
+    }
+
+    // sub_14DD50D40: the corners move out by the truncated size, then each axis is put back in order
+    JSValue boxDilate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox box;
+        int32_t size[3];
+        if (argc < 2 || !readBox(ctx, argv[0], box) || !readTruncated(ctx, argv[1], size))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockBox out;
+        for (int axis = 0; axis < 3; ++axis) {
+            const int32_t low = box.mMin[axis] - size[axis];
+            const int32_t high = box.mMax[axis] + size[axis];
+            out.mMin[axis] = std::min(low, high);
+            out.mMax[axis] = std::max(low, high);
+        }
+        return makeBox(ctx, out);
+    }
+
+    JSValue boxEquals(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox a, b;
+        if (argc < 2 || !readBox(ctx, argv[0], a) || !readBox(ctx, argv[1], b))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        bool same = true;
+        for (int axis = 0; axis < 3; ++axis)
+            same = same && a.mMin[axis] == b.mMin[axis] && a.mMax[axis] == b.mMax[axis];
+        return JS_NewBool(ctx, same);
+    }
+
+    JSValue boxExpand(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox a, b;
+        if (argc < 2 || !readBox(ctx, argv[0], a) || !readBox(ctx, argv[1], b))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockBox out;
+        for (int axis = 0; axis < 3; ++axis) {
+            out.mMin[axis] = std::min(a.mMin[axis], b.mMin[axis]);
+            out.mMax[axis] = std::max(a.mMax[axis], b.mMax[axis]);
+        }
+        return makeBox(ctx, out);
+    }
+
+    // sub_14DD50E50: whole blocks, the half span rounds toward zero
+    JSValue boxGetCenter(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox box;
+        if (argc < 1 || !readBox(ctx, argv[0], box))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        int32_t center[3];
+        for (int axis = 0; axis < 3; ++axis)
+            center[axis] = box.mMin[axis] + (box.mMax[axis] - box.mMin[axis] + 1) / 2;
+        return vector3(ctx, (float) center[0], (float) center[1], (float) center[2]);
+    }
+
+    JSValue boxGetIntersection(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox a, b;
+        if (argc < 2 || !readBox(ctx, argv[0], a) || !readBox(ctx, argv[1], b))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (!boxesIntersect(a, b))
+            return JS_UNDEFINED;
+        BlockBox out;
+        for (int axis = 0; axis < 3; ++axis) {
+            out.mMin[axis] = std::max(a.mMin[axis], b.mMin[axis]);
+            out.mMax[axis] = std::min(a.mMax[axis], b.mMax[axis]);
+        }
+        return makeBox(ctx, out);
+    }
+
+    // sub_14DD50E20: both corners count
+    JSValue boxGetSpan(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox box;
+        if (argc < 1 || !readBox(ctx, argv[0], box))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return vector3(ctx, (float) (box.mMax[0] - box.mMin[0] + 1), (float) (box.mMax[1] - box.mMin[1] + 1),
+                       (float) (box.mMax[2] - box.mMin[2] + 1));
+    }
+
+    JSValue boxIntersects(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox a, b;
+        if (argc < 2 || !readBox(ctx, argv[0], a) || !readBox(ctx, argv[1], b))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return JS_NewBool(ctx, boxesIntersect(a, b));
+    }
+
+    JSValue boxIsInside(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox box;
+        int32_t at[3];
+        if (argc < 2 || !readBox(ctx, argv[0], box) || !readTruncated(ctx, argv[1], at))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        bool inside = true;
+        for (int axis = 0; axis < 3; ++axis)
+            inside = inside && at[axis] >= box.mMin[axis] && at[axis] <= box.mMax[axis];
+        return JS_NewBool(ctx, inside);
+    }
+
+    JSValue boxIsValid(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox box;
+        if (argc < 1 || !readBox(ctx, argv[0], box))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return JS_NewBool(ctx, box.mMax[0] >= box.mMin[0] && box.mMax[1] >= box.mMin[1] && box.mMax[2] >= box.mMin[2]);
+    }
+
+    // sub_14DD50DC0
+    JSValue boxTranslate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        BlockBox box;
+        int32_t delta[3];
+        if (argc < 2 || !readBox(ctx, argv[0], box) || !readTruncated(ctx, argv[1], delta))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        for (int axis = 0; axis < 3; ++axis) {
+            box.mMin[axis] += delta[axis];
+            box.mMax[axis] += delta[axis];
+        }
+        return makeBox(ctx, box);
+    }
+
     // Direction values in RedstoneFace order
     const char *const DIRECTIONS[] = {"Down", "Up", "North", "South", "West", "East"};
 
@@ -1152,6 +1325,22 @@ JSValue ScriptApi::makeBlockComponent(Level &level, const Vector3i &position, co
 }
 
 void ScriptApi::_bindBlockSurface() {
+    if (mSurface.has("BlockBoundingBoxUtils")) {
+        defineClass("BlockBoundingBoxUtils");
+        JSValue utils = constructorOf("BlockBoundingBoxUtils");
+        method(utils, "BlockBoundingBoxUtils", "static createValid", boxCreateValid, 2);
+        method(utils, "BlockBoundingBoxUtils", "static dilate", boxDilate, 2);
+        method(utils, "BlockBoundingBoxUtils", "static equals", boxEquals, 2);
+        method(utils, "BlockBoundingBoxUtils", "static expand", boxExpand, 2);
+        method(utils, "BlockBoundingBoxUtils", "static getCenter", boxGetCenter, 1);
+        method(utils, "BlockBoundingBoxUtils", "static getIntersection", boxGetIntersection, 2);
+        method(utils, "BlockBoundingBoxUtils", "static getSpan", boxGetSpan, 1);
+        method(utils, "BlockBoundingBoxUtils", "static intersects", boxIntersects, 2);
+        method(utils, "BlockBoundingBoxUtils", "static isInside", boxIsInside, 2);
+        method(utils, "BlockBoundingBoxUtils", "static isValid", boxIsValid, 1);
+        method(utils, "BlockBoundingBoxUtils", "static translate", boxTranslate, 2);
+    }
+
     JSValue block = prototypeOf("Block");
     property(block, "Block", "permutation", blockGetPermutation);
     property(block, "Block", "type", blockGetType);
