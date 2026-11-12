@@ -961,6 +961,9 @@ namespace {
         // the input carrying the toggle still travels with the old abilities
         require(player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.09f) > 0.000002f,
                 "AuthInput StartFlying was not applied after the input that carries it");
+        // that input already rises with the fly control, then falls and drags as a walking move
+        require(std::fabs(player.getSimulatedVelocity().y - (0.15f - 0.08f) * 0.98f) < 0.000002f,
+                "The input that starts flight did not apply its vertical fly control");
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
         player.setSimulatedPosition(Vector3f(150.5f, 250.0f, 2.5f));
         player.setSimulatedVelocity(Vector3f());
