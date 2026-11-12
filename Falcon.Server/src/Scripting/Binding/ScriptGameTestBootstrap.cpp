@@ -654,6 +654,14 @@ namespace {
             throw atPosition(inst, "gameTest.assert.couldNotSetBlock", [typeId], location, "LevelStateModificationFailed");
         }
     }, world);
+    testMethod("setFluidContainer", (inst, location, type) => {
+        const fluid = ["Water", "Lava", "PowderSnow", "Potion"].indexOf(string(type));
+        if (fluid < 0)
+            throw conversion();
+        const at = worldBlock(inst, location);
+        if (!native.setCauldron(inst.dimension, at.x, at.y, at.z, fluid))
+            throw atPosition(inst, "gameTest.assert.expectCauldron", [], location);
+    }, world);
     testMethod("setTntFuse", (inst, entity, fuseLength) => {
         if (!isEntity(entity))
             throw conversion();

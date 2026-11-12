@@ -83,6 +83,21 @@ gt.registerAsync("Suite", "async", async (test) => {
 }).structureName("gt:box").tag("suite:default");
 gt.register("Suite", "missing", (test) => test.succeed()).structureName("gt:nothing");
 gt.register("Suite", "turns", (test) => test.succeed()).structureName("gt:box").rotateTest(true).tag("gt:turns").batch("turns");
+gt.register("Suite", "cauldron", (test) => {
+    const at = { x: 1, y: 1, z: 1 };
+    test.setBlockType("minecraft:cauldron", at);
+    test.setFluidContainer(at, "Lava");
+    const liquid = test.getBlock(at).permutation.getState("cauldron_liquid");
+    test.setBlockType("minecraft:stone", at);
+    let error = "none";
+    try {
+        test.setFluidContainer(at, "Water");
+    } catch (e) {
+        error = e.type + "|" + e.message;
+    }
+    r.cauldron = liquid + "|" + error;
+    test.succeed();
+}).structureName("gt:box");
 gt.register("Suite", "fuse", (test) => {
     const cow = test.spawn("minecraft:cow", { x: 1, y: 1, z: 1 });
     try {
@@ -190,7 +205,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         engine.tick(++tick);
 
         GameTestRunner &runner = engine.gameTests();
-        require(runner.testNames().size() == 8, "the registered tests are not listed");
+        require(runner.testNames().size() == 9, "the registered tests are not listed");
         require(!runner.run(level, Vector3i(0, 100, 0), "Suite:none", 0, false, 1).mSuccess, "an unknown test ran");
         require(runner.run(level, Vector3i(0, 100, 0), "Suite:passes", 0, false, 0).mKey
                         == "gameTest.error.repeatCountTooSmall",
@@ -250,6 +265,9 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 
         require(runner.run(level, Vector3i(40, 100, 45), "Suite:fuse", 0, false, 1).mSuccess, "fuse did not run");
         tickAndRead(owner, engine, tick, 2);
+        require(runner.run(level, Vector3i(40, 100, 60), "Suite:cauldron", 0, false, 1).mSuccess,
+                "cauldron did not run");
+        tickAndRead(owner, engine, tick, 2);
 
         const GameTestRunner::Outcome created = runner.create(level, Vector3i(0, 100, 60), "Made:here", 4, 0, 0);
         require(created.mSuccess, "create failed");
@@ -290,6 +308,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "tags", "suite:default|suite:all");
         expect(*report, "registrationBuilder", "ReferenceError:No constructor for native class 'RegistrationBuilder'.");
         expect(*report, "before", "1");
+        expect(*report, "cauldron", "lava|AssertAtPosition|gameTest.assert.expectCauldron");
         expect(*report, "fuse",
                "Assert|gameTest.assert.missingExplosionComponent|minecraft:cow|{\"x\":0,\"y\":0,\"z\":0}");
     }
