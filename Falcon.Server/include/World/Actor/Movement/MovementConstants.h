@@ -27,6 +27,8 @@ namespace MovementPhysics {
     // eyes above the feet; also how far above the feet a player's network position is
     inline constexpr float PLAYER_EYE_HEIGHT = 1.62f;
     inline constexpr float PLAYER_BASE_OFFSET = PLAYER_EYE_HEIGHT;
+    // Player::startSleepInBed (sub_1402BDD80, 26.60): a sleeper's network position sits 0.2 above the feet
+    inline constexpr float PLAYER_SLEEPING_BASE_OFFSET = 0.2f;
     inline constexpr int32_t JUMP_DELAY_TICKS = 10;
     inline constexpr float EDGE_INSET = 0.025f;
     inline constexpr float EDGE_STEP = 0.05f;
