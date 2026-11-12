@@ -1,4 +1,5 @@
 #include "Scripting/Binding/ScriptApi.h"
+#include "Scripting/Binding/ScriptMemoryTier.h"
 #include <functional>
 
 #include "World/Actor/ServerActor.h"
@@ -82,9 +83,8 @@ namespace {
         return JS_FALSE;
     }
 
-    // TODO: the game derives the tier from device memory; thresholds unverified, High for now
     JSValue systemInfoGetMemoryTier(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, 3);
+        return JS_NewInt32(ctx, ScriptMemoryTier::tierOf(ScriptMemoryTier::physicalMemory()));
     }
 
     JSValue systemWaitTicks(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {

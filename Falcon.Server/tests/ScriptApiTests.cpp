@@ -2,6 +2,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Scripting/Binding/ScriptMemoryTier.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Commands/PlayerCommandOrigin.h"
@@ -246,7 +247,7 @@ world.beforeEvents.effectAdd.subscribe(() => {
 
 system.runTimeout(() => {
     r.stableRules = world.gameRules === world.gameRules;
-    r.memoryTier = system.serverSystemInfo.memoryTier === MemoryTier.High;
+    r.memoryTier = String(system.serverSystemInfo.memoryTier);
     r.pvp = world.gameRules.pvp;
     world.gameRules.pvp = false;
     world.gameRules.randomTickSpeed = 3;
@@ -2854,7 +2855,12 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(w, "earlyRules",
                "ReferenceError: Native property getter [World::gameRules] cannot be used in early execution.");
         expect(w, "editor", "false");
-        expect(w, "memoryTier", "true");
+        expect(w, "memoryTier", std::to_string(ScriptMemoryTier::tierOf(ScriptMemoryTier::physicalMemory())));
+        const uint64_t gigabyte = 1024ull * 1024ull * 1024ull;
+        require(ScriptMemoryTier::tierOf(gigabyte * 3 / 2) == 0 && ScriptMemoryTier::tierOf(gigabyte * 2) == 1
+                        && ScriptMemoryTier::tierOf(gigabyte * 3) == 2 && ScriptMemoryTier::tierOf(gigabyte * 8) == 3
+                        && ScriptMemoryTier::tierOf(gigabyte * 16) == 4 && ScriptMemoryTier::physicalMemory() > 0,
+                "the memory tier did not follow the declared ceilings");
         expect(w, "earlyTier",
                "ReferenceError: Native property getter [SystemInfo::memoryTier] cannot be used in early execution.");
         expect(w, "earlySettings", "ok");
