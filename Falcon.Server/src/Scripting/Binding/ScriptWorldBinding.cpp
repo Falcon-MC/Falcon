@@ -643,7 +643,7 @@ namespace {
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         ScriptSoundOptions options;
-        JSValue refused = api->readSoundOptions(argc >= 3 ? argv[2] : JS_UNDEFINED, options);
+        JSValue refused = api->readSoundOptions(argc >= 3 ? argv[2] : JS_UNDEFINED, options, true);
         if (JS_IsException(refused))
             return refused;
         return api->playSound(api->levelOf(thisVal), nullptr, toString(ctx, argv[0]),

@@ -1564,7 +1564,7 @@ namespace {
             JS_FreeValue(ctx, locationValue);
         }
         ScriptSoundOptions read;
-        JSValue refused = target.mApi->readSoundOptions(options, read);
+        JSValue refused = target.mApi->readSoundOptions(options, read, false);
         if (JS_IsException(refused))
             return refused;
         const std::string eventId = definition != nullptr ? definition->mEventId : toString(ctx, argv[0]);

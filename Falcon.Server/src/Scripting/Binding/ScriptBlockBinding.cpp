@@ -385,7 +385,7 @@ namespace {
         if (CauldronBlock::matches(state.mName))
             ids.emplace_back("minecraft:fluid_container");
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
-        if (custom != nullptr && !custom->mInstrumentSounds.empty())
+        if (custom != nullptr && custom->mInstrumentSound)
             ids.emplace_back("minecraft:instrument_sound");
         if (actor != nullptr && actor->getContainer() != nullptr && dynamic_cast<JukeboxBlockActor *>(actor) == nullptr)
             ids.emplace_back("minecraft:inventory");
@@ -762,28 +762,28 @@ namespace {
         return JS_NewInt32(ctx, power);
     }
 
-    // the face's declared note sound; an exception value when the face has none or the block is unreachable
+    // the face's note sound, note.none when undeclared; only Down and Up have one (sub_14E0A7680, 26.60)
     JSValue instrumentOf(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, BlockAt &at,
                          std::string &sound) {
         at = blockAt(ctx, thisVal);
-        if (argc < 1 || !JS_IsString(argv[0]))
+        const int face = argc >= 1 && JS_IsString(argv[0]) ? faceOf(toString(ctx, argv[0])) : -1;
+        if (face < 0)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         if (at.mPosition.y < at.mLevel->getMinY() || at.mPosition.y > at.mLevel->getMaxY())
             return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
         if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
             return at.mApi->throwError("LocationInUnloadedChunkError", "");
-        std::string face = toString(ctx, argv[0]);
-        std::transform(face.begin(), face.end(), face.begin(), [](unsigned char c) { return (char) std::tolower(c); });
+        if (face > 1)
+            return at.mApi->throwError("InvalidArgumentError", "");
+        sound = "note.none";
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(at.state().mName);
-        if (custom != nullptr) {
-            for (const auto &entry: custom->mInstrumentSounds) {
-                if (entry.first == face) {
-                    sound = entry.second;
-                    return JS_UNDEFINED;
-                }
-            }
+        if (custom == nullptr)
+            return JS_UNDEFINED;
+        for (const auto &entry: custom->mInstrumentSounds) {
+            if (entry.first == (face == 0 ? "down" : "up"))
+                sound = entry.second;
         }
-        return at.mApi->throwError("InvalidArgumentError", "");
+        return JS_UNDEFINED;
     }
 
     JSValue instrumentGetName(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -793,7 +793,7 @@ namespace {
         return JS_IsException(refused) ? refused : string(ctx, sound);
     }
 
-    // note.none declares a silent face
+    // note.none is played too: the client has no such sound (sub_14E10C700, 26.60)
     JSValue instrumentPlaySound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         BlockAt at;
         std::string sound;
@@ -801,11 +801,9 @@ namespace {
         if (JS_IsException(refused))
             return refused;
         ScriptSoundOptions options;
-        refused = at.mApi->readSoundOptions(argc >= 2 ? argv[1] : JS_UNDEFINED, options);
+        refused = at.mApi->readSoundOptions(argc >= 2 ? argv[1] : JS_UNDEFINED, options, true);
         if (JS_IsException(refused))
             return refused;
-        if (sound == "note.none")
-            return JS_UNDEFINED;
         const Vector3f center((float) at.mPosition.x + 0.5f, (float) at.mPosition.y + 0.5f,
                               (float) at.mPosition.z + 0.5f);
         JS_FreeValue(ctx, at.mApi->playSound(*at.mLevel, nullptr, sound, center, options));

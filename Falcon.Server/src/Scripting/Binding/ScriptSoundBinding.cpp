@@ -13,7 +13,6 @@
 using namespace ScriptValues;
 
 namespace {
-    const double SECONDS_PER_TICK = 0.05;
     const double MIN_PITCH = 0.009999999776482582;
     const double MAX_PITCH = 10.0;
     const double MAX_VOLUME = 10.0;
@@ -23,9 +22,12 @@ namespace {
         return JS_ThrowTypeError(ctx, "Native type conversion failed.");
     }
 
+    // argument: the index of the refused argument, -1 for a property of the options
     JSValue outOfBounds(JSContext *ctx, const char *errorClass, double value, double minValue, double maxValue,
-                        bool hasMax) {
+                        bool hasMax, int argument = -1) {
         JSValue fields = JS_NewObject(ctx);
+        if (argument >= 0)
+            JS_SetPropertyStr(ctx, fields, "index", JS_NewInt32(ctx, argument));
         JS_SetPropertyStr(ctx, fields, "minValue", JS_NewFloat64(ctx, minValue));
         if (hasMax)
             JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewFloat64(ctx, maxValue));
@@ -39,10 +41,18 @@ namespace {
     }
 
     // the loops already played do not count: the position is within the current play
+    double playbackUnits(const ScriptSoundState &state) {
+        if (!state.mHasDuration || state.mDurationUnits <= 0)
+            return state.mElapsedUnits;
+        return std::fmod(state.mElapsedUnits, (double) state.mDurationUnits);
+    }
+
     double playbackPosition(const ScriptSoundState &state) {
-        if (!state.mHasDuration || state.mDuration <= 0.0)
-            return state.mElapsed;
-        return std::fmod(state.mElapsed, state.mDuration);
+        return playbackUnits(state) / state.unitsPerSecond();
+    }
+
+    double durationOf(const ScriptSoundState &state) {
+        return (double) state.mDurationUnits / state.unitsPerSecond();
     }
 
     bool readNumberArgument(JSContext *ctx, int argc, JSValueConst *argv, int index, double &value) {
@@ -132,14 +142,14 @@ namespace {
         double seconds = 0.0;
         if (state == nullptr || !readNumberArgument(ctx, argc, argv, 0, seconds))
             return typeError(ctx);
-        const double maxValue = state->mHasDuration ? state->mDuration : MAX_SEEK;
+        const double maxValue = state->mHasDuration ? durationOf(*state) : MAX_SEEK;
         if (seconds < 0.0 || seconds > maxValue)
-            return outOfBounds(ctx, "ArgumentOutOfBoundsError", seconds, 0.0, maxValue, true);
+            return outOfBounds(ctx, "ArgumentOutOfBoundsError", seconds, 0.0, maxValue, true, 0);
         ClientboundUpdateSoundDataPacket packet;
         packet.mType = SoundDataUpdateType::SeekTo;
         packet.mSeekTo.mSeconds = (float) seconds;
         sendUpdate(ctx, *state, packet);
-        state->mElapsed = state->mElapsed - playbackPosition(*state) + seconds;
+        state->mElapsedUnits = state->mElapsedUnits - playbackUnits(*state) + seconds * state->unitsPerSecond();
         return JS_UNDEFINED;
     }
 
@@ -149,7 +159,7 @@ namespace {
         if (state == nullptr || !readNumberArgument(ctx, argc, argv, 0, pitch))
             return typeError(ctx);
         if (pitch < MIN_PITCH || pitch > MAX_PITCH)
-            return outOfBounds(ctx, "ArgumentOutOfBoundsError", pitch, MIN_PITCH, MAX_PITCH, true);
+            return outOfBounds(ctx, "ArgumentOutOfBoundsError", pitch, MIN_PITCH, MAX_PITCH, true, 0);
         ClientboundUpdateSoundDataPacket packet;
         packet.mType = SoundDataUpdateType::SetPitch;
         packet.mPitch.mPitch = (float) pitch;
@@ -163,7 +173,7 @@ namespace {
         if (state == nullptr || !readNumberArgument(ctx, argc, argv, 0, volume))
             return typeError(ctx);
         if (volume < 0.0 || volume > MAX_VOLUME)
-            return outOfBounds(ctx, "ArgumentOutOfBoundsError", volume, 0.0, MAX_VOLUME, true);
+            return outOfBounds(ctx, "ArgumentOutOfBoundsError", volume, 0.0, MAX_VOLUME, true, 0);
         ClientboundUpdateSoundDataPacket packet;
         packet.mType = SoundDataUpdateType::SetVolume;
         packet.mVolume.mVolume = (float) volume;
@@ -179,9 +189,9 @@ namespace {
             || !readNumberArgument(ctx, argc, argv, 1, target))
             return typeError(ctx);
         if (duration < 0.0)
-            return outOfBounds(ctx, "ArgumentOutOfBoundsError", duration, 0.0, 0.0, false);
+            return outOfBounds(ctx, "ArgumentOutOfBoundsError", duration, 0.0, 0.0, false, 0);
         if (target < 0.0)
-            return outOfBounds(ctx, "ArgumentOutOfBoundsError", target, 0.0, 0.0, false);
+            return outOfBounds(ctx, "ArgumentOutOfBoundsError", target, 0.0, 0.0, false, 1);
         ClientboundUpdateSoundDataPacket packet;
         packet.mType = SoundDataUpdateType::Fade;
         packet.mFade.mDuration = (float) duration;
@@ -192,7 +202,7 @@ namespace {
 
     JSValue durationGetDuration(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptSoundState *state = soundOf(ctx, thisVal);
-        return state == nullptr ? typeError(ctx) : JS_NewFloat64(ctx, state->mDuration);
+        return state == nullptr ? typeError(ctx) : JS_NewFloat64(ctx, durationOf(*state));
     }
 
     JSValue durationGetIsActive(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -230,7 +240,7 @@ namespace {
         if (!definition->mHasDuration)
             return JS_UNDEFINED;
         JSValue info = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, info, "duration", JS_NewFloat64(ctx, definition->mDuration));
+        JS_SetPropertyStr(ctx, info, "duration", JS_NewFloat64(ctx, definition->durationSeconds()));
         return info;
     }
 
@@ -356,7 +366,7 @@ int64_t ScriptApi::nextSoundHandle() {
     return ++next;
 }
 
-JSValue ScriptApi::readSoundOptions(JSValueConst options, ScriptSoundOptions &read) {
+JSValue ScriptApi::readSoundOptions(JSValueConst options, ScriptSoundOptions &read, bool world) {
     if (JS_IsUndefined(options))
         return JS_UNDEFINED;
     if (!JS_IsObject(options))
@@ -364,7 +374,7 @@ JSValue ScriptApi::readSoundOptions(JSValueConst options, ScriptSoundOptions &re
     JSValue volume = JS_GetPropertyStr(mContext, options, "volume");
     JSValue pitch = JS_GetPropertyStr(mContext, options, "pitch");
     JSValue loop = JS_GetPropertyStr(mContext, options, "loopCount");
-    JSValue broadcast = JS_GetPropertyStr(mContext, options, "isBroadcast");
+    JSValue broadcast = world ? JS_GetPropertyStr(mContext, options, "isBroadcast") : JS_UNDEFINED;
     double number = 0.0;
     bool ok = true;
     if (!JS_IsUndefined(volume) && (ok = JS_ToFloat64(mContext, &number, volume) == 0))
@@ -381,9 +391,10 @@ JSValue ScriptApi::readSoundOptions(JSValueConst options, ScriptSoundOptions &re
     JS_FreeValue(mContext, broadcast);
     if (!ok)
         return typeError(mContext);
-    if (read.mVolume < 0.0)
+    // compared as the floats the game keeps (sub_14D4FB100, 26.60)
+    if ((float) read.mVolume < 0.0f)
         return outOfBounds(mContext, "PropertyOutOfBoundsError", read.mVolume, 0.0, 0.0, false);
-    if (read.mPitch < MIN_PITCH)
+    if ((float) read.mPitch < 0.01f)
         return outOfBounds(mContext, "PropertyOutOfBoundsError", read.mPitch, MIN_PITCH, 0.0, false);
     if (read.mLoopCount < -1)
         return outOfBounds(mContext, "PropertyOutOfBoundsError", read.mLoopCount, -1.0, 0.0, false);
@@ -399,9 +410,12 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
     const ScriptSoundDefinition *definition = mHost.getScriptEngine().sounds().find(eventId);
     if (definition != nullptr && definition->mHasDuration) {
         state->mHasDuration = true;
-        state->mDuration = definition->mDuration;
+        state->mDurationUnits = definition->mDurationUnits;
         state->mRealTime = definition->mRealTime;
     }
+    // isBroadcast with a declared broadcast_range: only players within it horizontally (sub_14B53D880, 26.60)
+    const bool ranged = options.mBroadcast && definition != nullptr && definition->mHasBroadcastRange;
+    const float rangeSquared = ranged ? definition->mBroadcastRange * definition->mBroadcastRange : 0.0f;
 
     PlaySoundPacket packet;
     packet.mSound = eventId;
@@ -421,6 +435,12 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
         for (auto &entry: mHost.getPlayers()) {
             if (!entry.second.isSpawned() || !entry.second.isIn(level))
                 continue;
+            if (ranged) {
+                const Vector3f &at = entry.second.getPosition();
+                const float dx = at.x - position.x, dz = at.z - position.z;
+                if (dx * dx + dz * dz > rangeSquared)
+                    continue;
+            }
             state->mListeners.push_back(mPlayers.acquire(entry.first));
             mHost.sendPacketTo(entry.first, packet);
         }
@@ -452,13 +472,14 @@ void ScriptApi::_tickSounds() {
             mTrackedSounds.erase(mTrackedSounds.begin() + (std::ptrdiff_t) index);
             continue;
         }
-        const double delta = state->mRealTime ? std::chrono::duration<double>(now - state->mLastRealTime).count()
-                                              : SECONDS_PER_TICK;
+        const double delta = state->mRealTime
+                                     ? std::chrono::duration<double, std::milli>(now - state->mLastRealTime).count()
+                                     : 1.0;
         state->mLastRealTime = now;
         if (!state->mPaused)
-            state->mElapsed += delta;
+            state->mElapsedUnits += delta;
         if (state->mHasDuration && state->mLoopCount >= 0
-            && state->mElapsed >= state->mDuration * (double) (state->mLoopCount + 1)) {
+            && state->mElapsedUnits >= (double) state->mDurationUnits * (double) (state->mLoopCount + 1)) {
             state->mCompleted = true;
             const std::string id = std::to_string(state->mHandle);
             mTrackedSounds.erase(mTrackedSounds.begin() + (std::ptrdiff_t) index);

@@ -603,6 +603,7 @@ system.runTimeout(() => {
     r.jingle = jingle.durationInfo.duration + ":" + jingle.musicInfo.artist + ":" + jingle.musicInfo.genres.join("|")
         + ":" + jingle.musicInfo.title + ":" + String(jingle.musicInfo.moods) + ":" + jingle.tags.mood.join("|");
     r.plain = String(all[1].durationInfo) + ":" + String(all[1].musicInfo) + ":" + String(all[1].tags);
+    r.quantized = all[2].durationInfo.duration + ":" + all[3].durationInfo.duration;
     r.filters = registry.getDefinitions({ genres: ["POP"] }).length + ":"
         + registry.getDefinitions({ minDuration: 1 }).length + ":" + registry.getDefinitions({ maxDuration: 1 }).length
         + ":" + registry.getDefinitions({ tags: { MOOD: ["Calm"] } }).length + ":"
@@ -629,7 +630,9 @@ system.runTimeout(() => {
         orb.seekTo(3); orb.stop(); });
     sound.seekTo(0.05);
     r.seek = sound.durationInfo.getPlaybackPosition().toFixed(2);
-  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+  } catch (e) {
+    r.error = e.name + ":" + e.message + ":" + e.stack;
+  }
     world.setDynamicProperty("sounds", JSON.stringify(r));
 }, 2);
 )JS";
@@ -916,6 +919,7 @@ system.runTimeout(() => {
     const failure = (run) => { try { run(); return "ok"; } catch (e) { return e.name; } };
     r.instrument = (instrument instanceof BlockInstrumentComponent) + ":" + instrument.getInstrumentName("Up") + ":"
         + instrument.getInstrumentName("Down") + ":" + failure(() => instrument.getInstrumentName("North")) + ":"
+        + failure(() => instrument.getInstrumentName("up")) + ":"
         + failure(() => instrument.playInstrumentSound("Up", { volume: 0.5 })) + ":"
         + failure(() => instrument.playInstrumentSound("Down", { pitch: 0 })) + ":"
         + (dimension.getBlock({ x: 0, y: 101, z: 8 }).getComponent("instrument_sound") === undefined);
@@ -1287,7 +1291,7 @@ system.beforeEvents.startup.subscribe((event) => {
       "minecraft:tick": { "interval_range": [10, 10] },
       "minecraft:redstone_consumer": { "min_power": 3 },
       "minecraft:entity_fall_on": { "min_fall_distance": 2 },
-      "minecraft:instrument_sound": { "up": "note.pling", "down": "note.none", "north": "note.harp" },
+      "minecraft:instrument_sound": { "up": "note.pling", "north": "note.harp" },
       "test:hooks": { "value": 42, "list": ["a", true] }
     }
   }
@@ -1539,7 +1543,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                       {"sound_event_name": "test:jingle", "duration_info": {"mode": "game_time", "seconds": 0.1},
                        "music_info": {"artist": "Someone", "genres": ["Pop", "Folk"], "title": "Tune"},
                        "tags": {"mood": "calm"}},
-                      {"sound_event_name": "random.orb"}]})");
+                      {"sound_event_name": "random.orb"},
+                      {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 0.125}},
+                      {"sound_event_name": "test:clock", "duration_info": {"mode": "real_time", "seconds": 1.2345}},
+                      {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 9}}]})");
         const std::string gemTable = "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", "
                                      "\"name\": \"minecraft:diamond\", \"functions\": [{\"function\": "
                                      "\"set_count\", \"count\": 3}]}]}]}";
@@ -2028,10 +2035,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
 
         const std::unique_ptr<json::Value> sounds = result(owner, "sounds");
         expect(*sounds, "registry", "true:true");
-        expect(*sounds, "definitions", "test:jingle,minecraft:random.orb:true");
+        expect(*sounds, "definitions", "test:jingle,minecraft:random.orb,test:ticks,test:clock:true");
         expect(*sounds, "jingle", "0.1:Someone:Pop|Folk:Tune:undefined:calm");
         expect(*sounds, "plain", "undefined:undefined:undefined");
-        expect(*sounds, "filters", "1:0:1:1:0:InvalidArgumentError");
+        expect(*sounds, "quantized", "0.1:1.234");
+        expect(*sounds, "filters", "1:1:2:1:0:InvalidArgumentError");
         expect(*sounds, "instance", "true:test:jingle:true:true:0.1:true:0");
         expect(*sounds, "dimension", "true:undefined:undefined:true");
         expect(*sounds, "bounds",
@@ -2510,7 +2518,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*betaEntities, "target", "true");
         expect(*betaEntities, "betaPlayer", "true");
         expect(*betaEntities, "instrument",
-               "true:note.pling:note.none:InvalidArgumentError:ok:PropertyOutOfBoundsError:true");
+               "true:note.pling:note.none:InvalidArgumentError:TypeError:ok:PropertyOutOfBoundsError:true");
         expect(*betaEntities, "chat", "[A] ScriptPlayer!:§a");
         expect(*betaEntities, "chatCleared", "[A] ScriptPlayer:true");
         expect(*betaEntities, "eat", "true");

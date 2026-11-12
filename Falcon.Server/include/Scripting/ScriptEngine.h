@@ -296,11 +296,11 @@ public:
         return mClocks;
     }
 
-    // world.structureManager of every pack
     ScriptSoundRegistry &sounds() {
         return mSounds;
     }
 
+    // world.structureManager of every pack
     ScriptStructureRegistry &structures() {
         return mStructures;
     }

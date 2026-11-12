@@ -366,8 +366,8 @@ public:
     // a server sound handle unique across packs
     static int64_t nextSoundHandle();
 
-    // WorldSoundOptions and PlayerSoundOptions; an exception value when they are refused, undefined otherwise
-    JSValue readSoundOptions(JSValueConst options, ScriptSoundOptions &read);
+    // WorldSoundOptions, or PlayerSoundOptions without isBroadcast; an exception value when refused, undefined otherwise
+    JSValue readSoundOptions(JSValueConst options, ScriptSoundOptions &read, bool world);
 
     // the SoundInstance; recipient: Player.playSound's player, null for every player in the level
     JSValue playSound(Level &level, ServerPlayer *recipient, const std::string &eventId, const Vector3f &position,

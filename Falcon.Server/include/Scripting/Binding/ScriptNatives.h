@@ -186,15 +186,20 @@ struct ScriptSoundState {
     std::vector<uint32_t> mListeners;
     uint32_t mRecipient = 0;
     bool mHasDuration = false;
-    double mDuration = 0.0;
+    // the definition's units: milliseconds for real_time, ticks for game_time
+    int64_t mDurationUnits = 0;
     bool mRealTime = false;
     // -1 loops until stopped or until scripts drop the last SoundInstance
     int32_t mLoopCount = 0;
-    double mElapsed = 0.0;
+    double mElapsedUnits = 0.0;
     std::chrono::steady_clock::time_point mLastRealTime;
     bool mPaused = false;
     bool mStopped = false;
     bool mCompleted = false;
+
+    double unitsPerSecond() const {
+        return mRealTime ? 1000.0 : 20.0;
+    }
 };
 
 // SoundInstance and its SoundDurationInfo share the state

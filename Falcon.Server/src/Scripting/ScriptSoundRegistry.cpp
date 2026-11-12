@@ -55,13 +55,22 @@ namespace {
 
         const json::Value *duration = entry.get("duration_info");
         if (duration != nullptr && duration->isObject()) {
-            const json::Value *seconds = duration->get("seconds");
-            if (seconds != nullptr && seconds->isNumber()) {
-                definition.mHasDuration = true;
-                definition.mDuration = seconds->number();
-            }
             const json::Value *mode = duration->get("mode");
             definition.mRealTime = mode != nullptr && mode->isString() && mode->string() == "real_time";
+            const json::Value *seconds = duration->get("seconds");
+            if (seconds != nullptr && seconds->isNumber()) {
+                // float seconds truncated: real_time to milliseconds, game_time to ticks
+                const float declared = (float) seconds->number();
+                definition.mHasDuration = true;
+                definition.mDurationUnits = definition.mRealTime ? (int64_t) (float) (declared * 1000.0)
+                                                                 : (int64_t) (int32_t) (float) (declared * 20.0);
+            }
+        }
+
+        const json::Value *range = entry.get("broadcast_range");
+        if (range != nullptr && range->isNumber()) {
+            definition.mHasBroadcastRange = true;
+            definition.mBroadcastRange = (float) range->number();
         }
 
         const json::Value *music = entry.get("music_info");
@@ -165,9 +174,9 @@ std::vector<const ScriptSoundDefinition *> ScriptSoundRegistry::definitions(cons
     for (const ScriptSoundDefinition &definition: mDefinitions) {
         if ((filter.mHasMinDuration || filter.mHasMaxDuration) && !definition.mHasDuration)
             continue;
-        if (filter.mHasMinDuration && definition.mDuration < filter.mMinDuration)
+        if (filter.mHasMinDuration && definition.durationSeconds() < filter.mMinDuration)
             continue;
-        if (filter.mHasMaxDuration && definition.mDuration > filter.mMaxDuration)
+        if (filter.mHasMaxDuration && definition.durationSeconds() > filter.mMaxDuration)
             continue;
         if (!matchesOne(filter.mArtists, definition.mArtist, definition.mHasArtist)
             || !matchesOne(filter.mTitles, definition.mTitle, definition.mHasTitle)

@@ -995,6 +995,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
             const json::Value *instrument = components->get("minecraft:instrument_sound");
             if (instrument != nullptr && instrument->isObject()) {
+                definition.mInstrumentSound = true;
                 for (const std::string &face: instrument->mKeys) {
                     const json::Value *sound = instrument->get(face);
                     if ((face == "up" || face == "down") && sound != nullptr && sound->isString()

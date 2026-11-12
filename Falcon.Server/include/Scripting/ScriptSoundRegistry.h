@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -8,15 +9,25 @@
 struct ScriptSoundDefinition {
     std::string mEventId;
     bool mHasDuration = false;
-    double mDuration = 0.0;
-    // duration_info mode real_time: wall clock seconds; game_time: server ticks
+    // duration_info kept as the game stores it: real_time in milliseconds, game_time in ticks (sub_143809380, 26.60)
+    int64_t mDurationUnits = 0;
     bool mRealTime = false;
+    bool mHasBroadcastRange = false;
+    float mBroadcastRange = 0.0f;
     bool mHasMusic = false;
     bool mHasArtist = false, mHasTitle = false, mHasGenres = false, mHasMoods = false;
     std::string mArtist, mTitle;
     std::vector<std::string> mGenres, mMoods;
     bool mHasTags = false;
     std::vector<std::pair<std::string, std::vector<std::string>>> mTags;
+
+    double unitsPerSecond() const {
+        return mRealTime ? 1000.0 : 20.0;
+    }
+
+    double durationSeconds() const {
+        return (double) mDurationUnits / unitsPerSecond();
+    }
 };
 
 // what SoundDefinitionRegistry.getDefinitions narrows by; empty lists and unset bounds do not constrain
@@ -33,7 +44,7 @@ public:
     // namespace:name; a name without one is in minecraft
     static std::string normalize(const std::string &eventId);
 
-    // a pack's document; the first pack declaring an event keeps it
+    // a pack's document; the first definition of an event wins, later ones are ignored like the game does
     void addPack(const std::string &packRoot);
 
     // nullptr when no pack declares the event
