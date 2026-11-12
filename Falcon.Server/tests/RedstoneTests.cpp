@@ -137,6 +137,33 @@ namespace {
         block->onRedstonePower(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
         require(fixture.at(ORIGIN).mStates.getByte("toggle_bit", 0) == 0, "an unpowered hopper stayed locked");
     }
+
+    void copperBulb() {
+        RedstoneFixture fixture;
+
+        fixture.set(ORIGIN, BlockState(BlockNames::COPPER_BULB));
+        const Block *block = VanillaBlocks::fromIdentifier(BlockNames::COPPER_BULB);
+        require(block != nullptr, "the copper bulb has no block class");
+
+        const Vector3i source(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z);
+        const auto pulse = [&](bool powered) {
+            fixture.set(source, powered ? VanillaBlocks::REDSTONE_BLOCK().toBlockState() : BlockState(BlockNames::AIR));
+            block->onScheduledUpdate(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN));
+        };
+        const auto lit = [&]() { return fixture.at(ORIGIN).mStates.getByte("lit", 0) != 0; };
+
+        pulse(true);
+        require(lit() && fixture.at(ORIGIN).mStates.getByte("powered_bit", 0) == 1, "a powered bulb did not light");
+        require(fixture.signal(ORIGIN) == 15, "a lit bulb did not give 15");
+
+        pulse(false);
+        require(lit() && fixture.at(ORIGIN).mStates.getByte("powered_bit", 0) == 0,
+                "a bulb losing power did not stay lit");
+
+        pulse(true);
+        require(!lit(), "a second pulse did not turn the bulb off");
+        require(fixture.signal(ORIGIN) == 0, "an unlit bulb gave a signal");
+    }
 }
 
 int main() {
@@ -145,6 +172,7 @@ int main() {
         stateSignals();
         containerSignals();
         hopperLock();
+        copperBulb();
         std::cout << "redstone checks passed\n";
         return 0;
     } catch (const std::exception &error) {
