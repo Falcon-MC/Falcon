@@ -2,6 +2,7 @@
 
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ClientboundUpdateSoundDataPacket.h"
+#include "Protocol/Packets/LevelEventGenericPacket.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Scripting/ScriptEngine.h"
 #include "Scripting/ScriptSoundRegistry.h"
@@ -490,6 +491,85 @@ void ScriptApi::_tickSounds() {
     }
 }
 
+namespace {
+    // the music manager's level events (sub_14C529CB0, sub_14C529A80, 26.60)
+    const int32_t MUSIC_QUEUE = 1900;
+    const int32_t MUSIC_PLAY = 1901;
+    const int32_t MUSIC_STOP = 1902;
+
+    // MusicOptions as the game reads it (sub_14D4EB0C0, 26.60): volume 1 and fade 0 by default, neither negative
+    bool readMusicTag(JSContext *ctx, int argc, JSValueConst *argv, Tag &tag, JSValue &error) {
+        error = JS_UNDEFINED;
+        if (argc < 1 || !JS_IsString(argv[0])) {
+            error = typeError(ctx);
+            return false;
+        }
+        double volume = 1.0, fade = 0.0;
+        bool loop = false;
+        JSValueConst options = argc >= 2 ? argv[1] : JS_UNDEFINED;
+        if (JS_IsObject(options)) {
+            JSValue value = JS_GetPropertyStr(ctx, options, "volume");
+            bool ok = JS_IsUndefined(value) || JS_ToFloat64(ctx, &volume, value) == 0;
+            JS_FreeValue(ctx, value);
+            value = JS_GetPropertyStr(ctx, options, "fade");
+            ok = ok && (JS_IsUndefined(value) || JS_ToFloat64(ctx, &fade, value) == 0);
+            JS_FreeValue(ctx, value);
+            value = JS_GetPropertyStr(ctx, options, "loop");
+            loop = JS_ToBool(ctx, value) == 1;
+            JS_FreeValue(ctx, value);
+            if (!ok) {
+                error = typeError(ctx);
+                return false;
+            }
+        } else if (!JS_IsUndefined(options)) {
+            error = typeError(ctx);
+            return false;
+        }
+        if ((float) volume < 0.0f) {
+            error = outOfBounds(ctx, "PropertyOutOfBoundsError", volume, 0.0, 0.0, false);
+            return false;
+        }
+        if ((float) fade < 0.0f) {
+            error = outOfBounds(ctx, "PropertyOutOfBoundsError", fade, 0.0, 0.0, false);
+            return false;
+        }
+        tag.putString("trackName", toString(ctx, argv[0]));
+        tag.putFloat("volume", (float) volume);
+        tag.putFloat("fadeSeconds", (float) fade);
+        tag.putByte("repeatMode", loop ? 1 : 0);
+        return true;
+    }
+
+    void sendMusic(ScriptApi &api, ServerPlayer *player, int32_t event, const Tag &tag) {
+        LevelEventGenericPacket packet;
+        packet.mEventId = event;
+        packet.mData = tag;
+        for (auto &entry: api.host().getPlayers()) {
+            if (entry.second.isSpawned() && (player == nullptr || &entry.second == player))
+                api.host().sendPacketTo(entry.first, packet);
+        }
+    }
+
+    // magic: the event; on a Player only that player hears it, on the World every player
+    JSValue musicPlay(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        Tag tag = Tag::ofCompound();
+        JSValue error = JS_UNDEFINED;
+        if (!readMusicTag(ctx, argc, argv, tag, error))
+            return error;
+        sendMusic(*api, api->resolvePlayer(thisVal), magic, tag);
+        return JS_UNDEFINED;
+    }
+
+    JSValue musicStop(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        Tag tag = Tag::ofCompound();
+        tag.putFloat("fadeSeconds", 0.0f);
+        sendMusic(*api, api->resolvePlayer(thisVal), MUSIC_STOP, tag);
+        return JS_UNDEFINED;
+    }
+}
+
 void ScriptApi::_bindSounds() {
     JSValue instance = defineClass("SoundInstance");
     property(instance, "SoundInstance", "id", soundGetId);
@@ -519,4 +599,10 @@ void ScriptApi::_bindSounds() {
     method(registry, "SoundDefinitionRegistry", "getDefinitions", registryGetDefinitions, 1);
     mSoundDefinitionRegistry = makeInstance("SoundDefinitionRegistry", new ScriptRegistryRef());
     property(prototypeOf("World"), "World", "soundDefinitionRegistry", worldGetSoundDefinitionRegistry);
+
+    for (const char *owner: {"World", "Player"}) {
+        methodMagic(prototypeOf(owner), owner, "playMusic", musicPlay, 2, MUSIC_PLAY);
+        methodMagic(prototypeOf(owner), owner, "queueMusic", musicPlay, 2, MUSIC_QUEUE);
+        method(prototypeOf(owner), owner, "stopMusic", musicStop, 0);
+    }
 }

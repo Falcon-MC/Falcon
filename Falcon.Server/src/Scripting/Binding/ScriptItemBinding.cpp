@@ -785,6 +785,12 @@ namespace {
                                  : "item." + descriptionIdOf(data.mTypeId) + ".name");
     }
 
+    JSValue typeLocalizationKey(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptItemData data;
+        data.mTypeId = argc >= 1 ? toString(ctx, argv[0]) : std::string();
+        return itemGetLocalizationKey(ctx, *ScriptApi::fromContext(ctx), data, 0, nullptr);
+    }
+
     JSValue itemGetWeight(JSContext *ctx, ScriptApi &api, ScriptItemData &data, int, JSValueConst *) {
         ItemStack stack;
         if (!gameStack(api, data, stack))
@@ -1116,6 +1122,10 @@ namespace {
         const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal);
         const std::string id = withNamespace(requested);
         const char *className = itemComponentClass(*api, *item->mItem, id);
+        // any other id: the custom component the item's JSON binds (ItemComponentReturnType)
+        if (className == nullptr && api->surface().has("ItemCustomComponentInstance")
+            && api->customItemComponent(item->mItem->mTypeId, id) != nullptr)
+            className = "ItemCustomComponentInstance";
         if (className == nullptr)
             return JS_UNDEFINED;
         ScriptItemRef *component = new ScriptItemRef();
@@ -1147,7 +1157,22 @@ namespace {
             if (!JS_IsUndefined(component))
                 JS_SetPropertyUint32(ctx, array, index++, component);
         }
+        const ScriptItemRef *item = ScriptApi::fromContext(ctx)->native<ScriptItemRef>(thisVal);
+        const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(item->mItem->mTypeId);
+        for (const CustomComponentUse &use:
+             custom == nullptr ? std::vector<CustomComponentUse>() : custom->mCustomComponents) {
+            JSValue component = makeItemComponent(ctx, thisVal, use.mName);
+            if (!JS_IsUndefined(component))
+                JS_SetPropertyUint32(ctx, array, index++, component);
+        }
         return array;
+    }
+
+    JSValue itemCustomGetParameters(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptItemRef *component = api->native<ScriptItemRef>(thisVal);
+        const CustomComponentUse *use = api->customItemComponent(component->mItem->mTypeId, component->mComponentId);
+        return use == nullptr ? JS_UNDEFINED : api->makeComponentParameters(use->mParams);
     }
 
     ScriptItemData &componentData(JSContext *ctx, JSValueConst thisVal) {
@@ -2421,6 +2446,10 @@ void ScriptApi::_bindItemStack() {
     method(slot, "ContainerSlot", "hasItem", slotHasItem, 0);
     method(slot, "ContainerSlot", "setItem", slotSetItem, 1);
 
+    if (mSurface.has("ItemCustomComponentInstance")) {
+        JSValue custom = defineClass("ItemCustomComponentInstance");
+        property(custom, "ItemCustomComponentInstance", "customComponentParameters", itemCustomGetParameters);
+    }
     JSValue durability = defineClass("ItemDurabilityComponent");
     property(durability, "ItemDurabilityComponent", "damage", durabilityGetDamage, durabilitySetDamage);
     property(durability, "ItemDurabilityComponent", "maxDurability", durabilityGetMax);
@@ -2551,4 +2580,10 @@ void ScriptApi::_bindContainers() {
     JSValue cursor = defineClass("PlayerCursorInventoryComponent");
     property(cursor, "PlayerCursorInventoryComponent", "item", cursorGetItem);
     method(cursor, "PlayerCursorInventoryComponent", "clear", cursorClear, 0);
+}
+
+namespace ScriptItemTypeData {
+    JSCFunction *localizationKey() {
+        return typeLocalizationKey;
+    }
 }

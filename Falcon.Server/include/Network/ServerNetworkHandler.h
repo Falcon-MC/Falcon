@@ -455,6 +455,10 @@ public:
 
     void spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position);
 
+    // molangJson: a serialized MolangVariableMap, sent as is; viewer: only that player sees it
+    void spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position,
+                             const std::string *molangJson, ServerPlayer *viewer);
+
     void playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                         const std::string &actorType = ":", int32_t extraData = -1);
 

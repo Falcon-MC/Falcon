@@ -48,6 +48,9 @@ public:
     // every Error subclass the version exports
     std::vector<std::string> errorClasses() const;
 
+    // every top-level export the version declares
+    std::vector<std::string> exports() const;
+
     static const ScriptSignalEntry *findSignal(const std::string &property);
 
     // every signal the definitions ever put on owner, whatever the version

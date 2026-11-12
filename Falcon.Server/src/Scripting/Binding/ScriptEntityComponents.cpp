@@ -48,6 +48,7 @@ namespace {
             {"minecraft:floats_in_liquid", "EntityFloatsInLiquidComponent", Backing::Definition},
             {"minecraft:flying_speed", "EntityFlyingSpeedComponent", Backing::Definition},
             {"minecraft:friction_modifier", "EntityFrictionModifierComponent", Backing::Definition},
+            {"minecraft:ground_offset", "EntityGroundOffsetComponent", Backing::Definition},
             {"minecraft:healable", "EntityHealableComponent", Backing::Definition},
             {"minecraft:health", "EntityHealthComponent", Backing::Attribute},
             {"minecraft:is_baby", "EntityIsBabyComponent", Backing::Definition},
@@ -241,6 +242,7 @@ namespace {
             {"EntityColor2Component", "value", "value"},
             {"EntityFlyingSpeedComponent", "value", "value"},
             {"EntityFrictionModifierComponent", "value", "value"},
+            {"EntityGroundOffsetComponent", "value", "value"},
             {"EntityHealableComponent", "forceUse", "force_use"},
             {"EntityLeashableComponent", "canBeStolen", "can_be_stolen"},
             {"EntityLeashableComponent", "hardDistance", "hard_distance"},
@@ -726,8 +728,13 @@ void ScriptApi::_bindEntityComponents() {
     methodMagic(attribute, "EntityAttributeComponent", "resetToMaxValue", attributeReset, 0, (int) AttributeField::Max);
     methodMagic(attribute, "EntityAttributeComponent", "resetToMinValue", attributeReset, 0, (int) AttributeField::Min);
 
-    for (const ComponentClass &component: COMPONENTS)
+    // the 1.x typings declare componentId before EntityComponentTypes lists the component
+    for (const ComponentClass &component: COMPONENTS) {
         defineClass(component.mClass);
+        if (mSurface.has(std::string(component.mClass) + ".static componentId"))
+            JS_DefinePropertyValueStr(mContext, constructorOf(component.mClass), "componentId",
+                                      string(mContext, component.mId), JS_PROP_ENUMERABLE);
+    }
 
     for (size_t i = 0; i < sizeof(FIELDS) / sizeof(FIELDS[0]); ++i) {
         const DefinitionField &field = FIELDS[i];

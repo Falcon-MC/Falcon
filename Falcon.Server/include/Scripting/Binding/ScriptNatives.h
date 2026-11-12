@@ -211,6 +211,20 @@ struct ScriptSoundDefinitionRef : ScriptNative {
     std::string mEventId;
 };
 
+// a MolangVariableMap: a variable holds a float, or named member floats (".r", ".x", ".speed")
+struct ScriptMolangMap : ScriptNative {
+    struct Variable {
+        std::string mName;
+        float mValue = 0.0f;
+        bool mArray = false;
+        std::vector<std::pair<std::string, float>> mMembers;
+    };
+
+    std::vector<Variable> mVariables;
+
+    std::string toJson() const;
+};
+
 namespace ScriptValues {
     std::string toString(JSContext *ctx, JSValueConst value);
 

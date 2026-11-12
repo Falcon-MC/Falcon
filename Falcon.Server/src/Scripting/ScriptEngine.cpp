@@ -1276,21 +1276,21 @@ void ScriptEngine::onEntityItemPickup(Actor &collector, const ItemStack &picked)
 void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {
     if (used.isAir() || used.mDefinition == nullptr)
         return;
+    // ScriptDeferredEventCoordinator flushes item custom components before world after events (sub_142BC3FF0, 26.60)
+    const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
+    if (item != nullptr) {
+        _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent",
+                       [&](ScriptApi &api, JSValue event) {
+                           JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
+                           JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
+                       });
+    }
     _emit("after.itemCompleteUse", "WorldAfterEvents.itemCompleteUse", false, [&](ScriptApi &api, JSValue event) {
         JSContext *ctx = api.context();
         JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
         JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
         JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration));
     });
-    const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
-    if (item == nullptr)
-        return;
-
-    const auto fill = [&](ScriptApi &api, JSValue event) {
-        JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
-        JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
-    };
-    _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent", fill);
 }
 
 void ScriptEngine::onItemConsume(ServerPlayer &player, const ItemStack &used) {

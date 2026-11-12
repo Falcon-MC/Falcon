@@ -527,7 +527,59 @@ JSValue ScriptApi::runCommand(Level &level, Actor *entity, const std::string &co
     return result;
 }
 
+namespace {
+    // the game queues at most 128 (sub_14C3448D0, 26.60)
+    const int32_t MAX_QUEUED_COMMANDS = 128;
+
+    JSValue runCommandAsync(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        return ScriptApi::fromContext(ctx)->queueCommand(thisVal, argc >= 1 ? argv[0] : JS_UNDEFINED);
+    }
+}
+
+// the 1.x runCommandAsync: this.runCommand(line) on the next tick, its result or error settling the promise
+JSValue ScriptApi::queueCommand(JSValueConst target, JSValueConst line) {
+    if ((int32_t) mQueuedCommands.size() >= MAX_QUEUED_COMMANDS)
+        return throwError("CommandError", "Command queue is full.");
+
+    QueuedCommand queued;
+    JSValue promise = JS_NewPromiseCapability(mContext, queued.mResolvers);
+    queued.mTarget = JS_DupValue(mContext, target);
+    queued.mLine = string(mContext, toString(mContext, line));
+    mQueuedCommands.push_back(queued);
+    return promise;
+}
+
+void ScriptApi::_runQueuedCommands() {
+    std::vector<QueuedCommand> queued;
+    queued.swap(mQueuedCommands);
+    for (QueuedCommand &command: queued) {
+        JSValue method = JS_GetPropertyStr(mContext, command.mTarget, "runCommand");
+        JSValue result = JS_Call(mContext, method, command.mTarget, 1, &command.mLine);
+        JSValue settled;
+        if (JS_IsException(result)) {
+            JSValue error = JS_GetException(mContext);
+            settled = JS_Call(mContext, command.mResolvers[1], JS_UNDEFINED, 1, &error);
+            JS_FreeValue(mContext, error);
+        } else {
+            settled = JS_Call(mContext, command.mResolvers[0], JS_UNDEFINED, 1, &result);
+        }
+        for (JSValue value: {settled, result, method})
+            JS_FreeValue(mContext, value);
+        _freeQueuedCommand(command);
+    }
+}
+
+void ScriptApi::_freeQueuedCommand(QueuedCommand &command) {
+    for (JSValue value: {command.mTarget, command.mLine, command.mResolvers[0], command.mResolvers[1]})
+        JS_FreeValue(mContext, value);
+}
+
 void ScriptApi::_bindCommands() {
+    for (const char *owner: {"Entity", "Player", "Dimension"}) {
+        if (!JS_IsUndefined(prototypeOf(owner)))
+            method(prototypeOf(owner), owner, "runCommandAsync", runCommandAsync, 1);
+    }
+
     if (!mSurface.has("CustomCommandRegistry"))
         return;
 

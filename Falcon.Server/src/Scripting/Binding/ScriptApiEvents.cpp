@@ -162,6 +162,7 @@ void ScriptApi::install() {
     _bindScoreboard();
     _bindWaypoints();
     _bindSounds();
+    _bindMolang();
     _bindCommands();
     _installBootstraps();
     _defineEnums();
@@ -171,6 +172,7 @@ void ScriptApi::install() {
 
 void ScriptApi::tick(int64_t currentTick) {
     mScheduler.tick(currentTick);
+    _runQueuedCommands();
     for (size_t index = 0; index < mTickJobs.size();) {
         if (mTickJobs[index]())
             ++index;

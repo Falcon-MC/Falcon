@@ -561,6 +561,45 @@ namespace {
         return array;
     }
 
+    JSValue makeDimensionType(ScriptApi &api, const std::string &id) {
+        ScriptNamedRef *ref = new ScriptNamedRef();
+        ref->mName = id;
+        return api.makeInstance("DimensionType", ref);
+    }
+
+    JSValue dimensionTypeGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ScriptNamedRef *ref = ScriptApi::fromContext(ctx)->native<ScriptNamedRef>(thisVal);
+        return ref == nullptr ? JS_UNDEFINED : string(ctx, ref->mName);
+    }
+
+    // vanilla first, then custom dimensions in registration order
+    std::vector<std::string> dimensionTypeIds() {
+        std::vector<std::string> ids = {"minecraft:overworld", "minecraft:nether", "minecraft:the_end"};
+        for (const auto &entry: Dimension::customDimensions())
+            ids.push_back(entry.second);
+        return ids;
+    }
+
+    JSValue dimensionTypesGet(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const std::string id = toString(ctx, argv[0]);
+        for (const std::string &known: dimensionTypeIds()) {
+            if (known == id)
+                return makeDimensionType(*ScriptApi::fromContext(ctx), id);
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue dimensionTypesGetAll(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &id: dimensionTypeIds())
+            JS_SetPropertyUint32(ctx, array, index++, makeDimensionType(*api, id));
+        return array;
+    }
+
     std::string biomeNameById(int32_t id) {
         BiomeChunkGenDataRegistry::initialize();
         for (const std::string &name: BiomeChunkGenDataRegistry::getBiomeNames()) {
@@ -915,5 +954,28 @@ void ScriptApi::_bindDimensionSurface() {
         JSValue types = constructorOf("BiomeTypes");
         method(types, "BiomeTypes", "static get", biomeTypesGet, 1);
         method(types, "BiomeTypes", "static getAll", biomeTypesGetAll, 0);
+    }
+
+    if (mSurface.has("DimensionType")) {
+        JSValue type = defineClass("DimensionType");
+        property(type, "DimensionType", "typeId", dimensionTypeGetTypeId);
+    }
+    if (mSurface.has("DimensionTypes")) {
+        defineClass("DimensionTypes");
+        JSValue types = constructorOf("DimensionTypes");
+        method(types, "DimensionTypes", "static get", dimensionTypesGet, 1);
+        method(types, "DimensionTypes", "static getAll", dimensionTypesGetAll, 0);
+    }
+    // the 1.x typings carry the vanilla ids as statics
+    if (mSurface.has("MinecraftDimensionTypes")) {
+        defineClass("MinecraftDimensionTypes");
+        JSValue types = constructorOf("MinecraftDimensionTypes");
+        for (const auto &entry:
+             {std::make_pair("nether", "minecraft:nether"), std::make_pair("overworld", "minecraft:overworld"),
+              std::make_pair("theEnd", "minecraft:the_end")}) {
+            if (mSurface.has(std::string("MinecraftDimensionTypes.static ") + entry.first))
+                JS_DefinePropertyValueStr(mContext, types, entry.first, string(mContext, entry.second),
+                                          JS_PROP_ENUMERABLE);
+        }
     }
 }

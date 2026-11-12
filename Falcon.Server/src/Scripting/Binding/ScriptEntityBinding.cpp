@@ -1578,8 +1578,14 @@ namespace {
         if (argc < 2 || !readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
+        std::string molang;
+        bool hasMolang = false;
+        if (!target.mApi->readMolang(argc >= 3 ? argv[2] : JS_UNDEFINED, molang, hasMolang))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        // only the target player sees it
         target.mApi->host().spawnParticleEffect(target.mApi->host().getLevelFor(*target.mPlayer),
-                                                toString(ctx, argv[0]), Vector3f((float) x, (float) y, (float) z));
+                                                toString(ctx, argv[0]), Vector3f((float) x, (float) y, (float) z),
+                                                hasMolang ? &molang : nullptr, target.mPlayer);
         return JS_UNDEFINED;
     }
 
