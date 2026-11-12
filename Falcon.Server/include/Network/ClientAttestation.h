@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Network/CompressedNetworkPeer.h"
 #include "Network/NetworkIdentifier.h"
 
 namespace nethernet {
@@ -25,6 +26,9 @@ public:
 
     // gathers what was observed of a NetherNet client while it connected and asks; never blocks
     void inspect(const nethernet::Connection &connection);
+
+    // asks again with what was observed of the client once it was playing; never blocks
+    void inspectSession(const NetworkIdentifier &id, const CompressedNetworkPeer::BatchTraits &batches);
 
     // verdicts that came back since the last call
     std::vector<std::pair<NetworkIdentifier, int>> takeVerdicts();

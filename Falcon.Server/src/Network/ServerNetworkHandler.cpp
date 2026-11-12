@@ -984,6 +984,8 @@ void ServerNetworkHandler::tick(bool paused) {
         const int failedCheck = unofficialClientsAllowed ? 0 : mClientProbes.tick(*this, entry.second, mCurrentTick);
         if (failedCheck != 0)
             unanswered.emplace_back(entry.first, failedCheck);
+        if (!unofficialClientsAllowed)
+            _inspectSession(entry.second);
         entry.second.getAcknowledgements().flush(*this, entry.first);
         if (entry.second.getAcknowledgements().hasTimedOut(mCurrentTick))
             timedOut.emplace_back(entry.first, entry.second.localize("falcon.disconnect.timedOut"));
@@ -1570,6 +1572,20 @@ void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectRe
     mNetworkHandler->flush(id);
     // Disconnect is advisory: a hostile client can ignore it; commands are queued, the message goes out first
     mNetworkHandler->closeConnection(id);
+}
+
+void ServerNetworkHandler::_inspectSession(ServerPlayer &player) {
+    // ten seconds in: the login and the first chunks of input have gone through by then
+    static const int64_t SESSION_TICKS = 200;
+    if (player.isSessionInspected() || player.getLoggedInTick() == 0
+        || mCurrentTick - player.getLoggedInTick() < SESSION_TICKS)
+        return;
+
+    CompressedNetworkPeer::BatchTraits batches;
+    if (!getNetworkHandler().getBatchTraits(player.getNetworkIdentifier(), batches) || batches.mBatches == 0)
+        return;
+    player.setSessionInspected();
+    ClientAttestation::getInstance().inspectSession(player.getNetworkIdentifier(), batches);
 }
 
 void ServerNetworkHandler::_rejectBadPacket(const NetworkIdentifier &id, const std::string &reason) {

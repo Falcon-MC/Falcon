@@ -796,6 +796,9 @@ public:
 
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
 
+    // asks the attestation service once about a client that has been playing for a while
+    void _inspectSession(ServerPlayer &player);
+
     ResourcePackManager &getResourcePacks() {
         return mResourcePacks;
     }

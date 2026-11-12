@@ -148,6 +148,19 @@ int NetworkHandler::getAveragePing(const NetworkIdentifier &id) const {
     return found == shard.mPings.end() ? -1 : found->second;
 }
 
+bool NetworkHandler::getBatchTraits(const NetworkIdentifier &id,
+                                    CompressedNetworkPeer::BatchTraits &outTraits) const {
+    if (mShards.empty())
+        return false;
+    const Shard &shard = *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
+    std::lock_guard<std::mutex> lock(shard.mPingMutex);
+    const auto found = shard.mBatchTraits.find(id);
+    if (found == shard.mBatchTraits.end())
+        return false;
+    outTraits = found->second;
+    return true;
+}
+
 NetworkHandler::Shard &NetworkHandler::_shardFor(const NetworkIdentifier &id) {
     return *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
 }
@@ -395,6 +408,7 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
         {
             std::lock_guard<std::mutex> lock(shard.mPingMutex);
             shard.mPings.erase(command.mId);
+            shard.mBatchTraits.erase(command.mId);
         }
 
         InboundEvent event;
@@ -464,8 +478,10 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
     if (now >= shard.mPingRefresh) {
         shard.mPingRefresh = now + std::chrono::seconds(1);
         std::lock_guard<std::mutex> lock(shard.mPingMutex);
-        for (auto &entry: shard.mConnections)
+        for (auto &entry: shard.mConnections) {
             shard.mPings[entry.first] = entry.second->getPeer()->getNetworkStatus().mAveragePing;
+            shard.mBatchTraits[entry.first] = entry.second->getCompressedPeer()->getBatchTraits();
+        }
     }
 
     std::vector<OutboundCommand> commands = shard.mOutbound.drain();
