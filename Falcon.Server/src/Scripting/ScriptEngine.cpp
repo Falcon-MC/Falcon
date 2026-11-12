@@ -565,10 +565,11 @@ bool ScriptEngine::_emit(const char *key, const char *signal, bool cancellable, 
     return cancellable && cancelled;
 }
 
-void ScriptEngine::onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z) {
+void ScriptEngine::onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z, const Vector3f &from,
+                                        const Vector3f &to) {
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
-        api->emitProjectileHitBlock(projectile, x, y, z);
+        api->emitProjectileHitBlock(projectile, x, y, z, from, to);
         _pumpJobs();
     }
 }

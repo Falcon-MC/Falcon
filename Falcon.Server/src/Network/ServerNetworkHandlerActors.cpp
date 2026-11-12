@@ -1720,7 +1720,7 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (!onThrownProjectileHit(actor, hitPosition, nullptr))
-                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ);
+                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ, previousPosition, position);
 
                 if (actor.getProjectileData().mStuck) {
                     plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));

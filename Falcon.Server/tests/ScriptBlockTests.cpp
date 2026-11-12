@@ -97,6 +97,8 @@ world.afterEvents.pistonActivate.subscribe((e) => log("piston:" + at(e.block) + 
 world.afterEvents.tripWireTrip.subscribe((e) => log("trip:" + at(e.block) + ":" + e.isPowered + ":" + e.sources.length));
 world.afterEvents.targetBlockHit.subscribe((e) => log("target:" + at(e.block) + ":" + e.previousRedstonePower + ">"
     + e.redstonePower + ":" + (e.source !== undefined)));
+world.afterEvents.projectileHitBlock.subscribe((e) => { const hit = e.getBlockHit(); log("hitBlock:" + at(hit.block)
+    + ":" + hit.face + ":" + hit.faceLocation.x + "," + hit.faceLocation.y + "," + hit.faceLocation.z); });
 world.afterEvents.pressurePlatePop.subscribe((e) => log("platePop:" + e.previousRedstonePower + ">"
     + e.redstonePower));
 
@@ -522,6 +524,10 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         RedstoneSystem::onRedstoneUpdate(owner, level, Vector3i(0, 100, 0), level.getBlockState(0, 100, 0),
                                          BlockUpdateType::Scheduled);
 
+        // a projectile falling into a block's top: the entered face and where on it, from the corner
+        engine.onProjectileHitBlock(*cow, 50, 99, 50, Vector3f(50.25f, 101.0f, 50.75f),
+                                    Vector3f(50.25f, 99.5f, 50.75f));
+
         // the piston pushes as soon as a redstone block powers it
         const Vector3i pistonAt(25, 101, 5);
         level.setBlock(pistonAt, vanilla("minecraft:piston"), false);
@@ -668,6 +674,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         for (const char *wanted: {"piston:25,101,5:true:true;", "platePop:", "trip:31,100,40:true:1;",
                                   "trip:31,100,40:false:0;", "target:40,100,40:0>15:true;"})
             require(events.find(wanted) != std::string::npos, std::string("missing event ") + wanted + " in " + events);
+        require(events.find("hitBlock:50,99,50:Up:0.25,1,0.75;") != std::string::npos,
+                "projectileHitBlock did not report the entered face: " + events);
 
         // the world copy is in the database, readable by a fresh registry
         Tag saved;

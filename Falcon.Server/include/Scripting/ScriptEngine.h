@@ -82,7 +82,9 @@ public:
     void tick(int64_t currentTick);
 
 
-    void onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z);
+    // from: where the projectile was, to: where it ended inside the block
+    void onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z, const Vector3f &from,
+                              const Vector3f &to);
 
     // clickPosition: the face location, relative to the block's bottom north-west corner
     void onItemUseOnBlock(ServerPlayer &player, const Vector3i &position, int32_t face, const Vector3f &clickPosition);
