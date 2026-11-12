@@ -1418,6 +1418,12 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         save();
     });
     ui.observable = [new ObservableNumber(3).getData(), errorOf(() => new ObservableNumber("3"))].join("|");
+    // 2.x options take an object only, undefined and null meaning none
+    ui.primitiveOptions = [errorOf(() => new ModalFormData().toggle("t", true)),
+                           errorOf(() => new ModalFormData().slider("s", 0, 5, 1)),
+                           errorOf(() => new CustomForm(p, "t").divider(false)),
+                           errorOf(() => new ModalFormData().textField("f", "p", null).dropdown("d", ["a"], undefined))]
+        .join("|");
     save();
 });
 system.afterEvents.scriptEventReceive.subscribe((event) => {
@@ -1439,6 +1445,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     const char *const LEGACY_UI = R"JS(
 import { world, system } from "@minecraft/server";
 import * as ui from "@minecraft/server-ui";
+r.positional = typeof new ui.ModalFormData().toggle("t", true).slider("s", 0, 5, 1, 2).dropdown("d", ["a"], 0);
 r.members = [typeof ui.ActionFormData.prototype.header, typeof ui.ModalFormData.prototype.submitButton,
              typeof ui.ModalFormData.prototype.label, "uiManager" in ui, typeof ui.ActionFormData.prototype.button]
     .join("|");
@@ -2006,6 +2013,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*ddui, "closed", "ClientClosed|true|false|true|true|false");
         expect(*ddui, "box", "ClientClosed|1");
         expect(*ddui, "observable", "3|TypeError:Native type conversion failed.");
+        expect(*ddui, "primitiveOptions",
+               "TypeError:Native optional type conversion failed.|TypeError:Native optional type conversion failed.|"
+               "TypeError:Native optional type conversion failed.|none");
 
         // getFilteredText: no text processor, so the text comes back as sent unless the player turned filtering off
         player.readSyncedClientOptions("{\"TextFilteringDebugTimeoutMilliSeconds\":600000}");
@@ -2363,6 +2373,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(filtered->get("filter_slow") == nullptr, "the client debug timeout did not hold the answer back");
         const std::unique_ptr<json::Value> legacyUi = result(owner, "legacyUi");
         expect(*legacyUi, "members", "undefined|undefined|undefined|false|function");
+        expect(*legacyUi, "positional", "object");
         expect(*legacyUi, "response", "false|false|[\"x\"]");
 
         const BlockState stateful = level.getBlockState(at.x, at.y, at.z);
