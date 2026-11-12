@@ -554,7 +554,8 @@ void ScriptApi::_subscribeGameEvents() {
                               makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
             JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
             JS_SetPropertyStr(mContext, object, "brokenBlockPermutation",
-                              makePermutation(event.mBrokenBlockIdentifier));
+                              event.mBrokenState ? makePermutation(*event.mBrokenState)
+                                                 : makePermutation(event.mBrokenBlockIdentifier));
             emit("after.playerBreakBlock", object);
         }
 
