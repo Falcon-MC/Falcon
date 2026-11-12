@@ -1374,6 +1374,23 @@ namespace {
         return JS_NewBool(ctx,
                           event->mEventName == toString(ctx, argv[0]) && event->mNamespace == api->scriptModuleUuid());
     }
+
+    JSValue neighborGetChanges(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptNeighborChangedEvent *event = api->native<ScriptNeighborChangedEvent>(thisVal);
+        if (event == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        JSValue changes = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const NeighborChangeQueue::Change &change: event->mChanges) {
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "blockPermutation", api->makePermutation(change.current));
+            JS_SetPropertyStr(ctx, entry, "direction", JS_NewString(ctx, DIRECTIONS[change.direction]));
+            JS_SetPropertyStr(ctx, entry, "previousPermutation", api->makePermutation(change.previous));
+            JS_SetPropertyUint32(ctx, changes, index++, entry);
+        }
+        return changes;
+    }
 }
 
 namespace ScriptBlockData {
@@ -1473,6 +1490,10 @@ void ScriptApi::_bindBlockSurface() {
     if (mSurface.has("BlockComponentNamedTickEvent")) {
         JSValue named = defineClass("BlockComponentNamedTickEvent");
         method(named, "BlockComponentNamedTickEvent", "isName", namedTickIsName, 1);
+    }
+    if (mSurface.has("BlockComponentNeighborChangedAfterEvent")) {
+        JSValue neighbor = defineClass("BlockComponentNeighborChangedAfterEvent");
+        method(neighbor, "BlockComponentNeighborChangedAfterEvent", "getChanges", neighborGetChanges, 0);
     }
     if (mSurface.has("BlockCustomComponentInstance")) {
         JSValue custom = defineClass("BlockCustomComponentInstance");

@@ -722,6 +722,8 @@ void ServerNetworkHandler::_loadScripts() {
     mBehaviorPacks.discover(ServerPaths::file("behavior_packs"));
     _validatePackDependencies();
 
+    CustomContentRegistry::getInstance().setUpcomingCreatorFeatures(
+            getLevel().hasExperiment("upcoming_creator_features"));
     CustomContentRegistry::getInstance().load(mBehaviorPacks, mItemDefinitions, mBlockDefinitions);
 
     loadWorldDynamicProperties();

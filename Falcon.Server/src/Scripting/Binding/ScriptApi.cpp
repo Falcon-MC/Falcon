@@ -140,6 +140,8 @@ namespace {
             return accepts<ScriptBlockPart>;
         if (cls == "BlockComponentNamedTickEvent")
             return accepts<ScriptNamedTickEvent>;
+        if (cls == "BlockComponentNeighborChangedAfterEvent")
+            return accepts<ScriptNeighborChangedEvent>;
         if (cls == "InputInfo")
             return accepts<ScriptInputInfoRef>;
         if (hasSuffix(cls, "Waypoint"))

@@ -142,6 +142,37 @@ void Level::tickBlockUpdates() {
     mBlockUpdates.tick([this](const Vector3i &position) { updateAt(position, BlockUpdateType::Scheduled); },
                        [this](int32_t chunkX, int32_t chunkZ) { return isColumnActive(chunkX, chunkZ); });
     _tickNamedTicks();
+    _tickNeighborChanges();
+}
+
+void Level::_recordNeighborChange(int32_t x, int32_t y, int32_t z, const BlockState &previous,
+                                  const BlockState &current) {
+    const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
+    const Vector3i changed(x, y, z);
+    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
+        const Vector3i neighbor = RedstoneFace::relative(changed, face);
+        const BlockState *listener = peekBlockPtr(neighbor.x, neighbor.y, neighbor.z);
+        if (listener == nullptr)
+            continue;
+        const int direction = RedstoneFace::opposite(face);
+        if ((custom.neighborDirectionsOf(listener->mName) & (1 << direction)) != 0)
+            mNeighborChanges.record(neighbor, listener->mName, direction, previous, current);
+    }
+}
+
+// changes made while the events run wait for the next tick
+void Level::_tickNeighborChanges() {
+    if (mOwner == nullptr || mNeighborChanges.empty())
+        return;
+
+    ServerNetworkHandler &owner = *mOwner;
+    for (const NeighborChangeQueue::Entry &entry: mNeighborChanges.take()) {
+        const BlockState *state = peekBlockPtr(entry.position.x, entry.position.y, entry.position.z);
+        if (state == nullptr || state->mName != entry.blockType)
+            continue;
+        const BlockState listener = *state;
+        owner.getScriptEngine().onCustomBlockNeighborChanged(*this, entry.position, listener, entry.changes);
+    }
 }
 
 void Level::_tickNamedTicks() {

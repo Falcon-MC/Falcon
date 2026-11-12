@@ -54,8 +54,17 @@ namespace {
   }
 })JSON";
 
+    const char *const WATCHER_BLOCK = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:block": {
+    "description": { "identifier": "test:watcher" },
+    "components": { "test:watch": {}, "minecraft:neighbor_change": { "neighbor_directions": ["north", "up"] } }
+  }
+})JSON";
+
     const char *const SCRIPT = R"JS(
-import { world, system, BlockComponentNamedTickEvent } from "@minecraft/server";
+import { world, system, BlockComponentNamedTickEvent, BlockComponentNeighborChangedAfterEvent }
+    from "@minecraft/server";
 
 const r = {};
 const save = () => world.setDynamicProperty("blockbeta", JSON.stringify(r));
@@ -66,6 +75,14 @@ system.beforeEvents.startup.subscribe((event) => {
         onNamedTick(e) {
             r.fired = (r.fired || "") + (system.currentTick - r.start) + ":" + e.isName("ping") + ":"
                 + e.isName("pong") + ":" + e.block.typeId + ":" + (e instanceof BlockComponentNamedTickEvent) + ";";
+            save();
+        },
+    });
+    event.blockComponentRegistry.registerCustomComponent("test:watch", {
+        onNeighborChanged(e) {
+            r.neighbor = (r.neighbor || "") + e.getChanges().map((c) => c.direction + ":"
+                + c.previousPermutation.type.id + ">" + c.blockPermutation.type.id).join(",") + "@" + e.block.typeId
+                + ":" + (e instanceof BlockComponentNeighborChangedAfterEvent) + ";";
             save();
         },
     });
@@ -153,12 +170,34 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         return player;
     }
 
+    // without upcoming_creator_features the game rejects a block using minecraft:neighbor_change
+    void checkNeighborChangeNeedsExperiment(const std::filesystem::path &directory) {
+        const std::filesystem::path packs = directory / "gated";
+        writePack(packs, "gated", "");
+        writeFile(packs / "gated" / "blocks" / "watcher.json", WATCHER_BLOCK);
+        ServerNetworkHandler probe("Script block beta gate", "", 1);
+        BehaviorPackManager manager;
+        manager.discover(packs.string());
+        CustomContentRegistry &registry = CustomContentRegistry::getInstance();
+        registry.load(manager, probe.getItemDefinitions(), probe.getBlockDefinitions());
+        require(registry.findBlock("test:watcher") == nullptr, "a neighbor_change block loaded without the experiment");
+        registry.reset();
+        registry.setUpcomingCreatorFeatures(true);
+        registry.load(manager, probe.getItemDefinitions(), probe.getBlockDefinitions());
+        require(registry.neighborDirectionsOf("test:watcher") == ((1 << 2) | (1 << 1)),
+                "neighbor_directions did not map to north and up");
+        registry.reset();
+    }
+
     void run(const std::filesystem::path &directory) {
         checkNamedTickRecord();
+        checkNeighborChangeNeedsExperiment(directory);
 
         const std::filesystem::path packs = directory / "packs";
         writePack(packs, "blockbeta", SCRIPT);
         writeFile(packs / "blockbeta" / "blocks" / "timer.json", TIMER_BLOCK);
+        writeFile(packs / "blockbeta" / "blocks" / "watcher.json", WATCHER_BLOCK);
+        CustomContentRegistry::getInstance().setUpcomingCreatorFeatures(true);
 
         ServerNetworkHandler owner("Script block beta", "", 1);
         ScriptEngine &engine = owner.getScriptEngine();
@@ -181,7 +220,22 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         for (int tick = 0; tick < 8; ++tick)
             owner.tick(false);
 
+        // one event a tick: a direction keeps its first previous and last permutation, east is not watched
+        level.setBlock(Vector3i(3, 100, 3), BlockState("test:watcher"), false);
+        level.setBlock(Vector3i(3, 101, 3), BlockState("minecraft:stone"), false);
+        level.setBlock(Vector3i(3, 100, 2), BlockState("minecraft:stone"), false);
+        level.setBlock(Vector3i(3, 100, 2), BlockState("minecraft:dirt"), false);
+        level.setBlock(Vector3i(4, 100, 3), BlockState("minecraft:stone"), false);
+        owner.tick(false);
+        level.setBlock(Vector3i(4, 100, 3), BlockState("minecraft:air"), false);
+        owner.tick(false);
+        level.setBlock(Vector3i(3, 101, 3), BlockState("minecraft:air"), false);
+        owner.tick(false);
+
         const std::unique_ptr<json::Value> r = result(owner);
+        expect(*r, "neighbor",
+               "Up:minecraft:air>minecraft:stone,North:minecraft:air>minecraft:dirt@test:watcher:true;"
+               "Up:minecraft:stone>minecraft:air@test:watcher:true;");
         expect(*r, "has", "true:false");
         expect(*r, "errors",
                "Error:The scheduled event name is invalid.|Error:The scheduled event name is invalid.|"
