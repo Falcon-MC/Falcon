@@ -1334,7 +1334,7 @@ namespace {
         return array;
     }
 
-    JSValue entityMatches(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+    JSValue entityMatchesFilter(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         return JS_NewBool(ctx, argc >= 1 && matchesQuery(ctx, entityOf(ctx, thisVal), argv[0]));
     }
 
@@ -3406,7 +3406,7 @@ void ScriptApi::_bindEntity() {
     method(entity, "Entity", "removeTag", entityRemoveTag, 1);
     method(entity, "Entity", "hasTag", entityHasTag, 1);
     method(entity, "Entity", "getTags", entityGetTags, 0);
-    method(entity, "Entity", "matches", entityMatches, 1);
+    method(entity, "Entity", "matches", entityMatchesFilter, 1);
     method(entity, "Entity", "getProperty", entityGetProperty, 1);
     method(entity, "Entity", "setProperty", entitySetProperty, 2);
     method(entity, "Entity", "getViewDirection", entityGetViewDirection, 0);
