@@ -612,8 +612,15 @@ namespace {
         if (found != nullptr)
             return *found;
 
-        // ui and common follow the server's major when a pack does not pin them
+        // every server version depends on common ^1.x: an unpinned common is the newest 1.x of 1.26.60, 1.3
         ScriptModuleVersion fallback;
+        if (std::strcmp(name, "@minecraft/common") == 0) {
+            fallback.mTrack = ScriptApiTrack::Stable1;
+            fallback.mMinor = 3;
+            return fallback;
+        }
+
+        // ui follows the server's major when a pack does not pin it
         const ScriptModuleVersion *server = modules.find("@minecraft/server");
         if (server != nullptr)
             fallback.mTrack = server->mTrack;
