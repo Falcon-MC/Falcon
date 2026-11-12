@@ -145,6 +145,17 @@ public:
         return mJumpControl;
     }
 
+    // Mob::setGoals with none (sub_142C23480): spawnWithoutBehaviors stops every goal for good
+    void removeBehaviors(ServerNetworkHandler &owner);
+
+    bool hasBehaviorsRemoved() const {
+        return mBehaviorsRemoved;
+    }
+
+    MobExplode &getExplode() {
+        return mExplode;
+    }
+
     PathNavigation &getNavigation() {
         return mNavigation;
     }
@@ -638,6 +649,7 @@ private:
     bool mSitting = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;
+    bool mBehaviorsRemoved = false;
     bool mBodyDirty = true;
     float mScale = 1.0f;
     bool mDefinitionStarted = false;

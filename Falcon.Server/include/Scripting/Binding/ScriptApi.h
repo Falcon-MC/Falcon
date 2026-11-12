@@ -7,6 +7,7 @@
 #include "Protocol/Types/ItemStack.h"
 #include "Protocol/Types/LocatorBarWaypoint.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Scripting/GameTestRunner.h"
 #include "World/Level/Block/BlockState.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
@@ -117,6 +118,20 @@ public:
     void setTimingWarningsDisabled(bool disabled) {
         mTimingWarningsDisabled = disabled;
     }
+
+    // the runner's side of @minecraft/server-gametest; nothing without the module
+    std::vector<GameTestRunner::Descriptor> gameTestList();
+
+    std::vector<std::string> gameTestTags();
+
+    // structureBlock: where relative (0, 1, 0) starts; false for a name the pack does not know
+    bool gameTestStart(int32_t id, const std::string &name, const Vector3i &structureBlock, int32_t rotation,
+                       const Vector3i &size, const Level &level);
+
+    void gameTestStop(int32_t id);
+
+    // setBeforeBatchCallback and setAfterBatchCallback
+    void gameTestBatch(bool before, const std::string &batchName);
 
     const ScriptModuleSet &modules() const {
         return mModules;
@@ -398,6 +413,10 @@ public:
         return mScriptModuleUuid;
     }
 
+    const ScriptSurface &gameTestSurface() const {
+        return mGameTestSurface;
+    }
+
     const ScriptSurface &adminSurface() const {
         return mAdminSurface;
     }
@@ -662,6 +681,9 @@ private:
     // @minecraft/debug-utilities: the drawer, the diagnostics manager and the stats functions
     void _installDebugUtilities();
 
+    // @minecraft/server-gametest: registrations, the Test helper and the hooks the runner drives
+    void _installGameTest();
+
     JSContext *mContext;
     ServerNetworkHandler &mHost;
     JSClassID mNativeClassId;
@@ -677,6 +699,7 @@ private:
     ScriptSurface mAdminSurface;
     ScriptSurface mNetSurface;
     ScriptSurface mDebugSurface;
+    ScriptSurface mGameTestSurface;
     ScriptPrivilege mPrivilege = ScriptPrivilege::Normal;
 
     struct SteppedBlock {
@@ -705,6 +728,8 @@ private:
     JSValue mAdminHooks = JS_UNDEFINED;
     std::string mScriptModuleUuid;
     std::vector<std::pair<std::string, JSValue>> mDebugExports;
+    std::vector<std::pair<std::string, JSValue>> mGameTestExports;
+    JSValue mGameTestHooks = JS_UNDEFINED;
     std::shared_ptr<ScriptHandleCounts> mHandleCounts = std::make_shared<ScriptHandleCounts>();
     bool mTimingWarningsDisabled = false;
     JSValue mDebugTick = JS_UNDEFINED;

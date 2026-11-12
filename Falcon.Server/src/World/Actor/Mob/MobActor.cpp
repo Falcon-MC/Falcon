@@ -363,6 +363,11 @@ void MobActor::tickDeath(ServerNetworkHandler &owner) {
         _tickTransformation(owner);
 }
 
+void MobActor::removeBehaviors(ServerNetworkHandler &owner) {
+    mBehaviorsRemoved = true;
+    mGoalSelector.clear(owner, *this);
+}
+
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
     mGoalsDirty = false;
     const bool sameGroups = mGoalGroups.size() == mComponentGroups.size()
@@ -376,9 +381,11 @@ void MobActor::_registerGoals(ServerNetworkHandler &owner) {
     mNavigation.setOptions(std::move(options));
 
     mGoalSelector.clear(owner, *this);
-    registerGoals(mGoalSelector);
-    if (mGoalSelector.isEmpty())
-        BehaviorGoals::build(*this, mGoalSelector);
+    if (!mBehaviorsRemoved) {
+        registerGoals(mGoalSelector);
+        if (mGoalSelector.isEmpty())
+            BehaviorGoals::build(*this, mGoalSelector);
+    }
 
     mGoalsRegistered = true;
     mGoalsDirty = false;

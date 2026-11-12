@@ -3,6 +3,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "Network/NetworkIdentifier.h"
+#include "Scripting/GameTestRunner.h"
 #include "Scripting/Binding/PlayerHandleRegistry.h"
 #include "Scripting/ScriptPackConfiguration.h"
 #include "Scripting/ScriptSoundRegistry.h"
@@ -312,6 +313,11 @@ public:
         return mStructures;
     }
 
+    // the tests every pack registered with @minecraft/server-gametest
+    GameTestRunner &gameTests() {
+        return mGameTests;
+    }
+
     // config/ of the server root: the module permissions, variables and secrets of each script module
     ScriptPackConfigurationManager &packConfigs() {
         return mPackConfigs;
@@ -395,6 +401,7 @@ private:
 
     WorldClockSystem mClocks;
     ScriptStructureRegistry mStructures;
+    GameTestRunner mGameTests;
     ScriptSoundRegistry mSounds;
     int64_t mLastClockSync = 0;
     // last power each redstone consumer custom block received, per level

@@ -29,6 +29,8 @@ namespace {
             return "net:";
         if (module == "@minecraft/debug-utilities")
             return "debug:";
+        if (module == "@minecraft/server-gametest")
+            return "gametest:";
         return "server:";
     }
 }

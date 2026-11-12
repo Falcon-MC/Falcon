@@ -21,6 +21,10 @@ public:
 
     void tick(ServerNetworkHandler &owner) override;
 
+    void setFuse(int32_t fuse) {
+        mFuse = fuse;
+    }
+
     float getBaseOffset() const override {
         return BASE_OFFSET;
     }

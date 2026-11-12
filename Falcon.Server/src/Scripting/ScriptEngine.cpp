@@ -278,6 +278,7 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
         return;
 
     mHost = &host;
+    mGameTests.bindHost(host);
     mPackConfigs.load(ServerPaths::file("config"));
     MobEffectManager::setAddFilter(
             [this](Actor &actor, MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
@@ -520,6 +521,7 @@ void ScriptEngine::startup() {
 }
 
 void ScriptEngine::shutdown() {
+    mGameTests.stopAll();
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
         api->shutdown();
@@ -1793,6 +1795,10 @@ void ScriptEngine::tick(int64_t currentTick) {
         _arm();
         api->tick(currentTick);
     }
+    _pumpJobs();
+    // after the packs ticked their running tests
+    _arm();
+    mGameTests.tick();
     _pumpJobs();
 }
 
