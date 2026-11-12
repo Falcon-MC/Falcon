@@ -1,5 +1,7 @@
 #include "World/Level/Block/ScaffoldingBlock.h"
 
+#include "World/Actor/Actor.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 
 FALCON_REGISTER_BLOCK(ScaffoldingBlock, 370);
@@ -132,5 +134,18 @@ bool ScaffoldingBlock::getMoverCollisionShapes(const BlockState &state, const Ve
         return true;
     if (mover.mMaxX > x && mover.mMinX < x + 1.0f && mover.mMaxZ > z && mover.mMinZ < z + 1.0f)
         shapes.push_back(AxisAlignedBB(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f));
+    return true;
+}
+
+bool ScaffoldingBlock::getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                           AxisAlignedBB &shape) const {
+    // placement, explosions and block rays keep the table shape
+    if (actor == nullptr)
+        return false;
+
+    const bool carries = state.mStates.getInt(STABILITY, 0) != UNSTABLE_STABILITY
+                         && !actor->getFlags().get(ActorFlag::Sneaking)
+                         && actor->getPosition().y >= (float) position.y + 1.0f - SUPPORT_EPSILON;
+    shape = carries ? AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f) : AxisAlignedBB(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     return true;
 }
