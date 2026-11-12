@@ -119,7 +119,7 @@ system.runTimeout(() => {
     r.offset = at(stone.offset({ x: 1, y: 0, z: 2 }));
     r.item = stone.getItemStack(3).typeId + "x" + stone.getItemStack(3).amount;
     r.light = typeof stone.getLightLevel() + ":" + typeof stone.getSkyLightLevel();
-    r.power = stone.getRedstonePower();
+    r.power = String(stone.getRedstonePower());
     r.components = stone.getComponents().map((c) => c.typeId).join(",");
     r.movable = stone.getComponent("movable").movementType + ":" + stone.getComponent(BlockComponentTypes.Movable).stickyType;
     r.precipitation = stone.getComponent("precipitation_interactions").obstructsRain();
@@ -318,7 +318,8 @@ system.runTimeout(() => {
     const dim = world.getDimension("overworld");
     const lever = dim.getBlock({ x: 12, y: 100, z: 20 }).getComponent("redstone_producer");
     r.leverFaces = lever.getConnectedFaces().length + ":" + (typeof lever.getStronglyPoweredFace());
-    r.target = dim.getBlock({ x: 40, y: 100, z: 41 }).getRedstonePower();
+    r.target = dim.getBlock({ x: 40, y: 100, z: 40 }).getRedstonePower();
+    r.leverPower = dim.getBlock({ x: 12, y: 100, z: 20 }).getRedstonePower();
   } catch (e) {
     r.error2 = e.name + ":" + e.message;
   }
@@ -607,7 +608,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "offset", "2,99,3");
         expect(r, "item", "minecraft:stonex3");
         expect(r, "light", "number:number");
-        expect(r, "power", "0");
+        // stone holds no circuit component (sub_14A752ED0)
+        expect(r, "power", "undefined");
         expect(r, "components", "minecraft:map_color,minecraft:movable,minecraft:precipitation_interactions");
         expect(r, "movable", "PushPull:None");
         expect(r, "precipitation", "true");
@@ -698,6 +700,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "jigsawErrors", "throw:Error:throw:ArgumentOutOfBoundsError");
         expect(r, "leverFaces", "6:string");
         expect(r, "target", "15");
+        expect(r, "leverPower", "15");
         require(hookPowered && hookReleased, "the trip wire did not power then release both hooks");
         require(edge == 1, "a hit at the rim did not give the lowest power");
         require(halfway == 10, "a hit halfway to the edge did not follow the game's distance formula");
