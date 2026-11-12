@@ -84,7 +84,7 @@ BOUND = {
         'ItemCustomComponentInstance', 'ClientSystemInfo', 'Seat', 'FeedItem', 'FeedItemEffect',
         'EntityDefinitionFeedItem', 'CatmullRomSpline', 'LinearSpline', 'FogSettings',
         'FogSettingsError', 'PrimitiveShape', 'TextPrimitive', 'PrimitiveShapesManager',
-        'PlayerWaypointsMode', 'BlockBoundingBoxUtils', 'CarryOverBlockEntityDataFunction', 'PoiBlockOccupancyFilter',
+        'PlayerWaypointsMode', 'BlockBoundingBoxUtils', 'BannerPattern', 'CarryOverBlockEntityDataFunction', 'PoiBlockOccupancyFilter',
         'WatchdogTerminateReason',
     },
     'server-ui': None,

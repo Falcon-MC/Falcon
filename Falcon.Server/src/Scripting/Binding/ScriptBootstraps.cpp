@@ -1523,6 +1523,53 @@ namespace {
             itemTagsAny: strings(j["minecraft:match_tool_filter_any"]),
             itemTagsNone: strings(j["minecraft:match_tool_filter_none"]) })],
     };
+    // the ItemColor names the files use (sub_1416826B0) and the ones scripts read back (the table at aBlack)
+    const COLOR_KEYS = ["black", "red", "green", "brown", "blue", "purple", "cyan", "silver", "gray", "pink", "lime",
+        "yellow", "light_blue", "magenta", "orange", "white"];
+    const COLOR_NAMES = ["black", "red", "green", "brown", "blue", "purple", "cyan", "silver", "gray", "pink", "lime",
+        "yellow", "lightBlue", "magenta", "orange", "white"];
+    // the banner pattern registry by name (sub_143324FC0)
+    const BANNER_PATTERNS = new Set(["base", "border", "bricks", "circle", "creeper", "skull", "cross", "curly_border",
+        "diagonal_up_left", "diagonal_up_right", "diagonal_left", "diagonal_right", "flower", "gradient", "gradient_up",
+        "half_horizontal", "half_horizontal_bottom", "half_vertical", "half_vertical_right", "illager", "mojang",
+        "rhombus", "small_stripes", "square_bottom_left", "square_bottom_right", "square_top_left", "square_top_right",
+        "straight_cross", "stripe_bottom", "stripe_center", "stripe_downleft", "stripe_downright", "stripe_left",
+        "stripe_middle", "stripe_right", "stripe_top", "triangle_bottom", "triangle_top", "triangles_bottom",
+        "triangles_top", "piglin", "globe", "flow", "guster"]);
+    // a name in any case or an index 0 to 15; anything else keeps the fallback
+    const itemColor = (value, fallback) => {
+        if (typeof value === "string") {
+            const index = COLOR_KEYS.indexOf(value.toLowerCase());
+            return index < 0 ? fallback : index;
+        }
+        if (typeof value === "number" && Number.isFinite(value)) {
+            const index = Math.trunc(value);
+            return index >= 0 && index <= 15 ? index : fallback;
+        }
+        return fallback;
+    };
+    const BannerPattern = add("BannerPattern", null, ["color", "pattern"]);
+    // sub_14BC47E70: white by default; patterns only on a plain banner, unknown names skipped, six at most
+    const bannerDetails = (j) => {
+        const type = number(j.type, 0);
+        const patterns = [];
+        const one = (entry) => {
+            if (entry === null || typeof entry !== "object" || !BANNER_PATTERNS.has(entry.pattern))
+                return;
+            patterns.push(new BannerPattern(token,
+                { color: COLOR_NAMES[itemColor(entry.color, 15)], pattern: entry.pattern }));
+        };
+        if (type === 0 && Array.isArray(j.patterns)) {
+            for (const entry of j.patterns) {
+                if (patterns.length > 5)
+                    break;
+                one(entry);
+            }
+        } else if (type === 0) {
+            one(j.patterns);
+        }
+        return { type, baseColor: COLOR_NAMES[itemColor(j.base_color, 15)], patterns };
+    };
     const FUNCTIONS = {
         set_count: ["SetItemCountFunction", (j) => ({ count: range(j.count, 1) })],
         set_damage: ["SetItemDamageFunction", (j) => ({ damage: range(j.damage, 1) })],
@@ -1546,7 +1593,7 @@ namespace {
         random_block_state: ["RandomBlockStateFunction",
             (j) => ({ blockState: String(j.block_state ?? ""), values: range(j.values, 0) })],
         random_dye: ["RandomDyeFunction", () => ({})],
-        set_banner_details: ["SetBannerDetailsFunction", (j) => ({ type: number(j.type, 0) })],
+        set_banner_details: ["SetBannerDetailsFunction", (j) => bannerDetails(j)],
         set_stew_effect: ["SetStewEffectFunction", (j) => ({
             effects: Array.isArray(j.effects) ? j.effects.map((e) => number(e !== null && typeof e === "object" ? e.id : e, 0)) : [] })],
         set_book_contents: ["SetBookContentsFunction",
@@ -1639,6 +1686,15 @@ namespace {
     });
     for (const key of Object.keys(LootTableManager.prototype))
         Object.defineProperty(LootTableManager.prototype, key, { enumerable: false });
+    // members the pack's module version lacks: the beta adds some to stable classes
+    for (const [name, cls] of Object.entries(classes)) {
+        if (!native.has(name))
+            continue;
+        for (const key of Object.getOwnPropertyNames(cls.prototype)) {
+            if (key !== "constructor" && !native.has(name + "." + key))
+                delete cls.prototype[key];
+        }
+    }
     classes.manager = new LootTableManager(token, {});
     return classes;
 })
