@@ -642,23 +642,12 @@ namespace {
         if (argc < 2 || !readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        if (argc >= 3 && JS_IsObject(argv[2])) {
-            JSValue volumeValue = JS_GetPropertyStr(ctx, argv[2], "volume");
-            JSValue pitchValue = JS_GetPropertyStr(ctx, argv[2], "pitch");
-            double parsed = 1.0;
-            if (!JS_IsUndefined(volumeValue) && JS_ToFloat64(ctx, &parsed, volumeValue) == 0)
-                volume = (float) parsed;
-            if (!JS_IsUndefined(pitchValue) && JS_ToFloat64(ctx, &parsed, pitchValue) == 0)
-                pitch = (float) parsed;
-            JS_FreeValue(ctx, volumeValue);
-            JS_FreeValue(ctx, pitchValue);
-        }
-
-        api->host().playNamedSound(api->levelOf(thisVal), toString(ctx, argv[0]),
-                                   Vector3f((float) x, (float) y, (float) z), volume, pitch);
-        return JS_UNDEFINED;
+        ScriptSoundOptions options;
+        JSValue refused = api->readSoundOptions(argc >= 3 ? argv[2] : JS_UNDEFINED, options, true);
+        if (JS_IsException(refused))
+            return refused;
+        return api->playSound(api->levelOf(thisVal), nullptr, toString(ctx, argv[0]),
+                              Vector3f((float) x, (float) y, (float) z), options);
     }
 
     JSValue dimensionGetEntities(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {

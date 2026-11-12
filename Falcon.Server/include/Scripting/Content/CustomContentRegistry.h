@@ -101,6 +101,9 @@ struct CustomBlockDefinition {
     int32_t mRedstoneMinPower = 0;
     bool mEntityFallOn = false;
     float mMinFallDistance = 0.0f;
+    // minecraft:instrument_sound: up and down faces to a note sound
+    bool mInstrumentSound = false;
+    std::vector<std::pair<std::string, std::string>> mInstrumentSounds;
 };
 
 struct CustomActorDefinition {

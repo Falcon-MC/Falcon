@@ -587,6 +587,56 @@ system.runTimeout(() => {
 }, 2);
 )JS";
 
+    const char *const SOUNDS = R"JS(
+import { world, system, SoundInstance, SoundDurationInfo, SoundDefinition, SoundDefinitionRegistry }
+    from "@minecraft/server";
+
+const r = {};
+const errorOf = (run) => { try { run(); return "ok"; } catch (e) { return e.name; } };
+system.runTimeout(() => {
+  try {
+    const registry = world.soundDefinitionRegistry;
+    r.registry = (registry instanceof SoundDefinitionRegistry) + ":" + (registry === world.soundDefinitionRegistry);
+    const all = registry.getDefinitions();
+    r.definitions = all.map((d) => d.soundEventId).join(",") + ":" + (all[0] instanceof SoundDefinition);
+    const jingle = all[0];
+    r.jingle = jingle.durationInfo.duration + ":" + jingle.musicInfo.artist + ":" + jingle.musicInfo.genres.join("|")
+        + ":" + jingle.musicInfo.title + ":" + String(jingle.musicInfo.moods) + ":" + jingle.tags.mood.join("|");
+    r.plain = String(all[1].durationInfo) + ":" + String(all[1].musicInfo) + ":" + String(all[1].tags);
+    r.quantized = all[2].durationInfo.duration + ":" + all[3].durationInfo.duration;
+    r.filters = registry.getDefinitions({ genres: ["POP"] }).length + ":"
+        + registry.getDefinitions({ minDuration: 1 }).length + ":" + registry.getDefinitions({ maxDuration: 1 }).length
+        + ":" + registry.getDefinitions({ tags: { MOOD: ["Calm"] } }).length + ":"
+        + registry.getDefinitions({ artists: ["nobody"] }).length + ":"
+        + errorOf(() => registry.getDefinitions({ minDuration: 2, maxDuration: 1 }));
+
+    const player = world.getPlayers()[0];
+    const sound = player.playSound(jingle, { loopCount: 1 });
+    world.afterEvents.soundCompleted.subscribe((e) => {
+        r.completed = (e.soundInstanceId === sound.id) + ":" + sound.durationInfo.isActive;
+        world.setDynamicProperty("sounds", JSON.stringify(r));
+    });
+    r.instance = (sound instanceof SoundInstance) + ":" + sound.soundEventId + ":" + (sound.recipient.id === player.id)
+        + ":" + (sound.durationInfo instanceof SoundDurationInfo) + ":" + sound.durationInfo.duration + ":"
+        + sound.durationInfo.isActive + ":" + sound.durationInfo.getPlaybackPosition();
+    const orb = world.getDimension("overworld").playSound("random.orb", { x: 0, y: 64, z: 0 }, { isBroadcast: true });
+    r.dimension = (orb instanceof SoundInstance) + ":" + String(orb.recipient) + ":" + String(orb.durationInfo) + ":"
+        + (orb.id !== sound.id);
+    r.bounds = errorOf(() => orb.setPitch(20)) + ":" + errorOf(() => orb.setVolume(-1)) + ":"
+        + errorOf(() => sound.seekTo(1)) + ":" + errorOf(() => orb.fade(-1, 1)) + ":"
+        + errorOf(() => world.getDimension("overworld").playSound("random.orb", { x: 0, y: 64, z: 0 }, { volume: -1 }))
+        + ":" + errorOf(() => player.playSound("random.orb", { pitch: 0 }));
+    r.controls = errorOf(() => { orb.setPitch(2); orb.setVolume(0.5); orb.fade(1, 0); orb.pause(); orb.resume();
+        orb.seekTo(3); orb.stop(); });
+    sound.seekTo(0.05);
+    r.seek = sound.durationInfo.getPlaybackPosition().toFixed(2);
+  } catch (e) {
+    r.error = e.name + ":" + e.message + ":" + e.stack;
+  }
+    world.setDynamicProperty("sounds", JSON.stringify(r));
+}, 2);
+)JS";
+
     const char *const ITEMS = R"JS(
 import { world, system, ItemStack, ItemType, ItemTypes, Container, ContainerSlot, EnchantmentType, EnchantmentTypes,
          EnchantmentSlot, ItemLockMode, Potions, PotionEffectType, ItemDurabilityComponent, ItemEnchantableComponent,
@@ -836,7 +886,7 @@ system.runTimeout(() => world.setDynamicProperty("items", JSON.stringify(r)), 7)
 )JS";
 
     const char *const BETA_ENTITIES = R"JS(
-import { world, system, Entity, Player, ItemStack } from "@minecraft/server";
+import { world, system, Entity, Player, ItemStack, BlockInstrumentComponent } from "@minecraft/server";
 r.target = "target" in Entity.prototype;
 world.afterEvents.playerCursorItemGrab.subscribe((e) => { r.cursor = (r.cursor || "") + "grab:" + e.item.typeId + ";"; });
 world.afterEvents.playerCursorItemRelease.subscribe((e) => {
@@ -863,6 +913,16 @@ system.runTimeout(() => {
     r.eatStone = (() => { try { player.eatItem(new ItemStack("minecraft:stone")); return "ok"; }
                           catch (e) { return e.name; } })();
     r.ping = (() => { try { return String(player.getPing()); } catch (e) { return e.name; } })();
+    const dimension = world.getDimension("overworld");
+    dimension.setBlockType({ x: 1, y: 101, z: 8 }, "test:block");
+    const instrument = dimension.getBlock({ x: 1, y: 101, z: 8 }).getComponent("instrument_sound");
+    const failure = (run) => { try { run(); return "ok"; } catch (e) { return e.name; } };
+    r.instrument = (instrument instanceof BlockInstrumentComponent) + ":" + instrument.getInstrumentName("Up") + ":"
+        + instrument.getInstrumentName("Down") + ":" + failure(() => instrument.getInstrumentName("North")) + ":"
+        + failure(() => instrument.getInstrumentName("up")) + ":"
+        + failure(() => instrument.playInstrumentSound("Up", { volume: 0.5 })) + ":"
+        + failure(() => instrument.playInstrumentSound("Down", { pitch: 0 })) + ":"
+        + (dimension.getBlock({ x: 0, y: 101, z: 8 }).getComponent("instrument_sound") === undefined);
     world.setDynamicProperty("betaEntities", JSON.stringify(r));
 }, 3);
 )JS";
@@ -1231,6 +1291,7 @@ system.beforeEvents.startup.subscribe((event) => {
       "minecraft:tick": { "interval_range": [10, 10] },
       "minecraft:redstone_consumer": { "min_power": 3 },
       "minecraft:entity_fall_on": { "min_fall_distance": 2 },
+      "minecraft:instrument_sound": { "up": "note.pling", "north": "note.harp" },
       "test:hooks": { "value": 42, "list": ["a", true] }
     }
   }
@@ -1475,6 +1536,17 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             " {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
                   GRAPHICS);
         writePack(packs, "loot", server2, LOOT);
+        writePack(packs, "sounds", server2 + ", {\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}",
+                  SOUNDS);
+        writeFile(packs / "sounds" / "sounds" / "sound_definitions.json",
+                  R"({"format_version": "beta", "minecraft:server_sound_definitions": [
+                      {"sound_event_name": "test:jingle", "duration_info": {"mode": "game_time", "seconds": 0.1},
+                       "music_info": {"artist": "Someone", "genres": ["Pop", "Folk"], "title": "Tune"},
+                       "tags": {"mood": "calm"}},
+                      {"sound_event_name": "random.orb"},
+                      {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 0.125}},
+                      {"sound_event_name": "test:clock", "duration_info": {"mode": "real_time", "seconds": 1.2345}},
+                      {"sound_event_name": "test:ticks", "duration_info": {"mode": "game_time", "seconds": 9}}]})");
         const std::string gemTable = "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", "
                                      "\"name\": \"minecraft:diamond\", \"functions\": [{\"function\": "
                                      "\"set_count\", \"count\": 3}]}]}]}";
@@ -1530,7 +1602,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
         }
-        require(engine.loadPacks(manager.getPacks()) == 12, "only the twelve valid packs start");
+        require(engine.loadPacks(manager.getPacks()) == 13, "only the thirteen valid packs start");
 
         NetworkIdentifier id;
         ServerPlayer &player = owner.getPlayers().try_emplace(id, id, 1001).first->second;
@@ -1960,6 +2032,22 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*loot, "tool", "TypeError:Native type conversion failed.");
         expect(*loot, "constructor", "ReferenceError:No constructor for native class 'LootTable'.");
         expect(*loot, "pack", "custom/gem|minecraft:diamondx3");
+
+        const std::unique_ptr<json::Value> sounds = result(owner, "sounds");
+        expect(*sounds, "registry", "true:true");
+        expect(*sounds, "definitions", "test:jingle,minecraft:random.orb,test:ticks,test:clock:true");
+        expect(*sounds, "jingle", "0.1:Someone:Pop|Folk:Tune:undefined:calm");
+        expect(*sounds, "plain", "undefined:undefined:undefined");
+        expect(*sounds, "quantized", "0.1:1.234");
+        expect(*sounds, "filters", "1:1:2:1:0:InvalidArgumentError");
+        expect(*sounds, "instance", "true:test:jingle:true:true:0.1:true:0");
+        expect(*sounds, "dimension", "true:undefined:undefined:true");
+        expect(*sounds, "bounds",
+               "ArgumentOutOfBoundsError:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError:"
+               "PropertyOutOfBoundsError:PropertyOutOfBoundsError");
+        expect(*sounds, "controls", "ok");
+        expect(*sounds, "seek", "0.05");
+        expect(*sounds, "completed", "true:false");
         expect(*loot, "override", "minecraft:emerald");
 
         // custom commands: in the command map under both names, parsed from a player and gated by cheats
@@ -2429,6 +2517,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*betaEntities, "cursor", "grab:minecraft:diamond;release:minecraft:diamond:ScriptPlayer;");
         expect(*betaEntities, "target", "true");
         expect(*betaEntities, "betaPlayer", "true");
+        expect(*betaEntities, "instrument",
+               "true:note.pling:note.none:InvalidArgumentError:TypeError:ok:PropertyOutOfBoundsError:true");
         expect(*betaEntities, "chat", "[A] ScriptPlayer!:§a");
         expect(*betaEntities, "chatCleared", "[A] ScriptPlayer:true");
         expect(*betaEntities, "eat", "true");

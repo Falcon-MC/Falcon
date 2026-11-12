@@ -20,6 +20,22 @@
 #include <sstream>
 
 namespace {
+    // NoteBlockInstrument, in the game's order (26.60 strings)
+    const char *const NOTE_BLOCK_INSTRUMENTS[] = {
+            "note.harp", "note.bd", "note.snare", "note.hat", "note.bassattack", "note.flute", "note.bell",
+            "note.guitar", "note.chime", "note.xylophone", "note.iron_xylophone", "note.cow_bell", "note.didgeridoo",
+            "note.bit", "note.banjo", "note.pling", "note.trumpet", "note.trumpet_exposed", "note.trumpet_weathered",
+            "note.trumpet_oxidized", "note.zombie", "note.skeleton", "note.creeper", "note.enderdragon",
+            "note.witherskeleton", "note.piglin", "note.none"};
+
+    bool isNoteBlockInstrument(const std::string &name) {
+        for (const char *instrument: NOTE_BLOCK_INSTRUMENTS) {
+            if (name == instrument)
+                return true;
+        }
+        return false;
+    }
+
     std::string readFile(const std::filesystem::path &path) {
         std::ifstream file(path, std::ios::binary);
         if (!file.is_open())
@@ -974,6 +990,17 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                         continue;
                     }
                     definition.mRedstoneMinPower = (int32_t) power;
+                }
+            }
+
+            const json::Value *instrument = components->get("minecraft:instrument_sound");
+            if (instrument != nullptr && instrument->isObject()) {
+                definition.mInstrumentSound = true;
+                for (const std::string &face: instrument->mKeys) {
+                    const json::Value *sound = instrument->get(face);
+                    if ((face == "up" || face == "down") && sound != nullptr && sound->isString()
+                        && isNoteBlockInstrument(sound->string()))
+                        definition.mInstrumentSounds.emplace_back(face, sound->string());
                 }
             }
 

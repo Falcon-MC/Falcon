@@ -134,6 +134,10 @@ namespace {
             return accepts<ScriptInputInfoRef>;
         if (hasSuffix(cls, "Waypoint"))
             return accepts<ScriptWaypointRef>;
+        if (cls == "SoundInstance" || cls == "SoundDurationInfo")
+            return accepts<ScriptSoundRef>;
+        if (cls == "SoundDefinition")
+            return accepts<ScriptSoundDefinitionRef>;
         return acceptsAny;
     }
 
@@ -601,7 +605,7 @@ ScriptApi::~ScriptApi() {
     for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
                          mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
                          mClockRegistry, mDimensionRegistry, mStructureManager, mListVolume, mCommandRegistry,
-                         mLootTableManager})
+                         mLootTableManager, mSoundDefinitionRegistry})
         JS_FreeValue(mContext, value);
 }
 

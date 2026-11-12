@@ -410,8 +410,9 @@ void ScriptEngine::_installConsole(JSContext *context) {
 size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     size_t loaded = 0;
     for (const BehaviorPack &pack: packs) {
-        // structures and loot tables come from every pack, scripted or not
+        // structures, loot tables and server sound definitions come from every pack, scripted or not
         mStructures.addPack(pack.mPath);
+        mSounds.addPack(pack.mPath);
         LootTableRegistry::getInstance().addPack(pack.mPath);
         if (pack.hasScript() && _loadPack(pack))
             loaded++;
@@ -1174,6 +1175,12 @@ void ScriptEngine::onItemStopUseOn(ServerPlayer &player, const Vector3i &positio
         if (!held.isAir())
             JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
         JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onSoundCompleted(const std::string &soundInstanceId) {
+    _emit("after.soundCompleted", "WorldAfterEvents.soundCompleted", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "soundInstanceId", JS_NewString(api.context(), soundInstanceId.c_str()));
     });
 }
 

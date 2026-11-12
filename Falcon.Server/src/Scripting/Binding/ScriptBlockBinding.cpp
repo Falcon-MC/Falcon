@@ -384,6 +384,9 @@ namespace {
             ids.emplace_back("minecraft:dynamic_properties");
         if (CauldronBlock::matches(state.mName))
             ids.emplace_back("minecraft:fluid_container");
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        if (custom != nullptr && custom->mInstrumentSound)
+            ids.emplace_back("minecraft:instrument_sound");
         if (actor != nullptr && actor->getContainer() != nullptr && dynamic_cast<JukeboxBlockActor *>(actor) == nullptr)
             ids.emplace_back("minecraft:inventory");
         if (MapColors::find(state.mName) != nullptr)
@@ -405,6 +408,7 @@ namespace {
         static const char *const CLASSES[][2] = {
                 {"minecraft:dynamic_properties", "BlockDynamicPropertiesComponent"},
                 {"minecraft:fluid_container", "BlockFluidContainerComponent"},
+                {"minecraft:instrument_sound", "BlockInstrumentComponent"},
                 {"minecraft:inventory", "BlockInventoryComponent"},
                 {"minecraft:map_color", "BlockMapColorComponent"},
                 {"minecraft:movable", "BlockMovableComponent"},
@@ -756,6 +760,54 @@ namespace {
         for (int face = 0; face < RedstoneFace::COUNT; ++face)
             power = std::max(power, RedstoneSystem::getWeakPower(at.mApi->host(), *at.mLevel, at.mPosition, face));
         return JS_NewInt32(ctx, power);
+    }
+
+    // the face's note sound, note.none when undeclared; only Down and Up have one (sub_14E0A7680, 26.60)
+    JSValue instrumentOf(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, BlockAt &at,
+                         std::string &sound) {
+        at = blockAt(ctx, thisVal);
+        const int face = argc >= 1 && JS_IsString(argv[0]) ? faceOf(toString(ctx, argv[0])) : -1;
+        if (face < 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (at.mPosition.y < at.mLevel->getMinY() || at.mPosition.y > at.mLevel->getMaxY())
+            return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
+        if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
+            return at.mApi->throwError("LocationInUnloadedChunkError", "");
+        if (face > 1)
+            return at.mApi->throwError("InvalidArgumentError", "");
+        sound = "note.none";
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(at.state().mName);
+        if (custom == nullptr)
+            return JS_UNDEFINED;
+        for (const auto &entry: custom->mInstrumentSounds) {
+            if (entry.first == (face == 0 ? "down" : "up"))
+                sound = entry.second;
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue instrumentGetName(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        BlockAt at;
+        std::string sound;
+        JSValue refused = instrumentOf(ctx, thisVal, argc, argv, at, sound);
+        return JS_IsException(refused) ? refused : string(ctx, sound);
+    }
+
+    // note.none is played too: the client has no such sound (sub_14E10C700, 26.60)
+    JSValue instrumentPlaySound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        BlockAt at;
+        std::string sound;
+        JSValue refused = instrumentOf(ctx, thisVal, argc, argv, at, sound);
+        if (JS_IsException(refused))
+            return refused;
+        ScriptSoundOptions options;
+        refused = at.mApi->readSoundOptions(argc >= 2 ? argv[1] : JS_UNDEFINED, options, true);
+        if (JS_IsException(refused))
+            return refused;
+        const Vector3f center((float) at.mPosition.x + 0.5f, (float) at.mPosition.y + 0.5f,
+                              (float) at.mPosition.z + 0.5f);
+        JS_FreeValue(ctx, at.mApi->playSound(*at.mLevel, nullptr, sound, center, options));
+        return JS_UNDEFINED;
     }
 
     JSValue rgba(JSContext *ctx, const float color[4]) {
@@ -1130,6 +1182,11 @@ void ScriptApi::_bindBlockSurface() {
         property(producer, "BlockRedstoneProducerComponent", "power", redstoneGetPower);
         method(producer, "BlockRedstoneProducerComponent", "getConnectedFaces", redstoneGetConnectedFaces, 0);
         method(producer, "BlockRedstoneProducerComponent", "getStronglyPoweredFace", redstoneGetStronglyPoweredFace, 0);
+    }
+    if (mSurface.has("BlockInstrumentComponent")) {
+        JSValue instrument = defineClass("BlockInstrumentComponent");
+        method(instrument, "BlockInstrumentComponent", "getInstrumentName", instrumentGetName, 1);
+        method(instrument, "BlockInstrumentComponent", "playInstrumentSound", instrumentPlaySound, 2);
     }
     if (mSurface.has("BlockMapColorComponent")) {
         JSValue color = defineClass("BlockMapColorComponent");
