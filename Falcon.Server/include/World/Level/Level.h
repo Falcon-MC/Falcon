@@ -16,6 +16,7 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "World/Level/GameRules.h"
+#include "World/Level/NamedTickQueue.h"
 #include "World/Level/Storage/LevelStorage.h"
 #include "World/Village/VillageManager.h"
 
@@ -497,6 +498,10 @@ public:
         return mLiquidPhysics.getLastProcessedCount();
     }
 
+    NamedTickQueue &getNamedTicks() {
+        return mNamedTicks;
+    }
+
     LiquidPhysicsSystem &getLiquidPhysics() {
         return mLiquidPhysics;
     }
@@ -547,6 +552,13 @@ private:
     void _refreshChunkShapes(int32_t chunkX, int32_t chunkZ);
 
     void _syncPendingTicks(LevelChunk &chunk);
+
+    // the chunk's PendingTicks, RandomTicks and named tick records into the queues
+    void _loadPendingTicks(LevelChunk &chunk);
+
+    void _dropPendingTicks(int32_t chunkX, int32_t chunkZ);
+
+    void _tickNamedTicks();
 
     // sky columns relit once at the end of a liquid tick instead of once a write
     void _flushLightBatch();
@@ -608,6 +620,7 @@ private:
     TerrainCache *mTerrainCache = nullptr;
     LevelStorage mStorage;
     LiquidPhysicsSystem mLiquidPhysics;
+    NamedTickQueue mNamedTicks;
     int64_t mLiquidTick = 0;
     bool mBatchLight = false;
     std::unordered_set<int64_t> mBatchedLightColumns;

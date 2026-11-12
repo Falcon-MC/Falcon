@@ -334,6 +334,11 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks));
     else
         batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), chunk.getRandomTicks());
+    // sub_1406D1BC0: written while an event waits, deleted otherwise
+    if (chunk.getNamedTicks().empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks), chunk.getNamedTicks());
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const SubChunk &subChunk = chunk.getSubChunk(i);
@@ -445,6 +450,10 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     std::string randomTicks;
     if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), &randomTicks).ok())
         chunk.setRandomTicks(std::move(randomTicks));
+
+    std::string namedTicks;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks), &namedTicks).ok())
+        chunk.setNamedTicks(std::move(namedTicks));
 
     // no version: written by the game, never migrated
     std::string dataVersion;

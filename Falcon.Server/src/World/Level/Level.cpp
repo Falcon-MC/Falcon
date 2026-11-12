@@ -90,6 +90,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mLiquidTick = other.mLiquidTick;
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
+    mNamedTicks = std::move(other.mNamedTicks);
     mVillageManager = std::move(other.mVillageManager);
     mGameRules = std::move(other.mGameRules);
     mRulesOwner = other.mRulesOwner;
@@ -545,7 +546,7 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     mPendingChunks.erase(key);
 
     auto result = mChunks.emplace(key, std::move(chunk));
-    mLiquidPhysics.loadPendingTicks(result.first->second);
+    _loadPendingTicks(result.first->second);
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
     return result.first->second;
@@ -571,7 +572,7 @@ LevelChunk &Level::insertChunk(LevelChunk chunk) {
     auto result = mChunks.emplace(key, std::move(chunk));
     if (result.second) {
         LevelChunk &inserted = result.first->second;
-        mLiquidPhysics.loadPendingTicks(inserted);
+        _loadPendingTicks(inserted);
         _refreshChunkShapes(inserted.getX(), inserted.getZ());
     }
     return result.first->second;
@@ -609,8 +610,25 @@ void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
 
 // ticks change without dirtying the blocks: a chunk is saved again when its record differs
 void Level::_syncPendingTicks(LevelChunk &chunk) {
-    if (mLiquidPhysics.savePendingTicks(chunk))
+    bool changed = mLiquidPhysics.savePendingTicks(chunk);
+    std::string named = mNamedTicks.save(chunk.getX(), chunk.getZ(), getMinY());
+    if (named != chunk.getNamedTicks()) {
+        chunk.setNamedTicks(std::move(named));
+        changed = true;
+    }
+    if (changed)
         chunk.markDirty();
+}
+
+void Level::_loadPendingTicks(LevelChunk &chunk) {
+    mLiquidPhysics.loadPendingTicks(chunk);
+    mNamedTicks.load(chunk.getX(), chunk.getZ(), getMinY(), chunk.getNamedTicks(),
+                     mOwner != nullptr ? mOwner->getCurrentTick() : 0);
+}
+
+void Level::_dropPendingTicks(int32_t chunkX, int32_t chunkZ) {
+    mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
+    mNamedTicks.drop(chunkX, chunkZ);
 }
 
 LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
@@ -625,13 +643,13 @@ LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
 
     LevelChunk chunk = std::move(it->second);
     mChunks.erase(it);
-    mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
+    _dropPendingTicks(chunkX, chunkZ);
     return chunk;
 }
 
 void Level::dropChunk(int32_t chunkX, int32_t chunkZ) {
     mChunks.erase(_packChunk(chunkX, chunkZ));
-    mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
+    _dropPendingTicks(chunkX, chunkZ);
 }
 
 void Level::_queueGeneratedChanges(std::vector<GeneratedBlockChange> changes) {
@@ -1123,7 +1141,7 @@ size_t Level::processChunkUnloads() {
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
-        mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
+        _dropPendingTicks(chunkX, chunkZ);
         mRepopulatedChunks.erase(key);
         mOrphanCandidates.erase(key);
         it = mUnloadQueue.erase(it);
@@ -1398,11 +1416,11 @@ size_t Level::drainCompletedChunks() {
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
             if (canInsert) {
                 LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
-                mLiquidPhysics.loadPendingTicks(inserted);
+                _loadPendingTicks(inserted);
                 _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
-                mLiquidPhysics.loadPendingTicks(resident->second);
+                _loadPendingTicks(resident->second);
                 mRepopulatedChunks.insert(key);
             }
 

@@ -106,6 +106,12 @@ struct ScriptBlockPart : ScriptNative {
     std::string mComponentId;
 };
 
+// a BlockComponentNamedTickEvent: the name and namespace isName compares
+struct ScriptNamedTickEvent : ScriptNative {
+    std::string mNamespace;
+    std::string mEventName;
+};
+
 // a structure of the shared registry, by identifier: deleting it leaves the object invalid
 struct ScriptStructureRef : ScriptNative {
     std::string mId;

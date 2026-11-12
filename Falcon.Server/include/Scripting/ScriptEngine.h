@@ -104,6 +104,10 @@ public:
 
     void onCustomBlockRandomTick(Level &level, const std::string &blockId, const Vector3i &position);
 
+    // a named tick fell due at a block still of the type it was scheduled on
+    void onCustomBlockNamedTick(Level &level, const Vector3i &position, const BlockState &state,
+                                const std::string &eventNamespace, const std::string &eventName);
+
     void onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId, const Vector3i &position);
 
     void onCustomBlockStepOff(Actor &actor, const Level &level);

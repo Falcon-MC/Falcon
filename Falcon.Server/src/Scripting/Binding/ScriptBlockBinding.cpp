@@ -1293,6 +1293,85 @@ namespace {
         writeSign(at, *sign, data);
         return JS_UNDEFINED;
     }
+
+    // the event name argument and the block's location checks of the named tick methods
+    JSValue namedTickTarget(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, BlockAt &at,
+                            std::string &name) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        at = blockAt(ctx, thisVal);
+        name = toString(ctx, argv[0]);
+        if (at.mPosition.y < at.mLevel->getMinY() || at.mPosition.y > at.mLevel->getMaxY())
+            return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
+        if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
+            return at.mApi->throwError("LocationInUnloadedChunkError", "");
+        return JS_UNDEFINED;
+    }
+
+    // sub_14A766340: the events are namespaced with the script module uuid, due tickDelay level ticks from now
+    JSValue blockScheduleNamedTick(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        if (argc < 2 || !JS_IsNumber(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockAt at;
+        std::string name;
+        JSValue refused = namedTickTarget(ctx, thisVal, argc, argv, at, name);
+        if (JS_IsException(refused))
+            return refused;
+        double delay = 0.0;
+        JS_ToFloat64(ctx, &delay, argv[1]);
+        if (!std::isfinite(delay) || delay < 1.0 || delay > 4294967295.0)
+            return at.mApi->throwError("ArgumentOutOfBoundsError", "");
+
+        const int64_t now = at.mApi->host().getCurrentTick();
+        switch (at.mLevel->getNamedTicks().schedule(at.mPosition, at.state().mName, at.mApi->scriptModuleUuid(), name,
+                                                    now, now + (int64_t) (uint32_t) delay)) {
+            case NamedTickQueue::Result::Scheduled:
+                return JS_UNDEFINED;
+            case NamedTickQueue::Result::BeforeCurrentTick:
+                return at.mApi->throwError("Error", "The scheduled event cannot be created before the current tick.");
+            case NamedTickQueue::Result::NoNamespace:
+                return at.mApi->throwError("Error", "The script module must have a valid UUID.");
+            case NamedTickQueue::Result::TooManyEvents:
+                return at.mApi->throwError("Error", "A block cannot have more than four scheduled events.");
+            case NamedTickQueue::Result::NamespaceConflict:
+                return at.mApi->throwError(
+                        "Error", "The script module UUID conflicts with an existing scheduled event namespace.");
+            case NamedTickQueue::Result::InvalidName:
+                return at.mApi->throwError("Error", "The scheduled event name is invalid.");
+        }
+        return at.mApi->throwError("Error", "Failed to schedule the block event.");
+    }
+
+    JSValue blockHasScheduledNamedTick(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        BlockAt at;
+        std::string name;
+        JSValue refused = namedTickTarget(ctx, thisVal, argc, argv, at, name);
+        if (JS_IsException(refused))
+            return refused;
+        return JS_NewBool(ctx, at.mLevel->getNamedTicks().has(at.mPosition, at.mApi->scriptModuleUuid(), name));
+    }
+
+    JSValue blockRemoveScheduledNamedTick(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        BlockAt at;
+        std::string name;
+        JSValue refused = namedTickTarget(ctx, thisVal, argc, argv, at, name);
+        if (JS_IsException(refused))
+            return refused;
+        at.mLevel->getNamedTicks().remove(at.mPosition, at.mApi->scriptModuleUuid(), name);
+        return JS_UNDEFINED;
+    }
+
+    // true only for the pack that scheduled it: the name is namespaced with its script module uuid
+    JSValue namedTickIsName(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptNamedTickEvent *event = api->native<ScriptNamedTickEvent>(thisVal);
+        if (event == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return JS_NewBool(ctx,
+                          event->mEventName == toString(ctx, argv[0]) && event->mNamespace == api->scriptModuleUuid());
+    }
 }
 
 namespace ScriptBlockData {
@@ -1381,10 +1460,17 @@ void ScriptApi::_bindBlockSurface() {
     method(block, "Block", "getComponent", blockGetComponent, 1);
     method(block, "Block", "getComponents", blockGetComponents, 0);
     method(block, "Block", "hasComponent", blockHasComponent, 1);
+    method(block, "Block", "scheduleNamedTick", blockScheduleNamedTick, 2);
+    method(block, "Block", "hasScheduledNamedTick", blockHasScheduledNamedTick, 1);
+    method(block, "Block", "removeScheduledNamedTick", blockRemoveScheduledNamedTick, 1);
 
     if (mSurface.has("BlockComponent")) {
         JSValue base = defineClass("BlockComponent");
         property(base, "BlockComponent", "block", componentGetBlock);
+    }
+    if (mSurface.has("BlockComponentNamedTickEvent")) {
+        JSValue named = defineClass("BlockComponentNamedTickEvent");
+        method(named, "BlockComponentNamedTickEvent", "isName", namedTickIsName, 1);
     }
     if (mSurface.has("BlockCustomComponentInstance")) {
         JSValue custom = defineClass("BlockCustomComponentInstance");

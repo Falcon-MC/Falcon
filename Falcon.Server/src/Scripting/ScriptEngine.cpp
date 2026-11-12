@@ -16,6 +16,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/ScriptApi.h"
+#include "Scripting/Binding/ScriptNatives.h"
 #include "Scripting/Binding/ScriptNetBinding.h"
 #include "Scripting/Binding/ScriptRayQueries.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -844,6 +845,30 @@ void ScriptEngine::onCustomBlockRandomTick(Level &level, const std::string &bloc
 
     _fireComponent(true, usesAt(*block, level, position), "onRandomTick", "BlockComponentRandomTickEvent",
                    [&](ScriptApi &api, JSValue event) { api.fillBlockEvent(event, level, position); });
+}
+
+// every pack's onNamedTick sees the event; isName answers only for the one that scheduled it (sub_1432C6B20)
+void ScriptEngine::onCustomBlockNamedTick(Level &level, const Vector3i &position, const BlockState &state,
+                                          const std::string &eventNamespace, const std::string &eventName) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(state.mName);
+    if (block == nullptr)
+        return;
+
+    const std::vector<CustomComponentUse> uses = CustomContentRegistry::componentsFor(*block, state.mStates);
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->surface().has("BlockComponentNamedTickEvent") || !api->handlesHook(true, uses, "onNamedTick"))
+            continue;
+
+        _arm();
+        ScriptNamedTickEvent *data = new ScriptNamedTickEvent();
+        data->mNamespace = eventNamespace;
+        data->mEventName = eventName;
+        JSValue event = api->makeInstance("BlockComponentNamedTickEvent", data);
+        api->fillBlockEvent(event, level, position);
+        api->fireComponents(true, uses, "onNamedTick", event);
+        JS_FreeValue(api->context(), event);
+        _pumpJobs();
+    }
 }
 
 void ScriptEngine::onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId,
