@@ -517,15 +517,30 @@ namespace {
         return std::max(power, isA<RedStoneWireBlock>(frontState) ? wireSignal(frontState) : 0);
     }
 
+    int comparatorSignalAt(Level &level, const Vector3i &position) {
+        const BlockState state = stateAt(level, position);
+        const Block *block = VanillaBlocks::fromIdentifier(state.mName);
+        return block == nullptr ? -1 : block->getComparatorSignal(level, position, state);
+    }
+
+    // ComparatorBlockActor::tick (sub_14331CF70, 26.60): the block behind, or the one past it through a solid
+    // block that is no power source; -1 when neither gives an analog signal
+    int comparatorAnalogInput(Level &level, const Vector3i &position, const BlockState &state) {
+        const int facing = diodeFacing(state);
+        const Vector3i front = RedstoneFace::relative(position, facing);
+        const int signal = comparatorSignalAt(level, front);
+        if (signal >= 0 || !RedstoneSystem::isNormalBlock(stateAt(level, front)))
+            return signal;
+
+        return comparatorSignalAt(level, RedstoneFace::relative(front, facing));
+    }
+
     int comparatorCalculateInputStrength(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &state) {
-        const Vector3i front = RedstoneFace::relative(position, diodeFacing(state));
-        const BlockState frontState = stateAt(level, front);
-        if (const Block *block = VanillaBlocks::fromIdentifier(frontState.mName)) {
-            const int signal = block->getComparatorSignal(level, front, frontState);
-            if (signal >= 0)
-                return signal;
-        }
+        const int signal = comparatorAnalogInput(level, position, state);
+        if (signal >= 0)
+            return signal;
+
         return diodeCalculateInputStrength(owner, level, position, state);
     }
 
@@ -1393,20 +1408,14 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
             updateAroundRedstone(owner, level, position);
     }
 
-    // a container has no change hook: a comparator reading one re-checks it every tick
+    // the comparator block actor reads its analog input every tick, no change event involved (sub_14331CF70)
     for (const auto &entry: redstone.mComparatorOutputs) {
         const Vector3i position = unpackPosition(entry.first);
         if (!isChunkReady(level, position))
             continue;
 
         const BlockState state = stateAt(level, position);
-        if (!isA<RedstoneComparatorBlock>(state))
-            continue;
-
-        const Vector3i front = RedstoneFace::relative(position, diodeFacing(state));
-        const BlockState frontState = stateAt(level, front);
-        const Block *frontBlock = VanillaBlocks::fromIdentifier(frontState.mName);
-        if (frontBlock != nullptr && frontBlock->getComparatorSignal(level, front, frontState) >= 0)
+        if (isA<RedstoneComparatorBlock>(state) && comparatorAnalogInput(level, position, state) >= 0)
             diodeUpdateState(owner, level, position, state);
     }
 

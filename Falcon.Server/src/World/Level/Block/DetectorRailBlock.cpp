@@ -47,7 +47,7 @@ bool DetectorRailBlock::matches(const std::string &identifier) {
     return identifier == BlockNames::DETECTOR_RAIL;
 }
 
-// a producer of 15 while a minecart is on it; like a pressure plate it charges the block below
+// a producer of 15 while a minecart is on it, attached downward so it charges the block below (sub_149C552D0)
 int DetectorRailBlock::getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
                                         bool strong) const {
     (void) level;
