@@ -345,11 +345,11 @@ namespace {
         if (structure == nullptr)
             return api->throwError("Error", "Unknown jigsaw structure " + id);
         JSValueConst options = argc >= 4 ? argv[3] : JS_UNDEFINED;
-        if (structure->mHasStartHeight && !optionBool(ctx, options, "ignoreStartHeight", false)) {
-            std::mt19937_64 random((uint64_t) jigsawSeed());
-            at.y = std::uniform_int_distribution<int32_t>(structure->mStartHeightMin, structure->mStartHeightMax)(random);
-        }
-        return runJigsaw(*api, api->levelOf(argv[1]), structure->mStartPool, std::string(), structure->mMaxDepth, at,
+        Level &level = api->levelOf(argv[1]);
+        if (structure->mHasStartHeight && !optionBool(ctx, options, "ignoreStartHeight", false))
+            at.y = PackJigsaw::resolveAnchor(structure->mStartAnchor, structure->mStartOffset, level.getMinY(),
+                                             level.getMaxY());
+        return runJigsaw(*api, level, structure->mStartPool, std::string(), structure->mMaxDepth, at,
                          jigsawOptions(ctx, options));
     }
 

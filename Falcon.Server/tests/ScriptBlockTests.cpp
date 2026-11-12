@@ -23,6 +23,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/Structure/McStructure.h"
+#include "World/Level/Structure/PackJigsaw.h"
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 
@@ -381,6 +382,25 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
                   R"({"format_version": "1.21.20", "minecraft:jigsaw": {
                       "description": {"identifier": "test:village"},
                       "start_pool": "test:start_pool", "max_depth": 2}})");
+        // the vanilla start_height shape: a constant height provider over a vertical anchor
+        writeFile(pack / "worldgen" / "jigsaw_structures" / "tower.json",
+                  R"({"format_version": "1.26.50", "minecraft:jigsaw": {
+                      "description": {"identifier": "test:tower"}, "start_pool": "test:start_pool", "max_depth": 1,
+                      "start_height": {"type": "constant", "value": {"below_top": 3}}}})");
+    }
+
+    void checkStartHeight(const std::filesystem::path &pack) {
+        PackJigsaw jigsaw;
+        jigsaw.addPack(pack.string());
+        const PackJigsaw::Structure *tower = jigsaw.structure("test:tower");
+        require(tower != nullptr && tower->mHasStartHeight && tower->mStartAnchor == PackJigsaw::Anchor::BelowTop
+                        && tower->mStartOffset == 3,
+                "the start_height anchor was not read");
+        require(PackJigsaw::resolveAnchor(tower->mStartAnchor, tower->mStartOffset, -64, 319) == 316
+                        && PackJigsaw::resolveAnchor(PackJigsaw::Anchor::AboveBottom, 5, -64, 319) == -59
+                        && PackJigsaw::resolveAnchor(PackJigsaw::Anchor::Absolute, -15, -64, 319) == -15,
+                "a vertical anchor did not resolve like the game");
+        require(!jigsaw.structure("test:village")->mHasStartHeight, "a structure without start_height got one");
     }
 
     // the file format alone: a roundtrip through the bytes and the placement transform
@@ -433,6 +453,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         writePack(packs, "blocks", BLOCKS);
         McStructure packed(Vector3i(1, 2, 3));
         writeJigsawPack(packs / "blocks");
+        checkStartHeight(packs / "blocks");
         writeFile(packs / "blocks" / "structures" / "test" / "packed.mcstructure", packed.serialize());
 
         ServerNetworkHandler owner("Script blocks", "", 1);
