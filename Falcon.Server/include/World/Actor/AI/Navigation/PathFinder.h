@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Navigation/NodeEvaluator.h"
+#include "World/Actor/ActorSize.h"
 #include "Core/Math/Vector3f.h"
 
 #include <array>
@@ -21,6 +22,10 @@ public:
     static bool tryReserveSearch(int64_t tick);
 
     bool findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options, Path &path);
+
+    // any actor of the given size, a gametest simulated player among them
+    bool findPath(Level &level, const Actor &actor, const ActorSize &size, const Vector3f &target,
+                  const PathOptions &options, Path &path);
 
     // one ray test: callers try it before spending a per-tick search slot
     bool findDirectPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
