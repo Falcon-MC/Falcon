@@ -1288,8 +1288,15 @@ namespace {
     // the entity's inventory component container takes it (sub_14C4ADC70, 26.60)
     JSValue entityAddItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
-        JSValue component = target.mApi->makeEntityComponent(*target.mActor, *target.mRef, "minecraft:inventory");
-        if (JS_IsUndefined(component))
+        // the entity's own getComponent: the inventory component has its own binding path
+        JSValue getComponent = JS_GetPropertyStr(ctx, thisVal, "getComponent");
+        JSValue id = JS_NewString(ctx, "minecraft:inventory");
+        JSValue component = JS_Call(ctx, getComponent, thisVal, 1, &id);
+        JS_FreeValue(ctx, id);
+        JS_FreeValue(ctx, getComponent);
+        if (JS_IsException(component))
+            return component;
+        if (!JS_IsObject(component))
             return target.mApi->throwError("InvalidEntityComponentError",
                                            "Attempting to access invalid entity component minecraft:inventory.");
         JSValue container = JS_GetPropertyStr(ctx, component, "container");
