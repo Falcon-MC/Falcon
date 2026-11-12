@@ -106,6 +106,9 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         world.broadcastClientMessage("test:id", "hello");
         const carried = world.getLootTableManager().getLootTable("test/carry").pools[0].entries[0].functions;
         r.carry = carried.map((f) => f.constructor.name + ":" + f.dynamicProperties).join(",");
+        const banners = world.getLootTableManager().getLootTable("test/banner").pools[0].entries[0].functions;
+        r.banner = banners.map((f) => f.type + ":" + f.baseColor + ":" +
+            f.patterns.map((p) => p.constructor.name + "=" + p.pattern + "/" + p.color).join(";")).join(",");
     } else if (event.id === "beta:settings") {
         const rules = world.gameRules;
         r.waypoints = rules.playerWaypoints;
@@ -170,6 +173,16 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
                   "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", \"name\": \"minecraft:chest\","
                   " \"functions\": [{\"function\": \"carry_over_block_entity_data\", \"dynamic_properties\": true},"
                   " {\"function\": \"carry_over_block_entity_data\", \"dynamic_properties\": 1}]}]}]}");
+        writeFile(packs / "beta" / "loot_tables" / "test" / "banner.json",
+                  "{\"pools\": [{\"rolls\": 1, \"entries\": [{\"type\": \"item\", \"name\": \"minecraft:banner\","
+                  " \"functions\": [{\"function\": \"set_banner_details\", \"type\": 0, \"base_color\": \"LIGHT_BLUE\","
+                  " \"patterns\": [{\"pattern\": \"creeper\", \"color\": \"red\"}, {\"pattern\": \"bogus\"},"
+                  " {\"pattern\": \"cross\", \"color\": 20}, {\"pattern\": \"skull\", \"color\": 4},"
+                  " {\"pattern\": \"flow\"}, {\"pattern\": \"globe\"}, {\"pattern\": \"base\"},"
+                  " {\"pattern\": \"border\"}]},"
+                  " {\"function\": \"set_banner_details\", \"type\": 1, \"patterns\": [{\"pattern\": \"creeper\"}]},"
+                  " {\"function\": \"set_banner_details\", \"base_color\": 7,"
+                  " \"patterns\": {\"pattern\": \"bricks\", \"color\": \"black\"}}]}]}]}");
 
         ServerNetworkHandler owner("Script beta", "", 1);
         ScriptEngine &engine = owner.getScriptEngine();
@@ -265,6 +278,10 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*r, "boxCtor", "ReferenceError");
         expect(*r, "enums", "Any:Hang");
         expect(*r, "carry", "CarryOverBlockEntityDataFunction:true,CarryOverBlockEntityDataFunction:false");
+        expect(*r, "banner",
+               "0:lightBlue:BannerPattern=creeper/red;BannerPattern=cross/white;BannerPattern=skull/blue;"
+               "BannerPattern=flow/white;BannerPattern=globe/white;BannerPattern=base/white,1:white:,0:silver:"
+               "BannerPattern=bricks/black");
         expect(*r, "ease",
                "ok|Error:The camera preset selected is not an allowed ease target.|Error:Easing time cannot be less "
                "than 0.|Error:Invalid camera preset!|ok|TypeError:Native type conversion failed.");
