@@ -198,6 +198,9 @@ public:
     // the transport's average round trip in milliseconds, refreshed about once a second; -1 when unknown
     int getAveragePing(const NetworkIdentifier &id) const;
 
+    // how the client compressed its first batches, refreshed about once a second; false when unknown
+    bool getBatchTraits(const NetworkIdentifier &id, CompressedNetworkPeer::BatchTraits &outTraits) const;
+
     Connector &getConnector() {
         return *mConnectors.front();
     }
@@ -238,6 +241,8 @@ private:
         // written by the shard's io thread, read by the game thread
         mutable std::mutex mPingMutex;
         std::unordered_map<NetworkIdentifier, int, NetworkIdentifier::Hasher> mPings;
+        std::unordered_map<NetworkIdentifier, CompressedNetworkPeer::BatchTraits, NetworkIdentifier::Hasher>
+                mBatchTraits;
         std::chrono::steady_clock::time_point mPingRefresh;
     };
 

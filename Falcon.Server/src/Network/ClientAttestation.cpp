@@ -19,7 +19,7 @@ namespace {
     const size_t MAX_QUESTIONS = 256;
 
     // evidence is a run of sections: what it is, three bytes of length, the bytes
-    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2, JoinRequest = 3 };
+    enum class Section : unsigned char { TransportTranscript = 1, Offer = 2, JoinRequest = 3, Batches = 4 };
 
     void append(std::string &evidence, Section section, const std::string &bytes) {
         evidence.push_back((char) section);
@@ -142,6 +142,30 @@ void ClientAttestation::inspect(const nethernet::Connection &connection) {
         if (mStopping || mQuestions.size() >= MAX_QUESTIONS)
             return;
         mQuestions.push_back(Question{connection.getNetworkIdentifier(), std::move(evidence)});
+        if (!mWorker.joinable())
+            mWorker = std::thread([this]() { _run(); });
+    }
+    mWake.notify_one();
+}
+
+void ClientAttestation::inspectSession(const NetworkIdentifier &id,
+                                       const CompressedNetworkPeer::BatchTraits &batches) {
+    // counts, two bytes each
+    std::string counts;
+    for (const unsigned short count: {batches.mBatches, batches.mCompressedBelowThreshold, batches.mOtherAlgorithm,
+                                      batches.mCompared, batches.mNotReproduced}) {
+        counts.push_back((char) (count >> 8));
+        counts.push_back((char) (count & 255));
+    }
+
+    std::string evidence;
+    append(evidence, Section::Batches, counts);
+
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        if (mStopping || mQuestions.size() >= MAX_QUESTIONS)
+            return;
+        mQuestions.push_back(Question{id, std::move(evidence)});
         if (!mWorker.joinable())
             mWorker = std::thread([this]() { _run(); });
     }
