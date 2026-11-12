@@ -580,8 +580,12 @@ void CustomContentRegistry::_loadPackActors(const std::string &packPath) {
                 }
             }
 
-            if (components->get("minecraft:projectile") != nullptr)
+            const json::Value *projectile = components->get("minecraft:projectile");
+            if (projectile != nullptr) {
                 definition.mIsProjectile = true;
+                definition.mHasProjectileComponent = true;
+                definition.mProjectileComponent = ProjectileComponent::read(*projectile);
+            }
 
             const json::Value *collision = components->get("minecraft:collision_box");
             if (collision != nullptr && collision->isObject()) {

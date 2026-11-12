@@ -322,6 +322,20 @@ float ServerActor::getFloatProperty(const std::string &name, float fallback) con
     return it == mFloatProperties.end() ? fallback : it->second;
 }
 
+const ProjectileComponent &ServerActor::getProjectileComponent() const {
+    if (!mProjectileComponentRead) {
+        if (!ProjectileComponent::find(mIdentifier, mDefinition, mProjectileComponent))
+            mProjectileComponent = _undefinedProjectileComponent();
+        mProjectileComponentRead = true;
+    }
+    return mProjectileComponent;
+}
+
+ProjectileComponent &ServerActor::getProjectileComponent() {
+    static_cast<const ServerActor &>(*this).getProjectileComponent();
+    return mProjectileComponent;
+}
+
 const std::vector<ActorPropertyDescription> *ServerActor::getPropertySchema() const {
     if (mDefinition != nullptr)
         return &mDefinition->mProperties;

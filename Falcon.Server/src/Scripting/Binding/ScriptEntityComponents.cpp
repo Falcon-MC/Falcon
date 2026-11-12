@@ -273,10 +273,6 @@ namespace {
             {"EntityNavigationComponent", "canWalk", "can_walk"},
             {"EntityNavigationComponent", "canWalkInLava", "can_walk_in_lava"},
             {"EntityNavigationComponent", "isAmphibious", "is_amphibious"},
-            {"EntityProjectileComponent", "airInertia", "inertia"},
-            {"EntityProjectileComponent", "gravity", "gravity"},
-            {"EntityProjectileComponent", "liquidInertia", "liquid_inertia"},
-            {"EntityProjectileComponent", "shouldBounceOnHit", "should_bounce"},
             {"EntityPushThroughComponent", "value", "value"},
             {"EntityRideableComponent", "controllingSeat", "controlling_seat"},
             {"EntityRideableComponent", "crouchingSkipInteract", "crouching_skip_interact"},
@@ -864,6 +860,151 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    enum class ProjectileField {
+        AirInertia,
+        CatchFireOnHurt,
+        CritParticles,
+        DestroyOnHurt,
+        Gravity,
+        HitEntitySound,
+        HitGroundSound,
+        HitParticle,
+        Lightning,
+        LiquidInertia,
+        OnFireTime,
+        ShouldBounce,
+        StopOnHit,
+    };
+
+    const char *const PROJECTILE_FIELDS[] = {"airInertia",
+                                             "catchFireOnHurt",
+                                             "critParticlesOnProjectileHurt",
+                                             "destroyOnProjectileHurt",
+                                             "gravity",
+                                             "hitEntitySound",
+                                             "hitGroundSound",
+                                             "hitParticle",
+                                             "lightningStrikeOnHit",
+                                             "liquidInertia",
+                                             "onFireTime",
+                                             "shouldBounceOnHit",
+                                             "stopOnHit"};
+
+    ProjectileComponent *projectileOf(const ComponentTarget &target) {
+        ServerActor *actor = dynamic_cast<ServerActor *>(target.mActor);
+        return actor == nullptr ? nullptr : &actor->getProjectileComponent();
+    }
+
+    // an empty sound and the none particle read as undefined
+    JSValue optionalText(JSContext *ctx, const std::string &text) {
+        return text.empty() || text == "none" ? JS_UNDEFINED : string(ctx, text);
+    }
+
+    JSValue projectileGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        const ProjectileComponent *projectile = projectileOf(target);
+        if (projectile == nullptr)
+            return JS_UNDEFINED;
+        switch ((ProjectileField) magic) {
+            case ProjectileField::AirInertia:
+                return JS_NewFloat64(ctx, projectile->mInertia);
+            case ProjectileField::CatchFireOnHurt:
+                return JS_NewBool(ctx, projectile->mCatchFire);
+            case ProjectileField::CritParticles:
+                return JS_NewBool(ctx, projectile->mCritParticleOnHurt);
+            case ProjectileField::DestroyOnHurt:
+                return JS_NewBool(ctx, projectile->mDestroyOnHurt);
+            case ProjectileField::Gravity:
+                return JS_NewFloat64(ctx, projectile->mGravity);
+            case ProjectileField::HitEntitySound:
+                return optionalText(ctx, projectile->mHitSound);
+            case ProjectileField::HitGroundSound:
+                return optionalText(ctx, projectile->mHitGroundSound);
+            case ProjectileField::HitParticle:
+                return optionalText(ctx, projectile->mParticle);
+            case ProjectileField::Lightning:
+                return JS_NewBool(ctx, projectile->mLightning);
+            case ProjectileField::LiquidInertia:
+                return JS_NewFloat64(ctx, projectile->mLiquidInertia);
+            case ProjectileField::OnFireTime:
+                return JS_NewFloat64(ctx, projectile->mOnFireTime);
+            case ProjectileField::ShouldBounce:
+                // the getter tests the should_bounce byte (sub_14C6A8770, 26.60)
+                return JS_NewBool(ctx, projectile->mShouldBounce != ProjectileComponent::Bounce::No);
+            case ProjectileField::StopOnHit:
+                return JS_NewBool(ctx, projectile->mStopOnHurt);
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue projectileSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        ProjectileComponent *projectile = projectileOf(target);
+        const JSValueConst value = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        const ProjectileField field = (ProjectileField) magic;
+        const bool text = field == ProjectileField::HitEntitySound || field == ProjectileField::HitGroundSound
+                          || field == ProjectileField::HitParticle;
+        const bool number = field == ProjectileField::AirInertia || field == ProjectileField::Gravity
+                            || field == ProjectileField::LiquidInertia || field == ProjectileField::OnFireTime;
+        if (text ? !JS_IsString(value) && !JS_IsUndefined(value) : number ? !JS_IsNumber(value) : !JS_IsBool(value))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (projectile == nullptr)
+            return JS_UNDEFINED;
+
+        double amount = 0.0;
+        if (number)
+            JS_ToFloat64(ctx, &amount, value);
+        const bool flag = JS_ToBool(ctx, value) == 1;
+        const std::string name = JS_IsString(value) ? toString(ctx, value) : std::string();
+        switch (field) {
+            case ProjectileField::AirInertia:
+                projectile->mInertia = (float) amount;
+                break;
+            case ProjectileField::CatchFireOnHurt:
+                projectile->mCatchFire = flag;
+                break;
+            case ProjectileField::CritParticles:
+                projectile->mCritParticleOnHurt = flag;
+                break;
+            case ProjectileField::DestroyOnHurt:
+                projectile->mDestroyOnHurt = flag;
+                break;
+            case ProjectileField::Gravity:
+                projectile->mGravity = (float) amount;
+                break;
+            case ProjectileField::HitEntitySound:
+                projectile->mHitSound = name;
+                break;
+            case ProjectileField::HitGroundSound:
+                projectile->mHitGroundSound = name;
+                break;
+            case ProjectileField::HitParticle:
+                projectile->mParticle = name.empty() ? std::string("none") : name;
+                break;
+            case ProjectileField::Lightning:
+                projectile->mLightning = flag;
+                break;
+            case ProjectileField::LiquidInertia:
+                projectile->mLiquidInertia = (float) amount;
+                break;
+            case ProjectileField::OnFireTime:
+                projectile->mOnFireTime = (float) amount;
+                break;
+            case ProjectileField::ShouldBounce:
+                // the setter stores the boolean in the should_bounce byte (sub_14C6A8A30, 26.60)
+                projectile->mShouldBounce = (ProjectileComponent::Bounce)(flag ? 1 : 0);
+                break;
+            case ProjectileField::StopOnHit:
+                projectile->mStopOnHurt = flag;
+                break;
+        }
+        return JS_UNDEFINED;
+    }
+
     JSValue projectileShoot(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -997,5 +1138,8 @@ void ScriptApi::_bindEntityComponents() {
 
     JSValue projectile = prototypeOf("EntityProjectileComponent");
     property(projectile, "EntityProjectileComponent", "owner", projectileGetOwner, projectileSetOwner);
+    for (size_t i = 0; i < sizeof(PROJECTILE_FIELDS) / sizeof(PROJECTILE_FIELDS[0]); ++i)
+        propertyMagic(projectile, "EntityProjectileComponent", PROJECTILE_FIELDS[i], projectileGet, (int) i,
+                      projectileSet);
     method(projectile, "EntityProjectileComponent", "shoot", projectileShoot, 2);
 }

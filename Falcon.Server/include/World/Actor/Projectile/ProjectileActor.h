@@ -22,6 +22,15 @@ public:
     virtual bool passesThroughOwner() const {
         return false;
     }
+
+protected:
+    // the class physics stand in for a missing definition
+    ProjectileComponent _undefinedProjectileComponent() const override {
+        ProjectileComponent component;
+        component.mGravity = getGravity();
+        component.mInertia = getInertia();
+        return component;
+    }
 };
 
 class ThrownProjectileActor : public ProjectileActor {
