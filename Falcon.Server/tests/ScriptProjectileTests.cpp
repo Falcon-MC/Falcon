@@ -6,6 +6,7 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -69,7 +70,11 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
     const p = snowball.getComponent("projectile");
     p.gravity = 0;
     p.airInertia = 0.5;
-    p.hitParticle = "none";
+    r.badParticle = fail(() => { p.hitParticle = "none"; }) + ":" + fail(() => { p.hitParticle = "nope"; })
+        + ":" + fail(() => { p.hitParticle = "Crit"; });
+    p.hitParticle = "crit";
+    r.crit = String(p.hitParticle);
+    p.hitParticle = undefined;
     p.hitEntitySound = "random.pop";
     p.shouldBounceOnHit = true;
     p.lightningStrikeOnHit = true;
@@ -136,6 +141,12 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         expect(*r, "bullet", "0.05,0.99,0.6,5,false,true,true,false,false,true,bullet.hit,undefined,iconcrack");
         expect(*r, "written", "0,0.5,0.6,5,false,false,false,true,false,true,random.pop,undefined,undefined");
         expect(*r, "badType", "TypeError:TypeError");
+        // none and unknown names are ParticleType 0, which the setter refuses; names are case sensitive
+        expect(*r, "badParticle", "InvalidArgumentError:InvalidArgumentError:InvalidArgumentError");
+        expect(*r, "crit", "crit");
+        require(ProjectileComponent::particleType("iceballbreak") == 105 && ProjectileComponent::particleType("x") == 0
+                        && std::string(ProjectileComponent::particleName(72)) == "blueflame",
+                "the particle type table does not follow the game");
 
         // the written gravity and inertia drive the flight: no fall, half the speed each tick
         snowball.setMotion(Vector3f(0.0f, 0.0f, 1.0f));

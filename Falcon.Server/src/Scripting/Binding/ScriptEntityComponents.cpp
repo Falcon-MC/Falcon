@@ -895,9 +895,9 @@ namespace {
         return actor == nullptr ? nullptr : &actor->getProjectileComponent();
     }
 
-    // an empty sound and the none particle read as undefined
+    // no sound and no particle read as undefined
     JSValue optionalText(JSContext *ctx, const std::string &text) {
-        return text.empty() || text == "none" ? JS_UNDEFINED : string(ctx, text);
+        return text.empty() ? JS_UNDEFINED : string(ctx, text);
     }
 
     JSValue projectileGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
@@ -923,7 +923,8 @@ namespace {
             case ProjectileField::HitGroundSound:
                 return optionalText(ctx, projectile->mHitGroundSound);
             case ProjectileField::HitParticle:
-                return optionalText(ctx, projectile->mParticle);
+                // ParticleType 0 and a type without a name read as undefined (sub_14C6A7B50, 26.60)
+                return optionalText(ctx, ProjectileComponent::particleName(projectile->mParticle));
             case ProjectileField::Lightning:
                 return JS_NewBool(ctx, projectile->mLightning);
             case ProjectileField::LiquidInertia:
@@ -982,9 +983,14 @@ namespace {
             case ProjectileField::HitGroundSound:
                 projectile->mHitGroundSound = name;
                 break;
-            case ProjectileField::HitParticle:
-                projectile->mParticle = name.empty() ? std::string("none") : name;
+            case ProjectileField::HitParticle: {
+                // undefined clears the particle, a name without a type throws (sub_14C6A8150, 26.60)
+                const int32_t type = JS_IsUndefined(value) ? 0 : ProjectileComponent::particleType(name);
+                if (type == 0 && !JS_IsUndefined(value))
+                    return target.mApi->throwError("InvalidArgumentError", "Invalid particle identifier.");
+                projectile->mParticle = type;
                 break;
+            }
             case ProjectileField::Lightning:
                 projectile->mLightning = flag;
                 break;
