@@ -9,6 +9,19 @@
 #include <sstream>
 
 namespace {
+    // config/default/permissions.json as the dedicated server creates it (Microsoft Learn, Scripting Bedrock
+    // Dedicated Server)
+    const char *const DEFAULT_PERMISSIONS = R"({
+  "allowed_modules": [
+    "@minecraft/server-gametest",
+    "@minecraft/server",
+    "@minecraft/server-ui",
+    "@minecraft/server-admin",
+    "@minecraft/server-editor"
+  ]
+}
+)";
+
     std::unique_ptr<json::Value> readJson(const std::filesystem::path &path, bool &present) {
         present = false;
         std::ifstream file(path, std::ios::binary);
@@ -142,6 +155,12 @@ void ScriptPackConfigurationManager::load(const std::string &root) {
 
     std::error_code error;
     const std::filesystem::path folder(root);
+    // the dedicated server writes the default module list on its first run
+    const std::filesystem::path defaults = folder / "default" / "permissions.json";
+    if (!std::filesystem::exists(defaults, error)) {
+        std::filesystem::create_directories(defaults.parent_path(), error);
+        std::ofstream(defaults, std::ios::binary) << DEFAULT_PERMISSIONS;
+    }
     if (!std::filesystem::is_directory(folder, error))
         return;
 

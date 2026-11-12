@@ -471,6 +471,8 @@ public:
     // asyncPlayerJoin of @minecraft/server-admin; false when the pack lacks the module or a subscriber
     bool emitPlayerJoin(uint32_t token, const std::string &name, const std::string &persistentId);
 
+    bool hasJoinSubscribers();
+
     void forgetEntity(uint64_t runtimeId);
 
     void forgetPlayer(ServerPlayer &player);

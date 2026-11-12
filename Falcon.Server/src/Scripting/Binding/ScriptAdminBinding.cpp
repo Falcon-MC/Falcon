@@ -8,7 +8,9 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
+#include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -83,19 +85,27 @@ namespace {
         return native.variable(name);
     });
 
-    // AllowListEntryNameInfo or a Player: [name, xuid]
-    const details = (value) => {
+    const invalidArgument = (message, type, index) => {
+        const error = new errors.classes.InvalidArgumentError(undefined, undefined, type, index);
+        Object.defineProperty(error, "message", { value: message, writable: true, configurable: true });
+        return error;
+    };
+    // AllowListEntryNameInfo or a Player: [name, xuid]; member names the call for an invalid player
+    const details = (value, member) => {
         const state = native.playerState(value);
         if (state === 2)
             return native.playerInfo(value);
         if (state === 1)
-            throw errors.make("InvalidEntityError", "Failed to get player.");
+            native.invalidPlayer(value, member);
         if (value === null || typeof value !== "object")
             throw conversion();
         const name = value.name === undefined ? "" : value.name;
         const xuid = value.xuid === undefined ? "" : value.xuid;
         if (typeof name !== "string" || typeof xuid !== "string")
             throw conversion();
+        // sub_14E2E7450 (26.60): InvalidArgumentErrorType.Empty, argument 0
+        if (name === "" && xuid === "")
+            throw invalidArgument("Entry data must contain a name and/or a xuid", "Empty", 0);
         return [name, xuid];
     };
     const label = (info) => info[0] !== "" ? info[0] : info[1];
@@ -123,7 +133,7 @@ namespace {
     });
     method(AllowList, "add", function (playerDetails, ignorePlayerLimit = false) {
         fn("AllowList.add");
-        const info = details(playerDetails);
+        const info = details(playerDetails, "add");
         if (typeof ignorePlayerLimit !== "boolean")
             throw conversion();
         if (!native.allowAdd(info[0], info[1], ignorePlayerLimit))
@@ -135,7 +145,7 @@ namespace {
     });
     method(AllowList, "contains", function (playerDetails) {
         fn("AllowList.contains");
-        const info = details(playerDetails);
+        const info = details(playerDetails, "contains");
         return native.allowContains(info[0], info[1]);
     });
     method(AllowList, "reloadFile", function () {
@@ -145,7 +155,7 @@ namespace {
     });
     method(AllowList, "remove", function (playerDetails) {
         fn("AllowList.remove");
-        const info = details(playerDetails);
+        const info = details(playerDetails, "remove");
         if (!native.allowRemove(info[0], info[1]))
             throw errors.make("AllowListModificationError",
                 "Unable to remove player '" + label(info) + "' from allow list");
@@ -206,6 +216,8 @@ namespace {
             joinOf.set(this, join);
             Object.defineProperty(this, "name", { value: name, enumerable: true });
             Object.defineProperty(this, "persistentId", { value: persistentId, enumerable: true });
+            // no split screen session: the game leaves it undefined (sub_14E2FAB20)
+            Object.defineProperty(this, "splitScreenSlot", { value: undefined, enumerable: true });
         }
     }, "AsyncPlayerJoinBeforeEvent");
     const decide = (event, member, refuse, reason) => {
@@ -319,7 +331,10 @@ namespace {
         if ("netherNetId" in options) {
             if (typeof options.netherNetId !== "string")
                 throw conversion();
-            native.transfer(target, options.netherNetId, -1);
+            // sub_14E310CC0 (26.60): InvalidArgumentErrorType.Unknown, argument 1
+            if (!native.transfer(target, options.netherNetId, -1))
+                throw invalidArgument("NetherNet Id provided '" + options.netherNetId
+                    + "' does not match expected format.", "Unknown", 1);
             return;
         }
         if (typeof options.hostname !== "string" || typeof options.port !== "number" || !Number.isFinite(options.port))
@@ -335,7 +350,7 @@ namespace {
         dedicatedServer: new DedicatedServerUtils(token),
         secrets: new ServerSecrets(token),
         variables: new ServerVariables(token),
-        hooks: { emitJoin, secretOf },
+        hooks: { emitJoin, secretOf, hasJoin: () => joinCallbacks.length !== 0 },
     };
 })
 )JS";
@@ -546,18 +561,73 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // port -1: a NetherNet id in place of the host
+    // sub_14202EC10 (26.60): a decimal uint64 or a uuid, written back the way sub_14201AB90 prints it
+    bool canonicalNetherNetId(const std::string &text, std::string &out) {
+        if (text.empty())
+            return false;
+        if (text.find_first_not_of("0123456789") == std::string::npos) {
+            uint64_t value = 0;
+            for (char c: text) {
+                const uint64_t digit = (uint64_t) (c - '0');
+                if (value > (UINT64_MAX - digit) / 10)
+                    return false;
+                value = value * 10 + digit;
+            }
+            out = std::to_string(value);
+            return true;
+        }
+        std::string hex;
+        if (text.size() == 36) {
+            for (size_t index = 0; index < text.size(); ++index) {
+                const bool dash = index == 8 || index == 13 || index == 18 || index == 23;
+                if (dash != (text[index] == '-'))
+                    return false;
+                if (!dash)
+                    hex.push_back(text[index]);
+            }
+        } else if (text.size() == 32) {
+            hex = text;
+        } else {
+            return false;
+        }
+        for (char &c: hex) {
+            if (!std::isxdigit((unsigned char) c))
+                return false;
+            c = (char) std::tolower((unsigned char) c);
+        }
+        out = hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-" + hex.substr(12, 4) + "-" + hex.substr(16, 4) + "-"
+              + hex.substr(20);
+        return true;
+    }
+
+    // port -1: a NetherNet id in place of the host; false for an id the game refuses
     JSValue transfer(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = apiOf(ctx);
         ServerPlayer *player = argc < 1 ? nullptr : api.resolvePlayer(argv[0]);
         double port = 0.0;
         if (player == nullptr || argc < 3 || JS_ToFloat64(ctx, &port, argv[2]) != 0)
-            return JS_UNDEFINED;
+            return JS_TRUE;
         TransferPacket packet;
         packet.mAddress = stringArg(ctx, argc, argv, 1);
-        packet.mPort = port < 0.0 ? 0 : (int32_t) (uint16_t) (int64_t) port;
+        if (port < 0.0) {
+            // the NetherNet form leaves the port at 0 (sub_143D7C340)
+            if (!canonicalNetherNetId(packet.mAddress, packet.mAddress))
+                return JS_FALSE;
+            packet.mPort = 0;
+        } else {
+            packet.mPort = (int32_t) (uint16_t) (int64_t) port;
+        }
         api.host().sendPacketTo(player->getNetworkIdentifier(), packet);
-        return JS_UNDEFINED;
+        return JS_TRUE;
+    }
+
+    // throws the InvalidEntityError the game raises for a Player that left
+    JSValue invalidPlayer(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi &api = apiOf(ctx);
+        const ScriptEntityRef *ref = argc < 1 ? nullptr : api.native<ScriptEntityRef>(argv[0]);
+        if (ref == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api.throwInvalidEntity("call", stringArg(ctx, argc, argv, 1), *ref);
     }
 
     JSValue reloadCdn(JSContext *ctx, JSValueConst, int, JSValueConst *) {
@@ -705,6 +775,7 @@ namespace ScriptAdminBinding {
         add(ctx, native, "op", op, 1);
         add(ctx, native, "deop", deop, 1);
         add(ctx, native, "transfer", transfer, 3);
+        add(ctx, native, "invalidPlayer", invalidPlayer, 2);
         add(ctx, native, "reloadCdn", reloadCdn, 0);
         add(ctx, native, "reloadPermissions", reloadPermissions, 0);
         add(ctx, native, "reloadScripting", reloadScripting, 0);

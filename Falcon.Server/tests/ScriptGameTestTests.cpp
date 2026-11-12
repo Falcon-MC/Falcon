@@ -304,6 +304,8 @@ int main() {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
+        // the server writes a restrictive default module list when there is none: these packs use every module
+        writeFile(directory / "config" / "default" / "permissions.json", R"({"allowed_modules": ["*"]})");
         run(directory);
     } catch (const std::exception &error) {
         std::clog << "Script gametest regression failed: " << error.what() << '\n';

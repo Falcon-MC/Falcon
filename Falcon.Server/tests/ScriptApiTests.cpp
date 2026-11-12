@@ -3197,6 +3197,8 @@ int main() {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
+        // the server writes a restrictive default module list when there is none: these packs use every module
+        writeFile(directory / "config" / "default" / "permissions.json", R"({"allowed_modules": ["*"]})");
         // the game's file: tab comments, crlf; haste is left out to check the key comes back
         writeFile(directory / "resource_packs" / "vanilla" / "texts" / "en_US.lang",
                   "## effects\npotion.moveSpeed=Speed\t#\r\npotion.potency.1=II\n");

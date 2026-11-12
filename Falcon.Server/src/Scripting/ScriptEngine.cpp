@@ -2013,6 +2013,17 @@ void ScriptEngine::onTargetBlockHit(Level &level, const Vector3i &position, cons
 bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> done) {
     if (mHost == nullptr)
         return false;
+    bool subscribed = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis)
+        subscribed = api->hasJoinSubscribers() || subscribed;
+    if (!subscribed)
+        return false;
+    // sub_14E2FAB20 (26.60): a paused world lets the join through untouched
+    if (mHost->isSimulationPaused()) {
+        LOG_ERROR(LogAreaID::Script, "Joins cannot be processed by scripting when the world is paused. Disable pause "
+                                     "when using AsyncPlayerJoinBeforeEvent.");
+        return false;
+    }
 
     const uint32_t token = mNextJoinToken++;
     PendingJoin &join = mPendingJoins[token];
@@ -2020,8 +2031,9 @@ bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> do
     join.mDone = std::move(done);
     // counted before the first emit: a callback that settles at once must not finish the join early
     join.mOutstanding = 1;
-    const std::string persistentId = player.getXuid().empty() ? player.getUuid() : player.getXuid();
+    // the playfab id of the identity component, what Player.persistentId reads too (sub_14D5F0110)
     // a subscriber may refuse the player while it is called: the player is erased, keep copies
+    const std::string persistentId = player.getPlayFabId();
     const std::string name = player.getName();
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();

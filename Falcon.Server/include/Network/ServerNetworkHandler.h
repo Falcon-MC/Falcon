@@ -110,6 +110,11 @@ public:
     ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                          TransportLayer transport = TransportLayer::NetherNet);
 
+    // the last tick ran with the simulation paused
+    bool isSimulationPaused() const {
+        return mSimulationPaused;
+    }
+
     bool isTransportReady() const {
         return mNetworkHandler != nullptr;
     }

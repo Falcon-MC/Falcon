@@ -1949,6 +1949,17 @@ namespace {
     }
 }
 
+bool ScriptApi::hasJoinSubscribers() {
+    if (!JS_IsObject(mAdminHooks))
+        return false;
+    JSValue has = JS_GetPropertyStr(mContext, mAdminHooks, "hasJoin");
+    JSValue result = JS_Call(mContext, has, mAdminHooks, 0, nullptr);
+    JS_FreeValue(mContext, has);
+    const bool subscribed = !JS_IsException(result) && JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return subscribed;
+}
+
 bool ScriptApi::emitPlayerJoin(uint32_t token, const std::string &name, const std::string &persistentId) {
     if (!JS_IsObject(mAdminHooks))
         return false;
