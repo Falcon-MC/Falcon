@@ -1,4 +1,5 @@
 #include "World/Actor/Player/ServerPlayer.h"
+#include "Network/ConnectionRequest.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/DynamicPropertyStore.h"
@@ -1148,4 +1149,10 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
         }
     }
     mAttributes.setClamped("minecraft:health", storedHealth);
+}
+
+// FilterProfanity defaults to true; a debug timeout counts only above 0
+void ServerPlayer::readSyncedClientOptions(const std::string &clientData) {
+    mProfanityFilterEnabled = ConnectionRequest::findJsonBool(clientData, "FilterProfanity", true);
+    mTextFilteringDebugTimeout = ConnectionRequest::findJsonInt(clientData, "TextFilteringDebugTimeoutMilliSeconds", 0);
 }

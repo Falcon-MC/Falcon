@@ -117,6 +117,7 @@
 #include "Protocol/Packets/SetDefaultGameTypePacket.h"
 #include "Protocol/Packets/ModalFormRequestPacket.h"
 #include "Protocol/Packets/ModalFormResponsePacket.h"
+#include "Protocol/Packets/UpdateClientOptionsPacket.h"
 #include "Protocol/Packets/ClientboundDataDrivenUICloseScreenPacket.h"
 #include "Protocol/Packets/PlayerSkinPacket.h"
 #include "Protocol/Packets/SetHealthPacket.h"
@@ -1440,6 +1441,7 @@ const std::unordered_set<MinecraftPacketIds> &ServerNetworkHandler::_serverbound
             MinecraftPacketIds::ModalFormResponse,
             MinecraftPacketIds::ServerboundDataStore,
             MinecraftPacketIds::ServerboundDataDrivenScreenClosed,
+            MinecraftPacketIds::UpdateClientOptions,
             MinecraftPacketIds::MapInfoRequest,
             MinecraftPacketIds::MapCreateLockedCopy,
             MinecraftPacketIds::Animate,
@@ -2065,6 +2067,16 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerToggl
         return;
 
     CrafterHandler::handleToggleSlot(*this, *player, packet);
+}
+
+// ServerNetworkHandler::handle(UpdateClientOptionsPacket) (sub_14228D1E0, 26.60): an absent field keeps its value
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const UpdateClientOptionsPacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr)
+        return;
+
+    if (packet.mHasFilterProfanityChange)
+        player->setProfanityFilterEnabled(packet.mFilterProfanityChange);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) {

@@ -168,6 +168,23 @@ public:
         mClientSideGenerationCompatible = compatible;
     }
 
+    // the text filtering half of SyncedClientOptionsComponent, from the login client data (sub_143A10DC0, 26.60)
+    void readSyncedClientOptions(const std::string &clientData);
+
+    // SyncedClientOptionsComponent+24: FilterProfanity at login, then UpdateClientOptionsPacket
+    bool isProfanityFilterEnabled() const {
+        return mProfanityFilterEnabled;
+    }
+
+    void setProfanityFilterEnabled(bool enabled) {
+        mProfanityFilterEnabled = enabled;
+    }
+
+    // SyncedClientOptionsComponent+16: TextFilteringDebugTimeoutMilliSeconds, 0 when the client sent none
+    int getTextFilteringDebugTimeout() const {
+        return mTextFilteringDebugTimeout;
+    }
+
     // The share of its view the server builds for this player (ClientSideGeneration::computeServerBuildRatio).
     float getServerBuildRatio() const {
         return mServerBuildRatio;
@@ -1059,6 +1076,8 @@ private:
     std::string mPlayFabId;
     int mBuildPlatform = -1;
     bool mClientSideGenerationCompatible = false;
+    bool mProfanityFilterEnabled = true;
+    int mTextFilteringDebugTimeout = 0;
     float mServerBuildRatio = 1.0f;
     int32_t mMapNameIndex = 0;
     MapRequestQueue mMapRequests;
