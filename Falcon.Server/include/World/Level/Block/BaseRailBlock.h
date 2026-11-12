@@ -8,7 +8,7 @@
 
 class ServerNetworkHandler;
 
-class BaseRailBlock final : public Block {
+class BaseRailBlock : public Block {
 public:
     explicit BaseRailBlock(const Block &base);
 

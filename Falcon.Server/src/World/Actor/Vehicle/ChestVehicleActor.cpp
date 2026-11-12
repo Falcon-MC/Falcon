@@ -29,8 +29,10 @@ namespace {
     }
 }
 
-ChestVehicleActor::ChestVehicleActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size)
-        : SizedActor(runtimeId, identifier, size, false), mInventory(inventorySizeOf(identifier)) {}
+ChestVehicleActor::ChestVehicleActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size,
+                                     bool minecart)
+        : SizedActor(runtimeId, identifier, size, false), mInventory(inventorySizeOf(identifier)), mMinecart(minecart) {
+}
 
 // a chest boat is boarded on a plain click, its chest opens on a sneaking one; a chest minecart always opens
 bool ChestVehicleActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {

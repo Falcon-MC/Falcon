@@ -798,6 +798,12 @@ int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, cons
     if (detector >= 0)
         return detector;
 
+    if (block != nullptr) {
+        const int emitted = block->getEmittedSignal(level, position, state, face, false);
+        if (emitted >= 0)
+            return emitted;
+    }
+
     if (dynamic_cast<const RedstoneBlock *>(block) != nullptr)
         return MAX_SIGNAL;
 
@@ -888,6 +894,12 @@ int RedstoneSystem::getStrongPower(ServerNetworkHandler &owner, Level &level, co
     const int detector = DetectorSystem::strongPower(level, position, state, face);
     if (detector >= 0)
         return detector;
+
+    if (block != nullptr) {
+        const int emitted = block->getEmittedSignal(level, position, state, face, true);
+        if (emitted >= 0)
+            return emitted;
+    }
 
     if (const RedstoneTorchBlock *torch = dynamic_cast<const RedstoneTorchBlock *>(block)) {
         if (!torch->isLit())
