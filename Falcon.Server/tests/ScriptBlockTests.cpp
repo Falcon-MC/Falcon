@@ -398,6 +398,11 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
                   R"({"format_version": "1.26.50", "minecraft:jigsaw": {
                       "description": {"identifier": "test:tower"}, "start_pool": "test:start_pool", "max_depth": 1,
                       "start_height": {"type": "constant", "value": {"below_top": 3}}}})");
+        // a uniform height provider between two anchors (sub_1492DB6B0: min and max)
+        writeFile(pack / "worldgen" / "jigsaw_structures" / "spire.json",
+                  R"({"format_version": "1.21.20", "minecraft:jigsaw": {
+                      "description": {"identifier": "test:spire"}, "start_pool": "test:start_pool", "max_depth": 1,
+                      "start_height": {"type": "uniform", "min": {"absolute": 10}, "max": {"absolute": 20}}}})");
     }
 
     void checkStartHeight(const std::filesystem::path &pack) {
@@ -412,6 +417,14 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
                         && PackJigsaw::resolveAnchor(PackJigsaw::Anchor::Absolute, -15, -64, 319) == -15,
                 "a vertical anchor did not resolve like the game");
         require(!jigsaw.structure("test:village")->mHasStartHeight, "a structure without start_height got one");
+        const PackJigsaw::Structure *spire = jigsaw.structure("test:spire");
+        require(spire != nullptr && spire->mHasStartHeight && spire->mStartUniform && spire->mStartOffset == 10
+                        && spire->mStartMaxOffset == 20,
+                "the uniform start_height was not read");
+        // the legacy random of world seed 12345 at 50, 100, 50 (sub_14383F470) draws 7 in [0, 10]
+        require(PackJigsaw::startHeight(*spire, 12345, Vector3i(50, 100, 50), -64, 319) == 17
+                        && PackJigsaw::startHeight(*tower, 12345, Vector3i(50, 100, 50), -64, 319) == 316,
+                "the start height was not drawn like the game");
     }
 
     // the file format alone: a roundtrip through the bytes and the placement transform

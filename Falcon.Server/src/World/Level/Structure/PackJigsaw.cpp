@@ -12,6 +12,9 @@
 #include <utility>
 
 namespace {
+    // the placer's translations of commands.place.generation.error and .outofbounds.error (0x14F432B10)
+    const char *const GENERATION_FAILED = "Jigsaw structure generation failed.";
+    const char *const OUT_OF_BOUNDS = "Jigsaw structure generation failed. Structure placed out of bounds.";
     std::string readText(const std::filesystem::path &path) {
         std::ifstream file(path, std::ios::binary);
         std::stringstream text;
@@ -120,21 +123,17 @@ namespace {
         return true;
     }
 
-    // start_height: {"type": "constant", "value": {"absolute" | "above_bottom" | "below_top": n}}, the height
-    // provider schema (sub_14930A460, 26.60); uniform and from_sea are left out: their fields and sea level unproven
-    bool readStartHeight(const json::Value *value, PackJigsaw::Anchor &anchor, int32_t &offset) {
+    // a vertical anchor {"absolute" | "above_bottom" | "below_top": n} (sub_14930A460); from_sea is left out:
+    // it adds the dimension's sea level (sub_14383EC10, Dimension +0xCC), whose overworld value is unproven
+    bool readAnchor(const json::Value *value, PackJigsaw::Anchor &anchor, int32_t &offset) {
         if (value == nullptr || !value->isObject())
-            return false;
-        const json::Value *type = value->get("type");
-        const json::Value *constant = value->get("value");
-        if (type == nullptr || type->string() != "constant" || constant == nullptr || !constant->isObject())
             return false;
         static const std::pair<const char *, PackJigsaw::Anchor> KINDS[] = {
                 {"absolute", PackJigsaw::Anchor::Absolute},
                 {"above_bottom", PackJigsaw::Anchor::AboveBottom},
                 {"below_top", PackJigsaw::Anchor::BelowTop}};
         for (const auto &kind: KINDS) {
-            const json::Value *number = constant->get(kind.first);
+            const json::Value *number = value->get(kind.first);
             if (number != nullptr && number->isNumber()) {
                 anchor = kind.second;
                 offset = number->integer();
@@ -142,6 +141,66 @@ namespace {
             }
         }
         return false;
+    }
+
+    // start_height: {"type": "constant", "value": anchor} or {"type": "uniform", "min": anchor, "max": anchor}, the
+    // height provider schemas (sub_14930A460, sub_1492DB6B0)
+    bool readStartHeight(const json::Value *value, PackJigsaw::Structure &structure) {
+        if (value == nullptr || !value->isObject())
+            return false;
+        const json::Value *type = value->get("type");
+        if (type == nullptr)
+            return false;
+        if (type->string() == "uniform") {
+            structure.mStartUniform = true;
+            return readAnchor(value->get("min"), structure.mStartAnchor, structure.mStartOffset)
+                   && readAnchor(value->get("max"), structure.mStartMaxAnchor, structure.mStartMaxOffset);
+        }
+        return type->string() == "constant"
+               && readAnchor(value->get("value"), structure.mStartAnchor, structure.mStartOffset);
+    }
+
+    // the game's legacy random (vtable 0x14F1ABF10): 48 bit linear congruence, nextInt as sub_145A2BCC0
+    class LegacyRandom {
+    public:
+        explicit LegacyRandom(int64_t seed) : mState(((uint64_t) seed ^ MULTIPLIER) & MASK) {}
+
+        int32_t next(int bits) {
+            mState = (mState * MULTIPLIER + 11) & MASK;
+            return (int32_t) (mState >> (48 - bits));
+        }
+
+        int64_t nextLong() {
+            const int64_t high = next(32);
+            const int64_t low = next(32);
+            return (int64_t) ((uint64_t) high << 32) + low;
+        }
+
+        int32_t nextInt(int32_t bound) {
+            if ((bound & -bound) == bound)
+                return (int32_t) (((int64_t) bound * (int64_t) next(31)) >> 31);
+            int32_t bits;
+            int32_t value;
+            do {
+                bits = next(31);
+                value = bits % bound;
+            } while ((int32_t) ((uint32_t) bits - (uint32_t) value + (uint32_t) (bound - 1)) < 0);
+            return value;
+        }
+
+    private:
+        static constexpr uint64_t MULTIPLIER = 0x5DEECE66DULL;
+        static constexpr uint64_t MASK = (1ULL << 48) - 1ULL;
+        uint64_t mState;
+    };
+
+    // sub_14383F470: the forked seed mixed with the position's hash
+    LegacyRandom positionalRandom(int64_t worldSeed, const Vector3i &at) {
+        LegacyRandom base(worldSeed);
+        const int64_t fork = base.nextLong();
+        int64_t hash = (int64_t) (int32_t) ((uint32_t) at.x * 3129871u) ^ (int64_t) at.z * 116129781LL ^ (int64_t) at.y;
+        hash = (int64_t) ((uint64_t) hash * (uint64_t) hash * 42317861ULL + (uint64_t) hash * 11ULL) >> 16;
+        return LegacyRandom(hash ^ fork);
     }
 
     std::vector<std::string> blockNames(const json::Value *value) {
@@ -346,8 +405,7 @@ void PackJigsaw::addPack(const std::string &packRoot) {
         const json::Value *depth = body->get("max_depth");
         structure.mStartPool = pool != nullptr ? pool->string() : std::string();
         structure.mMaxDepth = depth != nullptr ? depth->integer(1) : 1;
-        structure.mHasStartHeight = readStartHeight(body->get("start_height"), structure.mStartAnchor,
-                                                    structure.mStartOffset);
+        structure.mHasStartHeight = readStartHeight(body->get("start_height"), structure);
         mStructures[identifier] = structure;
     });
     eachJson(root / "processors", [&](const json::Value &file) {
@@ -383,6 +441,19 @@ int32_t PackJigsaw::resolveAnchor(Anchor anchor, int32_t offset, int32_t minY, i
     }
 }
 
+int32_t PackJigsaw::startHeight(const Structure &structure, int64_t worldSeed, const Vector3i &location, int32_t minY,
+                                int32_t maxY) {
+    const int32_t low = resolveAnchor(structure.mStartAnchor, structure.mStartOffset, minY, maxY);
+    if (!structure.mStartUniform)
+        return low;
+    const int32_t high = resolveAnchor(structure.mStartMaxAnchor, structure.mStartMaxOffset, minY, maxY);
+    // an empty range only logs and keeps the low end
+    if (high < low)
+        return low;
+    LegacyRandom random = positionalRandom(worldSeed, location);
+    return low + random.nextInt(high - low + 1);
+}
+
 const PackJigsaw::Pool *PackJigsaw::pool(const std::string &identifier) const {
     const auto found = mPools.find(identifier);
     return found == mPools.end() ? nullptr : &found->second;
@@ -407,7 +478,7 @@ bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::str
     std::mt19937 random((uint32_t) seed);
     const Pool *start = pool(startPool);
     if (start == nullptr) {
-        error = "Unknown template pool " + startPool;
+        error = GENERATION_FAILED;
         return false;
     }
 
@@ -439,8 +510,7 @@ bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::str
             break;
     }
     if (pieces.empty()) {
-        error = startJigsaw.empty() ? "No piece of " + startPool + " could be placed"
-                                    : "No piece of " + startPool + " holds the jigsaw " + startJigsaw;
+        error = GENERATION_FAILED;
         return false;
     }
 
@@ -498,8 +568,12 @@ bool PackJigsaw::place(ServerNetworkHandler &owner, Level &level, const std::str
         bounds.mMax = Vector3i(std::max(bounds.mMax.x, piece.mBox.mMax.x), std::max(bounds.mMax.y, piece.mBox.mMax.y),
                                std::max(bounds.mMax.z, piece.mBox.mMax.z));
     }
-    if (bounds.mMin.y < level.getMinY() || bounds.mMax.y > level.getMaxY()) {
-        error = "The jigsaw structure reaches outside the world";
+    // only a structure without a piece inside the height range fails; the top bound is the exclusive one
+    bool inside = false;
+    for (const Piece &piece: pieces)
+        inside = inside || (piece.mBox.mMin.y >= level.getMinY() && piece.mBox.mMax.y <= level.getMaxY() + 1);
+    if (!inside) {
+        error = OUT_OF_BOUNDS;
         return false;
     }
 
