@@ -122,7 +122,8 @@ The network layer, the protocol, NBT and the Bedrock data files live in their ow
   with `Closes #123` or `Fixes #123`.
 - Enable **"Allow maintainer edits"**.
 - Open a **draft pull request** if the work is not finished.
-- **CI must pass** on Linux, Windows and macOS.
+- **CI runs on `dev` once the pull request is merged**, on Linux, Windows and macOS. Only the rules check runs
+  on the pull request itself. A change that breaks `dev` has to be fixed right away.
 - **Every pull request must be tested on a running server.** Describe exactly what you tested and how.
   "Tested" alone is not a test report.
 - Reply to review feedback and resolve conversations once addressed. Push follow-up commits rather than
