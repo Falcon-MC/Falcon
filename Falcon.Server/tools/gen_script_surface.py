@@ -201,13 +201,16 @@ class Range:
 def main():
     root, output = sys.argv[1], sys.argv[2]
     entries = {}
+    # official names the scripting layer leaves out; the surface test holds each to a justified exception
+    unbound = {}
     signals = {}
     parents = {}
 
-    def entry(key):
-        if key not in entries:
-            entries[key] = Range()
-        return entries[key]
+    def entry(key, table=None):
+        table = entries if table is None else table
+        if key not in table:
+            table[key] = Range()
+        return table[key]
 
     bound_events = set()
     for version, path in collect(root, MODULES['server'][0]):
@@ -233,7 +236,17 @@ def main():
                 # custom component hook payloads
                 payload = name in bound_events or re.match(r'(Block|Item)Component\w+Event$', name) is not None
                 component = name.startswith('Entity') and name.endswith('Component')
-                if bound is not None and name not in bound and not is_error and not payload and not component:
+                # 1.x signal base classes (IButtonPushAfterEventSignal): exported, never carried by a holder
+                signal_base = re.match(r'I[A-Z]\w*Signal$', name) is not None
+                if (bound is not None and name not in bound and not is_error and not payload and not component
+                        and not signal_base):
+                    entry('%s:%s' % (short, name), unbound).add(version)
+                    if kind == 'class' and name in classes:
+                        for member in classes[name][1]:
+                            entry('%s:%s.%s' % (short, name, member), unbound).add(version)
+                    if kind == 'enum':
+                        for key, value in enums.get(name, []):
+                            entry('%s:%s.%s=%s' % (short, name, key, value), unbound).add(version)
                     continue
                 entry('%s:%s' % (short, name)).add(version)
                 if kind == 'function' and name in functions:
@@ -292,6 +305,16 @@ def main():
         out.write('static const ScriptParentEntry SCRIPT_PARENTS[] = {\n')
         for name in sorted(parents):
             out.write('        {"%s", "%s"},\n' % (name, parents[name]))
+        out.write('};\n\n')
+        # stable names only: beta-only ones never reach a stable pack
+        out.write('// official stable names outside the bound set, first/last 1.x minor, first/last 2.x minor\n')
+        out.write('static const ScriptUnboundEntry SCRIPT_UNBOUND[] = {\n')
+        for key in sorted(unbound):
+            item = unbound[key]
+            if not item.first:
+                continue
+            out.write('        {"%s", %d, %d, %d, %d},\n' % (key, bound_minor(item, 1, 'first'), bound_minor(item, 1, 'last'),
+                                                       bound_minor(item, 2, 'first'), bound_minor(item, 2, 'last')))
         out.write('};\n')
 
 
