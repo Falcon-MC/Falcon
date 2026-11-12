@@ -97,6 +97,27 @@ public:
         return mUiSurface;
     }
 
+    void setPackUuid(std::string packUuid) {
+        mPackUuid = std::move(packUuid);
+    }
+
+    const std::string &packUuid() const {
+        return mPackUuid;
+    }
+
+    const ScriptHandleCounts &handleCounts() const {
+        return *mHandleCounts;
+    }
+
+    // disableWatchdogTimingWarnings: the pack asked for no slow or spike warnings
+    bool timingWarningsDisabled() const {
+        return mTimingWarningsDisabled;
+    }
+
+    void setTimingWarningsDisabled(bool disabled) {
+        mTimingWarningsDisabled = disabled;
+    }
+
     const ScriptModuleSet &modules() const {
         return mModules;
     }
@@ -636,11 +657,15 @@ private:
 
     void _bindLootTableManager();
 
+    // @minecraft/debug-utilities: the drawer, the diagnostics manager and the stats functions
+    void _installDebugUtilities();
+
     JSContext *mContext;
     ServerNetworkHandler &mHost;
     JSClassID mNativeClassId;
     std::string mPackName;
     std::string mPackRoot;
+    std::string mPackUuid;
     ScriptModuleSet mModules;
     ScriptApiTrack mTrack;
     ScriptSurface mSurface;
@@ -649,6 +674,7 @@ private:
     ScriptSurface mGraphicsSurface;
     ScriptSurface mAdminSurface;
     ScriptSurface mNetSurface;
+    ScriptSurface mDebugSurface;
     ScriptPrivilege mPrivilege = ScriptPrivilege::Normal;
 
     struct SteppedBlock {
@@ -676,6 +702,10 @@ private:
     // what the admin bootstrap hands back to the engine: emitJoin
     JSValue mAdminHooks = JS_UNDEFINED;
     std::string mScriptModuleUuid;
+    std::vector<std::pair<std::string, JSValue>> mDebugExports;
+    std::shared_ptr<ScriptHandleCounts> mHandleCounts = std::make_shared<ScriptHandleCounts>();
+    bool mTimingWarningsDisabled = false;
+    JSValue mDebugTick = JS_UNDEFINED;
 
     // same entity, same object: scripts compare and key maps by them
     std::unordered_map<int64_t, JSValue> mActorObjects;

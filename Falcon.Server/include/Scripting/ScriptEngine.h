@@ -287,6 +287,10 @@ public:
     // from a running script: delivered on the next tick, never inside the caller's own call
     void queueScriptEvent(const std::string &id, const std::string &message);
 
+    const std::vector<std::unique_ptr<ScriptApi>> &getApis() const {
+        return mApis;
+    }
+
     void setWatchdogMs(int64_t milliseconds) {
         mWatchdogMs = milliseconds;
     }

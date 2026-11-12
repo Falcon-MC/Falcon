@@ -14,9 +14,19 @@
 
 #include <quickjs.h>
 
+// live handles of one pack by class name, as collectPluginStats reports them
+using ScriptHandleCounts = std::unordered_map<std::string, int64_t>;
+
 // opaque of every object the scripting layer hands out: scripts only see the official members
 struct ScriptNative {
-    virtual ~ScriptNative() = default;
+    virtual ~ScriptNative() {
+        if (mHandleCount != nullptr)
+            --*mHandleCount;
+    }
+
+    // the counts outlive the pack's api: objects are finalized with the runtime
+    std::shared_ptr<ScriptHandleCounts> mHandleCounts;
+    int64_t *mHandleCount = nullptr;
 };
 
 struct ScriptEntityRef : ScriptNative {
