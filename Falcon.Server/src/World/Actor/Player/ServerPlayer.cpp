@@ -18,6 +18,7 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AnimatePacket.h"
+#include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/SetHudPacket.h"
 #include "Protocol/Packets/UpdateClientInputLocksPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -28,6 +29,7 @@
 #include "Protocol/Packets/TextPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
+#include "Protocol/Types/CameraPresets.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "Server/Localization.h"
 
@@ -1155,4 +1157,14 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
 void ServerPlayer::readSyncedClientOptions(const std::string &clientData) {
     mProfanityFilterEnabled = ConnectionRequest::findJsonBool(clientData, "FilterProfanity", true);
     mTextFilteringDebugTimeout = ConnectionRequest::findJsonInt(clientData, "TextFilteringDebugTimeoutMilliSeconds", 0);
+}
+
+void ServerPlayer::recordCamera(const CameraInstructionPacket &packet) {
+    mCameraState.mPresent = true;
+    const std::vector<CameraPreset> &presets = standardCameraPresets();
+    const int32_t preset = packet.mSetInstruction.mPresetRuntimeId;
+    if (packet.mHasSetInstruction && preset >= 0 && (size_t) preset < presets.size())
+        mCameraState.mPreset = presets[(size_t) preset].mIdentifier;
+    if (packet.mHasClear && packet.mClear)
+        mCameraState.mPreset = "minecraft:first_person";
 }

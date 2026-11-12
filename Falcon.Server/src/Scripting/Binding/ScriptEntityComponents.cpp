@@ -350,6 +350,195 @@ namespace {
         return permutationList(ctx, thisVal, "non_breathe_blocks");
     }
 
+    double numberField(const json::Value &object, const char *key, double fallback) {
+        const json::Value *value = object.get(key);
+        return value != nullptr && value->isNumber() ? value->mNumber : fallback;
+    }
+
+    // the records the game copies out of the component; their getters read the copy
+    struct RecordField {
+        const char *mClass;
+        const char *mProperty;
+        const char *mKey;
+        enum class Kind { Number, String, OptionalString, Vector } mKind;
+    };
+
+    const RecordField RECORD_FIELDS[] = {
+            {"Seat", "lockRiderRotation", "lock_rider_rotation", RecordField::Kind::Number},
+            {"Seat", "maxRiderCount", "max_rider_count", RecordField::Kind::Number},
+            {"Seat", "minRiderCount", "min_rider_count", RecordField::Kind::Number},
+            {"Seat", "position", "position", RecordField::Kind::Vector},
+            {"Seat", "seatRotation", "rotate_rider_by", RecordField::Kind::Number},
+            {"FeedItem", "healAmount", "heal_amount", RecordField::Kind::Number},
+            {"FeedItem", "item", "item", RecordField::Kind::String},
+            {"FeedItem", "resultItem", "result_item", RecordField::Kind::OptionalString},
+            {"FeedItemEffect", "amplifier", "amplifier", RecordField::Kind::Number},
+            {"FeedItemEffect", "chance", "chance", RecordField::Kind::Number},
+            {"FeedItemEffect", "duration", "duration", RecordField::Kind::Number},
+            {"FeedItemEffect", "name", "name", RecordField::Kind::String},
+            {"EntityDefinitionFeedItem", "growth", "growth", RecordField::Kind::Number},
+            {"EntityDefinitionFeedItem", "item", "item", RecordField::Kind::String},
+            {"EntityDefinitionFeedItem", "resultItem", "result_item", RecordField::Kind::OptionalString},
+    };
+
+    JSValue recordGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const ScriptRecordRef *record = ScriptApi::fromContext(ctx)->native<ScriptRecordRef>(thisVal);
+        if (record == nullptr)
+            return JS_UNDEFINED;
+        const RecordField &field = RECORD_FIELDS[magic];
+        switch (field.mKind) {
+            case RecordField::Kind::Number: {
+                const auto it = record->mNumbers.find(field.mKey);
+                return JS_NewFloat64(ctx, it == record->mNumbers.end() ? 0.0 : it->second);
+            }
+            case RecordField::Kind::Vector:
+                return vector3(ctx, record->mVector[0], record->mVector[1], record->mVector[2]);
+            default: {
+                const auto it = record->mStrings.find(field.mKey);
+                if (it == record->mStrings.end())
+                    return field.mKind == RecordField::Kind::OptionalString ? JS_UNDEFINED : JS_NewString(ctx, "");
+                return string(ctx, it->second);
+            }
+        }
+    }
+
+    JSValue feedItemGetEffects(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptRecordRef *record = api->native<ScriptRecordRef>(thisVal);
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::shared_ptr<ScriptRecordRef> &child:
+             record == nullptr ? std::vector<std::shared_ptr<ScriptRecordRef>>() : record->mChildren)
+            JS_SetPropertyUint32(ctx, array, index++, api->makeInstance("FeedItemEffect", new ScriptRecordRef(*child)));
+        return array;
+    }
+
+    ScriptRecordRef *recordOf(const json::Value &object, const char *const *numbers, const char *const *strings) {
+        ScriptRecordRef *record = new ScriptRecordRef();
+        for (; *numbers != nullptr; ++numbers) {
+            const json::Value *value = object.get(*numbers);
+            if (value != nullptr && value->isNumber())
+                record->mNumbers[*numbers] = value->mNumber;
+        }
+        for (; *strings != nullptr; ++strings) {
+            const json::Value *value = object.get(*strings);
+            if (value != nullptr && value->isString())
+                record->mStrings[*strings] = value->mString;
+        }
+        return record;
+    }
+
+    // SeatDescription defaults (sub_14B015000, 26.60): lock_rider_rotation 181, the rest 0
+    JSValue rideableGetSeats(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        JSValue array = JS_NewArray(ctx);
+        const json::Value *seats = fieldOf(target, "seats");
+        if (seats == nullptr)
+            return array;
+        std::vector<const json::Value *> list;
+        if (seats->isArray()) {
+            for (const std::unique_ptr<json::Value> &seat: seats->mArray)
+                list.push_back(seat.get());
+        } else {
+            list.push_back(seats);
+        }
+        static const char *const NUMBERS[] = {"min_rider_count", "max_rider_count", "rotate_rider_by", nullptr};
+        static const char *const STRINGS[] = {nullptr};
+        uint32_t index = 0;
+        for (const json::Value *seat: list) {
+            if (!seat->isObject())
+                continue;
+            ScriptRecordRef *record = recordOf(*seat, NUMBERS, STRINGS);
+            record->mNumbers["lock_rider_rotation"] = numberField(*seat, "lock_rider_rotation", 181.0);
+            const json::Value *position = seat->get("position");
+            if (position != nullptr && position->isArray() && position->mArray.size() >= 3) {
+                for (int axis = 0; axis < 3; ++axis)
+                    record->mVector[axis] = (float) position->mArray[axis]->number(0.0);
+            }
+            JS_SetPropertyUint32(ctx, array, index++, target.mApi->makeInstance("Seat", record));
+        }
+        return array;
+    }
+
+    JSValue healableGetFeedItems(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        JSValue array = JS_NewArray(ctx);
+        const json::Value *items = fieldOf(target, "items");
+        if (items == nullptr || !items->isArray())
+            return array;
+        static const char *const NUMBERS[] = {"heal_amount", nullptr};
+        static const char *const STRINGS[] = {"item", "result_item", nullptr};
+        static const char *const EFFECT_NUMBERS[] = {"amplifier", "chance", "duration", nullptr};
+        static const char *const EFFECT_STRINGS[] = {"name", nullptr};
+        uint32_t index = 0;
+        for (const std::unique_ptr<json::Value> &item: items->mArray) {
+            if (!item->isObject())
+                continue;
+            ScriptRecordRef *record = recordOf(*item, NUMBERS, STRINGS);
+            const json::Value *effects = item->get("effects");
+            if (effects != nullptr && effects->isArray()) {
+                for (const std::unique_ptr<json::Value> &effect: effects->mArray) {
+                    if (effect->isObject())
+                        record->mChildren.emplace_back(recordOf(*effect, EFFECT_NUMBERS, EFFECT_STRINGS));
+                }
+            }
+            JS_SetPropertyUint32(ctx, array, index++, target.mApi->makeInstance("FeedItem", record));
+        }
+        return array;
+    }
+
+    // feed_items: a name or a list of names and {item, growth, result_item}; growth 0.1 when left out, as feeding uses
+    JSValue ageableGetFeedItems(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        JSValue array = JS_NewArray(ctx);
+        const json::Value *items = fieldOf(target, "feed_items");
+        if (items == nullptr)
+            return array;
+        std::vector<const json::Value *> list;
+        if (items->isArray()) {
+            for (const std::unique_ptr<json::Value> &item: items->mArray)
+                list.push_back(item.get());
+        } else {
+            list.push_back(items);
+        }
+        static const char *const NUMBERS[] = {nullptr};
+        static const char *const STRINGS[] = {"item", "result_item", nullptr};
+        uint32_t index = 0;
+        for (const json::Value *item: list) {
+            ScriptRecordRef *record = nullptr;
+            if (item->isString()) {
+                record = new ScriptRecordRef();
+                record->mStrings["item"] = item->mString;
+                record->mNumbers["growth"] = MobActor::DEFAULT_FEED_GROWTH;
+            } else if (item->isObject()) {
+                record = recordOf(*item, NUMBERS, STRINGS);
+                record->mNumbers["growth"] = numberField(*item, "growth", MobActor::DEFAULT_FEED_GROWTH);
+            } else {
+                continue;
+            }
+            JS_SetPropertyUint32(ctx, array, index++, target.mApi->makeInstance("EntityDefinitionFeedItem", record));
+        }
+        return array;
+    }
+
+    // the grow_up event as a Trigger
+    JSValue ageableGetGrowUp(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        const json::Value *growUp = fieldOf(target, "grow_up");
+        const json::Value *event = growUp == nullptr ? nullptr : growUp->get("event");
+        ScriptNamedRef *ref = new ScriptNamedRef();
+        ref->mName = event != nullptr && event->isString() ? event->mString : std::string();
+        return target.mApi->makeInstance("Trigger", ref);
+    }
+
     JSValue tameableGetTameItems(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -758,6 +947,21 @@ void ScriptApi::_bindEntityComponents() {
 
     JSValue rideable = prototypeOf("EntityRideableComponent");
     method(rideable, "EntityRideableComponent", "getFamilyTypes", rideableGetFamilyTypes, 0);
+    method(rideable, "EntityRideableComponent", "getSeats", rideableGetSeats, 0);
+    method(prototypeOf("EntityHealableComponent"), "EntityHealableComponent", "getFeedItems", healableGetFeedItems, 0);
+    method(prototypeOf("EntityAgeableComponent"), "EntityAgeableComponent", "getFeedItems", ageableGetFeedItems, 0);
+    property(prototypeOf("EntityAgeableComponent"), "EntityAgeableComponent", "growUp", ageableGetGrowUp);
+    for (const char *record: {"Seat", "FeedItem", "FeedItemEffect", "EntityDefinitionFeedItem"}) {
+        if (mSurface.has(record))
+            defineClass(record);
+    }
+    for (size_t i = 0; i < sizeof(RECORD_FIELDS) / sizeof(RECORD_FIELDS[0]); ++i) {
+        const RecordField &field = RECORD_FIELDS[i];
+        if (!JS_IsUndefined(prototypeOf(field.mClass)))
+            propertyMagic(prototypeOf(field.mClass), field.mClass, field.mProperty, recordGet, (int) i);
+    }
+    if (!JS_IsUndefined(prototypeOf("FeedItem")))
+        method(prototypeOf("FeedItem"), "FeedItem", "getEffects", feedItemGetEffects, 0);
     method(rideable, "EntityRideableComponent", "getRiders", rideableGetRiders, 0);
     method(rideable, "EntityRideableComponent", "addRider", rideableAddRider, 1);
     method(rideable, "EntityRideableComponent", "ejectRider", rideableEjectRider, 1);

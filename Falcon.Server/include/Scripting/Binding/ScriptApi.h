@@ -646,6 +646,8 @@ private:
 
     void _bindMolang();
 
+    void _bindFog();
+
     void _runQueuedCommands();
 
     void _freeQueuedCommand(QueuedCommand &command);

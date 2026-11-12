@@ -12,12 +12,25 @@
 #include "World/Level/WorldManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
 #include "Scripting/ScriptEngine.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace ScriptValues;
 
@@ -82,9 +95,47 @@ namespace {
         return JS_FALSE;
     }
 
-    // TODO: the game derives the tier from device memory; thresholds unverified, High for now
-    JSValue systemInfoGetMemoryTier(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, 3);
+    // MemoryTier by the ceilings the typings give: 1.5, 2, 4 and 8 GiB, above is SuperHigh
+    int32_t memoryTierOf(uint64_t bytes) {
+        const uint64_t gib = 1024ull * 1024ull * 1024ull;
+        if (bytes <= gib * 3 / 2)
+            return 0;
+        if (bytes <= gib * 2)
+            return 1;
+        if (bytes <= gib * 4)
+            return 2;
+        if (bytes <= gib * 8)
+            return 3;
+        return 4;
+    }
+
+    uint64_t physicalMemory() {
+#if defined(_WIN32)
+        MEMORYSTATUSEX status;
+        status.dwLength = sizeof(status);
+        return GlobalMemoryStatusEx(&status) ? (uint64_t) status.ullTotalPhys : 0;
+#elif defined(__APPLE__)
+        uint64_t bytes = 0;
+        size_t size = sizeof(bytes);
+        return sysctlbyname("hw.memsize", &bytes, &size, nullptr, 0) == 0 ? bytes : 0;
+#else
+        const long pages = sysconf(_SC_PHYS_PAGES);
+        const long pageSize = sysconf(_SC_PAGE_SIZE);
+        return pages > 0 && pageSize > 0 ? (uint64_t) pages * (uint64_t) pageSize : 0;
+#endif
+    }
+
+    // the server's own tier, or the client's on a ClientSystemInfo
+    JSValue systemInfoGetMemoryTier(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal)) {
+            ServerPlayer *player = api->resolvePlayerByHandle(part->mHandle);
+            if (player == nullptr)
+                return api->throwError("InvalidEntityError", "The player has left.");
+            return JS_NewInt32(ctx, player->getClientDevice().mMemoryTier);
+        }
+        static const int32_t tier = memoryTierOf(physicalMemory());
+        return JS_NewInt32(ctx, tier);
     }
 
     JSValue systemWaitTicks(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -316,6 +367,31 @@ namespace {
             JS_SetPropertyStr(ctx, settings, setting.mName.c_str(), value);
         }
         return settings;
+    }
+
+    // the 1.x World.playSound (sub_14C2FCE20, 26.60): every player hears it, whatever their dimension, and no
+    // SoundInstance tracks it
+    JSValue worldPlaySound(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        double x = 0.0, y = 0.0, z = 0.0;
+        if (argc < 2 || !JS_IsString(argv[0]) || !readVector3(ctx, argv[1], x, y, z))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptSoundOptions options;
+        JSValue refused = api->readSoundOptions(argc >= 3 ? argv[2] : JS_UNDEFINED, options, false);
+        if (JS_IsException(refused))
+            return refused;
+
+        PlaySoundPacket packet;
+        packet.mSound = toString(ctx, argv[0]);
+        packet.mPosition = Vector3f((float) x, (float) y, (float) z);
+        packet.mVolume = (float) options.mVolume;
+        packet.mPitch = (float) options.mPitch;
+        packet.mLoopCount = options.mLoopCount;
+        for (auto &entry: api->host().getPlayers()) {
+            if (entry.second.isSpawned())
+                api->host().sendPacketTo(entry.first, packet);
+        }
+        return JS_UNDEFINED;
     }
 
     JSValue worldSendMessage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -998,6 +1074,7 @@ void ScriptApi::_bindSystem() {
 void ScriptApi::_bindWorld() {
     JSValue world = defineClass("World");
     method(world, "World", "sendMessage", worldSendMessage, 1);
+    method(world, "World", "playSound", worldPlaySound, 3);
     method(world, "World", "getAllPlayers", worldGetAllPlayers, 0);
     method(world, "World", "getDimension", worldGetDimension, 1);
     method(world, "World", "getEntity", worldGetEntity, 1);

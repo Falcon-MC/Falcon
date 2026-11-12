@@ -974,9 +974,9 @@ private:
 
     void handle(const NetworkIdentifier &id, const PlayerToggleCrafterSlotRequestPacket &packet) override;
 
-    void handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) override;
-
     void handle(const NetworkIdentifier &id, const UpdateClientOptionsPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const ServerboundDataStorePacket &packet) override;
 

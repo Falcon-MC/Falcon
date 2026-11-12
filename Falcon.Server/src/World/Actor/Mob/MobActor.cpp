@@ -66,7 +66,6 @@ namespace {
     const int32_t LOVE_TICKS = 600;
     const int32_t BREED_COOLDOWN_TICKS = 6000;
     const float DEFAULT_AGEABLE_SECONDS = 1200.0f;
-    const float DEFAULT_FEED_GROWTH = 0.1f;
     const int32_t TICKS_PER_SECOND = 20;
     const char *const LOOT_TABLE_PREFIX = "loot_tables/";
     const int64_t OWNER_SYNC_INTERVAL = 20;

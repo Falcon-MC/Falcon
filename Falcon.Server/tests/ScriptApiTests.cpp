@@ -286,7 +286,8 @@ system.runTimeout(() => world.setDynamicProperty("world", JSON.stringify(r)), 7)
 import { world, system, Entity, Player, Effect, EffectTypes, ItemStack, BlockPermutation, EntityTypes, EntityComponentTypes, EntityHealthComponent,
          EntityTypeFamilyComponent, EntityDamageCause, EntityInitializationCause, EntityHealCause, InputButton,
          ButtonState, InputMode, EntitySwingSource, CommandPermissionLevel, PlayerPermissionLevel,
-         TickingAreaManager, EntityComponent } from "@minecraft/server";
+         TickingAreaManager, EntityComponent, Seat, FeedItem, Trigger, CatmullRomSpline,
+         LinearSpline } from "@minecraft/server";
 import { Scoreboard, ScoreboardObjective, ScoreboardIdentity, ScoreboardScoreInfo, DisplaySlotId, ObjectiveSortOrder,
          ScoreboardIdentityType } from "@minecraft/server";
 
@@ -425,6 +426,16 @@ system.runTimeout(() => {
     const mount = horse.getComponent("minecraft:tamemount");
     mount.tame(false);
     r.tameMount = mount.isTamed + ":" + mount.isTamedToPlayer + ":" + (mount.tamedToPlayerId === undefined);
+    const seat = horse.getComponent("rideable").getSeats()[0];
+    r.seat = [seat instanceof Seat, seat.lockRiderRotation, seat.maxRiderCount, seat.position.y.toFixed(2),
+              seat.seatRotation].join(":");
+    const feed = horse.getComponent("healable").getFeedItems();
+    r.feed = [feed.length, feed[0] instanceof FeedItem, feed[0].item, feed[0].healAmount, feed[0].resultItem,
+              feed[0].getEffects().length].join(":");
+    const calf = overworld.getEntities({ type: "minecraft:cow" }).find((cow) => cow.hasComponent("ageable"));
+    const ageable = calf.getComponent("ageable");
+    r.ageable = ageable.getFeedItems().map((item) => item.item + "@" + (item.growth === Math.fround(0.1))).join("|")
+        + ":" + ageable.growUp.eventName + ":" + (ageable.growUp instanceof Trigger);
     r.emoting = player.isEmoting;
     r.betaAbsent = !("chatDisplayName" in Player.prototype) && !("eatItem" in Player.prototype);
     player.commandPermissionLevel = CommandPermissionLevel.GameDirectors;
@@ -461,6 +472,47 @@ system.runTimeout(() => {
     r.playerFamilies = player.getComponent("type_family").getTypeFamilies().join(",")
         + ":" + player.matches({ families: ["player"] });
     r.playerHealth = player.getComponent("health").effectiveMax + ":" + player.hasComponent("player.hunger");
+    const overrideError = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ": " + e.message; } };
+    r.addItem = overrideError(() => cow.addItem(new ItemStack("minecraft:stick"))) + "|"
+        + (player.addItem(new ItemStack("minecraft:stick")) === undefined);
+    r.overrides = overrideError(() => player.setPropertyOverrideForEntity(cow, "test:none", 1)) + "|"
+        + overrideError(() => player.clearPropertyOverridesForEntity(cow));
+    const fog = player.fogSettings;
+    r.fog = [fog.push("minecraft:fog_bamboo_jungle"), fog.push("Test:Mist", "a"), fog.push("test:haze", "a"),
+             overrideError(() => fog.push("bad id")), fog.getStack().join(","), fog.getTags().join(","), fog.pop("a"),
+             fog.pop(), fog.remove("none"), fog.remove(), fog.pop(),
+             overrideError(() => fog.setStack(new Array(17).fill("a:b")))].join("|");
+    fog.setStack(["a:b", "c:d"], "t");
+    r.fogStack = fog.getStack().join(",") + "/" + fog.getTags().join(",");
+    fog.remove();
+    fog.push("test:fog");
+    for (let i = 0; i < 10; i++)
+        fog.push("test:fog", "t" + i);
+    r.fogTags = fog.getTags().join(",");
+    const scheme = (value) => overrideError(() => player.setControlScheme(value));
+    r.controlScheme = [player.getControlScheme(), scheme("CameraRelative")];
+    player.camera.setCamera("minecraft:first_person");
+    r.controlScheme.push(scheme("CameraRelative"), scheme("Sideways"));
+    player.camera.setCamera("minecraft:free");
+    r.controlScheme.push(scheme("PlayerRelative"), player.getControlScheme(), scheme(), player.getControlScheme());
+    r.controlScheme = r.controlScheme.join("|");
+    const linear = new LinearSpline();
+    linear.controlPoints = [{ x: 0, y: 1, z: 2 }];
+    const frames = (progress, rotation) => ({ totalTimeSeconds: 2, animation: {
+        progressKeyFrames: progress.map(([alpha, timeSeconds]) => ({ alpha, timeSeconds })),
+        rotationKeyFrames: rotation.map((timeSeconds) => ({ rotation: { x: 0, y: 0, z: 0 }, timeSeconds })) } });
+    const play = (spline, options) => overrideError(() => player.camera.playAnimation(spline, options));
+    r.spline = [linear instanceof LinearSpline, linear.controlPoints[0].z, play(linear, frames([[0, 0]], [])),
+                play(new CatmullRomSpline(), frames([], [])), play(linear, frames([[0, 1]], [])),
+                play(linear, frames([], [0, 0.04])), play(linear, frames([[2, 1], [0, 0]], [1, 0]))].join("|");
+    linear.controlPoints = [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 }];
+    r.splinePlay = play(linear, frames([[0, 0], [5, 1.5]], [0, 1])) + "|"
+        + play({}, frames([], [])) + "|" + overrideError(() => { linear.controlPoints = [1]; });
+    const device = player.clientSystemInfo;
+    r.device = [device.memoryTier, device.maxRenderDistance, device.platformType, device.locale, player.graphicsMode,
+                player.inputInfo.touchOnlyAffectsHotbar, typeof system.serverSystemInfo.memoryTier,
+                Object.getPrototypeOf(Object.getPrototypeOf(device)) === Object.getPrototypeOf(system.serverSystemInfo)]
+        .join(":");
     player.setGameMode("Adventure");
     r.gameMode = player.getGameMode();
 
@@ -1536,6 +1588,9 @@ r.dimensions = [MinecraftDimensionTypes.overworld, MinecraftDimensionTypes.nethe
 r.componentIds = EntityCanClimbComponent.componentId + "," + BlockInventoryComponent.componentId;
 r.orphans = typeof EffectAddAfterEvent + "," + typeof ExplosionBeforeEventSignal.prototype.subscribe;
 system.run(() => {
+    const sound = (options) => { try { world.playSound("random.click", { x: 0, y: 64, z: 0 }, options); return "ok"; }
+                                 catch (e) { return "threw"; } };
+    r.worldSound = [sound(), sound({ volume: 2, pitch: 0.5 }), sound({ pitch: 0 })].join(",");
     const dimension = world.getDimension("overworld");
     const pending = dimension.runCommandAsync("time set 1000");
     r.immediate = pending instanceof Promise;
@@ -1752,6 +1807,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         world.getOverworld().setBlock(Vector3i(0, 101, 8),
                                       VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState(), false);
         player.setName("ScriptPlayer");
+        player.getClientDevice().mMemoryTier = 2;
+        player.getClientDevice().mMaxViewDistance = 96;
+        player.getClientDevice().mPlatformType = 1;
+        player.getClientDevice().mGraphicsMode = 2;
+        player.getInputState().mTouchOnlyHotbar = true;
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         player.moveToLevel(world.getOverworld());
         player.setLoginState(ServerPlayer::LoginState::Spawned);
@@ -2643,6 +2703,35 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "spawnCleared", "true");
         expect(e, "playerFamilies", "player:true");
         expect(e, "playerHealth", "20:true");
+        expect(e, "seat", "true:181:0:1.10:0");
+        expect(e, "feed", "8:true:wheat:2::0");
+        expect(e, "ageable", "wheat@true:minecraft:ageable_grow_up:true");
+        expect(e, "addItem",
+               "InvalidEntityComponentError: Attempting to access invalid entity component minecraft:inventory.|true");
+        expect(e, "overrides", "Error: Property \"test:none\" does not exist on Entity of type \"minecraft:cow\".|ok");
+        expect(e, "device", "2:96:Mobile::Deferred:true:number:true");
+        expect(e, "spline",
+               "true|2|Error: Linear needs at least 2 control points|"
+               "Error: CatmullRom needs at least 3 control points|"
+               "Error: First progress key frame must be at time 0.0|"
+               "Error: Time between rotation frames must be greater than 0.05|"
+               "Error: Linear needs at least 2 control points");
+        expect(e, "fog",
+               "0|1|2|FogSettingsError: Failed to modify fog settings due to an invalid fog identifier.|"
+               "minecraft:fog_bamboo_jungle,Test:Mist,test:haze|untagged,a|test:haze|Test:Mist|false|true||"
+               "FogSettingsError: Failed to modify fog settings because the limit of 16 fog settings has "
+               "been reached.");
+        expect(e, "fogStack", "a:b,c:d/t");
+        // the game's unordered_set order, rehashed once past eight tags
+        expect(e, "fogTags", "t1,untagged,t0,t2,t3,t4,t5,t6,t7,t8,t9");
+        expect(e, "controlScheme",
+               "LockedPlayerRelativeStrafe|EngineError: An internal engine error occurred.|"
+               "InvalidArgumentError: Invalid value passed. Control Scheme 'CameraRelative' is not "
+               "allowed for current camera: [minecraft:first_person]|"
+               "TypeError: Native type conversion failed.|ok|PlayerRelative|ok|"
+               "LockedPlayerRelativeStrafe");
+        expect(e, "splinePlay",
+               "ok|TypeError: Native type conversion failed.|TypeError: Native type conversion failed.");
         expect(e, "gameMode", "Creative");
         expect(e, "tickingClass", "true");
         expect(e, "ticking", "true:1:2:2");
@@ -2775,6 +2864,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*legacyPack, "immediate", "true");
         expect(*legacyPack, "async", "resolved:1");
         expect(*legacyPack, "asyncError", "CommandError");
+        expect(*legacyPack, "worldSound", "ok,ok,threw");
 
         ScriptMolangMap molang;
         molang.mVariables.push_back({"variable.size", 0.5f, false, {}});
