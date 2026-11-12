@@ -29,6 +29,7 @@ namespace {
     const char *DIRECTION = "direction";
     const char *CARDINAL_DIRECTION = "cardinal_direction";
     const double BED_EXPLOSION_SIZE = 5.0;
+    const int32_t MIN_SLEEP_SKY_DARKEN = 4;
 
     struct StandUpOffset {
         int32_t mX;
@@ -222,7 +223,8 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
     player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(), level.getName());
     player.sendTranslation("§7%tile.bed.respawnSet", {});
 
-    if (!level.isNight() && !level.isThundering()) {
+    // refused while the dimension has a day (vfunc 8) and its sky darkening stays under 4 (sub_1402BDB80)
+    if (level.getSkyLightSubtracted() < MIN_SLEEP_SKY_DARKEN) {
         player.sendTranslation("§7%tile.bed.noSleep", {});
         return true;
     }
