@@ -11,4 +11,7 @@ public:
     static bool matches(const std::string &identifier);
 
     PistonMoveReaction getPistonMoveReaction() const override;
+
+    // a sign put against the side of a block becomes its wall block
+    BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 };
