@@ -1071,6 +1071,22 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                 }
             }
 
+            const json::Value *vibration = components->get("minecraft:vibration_properties");
+            if (vibration != nullptr) {
+                // sub_14328ACE0: the document fails without the experiment
+                if (!mUpcomingCreatorFeatures) {
+                    LOG_ERROR(LogAreaID::Script,
+                              "To use 'minecraft:vibration_properties', experimental creator features are required");
+                    continue;
+                }
+                const json::Value *dampen = vibration->get("can_dampen_vibrations");
+                if (dampen != nullptr)
+                    definition.mCanDampenVibrations = dampen->boolean(false);
+                const json::Value *occlude = vibration->get("can_occlude_vibrations");
+                if (occlude != nullptr)
+                    definition.mCanOccludeVibrations = occlude->boolean(false);
+            }
+
             applyBlockComponents(*components, definition);
             const json::Value *placement = components->get("minecraft:placement_filter");
             if (placement != nullptr && placement->isObject())

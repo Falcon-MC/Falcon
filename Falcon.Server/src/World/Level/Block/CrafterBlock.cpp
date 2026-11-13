@@ -131,14 +131,8 @@ void CrafterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, 
         return;
 
     SimpleContainerInventory &inventory = crafter->getInventory();
-    std::vector<ItemStack> grid;
-    for (int slot = 0; slot < CrafterBlockActor::SIZE; ++slot)
-        grid.push_back(inventory.getContainerItem(slot));
-
     const Vector3f corner((float) position.x, (float) position.y, (float) position.z);
-    const int32_t networkId =
-            CraftingManager::findNetworkRecipe(grid, 3, owner.getRecipeOutputs(), owner.getRecipeSourceIndices());
-    std::vector<ItemStack> results = recipeOutputs(owner, networkId);
+    std::vector<ItemStack> results = craftResults(owner, *crafter);
     if (results.empty()) {
         owner.playLevelSound(level, SOUND_FAIL, corner);
         return;
@@ -178,6 +172,16 @@ void CrafterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, 
         level.setBlock(position, BlockState(state.mName, states), false);
     }
     RedstoneSystem::queueRedstoneNotification(level, position);
+}
+
+std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter) {
+    const SimpleContainerInventory &inventory = crafter.getInventory();
+    std::vector<ItemStack> grid;
+    for (int slot = 0; slot < CrafterBlockActor::SIZE; ++slot)
+        grid.push_back(inventory.getContainerItem(slot));
+    const int32_t networkId =
+            CraftingManager::findNetworkRecipe(grid, 3, owner.getRecipeOutputs(), owner.getRecipeSourceIndices());
+    return recipeOutputs(owner, networkId);
 }
 
 int CrafterBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {

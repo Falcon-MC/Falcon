@@ -86,7 +86,7 @@ BOUND = {
         'EntityDefinitionFeedItem', 'CatmullRomSpline', 'LinearSpline', 'FogSettings',
         'FogSettingsError', 'PrimitiveShape', 'TextPrimitive', 'PrimitiveShapesManager',
         'PlayerWaypointsMode', 'BlockBoundingBoxUtils', 'BannerPattern', 'CarryOverBlockEntityDataFunction', 'PoiBlockOccupancyFilter',
-        'WatchdogTerminateReason',
+        'WatchdogTerminateReason', 'BlockRecipeProcessingComponent', 'BlockVibrationPropertiesComponent',
     },
     'server-ui': None,
     'common': None,
