@@ -117,6 +117,10 @@ public:
         return mCraftingTableWindowId != CONTAINER_ID_NONE;
     }
 
+    const Vector3i &getCraftingTablePosition() const {
+        return mCraftingTablePosition;
+    }
+
     bool isFurnaceOpen() const {
         return mFurnaceWindowId != CONTAINER_ID_NONE;
     }

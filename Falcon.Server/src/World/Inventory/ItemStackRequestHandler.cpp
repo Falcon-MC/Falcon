@@ -80,6 +80,9 @@ namespace {
         bool mStonecutterActive = false;
         int32_t mStonecutterInputRequired = 0;
         int32_t mStonecutterInputConsumed = 0;
+        // a grid recipe produced this output: the item the player crafted, for playerCraftRecipe
+        ItemStack mCraftedRecipeOutput;
+        bool mCraftedRecipe = false;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -802,6 +805,9 @@ namespace {
         context.mCraftingConsumed.assign(context.mCraftingRequired.size(), 0);
         context.mCraftingGridWidth = gridWidth;
         context.mCraftingActive = true;
+        // the recipe output as declared, not multiplied by the requested craft count
+        context.mCraftedRecipeOutput = output;
+        context.mCraftedRecipe = true;
         return true;
     }
 
@@ -980,7 +986,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         const PacketCodecContext *codecContext, std::vector<BundleSyncData> *outBundles, int32_t playerXpLevel,
         bool creativeMode, int32_t *outEnchantLevelsConsumed, bool anvilOpen, int32_t *outAnvilLevelsConsumed,
         bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
-        const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes) {
+        const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1116,6 +1122,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
 
     if (outAnvilUsed != nullptr)
         *outAnvilUsed = context.mAnvilActive;
+
+    if (outCraftedRecipeItem != nullptr && context.mCraftedRecipe)
+        *outCraftedRecipeItem = context.mCraftedRecipeOutput;
 
     if (outCartographyLock != nullptr)
         *outCartographyLock = context.mCartographyLock;
