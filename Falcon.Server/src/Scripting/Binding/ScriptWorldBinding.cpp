@@ -331,7 +331,9 @@ namespace {
     JSValue worldSetTime(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         double time = 0.0;
-        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &time, argv[0]) != 0 || !std::isfinite(time))
+        // the tick count is an int64: a time it cannot hold fails the conversion
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &time, argv[0]) != 0 || !std::isfinite(time)
+            || time < -9223372036854775808.0 || time >= 9223372036854775808.0)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         World &world = defaultWorld(ctx);
@@ -642,12 +644,38 @@ namespace {
         return identifier;
     }
 
+    // a block written or an entity spawned by a script: in the world's height, in a loaded chunk (the game
+    // throws instead of generating the column)
+    JSValue writableAt(ScriptApi &api, Level &level, const Vector3i &position) {
+        if (position.y < level.getMinY() || position.y > level.getMaxY())
+            return api.throwError("LocationOutOfWorldBoundariesError", "");
+        if (level.peekChunkPtr(position.x >> 4, position.z >> 4) == nullptr)
+            return api.throwError("LocationInUnloadedChunkError", "");
+        return JS_UNDEFINED;
+    }
+
+    bool inIntRange(double value) {
+        return std::isfinite(value) && value >= (double) INT32_MIN && value < (double) INT32_MAX + 1.0;
+    }
+
+    bool readPosition(JSContext *ctx, JSValueConst value, double &x, double &y, double &z, Vector3i &block) {
+        if (!readVector3(ctx, value, x, y, z) || !inIntRange(x) || !inIntRange(y) || !inIntRange(z))
+            return false;
+        block = Vector3i((int32_t) std::floor(x), (int32_t) std::floor(y), (int32_t) std::floor(z));
+        return true;
+    }
+
     JSValue blockSetType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const ScriptBlockRef *block = blockOf(ctx, thisVal);
         if (argc < 1)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        ScriptApi::fromContext(ctx)->setBlockType(blockLevel(ctx, *block), block->mX, block->mY, block->mZ,
-                                                  typeIdentifier(ctx, argv[0]));
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const std::string type = typeIdentifier(ctx, argv[0]);
+        Level &level = blockLevel(ctx, *block);
+        JSValue refused = writableAt(*api, level, Vector3i(block->mX, block->mY, block->mZ));
+        if (JS_IsException(refused))
+            return refused;
+        api->setBlockType(level, block->mX, block->mY, block->mZ, type);
         return JS_UNDEFINED;
     }
 
@@ -658,8 +686,13 @@ namespace {
 
         ScriptApi *api = ScriptApi::fromContext(ctx);
         BlockState state;
-        if (api->readPermutation(argv[0], state))
-            api->setBlock(blockLevel(ctx, *block), block->mX, block->mY, block->mZ, state);
+        if (!api->readPermutation(argv[0], state))
+            return JS_UNDEFINED;
+        Level &level = blockLevel(ctx, *block);
+        JSValue refused = writableAt(*api, level, Vector3i(block->mX, block->mY, block->mZ));
+        if (JS_IsException(refused))
+            return refused;
+        api->setBlock(level, block->mX, block->mY, block->mZ, state);
         return JS_UNDEFINED;
     }
 
@@ -694,15 +727,16 @@ namespace {
     JSValue dimensionSetBlockType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         double x = 0.0, y = 0.0, z = 0.0;
-        if (argc < 2 || !readVector3(ctx, argv[0], x, y, z))
+        Vector3i position;
+        if (argc < 2 || !readPosition(ctx, argv[0], x, y, z, position))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
+        const std::string type = typeIdentifier(ctx, argv[1]);
         Level &level = api->levelOf(thisVal);
-        const int32_t blockY = (int32_t) std::floor(y);
-        if (blockY < level.getMinY() || blockY > level.getMaxY())
-            return api->throwError("LocationOutOfWorldBoundariesError", "");
-        api->setBlockType(level, (int32_t) std::floor(x), blockY, (int32_t) std::floor(z),
-                          typeIdentifier(ctx, argv[1]));
+        JSValue refused = writableAt(*api, level, position);
+        if (JS_IsException(refused))
+            return refused;
+        api->setBlockType(level, position.x, position.y, position.z, type);
         return JS_UNDEFINED;
     }
 
@@ -719,11 +753,16 @@ namespace {
     JSValue dimensionSpawnEntity(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         double x = 0.0, y = 0.0, z = 0.0;
-        if (argc < 2 || !readVector3(ctx, argv[1], x, y, z))
+        Vector3i position;
+        if (argc < 2 || !readPosition(ctx, argv[1], x, y, z, position))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        ServerActor *actor = api->host().spawnActor(api->levelOf(thisVal), typeIdentifier(ctx, argv[0]),
-                                                    Vector3f((float) x, (float) y, (float) z));
+        const std::string type = typeIdentifier(ctx, argv[0]);
+        Level &level = api->levelOf(thisVal);
+        JSValue refused = writableAt(*api, level, position);
+        if (JS_IsException(refused))
+            return refused;
+        ServerActor *actor = api->host().spawnActor(level, type, Vector3f((float) x, (float) y, (float) z));
         // the game's messages by failure (sub_14C377CE0): only the peaceful refusal and the fallback reach here
         if (actor == nullptr)
             return api->throwError("EntitySpawnError",
@@ -737,8 +776,12 @@ namespace {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptItemRef *item = argc >= 1 ? api->native<ScriptItemRef>(argv[0]) : nullptr;
         double x = 0.0, y = 0.0, z = 0.0;
-        if (item == nullptr || argc < 2 || !readVector3(ctx, argv[1], x, y, z))
+        Vector3i position;
+        if (item == nullptr || argc < 2 || !readPosition(ctx, argv[1], x, y, z, position))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        JSValue refused = writableAt(*api, api->levelOf(thisVal), position);
+        if (JS_IsException(refused))
+            return refused;
 
         ItemStack stack;
         if (!api->toItemStack(*item->mItem, stack))
@@ -857,10 +900,6 @@ namespace {
         return api.throwError("TickingAreaError", "", fields);
     }
 
-    bool inBlockRange(double value) {
-        return std::isfinite(value) && value >= (double) INT32_MIN && value < (double) INT32_MAX + 1.0;
-    }
-
     // TickingAreaOptions; false for a conversion failure
     bool readTickingArea(ScriptApi &api, JSValueConst options, TickingArea &area) {
         JSContext *ctx = api.context();
@@ -869,8 +908,8 @@ namespace {
         JSValue to = JS_GetPropertyStr(ctx, options, "to");
         double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
         const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
-                           && readVector3(ctx, to, tx, ty, tz) && inBlockRange(fx) && inBlockRange(fy)
-                           && inBlockRange(fz) && inBlockRange(tx) && inBlockRange(ty) && inBlockRange(tz);
+                           && readVector3(ctx, to, tx, ty, tz) && inIntRange(fx) && inIntRange(fy)
+                           && inIntRange(fz) && inIntRange(tx) && inIntRange(ty) && inIntRange(tz);
         if (valid) {
             area = TickingArea::box(
                     Vector3i((int32_t) std::floor(fx), (int32_t) std::floor(fy), (int32_t) std::floor(fz)),

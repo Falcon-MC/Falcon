@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <unordered_set>
 
 using namespace ScriptValues;
@@ -36,9 +37,13 @@ namespace {
         return ScriptApi::fromContext(ctx)->levelOf(thisVal);
     }
 
+    bool inIntRange(double value) {
+        return std::isfinite(value) && value >= (double) INT32_MIN && value < (double) INT32_MAX + 1.0;
+    }
+
     bool readBlockLocation(JSContext *ctx, JSValueConst value, Vector3i &out) {
         double x = 0.0, y = 0.0, z = 0.0;
-        if (!readVector3(ctx, value, x, y, z) || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+        if (!readVector3(ctx, value, x, y, z) || !inIntRange(x) || !inIntRange(y) || !inIntRange(z))
             return false;
         out = Vector3i((int32_t) std::floor(x), (int32_t) std::floor(y), (int32_t) std::floor(z));
         return true;
