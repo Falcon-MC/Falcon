@@ -259,6 +259,30 @@ namespace {
                 "A fresh brushable block saves other fields than the game");
         brushable->setLootTable("loot_tables/entities/desert_well_brushable_block.json", -7);
         require(brushable->saveWithPosition().getInt("LootTableSeed", 0) == -7, "The archaeology seed is lost");
+
+        // strokes count every 10 ticks, the cooldown running on from the previous stroke time
+        BrushableBlockActor brushed;
+        bool rollLoot = false;
+        require(brushed.stroke(100, 1, rollLoot) && rollLoot && brushed.getBrushCount() == 1
+                        && brushed.getBrushDirection() == 1,
+                "The first stroke does not count or roll the loot");
+        require(!brushed.stroke(110, 2, rollLoot), "A stroke inside the cooldown counts");
+        require(brushed.stroke(111, 2, rollLoot) && !rollLoot && brushed.getBrushDirection() == 1,
+                "A later stroke rolls the loot again or turns the face");
+        require(!brushed.stroke(120, 1, rollLoot) && brushed.stroke(121, 1, rollLoot) && brushed.getBrushCount() == 3,
+                "A stroke past the cooldown does not count");
+        require(!brushed.stroke(130, 1, rollLoot) && brushed.stroke(131, 1, rollLoot) && brushed.getBrushCount() == 4,
+                "The stroke cooldown restarts from the current tick");
+        bool changed = false;
+        require(brushed.checkReset(171, changed) == 20 && !changed, "The count falls back before the pause ends");
+        require(brushed.checkReset(172, changed) == 10 && changed && brushed.getBrushCount() == 2,
+                "A pause does not take two strokes off");
+        require(brushed.checkReset(182, changed) == 10 && brushed.getBrushCount() == 0, "The count goes below zero");
+        require(brushed.checkReset(192, changed) == 0 && !changed && brushed.getBrushDirection() == 6,
+                "A clean block keeps its brushed face");
+        const int32_t progress[] = {0, 1, 1, 2, 2, 2, 3, 3, 3, 3};
+        for (int32_t count = 0; count < 10; ++count)
+            require(BrushableBlockActor::progressOf(count) == progress[count], "The brushed progress differs");
     }
 }
 
