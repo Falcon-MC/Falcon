@@ -226,6 +226,15 @@ system.runTimeout(() => {
         + (empty.getBlockPermutation({ x: 0, y: 0, z: 0 }) === undefined) + ":" + empty.isValid;
     r.duplicate = capture(() => manager.createEmpty("test:empty", { x: 1, y: 1, z: 1 }));
     r.outside = capture(() => empty.getBlockPermutation({ x: 5, y: 0, z: 0 }));
+    r.tooBig = capture(() => manager.createEmpty("test:huge", { x: 4194304, y: 4194304, z: 1048576 })) + ":"
+        + capture(() => manager.createEmpty("test:huge", { x: 65, y: 1, z: 1 })) + ":"
+        + capture(() => manager.createEmpty("test:huge", { x: 1, y: 385, z: 1 })) + ":"
+        + capture(() => manager.createEmpty("test:huge", { x: 1, y: 1, z: 1e300 })) + ":"
+        + capture(() => manager.createFromWorld("test:huge", dim, { x: 0, y: 100, z: 0 },
+            { x: 64, y: 100, z: 0 })) + ":"
+        + (manager.get("test:huge") === undefined);
+    r.maxSize = JSON.stringify(manager.createEmpty("test:max", { x: 64, y: 384, z: 64 }).size) + ":"
+        + manager.delete("test:max");
     empty.setBlockPermutation({ x: 1, y: 2, z: 3 }, BlockPermutation.resolve("minecraft:dirt"), true);
     r.emptySet = empty.getBlockPermutation({ x: 1, y: 2, z: 3 }).type.id + ":" + empty.getIsWaterlogged({ x: 1, y: 2, z: 3 });
 
@@ -458,6 +467,26 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
                         && parsed.getBlockEntity(Vector3i(1, 0, 2)) != nullptr,
                 "the roundtrip lost blocks, layers or block entities");
         require(!McStructure::parse("not nbt", parsed), "garbage parsed as a structure");
+
+        // 4194304 * 4194304 * 1048576 wraps to 0 in 64 bits
+        size_t volume = 0;
+        require(!McStructure::volumeOf(Vector3i(4194304, 4194304, 1048576), volume)
+                        && !McStructure::volumeOf(Vector3i(2000, 2000, 2000), volume)
+                        && !McStructure::volumeOf(Vector3i(-1, 1, 1), volume)
+                        && McStructure::volumeOf(Vector3i(64, 384, 64), volume) && volume == 64u * 384u * 64u,
+                "a structure volume was not bounded");
+        const McStructure wrapped(Vector3i(4194304, 4194304, 1048576));
+        require(wrapped.getSize().x == 0 && !wrapped.contains(Vector3i(1, 1, 1)),
+                "a structure whose volume wraps still accepts cells");
+        Tag bare = structure.toNbt();
+        bare.put("size", Tag::ofList(Tag::Type::Int, {Tag::ofInt(300), Tag::ofInt(300), Tag::ofInt(300)}));
+        Tag emptyLayers = Tag::ofList(Tag::Type::List);
+        emptyLayers.addToList(Tag::ofList(Tag::Type::Int));
+        emptyLayers.addToList(Tag::ofList(Tag::Type::Int));
+        Tag body = *bare.get("structure");
+        body.put("block_indices", std::move(emptyLayers));
+        bare.put("structure", std::move(body));
+        require(!McStructure::fromNbt(bare, parsed), "a size without the cells to match it was accepted");
 
         McStructure::PlaceOptions options;
         options.mRotation = 1;
@@ -721,6 +750,9 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "empty", "true:{\"x\":2,\"y\":3,\"z\":4}:true:true");
         expect(r, "duplicate", "throw:Error");
         expect(r, "outside", "throw:ArgumentOutOfBoundsError");
+        expect(r, "tooBig", "throw:InvalidArgumentError:throw:InvalidArgumentError:throw:InvalidArgumentError:"
+                            "throw:TypeError:throw:InvalidArgumentError:true");
+        expect(r, "maxSize", "{\"x\":64,\"y\":384,\"z\":64}:true");
         expect(r, "emptySet", "minecraft:dirt:true");
         expect(r, "taken", "mystructure:house:{\"x\":2,\"y\":2,\"z\":3}:minecraft:gold_block");
         expect(r, "placed", "minecraft:gold_block:minecraft:gold_block");

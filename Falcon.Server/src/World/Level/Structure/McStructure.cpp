@@ -40,9 +40,23 @@ namespace {
 }
 
 McStructure::McStructure(const Vector3i &size) : mSize(size) {
-    const size_t volume = (size_t) std::max(size.x, 0) * (size_t) std::max(size.y, 0) * (size_t) std::max(size.z, 0);
+    size_t volume = 0;
+    if (!volumeOf(size, volume))
+        mSize = Vector3i(0, 0, 0);
     for (std::vector<int32_t> &layer: mLayers)
         layer.assign(volume, VOID_INDEX);
+}
+
+bool McStructure::volumeOf(const Vector3i &size, size_t &volume) {
+    volume = 0;
+    if (size.x < 0 || size.y < 0 || size.z < 0)
+        return false;
+    // block entities are keyed by an int32 cell
+    const uint64_t cells = (uint64_t) size.x * (uint64_t) size.y;
+    if (size.z != 0 && cells > (uint64_t) INT32_MAX / (uint64_t) size.z)
+        return false;
+    volume = (size_t) (cells * (uint64_t) size.z);
+    return true;
 }
 
 bool McStructure::contains(const Vector3i &local) const {
@@ -137,13 +151,25 @@ bool McStructure::fromNbt(const Tag &root, McStructure &out) {
         return false;
     Vector3i size;
     const Tag *structure = root.get("structure");
-    if (!readIntList(root.get("size"), size) || size.x < 0 || size.y < 0 || size.z < 0 || structure == nullptr
+    size_t volume = 0;
+    if (!readIntList(root.get("size"), size) || !volumeOf(size, volume) || structure == nullptr
         || !structure->isCompound())
         return false;
 
+    // the size is only trusted once a layer holds that many cells: nothing is allocated for a bare size
+    const Tag *indices = structure->get("block_indices");
+    if (volume > 0) {
+        bool filled = false;
+        if (indices != nullptr && indices->isList()) {
+            for (const Tag &layer: indices->getList())
+                filled = filled || (layer.isList() && layer.getList().size() == volume);
+        }
+        if (!filled)
+            return false;
+    }
+
     McStructure parsed(size);
     readIntList(root.get("structure_world_origin"), parsed.mWorldOrigin);
-    const size_t volume = parsed.mLayers[0].size();
 
     const Tag *palettes = structure->get("palette");
     const Tag *defaults = palettes != nullptr && palettes->isCompound() ? palettes->get("default") : nullptr;
@@ -157,7 +183,6 @@ bool McStructure::fromNbt(const Tag &root, McStructure &out) {
         }
     }
 
-    const Tag *indices = structure->get("block_indices");
     if (indices != nullptr && indices->isList()) {
         const std::vector<Tag> &layers = indices->getList();
         for (size_t layer = 0; layer < 2 && layer < layers.size(); ++layer) {

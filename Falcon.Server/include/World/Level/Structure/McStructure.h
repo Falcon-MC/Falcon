@@ -40,10 +40,16 @@ public:
         std::function<bool(const Vector3i &target, BlockState &state)> mFilter;
     };
 
+    // ScriptStructureManager::createEmptyStructure (sub_14B85BCE0, 26.60): x and z, y being the dimension height
+    static constexpr int32_t MAX_HORIZONTAL_SIZE = 64;
+
     McStructure() = default;
 
-    // every cell void
+    // every cell void; a size without a valid volume gives an empty structure
     explicit McStructure(const Vector3i &size);
+
+    // false for a negative axis or more cells than an int32 indexes
+    static bool volumeOf(const Vector3i &size, size_t &volume);
 
     const Vector3i &getSize() const {
         return mSize;
