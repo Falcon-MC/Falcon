@@ -40,9 +40,10 @@ std::vector<ScriptNetService::Completed> ScriptNetService::pollRequests() {
 }
 
 WebSocketClient &ScriptNetService::openSocket(uint32_t id, const std::string &url,
-                                              const HttpsClient::Headers &headers) {
+                                              const HttpsClient::Headers &headers, uint64_t maxMessageBytes) {
     std::unique_ptr<WebSocketClient> &socket = mSockets[id];
     socket = std::make_unique<WebSocketClient>();
+    socket->setMaxMessageBytes(maxMessageBytes);
     socket->start(url, headers);
     return *socket;
 }
