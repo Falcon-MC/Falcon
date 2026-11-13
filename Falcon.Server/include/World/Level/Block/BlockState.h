@@ -55,11 +55,22 @@ public:
         mResolved.mGeneration = generation;
     }
 
+    // a block the server does not know: played as this state, saved back as the tag it was read from
+    const Tag *getPreserved() const {
+        return mPreserved.mTag;
+    }
+
+    void preserve(const Tag *stored) {
+        mPreserved.mTag = stored;
+    }
+
     bool operator==(const BlockState &other) const {
-        return mName == other.mName && mStates == other.mStates;
+        return mName == other.mName && mStates == other.mStates && mPreserved.mTag == other.mPreserved.mTag;
     }
 
     Tag toNbt() const {
+        if (mPreserved.mTag != nullptr)
+            return *mPreserved.mTag;
         Tag tag = Tag::ofCompound();
         tag.putString("name", mName);
         tag.put("states", mStates);
@@ -105,7 +116,22 @@ private:
         std::atomic<uint32_t> mValue{0};
     };
 
+    // not copied: a copy may be renamed in place and must not save as the stored tag
+    struct PreservedTag {
+        PreservedTag() = default;
+
+        PreservedTag(const PreservedTag &) {}
+
+        PreservedTag &operator=(const PreservedTag &) {
+            mTag = nullptr;
+            return *this;
+        }
+
+        const Tag *mTag = nullptr;
+    };
+
     mutable int32_t mLightProperties = -1;
     mutable ResolvedBlock mResolved;
+    PreservedTag mPreserved;
     mutable LiquidCache mLiquidProperties;
 };

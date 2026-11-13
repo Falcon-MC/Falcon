@@ -889,6 +889,45 @@ int main() {
                             "Network section indices point at other blocks");
             }
         });
+        check("an unknown block is played as info_update and saved back as read", [&]() {
+            Tag states = Tag::ofCompound();
+            states.putInt("test:stage", 3);
+            SubChunk original(0);
+            original.setBlock(2, 3, 4, BlockState("test:removed_pack_block", states));
+            original.setBlock(5, 6, 7, BlockState("minecraft:stone"));
+            BinaryStream written;
+            original.writePersistent(written);
+
+            ReadOnlyBinaryStream input(written.getBuffer());
+            SubChunk loaded(0);
+            require(loaded.readPersistent(input), "A section with an unknown block did not load");
+            require(loaded.getBlock(2, 3, 4).mName == "minecraft:info_update"
+                            && loaded.getBlock(5, 6, 7).mName == "minecraft:stone"
+                            && loaded.getBlock(0, 0, 0).mName == "minecraft:air",
+                    "The unknown block was not shown as info_update");
+            BinaryStream rewritten;
+            loaded.writePersistent(rewritten);
+            require(rewritten.getBuffer() == written.getBuffer(), "The unknown block was not saved back unchanged");
+
+            LevelChunk chunk(0, 0);
+            chunk.getSubChunk(4) = loaded;
+            chunk.pack();
+            BinaryStream unpacked;
+            chunk.getSubChunk(4).writePersistent(unpacked);
+            require(unpacked.getBuffer() == written.getBuffer(), "A packed chunk lost the unknown block");
+
+            SubChunk placed(0);
+            placed.setBlock(2, 3, 4, loaded.getBlock(2, 3, 4));
+            loaded.setBlock(8, 8, 8, BlockState("minecraft:info_update"));
+            BinaryStream mixed;
+            loaded.writePersistent(mixed);
+            ReadOnlyBinaryStream mixedInput(mixed.getBuffer());
+            SubChunk reread(0);
+            require(placed.getBlock(2, 3, 4).getPreserved() != nullptr && reread.readPersistent(mixedInput)
+                            && reread.getBlock(8, 8, 8).getPreserved() == nullptr
+                            && reread.getBlock(2, 3, 4).getPreserved() != nullptr,
+                    "A real info_update took the unknown block's place, or a moved one lost it");
+        });
         check("a packed chunk unpacks to exactly the same storage", [&]() {
             const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:water", "minecraft:glowstone",
                                    "minecraft:oak_log"};
