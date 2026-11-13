@@ -2,6 +2,7 @@
 
 #include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Commands/ScoreboardCommand.h"
@@ -156,6 +157,17 @@ std::vector<ServerPlayer *> ExecuteCommand::resolveTargets(CommandOrigin &sender
     return mHandler.resolveTargets(origin, selector);
 }
 
+std::vector<Actor *> ExecuteCommand::resolveEntities(CommandOrigin &sender, const Context &context,
+                                                     const std::string &selector) {
+    ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation, context.mLevel);
+    std::vector<Actor *> entities;
+    for (ServerPlayer *player: mHandler.resolveTargets(origin, selector))
+        entities.push_back(player);
+    for (ServerActor *actor: mHandler.resolveActorTargets(origin, selector))
+        entities.push_back(actor);
+    return entities;
+}
+
 Level &ExecuteCommand::resolveLevel(const Context &context) const {
     return context.mLevel == nullptr ? mHandler.getLevel() : *context.mLevel;
 }
@@ -187,7 +199,10 @@ bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context, co
         return false;
     }
 
-    if (position.y < level.getMinY() || position.y > level.getMaxY()) {
+    // the game finds no command area for an unloaded chunk and answers outOfWorld (sub_14BE21B90): no column is
+    // generated for a test
+    if (position.y < level.getMinY() || position.y > level.getMaxY()
+        || level.peekChunkPtr(position.x >> 4, position.z >> 4) == nullptr) {
         sender.sendTranslation("commands.testforblock.outOfWorld", {});
         return false;
     }
@@ -195,6 +210,21 @@ bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context, co
     matched = level.getBlockState(position.x, position.y, position.z).mName == expected.mName;
     next = index + 4;
     return true;
+}
+
+namespace {
+    // int64 corners: a destination near the int32 limit plus the area width must not wrap
+    bool areaLoaded(Level &level, int64_t minX, int64_t minZ, int64_t maxX, int64_t maxZ) {
+        if (maxX > INT32_MAX || maxZ > INT32_MAX)
+            return false;
+        for (int64_t chunkX = minX >> 4; chunkX <= (maxX >> 4); ++chunkX) {
+            for (int64_t chunkZ = minZ >> 4; chunkZ <= (maxZ >> 4); ++chunkZ) {
+                if (level.peekChunkPtr((int32_t) chunkX, (int32_t) chunkZ) == nullptr)
+                    return false;
+            }
+        }
+        return true;
+    }
 }
 
 bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
@@ -241,7 +271,10 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
     }
 
     if (minimum.y < level.getMinY() || maximum.y > level.getMaxY() || destination.y < level.getMinY()
-        || destination.y + height - 1 > level.getMaxY()) {
+        || destination.y + height - 1 > level.getMaxY()
+        || !areaLoaded(level, minimum.x, minimum.z, maximum.x, maximum.z)
+        || !areaLoaded(level, destination.x, destination.z, (int64_t) destination.x + width - 1,
+                       (int64_t) destination.z + depth - 1)) {
         sender.sendTranslation("commands.testforblock.outOfWorld", {});
         return false;
     }
@@ -312,14 +345,14 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             return false;
         }
 
-        const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 1]);
+        const std::vector<Actor *> targets = resolveEntities(sender, context, arguments[index + 1]);
         if (targets.empty()) {
             sender.sendTranslation("commands.generic.noTargetMatch", {});
             return false;
         }
 
         bool result = false;
-        for (ServerPlayer *target: targets) {
+        for (Actor *target: targets) {
             Context derived = context;
 
             if (subcommand == "as") {
@@ -373,14 +406,14 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 return false;
             }
 
-            const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 2]);
+            const std::vector<Actor *> targets = resolveEntities(sender, context, arguments[index + 2]);
             if (targets.empty()) {
                 sender.sendTranslation("commands.generic.noTargetMatch", {});
                 return false;
             }
 
             bool result = false;
-            for (ServerPlayer *target: targets) {
+            for (Actor *target: targets) {
                 Context derived = context;
                 derived.mPosition = target->getPosition();
 
@@ -410,14 +443,14 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
                 return false;
             }
 
-            const std::vector<ServerPlayer *> targets = resolveTargets(sender, context, arguments[index + 2]);
+            const std::vector<Actor *> targets = resolveEntities(sender, context, arguments[index + 2]);
             if (targets.empty()) {
                 sender.sendTranslation("commands.generic.noTargetMatch", {});
                 return false;
             }
 
             bool result = false;
-            for (ServerPlayer *target: targets) {
+            for (Actor *target: targets) {
                 Context derived = context;
                 derived.mRotation = target->getRotation();
 
