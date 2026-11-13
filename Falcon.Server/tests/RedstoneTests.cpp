@@ -229,6 +229,8 @@ namespace {
 
     void detectorRail() {
         RedstoneFixture fixture;
+        // World::open hands the level its owner, the rail reads the minecarts through it
+        fixture.mLevel.setOwner(&fixture.mOwner);
 
         fixture.set(ORIGIN, VanillaBlocks::DETECTOR_RAIL().toBlockState());
         const auto powered = [&]() { return fixture.at(ORIGIN).mStates.getByte("rail_data_bit", 0) != 0; };
