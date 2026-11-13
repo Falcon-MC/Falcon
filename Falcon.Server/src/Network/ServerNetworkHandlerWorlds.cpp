@@ -143,8 +143,10 @@ void ServerNetworkHandler::_unloadWorldNow(uint32_t id, const std::string &name)
             ++it;
     }
 
-    for (Level *level: world->getLevels())
+    for (Level *level: world->getLevels()) {
         PistonSystem::forgetLevel(*level);
+        mScriptEngine.forgetLevel(*level);
+    }
     world->saveAll();
     AutoCompaction::untrack(world->getOverworld());
     world->close();

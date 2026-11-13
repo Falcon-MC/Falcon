@@ -1976,6 +1976,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         engine.onCustomBlockFallOn(player, level, "test:block", at, 3.5f);
         for (int32_t power: {0, 2, 5, 5, 9, 0})
             engine.onCustomBlockRedstone(level, "test:block", at, power);
+        // a block placed again starts from no power: the same 9 fires once more
+        engine.onCustomBlockRedstone(level, "test:block", at, 9);
+        engine.onCustomBlockPlaced(level, at, BlockState("test:block"), BlockState("minecraft:air"));
+        engine.onCustomBlockRedstone(level, "test:block", at, 9);
         engine.onCustomBlockBreak(level, at, BlockState("test:block"), &player);
         PlayerBreakBlockAfterEvent legacyBroken(player, at, "legacy:block");
         owner.getEventBus().after().mPlayerBreakBlock.emit(legacyBroken);
@@ -3051,7 +3055,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(c, "onStepOn", "BlockComponentStepOnEvent|entity|" + params);
         expect(c, "onStepOff", "BlockComponentStepOffEvent|entity|" + params);
         expect(c, "onEntityFallOn", "BlockComponentEntityFallOnEvent|entity+fallDistance|" + params + "|3.5;");
-        expect(c, "onRedstoneUpdate", "2>5;5>9;");
+        expect(c, "onRedstoneUpdate", "2>5;5>9;0>9;0>9;");
         expect(c, "onBreak", "BlockComponentBlockBreakEvent|brokenBlockPermutation+entitySource|" + params + "|true");
         expect(c, "onPlayerBreak", "BlockComponentPlayerBreakEvent|brokenBlockPermutation+player|" + params);
         require(c.get("onPlayerDestroy") == nullptr, "a 2.x pack received the 1.x onPlayerDestroy hook");

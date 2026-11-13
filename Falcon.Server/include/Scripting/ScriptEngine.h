@@ -127,6 +127,9 @@ public:
                              float fallDistance);
 
     // the power the block receives; hooks fire on a change reaching minecraft:redstone_consumer's min_power
+    // a level about to be freed: another one may later get its address
+    void forgetLevel(const Level &level);
+
     void onCustomBlockRedstone(Level &level, const std::string &blockId, const Vector3i &position, int32_t power);
 
     // beforeOnPlayerPlace; true when cancelled, placed takes the permutation scripts chose
