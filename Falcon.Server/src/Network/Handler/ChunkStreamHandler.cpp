@@ -630,12 +630,11 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
     }
     state.mLastLoaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
 
-    // Shrinking the radius to 1 first drops every chunk sent around the old position; the
-    // radius is then widened to the teleport budget so the destination streams immediately
-    // instead of waiting for the next tick.
-    updateInRadiusChunks(state, 1, state.mComparatorChunkX, state.mComparatorChunkZ);
+    // the full view around the destination: a short hop keeps what the client holds, tick() only redoes
+    // this when the chunk changes; the destination's first chunks load now, not on the next tick
+    updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
+                         state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);
-    updateInRadiusChunks(state, TELEPORT_LOAD_COUNT, state.mComparatorChunkX, state.mComparatorChunkZ);
 
     pruneLoadingQueueOutOfRadius(state);
     pruneQueueOutOfRadius(state, state.mReadyToSend, owner.getLevelFor(player), player.getRuntimeId());
