@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Misc/ArmorStandActor.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Item/ArmorStandItem.h"
 #include "World/Actor/VanillaActorTable.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
@@ -478,6 +479,54 @@ namespace {
             require(fixture.at(8, 101, 8) == "minecraft:air" && fixture.at(8, 102, 8) == "minecraft:slime"
                             && fixture.at(9, 102, 8) == "minecraft:stone",
                     "a sticky piston that cannot pull its structure did not retract empty-handed");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:pumpkin");
+            fixture.power(true);
+            size_t pumpkins = 0;
+            for (const std::unique_ptr<ItemActor> &dropped: fixture.mOwner.getItemEntities()) {
+                if (!dropped->isRemoved() && !dropped->getItem().isAir()
+                    && dropped->getItem().mDefinition->getIdentifier() == "minecraft:pumpkin")
+                    pumpkins++;
+            }
+            require(fixture.at(8, 101, 8) == "minecraft:piston_arm_collision" && pumpkins == 1,
+                    "a piston broke a pumpkin without dropping it");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:stone");
+            fixture.mLevel.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
+            PistonSystem::onRedstoneUpdate(fixture.mOwner, fixture.mLevel, fixture.mPiston,
+                                           fixture.mLevel.getBlockState(8, 100, 8));
+            require(fixture.at(8, 101, 8) == "minecraft:air" && PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+                    "a pushed block did not wait for the arm");
+            PistonSystem::finishMoves(fixture.mOwner, fixture.mLevel);
+            require(fixture.at(8, 102, 8) == "minecraft:stone"
+                            && !PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+                    "finishing the moves did not place the pushed block");
+        }
+        {
+            PistonFixture fixture;
+            Level other("Other", 4, 1);
+            other.getChunk(0, 0);
+            for (int y = 95; y <= 120; ++y)
+                other.setBlockState(8, y, 8, BlockState("minecraft:air"));
+            BlockState piston = block("minecraft:piston");
+            piston.mStates.putInt("facing_direction", 1);
+            other.setBlockState(8, 100, 8, piston);
+            other.setBlockState(8, 101, 8, block("minecraft:stone"));
+            other.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
+            PistonSystem::onRedstoneUpdate(fixture.mOwner, other, fixture.mPiston, other.getBlockState(8, 100, 8));
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(fixture.mOwner, fixture.mLevel);
+            require(fixture.at(8, 102, 8) == "minecraft:air", "a piston move of one level ended in another");
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(fixture.mOwner, other);
+            require(other.getBlockState(8, 102, 8).mName == "minecraft:stone", "a piston move lost its level");
+            PistonSystem::forgetLevel(other);
         }
     }
 

@@ -8,6 +8,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <chrono>
@@ -203,6 +204,7 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
 
 void ServerNetworkHandler::saveAllActors() {
     for (Level *level: getLevels()) {
+        PistonSystem::finishMoves(*this, *level);
         const std::unordered_set<int64_t> &columns = getWorldOf(*level).getActorLoadedChunks(level->getDimensionType());
 
         // one pass, in saveActorsForChunk() order; asking each loaded chunk walks every actor once per chunk
@@ -318,6 +320,10 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
     for (const int64_t column: loadedChunks) {
         if (active.count(column) == 0)
             unloaded.push_back(column);
+    }
+    if (!unloaded.empty()) {
+        const std::unordered_set<int64_t> leaving(unloaded.begin(), unloaded.end());
+        PistonSystem::finishMoves(*this, level, &leaving);
     }
 
     for (const int64_t column: unloaded) {

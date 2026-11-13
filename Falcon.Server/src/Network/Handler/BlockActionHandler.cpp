@@ -18,6 +18,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Player/ExperienceValues.h"
 #include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/VanillaItems.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -663,7 +664,7 @@ bool BlockActionHandler::canHarvest(const BlockData &block, const ItemStack &too
 
 void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                       const BlockState &brokenState, bool dropItems, const ItemStack &tool,
-                                      const Actor *entitySource) {
+                                      const Actor *entitySource, const Vector3i *blockSource) {
     const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
 
@@ -700,7 +701,7 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
 
     level.onBlockBroken(position, brokenState);
     if (brokenBlock == nullptr)
-        owner.getScriptEngine().onCustomBlockBreak(level, position, brokenState, entitySource);
+        owner.getScriptEngine().onCustomBlockBreak(level, position, brokenState, entitySource, blockSource);
 }
 
 void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -1208,7 +1209,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (isInSpawnProtection(owner, player, level, target))
         return false;
 
-    if (!isBlockChangeAllowed(level, target, player))
+    if (!isBlockChangeAllowed(level, target, player) || PistonSystem::isMovingInto(level, target))
         return false;
 
     const BlockDefinition &definition = *heldItem.mBlockDefinition;

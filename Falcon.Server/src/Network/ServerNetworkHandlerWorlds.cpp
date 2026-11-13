@@ -4,6 +4,7 @@
 #include "World/Level/Storage/AutoCompaction.h"
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 
@@ -86,6 +87,7 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
     }
 
     for (Level *level: world->getLevels()) {
+        PistonSystem::finishMoves(*this, *level);
         std::unordered_set<int64_t> &loadedChunks = world->getActorLoadedChunks(level->getDimensionType());
         for (const int64_t column: loadedChunks) {
             const int32_t chunkX = (int32_t) (column >> 32);
@@ -124,6 +126,8 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
             ++it;
     }
 
+    for (Level *level: world->getLevels())
+        PistonSystem::forgetLevel(*level);
     world->saveAll();
     AutoCompaction::untrack(world->getOverworld());
     world->close();
