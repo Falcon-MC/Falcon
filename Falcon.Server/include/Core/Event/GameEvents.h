@@ -2,6 +2,7 @@
 
 #include "Core/Event/Event.h"
 #include "Core/Math/Vector3i.h"
+#include "Protocol/Types/ItemStack.h"
 #include "World/Level/Block/BlockState.h"
 
 #include <optional>
@@ -43,6 +44,9 @@ struct PlayerBreakBlockAfterEvent : public Event {
 
     // the block as it stood, states included; unset when only the identifier is known
     std::optional<BlockState> mBrokenState;
+    // the held item before the break and after the tool took its wear
+    ItemStack mItemBeforeBreak;
+    ItemStack mItemAfterBreak;
 
     PlayerBreakBlockAfterEvent(ServerPlayer &player, const Vector3i &position, std::string identifier)
             : mPlayer(player), mBlockPosition(position), mBrokenBlockIdentifier(std::move(identifier)) {}

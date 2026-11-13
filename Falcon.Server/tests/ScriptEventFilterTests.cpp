@@ -103,6 +103,15 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
     on(after.playerBreakBlock, "breakLogX",
         { permutations: [BlockPermutation.resolve("minecraft:oak_log", { pillar_axis: "x" })] });
     on(after.playerBreakBlock, "breakLogY", { permutations: [BlockPermutation.resolve("minecraft:oak_log")] });
+    // dynamic properties stay read-only in a before event: the next after event writes the tag
+    before.playerBreakBlock.subscribe((e) => {
+        if (e.itemStack)
+            r.events += "holding" + e.itemStack.typeId + ";";
+    });
+    after.playerBreakBlock.subscribe((e) => {
+        if (e.itemStackBeforeBreak)
+            log("tool" + e.itemStackBeforeBreak.typeId + (e.itemStackAfterBreak ? "Kept" : "Gone"));
+    });
     on(after.playerPlaceBlock, "placeStone", { permutations: [BlockPermutation.resolve("minecraft:stone")] });
     on(after.playerPlaceBlock, "placeDirt", { permutations: [BlockPermutation.resolve("minecraft:dirt")] });
     on(after.effectAdd, "effectPlayer", { entityTypes: ["player"] });
@@ -200,6 +209,14 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         log.mStates.putString("pillar_axis", "x");
         PlayerBreakBlockAfterEvent brokenLog(player, Vector3i(0, 99, 0), log);
         owner.getEventBus().after().mPlayerBreakBlock.emit(brokenLog);
+        player.getInventory().setItemInHand(owner.createItemStack("minecraft:shears", 1));
+        PlayerBreakBlockBeforeEvent breaking(player, Vector3i(0, 99, 0));
+        owner.getEventBus().before().mPlayerBreakBlock.emit(breaking);
+        // the last use wore the tool out: nothing left in the hand after the break
+        PlayerBreakBlockAfterEvent wornOut(player, Vector3i(0, 99, 0), "minecraft:stone");
+        wornOut.mItemBeforeBreak = player.getInventory().getItemInHand();
+        player.getInventory().setItemInHand(ItemStack::air());
+        owner.getEventBus().after().mPlayerBreakBlock.emit(wornOut);
         level.setBlock(Vector3i(1, 100, 1), VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState(), false);
         PlayerPlaceBlockAfterEvent placed(player, Vector3i(1, 100, 1), "minecraft:stone");
         owner.getEventBus().after().mPlayerPlaceBlock.emit(placed);
@@ -215,7 +232,8 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         const std::string wanted =
                 "armed;dieCow;diePlayer;hurtMagic;hurtMagic;hurtPlayer;beforeHurtCow;hitByPlayer;"
                 "hitBlock;sneakPlayer;tamedByPlayer;triggerGrow;dropDiamond;healRegen;jumpPressed;"
-                "released;swingEmpty;slotFour;breakStone;breakLogX;placeStone;effectPlayer;removeCow;";
+                "released;swingEmpty;slotFour;breakStone;breakLogX;holdingminecraft:shears;breakStone;"
+                "toolminecraft:shearsGone;placeStone;effectPlayer;removeCow;";
         require(events == wanted, "filtered events: expected \"" + wanted + "\", got \"" + events + "\"");
         require(result(owner, "legacy") == "hurtCow;", "1.x entityHurt ignored its entityTypes");
     }
