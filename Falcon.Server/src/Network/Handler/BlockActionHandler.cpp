@@ -477,21 +477,27 @@ bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vecto
 }
 
 bool BlockActionHandler::canBreakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
+    // reach first: nothing is read at a position the client only named
+    const PropertiesSettings &properties = owner.getProperties();
+    const float scalar = properties.getServerAuthoritativeBlockBreaking()
+                                 ? properties.getServerAuthoritativeBlockBreakingRangeScalar()
+                                 : 1.0f;
+    if (!_canInteractWithBlock(player, position, scalar))
+        return false;
+
+    Level &level = owner.getLevelFor(player);
+    // a column not in memory is unknown: the callers read it next, and a read would generate it
+    if (!level.isChunkResident(position.x >> 4, position.z >> 4))
+        return false;
+
     if (player.isAdventure()) {
-        const BlockState *block = owner.getLevelFor(player).peekBlockPtr(position.x, position.y, position.z);
+        const BlockState *block = level.peekBlockPtr(position.x, position.y, position.z);
         if (block == nullptr || !ItemProperties::canDestroy(player.getInventory().getItemInHand(), block->mName))
             return false;
     }
 
     // a deny block forbids breaking as much as placing: else breaking bypasses it
-    if (!isBlockChangeAllowed(owner.getLevelFor(player), position, player))
-        return false;
-
-    const PropertiesSettings &properties = owner.getProperties();
-    const float scalar = properties.getServerAuthoritativeBlockBreaking()
-                                 ? properties.getServerAuthoritativeBlockBreakingRangeScalar()
-                                 : 1.0f;
-    return _canInteractWithBlock(player, position, scalar);
+    return isBlockChangeAllowed(level, position, player);
 }
 
 void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
@@ -953,13 +959,18 @@ bool BlockActionHandler::matchesTransactionItem(const PacketCodecContext &contex
 
 // the nearest allow/deny below in the same column decides; deny still lets creative build
 bool BlockActionHandler::isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player) {
-    for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
-        const std::string &identifier = level.getBlockState(position.x, y, position.z).mName;
+    if (!level.isChunkResident(position.x >> 4, position.z >> 4))
+        return false;
 
-        if (identifier == "minecraft:allow")
+    for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
+        const BlockState *state = level.peekBlockPtr(position.x, y, position.z);
+        if (state == nullptr)
+            continue;
+
+        if (state->mName == "minecraft:allow")
             return true;
 
-        if (identifier == "minecraft:deny")
+        if (state->mName == "minecraft:deny")
             return player.isCreative();
     }
 
@@ -1069,6 +1080,11 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     PlayerInventory &inventory = player.getInventory();
     Level &level = owner.getLevelFor(player);
+
+    // the clicked column is read below: one not in memory would be generated on the tick thread
+    if (!player.isSimulated()
+        && !level.isChunkResident(transaction.mBlockPosition.x >> 4, transaction.mBlockPosition.z >> 4))
+        return false;
 
     const BlockState clickedState = level.getBlockState(transaction.mBlockPosition.x, transaction.mBlockPosition.y,
                                                         transaction.mBlockPosition.z);
