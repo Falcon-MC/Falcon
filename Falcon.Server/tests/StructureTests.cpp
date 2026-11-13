@@ -216,6 +216,12 @@ namespace {
                         && out.mStates.getByte("minecraft:connection_south", -1) == 0
                         && out.mStates.getByte("minecraft:connection_west", -1) == 1,
                 "Mirrored iron bars keep their sides");
+        require(StructureBlockTable::translate(bars, 1, 0, out)
+                        && out.mStates.getByte("minecraft:connection_south", -1) == 0
+                        && out.mStates.getByte("minecraft:connection_west", -1) == 1
+                        && out.mStates.getByte("minecraft:connection_north", -1) == 1
+                        && out.mStates.getByte("minecraft:connection_east", -1) == 0,
+                "Turned iron bars do not turn their sides");
 
         StructureTemplate::PaletteEntry ladder;
         ladder.mName = "minecraft:ladder";

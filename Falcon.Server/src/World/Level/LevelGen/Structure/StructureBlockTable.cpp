@@ -619,8 +619,13 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
     }
 
     if (name == "minecraft:iron_bars") {
-        for (const char *side: {"east", "north", "south", "west"})
-            states.putByte(std::string("minecraft:connection_") + side, property(entry, side) == "true" ? 1 : 0);
+        // the sides turn with the template (sub_145E93340); written in palette key order
+        static const std::array<const char *, 4> CLOCKWISE = {"north", "east", "south", "west"};
+        for (const size_t side: {(size_t) 1, (size_t) 0, (size_t) 2, (size_t) 3}) {
+            const char *from = CLOCKWISE[(side + 4 - (size_t) (quarterTurns & 3)) & 3];
+            states.putByte(std::string("minecraft:connection_") + CLOCKWISE[side],
+                           property(entry, from) == "true" ? 1 : 0);
+        }
         out = BlockState(name, states);
         return true;
     }
