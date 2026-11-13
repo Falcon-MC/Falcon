@@ -103,6 +103,8 @@ namespace {
         std::vector<int32_t> mSignals;
 
         explicit VibrationFixture(uint32_t range = 8) : mLevel(mWorld.getLevel(DimensionType::Overworld)) {
+            // the server sets it when it opens the world, which the tests never do
+            mLevel.setOwner(&mOwner);
             for (int32_t chunkX = 0; chunkX <= 1; ++chunkX) {
                 for (int32_t chunkZ = 0; chunkZ <= 1; ++chunkZ)
                     mLevel.getChunk(chunkX, chunkZ);
@@ -283,6 +285,7 @@ namespace {
     void sculkSensorActivates() {
         ServerNetworkHandler owner("Sculk", "", 1);
         Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        level.setOwner(&owner);
         std::vector<int64_t> columns;
         for (int32_t chunkX = -1; chunkX <= 1; ++chunkX) {
             for (int32_t chunkZ = -1; chunkZ <= 1; ++chunkZ) {
