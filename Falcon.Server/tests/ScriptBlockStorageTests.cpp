@@ -14,10 +14,24 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+// tick() returns at once while the server does not listen: the main thread task step of a tick, where a stored
+// entity leaves the world
+class ServerTickProbe {
+public:
+    static void runMainThreadTasks(ServerNetworkHandler &owner) {
+        std::vector<std::function<void()>> tasks;
+        tasks.swap(owner.mMainThreadTasks);
+        for (const std::function<void()> &task: tasks)
+            task();
+    }
+};
 
 namespace {
     void require(bool condition, const std::string &message) {
@@ -184,7 +198,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         engine.tick(0);
 
         engine.emitScriptEvent("storage:store", "");
-        owner.tick(false);
+        ServerTickProbe::runMainThreadTasks(owner);
 
         BlockActor *jar = level.getBlockActors().find(Vector3i(1, 100, 1));
         require(jar != nullptr && std::string(jar->getBlockActorId()) == "DataDriven",
@@ -200,7 +214,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
                 "the bucket is not keyed by the module or lost the pig");
 
         engine.emitScriptEvent("storage:move", "");
-        owner.tick(false);
+        ServerTickProbe::runMainThreadTasks(owner);
 
         const std::unique_ptr<json::Value> r = result(owner);
         expect(*r, "component", "true:minecraft:entity_storage:minecraft:entity_storage:0");
