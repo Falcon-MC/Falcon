@@ -465,8 +465,9 @@ void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlaye
 void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
     std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
 
-    for (auto it = actors.begin(); it != actors.end();) {
-        ItemActor &actor = **it;
+    // by index: a pickup handler can drop an item (the vector grows) or move one out of it
+    for (size_t index = 0; index < actors.size();) {
+        ItemActor &actor = *actors[index];
 
         actor.tick();
         if (isInFire(owner, actor) && !isFireResistant(actor.getItem()))
@@ -484,14 +485,18 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
 
         tryPickupItemActor(owner, actor);
 
+        // erased by a handler: the next one took its place
+        if (index >= actors.size() || actors[index].get() != &actor)
+            continue;
+
         if (actor.isRemoved() || actor.isExpired()) {
             broadcastItemActorRemove(owner, actor);
             owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
-            it = actors.erase(it);
+            actors.erase(actors.begin() + (long) index);
             continue;
         }
 
-        ++it;
+        ++index;
     }
 }
 

@@ -133,6 +133,39 @@ namespace {
         return item == nullptr ? ItemStack::air() : *item;
     }
 
+    // ServerPlayer::attackActor bounds a hit the same way
+    const float ENTITY_INTERACT_REACH = 8.0f;
+
+    bool isEnchantingSlot(ContainerSlotType type) {
+        return type == ContainerSlotType::EnchantingInput || type == ContainerSlotType::EnchantingMaterial;
+    }
+
+    bool usesEnchantingTable(const ItemStackRequestAction &action) {
+        if (isEnchantingSlot(action.mSource.mContainerName.mContainer)
+            || isEnchantingSlot(action.mDestination.mContainerName.mContainer))
+            return true;
+
+        return action.mType == ItemStackRequestActionType::CraftRecipe
+               && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
+    }
+
+    // the table's two slots live in the player inventory: nothing else gives them back
+    bool returnEnchantingItems(ServerPlayer &player) {
+        bool returned = false;
+        for (const ContainerSlotType type:
+             {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
+            ItemStack *slot = player.getInventory().resolveSlot(type, 0);
+            if (slot == nullptr || slot->isAir())
+                continue;
+
+            ItemStack item = *slot;
+            returnToInventory(player, item);
+            *slot = std::move(item);
+            returned = true;
+        }
+        return returned;
+    }
+
     bool isCraft(const ItemStackRequestAction &action) {
         if (action.mType == ItemStackRequestActionType::CraftCreative)
             return true;
@@ -471,7 +504,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         for (const ItemStackRequestAction &action: request.mActions)
             creativeCraft = creativeCraft || action.mType == ItemStackRequestActionType::CraftCreative;
 
-        if ((creativeCraft && gameType != (int32_t) GameType::Creative) || !allowRequest(owner, player, request)) {
+        // the enchanting slots exist only while the table's window is open
+        bool strayEnchanting = false;
+        if (!manager.isContainerOpen() || manager.getCurrentWindowType() != ContainerType::Enchantment) {
+            for (const ItemStackRequestAction &action: request.mActions)
+                strayEnchanting = strayEnchanting || usesEnchantingTable(action);
+        }
+
+        if (strayEnchanting || (creativeCraft && gameType != (int32_t) GameType::Creative)
+            || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
             rejected.mRequestId = request.mRequestId;
             rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
@@ -619,6 +660,15 @@ bool InventoryHandler::interactWithEntity(ServerNetworkHandler &owner, ServerPla
                                               player.getInventory().getSelectedSlot());
         return false;
     }
+
+    // the id alone names any actor of the server: same level and within reach only
+    const Vector3f delta(target->getPosition().x - player.getPosition().x,
+                         target->getPosition().y - player.getPosition().y,
+                         target->getPosition().z - player.getPosition().z);
+    if (!target->sharesLevelWith(player)
+        || !(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z
+             <= ENTITY_INTERACT_REACH * ENTITY_INTERACT_REACH))
+        return false;
 
     if (owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target))
         return false;
@@ -829,6 +879,9 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
         manager.syncSlot(InventoryManager::InventoryId::Cursor, 0);
     }
 
+    if (returnEnchantingItems(player))
+        manager.syncAll();
+
     manager.onClientRemoveWindow(windowId);
 }
 
@@ -864,6 +917,15 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
     if (!inventory.getCursor().isAir())
         returned.push_back(inventory.getCursor());
     inventory.setCursor(ItemStack::air());
+
+    for (const ContainerSlotType type: {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
+        ItemStack *slot = inventory.resolveSlot(type, 0);
+        if (slot == nullptr || slot->isAir())
+            continue;
+
+        returned.push_back(*slot);
+        *slot = ItemStack::air();
+    }
 
     for (ItemStack &item: returned) {
         returnToInventory(player, item);
