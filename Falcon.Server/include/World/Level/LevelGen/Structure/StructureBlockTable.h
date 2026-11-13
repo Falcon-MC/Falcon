@@ -21,6 +21,18 @@ public:
     static bool translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out,
                           const WoodSpecies &wood);
 
+    // mirror as the template settings store it, applied before the turn: 1 swaps north and south, 2 east and west;
+    // false as well for an oriented block whose mirrored state is not known
+    static bool translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                          BlockState &out);
+
+    static bool translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                          BlockState &out, const WoodSpecies &wood);
+
     // the banner Type the template loader gives a banner without one, from its file block name: 1 is the ominous one
     static int32_t bannerType(const std::string &name);
+
+private:
+    static bool _translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                           BlockState &out, const WoodSpecies &wood);
 };
