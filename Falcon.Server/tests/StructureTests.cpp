@@ -227,6 +227,8 @@ namespace {
         require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:glass")), "glass has flag 1");
         require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:chest")), "a chest clears it");
         require(!StructureMaterials::isBuriedTreasureGround(BlockState("custom:block")), "unknown blocks do not bury");
+        require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:iron_chain")),
+                "chains of 1.26.50 worlds lose the default property");
     }
 }
 

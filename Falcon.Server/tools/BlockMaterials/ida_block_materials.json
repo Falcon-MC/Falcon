@@ -1546,8 +1546,8 @@
   "minecraft:copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D0162EB)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:copper_chest": {
    "type": 3,
@@ -3268,8 +3268,8 @@
   "minecraft:exposed_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D01630C)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:exposed_copper_chest": {
    "type": 3,
@@ -3934,8 +3934,8 @@
   "minecraft:honey_block": {
    "type": 23,
    "source": "registration passes the material constant to sub_1435A7570",
-   "property": true,
-   "property_source": "registration stores [rbp+var_4A8] = 0x40060000 (0x14CF1B786); 0x2040020000 only for worlds older than 1.26.50"
+   "property": false,
+   "property_source": "registration stores [rbp+var_4A8] = 0x40060000 (0x14CF1B786), replaced by 0x2040020000 (0x14CF1B7D6) unless the world is older than 1.26.50"
   },
   "minecraft:honeycomb_block": {
    "type": 23,
@@ -4066,8 +4066,8 @@
   "minecraft:iron_chain": {
    "type": 3,
    "source": "registration passes the material constant to sub_1435A7570",
-   "property": true,
-   "property_source": "registration stores [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50"
+   "property": false,
+   "property_source": "registration stores [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<) (0x14CF2D0A0)"
   },
   "minecraft:iron_door": {
    "type": 3,
@@ -5296,8 +5296,8 @@
   "minecraft:oxidized_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D01634E)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:oxidized_copper_chest": {
    "type": 3,
@@ -6808,8 +6808,8 @@
   "minecraft:sniffer_egg": {
    "type": 23,
    "source": "registration passes the material constant to sub_1435A7570",
-   "property": true,
-   "property_source": "registration stores r13 = 0x40000 (0x14CF7A86B); 0 only for worlds older than 1.26.50"
+   "property": false,
+   "property_source": "registration stores r13 = 0x40000 (0x14CF7A86B), cleared (0x14CF7A8B5) unless the world is older than 1.26.50"
   },
   "minecraft:snow": {
    "type": 23,
@@ -7726,8 +7726,8 @@
   "minecraft:waxed_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D01636F)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:waxed_copper_chest": {
    "type": 3,
@@ -7816,8 +7816,8 @@
   "minecraft:waxed_exposed_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D016390)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:waxed_exposed_copper_chest": {
    "type": 3,
@@ -7918,8 +7918,8 @@
   "minecraft:waxed_oxidized_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D0163D2)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:waxed_oxidized_copper_chest": {
    "type": 3,
@@ -8014,8 +8014,8 @@
   "minecraft:waxed_weathered_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D0163B1)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:waxed_weathered_copper_chest": {
    "type": 3,
@@ -8110,8 +8110,8 @@
   "minecraft:weathered_copper_chain": {
    "type": 3,
    "source": "constructor chain of sub_14D1C0860 takes one material constant",
-   "property": true,
-   "property_source": "sub_14D1C0860 stores its second argument, [rbp+var_590] = 0x4040000 (0x14CE9AEB5); 0x2000000000 only for worlds older than 1.26.50 (call 0x14D01632D)"
+   "property": false,
+   "property_source": "sub_14D1C0860 stores its second argument: [rbp+var_590] = 0x4040000 (0x14CE9AEB5), replaced by 0x2000000000 (0x14CE9AF05) unless the world is older than 1.26.50 (sub_1403A2750 is SemVersion::operator<)"
   },
   "minecraft:weathered_copper_chest": {
    "type": 3,
