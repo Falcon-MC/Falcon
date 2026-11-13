@@ -911,6 +911,7 @@ public:
 
 private:
     friend class MovementInputProbe;
+    friend class ServerTickProbe;
 
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
 
