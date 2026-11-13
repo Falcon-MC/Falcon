@@ -156,3 +156,7 @@ bool CauldronBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
     broadcastCauldronEvent(owner, level, position, actor, EVENT_ADD_DYE);
     return true;
 }
+
+const char *CauldronBlock::getBlockActorId() const {
+    return CauldronBlockActor::BLOCK_ACTOR_ID;
+}

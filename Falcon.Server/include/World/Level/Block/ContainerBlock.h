@@ -44,6 +44,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     static const ContainerBlockDefinition *findDefinition(const std::string &identifier);
 
     static bool isShulkerBoxItem(const ItemStack &item);

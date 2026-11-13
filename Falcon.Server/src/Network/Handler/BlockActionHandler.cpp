@@ -668,7 +668,11 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
     const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
 
+    // the drops and onBroken still read the actor: it leaves with the block once they ran
+    std::unique_ptr<BlockActor> heldActor = level.getBlockActors().take(position);
     level.setBlockState(position.x, position.y, position.z, BlockState(BlockNames::AIR));
+    if (heldActor != nullptr)
+        level.getBlockActors().insert(std::move(heldActor));
 
     if (brokenBlock != nullptr) {
         for (const Vector3i &affected: brokenBlock->getAffectedBlocks(level, position, brokenState)) {
@@ -702,6 +706,7 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
     level.onBlockBroken(position, brokenState);
     if (brokenBlock == nullptr)
         owner.getScriptEngine().onCustomBlockBreak(level, position, brokenState, entitySource, blockSource);
+    level.removeForeignBlockActor(position, level.getBlockState(position.x, position.y, position.z));
 }
 
 void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

@@ -130,3 +130,7 @@ int ChestBlock::getComparatorSignal(Level &level, const Vector3i &position, cons
     (void) state;
     return containerSignal(level, position);
 }
+
+const char *ChestBlock::getBlockActorId() const {
+    return ChestBlockActor::BLOCK_ACTOR_ID;
+}

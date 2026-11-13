@@ -1,5 +1,6 @@
 #include "World/Level/Block/SignBlock.h"
 
+#include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
@@ -50,4 +51,8 @@ void SignBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, cons
     (void) state;
     (void) blockFace;
     SignEditing::onPlaced(owner, player, position, usedItem);
+}
+
+const char *SignBlock::getBlockActorId() const {
+    return SignBlockActor::BLOCK_ACTOR_ID;
 }

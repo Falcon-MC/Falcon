@@ -13,6 +13,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     static int32_t getHoneyLevel(const BlockState &state);
 
     static void setHoneyLevel(Level &level, const Vector3i &position, int32_t honeyLevel);

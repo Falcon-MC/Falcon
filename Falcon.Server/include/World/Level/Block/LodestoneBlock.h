@@ -10,6 +10,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     // CompassItem::useOn (sub_148EED3F0), LodestoneCompassItem::useOn (sub_141ADF5E0)
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;

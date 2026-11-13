@@ -1,5 +1,6 @@
 #include "World/Level/Block/CommandBlock.h"
 
+#include "World/Level/Block/Actor/CommandBlockActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 
 FALCON_REGISTER_BLOCK(CommandBlock, 30);
@@ -18,4 +19,8 @@ bool CommandBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
     CommandBlockContainerManagerModel model;
     model.open(owner, player, position);
     return true;
+}
+
+const char *CommandBlock::getBlockActorId() const {
+    return CommandBlockActor::BLOCK_ACTOR_ID;
 }

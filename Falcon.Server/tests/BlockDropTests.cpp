@@ -3,6 +3,10 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BedBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Actor/FurnaceBlockActor.h"
+#include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -81,6 +85,35 @@ namespace {
                 "a banner lost its patterns");
         require(drops[0].mTag.get("Base") == nullptr, "a banner item kept Base in its tag");
     }
+
+    // a block actor leaves with its block, whatever replaces it; a block of its own type keeps it
+    void replacedBlockActors() {
+        Fixture fixture;
+        Level &level = fixture.mLevel;
+        BlockActorStore &actors = level.getBlockActors();
+        const Vector3i chest(1, 64, 1), furnace(2, 64, 1), sign(3, 64, 1), barrel(4, 64, 1);
+
+        level.setBlockState(chest.x, chest.y, chest.z, BlockState(BlockNames::CHEST));
+        actors.getOrCreate<ChestBlockActor>(chest);
+        level.setBlockState(chest.x, chest.y, chest.z, BlockState("minecraft:stone"));
+        require(actors.find(chest) == nullptr, "a chest replaced by stone kept its block actor");
+
+        level.setBlockState(furnace.x, furnace.y, furnace.z, BlockState("minecraft:furnace"));
+        actors.getOrCreate<FurnaceBlockActor>(furnace);
+        level.setBlockState(furnace.x, furnace.y, furnace.z, BlockState("minecraft:lit_furnace"));
+        require(actors.find<FurnaceBlockActor>(furnace) != nullptr, "a furnace lost its block actor when it lit");
+
+        level.setBlockState(sign.x, sign.y, sign.z, BlockState("minecraft:standing_sign"));
+        actors.getOrCreate<SignBlockActor>(sign);
+        BlockActionHandler::destroyBlock(fixture.mOwner, level, sign, BlockState("minecraft:standing_sign"), false,
+                                         ItemStack::air());
+        require(actors.find(sign) == nullptr, "a broken sign kept its block actor");
+
+        level.setBlockState(barrel.x, barrel.y, barrel.z, BlockState("minecraft:barrel"));
+        actors.getOrCreate<BarrelBlockActor>(barrel);
+        level.setBlockState(barrel.x, barrel.y, barrel.z, BlockState("minecraft:hopper"));
+        require(actors.find(barrel) == nullptr, "a hopper took over a barrel's block actor");
+    }
 }
 
 int main() {
@@ -89,6 +122,7 @@ int main() {
         wallSign();
         bedColor();
         bannerPatterns();
+        replacedBlockActors();
         std::cout << "block drop checks passed\n";
         return 0;
     } catch (const std::exception &error) {

@@ -440,6 +440,9 @@ public:
 
     void setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state);
 
+    // an actor stays only under a block carrying its type
+    void removeForeignBlockActor(const Vector3i &position, const BlockState &state);
+
     BlockState getBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer);
 
     void setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, const BlockState &state);

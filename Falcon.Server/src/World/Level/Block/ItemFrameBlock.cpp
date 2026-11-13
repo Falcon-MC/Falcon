@@ -232,3 +232,7 @@ void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
 
     owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centerOf(position), 0);
 }
+
+const char *ItemFrameBlock::getBlockActorId() const {
+    return isGlow(getIdentifier()) ? GlowItemFrameBlockActor::BLOCK_ACTOR_ID : ItemFrameBlockActor::BLOCK_ACTOR_ID;
+}

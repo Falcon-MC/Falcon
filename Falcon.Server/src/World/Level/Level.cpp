@@ -7,6 +7,7 @@
 #include "World/Level/Particle/Particle.h"
 #include "World/Level/LightSystem.h"
 
+#include "World/Level/Block/Actor/DataDrivenBlockActor.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Block/BlockShape.h"
@@ -25,6 +26,7 @@
 #include <bitset>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iterator>
 #include <random>
 #include <stdexcept>
@@ -1613,8 +1615,10 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     // interned: still the old block once the chunk holds the new one
     const BlockState &previous = chunk.getBlock(x & 15, y, z & 15);
     chunk.setBlock(x & 15, y, z & 15, state);
-    if (previous.mName != state.mName)
+    if (previous.mName != state.mName) {
         mBlockActors.onBlockReplaced(Vector3i(x, y, z));
+        removeForeignBlockActor(Vector3i(x, y, z), state);
+    }
     if (mOwner != nullptr && CustomContentRegistry::getInstance().hasNeighborListeners())
         _recordNeighborChange(x, y, z, previous, state);
     if (mBatchLight) {
@@ -1625,6 +1629,21 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     }
 
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
+}
+
+void Level::removeForeignBlockActor(const Vector3i &position, const BlockState &state) {
+    BlockActor *actor = mBlockActors.find(position);
+    if (actor == nullptr)
+        return;
+    const Block *block = VanillaBlocks::fromState(state);
+    const char *carried = block == nullptr ? nullptr : block->getBlockActorId();
+    if (carried != nullptr && std::strcmp(carried, actor->getBlockActorId()) == 0)
+        return;
+    // pack blocks share the data-driven actor
+    if (dynamic_cast<DataDrivenBlockActor *>(actor) != nullptr
+        && CustomContentRegistry::getInstance().isCustomBlock(state.mName))
+        return;
+    mBlockActors.remove(position);
 }
 
 BlockState Level::getBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer) {
