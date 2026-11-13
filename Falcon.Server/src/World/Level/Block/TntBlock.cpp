@@ -10,6 +10,7 @@ FALCON_REGISTER_BLOCK(TntBlock, 410);
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/DispenseSource.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
@@ -24,9 +25,18 @@ namespace {
     const char *ARROW = "minecraft:arrow";
     const char *SMALL_FIREBALL = "minecraft:small_fireball";
 
+    // LevelEvent 1005, the fuse the dispenser sends
+    const int32_t LEVEL_EVENT_FUSE = 1005;
+
     float nextAngle() {
         static std::mt19937 random(std::random_device{}());
         return std::uniform_real_distribution<float>(0.0f, 1.0f)(random) * MathConstants::TWO_PI_F;
+    }
+
+    Vector3f primeMotion() {
+        const float angle = nextAngle();
+        return Vector3f(-std::sin(angle) * PRIME_HORIZONTAL_MOTION, PRIME_VERTICAL_MOTION,
+                        -std::cos(angle) * PRIME_HORIZONTAL_MOTION);
     }
 }
 
@@ -41,12 +51,26 @@ void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &
                                              level.getBlockState(position.x, position.y, position.z));
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
-    const float angle = nextAngle();
-    const Vector3f motion(-std::sin(angle) * PRIME_HORIZONTAL_MOTION, PRIME_VERTICAL_MOTION,
-                          -std::cos(angle) * PRIME_HORIZONTAL_MOTION);
-
-    owner.spawnPrimedTnt(level, spawnPosition, motion, fuse);
+    owner.spawnPrimedTnt(level, spawnPosition, primeMotion(), fuse);
     owner.playNamedSound(level, PlaySoundName::FUSE, spawnPosition, 1.0f, 1.0f);
+}
+
+// TntBlock::dispense (sub_14B27A1D0, 26.60): refused while tntexplodes is off (sub_14B27A720 reads game rule
+// 21, the rule every TNT ignition reads); the primed TNT spawns through the same call as a primed block
+bool TntBlock::dispense(const DispenseSource &source) const {
+    if (!source.mLevel.getGameRules().getBool("tntexplodes"))
+        return false;
+
+    const Vector3f spawnPosition(std::floor(source.mPosition.x) + 0.5f, std::floor(source.mPosition.y) + 0.5f,
+                                 std::floor(source.mPosition.z) + 0.5f);
+    if (source.mOwner.spawnPrimedTnt(source.mLevel, spawnPosition, primeMotion(), PrimedTntActor::DEFAULT_FUSE)
+        == nullptr)
+        return false;
+
+    source.playClick();
+    source.mOwner.broadcastLevelEvent(source.mLevel, LEVEL_EVENT_FUSE, source.mPosition, 0);
+    source.removeOne();
+    return true;
 }
 
 bool TntBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

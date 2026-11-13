@@ -99,6 +99,38 @@ namespace {
         require(snowball != nullptr && snowball->getMotion().x > 1.4f, "the snowball did not fly at power 1.5");
     }
 
+    // primed only while tntexplodes is on, else dropped
+    void tnt() {
+        Fixture fixture;
+        fixture.load("minecraft:tnt", 2);
+        fixture.fire();
+        require(fixture.count() == 1 && fixture.find("minecraft:tnt") != nullptr, "the dispenser primed no TNT");
+
+        Fixture disabled;
+        disabled.mLevel.getGameRules().setFromString("tntexplodes", "false");
+        disabled.load("minecraft:tnt", 2);
+        disabled.fire();
+        require(disabled.count() == 1 && disabled.find("minecraft:tnt") == nullptr,
+                "TNT was primed with tntexplodes off");
+    }
+
+    // a crop in front grows and takes one; nothing to grow keeps the bone meal
+    void boneMeal() {
+        Fixture fixture;
+        const Vector3i crop(AT.x + 1, AT.y, AT.z);
+        fixture.mLevel.setBlock(crop, VanillaBlocks::fromIdentifier("minecraft:wheat")->toBlockState(), false);
+        fixture.load("minecraft:bone_meal", 2);
+        fixture.fire();
+        require(fixture.count() == 1, "the bone meal was not used on the crop");
+        require(fixture.mLevel.getBlockState(crop.x, crop.y, crop.z).mStates.getInt("growth") > 0,
+                "the crop did not grow");
+
+        Fixture empty;
+        empty.load("minecraft:bone_meal", 2);
+        empty.fire();
+        require(empty.count() == 2, "bone meal with nothing to grow left the dispenser");
+    }
+
     // Item::dispense refuses: the item drops as from a dropper
     void dropped() {
         Fixture fixture;
@@ -124,6 +156,8 @@ int main() {
         ServerPaths::setRoot(directory);
         EntityDefinitions::initialize();
         projectiles();
+        tnt();
+        boneMeal();
         dropped();
     } catch (const std::exception &error) {
         std::clog << "Dispenser regression failed: " << error.what() << '\n';

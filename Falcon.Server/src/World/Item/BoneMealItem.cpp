@@ -25,13 +25,18 @@ FALCON_REGISTER_ITEM(BoneMealItem, 100);
 #include "Protocol/Types/StartGameTypes.h"
 #include "Core/Math/VectorMath.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/DispenseSource.h"
 
 #include <chrono>
+#include <cmath>
 #include <string>
 #include <vector>
 
 namespace {
     const int32_t BONE_MEAL_USE_EVENT = 2005;
+    const char *const SOUND_DISPENSE_FAIL = "block.click.fail";
+    // the extra data the game sends with the dispenser's failed bone meal click
+    const int32_t FAIL_SOUND_DATA = 1000;
 
     int64_t randomSeed() {
         return (int64_t) std::chrono::steady_clock::now().time_since_epoch().count();
@@ -159,6 +164,19 @@ bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, cons
     return BlockChangeSystem::change(level, above, BlockState(grown), BlockChangeCause::Grow, false);
 }
 
+bool BoneMealItem::fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    if (isCrop(state))
+        return applyToCrop(owner, level, position, state);
+    if (SaplingBlock::matches(state.mName))
+        return applyToSapling(owner, level, position, state);
+    if (state.mName == BlockNames::GRASS_BLOCK)
+        return applyToGrass(owner, level, position);
+    if (NyliumBlock::matches(state.mName))
+        return applyToNylium(owner, level, position, state);
+    return false;
+}
+
 bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                                 const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) face;
@@ -168,19 +186,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
         return false;
 
     Level &level = owner.getLevelFor(player);
-    const BlockState state = level.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
-
-    bool applied = false;
-    if (isCrop(state))
-        applied = applyToCrop(owner, level, blockPosition, state);
-    else if (SaplingBlock::matches(state.mName))
-        applied = applyToSapling(owner, level, blockPosition, state);
-    else if (state.mName == BlockNames::GRASS_BLOCK)
-        applied = applyToGrass(owner, level, blockPosition);
-    else if (NyliumBlock::matches(state.mName))
-        applied = applyToNylium(owner, level, blockPosition, state);
-
-    if (!applied)
+    if (!fertilize(owner, level, blockPosition))
         return false;
 
     player.startItemCooldown(item, owner.getCurrentTick(), USE_COOLDOWN_TICKS);
@@ -189,5 +195,22 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
 
     player.consumeOneHeldItem();
 
+    return true;
+}
+
+// BoneMealItem::dispense (sub_147BA1DC0, 26.60): the block the dispense position is in; a block that takes
+// no bone meal keeps the item with block.click.fail, and the dispense still counts as done
+bool BoneMealItem::dispense(const DispenseSource &source) const {
+    const Vector3i target((int32_t) std::floor(source.mPosition.x), (int32_t) std::floor(source.mPosition.y),
+                          (int32_t) std::floor(source.mPosition.z));
+    if (!fertilize(source.mOwner, source.mLevel, target)) {
+        source.mOwner.playLevelSound(source.mLevel, SOUND_DISPENSE_FAIL, source.mPosition, ":", FAIL_SOUND_DATA);
+        return true;
+    }
+
+    source.playClick();
+    source.mOwner.broadcastLevelEvent(source.mLevel, BONE_MEAL_USE_EVENT,
+                                      Vector3f((float) target.x, (float) target.y, (float) target.z), 0);
+    source.removeOne();
     return true;
 }
