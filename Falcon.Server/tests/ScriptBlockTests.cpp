@@ -279,6 +279,11 @@ system.runTimeout(() => {
     const dyed = bytes(fluid.fluidColor);
     fluid.addDye(new ItemStack("minecraft:stone").type);
     r.fluidDye = dyed + ":" + bytes(fluid.fluidColor) + ":" + capture(() => fluid.addDye("minecraft:blue_dye"));
+    dim.setBlockType({ x: 44, y: 100, z: 44 }, "minecraft:cauldron");
+    const stale = dim.getBlock({ x: 44, y: 100, z: 44 }).getComponent("fluid_container");
+    dim.setBlockType({ x: 44, y: 100, z: 44 }, "minecraft:stone");
+    r.staleFluid = capture(() => { stale.fillLevel = 3; }) + ":" + capture(() => stale.setFluidType("Lava")) + ":"
+        + capture(() => stale.getFluidType()) + ":" + dim.getBlock({ x: 44, y: 100, z: 44 }).typeId;
 
     const record = dim.getBlock({ x: 7, y: 100, z: 7 }).getComponent("record_player");
     record.setRecord("minecraft:music_disc_cat");
@@ -752,6 +757,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "empty", "true:{\"x\":2,\"y\":3,\"z\":4}:true:true");
         expect(r, "duplicate", "throw:Error");
         expect(r, "outside", "throw:ArgumentOutOfBoundsError");
+        expect(r, "staleFluid", "throw:InvalidBlockComponentError:throw:InvalidBlockComponentError:"
+                                "throw:InvalidBlockComponentError:minecraft:stone");
         expect(r, "tooBig", "throw:InvalidArgumentError:throw:InvalidArgumentError:throw:InvalidArgumentError:"
                             "throw:TypeError:throw:InvalidArgumentError:true");
         expect(r, "maxSize", "{\"x\":64,\"y\":384,\"z\":64}:true");
