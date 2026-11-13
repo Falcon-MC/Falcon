@@ -18,6 +18,8 @@ public:
 
     static bool matches(const BlockState &state);
     static bool matches(const std::string &identifier);
+
+    const char *getBlockActorId() const override;
     static FurnaceKind kind(const BlockState &state);
     static ContainerType containerType(const BlockState &state);
 

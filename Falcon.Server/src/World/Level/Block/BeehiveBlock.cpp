@@ -152,3 +152,7 @@ void BeehiveBlock::writeDropContents(Level &level, const Vector3i &position, Ite
     drop.mTag.put(BLOCK_ENTITY_TAG, hive->saveNbt());
     hive->clearOccupants();
 }
+
+const char *BeehiveBlock::getBlockActorId() const {
+    return BeehiveBlockActor::BLOCK_ACTOR_ID;
+}

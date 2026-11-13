@@ -14,3 +14,7 @@ void WallBannerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player
     (void) blockFace;
     BannerBlockActor::placeFromItem(owner, player, position, state, usedItem);
 }
+
+const char *WallBannerBlock::getBlockActorId() const {
+    return BannerBlockActor::BLOCK_ACTOR_ID;
+}

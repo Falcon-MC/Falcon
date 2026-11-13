@@ -10,6 +10,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     PistonMoveReaction getPistonMoveReaction() const override;
 
     // a sign put against the side of a block becomes its wall block

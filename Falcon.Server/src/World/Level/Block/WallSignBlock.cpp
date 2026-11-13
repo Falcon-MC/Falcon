@@ -1,5 +1,6 @@
 #include "World/Level/Block/WallSignBlock.h"
 
+#include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/SignEditing.h"
@@ -24,4 +25,8 @@ void WallSignBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, 
     (void) state;
     (void) blockFace;
     SignEditing::onPlaced(owner, player, position, usedItem);
+}
+
+const char *WallSignBlock::getBlockActorId() const {
+    return SignBlockActor::BLOCK_ACTOR_ID;
 }

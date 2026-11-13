@@ -72,3 +72,7 @@ int FurnaceBlock::getComparatorSignal(Level &level, const Vector3i &position, co
     (void) state;
     return containerSignal(level, position);
 }
+
+const char *FurnaceBlock::getBlockActorId() const {
+    return FurnaceBlockActor::BLOCK_ACTOR_ID;
+}

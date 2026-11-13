@@ -118,3 +118,7 @@ void BellBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, cons
     (void) blockFace;
     bellAt(owner, owner.getLevelFor(player), position, state);
 }
+
+const char *BellBlock::getBlockActorId() const {
+    return BellBlockActor::BLOCK_ACTOR_ID;
+}

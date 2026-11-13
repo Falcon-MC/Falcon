@@ -1,5 +1,6 @@
 #include "World/Level/Block/LodestoneBlock.h"
 
+#include "World/Level/Block/Actor/LodestoneBlockActor.h"
 #include "Network/Handler/LodestoneHandler.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 
@@ -19,4 +20,8 @@ void LodestoneBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
                               const BlockState &state) const {
     (void) state;
     LodestoneHandler::destroy(owner, level, position);
+}
+
+const char *LodestoneBlock::getBlockActorId() const {
+    return LodestoneBlockActor::BLOCK_ACTOR_ID;
 }

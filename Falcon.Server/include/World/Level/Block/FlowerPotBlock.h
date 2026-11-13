@@ -9,4 +9,6 @@ public:
     explicit FlowerPotBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
+
+    const char *getBlockActorId() const override;
 };

@@ -10,6 +10,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 
     // BellBlock::use (sub_14315C7C0): rings when the player faces the right way for its attachment

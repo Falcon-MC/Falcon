@@ -431,3 +431,8 @@ void ContainerBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, 
     states.putByte("toggle_bit", powered ? 1 : 0);
     level.setBlock(position, BlockState(state.mName, states), false);
 }
+
+const char *ContainerBlock::getBlockActorId() const {
+    const ContainerBlockDefinition *definition = findDefinition(getIdentifier());
+    return definition == nullptr ? nullptr : definition->mBlockActorId;
+}

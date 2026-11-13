@@ -14,6 +14,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     int getFillLevel() const;
 
     Liquid getLiquid() const;

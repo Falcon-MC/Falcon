@@ -459,6 +459,11 @@ public:
         return PistonMoveReaction::Normal;
     }
 
+    // the block actor type this block carries, null for none: an actor of another type goes when the block is set
+    virtual const char *getBlockActorId() const {
+        return nullptr;
+    }
+
     virtual BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const;
 
     Block() : mTypeId(0), mIdentifier("minecraft:air"), mName("Air"), mStates(Tag::ofCompound()) {}
