@@ -295,6 +295,10 @@ namespace {
                 "water stops when it counts");
         require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:water"), false, false),
                 "water is looked through otherwise");
+        // the feature rules' query.above_top_solid passes neither flag: leaves are looked through there too
+        require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:oak_leaves"), false, false)
+                        && !StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:air"), false, false),
+                "the feature query stops on leaves or air");
         require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:short_grass"), true, true),
                 "grass never stops");
 
