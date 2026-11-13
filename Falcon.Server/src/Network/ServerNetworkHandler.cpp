@@ -2389,8 +2389,12 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
         return;
 
     Level &level = getLevelFor(*player);
-    const BlockState state = level.getBlockState(packet.mBlockPosition.x, packet.mBlockPosition.y,
-                                                 packet.mBlockPosition.z);
+    // peek only: a far position must not force a chunk load
+    const BlockState *statePtr = level.peekBlockPtr(packet.mBlockPosition.x, packet.mBlockPosition.y,
+                                                    packet.mBlockPosition.z);
+    if (statePtr == nullptr)
+        return;
+    const BlockState state = *statePtr;
     const std::string pickIdentifier = BlockPickItem::identifierFor(state.mName);
     if (pickIdentifier.empty())
         return;

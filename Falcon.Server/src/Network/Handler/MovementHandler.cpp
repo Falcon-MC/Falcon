@@ -159,6 +159,22 @@ namespace {
         return false;
     }
 
+    // every column the player's box touches is in memory
+    bool columnsResident(const Level &level, const Vector3f &feetPosition) {
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH) >> 4;
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH) >> 4;
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH) >> 4;
+
+        for (int32_t chunkX = minX; chunkX <= maxX; ++chunkX) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; ++chunkZ) {
+                if (!level.isChunkResident(chunkX, chunkZ))
+                    return false;
+            }
+        }
+        return true;
+    }
+
     bool applyLandingBehavior(ServerNetworkHandler &owner, ServerPlayer &player, const Block &support,
                               float downwardVelocity) {
         if (!support.onEntityLand(player, downwardVelocity))
@@ -216,8 +232,12 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     player.setPosition(feetPosition);
 
-    const bool wasOnGround = player.isOnGround();
     Level &level = owner.getLevelFor(player);
+    // an unloaded column is unknown, not air: the probes below would generate it on the tick thread
+    if (!columnsResident(level, feetPosition))
+        return;
+
+    const bool wasOnGround = player.isOnGround();
     // keep the collision result: a proximity probe can report ground mid-jump or above shallow water
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
                                                       : checkGroundState(level, previous, feetPosition, &player);
