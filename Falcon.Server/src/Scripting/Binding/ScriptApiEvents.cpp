@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <memory>
 
 using namespace ScriptValues;
@@ -178,12 +179,23 @@ void ScriptApi::tick(int64_t currentTick) {
     ScriptNetBinding::tick(*this);
     mScheduler.tick(currentTick);
     _runQueuedCommands();
-    for (size_t index = 0; index < mTickJobs.size();) {
-        if (mTickJobs[index]())
-            ++index;
-        else
-            mTickJobs.erase(mTickJobs.begin() + (std::ptrdiff_t) index);
+    // a job running script may add jobs: run them from a list the push cannot move
+    std::vector<std::function<bool()>> jobs;
+    jobs.swap(mTickJobs);
+    size_t kept = 0;
+    for (size_t index = 0; index < jobs.size(); ++index) {
+        if (jobs[index]()) {
+            if (kept != index)
+                jobs[kept] = std::move(jobs[index]);
+            ++kept;
+        }
+        if (index + 1 == jobs.size() && !mTickJobs.empty()) {
+            std::move(mTickJobs.begin(), mTickJobs.end(), std::back_inserter(jobs));
+            mTickJobs.clear();
+        }
     }
+    jobs.resize(kept);
+    mTickJobs.swap(jobs);
     if (!mPendingTickingAreas.empty())
         resolveTickingAreas();
     if (!mPendingFilteredTexts.empty())

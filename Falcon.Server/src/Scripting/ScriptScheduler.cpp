@@ -80,7 +80,8 @@ void ScriptScheduler::tick(int64_t currentTick) {
         if (!stillActive)
             continue;
 
-        JSValue callback = asValue(task.mCallback);
+        // the task may clear itself while it runs: keep the closure alive until it returns
+        JSValue callback = JS_DupValue(mContext, asValue(task.mCallback));
         JSValue result = JS_Call(mContext, callback, JS_UNDEFINED, 0, nullptr);
 
         if (JS_IsException(result)) {
@@ -103,6 +104,7 @@ void ScriptScheduler::tick(int64_t currentTick) {
         }
 
         JS_FreeValue(mContext, result);
+        JS_FreeValue(mContext, callback);
 
         if (!task.mRepeating)
             clear(task.mId);

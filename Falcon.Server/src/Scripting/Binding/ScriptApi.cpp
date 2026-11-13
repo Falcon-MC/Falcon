@@ -1366,7 +1366,11 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
         eventNamespace = text.substr(0, text.find(':'));
     }
 
-    const std::vector<JSValue> snapshot = it->second;
+    // a handler may unsubscribe itself or a later one: each keeps its own reference until the loop ends
+    std::vector<JSValue> snapshot;
+    snapshot.reserve(it->second.size());
+    for (JSValue callback: it->second)
+        snapshot.push_back(JS_DupValue(mContext, callback));
     for (JSValue callback: snapshot) {
         if (filtered && !_acceptsScriptEvent(callback, eventNamespace))
             continue;
@@ -1385,6 +1389,8 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
             logException(mContext, mPackName, "event handler (" + key + ")");
         JS_FreeValue(mContext, result);
     }
+    for (JSValue callback: snapshot)
+        JS_FreeValue(mContext, callback);
 
     mPrivilege = previous;
 
