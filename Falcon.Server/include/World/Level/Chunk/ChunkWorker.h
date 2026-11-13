@@ -46,6 +46,10 @@ struct ChunkLoadResult {
     // applied by the worker, stored ones first; exist nowhere else: restored if the result is dropped;
     // a load discarded at shutdown returns no chunk, only its task's parked blocks
     std::vector<GeneratedBlockChange> mSpilledChanges;
+    // what its decoration placed: block actors are also written to storage, entities only by the main
+    // thread, which gives them their unique id
+    std::vector<Tag> mBlockActors;
+    std::vector<Tag> mEntities;
     bool mReplacesResident = false;
     bool mGenerated = false;
 };

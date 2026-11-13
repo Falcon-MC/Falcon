@@ -88,8 +88,10 @@ void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ) {
-    const std::vector<Tag> entities = level.loadEntities(chunkX, chunkZ);
+    spawnStoredActors(level, level.loadEntities(chunkX, chunkZ));
+}
 
+void ServerNetworkHandler::spawnStoredActors(Level &level, const std::vector<Tag> &entities) {
     for (const Tag &tag: entities) {
         const std::string identifier = tag.getString("identifier", std::string());
         if (identifier.empty())

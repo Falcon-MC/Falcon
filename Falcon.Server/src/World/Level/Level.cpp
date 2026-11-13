@@ -1412,6 +1412,25 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     return false;
 }
 
+void Level::_storeGeneratedContent(ChunkLoadResult &result) {
+    if (mOwner == nullptr)
+        return;
+
+    if (!result.mBlockActors.empty() && mBlockActors.isChunkLoaded(result.mX, result.mZ))
+        mBlockActors.addLoaded(result.mBlockActors, mOwner->getCodecContext());
+
+    if (result.mEntities.empty() || !mStorage.isOpen())
+        return;
+
+    for (Tag &entity: result.mEntities)
+        entity.putLong("UniqueID", mOwner->allocateActorUniqueId());
+    mStorage.appendEntities(result.mX, result.mZ, result.mEntities);
+
+    const int64_t column = ((int64_t) result.mX << 32) | (uint32_t) result.mZ;
+    if (mOwner->getWorldOf(*this).getActorLoadedChunks(getDimensionType()).count(column) != 0)
+        mOwner->spawnStoredActors(*this, result.mEntities);
+}
+
 void Level::_dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated) {
     PluginManager *plugins = PluginManager::findWithSubscribers(type);
     if (plugins == nullptr)
@@ -1464,6 +1483,7 @@ size_t Level::drainCompletedChunks() {
             _queueGeneratedChanges(std::move(result.mOverflowChanges));
             _refreshChunkShapes(result.mX, result.mZ);
             _queueCompletedSaves(result.mX, result.mZ);
+            _storeGeneratedContent(result);
         } else {
             // overtaken by a synchronous getChunk(), or discarded at shutdown: keep the spilled blocks it carried
             _restoreSpilledChanges(key, std::move(result.mSpilledChanges));

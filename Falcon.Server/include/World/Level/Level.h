@@ -617,6 +617,9 @@ private:
 
     void _queueCompletedSaves(int32_t chunkX, int32_t chunkZ);
 
+    // a chunk loaded for its block actors or actors before its decoration came back gets that decoration's
+    void _storeGeneratedContent(ChunkLoadResult &result);
+
     void _finishPendingChangeWrite(bool wait);
 
     size_t _generationBacklog() const {

@@ -340,12 +340,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
             saved.insert(saved.end(), blockActors.begin(), blockActors.end());
             mStorage.saveBlockEntities(result.mX, result.mZ, saved);
         }
-
-        if (!entities.empty() && mStorage.isOpen()) {
-            std::vector<Tag> saved = mStorage.loadEntities(result.mX, result.mZ);
-            saved.insert(saved.end(), entities.begin(), entities.end());
-            mStorage.saveEntities(result.mX, result.mZ, saved);
-        }
+        result.mBlockActors = std::move(blockActors);
+        result.mEntities = std::move(entities);
     } else {
         applySpilled();
     }
