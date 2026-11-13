@@ -501,7 +501,8 @@ namespace {
             fixture.mLevel.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
             PistonSystem::onRedstoneUpdate(fixture.mOwner, fixture.mLevel, fixture.mPiston,
                                            fixture.mLevel.getBlockState(8, 100, 8));
-            require(fixture.at(8, 101, 8) == "minecraft:air" && PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+            // the arm takes the source at once, the pushed block waits for it at its destination
+            require(fixture.at(8, 102, 8) == "minecraft:air" && PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
                     "a pushed block did not wait for the arm");
             PistonSystem::finishMoves(fixture.mOwner, fixture.mLevel);
             require(fixture.at(8, 102, 8) == "minecraft:stone"
