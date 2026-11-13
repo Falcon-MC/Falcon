@@ -147,8 +147,20 @@ void startServer(const ServerSettings &settings) {
     const std::chrono::nanoseconds catchupResetInterval(1000000000);
     std::chrono::steady_clock::time_point nextTick = std::chrono::steady_clock::now();
 
+    // an error out of a tick still ends with the shutdown save: players and the containers they used stay together
+    bool failed = false;
     while (gRunning.load() && !host.isStopRequested()) {
-        host.tick();
+        try {
+            host.tick();
+        } catch (const std::exception &error) {
+            LOG_ERROR(LogAreaID::Server, "The server stopped on an error: %s", error.what());
+            failed = true;
+            break;
+        } catch (...) {
+            LOG_ERROR(LogAreaID::Server, "The server stopped on an unknown error");
+            failed = true;
+            break;
+        }
 
         nextTick += tickInterval;
 
@@ -168,7 +180,7 @@ void startServer(const ServerSettings &settings) {
     // flushes stdin too: it hangs; worker and plugin host threads block destructors alike: _Exit skips them
     std::cout.flush();
     std::fflush(nullptr);
-    std::_Exit(0);
+    std::_Exit(failed ? 1 : 0);
 }
 
 int main(int argc, char **argv) {

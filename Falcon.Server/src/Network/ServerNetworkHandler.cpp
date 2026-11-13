@@ -1205,8 +1205,10 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         RideSystem::ejectAll(*this, *player);
         if (player->isSpawned())
             InventoryHandler::resetInventory(*this, *player);
-        if (!player->isSimulated())
+        if (!player->isSimulated()) {
+            _saveTouchedContainers(*player);
             _savePlayerData(*player);
+        }
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
         if (player->isSpawned()) {

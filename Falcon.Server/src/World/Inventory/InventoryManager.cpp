@@ -1160,6 +1160,16 @@ Container *InventoryManager::getContainer() {
     return blockActor->getContainer();
 }
 
+void InventoryManager::_touchColumn(const Vector3i &position) {
+    if (mOwner == nullptr || mPlayer == nullptr)
+        return;
+
+    const std::pair<const Level *, int64_t> column(&mOwner->getLevelFor(*mPlayer),
+                                                   ((int64_t) (position.x >> 4) << 32) | (uint32_t) (position.z >> 4));
+    if (std::find(mTouchedColumns.begin(), mTouchedColumns.end(), column) == mTouchedColumns.end())
+        mTouchedColumns.push_back(column);
+}
+
 bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, ContainerType type) {
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
@@ -1180,6 +1190,7 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
     mContainerWindowId = windowId;
     mContainerPosition = position;
     mCurrentWindowType = type;
+    _touchColumn(position);
 
     BlockActorDataPacket blockActorData;
     blockActorData.mBlockPosition = position;
@@ -1235,6 +1246,7 @@ bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType typ
     mContainerPosition = Vector3i((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                                   (int32_t) std::floor(position.z));
     mCurrentWindowType = type;
+    _touchColumn(mContainerPosition);
 
     ContainerOpenPacket open;
     open.mWindowId = (int8_t) windowId;
@@ -1289,6 +1301,7 @@ bool InventoryManager::onClientOpenChest(const Vector3i &position) {
     mContainerWindowId = windowId;
     mContainerPosition = position;
     mCurrentWindowType = ContainerType::Container;
+    _touchColumn(position);
 
     BlockActorDataPacket blockActorData;
     blockActorData.mBlockPosition = position;
@@ -1447,6 +1460,7 @@ bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind
     const int windowId = _getNewWindowId();
     mFurnaceWindowId = windowId;
     mFurnacePosition = position;
+    _touchColumn(position);
     mFurnaceKind = kind;
     mFurnaceContainerType = type;
     mFurnaceBurnTime = 0;
