@@ -409,6 +409,12 @@ private:
 
     void _arm();
 
+    // in the interrupt handler: the pack whose code ran past the deadline, read from the running frames
+    void _noteHang();
+
+    // the hung pack's system.beforeEvents.watchdogTerminate, once its code has unwound
+    void _dispatchWatchdog();
+
     // calls fill(api, event) for each pack with subscribers; true when one cancelled
     template <typename Fill>
     bool _emit(const char *key, const char *signal, bool cancellable, Fill fill);
@@ -478,4 +484,9 @@ private:
     uint32_t mNextJoinToken = 1;
     int64_t mExecutionDeadlineMs;
     int32_t mGuardDepth = 0;
+    // one hang per arming: once the deadline passed, every script entry before the next arming trips too
+    uint64_t mArmSerial = 0;
+    uint64_t mHangSerial = 0;
+    const ScriptApi *mHungApi = nullptr;
+    bool mDispatchingWatchdog = false;
 };
