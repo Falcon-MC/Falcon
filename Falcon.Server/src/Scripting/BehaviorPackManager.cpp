@@ -275,7 +275,16 @@ void BehaviorPackManager::_scanContainer(const std::string &directory, const std
 
     const std::filesystem::path cacheRoot(cacheDirectory);
 
-    for (const std::filesystem::directory_entry &entry: std::filesystem::directory_iterator(root, error)) {
+    // directory order differs between file systems, the pack order must not
+    std::vector<std::filesystem::directory_entry> entries;
+    for (const std::filesystem::directory_entry &entry: std::filesystem::directory_iterator(root, error))
+        entries.push_back(entry);
+    std::sort(entries.begin(), entries.end(),
+              [](const std::filesystem::directory_entry &a, const std::filesystem::directory_entry &b) {
+                  return a.path().filename() < b.path().filename();
+              });
+
+    for (const std::filesystem::directory_entry &entry: entries) {
         if (entry.path().filename() == ".cache")
             continue;
 
