@@ -2,12 +2,15 @@
 
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
+
+#include <algorithm>
 
 namespace {
     // the chest takes its direction as a data value: its old facing_direction, renamed cardinal_direction by the
@@ -35,6 +38,16 @@ int32_t ScatteredPiece::aboveTopSolid(const LevelChunk &chunk, int32_t x, int32_
             return y + 1;
     }
     return LevelChunk::MIN_Y;
+}
+
+int32_t ScatteredPiece::averageGround(const LevelChunk &chunk, int32_t minX, int32_t minZ, int32_t sizeX,
+                                      int32_t sizeZ) {
+    int32_t total = 0;
+    for (int32_t z = minZ; z < minZ + sizeZ; z++) {
+        for (int32_t x = minX; x < minX + sizeX; x++)
+            total += std::max(0, aboveTopSolid(chunk, x, z));
+    }
+    return total / (sizeX * sizeZ);
 }
 
 BlockState ScatteredPiece::stairs(const BlockState &base, int32_t direction) {
@@ -107,6 +120,20 @@ bool ScatteredPiece::createChest(std::mt19937 &random, int32_t x, int32_t y, int
     placeBlock(DecorationSupport::withState(chest, "minecraft:cardinal_direction", chestDirection(direction)), x, y, z);
     mLevel.getBlockActors()
             .getOrCreate<ChestBlockActor>(Vector3i(worldX(x), worldY(y), worldZ(z)))
+            .setLootTable(lootTable, FeatureRandom::nextInt(random));
+    return true;
+}
+
+bool ScatteredPiece::createDispenser(std::mt19937 &random, int32_t x, int32_t y, int32_t z, int32_t facing,
+                                     const char *lootTable) {
+    const BlockState *current = getBlock(x, y, z);
+    const BlockState dispenser = VanillaBlocks::DISPENSER().toBlockState();
+    if (current == nullptr || current->mName == dispenser.mName)
+        return false;
+
+    placeBlock(DecorationSupport::withState(dispenser, "facing_direction", facing), x, y, z);
+    mLevel.getBlockActors()
+            .getOrCreate<DispenserBlockActor>(Vector3i(worldX(x), worldY(y), worldZ(z)))
             .setLootTable(lootTable, FeatureRandom::nextInt(random));
     return true;
 }

@@ -17,6 +17,10 @@ public:
     // LevelChunk::getAboveTopSolidBlock (sub_1438650A0, 26.60) with water counted and leaves looked through
     static int32_t aboveTopSolid(const LevelChunk &chunk, int32_t x, int32_t z);
 
+    // ScatteredFeaturePiece::updateAverageGroundHeight (sub_1473CE840, 26.60) over a box held by one chunk: the mean of
+    // the ground of its columns, none counted under 0 (the dimension's slot +232)
+    static int32_t averageGround(const LevelChunk &chunk, int32_t minX, int32_t minZ, int32_t sizeX, int32_t sizeZ);
+
     // StructurePiece::getOrientationData (sub_147772040, 26.60) for stairs: the weirdo_direction branch
     // (sub_147771BF0), an unturned piece swaps 2 and 3
     static BlockState stairs(const BlockState &base, int32_t direction);
@@ -53,6 +57,9 @@ public:
     // StructurePiece::createChest (sub_147771D00, 26.60): inside the chunk and not a chest already; the loot seed
     // is drawn once the chest stands
     bool createChest(std::mt19937 &random, int32_t x, int32_t y, int32_t z, int32_t direction, const char *lootTable);
+
+    // StructurePiece::createDispenser (sub_147772720, 26.60): the facing is the data value as given
+    bool createDispenser(std::mt19937 &random, int32_t x, int32_t y, int32_t z, int32_t facing, const char *lootTable);
 
 private:
     Level &mLevel;

@@ -1,6 +1,7 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockMaterial.h"
@@ -356,6 +357,8 @@ namespace {
         require(ScatteredPiece::aboveTopSolid(chunk, 0, 0) == LevelChunk::MIN_Y, "An empty column has no ground");
         chunk.setBlock(0, 70, 0, stone);
         require(ScatteredPiece::aboveTopSolid(chunk, 0, 0) == 71, "The ground is one over the top solid block");
+        chunk.setBlock(1, -20, 0, stone);
+        require(ScatteredPiece::averageGround(chunk, 0, 0, 2, 1) == 35, "Ground under 0 counts as 0 in the mean");
 
         // the box starts in the chunk to the west: only its east part is written
         ScatteredPiece piece(level, chunk, 8, 64, 0);
@@ -386,6 +389,12 @@ namespace {
                 "A chest is placed twice");
         require(!piece.createChest(random, 0, 0, 6, 5, "loot_tables/chests/desert_pyramid.json"),
                 "A chest is placed outside the chunk");
+
+        require(piece.createDispenser(random, 13, 0, 6, 3, "loot_tables/chests/dispenser_trap.json")
+                        && chunk.getBlock(5, 64, 6).mStates.getInt("facing_direction", -1) == 3,
+                "The dispenser keeps its data facing");
+        require(level.getBlockActors().find<DispenserBlockActor>(Vector3i(21, 64, 6)) != nullptr,
+                "The dispenser has no actor");
 
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         TerrainCache cache(*generator);

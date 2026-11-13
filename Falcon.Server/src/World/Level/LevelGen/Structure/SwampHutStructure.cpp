@@ -66,13 +66,8 @@ void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, Lev
     if (biome != BiomeIds::SWAMPLAND && biome != BiomeIds::SWAMPLAND_MUTATED)
         return;
 
-    // sub_1473CE840: the box sits one block over the mean ground of its columns
-    int32_t total = 0;
-    for (int32_t z = 0; z < SIZE_Z; z++) {
-        for (int32_t x = 0; x < SIZE_X; x++)
-            total += ScatteredPiece::aboveTopSolid(chunk, x, z);
-    }
-    const int32_t floorY = total / (SIZE_X * SIZE_Z) + 1;
+    // the box sits one block over the mean ground of its columns
+    const int32_t floorY = ScatteredPiece::averageGround(chunk, 0, 0, SIZE_X, SIZE_Z) + 1;
 
     const BlockState planks = VanillaBlocks::SPRUCE_PLANKS().toBlockState();
     const BlockState log = VanillaBlocks::OAK_LOG().toBlockState();
