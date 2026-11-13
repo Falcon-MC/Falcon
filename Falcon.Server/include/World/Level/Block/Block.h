@@ -466,6 +466,11 @@ public:
         return PistonMoveReaction::Normal;
     }
 
+    // VibrationProperties flags: the BlockVibrationPropertiesComponent the game gives wool and carpets
+    virtual uint8_t getVibrationProperties() const {
+        return 0;
+    }
+
     // the block actor type this block carries, null for none: an actor of another type goes when the block is set
     virtual const char *getBlockActorId() const {
         return nullptr;
