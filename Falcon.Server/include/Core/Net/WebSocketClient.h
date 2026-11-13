@@ -23,6 +23,8 @@ public:
         int mErrorCode = 0;
         // Closed: the server closed it or the connection dropped
         bool mByServer = true;
+        // Closed: a message went past setMaxMessageBytes()
+        bool mTooLarge = false;
     };
 
     WebSocketClient() = default;
@@ -32,6 +34,11 @@ public:
     WebSocketClient(const WebSocketClient &) = delete;
 
     WebSocketClient &operator=(const WebSocketClient &) = delete;
+
+    // before start(); 0: no limit. a longer message closes the socket before it is read in
+    void setMaxMessageBytes(uint64_t bytes) {
+        mMaxMessageBytes = bytes;
+    }
 
     void start(const std::string &url, const HttpsClient::Headers &headers);
 
@@ -65,4 +72,6 @@ private:
     // fragments of a message that is not complete yet
     std::string mPartial;
     std::string mMessage;
+    uint64_t mMaxMessageBytes = 0;
+    bool mTooLarge = false;
 };

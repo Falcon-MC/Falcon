@@ -188,7 +188,7 @@ namespace {
             const std::string path = head.substr(head.find(' ') + 1,
                                                  head.find(' ', head.find(' ') + 1) - head.find(' ') - 1);
 
-            if (path == "/ws" || path == "/ws-bye") {
+            if (path == "/ws" || path == "/ws-bye" || path == "/ws-big") {
                 const std::string key = header(head, "sec-websocket-key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
                 unsigned char digest[SHA_DIGEST_LENGTH];
                 SHA1((const unsigned char *) key.data(), key.size(), digest);
@@ -197,6 +197,16 @@ namespace {
                 sendAll(client, std::string("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
                                             "Connection: Upgrade\r\nSec-WebSocket-Accept: ")
                                         + accept + "\r\n\r\n");
+                if (path == "/ws-big") {
+                    // a 1 GiB text frame announced, a few bytes sent: the client must not wait to buffer it
+                    std::string header("\x81\x7F", 2);
+                    for (int shift = 56; shift >= 0; shift -= 8)
+                        header.push_back((char) (((uint64_t) 1 << 30) >> shift));
+                    sendAll(client, header + "yyyy");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+                    TEST_CLOSE(client);
+                    return;
+                }
                 if (path == "/ws-bye") {
                     frame(client, 0x1, "bye");
                     frame(client, 0x8, std::string("\x03\xE8", 2));
@@ -359,6 +369,12 @@ world.afterEvents.worldLoad.subscribe(async () => {
             bye.afterEvents.close.subscribe((event) => resolve(seen.join("+") + "|" + event.reason));
         });
         r.closedByServer = byeEvents;
+        const big = await net.websocket.connect(ws + "/ws-big");
+        r.closedTooLarge = await new Promise((resolve) => {
+            const seen = [];
+            big.afterEvents.message.subscribe((event) => seen.push(event.message));
+            big.afterEvents.close.subscribe((event) => resolve(seen.length + "|" + event.reason));
+        });
         r.refused = await net.websocket.connect("ws://127.0.0.1:1/ws").then(() => "resolved", (e) => e.name);
     } catch (e) {
         r.failure = describe(e) + " " + e.stack;
@@ -431,6 +447,7 @@ world.afterEvents.worldLoad.subscribe(async () => {
                         + port + "/\", \"ws://127.0.0.1:" + port
                         + "\", \"ws://127.0.0.1:1\", \"ftp://127.0.0.1\"],"
                           " \"max_body_bytes\": 4096, \"max_concurrent_requests\": 1, \"max_websocket_connections\": 1,"
+                          " \"max_websocket_payload_size\": 64,"
                           " \"session_headers\": {\"X-Session\": \"config\"}}}}");
         writeFile(directory / "config" / NET_UUID / "variables.json", "{\"port\": " + port + "}");
         writeFile(directory / "config" / NET_UUID / "secrets.json", R"({"token": "hunter2"})");
@@ -529,6 +546,7 @@ world.afterEvents.worldLoad.subscribe(async () => {
         expect(*values, "sendClosed", "WebSocketNotConnectedError: This web socket is not connected.");
         expect(*values, "closeClosed", "WebSocketNotConnectedError: This web socket is not connected.");
         expect(*values, "closedByServer", "bye|0");
+        expect(*values, "closedTooLarge", "0|2");
         expect(*values, "refused", "InternalWebSocketError");
         expect(*values, "sent", "TextPacket:1:Guest;TextPacket:1:none;");
         expect(*values, "received", "TextPacket:42:Guest;");

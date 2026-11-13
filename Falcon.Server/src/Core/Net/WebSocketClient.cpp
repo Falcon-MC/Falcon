@@ -2,6 +2,7 @@
 
 #include "Core/Net/NetUri.h"
 
+#include <algorithm>
 #include <cctype>
 #include <random>
 
@@ -190,6 +191,14 @@ bool WebSocketClient::_readFrames(std::string &buffer) {
                 mask[index] = (unsigned char) buffer[offset + index];
             offset += 4;
         }
+        const uint8_t frameOpcode = first & 0x0F;
+        const uint64_t held = std::min<uint64_t>(mMaxMessageBytes, mMessage.size());
+        if (mMaxMessageBytes != 0 && frameOpcode <= 0x2 && size > mMaxMessageBytes - held) {
+            // 1009: message too big
+            _writeFrame(0x8, std::string("\x03\xF1", 2));
+            mTooLarge = true;
+            return false;
+        }
         if (size > buffer.size() - offset)
             return true;
 
@@ -286,7 +295,8 @@ void WebSocketClient::_run(std::string url, HttpsClient::Headers headers) {
     }
     Event closed;
     closed.mKind = Event::Kind::Closed;
-    closed.mByServer = byServer;
+    closed.mByServer = byServer && !mTooLarge;
+    closed.mTooLarge = mTooLarge;
     _push(closed);
     mStream.close();
 }

@@ -965,6 +965,8 @@ namespace {
 
         HttpsClient::Request outgoing;
         outgoing.mUrl = uri;
+        // read on a worker outside the script heap: a body it could never hold is refused there
+        outgoing.mMaxResponseBytes = ScriptEngine::SCRIPT_MEMORY_LIMIT_BYTES;
         outgoing.mMethod = wireMethod(stringOf(ctx, argv[2]));
         outgoing.mHeaders = mergeHeaders(api, ctx, argv[3]);
         double timeout = 0.0;
@@ -1060,7 +1062,11 @@ namespace {
         if (!JS_IsUndefined(invalid))
             return invalid;
 
-        service.openSocket(id, uri, mergeHeaders(api, ctx, argv[2]));
+        // a message past the per tick allowance closes the socket anyway; none can outgrow the script heap
+        uint64_t maxMessage = ScriptEngine::SCRIPT_MEMORY_LIMIT_BYTES;
+        if (config.mMaxWebsocketPayloadSize.has_value())
+            maxMessage = std::min<uint64_t>(maxMessage, *config.mMaxWebsocketPayloadSize);
+        service.openSocket(id, uri, mergeHeaders(api, ctx, argv[2]), maxMessage);
         service.mSocketUris[id] = uri;
         return JS_UNDEFINED;
     }
@@ -1328,10 +1334,13 @@ namespace ScriptNetBinding {
                         callHook(api, "wsMessage", {JS_NewUint32(ctx, id), string(ctx, event.mText)});
                         break;
                     }
-                    case WebSocketClient::Event::Kind::Closed:
+                    case WebSocketClient::Event::Kind::Closed: {
                         finished.push_back(id);
-                        callHook(api, "wsClosed", {JS_NewUint32(ctx, id), JS_NewInt32(ctx, event.mByServer ? 0 : 1)});
+                        // 2: WebSocketClientCloseReasons.IncomingPayloadsTooLarge, as for the per tick allowance
+                        const int32_t reason = event.mTooLarge ? 2 : event.mByServer ? 0 : 1;
+                        callHook(api, "wsClosed", {JS_NewUint32(ctx, id), JS_NewInt32(ctx, reason)});
                         break;
+                    }
                 }
                 if (opened || (!finished.empty() && finished.back() == id))
                     break;

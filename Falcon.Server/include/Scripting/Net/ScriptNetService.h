@@ -36,7 +36,8 @@ public:
     // the exchanges finished since the last call
     std::vector<Completed> pollRequests();
 
-    WebSocketClient &openSocket(uint32_t id, const std::string &url, const HttpsClient::Headers &headers);
+    WebSocketClient &openSocket(uint32_t id, const std::string &url, const HttpsClient::Headers &headers,
+                                uint64_t maxMessageBytes);
 
     WebSocketClient *findSocket(uint32_t id);
 
