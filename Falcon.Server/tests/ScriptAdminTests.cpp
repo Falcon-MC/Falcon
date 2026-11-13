@@ -70,6 +70,13 @@ r.secret = secret instanceof admin.SecretString && JSON.stringify(secret) === "{
 r.noSecret = admin.secrets.get("nope") === undefined;
 r.ownSecret = capture(() => new admin.SecretString("x") instanceof admin.SecretString);
 r.earlyKick = capture(() => admin.kickPlayer(undefined));
+// the privilege tags come back as own elements: a replaced iterator or an inherited element changes nothing
+const arrayIterator = Array.prototype[Symbol.iterator];
+Array.prototype[Symbol.iterator] = function* () { yield true; yield false; };
+Object.defineProperty(Array.prototype, "0", { get() { return true; }, set() {}, configurable: true });
+r.tamperedKick = capture(() => admin.kickPlayer(undefined));
+delete Array.prototype[0];
+Array.prototype[Symbol.iterator] = arrayIterator;
 r.serverConstructor = capture(() => new admin.ServerVariables());
 r.dedicated = admin.dedicatedServer instanceof admin.DedicatedServerUtils;
 r.earlySubscribe = capture(() => admin.beforeEvents.asyncPlayerJoin.subscribe(async () => {}));
@@ -255,6 +262,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("blocked", 
         expect(*values, "noSecret", "true");
         expect(*values, "ownSecret", "true");
         expect(*values, "earlyKick", "ReferenceError: Native function [kickPlayer] cannot be used in early execution.");
+        expect(*values, "tamperedKick",
+               "ReferenceError: Native function [kickPlayer] cannot be used in early execution.");
         expect(*values, "serverConstructor", "ReferenceError: No constructor for native class 'ServerVariables'.");
         expect(*values, "dedicated", "true");
         expect(*values, "earlySubscribe",

@@ -407,9 +407,12 @@ namespace {
     JSValue gtFlags(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const std::string name = argc >= 1 ? toString(ctx, argv[0]) : std::string();
+        // defined, not set: a setter a pack put on Object.prototype must not see or replace them
         JSValue flags = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, flags, "early", JS_NewBool(ctx, api->gameTestSurface().isEarly(name)));
-        JS_SetPropertyStr(ctx, flags, "blocked", JS_NewBool(ctx, api->gameTestSurface().isBlocked(name)));
+        JS_DefinePropertyValueStr(ctx, flags, "early", JS_NewBool(ctx, api->gameTestSurface().isEarly(name)),
+                                  JS_PROP_C_W_E);
+        JS_DefinePropertyValueStr(ctx, flags, "blocked", JS_NewBool(ctx, api->gameTestSurface().isBlocked(name)),
+                                  JS_PROP_C_W_E);
         return flags;
     }
 }
