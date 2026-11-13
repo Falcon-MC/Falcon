@@ -242,6 +242,21 @@ void TerrainCache::waitForDecoration(std::chrono::milliseconds timeout) {
     mReleased.wait_for(lock, timeout);
 }
 
+bool TerrainCache::findStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t &value) {
+    std::lock_guard<std::mutex> lock(mStartMutex);
+    const auto found = mStartValues.find(std::make_tuple(structure, startX, startZ));
+    if (found == mStartValues.end())
+        return false;
+
+    value = found->second;
+    return true;
+}
+
+int32_t TerrainCache::storeStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t value) {
+    std::lock_guard<std::mutex> lock(mStartMutex);
+    return mStartValues.emplace(std::make_tuple(structure, startX, startZ), value).first->second;
+}
+
 GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
         : mScratch("generator", 1, seed, dimension), mCache(cache) {
     mScratch.setTerrainCache(&cache);
