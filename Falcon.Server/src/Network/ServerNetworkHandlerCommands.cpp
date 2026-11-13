@@ -71,9 +71,11 @@
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <algorithm>
 #include <climits>
 #include <cstdlib>
 #include <memory>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -432,20 +434,46 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
     if (!filter.mValid || !matchesType(filter, "minecraft:player"))
         return targets;
 
-    if (filter.mKind == 's' || filter.mKind == 'p') {
+    if (filter.mKind == 's') {
         ServerPlayer *self = sender.asPlayer();
         if (self != nullptr && matchesName(filter, self->getName()) && matchesScores(filter, mScoreboard, *self))
             targets.push_back(self);
         return targets;
     }
 
-    if (filter.mKind != 'a' && filter.mKind != 'e' && filter.mKind != 'r')
+    if (filter.mKind != 'a' && filter.mKind != 'e' && filter.mKind != 'r' && filter.mKind != 'p')
         return targets;
 
     const Level *contextLevel = sender.getLevel();
     if (contextLevel == nullptr)
         contextLevel = &getLevel();
-    const size_t limit = filter.mKind == 'r' && filter.mLimit == 0 ? 1 : filter.mLimit;
+
+    if (filter.mKind == 'p') {
+        // nearest to where the command runs: a command block or the console is no player itself
+        const Vector3f origin = sender.getPosition();
+        ServerPlayer *nearest = nullptr;
+        float nearestDistance = 0.0f;
+        for (auto &entry: mPlayers) {
+            ServerPlayer &player = entry.second;
+            if (!player.isSpawned() || !player.isIn(*contextLevel) || !matchesName(filter, player.getName())
+                || !matchesScores(filter, mScoreboard, player))
+                continue;
+
+            const Vector3f &position = player.getPosition();
+            const float dx = position.x - origin.x, dy = position.y - origin.y, dz = position.z - origin.z;
+            const float distance = dx * dx + dy * dy + dz * dz;
+            if (nearest == nullptr || distance < nearestDistance) {
+                nearest = &player;
+                nearestDistance = distance;
+            }
+        }
+        if (nearest != nullptr)
+            targets.push_back(nearest);
+        return targets;
+    }
+
+    const bool random = filter.mKind == 'r';
+    const size_t limit = random && filter.mLimit == 0 ? 1 : filter.mLimit;
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
@@ -456,8 +484,16 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
             continue;
 
         targets.push_back(&player);
-        if (limit != 0 && targets.size() >= limit)
+        if (!random && limit != 0 && targets.size() >= limit)
             break;
+    }
+
+    // drawn, not the first ones of the map's order
+    if (random) {
+        static std::mt19937 generator{std::random_device{}()};
+        std::shuffle(targets.begin(), targets.end(), generator);
+        if (targets.size() > limit)
+            targets.resize(limit);
     }
 
     return targets;

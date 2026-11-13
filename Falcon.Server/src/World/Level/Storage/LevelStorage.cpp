@@ -1106,17 +1106,27 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     file.putLInt((uint32_t) payload.size());
     file.put(payload);
 
-    std::ofstream out((root / "level.dat").string(), std::ios::binary);
-    if (!out.is_open()) {
-        _recordWrite(false);
-        LOG_WARN(LogAreaID::Server, "Could not write level.dat for %s", levelName.c_str());
-        return;
+    // written beside it, then renamed over it: a crash mid-write keeps the seed and the start count
+    const std::filesystem::path pending = root / "level.dat.tmp";
+    bool written = false;
+    {
+        std::ofstream out(pending.string(), std::ios::binary);
+        if (!out.is_open()) {
+            _recordWrite(false);
+            LOG_WARN(LogAreaID::Server, "Could not write level.dat for %s", levelName.c_str());
+            return;
+        }
+
+        const std::string bytes = file.getBuffer();
+        out.write(bytes.data(), (std::streamsize) bytes.size());
+        out.flush();
+        written = out.good();
     }
 
-    const std::string bytes = file.getBuffer();
-    out.write(bytes.data(), (std::streamsize) bytes.size());
-    out.flush();
-    if (!_recordWrite(out.good()))
+    std::error_code error;
+    if (written)
+        std::filesystem::rename(pending, root / "level.dat", error);
+    if (!_recordWrite(written && !error))
         LOG_WARN(LogAreaID::Server, "Could not finish writing level.dat for %s", levelName.c_str());
 }
 
