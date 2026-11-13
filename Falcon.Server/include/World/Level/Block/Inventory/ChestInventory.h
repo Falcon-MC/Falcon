@@ -44,6 +44,10 @@ public:
 
     void setContainerItem(int slot, ItemStack item) override;
 
+    bool wraps(const ChestInventory &left, const ChestInventory &right) const {
+        return &mLeft == &left && &mRight == &right;
+    }
+
 private:
     ChestInventory &mLeft;
     ChestInventory &mRight;

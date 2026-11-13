@@ -103,7 +103,9 @@ Container *ChestBlockActor::getContainer() {
     ChestBlockActor *primary = getPrimary();
     ChestBlockActor *secondary = primary == this ? pair : this;
 
-    mDoubleInventory.reset(new DoubleChestInventory(primary->mInventory, secondary->mInventory));
+    // kept while the pair holds: a caller may still use the pointer an earlier call returned
+    if (mDoubleInventory == nullptr || !mDoubleInventory->wraps(primary->mInventory, secondary->mInventory))
+        mDoubleInventory.reset(new DoubleChestInventory(primary->mInventory, secondary->mInventory));
     return mDoubleInventory.get();
 }
 

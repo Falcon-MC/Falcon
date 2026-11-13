@@ -534,20 +534,36 @@ namespace {
         return view;
     }
 
-    // the block actor is looked up on every access: a broken chest makes the container invalid
+    Container *liveBlockContainer(ServerNetworkHandler &host, uint32_t worldId, DimensionType dimension,
+                                  const Vector3i &position) {
+        World *world = host.getWorlds().find(worldId);
+        if (world == nullptr)
+            return nullptr;
+        BlockActor *blockActor = world->getLevel(dimension).getBlockActors().find(position);
+        return blockActor == nullptr ? nullptr : blockActor->getContainer();
+    }
+
+    // the block actor is looked up on every access: script run between two accesses can break or unpair the block
     ScriptContainerView blockContainer(ScriptApi &api, const ScriptContainerRef &ref) {
         ScriptContainerView view;
-        Level &level = api.resolveLevel(ref.mWorldId, ref.mDimension);
+        ServerNetworkHandler &host = api.host();
+        const uint32_t worldId = api.resolveLevel(ref.mWorldId, ref.mDimension).getWorldId();
+        const DimensionType dimension = ref.mDimension;
         const Vector3i position(ref.mX, ref.mY, ref.mZ);
-        BlockActor *blockActor = level.getBlockActors().find(position);
-        Container *container = blockActor == nullptr ? nullptr : blockActor->getContainer();
+        Container *container = liveBlockContainer(host, worldId, dimension, position);
         if (container == nullptr)
             return view;
-        ServerNetworkHandler &host = api.host();
         view.mSize = container->getContainerSize();
-        view.mGet = [container](int slot) -> const ItemStack & { return container->getContainerItem(slot); };
-        view.mSet = [&host, container, position](int slot, ItemStack item) {
-            container->setContainerItem(slot, std::move(item));
+        view.mGet = [&host, worldId, dimension, position](int slot) -> const ItemStack & {
+            static const ItemStack EMPTY = ItemStack::air();
+            Container *live = liveBlockContainer(host, worldId, dimension, position);
+            return live == nullptr || slot >= live->getContainerSize() ? EMPTY : live->getContainerItem(slot);
+        };
+        view.mSet = [&host, worldId, dimension, position](int slot, ItemStack item) {
+            Container *live = liveBlockContainer(host, worldId, dimension, position);
+            if (live == nullptr || slot >= live->getContainerSize())
+                return;
+            live->setContainerItem(slot, std::move(item));
             host.refreshContainerViewers(position);
         };
         return view;
@@ -1808,11 +1824,15 @@ namespace {
         return ScriptApi::fromContext(ctx)->throwError("InvalidContainerError", "");
     }
 
-    // the binding's bounds error (sub_148548380); argument: the index of `value` in the call
-    JSValue readSlot(JSContext *ctx, const ScriptContainerView &view, JSValueConst value, int32_t &slot,
-                     int argument = 0) {
+    // every argument is converted before a view is built: valueOf can run script that breaks the block
+    JSValue slotArgument(JSContext *ctx, JSValueConst value, int32_t &slot) {
         if (JS_ToInt32(ctx, &slot, value) != 0)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return JS_UNDEFINED;
+    }
+
+    // the binding's bounds error (sub_148548380); argument: the index of the slot in the call
+    JSValue checkSlot(JSContext *ctx, const ScriptContainerView &view, int32_t slot, int argument = 0) {
         if (slot < 0 || slot >= view.mSize)
             return ScriptApi::fromContext(ctx)->throwError(
                     "ArgumentOutOfBoundsError",
@@ -2003,23 +2023,27 @@ namespace {
     }
 
     JSValue containerGetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        int32_t slot = 0;
+        if (argc < 1 || JS_IsException(slotArgument(ctx, argv[0], slot)))
+            return argc < 1 ? JS_ThrowTypeError(ctx, "Native type conversion failed.") : JS_EXCEPTION;
         const ScriptContainerView view = viewOf(ctx, thisVal);
         if (!view)
             return invalidContainer(ctx);
-        int32_t slot = 0;
-        if (argc < 1 || JS_IsException(readSlot(ctx, view, argv[0], slot)))
-            return argc < 1 ? JS_ThrowTypeError(ctx, "Native type conversion failed.") : JS_EXCEPTION;
+        if (JS_IsException(checkSlot(ctx, view, slot)))
+            return JS_EXCEPTION;
         return ScriptApi::fromContext(ctx)->makeItem(view.mGet(slot));
     }
 
     JSValue containerGetSlot(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t slot = 0;
+        if (argc < 1 || JS_IsException(slotArgument(ctx, argv[0], slot)))
+            return argc < 1 ? JS_ThrowTypeError(ctx, "Native type conversion failed.") : JS_EXCEPTION;
         const ScriptContainerView view = viewOf(ctx, thisVal);
         if (!view)
             return invalidContainer(ctx);
-        int32_t slot = 0;
-        if (argc < 1 || JS_IsException(readSlot(ctx, view, argv[0], slot)))
-            return argc < 1 ? JS_ThrowTypeError(ctx, "Native type conversion failed.") : JS_EXCEPTION;
+        if (JS_IsException(checkSlot(ctx, view, slot)))
+            return JS_EXCEPTION;
         ScriptContainerRef *ref = new ScriptContainerRef(*api->native<ScriptContainerRef>(thisVal));
         ref->mIsContainer = false;
         ref->mSlot = slot;
@@ -2028,12 +2052,14 @@ namespace {
 
     JSValue containerSetItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t slot = 0;
+        if (argc < 1 || JS_IsException(slotArgument(ctx, argv[0], slot)))
+            return argc < 1 ? JS_ThrowTypeError(ctx, "Native type conversion failed.") : JS_EXCEPTION;
         const ScriptContainerView view = viewOf(ctx, thisVal);
         if (!view)
             return invalidContainer(ctx);
-        int32_t slot = 0;
-        if (argc < 1 || JS_IsException(readSlot(ctx, view, argv[0], slot)))
-            return argc < 1 ? JS_ThrowTypeError(ctx, "Native type conversion failed.") : JS_EXCEPTION;
+        if (JS_IsException(checkSlot(ctx, view, slot)))
+            return JS_EXCEPTION;
         const ScriptItemRef *item = argc >= 2 ? api->native<ScriptItemRef>(argv[1]) : nullptr;
         ItemStack stack;
         if (item != nullptr && !api->toItemStack(*item->mItem, stack))
@@ -2044,13 +2070,20 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // moveItem, swapItems and transferItem take a second container
-    JSValue otherView(JSContext *ctx, JSValueConst value, ScriptContainerView &view) {
+    // moveItem, swapItems and transferItem take a second container; the same bundle shares one view, since a
+    // bundle view writes back its own copy of the contents
+    JSValue otherView(JSContext *ctx, JSValueConst thisVal, const ScriptContainerView &self, JSValueConst value,
+                      ScriptContainerView &view) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptContainerRef *ref = api->native<ScriptContainerRef>(value);
         if (ref == nullptr || !ref->mIsContainer)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        view = containerOf(*api, *ref);
+        const ScriptContainerRef *own = api->native<ScriptContainerRef>(thisVal);
+        if (own != nullptr && own->mKind == ScriptContainerRef::Kind::Item && ref->mKind == own->mKind
+            && ref->mItem == own->mItem)
+            view = self;
+        else
+            view = containerOf(*api, *ref);
         return view ? JS_UNDEFINED : invalidContainer(ctx);
     }
 
@@ -2058,13 +2091,15 @@ namespace {
     JSValue containerMoveItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 3)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        int32_t fromSlot = 0, toSlot = 0;
+        if (JS_IsException(slotArgument(ctx, argv[0], fromSlot)) || JS_IsException(slotArgument(ctx, argv[1], toSlot)))
+            return JS_EXCEPTION;
         const ScriptContainerView from = viewOf(ctx, thisVal);
         if (!from)
             return invalidContainer(ctx);
         ScriptContainerView to;
-        int32_t fromSlot = 0, toSlot = 0;
-        if (JS_IsException(otherView(ctx, argv[2], to)) || JS_IsException(readSlot(ctx, from, argv[0], fromSlot))
-            || JS_IsException(readSlot(ctx, to, argv[1], toSlot, 1)))
+        if (JS_IsException(otherView(ctx, thisVal, from, argv[2], to)) || JS_IsException(checkSlot(ctx, from, fromSlot))
+            || JS_IsException(checkSlot(ctx, to, toSlot, 1)))
             return JS_EXCEPTION;
         ItemStack moving = from.mGet(fromSlot);
         if (moving.isAir())
@@ -2093,13 +2128,15 @@ namespace {
     JSValue containerSwapItems(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 3)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        int32_t slot = 0, otherSlot = 0;
+        if (JS_IsException(slotArgument(ctx, argv[0], slot)) || JS_IsException(slotArgument(ctx, argv[1], otherSlot)))
+            return JS_EXCEPTION;
         const ScriptContainerView first = viewOf(ctx, thisVal);
         if (!first)
             return invalidContainer(ctx);
         ScriptContainerView second;
-        int32_t slot = 0, otherSlot = 0;
-        if (JS_IsException(otherView(ctx, argv[2], second)) || JS_IsException(readSlot(ctx, first, argv[0], slot))
-            || JS_IsException(readSlot(ctx, second, argv[1], otherSlot, 1)))
+        if (JS_IsException(otherView(ctx, thisVal, first, argv[2], second))
+            || JS_IsException(checkSlot(ctx, first, slot)) || JS_IsException(checkSlot(ctx, second, otherSlot, 1)))
             return JS_EXCEPTION;
         ItemStack left = first.mGet(slot);
         ItemStack right = second.mGet(otherSlot);
@@ -2114,12 +2151,15 @@ namespace {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 2)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        int32_t fromSlot = 0;
+        if (JS_IsException(slotArgument(ctx, argv[0], fromSlot)))
+            return JS_EXCEPTION;
         const ScriptContainerView from = viewOf(ctx, thisVal);
         if (!from)
             return invalidContainer(ctx);
         ScriptContainerView to;
-        int32_t fromSlot = 0;
-        if (JS_IsException(otherView(ctx, argv[1], to)) || JS_IsException(readSlot(ctx, from, argv[0], fromSlot)))
+        if (JS_IsException(otherView(ctx, thisVal, from, argv[1], to))
+            || JS_IsException(checkSlot(ctx, from, fromSlot)))
             return JS_EXCEPTION;
         ItemStack moving = from.mGet(fromSlot);
         if (moving.isAir())
