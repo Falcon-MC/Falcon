@@ -92,16 +92,7 @@ namespace {
             if (cached != mCache.end())
                 return cached->second;
 
-            MapBiomeColors colors;
-            for (const BiomeDefinitionData &biome: mBiomes.getBiomes()) {
-                if (biome.mId != biomeId)
-                    continue;
-
-                colors.mTemperature = biome.mTemperature;
-                colors.mDownfall = biome.mDownfall;
-                colors.mWaterColor = (uint32_t) biome.mMapWaterColorArgb;
-                break;
-            }
+            const MapBiomeColors colors = MapColors::biomeColors(mBiomes, biomeId);
             mCache.emplace(biomeId, colors);
             return colors;
         }

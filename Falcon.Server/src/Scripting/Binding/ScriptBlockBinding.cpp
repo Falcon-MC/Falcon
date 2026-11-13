@@ -23,6 +23,7 @@
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Systems/CircuitComponents.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/Map/MapColors.h"
 #include "World/Level/Block/BlockNames.h"
@@ -1046,6 +1047,18 @@ namespace {
         return rgba(ctx, color);
     }
 
+    // sub_14A764AF0: the colour a map draws for the block, tinted by the biome it stands in
+    JSValue blockGetMapColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        MapBiomeColors biome;
+        if (const LevelChunk *chunk = at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4))
+            biome = MapColors::biomeColors(at.mApi->host().getBiomes(),
+                                           chunk->getBiomeAt(at.mPosition.x & 15, at.mPosition.y, at.mPosition.z & 15));
+        float color[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        MapColors::getColor(at.state(), biome, color);
+        return rgba(ctx, color);
+    }
+
     JSValue movableGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         const BlockState state = blockAt(ctx, thisVal).state();
         if (magic == 1)
@@ -1474,6 +1487,7 @@ void ScriptApi::_bindBlockSurface() {
     method(block, "Block", "getLightLevel", blockGetLightLevel, 0);
     method(block, "Block", "getSkyLightLevel", blockGetSkyLightLevel, 0);
     method(block, "Block", "getRedstonePower", blockGetRedstonePower, 0);
+    method(block, "Block", "getMapColor", blockGetMapColor, 0);
     method(block, "Block", "getItemStack", blockGetItemStack, 2);
     method(block, "Block", "getParts", blockGetParts, 0);
     method(block, "Block", "getComponent", blockGetComponent, 1);

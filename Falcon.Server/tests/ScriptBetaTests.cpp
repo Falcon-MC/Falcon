@@ -103,6 +103,10 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         try { new ListBlockVolume([]).getBoundingBox(); r.emptyBox = "ok"; } catch (e) { r.emptyBox = e.name + ":" + e.message; }
         r.boxCtor = (() => { try { new U(); return "ok"; } catch (e) { return e.name; } })();
         r.enums = PoiBlockOccupancyFilter.Any + ":" + WatchdogTerminateReason.Hang;
+        const stoneBlock = overworld.getBlock({ x: 1, y: 99, z: 1 });
+        stoneBlock.setType("minecraft:stone");
+        const rgba = (c) => [c.red, c.green, c.blue, c.alpha].map((v) => Math.round(v * 255)).join(",");
+        r.mapColor = rgba(stoneBlock.getMapColor()) + "|" + rgba(overworld.getBlock({ x: 1, y: 110, z: 1 }).getMapColor());
         world.broadcastClientMessage("test:id", "hello");
         const carried = world.getLootTableManager().getLootTable("test/carry").pools[0].entries[0].functions;
         r.carry = carried.map((f) => f.constructor.name + ":" + f.dynamicProperties).join(",");
@@ -277,6 +281,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*r, "emptyBox", "Error:Cannot get bounding box of empty block volume.");
         expect(*r, "boxCtor", "ReferenceError");
         expect(*r, "enums", "Any:Hang");
+        expect(*r, "mapColor", "112,112,112,255|0,0,0,0");
         expect(*r, "carry", "CarryOverBlockEntityDataFunction:true,CarryOverBlockEntityDataFunction:false");
         expect(*r, "banner",
                "0:lightBlue:BannerPattern=creeper/red;BannerPattern=cross/white;BannerPattern=skull/blue;"
