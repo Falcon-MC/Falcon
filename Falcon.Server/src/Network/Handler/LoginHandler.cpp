@@ -1102,6 +1102,41 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         cached.mMultiRecipes.push_back(multi);
     }
 
+    // after every other recipe: their network ids stay put
+    const StonecutterRecipeData *stonecutterRecipes = CraftingRecipeTable::getStonecutterRecipes();
+    std::unordered_map<int32_t, uint32_t> &stonecutterIndices = owner.getStonecutterRecipeIndicesMutable();
+    for (size_t index = 0; index < CraftingRecipeTable::getStonecutterRecipeCount(); ++index) {
+        const StonecutterRecipeData &source = stonecutterRecipes[index];
+        const ItemNetworkIdEntry *outputNetwork = ItemNetworkIdTable::find(source.mOutputItemId);
+        if (outputNetwork == nullptr)
+            continue;
+
+        CraftingRecipeEntry entry;
+        entry.mRecipeNetId = furnaceRecipeNetId++;
+        entry.mRecipeId = packRecipeId((uint32_t) entry.mRecipeNetId);
+        entry.mUuid = Uuid::fromString(source.mUuid);
+        entry.mBlockName = "stonecutter";
+        entry.mPriority = source.mPriority;
+
+        RecipeIngredientEntry input;
+        input.mHasItem = true;
+        input.mItemId = source.mInputItemId;
+        input.mAuxValue = source.mInputAuxValue < 0 ? 0x7fff : source.mInputAuxValue;
+        input.mCount = 1;
+        entry.mInputs.push_back(std::move(input));
+
+        RecipeOutputEntry output;
+        output.mRuntimeId = outputNetwork->mNetworkId;
+        output.mCount = source.mOutputCount;
+        const auto blockDefinition = owner.getBlockDefinitions().getDefinition(source.mOutputItemId);
+        output.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
+        entry.mOutputs.push_back(output);
+
+        owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+        stonecutterIndices[entry.mRecipeNetId] = (uint32_t) index;
+        cached.mShapelessRecipes.push_back(std::move(entry));
+    }
+
     cached.mCleanRecipes = true;
 }
 

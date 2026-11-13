@@ -32,6 +32,7 @@ namespace {
         std::vector<FurnaceRecipeData> mFurnaceRecipes;
         std::vector<FurnaceRecipeData> mCampfireRecipes;
         std::vector<FurnaceRecipeData> mSoulCampfireRecipes;
+        std::vector<StonecutterRecipeData> mStonecutterRecipes;
         std::vector<BrewingMixData> mPotionMixes;
         std::vector<BrewingMixData> mContainerMixes;
         std::deque<std::string> mStrings;
@@ -272,6 +273,42 @@ namespace {
         }
     }
 
+    void loadStonecutterRecipe(RecipeStorage &storage, const json::Value &source) {
+        const json::Value *id = source.get("id");
+        const json::Value *uuid = source.get("uuid");
+        const json::Value *inputData = source.get("input");
+        const json::Value *outputData = source.get("output");
+        if (id == nullptr || inputData == nullptr || inputData->mType != json::Value::Type::Array
+            || inputData->mArray.size() != 1 || outputData == nullptr || outputData->mType != json::Value::Type::Array
+            || outputData->mArray.size() != 1) {
+            return;
+        }
+
+        const json::Value &input = *inputData->mArray.front();
+        const json::Value *inputType = input.get("type");
+        const json::Value *inputItem = input.get("itemId");
+        if (inputType == nullptr || inputType->string() != "name" || inputItem == nullptr
+            || inputItem->mType != json::Value::Type::String) {
+            return;
+        }
+
+        const json::Value *output = outputData->mArray.front()->get("id");
+        if (output == nullptr || output->mType != json::Value::Type::String)
+            return;
+
+        const json::Value *auxValue = input.get("auxValue");
+        const json::Value *countValue = outputData->mArray.front()->get("count");
+        const json::Value *priority = source.get("priority");
+        const int32_t outputCount = countValue == nullptr ? 1 : countValue->integer(1);
+        if (outputCount <= 0)
+            return;
+
+        storage.mStonecutterRecipes.push_back(
+                {storage.store(id->string()), storage.store(uuid == nullptr ? std::string() : uuid->string()),
+                 storage.store(inputItem->mString), auxValue == nullptr ? 0 : auxValue->integer(0),
+                 storage.store(output->mString), outputCount, priority == nullptr ? 0 : priority->integer(0)});
+    }
+
     void loadBrewingMixes(RecipeStorage &storage, std::vector<BrewingMixData> &target, const json::Value *mixes) {
         if (mixes == nullptr || mixes->mType != json::Value::Type::Array)
             return;
@@ -333,7 +370,13 @@ namespace {
                 continue;
             }
 
-            if (block->string() != "crafting_table")
+            if (blockName == "stonecutter") {
+                if (type->integer(-1) == 1)
+                    loadStonecutterRecipe(storage, *recipe);
+                continue;
+            }
+
+            if (blockName != "crafting_table")
                 continue;
 
             switch (type->integer(-1)) {
@@ -374,6 +417,14 @@ const FurnaceRecipeData *CraftingRecipeTable::getFurnaceRecipes() {
 
 size_t CraftingRecipeTable::getFurnaceRecipeCount() {
     return getStorage().mFurnaceRecipes.size();
+}
+
+const StonecutterRecipeData *CraftingRecipeTable::getStonecutterRecipes() {
+    return getStorage().mStonecutterRecipes.data();
+}
+
+size_t CraftingRecipeTable::getStonecutterRecipeCount() {
+    return getStorage().mStonecutterRecipes.size();
 }
 
 const FurnaceRecipeData *CraftingRecipeTable::findCampfireRecipe(const std::string &inputId, int32_t inputMeta,

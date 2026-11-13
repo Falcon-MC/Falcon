@@ -747,6 +747,16 @@ public:
         return mRecipeSourceIndices;
     }
 
+    // recipe network id to CraftingRecipeTable::getStonecutterRecipes index
+    const std::unordered_map<int32_t, uint32_t> &getStonecutterRecipeIndices() {
+        _buildCraftingData();
+        return mStonecutterRecipeIndices;
+    }
+
+    std::unordered_map<int32_t, uint32_t> &getStonecutterRecipeIndicesMutable() {
+        return mStonecutterRecipeIndices;
+    }
+
     // custom recipes absent
     std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() {
         return mVanillaRecipeIds;
@@ -1115,6 +1125,7 @@ private:
     std::vector<ItemStack> mRecipeOutputs;
     std::vector<uint32_t> mRecipeSourceIndices;
     std::unordered_map<int32_t, std::string> mVanillaRecipeIds;
+    std::unordered_map<int32_t, uint32_t> mStonecutterRecipeIndices;
     std::vector<int32_t> mCreativeSourceIndices;
     PlayerDataProvider mPlayerData;
     OpList mOps;

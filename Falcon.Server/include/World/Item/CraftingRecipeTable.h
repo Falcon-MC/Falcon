@@ -38,6 +38,16 @@ struct FurnaceRecipeData {
     int32_t mPriority;
 };
 
+struct StonecutterRecipeData {
+    const char *mRecipeId;
+    const char *mUuid;
+    const char *mInputItemId;
+    int32_t mInputAuxValue;
+    const char *mOutputItemId;
+    int32_t mOutputCount;
+    int32_t mPriority;
+};
+
 struct BrewingMixData {
     const char *mInputId;
     int32_t mInputMeta;
@@ -56,6 +66,9 @@ public:
 
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
+
+    static const StonecutterRecipeData *getStonecutterRecipes();
+    static size_t getStonecutterRecipeCount();
 
     static const FurnaceRecipeData *findCampfireRecipe(const std::string &inputId, int32_t inputMeta, bool soul);
 
