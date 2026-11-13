@@ -22,3 +22,4 @@
 /Falcon.Server/benchmarks/
 /Falcon.Server/docs/
 __pycache__/
+.DS_Store
