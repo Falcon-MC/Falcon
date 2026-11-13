@@ -1,5 +1,6 @@
 #include "World/Level/TickingAreaManager.h"
 
+#include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/UUID.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -57,6 +58,18 @@ std::vector<int64_t> TickingArea::getColumns() const {
     return columns;
 }
 
+int64_t TickingArea::getChunkCount() const {
+    if (mCircle)
+        return (int64_t) getColumns().size();
+    return ((int64_t) (mMaxX >> CHUNK_SHIFT) - (mMinX >> CHUNK_SHIFT) + 1)
+           * ((int64_t) (mMaxZ >> CHUNK_SHIFT) - (mMinZ >> CHUNK_SHIFT) + 1);
+}
+
+int64_t TickingArea::getSideChunks() const {
+    return std::max((int64_t) (mMaxX >> CHUNK_SHIFT) - (mMinX >> CHUNK_SHIFT) + 1,
+                    (int64_t) (mMaxZ >> CHUNK_SHIFT) - (mMinZ >> CHUNK_SHIFT) + 1);
+}
+
 Tag TickingArea::toNbt() const {
     Tag data = Tag::ofCompound();
     data.putInt("Dimension", Dimension::toId(mDimension));
@@ -109,7 +122,15 @@ void TickingAreaManager::load(World &world) {
     mAreas.clear();
 
     for (const std::pair<std::string, Tag> &entry: world.getLevel(DimensionType::Overworld).loadTickingAreas()) {
-        mAreas.push_back(TickingArea::fromNbt(entry.first, entry.second));
+        TickingArea area = TickingArea::fromNbt(entry.first, entry.second);
+        // a stored area no limit admits would load its chunks at every start: left on disk, not attached
+        if (area.mMinX > area.mMaxX || area.mMinZ > area.mMaxZ || area.getSideChunks() > MAX_SIDE_CHUNKS
+            || area.getChunkCount() > MAX_SCRIPT_CHUNKS) {
+            LOG_WARN(LogAreaID::Server, "Skipped ticking area %s: %lld chunks over the limits", area.mName.c_str(),
+                     (long long) area.getChunkCount());
+            continue;
+        }
+        mAreas.push_back(std::move(area));
         _attach(world, mAreas.back());
     }
 }

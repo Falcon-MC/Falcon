@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 
 #if defined(_WIN32)
@@ -856,32 +857,65 @@ namespace {
         return api.throwError("TickingAreaError", "", fields);
     }
 
+    bool inBlockRange(double value) {
+        return std::isfinite(value) && value >= (double) INT32_MIN && value < (double) INT32_MAX + 1.0;
+    }
+
+    // TickingAreaOptions; false for a conversion failure
+    bool readTickingArea(ScriptApi &api, JSValueConst options, TickingArea &area) {
+        JSContext *ctx = api.context();
+        JSValue dimension = JS_GetPropertyStr(ctx, options, "dimension");
+        JSValue from = JS_GetPropertyStr(ctx, options, "from");
+        JSValue to = JS_GetPropertyStr(ctx, options, "to");
+        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
+        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
+                           && readVector3(ctx, to, tx, ty, tz) && inBlockRange(fx) && inBlockRange(fy)
+                           && inBlockRange(fz) && inBlockRange(tx) && inBlockRange(ty) && inBlockRange(tz);
+        if (valid) {
+            area = TickingArea::box(
+                    Vector3i((int32_t) std::floor(fx), (int32_t) std::floor(fy), (int32_t) std::floor(fz)),
+                    Vector3i((int32_t) std::floor(tx), (int32_t) std::floor(ty), (int32_t) std::floor(tz)));
+            area.mDimension = api.levelOf(dimension).getDimensionType();
+        }
+        JS_FreeValue(ctx, dimension);
+        JS_FreeValue(ctx, from);
+        JS_FreeValue(ctx, to);
+        return valid;
+    }
+
+    int64_t scriptChunkCount(ScriptApi &api) {
+        int64_t count = 0;
+        for (const std::string &name: api.tickingAreaNames()) {
+            if (const TickingArea *area = findArea(api, name))
+                count += area->getChunkCount();
+        }
+        return count;
+    }
+
+    // the TickingAreaErrorReason refusing the area, null when it fits
+    const char *capacityError(ScriptApi &api, const TickingArea &area) {
+        if (area.getSideChunks() > TickingAreaManager::MAX_SIDE_CHUNKS)
+            return "SideLengthExceeded";
+        if (scriptChunkCount(api) + area.getChunkCount() > TickingAreaManager::MAX_SCRIPT_CHUNKS)
+            return "OverChunkLimit";
+        return nullptr;
+    }
+
     JSValue tickingCreate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         if (argc < 2 || !JS_IsObject(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         const std::string name = toString(ctx, argv[0]);
-        JSValue dimension = JS_GetPropertyStr(ctx, argv[1], "dimension");
-        JSValue from = JS_GetPropertyStr(ctx, argv[1], "from");
-        JSValue to = JS_GetPropertyStr(ctx, argv[1], "to");
-        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
-        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
-                           && readVector3(ctx, to, tx, ty, tz);
-        const DimensionType type = valid ? api.levelOf(dimension).getDimensionType() : DimensionType::Overworld;
-        JS_FreeValue(ctx, dimension);
-        JS_FreeValue(ctx, from);
-        JS_FreeValue(ctx, to);
-        if (!valid)
+        TickingArea area;
+        if (!readTickingArea(api, argv[1], area))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         if (findArea(api, name) != nullptr)
             return tickingAreaError(api, "IdentifierAlreadyExists");
+        if (const char *refused = capacityError(api, area))
+            return tickingAreaError(api, refused);
 
-        TickingArea area = TickingArea::box(
-                Vector3i((int32_t) std::floor(fx), (int32_t) std::floor(fy), (int32_t) std::floor(fz)),
-                Vector3i((int32_t) std::floor(tx), (int32_t) std::floor(ty), (int32_t) std::floor(tz)));
         area.mName = name;
-        area.mDimension = type;
         worldOfPack(api).getTickingAreas().add(worldOfPack(api), area);
         api.tickingAreaNames().push_back(name);
 
@@ -939,38 +973,22 @@ namespace {
     }
 
     JSValue tickingChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        ScriptApi &api = *ScriptApi::fromContext(ctx);
-        int32_t count = 0;
-        for (const std::string &name: api.tickingAreaNames()) {
-            const TickingArea *area = findArea(api, name);
-            if (area != nullptr)
-                count += (int32_t) area->getColumns().size();
-        }
-        return JS_NewInt32(ctx, count);
+        return JS_NewInt64(ctx, scriptChunkCount(*ScriptApi::fromContext(ctx)));
     }
 
-    // the limit is an optional<int> the level gets at creation; empty: -1 and every area fits (sub_14C3A58D0,
-    // sub_14C2BBDD0). falcon sets no limit
+    // the limit is an optional<int> the level gets at creation, -1 when unset (sub_14C3A58D0, sub_14C2BBDD0)
     JSValue tickingMaxChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, -1);
+        return JS_NewInt64(ctx, TickingAreaManager::MAX_SCRIPT_CHUNKS);
     }
 
     JSValue tickingHasCapacity(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         if (argc < 1 || !JS_IsObject(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        JSValue dimension = JS_GetPropertyStr(ctx, argv[0], "dimension");
-        JSValue from = JS_GetPropertyStr(ctx, argv[0], "from");
-        JSValue to = JS_GetPropertyStr(ctx, argv[0], "to");
-        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
-        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
-                           && readVector3(ctx, to, tx, ty, tz);
-        JS_FreeValue(ctx, dimension);
-        JS_FreeValue(ctx, from);
-        JS_FreeValue(ctx, to);
-        if (!valid)
+        TickingArea area;
+        if (!readTickingArea(api, argv[0], area))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        return JS_NewBool(ctx, true);
+        return JS_NewBool(ctx, capacityError(api, area) == nullptr);
     }
 }
 
