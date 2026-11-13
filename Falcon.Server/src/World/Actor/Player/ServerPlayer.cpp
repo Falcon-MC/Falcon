@@ -1163,12 +1163,13 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
             if (value.getType() != Tag::Type::Compound)
                 continue;
             const int id = value.getByte("Id", 0);
-            if (id < 1 || id > 30)
+            if (!isKnownMobEffect(id))
                 continue;
             MobEffectInstance effect;
             effect.mId = (MobEffectId) id;
             effect.mDuration = value.getInt("Duration", 0);
-            effect.mAmplifier = value.getByte("Amplifier", 0);
+            // a byte on disk; /effect goes up to 255
+            effect.mAmplifier = (uint8_t) value.getByte("Amplifier", 0);
             effect.mAmbient = value.getByte("Ambient", 0) != 0;
             effect.mParticles = value.getByte("ShowParticles", 1) != 0;
             effect.mInfinite = effect.mDuration < 0;
