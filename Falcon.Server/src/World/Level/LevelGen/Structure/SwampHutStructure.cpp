@@ -6,9 +6,7 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
-#include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/VanillaBlocks.h"
-#include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -28,7 +26,7 @@ namespace {
     int32_t aboveTopSolid(const LevelChunk &chunk, int32_t x, int32_t z) {
         for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
             const BlockState &state = chunk.getBlock(x, y, z);
-            if (WaterBlock::matches(state.mName) || BlockSupport::isSolid(state))
+            if (StructureMaterials::stopsTopSolidSearch(state, true, false))
                 return y + 1;
         }
         return LevelChunk::MIN_Y;
