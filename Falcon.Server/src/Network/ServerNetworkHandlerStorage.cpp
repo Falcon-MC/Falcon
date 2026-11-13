@@ -33,6 +33,10 @@ namespace {
 }
 
 void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool checked) {
+    // loaded in sendStartGame: before it the player is blank, and would overwrite its own save
+    if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent)
+        return;
+
     Tag data = player.saveNbt(getWorldFor(player).getName());
     if (!player.getXuid().empty())
         data.putString(PlayerDataProvider::TAG_OWNER_XUID, player.getXuid());
