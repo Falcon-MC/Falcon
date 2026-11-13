@@ -30,6 +30,7 @@
 #include "Network/LoginChainVerifier.h"
 #include "World/Level/Storage/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
+#include "Core/Text/StringUtil.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
@@ -380,6 +381,30 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
             owner.erasePlayer(id);
             return;
         }
+    }
+
+    // one session per account: two would load the same save, and the last to leave would write over the other.
+    // the older one is closed and this login refused: its save lands before the next attempt reads it
+    bool alreadyOnline = false;
+    const std::string loweredName = StringUtil::toLowerCase(player.getName());
+    for (auto &entry: owner.getPlayers()) {
+        const ServerPlayer &other = entry.second;
+        if (&other == &player || other.isSimulated() || other.getName().empty())
+            continue;
+
+        const bool sameAccount = !player.getXuid().empty() && other.getXuid() == player.getXuid();
+        if (!sameAccount && StringUtil::toLowerCase(other.getName()) != loweredName)
+            continue;
+
+        alreadyOnline = true;
+        owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
+                          "disconnectionScreen.loggedinOtherLocation");
+    }
+    if (alreadyOnline) {
+        LOG_INFO(LogAreaID::Server, "Player %s logged in from another location", player.getName().c_str());
+        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, "disconnectionScreen.loggedinOtherLocation");
+        owner.erasePlayer(id);
+        return;
     }
 
     // a gamertag can change hands: the save under it must be this account's before it is read or written
