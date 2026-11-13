@@ -758,7 +758,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "herd", "1");
         expect(r, "jigsaw", "4:true:true:true:false");
         expect(r, "partial", "minecraft:diamond_block:true");
-        expect(r, "jigsawErrors", "throw:Error:throw:ArgumentOutOfBoundsError");
+        expect(r, "jigsawErrors", "throw:PlaceJigsawError:throw:ArgumentOutOfBoundsError");
         expect(r, "leverFaces", "6:string");
         expect(r, "target", "15");
         expect(r, "leverPower", "15");
