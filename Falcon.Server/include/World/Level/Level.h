@@ -19,6 +19,7 @@
 #include "World/Level/NamedTickQueue.h"
 #include "World/Level/NeighborChangeQueue.h"
 #include "World/Level/Storage/LevelStorage.h"
+#include "World/Village/PoiManager.h"
 #include "World/Village/VillageManager.h"
 
 #include <chrono>
@@ -453,6 +454,10 @@ public:
         return mVillageManager;
     }
 
+    PoiManager &getPoiManager() {
+        return mPoiManager;
+    }
+
     void scheduleBlockUpdate(const Vector3i &position, int64_t delay = 1);
 
     void setOwner(ServerNetworkHandler *owner) {
@@ -512,6 +517,10 @@ public:
     }
 
     bool hasExperiment(const std::string &name) const;
+
+    void setExperiments(std::vector<std::string> experiments) {
+        mExperiments = std::move(experiments);
+    }
 
     LiquidPhysicsSystem &getLiquidPhysics() {
         return mLiquidPhysics;
@@ -642,6 +651,7 @@ private:
     bool mBatchLight = false;
     std::unordered_set<int64_t> mBatchedLightColumns;
     VillageManager mVillageManager;
+    PoiManager mPoiManager;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
     // drained results awaiting insertion; new requests wait at this many
