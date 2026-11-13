@@ -7,6 +7,7 @@
 #include "World/Level/LevelGen/Structure/BuriedTreasureStructure.h"
 #include "World/Level/LevelGen/Structure/DesertPyramidStructure.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
+#include "World/Level/LevelGen/Structure/JungleTempleStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
 #include "World/Level/LevelGen/Structure/ShipwreckStructure.h"
@@ -131,6 +132,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     IglooStructure::place(*this, level, chunk);
     SwampHutStructure::place(*this, level, chunk);
     DesertPyramidStructure::place(*this, level, chunk);
+    JungleTempleStructure::place(*this, level, chunk);
     BuriedTreasureStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);
     OceanRuinStructure::place(*this, level, chunk);
