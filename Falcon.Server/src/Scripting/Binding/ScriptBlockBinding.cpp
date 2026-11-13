@@ -5,7 +5,10 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/Container.h"
+#include "World/Inventory/InventoryManager.h"
+#include "World/Inventory/StonecutterRecipes.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
@@ -21,6 +24,7 @@
 #include "World/Level/Block/CauldronBlock.h"
 #include "World/Level/Block/CrafterBlock.h"
 #include "World/Level/Block/LiquidProperties.h"
+#include "World/Level/Block/StonecutterBlock.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Level/Block/Systems/PrecipitationSystem.h"
@@ -605,6 +609,9 @@ namespace {
         if (PistonSystem::isPiston(state.mName))
             ids.emplace_back("minecraft:piston");
         ids.emplace_back("minecraft:precipitation_interactions");
+        // sub_14E0E0F70: the stonecutter alone
+        if (StonecutterBlock::matches(state.mName))
+            ids.emplace_back("minecraft:recipe_crafting");
         if (dynamic_cast<CrafterBlockActor *>(actor) != nullptr)
             ids.emplace_back("minecraft:recipe_processing");
         if (dynamic_cast<JukeboxBlockActor *>(actor) != nullptr)
@@ -628,6 +635,7 @@ namespace {
             {"minecraft:movable", "BlockMovableComponent"},
             {"minecraft:piston", "BlockPistonComponent"},
             {"minecraft:precipitation_interactions", "BlockPrecipitationInteractionsComponent"},
+            {"minecraft:recipe_crafting", "BlockRecipeCraftingComponent"},
             {"minecraft:recipe_processing", "BlockRecipeProcessingComponent"},
             {"minecraft:record_player", "BlockRecordPlayerComponent"},
             {"minecraft:redstone_producer", "BlockRedstoneProducerComponent"},
@@ -1570,6 +1578,219 @@ namespace {
         return results.empty() ? JS_UNDEFINED : at.mApi->makeItem(results.front());
     }
 
+    bool isStonecutterAt(const BlockAt &at) {
+        return StonecutterBlock::matches(at.state().mName);
+    }
+
+    bool hasStonecutterOpen(const BlockAt &at, ServerPlayer &player) {
+        const InventoryManager &manager = player.getInventoryManager();
+        return manager.isStonecutterOpen() && manager.getAnvilPosition() == at.mPosition
+               && &at.mApi->host().getLevelFor(player) == at.mLevel;
+    }
+
+    JSValue invalidCrafting(const BlockAt &at) {
+        return at.mApi->throwError("InvalidBlockComponentError",
+                                   "Attempting to access invalid block component minecraft:recipe_crafting.");
+    }
+
+    JSValue craftingPlayers(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (!isStonecutterAt(at))
+            return invalidCrafting(at);
+        JSValue players = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (auto &entry: at.mApi->host().getPlayers()) {
+            if (hasStonecutterOpen(at, entry.second))
+                JS_SetPropertyUint32(ctx, players, index++, at.mApi->makePlayer(entry.second));
+        }
+        return players;
+    }
+
+    JSValue craftingGetContext(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const ScriptEntityRef *ref = argc < 1 ? nullptr : at.mApi->native<ScriptEntityRef>(argv[0]);
+        if (ref == nullptr || ref->mKind != ScriptEntityRef::Kind::Player)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (!isStonecutterAt(at))
+            return invalidCrafting(at);
+        ServerPlayer *player = at.mApi->resolvePlayer(argv[0]);
+        if (player == nullptr)
+            return at.mApi->throwInvalidEntity("call function", "getCraftingContext", *ref);
+        if (!hasStonecutterOpen(at, *player))
+            return JS_UNDEFINED;
+
+        ScriptRecipeCraftingContext *context = new ScriptRecipeCraftingContext();
+        context->mHandle = (uint32_t) ref->mId;
+        context->mWindowId = player->getInventoryManager().getStonecutterWindowId();
+        context->mBlock.mWorldId = at.mLevel->getWorldId();
+        context->mBlock.mDimension = at.mLevel->getDimensionType();
+        context->mBlock.mX = at.mPosition.x;
+        context->mBlock.mY = at.mPosition.y;
+        context->mBlock.mZ = at.mPosition.z;
+        return at.mApi->makeInstance("RecipeCraftingContext", context);
+    }
+
+    // the player of a context whose window is still the open one, else null
+    ServerPlayer *contextPlayer(ScriptApi &api, const ScriptRecipeCraftingContext &context) {
+        ServerPlayer *player = api.resolvePlayerByHandle(context.mHandle);
+        if (player == nullptr)
+            return nullptr;
+        const InventoryManager &manager = player->getInventoryManager();
+        Level &level = api.resolveLevel(context.mBlock.mWorldId, context.mBlock.mDimension);
+        const Vector3i position(context.mBlock.mX, context.mBlock.mY, context.mBlock.mZ);
+        if (manager.getStonecutterWindowId() != context.mWindowId || manager.getAnvilPosition() != position
+            || &api.host().getLevelFor(*player) != &level)
+            return nullptr;
+        return player;
+    }
+
+    struct ContextAt {
+        ScriptApi *mApi = nullptr;
+        ServerPlayer *mPlayer = nullptr;
+        JSValue mError = JS_UNDEFINED;
+    };
+
+    ContextAt contextAt(JSContext *ctx, JSValueConst thisVal) {
+        ContextAt at;
+        at.mApi = ScriptApi::fromContext(ctx);
+        const ScriptRecipeCraftingContext *context = at.mApi->native<ScriptRecipeCraftingContext>(thisVal);
+        if (context == nullptr) {
+            at.mError = JS_ThrowTypeError(ctx, "Native type conversion failed.");
+            return at;
+        }
+        at.mPlayer = contextPlayer(*at.mApi, *context);
+        if (at.mPlayer == nullptr)
+            at.mError = at.mApi->throwError("EngineError", "RecipeCraftingContext is invalid.");
+        return at;
+    }
+
+    // the component maps its one input to ui slot 3 (sub_14E0E0F70); past it the bounds error of sub_148548380
+    // names argument 0 "slot", bounds 0 and the mapping count
+    JSValue checkContextSlot(ScriptApi &api, uint32_t slot) {
+        if (slot < 1)
+            return JS_UNDEFINED;
+        JSContext *ctx = api.context();
+        JSValue fields = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, fields, "index", JS_NewInt32(ctx, 0));
+        JS_SetPropertyStr(ctx, fields, "minValue", JS_NewFloat64(ctx, 0.0));
+        JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewFloat64(ctx, 1.0));
+        JS_SetPropertyStr(ctx, fields, "value", JS_NewFloat64(ctx, (double) slot));
+        return api.throwError("ArgumentOutOfBoundsError",
+                              "Unsupported or out of bounds value passed to function argument [0]: slot, Value: "
+                                      + std::to_string(slot) + ", Argument bounds: [0, 1]",
+                              fields);
+    }
+
+    JSValue contextIsValid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptRecipeCraftingContext *context = api->native<ScriptRecipeCraftingContext>(thisVal);
+        if (context == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return JS_NewBool(ctx, contextPlayer(*api, *context) != nullptr);
+    }
+
+    JSValue contextSlotCount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ContextAt at = contextAt(ctx, thisVal);
+        if (at.mPlayer == nullptr)
+            return at.mError;
+        return JS_NewInt32(ctx, 1);
+    }
+
+    JSValue contextValidRecipes(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ContextAt at = contextAt(ctx, thisVal);
+        if (at.mPlayer == nullptr)
+            return at.mError;
+        JSValue ids = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const StonecutterRecipeData *recipe:
+             StonecutterRecipes::validRecipes(at.mPlayer->getInventory().getStonecutterInput()))
+            JS_SetPropertyUint32(ctx, ids, index++, JS_NewString(ctx, recipe->mRecipeId));
+        return ids;
+    }
+
+    JSValue contextGetInput(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        uint32_t slot = 0;
+        if (!readSlotIndex(ctx, argc, argv, slot))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const ContextAt at = contextAt(ctx, thisVal);
+        if (at.mPlayer == nullptr)
+            return at.mError;
+        JSValue refused = checkContextSlot(*at.mApi, slot);
+        if (JS_IsException(refused))
+            return refused;
+        return at.mApi->makeItem(at.mPlayer->getInventory().getStonecutterInput());
+    }
+
+    // sub_14C8D96D0: undefined with no input or no recipe, the selected recipe's output otherwise
+    JSValue contextGetOutput(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ContextAt at = contextAt(ctx, thisVal);
+        if (at.mPlayer == nullptr)
+            return at.mError;
+        const ItemStack &input = at.mPlayer->getInventory().getStonecutterInput();
+        if (input.isAir())
+            return JS_UNDEFINED;
+        const std::vector<const StonecutterRecipeData *> recipes = StonecutterRecipes::validRecipes(input);
+        if (recipes.empty())
+            return JS_UNDEFINED;
+        const int32_t selected = at.mPlayer->getInventoryManager().getStonecutterSelectedRecipe();
+        if (selected < 0 || (size_t) selected >= recipes.size())
+            return at.mApi->throwError("EngineError",
+                                       "The selected recipe index is out of range, should always be in sync.");
+        return at.mApi->makeItem(
+                StonecutterRecipes::createOutput(*recipes[(size_t) selected], at.mApi->host().getCodecContext()));
+    }
+
+    // sub_14C8DBCF0: writes the player's ui slot, an omitted item clears it; the selected recipe stays
+    JSValue contextSetInput(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        uint32_t slot = 0;
+        if (!readSlotIndex(ctx, argc, argv, slot))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        ItemStack stack = ItemStack::air();
+        if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+            const ScriptItemRef *item = api->native<ScriptItemRef>(argv[1]);
+            if (item == nullptr || !api->toItemStack(*item->mItem, stack))
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        }
+        const ContextAt at = contextAt(ctx, thisVal);
+        if (at.mPlayer == nullptr)
+            return at.mError;
+        JSValue refused = checkContextSlot(*at.mApi, slot);
+        if (JS_IsException(refused))
+            return refused;
+        at.mPlayer->getInventory().setStonecutterInput(std::move(stack));
+        at.mPlayer->getInventoryManager().syncStonecutterInput();
+        return JS_UNDEFINED;
+    }
+
+    // sub_14C8DDC10: an empty input or an id outside its recipes throws InvalidRecipeError
+    JSValue contextSetSelected(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const char *raw = JS_ToCString(ctx, argv[0]);
+        if (raw == nullptr)
+            return JS_EXCEPTION;
+        const std::string recipeId(raw);
+        JS_FreeCString(ctx, raw);
+        const ContextAt at = contextAt(ctx, thisVal);
+        if (at.mPlayer == nullptr)
+            return at.mError;
+
+        const ItemStack &input = at.mPlayer->getInventory().getStonecutterInput();
+        if (!input.isAir()) {
+            const std::vector<const StonecutterRecipeData *> recipes = StonecutterRecipes::validRecipes(input);
+            for (size_t index = 0; index < recipes.size(); ++index) {
+                if (recipeId != recipes[index]->mRecipeId)
+                    continue;
+                at.mPlayer->getInventoryManager().setStonecutterSelectedRecipe((int32_t) index);
+                return JS_UNDEFINED;
+            }
+        }
+        JSValue fields = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, fields, "recipeId", JS_NewString(ctx, recipeId.c_str()));
+        return at.mApi->throwError("InvalidRecipeError", "Invalid recipe Id " + recipeId, fields);
+    }
+
     // sub_14C8533F0: the block where the component stands now, a block without the json component reads false
     JSValue vibrationQuery(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         const BlockAt at = blockAt(ctx, thisVal);
@@ -1974,6 +2195,21 @@ void ScriptApi::_bindBlockSurface() {
         method(processing, "BlockRecipeProcessingComponent", "getInputSlotEnabled", processingGetSlotEnabled, 1);
         method(processing, "BlockRecipeProcessingComponent", "setInputSlotEnabled", processingSetSlotEnabled, 2);
         method(processing, "BlockRecipeProcessingComponent", "getOutputItem", processingGetOutput, 0);
+    }
+    if (mSurface.has("BlockRecipeCraftingComponent")) {
+        JSValue crafting = defineClass("BlockRecipeCraftingComponent");
+        property(crafting, "BlockRecipeCraftingComponent", "players", craftingPlayers);
+        method(crafting, "BlockRecipeCraftingComponent", "getCraftingContext", craftingGetContext, 1);
+    }
+    if (mSurface.has("RecipeCraftingContext")) {
+        JSValue context = defineClass("RecipeCraftingContext");
+        property(context, "RecipeCraftingContext", "inputSlotCount", contextSlotCount);
+        property(context, "RecipeCraftingContext", "isValid", contextIsValid);
+        property(context, "RecipeCraftingContext", "validRecipes", contextValidRecipes);
+        method(context, "RecipeCraftingContext", "getInputItem", contextGetInput, 1);
+        method(context, "RecipeCraftingContext", "getOutputItem", contextGetOutput, 0);
+        method(context, "RecipeCraftingContext", "setInputItem", contextSetInput, 2);
+        method(context, "RecipeCraftingContext", "setSelectedRecipe", contextSetSelected, 1);
     }
     if (mSurface.has("BlockVibrationPropertiesComponent")) {
         JSValue vibration = defineClass("BlockVibrationPropertiesComponent");

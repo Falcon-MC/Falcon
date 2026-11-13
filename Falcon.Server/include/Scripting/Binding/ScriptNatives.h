@@ -103,6 +103,13 @@ struct ScriptBlockRef : ScriptNative {
     int32_t mZ = 0;
 };
 
+// one player's stonecutter window, valid while that window stays open
+struct ScriptRecipeCraftingContext : ScriptNative {
+    uint32_t mHandle = 0;
+    int mWindowId = -1;
+    ScriptBlockRef mBlock;
+};
+
 // a block component: reads the block on every access
 struct ScriptBlockPart : ScriptNative {
     ScriptBlockRef mBlock;

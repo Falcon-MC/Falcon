@@ -953,6 +953,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const MapCreateLockedCopyPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const ServerboundStonecutterSetRecipePacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const RequestAbilityPacket &packet) override;

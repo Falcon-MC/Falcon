@@ -1,5 +1,6 @@
 #include "World/Inventory/StonecutterRecipes.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -24,6 +25,21 @@ bool StonecutterRecipes::matchesInput(const StonecutterRecipeData &recipe, const
         return false;
 
     return auxValue < 0 || input.mDamage == auxValue;
+}
+
+std::vector<const StonecutterRecipeData *> StonecutterRecipes::validRecipes(const ItemStack &input) {
+    std::vector<const StonecutterRecipeData *> recipes;
+    const StonecutterRecipeData *all = CraftingRecipeTable::getStonecutterRecipes();
+    for (size_t index = 0; index < CraftingRecipeTable::getStonecutterRecipeCount(); ++index) {
+        if (matchesInput(all[index], input))
+            recipes.push_back(&all[index]);
+    }
+
+    std::sort(recipes.begin(), recipes.end(),
+              [](const StonecutterRecipeData *left, const StonecutterRecipeData *right) {
+                  return std::string(left->mRecipeId) < std::string(right->mRecipeId);
+              });
+    return recipes;
 }
 
 ItemStack StonecutterRecipes::createOutput(const StonecutterRecipeData &recipe, const PacketCodecContext &context) {
