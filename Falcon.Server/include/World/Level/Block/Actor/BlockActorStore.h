@@ -80,6 +80,19 @@ public:
     // a block actor of no registered class lives as long as the block it was loaded with
     void onBlockReplaced(const Vector3i &position);
 
+    template <typename Visitor>
+    void forEachInChunk(int32_t chunkX, int32_t chunkZ, Visitor &&visit) {
+        const std::unordered_set<int64_t> *positions = _positionsIn(chunkX, chunkZ);
+        if (positions == nullptr)
+            return;
+
+        for (const int64_t key: *positions) {
+            const auto found = mBlockActors.find(key);
+            if (found != mBlockActors.end())
+                visit(*found->second);
+        }
+    }
+
     template <typename T>
     std::vector<T *> findAll() {
         std::vector<T *> matches;

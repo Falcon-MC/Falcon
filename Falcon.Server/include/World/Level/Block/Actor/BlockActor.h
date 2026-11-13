@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 
+class GameEventListener;
 class Level;
 class PacketCodecContext;
 class ServerNetworkHandler;
@@ -32,6 +33,11 @@ public:
     virtual void loadNbt(const Tag &data, const PacketCodecContext &context) = 0;
 
     virtual Container *getContainer() {
+        return nullptr;
+    }
+
+    // what the chunk's game events reach, as the game keeps a listener registry per chunk
+    virtual GameEventListener *getGameEventListener() {
         return nullptr;
     }
 

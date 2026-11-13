@@ -9,6 +9,7 @@ FALCON_REGISTER_BLOCK(CarpetBlock, 380);
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/VibrationProperties.h"
 
 using namespace PlacementHelpers;
 
@@ -25,4 +26,9 @@ bool CarpetBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFa
 bool CarpetBlock::canSurvive(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) state;
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
+}
+
+// dampen only: the carpet registrations leave occlude off (sub_14CE9AD30 at 0x14CF87579, 26.60)
+uint8_t CarpetBlock::getVibrationProperties() const {
+    return VibrationProperties::DAMPENS;
 }

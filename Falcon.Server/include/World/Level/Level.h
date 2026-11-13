@@ -34,6 +34,7 @@
 #include <vector>
 
 class Actor;
+class GameEvent;
 class Packet;
 class Particle;
 class ServerNetworkHandler;
@@ -179,6 +180,10 @@ public:
     }
 
     void addParticle(const Particle &particle);
+
+    // listeners of the chunks within 16 blocks hear it now, each inside its own range (sub_143FA66C0, 26.60)
+    void postGameEvent(const GameEvent &event, const Vector3f &position, Actor *source = nullptr,
+                       const BlockState *block = nullptr);
 
     BlockActorStore &getBlockActors() {
         return mBlockActors;
