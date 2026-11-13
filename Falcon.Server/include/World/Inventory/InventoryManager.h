@@ -79,6 +79,10 @@ public:
 
     bool isCartographyOpen() const;
 
+    bool onClientOpenStonecutter(const Vector3i &position);
+
+    bool isStonecutterOpen() const;
+
     // the copy id a MapCreateLockedCopyPacket asked for, kept until the table locks a map
     void setClientMapLock(const CartographyLock &lock) {
         mClientMapLock = lock;

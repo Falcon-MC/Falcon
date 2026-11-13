@@ -9,6 +9,7 @@
 #include "Protocol/Types/ItemStackRequest.h"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 class BundleSyncData {
@@ -33,5 +34,6 @@ public:
             const PacketCodecContext *codecContext = nullptr, std::vector<BundleSyncData> *outBundles = nullptr,
             int32_t playerXpLevel = 0, bool creativeMode = false, int32_t *outEnchantLevelsConsumed = nullptr,
             bool anvilOpen = false, int32_t *outAnvilLevelsConsumed = nullptr, bool *outAnvilUsed = nullptr,
-            const CartographyRecipes::Maps *cartographyMaps = nullptr, CartographyLock *outCartographyLock = nullptr);
+            const CartographyRecipes::Maps *cartographyMaps = nullptr, CartographyLock *outCartographyLock = nullptr,
+            const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes = nullptr);
 };

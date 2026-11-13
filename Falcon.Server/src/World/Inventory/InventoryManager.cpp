@@ -980,7 +980,11 @@ bool InventoryManager::onClientOpenCartography(const Vector3i &position) {
     return _openWorkbench(ContainerType::Cartography, position);
 }
 
-// the anvil and the cartography table share a window: both keep two slots and nothing once closed
+bool InventoryManager::onClientOpenStonecutter(const Vector3i &position) {
+    return _openWorkbench(ContainerType::Stonecutter, position);
+}
+
+// the anvil, the cartography table and the stonecutter share a window: none keeps its slots once closed
 bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &position) {
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
@@ -1018,6 +1022,10 @@ bool InventoryManager::isCartographyOpen() const {
     return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Cartography;
 }
 
+bool InventoryManager::isStonecutterOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Stonecutter;
+}
+
 const Vector3i &InventoryManager::getAnvilPosition() const {
     return mAnvilPosition;
 }
@@ -1030,13 +1038,18 @@ void InventoryManager::_closeAnvil() {
     mClientMapLock = CartographyLock();
     PlayerInventory &inventory = mPlayer->getInventory();
     const bool cartography = mAnvilWindowType == ContainerType::Cartography;
-    const int size = cartography ? PlayerInventory::CARTOGRAPHY_SIZE : PlayerInventory::ANVIL_SIZE;
+    const bool stonecutter = mAnvilWindowType == ContainerType::Stonecutter;
+    const int size = stonecutter ? 1 : (cartography ? PlayerInventory::CARTOGRAPHY_SIZE : PlayerInventory::ANVIL_SIZE);
     for (int slot = 0; slot < size; ++slot) {
-        ItemStack item = cartography ? inventory.getCartographyItem(slot) : inventory.getAnvilItem(slot);
+        ItemStack item = stonecutter
+                                 ? inventory.getStonecutterInput()
+                                 : (cartography ? inventory.getCartographyItem(slot) : inventory.getAnvilItem(slot));
         if (item.isAir())
             continue;
 
-        if (cartography)
+        if (stonecutter)
+            inventory.setStonecutterInput(ItemStack::air());
+        else if (cartography)
             inventory.setCartographyItem(slot, ItemStack::air());
         else
             inventory.setAnvilItem(slot, ItemStack::air());

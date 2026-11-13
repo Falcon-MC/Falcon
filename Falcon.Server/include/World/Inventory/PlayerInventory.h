@@ -21,6 +21,7 @@ public:
     static const int CARTOGRAPHY_SIZE = 2;
     static const int CARTOGRAPHY_INPUT = 0;
     static const int CARTOGRAPHY_ADDITIONAL = 1;
+    static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
 
     static const int CONTAINER_ID_INVENTORY = 0;
@@ -101,6 +102,12 @@ public:
 
     void setCartographyItem(int slot, ItemStack item);
 
+    const ItemStack &getStonecutterInput() const {
+        return mStonecutterInput;
+    }
+
+    void setStonecutterInput(ItemStack item);
+
     const ItemStack &getOffhand() const {
         return mOffhand;
     }
@@ -159,6 +166,7 @@ private:
     ItemStack mCursor;
     ItemStack mEnchantingInput;
     ItemStack mEnchantingMaterial;
+    ItemStack mStonecutterInput;
     int mSelectedSlot;
     int32_t mNextNetId;
 };
