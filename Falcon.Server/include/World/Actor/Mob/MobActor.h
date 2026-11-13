@@ -282,6 +282,16 @@ public:
 
     int32_t getVariant() const;
 
+    // air in ticks; a mob that never breathed yet holds its full supply
+    int32_t getAirSupply() const;
+
+    void setAirSupply(int32_t ticks);
+
+    int32_t getMaxAirSupply() const;
+
+    // the drowning damage hits once the air falls to this
+    static constexpr int32_t MIN_AIR_SUPPLY = -20;
+
     void setVariant(int32_t variant);
 
     void inheritVariant(const MobActor &firstParent, const MobActor &secondParent);

@@ -11,6 +11,8 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <cstring>
 
 using namespace ScriptValues;
@@ -667,6 +669,72 @@ namespace {
         return JS_NewInt32(ctx, target.mActor->getFireTicks());
     }
 
+    struct AirSupply {
+        int32_t mTicks = 0;
+        int32_t mMaxTicks = 0;
+    };
+
+    bool airSupplyOf(Actor &actor, AirSupply &air) {
+        if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
+            air.mTicks = player->getAirSupply();
+            air.mMaxTicks = ServerPlayer::MAX_AIR_SUPPLY;
+            return true;
+        }
+        MobActor *mob = dynamic_cast<MobActor *>(&actor);
+        if (mob == nullptr)
+            return false;
+        air.mTicks = mob->getAirSupply();
+        air.mMaxTicks = mob->getMaxAirSupply();
+        return true;
+    }
+
+    // whole seconds, truncated (sub_14BDBB230)
+    JSValue breathableGetAirSupply(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        AirSupply air;
+        if (!airSupplyOf(*target.mActor, air))
+            return target.mApi->throwError("Error", "Failed to call function 'getAirSupply'.");
+        return JS_NewInt32(ctx, (int16_t) air.mTicks / 20);
+    }
+
+    // seconds within [suffocation, total supply] in whole seconds, stored as ticks (sub_14BDB9D20)
+    JSValue breathableSetAirSupply(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        double number = 0.0;
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &number, argv[0]) != 0 || !std::isfinite(number)
+            || number < INT16_MIN || number > INT16_MAX)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        AirSupply air;
+        if (!airSupplyOf(*target.mActor, air))
+            return target.mApi->throwError("Error", "Failed to call function 'setAirSupply'.");
+
+        const int16_t seconds = (int16_t) number;
+        const int32_t minimum = MobActor::MIN_AIR_SUPPLY / 20;
+        const int32_t maximum = (int16_t) air.mMaxTicks / 20;
+        if (seconds < minimum || seconds > maximum) {
+            JSValue fields = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, fields, "minValue", JS_NewFloat64(ctx, minimum));
+            JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewFloat64(ctx, maximum));
+            JS_SetPropertyStr(ctx, fields, "value", JS_NewFloat64(ctx, seconds));
+            return target.mApi->throwError("PropertyOutOfBoundsError",
+                                           "Unsupported or out of bounds value set on Property: airSupply, Value: "
+                                                   + std::to_string(seconds) + ", Property bounds: ["
+                                                   + std::to_string(minimum) + ", " + std::to_string(maximum) + "]",
+                                           fields);
+        }
+
+        const int32_t ticks = std::clamp<int32_t>((int16_t) (seconds * 20), MobActor::MIN_AIR_SUPPLY, air.mMaxTicks);
+        if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(target.mActor))
+            player->setAirSupply(ticks);
+        else
+            static_cast<MobActor *>(target.mActor)->setAirSupply(ticks);
+        return JS_UNDEFINED;
+    }
+
     JSValue itemGetItemStack(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -1158,6 +1226,8 @@ void ScriptApi::_bindEntityComponents() {
            breathableGetBreatheBlocks, 0);
     method(prototypeOf("EntityBreathableComponent"), "EntityBreathableComponent", "getNonBreatheBlocks",
            breathableGetNonBreatheBlocks, 0);
+    property(prototypeOf("EntityBreathableComponent"), "EntityBreathableComponent", "airSupply",
+             breathableGetAirSupply, breathableSetAirSupply);
 
     JSValue family = prototypeOf("EntityTypeFamilyComponent");
     method(family, "EntityTypeFamilyComponent", "hasTypeFamily", typeFamilyHas, 1);

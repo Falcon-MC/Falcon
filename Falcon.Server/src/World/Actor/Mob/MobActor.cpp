@@ -90,7 +90,7 @@ namespace {
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
     const int32_t AIR_REFILL_PER_TICK = 5;
-    const int32_t DROWNING_AIR = -20;
+    const int32_t DROWNING_AIR = MobActor::MIN_AIR_SUPPLY;
     const float DROWNING_DAMAGE = 2.0f;
     const float FLOP_HORIZONTAL = 0.05f;
     const float FLOP_VERTICAL = 0.4f;
@@ -849,6 +849,18 @@ void MobActor::_tickAttackCooldown(ServerNetworkHandler &owner) {
         return;
 
     EntityEvents::fireTrigger(owner, *this, cooldown->get("attack_cooldown_complete_event"));
+}
+
+int32_t MobActor::getAirSupply() const {
+    return mAirSupply == UNSET_AIR_SUPPLY ? getMaxAirSupply() : mAirSupply;
+}
+
+void MobActor::setAirSupply(int32_t ticks) {
+    mAirSupply = ticks;
+}
+
+int32_t MobActor::getMaxAirSupply() const {
+    return secondsToTicks(numberIn(getComponent(BREATHABLE_COMPONENT), "total_supply", DEFAULT_AIR_SECONDS));
 }
 
 void MobActor::_tickBreathing(ServerNetworkHandler &owner) {
