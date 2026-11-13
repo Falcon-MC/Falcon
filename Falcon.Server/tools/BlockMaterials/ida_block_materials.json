@@ -1,0 +1,5631 @@
+{
+ "_source": "Windows client 26.60. Types and flags: the (type, flags) pairs at 0x14F1ABBD8, names from the string table at 0x14F185120 that the json material map sub_149948C40 reads. Blocks: the material each registration hands the BlockLegacy constructor sub_1435A7570 (copied to +40 type, +41 flags).",
+ "types": [
+  {
+   "name": "air",
+   "flags": 0
+  },
+  {
+   "name": "dirt",
+   "flags": 28
+  },
+  {
+   "name": "wood",
+   "flags": 28
+  },
+  {
+   "name": "metal",
+   "flags": 28
+  },
+  {
+   "name": "grate",
+   "flags": 28
+  },
+  {
+   "name": "water",
+   "flags": 10
+  },
+  {
+   "name": "lava",
+   "flags": 42
+  },
+  {
+   "name": "leaves",
+   "flags": 29
+  },
+  {
+   "name": "plant",
+   "flags": 0
+  },
+  {
+   "name": "solid_plant",
+   "flags": 20
+  },
+  {
+   "name": "fire",
+   "flags": 32
+  },
+  {
+   "name": "glass",
+   "flags": 29
+  },
+  {
+   "name": "explosive",
+   "flags": 29
+  },
+  {
+   "name": "ice",
+   "flags": 29
+  },
+  {
+   "name": "powder_snow",
+   "flags": 12
+  },
+  {
+   "name": "cactus",
+   "flags": 29
+  },
+  {
+   "name": "portal",
+   "flags": 0
+  },
+  {
+   "name": "stone_decoration",
+   "flags": 16
+  },
+  {
+   "name": "bubble",
+   "flags": 2
+  },
+  {
+   "name": "barrier",
+   "flags": 20
+  },
+  {
+   "name": "decoration_solid",
+   "flags": 16
+  },
+  {
+   "name": "client_request_placeholder",
+   "flags": 16
+  },
+  {
+   "name": "structure_void",
+   "flags": 16
+  },
+  {
+   "name": "solid",
+   "flags": 28
+  },
+  {
+   "name": "non_solid",
+   "flags": 0
+  }
+ ],
+ "blocks": {
+  "minecraft:acacia_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:acacia_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:acacia_double_slab": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:acacia_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:acacia_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:acacia_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:acacia_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1B59E0 takes one material constant"
+  },
+  "minecraft:acacia_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:acacia_planks": {
+   "type": 2,
+   "source": "constructor chain of sub_14D18CA50 takes one material constant"
+  },
+  "minecraft:acacia_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:acacia_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:acacia_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:acacia_slab": {
+   "type": 2,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:acacia_stairs": {
+   "base": "minecraft:acacia_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:acacia_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:acacia_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:acacia_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:acacia_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:activator_rail": {
+   "type": 24,
+   "source": "constructor chain of sub_143151DE0 takes one material constant"
+  },
+  "minecraft:air": {
+   "type": 0,
+   "source": "sub_1431FA960 creates it with material 0"
+  },
+  "minecraft:allium": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:allow": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:amethyst_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:amethyst_cluster": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A9EB0 takes one material constant"
+  },
+  "minecraft:ancient_debris": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:andesite": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:andesite_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:andesite_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:andesite_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:andesite_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:anvil": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BB600 takes one material constant"
+  },
+  "minecraft:azalea": {
+   "type": 9,
+   "source": "constructor chain of sub_14D1A73D0 takes one material constant"
+  },
+  "minecraft:azalea_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1A7B40 takes one material constant"
+  },
+  "minecraft:azalea_leaves_flowered": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1A7B40 takes one material constant"
+  },
+  "minecraft:azure_bluet": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:bamboo": {
+   "type": 9,
+   "source": "constructor chain of sub_143145B20 takes one material constant"
+  },
+  "minecraft:bamboo_block": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:bamboo_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:bamboo_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:bamboo_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:bamboo_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:bamboo_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:bamboo_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:bamboo_mosaic": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:bamboo_mosaic_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:bamboo_mosaic_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:bamboo_mosaic_stairs": {
+   "base": "minecraft:bamboo_planks",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:bamboo_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:bamboo_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:bamboo_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_143144980 takes one material constant"
+  },
+  "minecraft:bamboo_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:bamboo_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:bamboo_stairs": {
+   "base": "minecraft:bamboo_planks",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:bamboo_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:bamboo_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:bamboo_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:barrel": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:barrier": {
+   "type": 19,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:basalt": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:beacon": {
+   "type": 11,
+   "source": "sub_14D199330 passes material 11"
+  },
+  "minecraft:bed": {
+   "type": 23,
+   "source": "constructor chain of sub_143153C50 takes one material constant"
+  },
+  "minecraft:bedrock": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:bee_nest": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A3CE0 takes one material constant"
+  },
+  "minecraft:beehive": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A3CE0 takes one material constant"
+  },
+  "minecraft:beetroot": {
+   "type": 8,
+   "source": "constructor chain of sub_14315BB30 takes one material constant"
+  },
+  "minecraft:bell": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:big_dripleaf": {
+   "type": 8,
+   "source": "constructor chain of sub_14315F6B0 takes one material constant"
+  },
+  "minecraft:birch_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:birch_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:birch_double_slab": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:birch_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:birch_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:birch_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:birch_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1B59E0 takes one material constant"
+  },
+  "minecraft:birch_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:birch_planks": {
+   "type": 2,
+   "source": "constructor chain of sub_14D18CA50 takes one material constant"
+  },
+  "minecraft:birch_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:birch_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:birch_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:birch_slab": {
+   "type": 2,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:birch_stairs": {
+   "base": "minecraft:birch_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:birch_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:birch_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:birch_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:birch_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:black_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:black_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:black_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:black_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:black_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:black_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:black_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:black_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:black_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:black_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:black_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:blackstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:blackstone_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:blackstone_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:blackstone_stairs": {
+   "base": "minecraft:blackstone",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:blackstone_wall": {
+   "base": "minecraft:blackstone",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:blast_furnace": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A1CC0 takes one material constant"
+  },
+  "minecraft:blue_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:blue_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:blue_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:blue_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:blue_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:blue_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:blue_ice": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:blue_orchid": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:blue_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:blue_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:blue_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:blue_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:blue_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:bone_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:bookshelf": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:border_block": {
+   "type": 23,
+   "source": "constructor chain of sub_1435B1430 takes one material constant"
+  },
+  "minecraft:brain_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:brain_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:brain_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:brain_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:brewing_stand": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:brick_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:brick_stairs": {
+   "base": "minecraft:brick_block",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:brick_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:brown_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:brown_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:brown_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:brown_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:brown_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:brown_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:brown_mushroom": {
+   "type": 8,
+   "source": "constructor chain of sub_1476E9BC0 takes one material constant"
+  },
+  "minecraft:brown_mushroom_block": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D196D30"
+  },
+  "minecraft:brown_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:brown_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:brown_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:brown_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:brown_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:bubble_column": {
+   "type": 18,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:bubble_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:bubble_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:bubble_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:bubble_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:budding_amethyst": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:bush": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cactus": {
+   "type": 15,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cactus_flower": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cake": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:calcite": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:calibrated_sculk_sensor": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:camera": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:campfire": {
+   "type": 20,
+   "source": "constructor chain of sub_14D1A3560 takes one material constant"
+  },
+  "minecraft:candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:carrots": {
+   "type": 8,
+   "source": "constructor chain of sub_14A2ED0F0 takes one material constant"
+  },
+  "minecraft:cartography_table": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:carved_pumpkin": {
+   "type": 23,
+   "source": "constructor chain of sub_14D194E10 takes one material constant"
+  },
+  "minecraft:cauldron": {
+   "type": 3,
+   "source": "constructor chain of sub_14A2ED8D0 takes one material constant"
+  },
+  "minecraft:cave_vines": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A82E0 takes one material constant"
+  },
+  "minecraft:cave_vines_body_with_berries": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A82E0 takes one material constant"
+  },
+  "minecraft:cave_vines_head_with_berries": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A82E0 takes one material constant"
+  },
+  "minecraft:chain_command_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D19B2D0 takes one material constant"
+  },
+  "minecraft:chalkboard": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:chemical_heat": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cherry_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:cherry_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:cherry_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cherry_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:cherry_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:cherry_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:cherry_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_143C85140 takes one material constant"
+  },
+  "minecraft:cherry_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:cherry_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cherry_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:cherry_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:cherry_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:cherry_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cherry_stairs": {
+   "base": "minecraft:cherry_planks",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:cherry_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:cherry_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:cherry_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:cherry_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:chest": {
+   "type": 2,
+   "source": "constructor chain of sub_14D190EF0 takes one material constant"
+  },
+  "minecraft:chipped_anvil": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BB600 takes one material constant"
+  },
+  "minecraft:chiseled_bookshelf": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:chiseled_cinnabar": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:chiseled_deepslate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_nether_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_polished_blackstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_quartz_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:chiseled_red_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_resin_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_stone_bricks": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:chiseled_sulfur": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_tuff": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chiseled_tuff_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:chorus_flower": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:chorus_plant": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cinnabar": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cinnabar_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cinnabar_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cinnabar_brick_stairs": {
+   "base": "minecraft:cinnabar",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:cinnabar_brick_wall": {
+   "base": "minecraft:cinnabar",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:cinnabar_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cinnabar_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cinnabar_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cinnabar_stairs": {
+   "base": "minecraft:cinnabar",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:cinnabar_wall": {
+   "base": "minecraft:cinnabar",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:clay": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:client_request_placeholder_block": {
+   "type": 21,
+   "source": "sub_1431FA960 creates it with material 21"
+  },
+  "minecraft:closed_eyeblossom": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1BCCF0 takes one material constant"
+  },
+  "minecraft:coal_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D18F850 takes one material constant"
+  },
+  "minecraft:coal_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:coarse_dirt": {
+   "type": 1,
+   "source": "constructor chain of sub_14D18C1A0 takes one material constant"
+  },
+  "minecraft:cobbled_deepslate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cobbled_deepslate_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cobbled_deepslate_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:cobbled_deepslate_stairs": {
+   "base": "minecraft:cobbled_deepslate",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:cobbled_deepslate_wall": {
+   "base": "minecraft:cobbled_deepslate",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:cobblestone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cobblestone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:cobblestone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:cobblestone_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:cocoa": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:colored_torch_blue": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1A0DC0 takes one material constant"
+  },
+  "minecraft:colored_torch_green": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1A0DC0 takes one material constant"
+  },
+  "minecraft:colored_torch_purple": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1A0DC0 takes one material constant"
+  },
+  "minecraft:colored_torch_red": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1A0DC0 takes one material constant"
+  },
+  "minecraft:command_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D19B2D0 takes one material constant"
+  },
+  "minecraft:composter": {
+   "type": 2,
+   "source": "constructor chain of sub_147718150 takes one material constant"
+  },
+  "minecraft:compound_creator": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A05D0 takes one material constant"
+  },
+  "minecraft:conduit": {
+   "type": 17,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:copper_block": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:copper_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:copper_torch": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:cornflower": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:cracked_deepslate_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cracked_deepslate_tiles": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cracked_nether_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cracked_polished_blackstone_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cracked_stone_bricks": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:crafter": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:crafting_table": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:creaking_heart": {
+   "type": 2,
+   "source": "constructor chain of sub_14772F160 takes one material constant"
+  },
+  "minecraft:creeper_head": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  },
+  "minecraft:crimson_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:crimson_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:crimson_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:crimson_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:crimson_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:crimson_fungus": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A54F0 takes one material constant"
+  },
+  "minecraft:crimson_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:crimson_hyphae": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:crimson_nylium": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A5C60 takes one material constant"
+  },
+  "minecraft:crimson_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:crimson_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:crimson_roots": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A44E0 takes one material constant"
+  },
+  "minecraft:crimson_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:crimson_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:crimson_stairs": {
+   "base": "minecraft:crimson_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:crimson_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:crimson_stem": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:crimson_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:crimson_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:crying_obsidian": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:cut_copper_stairs": {
+   "base": "minecraft:copper_block",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:cut_red_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cut_red_sandstone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:cut_red_sandstone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:cut_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:cut_sandstone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:cut_sandstone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:cyan_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:cyan_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:cyan_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:cyan_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:cyan_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:cyan_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:cyan_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:cyan_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:cyan_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:cyan_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:cyan_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:damaged_anvil": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BB600 takes one material constant"
+  },
+  "minecraft:dandelion": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:dark_oak_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:dark_oak_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:dark_oak_double_slab": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:dark_oak_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:dark_oak_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:dark_oak_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:dark_oak_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1B59E0 takes one material constant"
+  },
+  "minecraft:dark_oak_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:dark_oak_planks": {
+   "type": 2,
+   "source": "constructor chain of sub_14D18CA50 takes one material constant"
+  },
+  "minecraft:dark_oak_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:dark_oak_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:dark_oak_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:dark_oak_slab": {
+   "type": 2,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:dark_oak_stairs": {
+   "base": "minecraft:dark_oak_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:dark_oak_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:dark_oak_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:dark_prismarine": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:dark_prismarine_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:dark_prismarine_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:dark_prismarine_stairs": {
+   "base": "minecraft:dark_prismarine",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:darkoak_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:darkoak_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:daylight_detector": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19CAA0 takes one material constant"
+  },
+  "minecraft:daylight_detector_inverted": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19CAA0 takes one material constant"
+  },
+  "minecraft:dead_brain_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:dead_brain_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:dead_brain_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:dead_brain_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:dead_bubble_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:dead_bubble_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:dead_bubble_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:dead_bubble_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:dead_fire_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:dead_fire_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:dead_fire_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:dead_fire_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:dead_horn_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:dead_horn_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:dead_horn_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:dead_horn_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:dead_tube_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:dead_tube_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:dead_tube_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:dead_tube_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:deadbush": {
+   "type": 8,
+   "source": "constructor chain of sub_149C50C40 takes one material constant"
+  },
+  "minecraft:decorated_pot": {
+   "type": 20,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:deepslate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:deepslate_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:deepslate_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:deepslate_brick_stairs": {
+   "base": "minecraft:deepslate_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:deepslate_brick_wall": {
+   "base": "minecraft:deepslate_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:deepslate_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_coal_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_copper_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_diamond_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_emerald_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_gold_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_iron_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_lapis_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deepslate_redstone_ore": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ACB10 takes one material constant"
+  },
+  "minecraft:deepslate_tile_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:deepslate_tile_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:deepslate_tile_stairs": {
+   "base": "minecraft:deepslate_tiles",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:deepslate_tile_wall": {
+   "base": "minecraft:deepslate_tiles",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:deepslate_tiles": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deny": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:deprecated_anvil": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BB600 takes one material constant"
+  },
+  "minecraft:deprecated_purpur_block_1": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:deprecated_purpur_block_2": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:detector_rail": {
+   "type": 24,
+   "source": "constructor chain of sub_143151DE0 takes one material constant"
+  },
+  "minecraft:diamond_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D18F850 takes one material constant"
+  },
+  "minecraft:diamond_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:diorite": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:diorite_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:diorite_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:diorite_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:diorite_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:dirt": {
+   "type": 1,
+   "source": "constructor chain of sub_14D18C1A0 takes one material constant"
+  },
+  "minecraft:dirt_with_roots": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:disc_press": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:dispenser": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:dragon_egg": {
+   "type": 23,
+   "source": "constructor chain of sub_149C61150 takes one material constant"
+  },
+  "minecraft:dragon_head": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  },
+  "minecraft:dried_ghast": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:dried_kelp_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:dripstone_block": {
+   "type": 23,
+   "source": "constructor chain of sub_148F93CF0 takes one material constant"
+  },
+  "minecraft:dropper": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:element_0": {
+   "type": 1,
+   "source": "constructor chain of sub_14D1A1530 takes one material constant"
+  },
+  "minecraft:element_1": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_10": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_100": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_101": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_102": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_103": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_104": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_105": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_106": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_107": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_108": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_109": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_11": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_110": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_111": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_112": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_113": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_114": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_115": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_116": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_117": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_118": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_12": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_13": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_14": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_15": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_16": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_17": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_18": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_19": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_2": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_20": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_21": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_22": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_23": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_24": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_25": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_26": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_27": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_28": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_29": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_3": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_30": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_31": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_32": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_33": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_34": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_35": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_36": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_37": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_38": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_39": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_4": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_40": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_41": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_42": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_43": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_44": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_45": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_46": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_47": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_48": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_49": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_5": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_50": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_51": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_52": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_53": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_54": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_55": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_56": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_57": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_58": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_59": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_6": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_60": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_61": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_62": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_63": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_64": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_65": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_66": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_67": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_68": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_69": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_7": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_70": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_71": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_72": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_73": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_74": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_75": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_76": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_77": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_78": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_79": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_8": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_80": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_81": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_82": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_83": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_84": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_85": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_86": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_87": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_88": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_89": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_9": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_90": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_91": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_92": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_93": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_94": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_95": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_96": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_97": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_98": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_99": {
+   "type": 1,
+   "source": "sub_14D1A1530 creates every element with material 1 (loop at 0x14CEFC99F)"
+  },
+  "minecraft:element_constructor": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A05D0 takes one material constant"
+  },
+  "minecraft:emerald_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D18F850 takes one material constant"
+  },
+  "minecraft:emerald_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:enchanting_table": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:end_brick_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:end_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:end_gateway": {
+   "type": 16,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:end_portal": {
+   "type": 16,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:end_portal_frame": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:end_rod": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:end_stone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:end_stone_brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:end_stone_brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:end_stone_brick_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:ender_chest": {
+   "type": 23,
+   "source": "constructor chain of sub_14A42DE10 takes one material constant"
+  },
+  "minecraft:exposed_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:exposed_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:exposed_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:exposed_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:exposed_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:exposed_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:exposed_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:exposed_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:exposed_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:exposed_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:exposed_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:exposed_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:exposed_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:exposed_cut_copper_stairs": {
+   "base": "minecraft:exposed_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:exposed_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:exposed_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:farmland": {
+   "type": 1,
+   "source": "constructor chain of sub_14D18C1A0 takes one material constant"
+  },
+  "minecraft:fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:fern": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B7FB0 takes one material constant"
+  },
+  "minecraft:fire": {
+   "type": 10,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:fire_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:fire_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:fire_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:fire_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:firefly_bush": {
+   "type": 8,
+   "source": "constructor chain of sub_14A43BC60 takes one material constant"
+  },
+  "minecraft:fletching_table": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:flower_pot": {
+   "type": 24,
+   "source": "constructor chain of sub_14A43E2C0 takes one material constant"
+  },
+  "minecraft:flowering_azalea": {
+   "type": 9,
+   "source": "constructor chain of sub_14D1A73D0 takes one material constant"
+  },
+  "minecraft:flowing_lava": {
+   "type": 6,
+   "source": "registration passes the material constant to sub_14D18D950"
+  },
+  "minecraft:flowing_water": {
+   "type": 5,
+   "source": "registration passes the material constant to sub_14D18D950"
+  },
+  "minecraft:frame": {
+   "type": 24,
+   "source": "constructor chain of sub_146D74BA0 takes one material constant"
+  },
+  "minecraft:frog_spawn": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:frosted_ice": {
+   "type": 13,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:furnace": {
+   "type": 23,
+   "source": "constructor chain of sub_14D191730 takes one material constant"
+  },
+  "minecraft:gilded_blackstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:glass": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D18E840"
+  },
+  "minecraft:glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:glow_frame": {
+   "type": 24,
+   "source": "constructor chain of sub_146D74BA0 takes one material constant"
+  },
+  "minecraft:glow_lichen": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_149C49910"
+  },
+  "minecraft:glowingobsidian": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18FFD0 takes one material constant"
+  },
+  "minecraft:glowstone": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:gold_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D18F850 takes one material constant"
+  },
+  "minecraft:gold_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:golden_dandelion": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:golden_rail": {
+   "type": 24,
+   "source": "constructor chain of sub_143151DE0 takes one material constant"
+  },
+  "minecraft:granite": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:granite_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:granite_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:granite_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:granite_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:grass_block": {
+   "type": 1,
+   "source": "constructor chain of sub_146D75400 takes one material constant"
+  },
+  "minecraft:grass_path": {
+   "type": 1,
+   "source": "constructor chain of sub_1476F7B90 takes one material constant"
+  },
+  "minecraft:gravel": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:gray_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:gray_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:gray_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:gray_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:gray_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:gray_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:gray_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:gray_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:gray_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:gray_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:gray_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:green_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:green_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:green_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:green_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:green_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:green_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:green_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:green_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:green_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:green_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:green_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:grindstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:hanging_roots": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:hard_black_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_black_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_blue_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_blue_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_brown_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_brown_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_cyan_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_cyan_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_glass": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D18E840"
+  },
+  "minecraft:hard_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_gray_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_gray_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_green_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_green_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_light_blue_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_light_blue_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_light_gray_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_light_gray_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_lime_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_lime_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_magenta_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_magenta_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_orange_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_orange_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_pink_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_pink_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_purple_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_purple_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_red_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_red_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_white_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_white_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hard_yellow_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:hard_yellow_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:hardened_clay": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:hay_block": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:heavy_core": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:heavy_weighted_pressure_plate": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D19BAF0"
+  },
+  "minecraft:honey_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:honeycomb_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:hopper": {
+   "type": 3,
+   "source": "constructor chain of sub_146D7B090 takes one material constant"
+  },
+  "minecraft:horn_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:horn_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:horn_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:horn_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:ice": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1945D0 takes one material constant"
+  },
+  "minecraft:ice_crystal": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:icicle": {
+   "type": 23,
+   "source": "constructor chain of sub_148F93CF0 takes one material constant"
+  },
+  "minecraft:infested_chiseled_stone_bricks": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:infested_cobblestone": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:infested_cracked_stone_bricks": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:infested_deepslate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:infested_mossy_stone_bricks": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:infested_stone": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:infested_stone_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1964E0"
+  },
+  "minecraft:info_update": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:info_update2": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:invisible_bedrock": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:iron_bars": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:iron_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D18F850 takes one material constant"
+  },
+  "minecraft:iron_chain": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:iron_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:iron_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:iron_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:jigsaw": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:jukebox": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:jungle_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:jungle_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:jungle_double_slab": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:jungle_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:jungle_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:jungle_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:jungle_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1B59E0 takes one material constant"
+  },
+  "minecraft:jungle_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:jungle_planks": {
+   "type": 2,
+   "source": "constructor chain of sub_14D18CA50 takes one material constant"
+  },
+  "minecraft:jungle_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:jungle_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:jungle_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:jungle_slab": {
+   "type": 2,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:jungle_stairs": {
+   "base": "minecraft:jungle_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:jungle_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:jungle_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:jungle_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:jungle_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:kelp": {
+   "type": 8,
+   "source": "constructor chain of sub_143C80C50 takes one material constant"
+  },
+  "minecraft:lab_table": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A05D0 takes one material constant"
+  },
+  "minecraft:ladder": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A2D60 takes one material constant"
+  },
+  "minecraft:lapis_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:lapis_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:large_amethyst_bud": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A9EB0 takes one material constant"
+  },
+  "minecraft:large_fern": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B7830 takes one material constant"
+  },
+  "minecraft:lava": {
+   "type": 6,
+   "source": "registration passes the material constant to sub_14D18D1E0"
+  },
+  "minecraft:leaf_litter": {
+   "type": 8,
+   "source": "constructor chain of sub_14A43C1C0 takes one material constant"
+  },
+  "minecraft:lectern": {
+   "type": 2,
+   "source": "constructor chain of sub_143C85DB0 takes one material constant"
+  },
+  "minecraft:lever": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:light_block_0": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_1": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_10": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_11": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_12": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_13": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_14": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_15": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_2": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_3": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_4": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_5": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_6": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_7": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_8": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_block_9": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1BAE90 takes one material constant"
+  },
+  "minecraft:light_blue_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:light_blue_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:light_blue_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:light_blue_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:light_blue_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:light_blue_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:light_blue_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:light_blue_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:light_blue_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:light_blue_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:light_blue_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:light_gray_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:light_gray_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:light_gray_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:light_gray_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:light_gray_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:light_gray_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:light_gray_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:light_gray_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:light_gray_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:light_gray_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:light_weighted_pressure_plate": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D19BAF0"
+  },
+  "minecraft:lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:lilac": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B70B0 takes one material constant"
+  },
+  "minecraft:lily_of_the_valley": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:lime_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:lime_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:lime_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:lime_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:lime_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:lime_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:lime_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:lime_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:lime_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:lime_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:lime_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:lit_blast_furnace": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A1CC0 takes one material constant"
+  },
+  "minecraft:lit_deepslate_redstone_ore": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ACB10 takes one material constant"
+  },
+  "minecraft:lit_furnace": {
+   "type": 23,
+   "source": "constructor chain of sub_14D191730 takes one material constant"
+  },
+  "minecraft:lit_pumpkin": {
+   "type": 23,
+   "source": "constructor chain of sub_14D194E10 takes one material constant"
+  },
+  "minecraft:lit_redstone_lamp": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19AAD0 takes one material constant"
+  },
+  "minecraft:lit_redstone_ore": {
+   "type": 23,
+   "source": "constructor chain of sub_14D192ED0 takes one material constant"
+  },
+  "minecraft:lit_smoker": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A2510 takes one material constant"
+  },
+  "minecraft:lodestone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:loom": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:magenta_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:magenta_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:magenta_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:magenta_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:magenta_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:magenta_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:magenta_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:magenta_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:magenta_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:magenta_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:magenta_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:magma": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:mangrove_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:mangrove_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:mangrove_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:mangrove_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:mangrove_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:mangrove_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:mangrove_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_143C85140 takes one material constant"
+  },
+  "minecraft:mangrove_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:mangrove_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:mangrove_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:mangrove_propagule": {
+   "type": 8,
+   "source": "constructor chain of sub_149C46840 takes one material constant"
+  },
+  "minecraft:mangrove_roots": {
+   "type": 23,
+   "source": "sub_14D19A320 takes its material from both callers (0x14CECB5A8, 0x14CECC808): material 23"
+  },
+  "minecraft:mangrove_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:mangrove_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:mangrove_stairs": {
+   "base": "minecraft:mangrove_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:mangrove_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:mangrove_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:mangrove_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:mangrove_wood": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:material_reducer": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A05D0 takes one material constant"
+  },
+  "minecraft:medium_amethyst_bud": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A9EB0 takes one material constant"
+  },
+  "minecraft:melon_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:melon_stem": {
+   "type": 8,
+   "source": "constructor chain of sub_14D197CA0 takes one material constant"
+  },
+  "minecraft:mob_spawner": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:moss_block": {
+   "type": 1,
+   "source": "constructor chain of sub_149C489D0 takes one material constant"
+  },
+  "minecraft:moss_carpet": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:mossy_cobblestone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:mossy_cobblestone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:mossy_cobblestone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:mossy_cobblestone_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:mossy_cobblestone_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:mossy_stone_brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:mossy_stone_brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:mossy_stone_brick_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:mossy_stone_brick_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:mossy_stone_bricks": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B96E0 takes one material constant"
+  },
+  "minecraft:moving_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:mud": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:mud_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:mud_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:mud_brick_stairs": {
+   "base": "minecraft:mud_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:mud_brick_wall": {
+   "base": "minecraft:mud_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:mud_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:muddy_mangrove_roots": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:mushroom_stem": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D196D30"
+  },
+  "minecraft:mycelium": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:nether_brick": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:nether_brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:nether_brick_fence": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:nether_brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:nether_brick_stairs": {
+   "base": "minecraft:nether_brick",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:nether_brick_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:nether_gold_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:nether_sprouts": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:nether_wart": {
+   "type": 8,
+   "source": "constructor chain of sub_1476EC7C0 takes one material constant"
+  },
+  "minecraft:nether_wart_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:netherite_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D18F850 takes one material constant"
+  },
+  "minecraft:netherrack": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:netherreactor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:normal_stone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:normal_stone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:normal_stone_stairs": {
+   "base": "minecraft:stone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:noteblock": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:oak_double_slab": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:oak_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:oak_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:oak_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1B59E0 takes one material constant"
+  },
+  "minecraft:oak_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:oak_planks": {
+   "type": 2,
+   "source": "constructor chain of sub_14D18CA50 takes one material constant"
+  },
+  "minecraft:oak_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:oak_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:oak_slab": {
+   "type": 2,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:oak_stairs": {
+   "base": "minecraft:oak_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:oak_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:observer": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:obsidian": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18FFD0 takes one material constant"
+  },
+  "minecraft:ochre_froglight": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:open_eyeblossom": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1BCCF0 takes one material constant"
+  },
+  "minecraft:orange_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:orange_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:orange_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:orange_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:orange_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:orange_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:orange_poplar_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1BC550 takes one material constant"
+  },
+  "minecraft:orange_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:orange_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:orange_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:orange_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:orange_tulip": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:orange_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:oxeye_daisy": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:oxidized_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:oxidized_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:oxidized_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:oxidized_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:oxidized_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:oxidized_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:oxidized_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:oxidized_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:oxidized_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:oxidized_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:oxidized_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:oxidized_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:oxidized_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:oxidized_cut_copper_stairs": {
+   "base": "minecraft:oxidized_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:oxidized_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:oxidized_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:packed_ice": {
+   "type": 0,
+   "source": "constructor chain of sub_14D1945D0 takes one material constant"
+  },
+  "minecraft:packed_mud": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:pale_hanging_moss": {
+   "type": 8,
+   "source": "constructor chain of sub_1476F2670 takes one material constant"
+  },
+  "minecraft:pale_moss_block": {
+   "type": 1,
+   "source": "constructor chain of sub_149C489D0 takes one material constant"
+  },
+  "minecraft:pale_moss_carpet": {
+   "type": 8,
+   "source": "constructor chain of sub_1476F4020 takes one material constant"
+  },
+  "minecraft:pale_oak_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:pale_oak_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:pale_oak_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:pale_oak_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:pale_oak_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:pale_oak_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:pale_oak_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1BC550 takes one material constant"
+  },
+  "minecraft:pale_oak_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:pale_oak_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:pale_oak_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:pale_oak_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:pale_oak_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:pale_oak_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:pale_oak_stairs": {
+   "base": "minecraft:pale_oak_planks",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:pale_oak_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:pale_oak_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:pale_oak_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:pale_oak_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:pearlescent_froglight": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:peony": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B70B0 takes one material constant"
+  },
+  "minecraft:petrified_oak_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:petrified_oak_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:piglin_head": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  },
+  "minecraft:pink_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:pink_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:pink_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:pink_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:pink_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:pink_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:pink_petals": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1AFA20 takes one material constant"
+  },
+  "minecraft:pink_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:pink_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:pink_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:pink_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:pink_tulip": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:pink_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:piston": {
+   "type": 23,
+   "source": "constructor chain of sub_1476FB180 takes one material constant"
+  },
+  "minecraft:piston_arm_collision": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:pitcher_crop": {
+   "type": 8,
+   "source": "constructor chain of sub_1476FCD80 takes one material constant"
+  },
+  "minecraft:pitcher_plant": {
+   "type": 8,
+   "source": "constructor chain of sub_149C5DA10 takes one material constant"
+  },
+  "minecraft:player_head": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  },
+  "minecraft:podzol": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:pointed_dripstone": {
+   "type": 23,
+   "source": "constructor chain of sub_148F93CF0 takes one material constant"
+  },
+  "minecraft:polished_andesite": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:polished_andesite_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:polished_andesite_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:polished_andesite_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_basalt": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:polished_blackstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:polished_blackstone_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_blackstone_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_blackstone_brick_stairs": {
+   "base": "minecraft:polished_blackstone_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_blackstone_brick_wall": {
+   "base": "minecraft:polished_blackstone_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_blackstone_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:polished_blackstone_button": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:polished_blackstone_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_blackstone_pressure_plate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:polished_blackstone_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_blackstone_stairs": {
+   "base": "minecraft:polished_blackstone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_blackstone_wall": {
+   "base": "minecraft:polished_blackstone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_cinnabar": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:polished_cinnabar_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_cinnabar_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_cinnabar_stairs": {
+   "base": "minecraft:cinnabar",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:polished_cinnabar_wall": {
+   "base": "minecraft:cinnabar",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:polished_deepslate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:polished_deepslate_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_deepslate_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_deepslate_stairs": {
+   "base": "minecraft:polished_deepslate",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_deepslate_wall": {
+   "base": "minecraft:polished_deepslate",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_diorite": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:polished_diorite_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:polished_diorite_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:polished_diorite_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_granite": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:polished_granite_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:polished_granite_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:polished_granite_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_sulfur": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:polished_sulfur_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_sulfur_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_sulfur_stairs": {
+   "base": "minecraft:sulfur",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:polished_sulfur_wall": {
+   "base": "minecraft:sulfur",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:polished_tuff": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:polished_tuff_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_tuff_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:polished_tuff_stairs": {
+   "base": "minecraft:polished_tuff",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:polished_tuff_wall": {
+   "base": "minecraft:polished_tuff",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:poplar_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:poplar_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:poplar_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:poplar_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:poplar_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:poplar_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:poplar_log": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:poplar_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:poplar_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:poplar_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:poplar_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:poplar_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:poplar_stairs": {
+   "base": "minecraft:poplar_planks",
+   "source": "stairs constructor sub_148F9C8D0 takes base + 0x28; base = poplar_planks created by sub_1431B8EC0 at 0x14D021F76"
+  },
+  "minecraft:poplar_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:poplar_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:poplar_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:poplar_wood": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:poppy": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:portal": {
+   "type": 16,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:potatoes": {
+   "type": 8,
+   "source": "constructor chain of sub_14A237F90 takes one material constant"
+  },
+  "minecraft:potent_sulfur": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14A238230"
+  },
+  "minecraft:powder_snow": {
+   "type": 14,
+   "source": "registration passes the material constant to sub_14A23A7A0"
+  },
+  "minecraft:powered_comparator": {
+   "type": 24,
+   "source": "constructor chain of sub_14D19C330 takes one material constant"
+  },
+  "minecraft:powered_repeater": {
+   "type": 24,
+   "source": "constructor chain of sub_14D195600 takes one material constant"
+  },
+  "minecraft:prismarine": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:prismarine_brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:prismarine_brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:prismarine_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:prismarine_bricks_stairs": {
+   "base": "minecraft:prismarine_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:prismarine_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:prismarine_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:prismarine_stairs": {
+   "base": "minecraft:prismarine",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:prismarine_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:pumpkin": {
+   "type": 23,
+   "source": "constructor chain of sub_14D194E10 takes one material constant"
+  },
+  "minecraft:pumpkin_stem": {
+   "type": 8,
+   "source": "constructor chain of sub_14D197CA0 takes one material constant"
+  },
+  "minecraft:purple_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:purple_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:purple_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:purple_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:purple_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:purple_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:purple_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:purple_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:purple_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:purple_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:purple_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:purpur_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:purpur_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:purpur_pillar": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:purpur_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:purpur_stairs": {
+   "base": "minecraft:purpur_block",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:quartz_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:quartz_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:quartz_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:quartz_ore": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:quartz_pillar": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:quartz_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:quartz_stairs": {
+   "base": "minecraft:quartz_block",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:rail": {
+   "type": 24,
+   "source": "constructor chain of sub_143151DE0 takes one material constant"
+  },
+  "minecraft:raw_copper_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:raw_gold_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:raw_iron_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:red_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:red_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:red_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:red_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:red_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:red_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:red_mushroom": {
+   "type": 8,
+   "source": "constructor chain of sub_1476E9BC0 takes one material constant"
+  },
+  "minecraft:red_mushroom_block": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D196D30"
+  },
+  "minecraft:red_nether_brick": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:red_nether_brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:red_nether_brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:red_nether_brick_stairs": {
+   "base": "minecraft:red_nether_brick",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:red_nether_brick_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:red_poplar_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1BC550 takes one material constant"
+  },
+  "minecraft:red_sand": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18E0D0 takes one material constant"
+  },
+  "minecraft:red_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:red_sandstone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:red_sandstone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:red_sandstone_stairs": {
+   "base": "minecraft:red_sandstone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:red_sandstone_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:red_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:red_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:red_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:red_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:red_tulip": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:red_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:redstone_block": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:redstone_lamp": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19AAD0 takes one material constant"
+  },
+  "minecraft:redstone_ore": {
+   "type": 23,
+   "source": "constructor chain of sub_14D192ED0 takes one material constant"
+  },
+  "minecraft:redstone_torch": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1936E0 takes one material constant"
+  },
+  "minecraft:redstone_wire": {
+   "type": 24,
+   "source": "constructor chain of sub_14A242420 takes one material constant"
+  },
+  "minecraft:reeds": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:reinforced_deepslate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:repeating_command_block": {
+   "type": 3,
+   "source": "constructor chain of sub_14D19B2D0 takes one material constant"
+  },
+  "minecraft:reserved6": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:resin_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:resin_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:resin_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:resin_brick_stairs": {
+   "base": "minecraft:resin_bricks",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:resin_brick_wall": {
+   "base": "minecraft:resin_bricks",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:resin_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:resin_clump": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_149C49910"
+  },
+  "minecraft:respawn_anchor": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:rose_bush": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B70B0 takes one material constant"
+  },
+  "minecraft:sand": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18E0D0 takes one material constant"
+  },
+  "minecraft:sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:sandstone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:sandstone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:sandstone_stairs": {
+   "base": "minecraft:sandstone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:sandstone_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:scaffolding": {
+   "type": 24,
+   "source": "constructor chain of sub_14B24EB10 takes one material constant"
+  },
+  "minecraft:sculk": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:sculk_catalyst": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:sculk_sensor": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:sculk_shrieker": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:sculk_vein": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14B25FF20"
+  },
+  "minecraft:sea_lantern": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:sea_pickle": {
+   "type": 8,
+   "source": "constructor chain of sub_14B2602B0 takes one material constant"
+  },
+  "minecraft:seagrass": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:short_dry_grass": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:short_grass": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B7FB0 takes one material constant"
+  },
+  "minecraft:shroomlight": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:silver_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:skeleton_skull": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  },
+  "minecraft:slime": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:small_amethyst_bud": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A9EB0 takes one material constant"
+  },
+  "minecraft:small_dripleaf_block": {
+   "type": 8,
+   "source": "constructor chain of sub_148F8E0C0 takes one material constant"
+  },
+  "minecraft:smithing_table": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:smoker": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A2510 takes one material constant"
+  },
+  "minecraft:smooth_basalt": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:smooth_quartz": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19D2E0 takes one material constant"
+  },
+  "minecraft:smooth_quartz_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:smooth_quartz_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:smooth_quartz_stairs": {
+   "base": "minecraft:quartz_block",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:smooth_red_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:smooth_red_sandstone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:smooth_red_sandstone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:smooth_red_sandstone_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:smooth_sandstone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:smooth_sandstone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:smooth_sandstone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:smooth_sandstone_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:smooth_stone": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:smooth_stone_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:smooth_stone_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:sniffer_egg": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:snow": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:snow_layer": {
+   "type": 24,
+   "source": "constructor chain of sub_14B27AF00 takes one material constant"
+  },
+  "minecraft:soul_campfire": {
+   "type": 20,
+   "source": "constructor chain of sub_14D1A3560 takes one material constant"
+  },
+  "minecraft:soul_fire": {
+   "type": 10,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:soul_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A2D60 takes one material constant"
+  },
+  "minecraft:soul_sand": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:soul_soil": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:soul_torch": {
+   "type": 24,
+   "source": "constructor chain of sub_148F93740 takes one material constant"
+  },
+  "minecraft:sponge": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1BBD70"
+  },
+  "minecraft:spore_blossom": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:spruce_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:spruce_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:spruce_double_slab": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:spruce_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:spruce_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:spruce_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:spruce_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1B59E0 takes one material constant"
+  },
+  "minecraft:spruce_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AE210 takes one material constant"
+  },
+  "minecraft:spruce_planks": {
+   "type": 2,
+   "source": "constructor chain of sub_14D18CA50 takes one material constant"
+  },
+  "minecraft:spruce_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:spruce_sapling": {
+   "type": 8,
+   "source": "constructor chain of sub_14B24CB20 takes one material constant"
+  },
+  "minecraft:spruce_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:spruce_slab": {
+   "type": 2,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:spruce_stairs": {
+   "base": "minecraft:spruce_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:spruce_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:spruce_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:spruce_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:spruce_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:standing_banner": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19DA60 takes one material constant"
+  },
+  "minecraft:standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:sticky_piston": {
+   "type": 23,
+   "source": "constructor chain of sub_1476FB180 takes one material constant"
+  },
+  "minecraft:sticky_piston_arm_collision": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:stone": {
+   "type": 23,
+   "source": "constructor chain of sub_14D18BA20 takes one material constant"
+  },
+  "minecraft:stone_brick_double_slab": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1A6430"
+  },
+  "minecraft:stone_brick_slab": {
+   "type": 23,
+   "source": "material constant loaded before the factory call to sub_14D1A6430"
+  },
+  "minecraft:stone_brick_stairs": {
+   "base": "minecraft:stone_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:stone_brick_wall": {
+   "base": "minecraft:cobblestone",
+   "source": "wall factory sub_14D1A6BC0 takes base + 0x28 from [rbp+var_518], written only at 0x14CE9B3D1 and 0x14CE9C23D (cobblestone)"
+  },
+  "minecraft:stone_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1964E0"
+  },
+  "minecraft:stone_button": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:stone_pressure_plate": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:stone_stairs": {
+   "base": "minecraft:cobblestone",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:stonecutter": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:stonecutter_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:straw_bed": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:stripped_acacia_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_acacia_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_bamboo_block": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_birch_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_birch_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_cherry_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AF270 takes one material constant"
+  },
+  "minecraft:stripped_cherry_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_crimson_hyphae": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:stripped_crimson_stem": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:stripped_dark_oak_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_dark_oak_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_jungle_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_jungle_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_mangrove_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_mangrove_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_oak_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_oak_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_pale_oak_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AF270 takes one material constant"
+  },
+  "minecraft:stripped_pale_oak_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_poplar_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AF270 takes one material constant"
+  },
+  "minecraft:stripped_poplar_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_spruce_log": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_spruce_wood": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19FE40 takes one material constant"
+  },
+  "minecraft:stripped_warped_hyphae": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:stripped_warped_stem": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:structure_block": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:structure_void": {
+   "type": 22,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:sulfur": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:sulfur_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:sulfur_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:sulfur_brick_stairs": {
+   "base": "minecraft:sulfur",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:sulfur_brick_wall": {
+   "base": "minecraft:sulfur",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:sulfur_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:sulfur_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:sulfur_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:sulfur_spike": {
+   "type": 23,
+   "source": "constructor chain of sub_148F93CF0 takes one material constant"
+  },
+  "minecraft:sulfur_stairs": {
+   "base": "minecraft:sulfur",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:sulfur_wall": {
+   "base": "minecraft:sulfur",
+   "source": "material of the base block, traced from the factory argument (creation)"
+  },
+  "minecraft:sunflower": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B70B0 takes one material constant"
+  },
+  "minecraft:suspicious_gravel": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B06B0 takes one material constant"
+  },
+  "minecraft:suspicious_sand": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B06B0 takes one material constant"
+  },
+  "minecraft:sweet_berry_bush": {
+   "type": 8,
+   "source": "constructor chain of sub_14B26FBD0 takes one material constant"
+  },
+  "minecraft:tall_dry_grass": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:tall_grass": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1B7830 takes one material constant"
+  },
+  "minecraft:target": {
+   "type": 1,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:tinted_glass": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D18E840"
+  },
+  "minecraft:tnt": {
+   "type": 12,
+   "source": "constructor chain of sub_14D199B30 takes one material constant"
+  },
+  "minecraft:torch": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:torchflower": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:torchflower_crop": {
+   "type": 8,
+   "source": "constructor chain of sub_1449BA7B0 takes one material constant"
+  },
+  "minecraft:trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:trapped_chest": {
+   "type": 2,
+   "source": "constructor chain of sub_14D190EF0 takes one material constant"
+  },
+  "minecraft:trial_spawner": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:trip_wire": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:tripwire_hook": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:tube_coral": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B0E20 takes one material constant"
+  },
+  "minecraft:tube_coral_block": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B8800 takes one material constant"
+  },
+  "minecraft:tube_coral_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B6170 takes one material constant"
+  },
+  "minecraft:tube_coral_wall_fan": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B9F30 takes one material constant"
+  },
+  "minecraft:tuff": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:tuff_brick_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:tuff_brick_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:tuff_brick_stairs": {
+   "base": "minecraft:tuff_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:tuff_brick_wall": {
+   "base": "minecraft:tuff_bricks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:tuff_bricks": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:tuff_double_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:tuff_slab": {
+   "type": 23,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:tuff_stairs": {
+   "base": "minecraft:tuff",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:tuff_wall": {
+   "base": "minecraft:tuff",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:turtle_egg": {
+   "type": 23,
+   "source": "constructor chain of sub_1449C3860 takes one material constant"
+  },
+  "minecraft:twisting_vines": {
+   "type": 8,
+   "source": "constructor chain of sub_1449C7340 takes one material constant"
+  },
+  "minecraft:underwater_tnt": {
+   "type": 12,
+   "source": "constructor chain of sub_14D199B30 takes one material constant"
+  },
+  "minecraft:underwater_torch": {
+   "type": 24,
+   "source": "constructor chain of sub_1449C9920 takes one material constant"
+  },
+  "minecraft:undyed_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:unlit_redstone_torch": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1936E0 takes one material constant"
+  },
+  "minecraft:unpowered_comparator": {
+   "type": 24,
+   "source": "constructor chain of sub_14D19C330 takes one material constant"
+  },
+  "minecraft:unpowered_repeater": {
+   "type": 24,
+   "source": "constructor chain of sub_14D195600 takes one material constant"
+  },
+  "minecraft:vault": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:verdant_froglight": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D19EA10"
+  },
+  "minecraft:vine": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:wall_banner": {
+   "type": 2,
+   "source": "constructor chain of sub_14D19DA60 takes one material constant"
+  },
+  "minecraft:wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:warped_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:warped_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:warped_double_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:warped_fence": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D198B80"
+  },
+  "minecraft:warped_fence_gate": {
+   "type": 2,
+   "source": "constructor chain of sub_14D198410 takes one material constant"
+  },
+  "minecraft:warped_fungus": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A54F0 takes one material constant"
+  },
+  "minecraft:warped_hanging_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1AEA20 takes one material constant"
+  },
+  "minecraft:warped_hyphae": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:warped_nylium": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1A5C60 takes one material constant"
+  },
+  "minecraft:warped_planks": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:warped_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:warped_roots": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1A44E0 takes one material constant"
+  },
+  "minecraft:warped_shelf": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1BEAA0 takes one material constant"
+  },
+  "minecraft:warped_slab": {
+   "type": 2,
+   "source": "argument register traced to its material constant"
+  },
+  "minecraft:warped_stairs": {
+   "base": "minecraft:warped_planks",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:warped_standing_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:warped_stem": {
+   "type": 2,
+   "source": "constructor chain of sub_14D1A4D10 takes one material constant"
+  },
+  "minecraft:warped_trapdoor": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D195D70"
+  },
+  "minecraft:warped_wall_sign": {
+   "type": 2,
+   "source": "constructor chain of sub_1431791E0 takes one material constant"
+  },
+  "minecraft:warped_wart_block": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_1431B8EC0"
+  },
+  "minecraft:water": {
+   "type": 5,
+   "source": "registration passes the material constant to sub_14D18D1E0"
+  },
+  "minecraft:waterlily": {
+   "type": 9,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:waxed_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:waxed_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:waxed_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:waxed_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:waxed_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:waxed_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:waxed_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:waxed_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:waxed_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:waxed_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:waxed_cut_copper_stairs": {
+   "base": "minecraft:waxed_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:waxed_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:waxed_exposed_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_exposed_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_exposed_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:waxed_exposed_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:waxed_exposed_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:waxed_exposed_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:waxed_exposed_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:waxed_exposed_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:waxed_exposed_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:waxed_exposed_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:waxed_exposed_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:waxed_exposed_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_exposed_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:waxed_exposed_cut_copper_stairs": {
+   "base": "minecraft:waxed_exposed_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:waxed_exposed_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:waxed_exposed_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:waxed_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_oxidized_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_oxidized_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:waxed_oxidized_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:waxed_oxidized_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:waxed_oxidized_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:waxed_oxidized_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_oxidized_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:waxed_oxidized_cut_copper_stairs": {
+   "base": "minecraft:waxed_oxidized_cut_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:waxed_oxidized_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:waxed_oxidized_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:waxed_weathered_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_weathered_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_weathered_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:waxed_weathered_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:waxed_weathered_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:waxed_weathered_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:waxed_weathered_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:waxed_weathered_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:waxed_weathered_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:waxed_weathered_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:waxed_weathered_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:waxed_weathered_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:waxed_weathered_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:waxed_weathered_cut_copper_stairs": {
+   "base": "minecraft:waxed_weathered_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:waxed_weathered_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:waxed_weathered_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:weathered_chiseled_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:weathered_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:weathered_copper_bars": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BF1D0 takes one material constant"
+  },
+  "minecraft:weathered_copper_bulb": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1B4220 takes one material constant"
+  },
+  "minecraft:weathered_copper_chain": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C0860 takes one material constant"
+  },
+  "minecraft:weathered_copper_chest": {
+   "type": 3,
+   "source": "sub_1477224E0 hands material 3 to the chest constructor sub_147722690, which indexes the table by it"
+  },
+  "minecraft:weathered_copper_door": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B49E0"
+  },
+  "minecraft:weathered_copper_golem_statue": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1BE370 takes one material constant"
+  },
+  "minecraft:weathered_copper_grate": {
+   "type": 4,
+   "source": "constructor chain of sub_14D1B3A70 takes one material constant"
+  },
+  "minecraft:weathered_copper_lantern": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1C1D90 takes one material constant"
+  },
+  "minecraft:weathered_copper_trapdoor": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1B51F0"
+  },
+  "minecraft:weathered_cut_copper": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1AA690"
+  },
+  "minecraft:weathered_cut_copper_slab": {
+   "type": 3,
+   "source": "material constant loaded before the factory call to sub_14D1ABC90"
+  },
+  "minecraft:weathered_cut_copper_stairs": {
+   "base": "minecraft:weathered_copper",
+   "source": "material of the base block, traced from the factory argument (lookup)"
+  },
+  "minecraft:weathered_double_cut_copper_slab": {
+   "type": 3,
+   "source": "registration passes the material constant to sub_14D1ABC90"
+  },
+  "minecraft:weathered_lightning_rod": {
+   "type": 3,
+   "source": "constructor chain of sub_14D1A8A50 takes one material constant"
+  },
+  "minecraft:web": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:weeping_vines": {
+   "type": 8,
+   "source": "constructor chain of sub_1432EAD80 takes one material constant"
+  },
+  "minecraft:wet_sponge": {
+   "type": 23,
+   "source": "registration passes the material constant to sub_14D1BBD70"
+  },
+  "minecraft:wheat": {
+   "type": 8,
+   "source": "constructor chain of sub_147731560 takes one material constant"
+  },
+  "minecraft:white_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:white_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:white_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:white_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:white_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:white_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:white_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:white_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:white_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:white_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:white_tulip": {
+   "type": 8,
+   "source": "constructor chain of sub_14D18F020 takes one material constant"
+  },
+  "minecraft:white_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:wildflowers": {
+   "type": 8,
+   "source": "constructor chain of sub_14D1AFA20 takes one material constant"
+  },
+  "minecraft:wither_rose": {
+   "type": 8,
+   "source": "registration passes the material constant to sub_1435A7570"
+  },
+  "minecraft:wither_skeleton_skull": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  },
+  "minecraft:wooden_button": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D193E50"
+  },
+  "minecraft:wooden_door": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D191F10"
+  },
+  "minecraft:wooden_pressure_plate": {
+   "type": 2,
+   "source": "registration passes the material constant to sub_14D192690"
+  },
+  "minecraft:yellow_candle": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1AD330 takes one material constant"
+  },
+  "minecraft:yellow_candle_cake": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1ADAA0 takes one material constant"
+  },
+  "minecraft:yellow_carpet": {
+   "type": 24,
+   "source": "registration passes the material constant to sub_14D1A9690"
+  },
+  "minecraft:yellow_concrete": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B1D00 takes one material constant"
+  },
+  "minecraft:yellow_concrete_powder": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B2990 takes one material constant"
+  },
+  "minecraft:yellow_glazed_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19F190 takes one material constant"
+  },
+  "minecraft:yellow_poplar_leaves": {
+   "type": 7,
+   "source": "constructor chain of sub_14D1BC550 takes one material constant"
+  },
+  "minecraft:yellow_shulker_box": {
+   "type": 23,
+   "source": "constructor chain of sub_14D19E2A0 takes one material constant"
+  },
+  "minecraft:yellow_stained_glass": {
+   "type": 11,
+   "source": "constructor chain of sub_14D1B21C0 takes one material constant"
+  },
+  "minecraft:yellow_stained_glass_pane": {
+   "type": 11,
+   "source": "registration passes the material constant to sub_14D1974B0"
+  },
+  "minecraft:yellow_terracotta": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B35B0 takes one material constant"
+  },
+  "minecraft:yellow_wool": {
+   "type": 23,
+   "source": "constructor chain of sub_14D1B01A0 takes one material constant"
+  },
+  "minecraft:zombie_head": {
+   "type": 24,
+   "source": "constructor chain of sub_14D1BD420 takes one material constant"
+  }
+ }
+}

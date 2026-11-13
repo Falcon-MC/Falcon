@@ -1,6 +1,8 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
+#include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/BlockMaterial.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -177,6 +179,40 @@ namespace {
         require(!StructureMaterials::isPlant(BlockState("minecraft:waterlily")), "the lily pad is no plant material");
         require(!StructureMaterials::isPlant(BlockState("minecraft:oak_leaves")), "leaves are no plant material");
         require(!StructureMaterials::isPlant(BlockState("minecraft:lava")), "lava is no plant material");
+
+        for (size_t i = 0; i < BlockDataTable::getCount(); i++) {
+            BlockMaterialType type;
+            if (!BlockMaterial::find(BlockState(BlockDataTable::getEntries()[i].mIdentifier), type))
+                throw std::runtime_error(std::string("no material for ") + BlockDataTable::getEntries()[i].mIdentifier);
+        }
+        BlockMaterialType type;
+        require(!BlockMaterial::find(BlockState("custom:block"), type), "an unknown block has no material");
+        require(BlockMaterial::find(BlockState("minecraft:cobblestone_wall"), type)
+                        && type == BlockMaterialType::Solid,
+                "walls take the material of cobblestone");
+        require(BlockMaterial::find(BlockState("minecraft:white_wool_stairs"), type)
+                        && type == BlockMaterialType::Solid,
+                "wool stairs take the material of wool");
+        require(BlockMaterial::find(BlockState("minecraft:copper_chest"), type) && type == BlockMaterialType::Metal,
+                "copper chests are metal");
+        require(BlockMaterial::flagsOf(BlockState("minecraft:water")) == 0x0a, "water flags");
+        require(BlockMaterial::flagsOf(BlockState("minecraft:oak_leaves")) == 0x1d, "leaves flags");
+
+        require(StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:stone"), false, false), "stone stops");
+        require(StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:wall_sign"), false, false),
+                "wooden signs stop the search");
+        require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:ice"), true, true),
+                "ice has the air material");
+        require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:oak_leaves"), true, false),
+                "leaves are looked through");
+        require(StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:oak_leaves"), false, true),
+                "leaves stop when they count");
+        require(StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:flowing_water"), true, false),
+                "water stops when it counts");
+        require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:water"), false, false),
+                "water is looked through otherwise");
+        require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:short_grass"), true, true),
+                "grass never stops");
     }
 }
 
