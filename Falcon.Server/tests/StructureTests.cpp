@@ -15,6 +15,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/LevelGen/Structure/JigsawPlacer.h"
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
@@ -30,6 +31,7 @@
 
 #include <array>
 #include <initializer_list>
+#include <map>
 #include <iostream>
 #include <memory>
 #include <random>
@@ -622,6 +624,143 @@ namespace {
     }
 }
 
+namespace {
+    std::shared_ptr<const JigsawPlacer::Template> slab(const JigsawPlacer::Jigsaw &jigsaw) {
+        auto out = std::make_shared<JigsawPlacer::Template>();
+        out->mSizeX = 3;
+        out->mSizeY = 2;
+        out->mSizeZ = 3;
+        out->mJigsaws.push_back(jigsaw);
+        return out;
+    }
+
+    JigsawPlacer::Jigsaw jigsawAt(int32_t x, int32_t z, JigsawPlacer::Facing front, const std::string &name,
+                                  const std::string &target, const std::string &pool) {
+        JigsawPlacer::Jigsaw jigsaw;
+        jigsaw.x = x;
+        jigsaw.z = z;
+        jigsaw.mFront = front;
+        jigsaw.mName = name;
+        jigsaw.mTarget = target;
+        jigsaw.mPool = pool;
+        return jigsaw;
+    }
+
+    struct PlacerWorld {
+        std::map<std::string, JigsawPlacer::Pool> mPools;
+        std::map<std::string, std::shared_ptr<const JigsawPlacer::Template>> mTemplates;
+
+        JigsawPlacer placer() const {
+            return JigsawPlacer(
+                    [](int32_t) { return 0; },
+                    [this](const std::string &name) -> const JigsawPlacer::Pool * {
+                        const auto found = mPools.find(name);
+                        return found == mPools.end() ? nullptr : &found->second;
+                    },
+                    [this](const JigsawPlacer::Element &element) -> std::shared_ptr<const JigsawPlacer::Template> {
+                        const auto found = mTemplates.find(element.mLocation);
+                        return found == mTemplates.end() ? nullptr : found->second;
+                    },
+                    [](int32_t, int32_t, JigsawPlacer::Projection) { return 70; });
+        }
+    };
+
+    void checkJigsawPlacer() {
+        const JigsawPlacer::Element start{"start", "", false};
+        const JigsawPlacer::Element child{"child", "", false};
+        const JigsawPlacer::Element blocked{"blocked", "", false};
+        const JigsawPlacer::Element cap{"cap", "", false};
+        PlacerWorld world;
+        world.mPools["minecraft:empty"] = JigsawPlacer::Pool{{}, "minecraft:empty"};
+        world.mPools["test:start"] = JigsawPlacer::Pool{{&start}, "minecraft:empty"};
+        world.mPools["test:child"] = JigsawPlacer::Pool{{&child}, "minecraft:empty"};
+        world.mPools["test:blocked"] = JigsawPlacer::Pool{{&blocked}, "minecraft:empty"};
+        world.mPools["test:main"] = JigsawPlacer::Pool{{&child}, "test:cap"};
+        world.mPools["test:cap"] = JigsawPlacer::Pool{{&cap}, "minecraft:empty"};
+        world.mTemplates["start"] = slab(jigsawAt(1, 0, 2, "s", "c", "test:child"));
+        world.mTemplates["child"] = slab(jigsawAt(1, 2, 3, "c", "c", "test:missing"));
+        world.mTemplates["blocked"] = slab(jigsawAt(1, 0, 3, "c", "c", "test:missing"));
+        world.mTemplates["cap"] = slab(jigsawAt(1, 2, 3, "c", "c", "test:missing"));
+
+        JigsawPlacer::Settings settings;
+        settings.mStartPool = "test:start";
+        settings.mMaxDepth = 2;
+        settings.mStartX = 100;
+        settings.mStartY = 64;
+        settings.mStartZ = 200;
+        settings.mMaxDistanceHorizontal = 80;
+        settings.mMaxDistanceVertical = 80;
+        settings.mDimensionMinY = -64;
+        settings.mDimensionHeight = 384;
+
+        JigsawPlacer::Result result;
+        require(world.placer().place(settings, result), "The jigsaw placer refused a valid start");
+        // the start drops by its ground level delta when it is not projected
+        require(result.x == 101 && result.y == 64 && result.z == 201, "The jigsaw start position differs");
+        require(result.mPieces.size() == 2, "The north jigsaw did not attach its child");
+        const JigsawPlacer::Piece &first = result.mPieces[0];
+        const JigsawPlacer::Piece &second = result.mPieces[1];
+        require(first.y == 63 && first.mBox.mMinY == 63 && first.mBox.mMaxY == 64, "The start piece was not lowered");
+        require(second.mElement == &child && second.mQuarterTurns == 0 && second.x == 100 && second.y == 63
+                        && second.z == 197 && second.mBox.mMaxZ == 199 && second.mDepth == 1,
+                "The child piece does not face the start's jigsaw");
+        require(first.mJunctions.size() == 1 && first.mJunctions[0].x == 101 && first.mJunctions[0].y == 64
+                        && first.mJunctions[0].z == 199 && first.mJunctions[0].mDeltaY == 0,
+                "The start junction differs");
+        require(second.mJunctions.size() == 1 && second.mJunctions[0].z == 200, "The child junction differs");
+
+        settings.mMaxDepth = 0;
+        require(world.placer().place(settings, result) && result.mPieces.empty(),
+                "A max depth of 0 placed pieces");
+
+        // a child overlapping the start's box is refused on every turn
+        settings.mMaxDepth = 2;
+        world.mTemplates["start"] = slab(jigsawAt(1, 0, 2, "s", "c", "test:blocked"));
+        require(world.placer().place(settings, result) && result.mPieces.size() == 1,
+                "A child inside the start's box was placed");
+
+        // at the max depth only the fallback pool is drawn from
+        settings.mMaxDepth = 1;
+        world.mTemplates["start"] = slab(jigsawAt(1, 0, 2, "s", "c", "test:child"));
+        auto branching = std::make_shared<JigsawPlacer::Template>(*slab(jigsawAt(1, 2, 3, "c", "c", "test:missing")));
+        branching->mJigsaws.push_back(jigsawAt(1, 0, 2, "n", "c", "test:main"));
+        world.mTemplates["child"] = branching;
+        require(world.placer().place(settings, result) && result.mPieces.size() == 3
+                        && result.mPieces[2].mElement == &cap && result.mPieces[2].mDepth == 2,
+                "The max depth did not fall back to the fallback pool");
+
+        // a branch never leaves the maximum distance from the start
+        settings.mMaxDistanceHorizontal = 2;
+        require(world.placer().place(settings, result) && result.mPieces.size() == 1,
+                "A piece left the maximum distance");
+
+        JigsawPlacer::Jigsaw up = jigsawAt(0, 0, 1, "a", "b", "");
+        up.mAligned = true;
+        up.mTop = 2;
+        JigsawPlacer::Jigsaw down = jigsawAt(0, 0, 0, "b", "", "");
+        down.mTop = 2;
+        require(JigsawPlacer::canAttach(up, 0, down, 0), "An aligned vertical jigsaw refused its match");
+        require(!JigsawPlacer::canAttach(up, 0, down, 1), "An aligned vertical jigsaw accepted a turned top");
+        up.mAligned = false;
+        require(JigsawPlacer::canAttach(up, 0, down, 1), "A rollable vertical jigsaw refused a turned top");
+
+        const std::shared_ptr<const StructureTemplate> tower = StructureTemplate::load("trail_ruins/tower/tower_1.nbt");
+        require(tower != nullptr, "No trail ruins tower template");
+        const std::shared_ptr<const JigsawPlacer::Template> read = JigsawPlacer::templateOf(*tower);
+        require(read->mJigsaws.size() == 5, "The tower's jigsaws were not all read");
+        const JigsawPlacer::Jigsaw &west = read->mJigsaws[0];
+        require(west.x == 0 && west.y == 1 && west.z == 2 && west.mFront == 4 && west.mTop == 1
+                        && west.mName == "minecraft:road_anchor" && west.mTarget == "minecraft:road_hall_anchor"
+                        && west.mPool == "minecraft:trail_ruins/tower/additions" && !west.mAligned
+                        && west.mFinalState == "minecraft:cobblestone",
+                "The tower's first jigsaw was misread");
+        const JigsawPlacer::Jigsaw &top = read->mJigsaws[4];
+        require(top.mFront == 1 && top.mTop == 2 && top.mAligned
+                        && top.mPool == "minecraft:trail_ruins/tower/tower_top",
+                "The tower's aligned top jigsaw was misread");
+    }
+}
+
 int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
@@ -638,6 +777,7 @@ int main() {
         checkRuinedPortals();
         checkScatteredPieces();
         checkStructureBounds();
+        checkJigsawPlacer();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;
