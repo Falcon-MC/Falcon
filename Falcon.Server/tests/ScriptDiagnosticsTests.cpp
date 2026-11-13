@@ -82,13 +82,23 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
                   "{\"module_name\": \"@minecraft/server-admin\", \"version\": \"1.0.0-beta\"}, "
                   "{\"module_name\": \"@minecraft/common\", \"version\": \"1.3.0\"}]}\n");
         writeFile(pack / "scripts" / "main.js", DIAGNOSTICS);
+        // an entry leaving its pack is not run
+        const std::filesystem::path escape = directory / "packs" / "escape";
+        writeFile(escape / "manifest.json",
+                  "{\"format_version\": 2, \"header\": {\"name\": \"escape\", \"uuid\": "
+                  "\"00000000-0000-4000-8000-600000000002\", \"version\": [1, 0, 0], \"min_engine_version\": [1, 21, "
+                  "0]}, \"modules\": [{\"type\": \"script\", \"language\": \"javascript\", \"uuid\": "
+                  "\"00000000-0000-4000-9000-600000000002\", \"entry\": \"../outside.js\", \"version\": [1, 0, 0]}], "
+                  "\"dependencies\": [{\"module_name\": \"@minecraft/server\", \"version\": \"2.12.0-beta\"}]}\n");
+        writeFile(directory / "packs" / "outside.js", "export const ran = true;\n");
 
         ServerNetworkHandler owner("Script diagnostics", "", 1);
         ScriptEngine &engine = owner.getScriptEngine();
         engine.bindHost(owner);
         BehaviorPackManager manager;
         manager.discover((directory / "packs").string());
-        require(engine.loadPacks(manager.getPacks()) == 1, "the diagnostics pack did not start");
+        require(manager.getPacks().size() == 2, "the escaping pack was not discovered");
+        require(engine.loadPacks(manager.getPacks()) == 1, "only the diagnostics pack should start");
         engine.startup();
         engine.tick(1);
         engine.queueScriptEvent("diag:report", "");
