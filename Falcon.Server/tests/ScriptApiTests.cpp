@@ -1431,6 +1431,24 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    // s1 to s4 take 13 of the 16 state bits and s5 would need 4 more; the other states are refused like the game
+    // refuses them
+    const char *const BOUNDED_BLOCK = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:block": {
+    "description": {
+      "identifier": "test:bounded",
+      "states": {
+        "test:wide": { "values": { "min": 0, "max": 2147483647 } }, "test:one": [1], "test:mixed": [1, "a"],
+        "test:same": ["a", "a"], "test:inverted": { "values": { "min": 3, "max": 3 } },
+        "test:s1": { "values": { "min": 0, "max": 15 } }, "test:s2": { "values": { "min": 0, "max": 15 } },
+        "test:s3": { "values": { "min": 0, "max": 15 } }, "test:s4": [false, true],
+        "test:s5": { "values": { "min": 0, "max": 15 } }
+      }
+    }
+  }
+})JSON";
+
     const char *const LEGACY_BLOCK = R"JSON({
   "format_version": "1.21.40",
   "minecraft:block": {
@@ -1793,6 +1811,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
         writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
+        writeFile(packs / "components" / "blocks" / "bounded.json", BOUNDED_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
 
         ServerNetworkHandler owner("Script API", "", 1);
@@ -1802,6 +1821,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         BehaviorPackManager manager;
         manager.discover(packs.string());
         CustomContentRegistry::getInstance().load(manager, owner.getItemDefinitions(), owner.getBlockDefinitions());
+        const CustomBlockDefinition *bounded = CustomContentRegistry::getInstance().findBlock("test:bounded");
+        require(bounded != nullptr && bounded->mStates.size() == 4 && bounded->mStates.front().mName == "test:s1"
+                        && bounded->mStates.back().mName == "test:s4"
+                        && CustomContentRegistry::permutationsOf(*bounded).size() == 8192,
+                "the pack block states were not bounded like the game");
         for (const BlockPropertyData &property: CustomContentRegistry::getInstance().getBlockProperties()) {
             if (property.mName != "test:stateful")
                 continue;
