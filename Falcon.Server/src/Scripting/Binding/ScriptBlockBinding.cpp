@@ -4,10 +4,13 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Inventory/Container.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Actor/DataDrivenBlockActor.h"
+#include "World/Level/Block/Actor/StoredActor.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/BlockIdentifier.h"
@@ -30,6 +33,8 @@
 #include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <cmath>
@@ -555,6 +560,29 @@ namespace {
         return parts;
     }
 
+    bool declaresEntityStorage(Level &level, const Vector3i &position) {
+        const BlockState state = level.getBlockState(position.x, position.y, position.z);
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        return custom != nullptr && custom->mEntityStorage;
+    }
+
+    // the storage the block actor carries (sub_14E0DD0A0); a pack block declaring entity_storage always has one
+    BlockEntityStorage *entityStorageAt(Level &level, const Vector3i &position) {
+        BlockActor *actor = level.getBlockActors().find(position);
+        if (actor != nullptr && actor->getEntityStorage() != nullptr)
+            return actor->getEntityStorage();
+        if (!declaresEntityStorage(level, position))
+            return nullptr;
+        if (actor == nullptr)
+            actor = &level.getBlockActors().getOrCreate<DataDrivenBlockActor>(position);
+        return &actor->enableEntityStorage();
+    }
+
+    bool hasEntityStorageAt(Level &level, const Vector3i &position) {
+        BlockActor *actor = level.getBlockActors().find(position);
+        return (actor != nullptr && actor->getEntityStorage() != nullptr) || declaresEntityStorage(level, position);
+    }
+
     // components each block has, in BlockComponentTypes order
     std::vector<std::string> componentIdsAt(Level &level, const Vector3i &position) {
         std::vector<std::string> ids;
@@ -562,6 +590,8 @@ namespace {
         BlockActor *actor = level.getBlockActors().find(position);
         if (actor != nullptr)
             ids.emplace_back("minecraft:dynamic_properties");
+        if (hasEntityStorageAt(level, position))
+            ids.emplace_back("minecraft:entity_storage");
         if (CauldronBlock::matches(state.mName))
             ids.emplace_back("minecraft:fluid_container");
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
@@ -590,6 +620,7 @@ namespace {
 
     const char *const COMPONENT_CLASSES[][2] = {
             {"minecraft:dynamic_properties", "BlockDynamicPropertiesComponent"},
+            {"minecraft:entity_storage", "BlockEntityStorageComponent"},
             {"minecraft:fluid_container", "BlockFluidContainerComponent"},
             {"minecraft:instrument_sound", "BlockInstrumentComponent"},
             {"minecraft:inventory", "BlockInventoryComponent"},
@@ -1551,6 +1582,191 @@ namespace {
             return JS_FALSE;
         return JS_NewBool(ctx, magic == 0 ? custom->mCanDampenVibrations : custom->mCanOccludeVibrations);
     }
+
+    // the location checks come first (sub_14A5E5600, sub_14B538980), then the component
+    JSValue storageTarget(const BlockAt &at, BlockEntityStorage *&storage) {
+        if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
+            return at.mApi->throwError("LocationInUnloadedChunkError", "");
+        if (at.mPosition.y < at.mLevel->getMinY() || at.mPosition.y > at.mLevel->getMaxY())
+            return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
+        storage = entityStorageAt(*at.mLevel, at.mPosition);
+        if (storage == nullptr)
+            return at.mApi->throwError("InvalidBlockComponentError",
+                                       "Attempting to access invalid block component minecraft:entity_storage.");
+        return JS_UNDEFINED;
+    }
+
+    JSValue storageError(const BlockAt &at, BlockEntityStorage::Result result) {
+        return at.mApi->throwError("Error", BlockEntityStorage::message(result));
+    }
+
+    // a stored id that does not read as a whole number is -1, refused as invalid
+    int64_t parseStoredId(const std::string &text) {
+        if (text.empty())
+            return -1;
+        errno = 0;
+        char *end = nullptr;
+        const long long value = std::strtoll(text.c_str(), &end, 10);
+        if (errno != 0 || end == nullptr || *end != '\0')
+            return -1;
+        return (int64_t) value;
+    }
+
+    // the stored identifier drops the spawn event a pack can append to it
+    std::string canonicalIdentifier(const char *identifier) {
+        const std::string text = identifier == nullptr ? std::string() : identifier;
+        const size_t suffix = text.find('<');
+        return suffix == std::string::npos ? text : text.substr(0, suffix);
+    }
+
+    JSValue storageGetEntities(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        BlockEntityStorage *storage = nullptr;
+        JSValue refused = storageTarget(at, storage);
+        if (JS_IsException(refused))
+            return refused;
+        JSValue list = JS_NewArray(ctx);
+        const std::vector<Tag> *entities = storage->bucket(at.mApi->scriptModuleUuid());
+        if (entities == nullptr)
+            return list;
+        uint32_t index = 0;
+        // sub_149B65E60: UniqueID and Definition of every entity of this module's bucket
+        for (const Tag &entity: *entities) {
+            ScriptEntityStorageInfo *info = new ScriptEntityStorageInfo();
+            info->mUniqueId = std::to_string(BlockEntityStorage::uniqueIdOf(entity));
+            info->mDefinitionId = entity.getString("Definition");
+            JS_SetPropertyUint32(ctx, list, index++, at.mApi->makeInstance("BlockEntityStorageInfo", info));
+        }
+        return list;
+    }
+
+    JSValue storageSize(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        BlockEntityStorage *storage = nullptr;
+        JSValue refused = storageTarget(at, storage);
+        if (JS_IsException(refused))
+            return refused;
+        const std::vector<Tag> *entities = storage->bucket(at.mApi->scriptModuleUuid());
+        return JS_NewInt32(ctx, entities == nullptr ? 0 : (int32_t) entities->size());
+    }
+
+    // sub_149B64930: the actor's save plus UniqueID and Definition, then the actor leaves the world
+    JSValue storageStore(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        Actor *actor = argc >= 1 ? at.mApi->resolveEntity(argv[0]) : nullptr;
+        if (actor == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockEntityStorage *storage = nullptr;
+        JSValue refused = storageTarget(at, storage);
+        if (JS_IsException(refused))
+            return refused;
+        MobActor *mob = dynamic_cast<MobActor *>(actor);
+        if (actor->isPlayer() || mob == nullptr)
+            return storageError(at, BlockEntityStorage::Result::NotStorable);
+        if (storage->total() >= BlockEntityStorage::CAPACITY)
+            return storageError(at, BlockEntityStorage::Result::Full);
+        const int64_t uniqueId = mob->getUniqueId();
+        if (uniqueId == -1)
+            return storageError(at, BlockEntityStorage::Result::InvalidId);
+        if (storage->contains(uniqueId))
+            return storageError(at, BlockEntityStorage::Result::AlreadyStored);
+        if (mob->isRiding() || !mob->getPassengers().empty())
+            return storageError(at, BlockEntityStorage::Result::Riding);
+        Tag saved = mob->saveNbt();
+        saved.putLong("UniqueID", uniqueId);
+        saved.putString("Definition", canonicalIdentifier(mob->getIdentifier()));
+        // removed like Entity.remove, once the script returns
+        ServerNetworkHandler &host = at.mApi->host();
+        host.postToMainThread([&host, uniqueId] { host.removeActor(uniqueId); });
+        storage->add(at.mApi->scriptModuleUuid(), std::move(saved));
+        return string(ctx, std::to_string(uniqueId));
+    }
+
+    // sub_149B652C0: the saved actor spawns where it was stored, then leaves the bucket
+    JSValue storageRelease(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockEntityStorage *storage = nullptr;
+        JSValue refused = storageTarget(at, storage);
+        if (JS_IsException(refused))
+            return refused;
+        const int64_t uniqueId = parseStoredId(toString(ctx, argv[0]));
+        if (uniqueId == -1)
+            return storageError(at, BlockEntityStorage::Result::InvalidId);
+        const std::string bucket = at.mApi->scriptModuleUuid();
+        const std::vector<Tag> *entities = storage->bucket(bucket);
+        const Tag *stored = nullptr;
+        for (size_t i = 0; entities != nullptr && i < entities->size(); ++i) {
+            if (BlockEntityStorage::uniqueIdOf((*entities)[i]) == uniqueId)
+                stored = &(*entities)[i];
+        }
+        if (stored == nullptr)
+            return storageError(at, BlockEntityStorage::Result::NotFound);
+        const Tag saved = *stored;
+        const std::string identifier = canonicalIdentifier(saved.getString("identifier").c_str());
+        if (identifier.empty())
+            return storageError(at, BlockEntityStorage::Result::DeserializeFailed);
+        const Vector3f center((float) at.mPosition.x + 0.5f, (float) at.mPosition.y, (float) at.mPosition.z + 0.5f);
+        ServerActor *released = StoredActor::restore(at.mApi->host(), *at.mLevel, identifier, saved, center);
+        if (released == nullptr)
+            return storageError(at, BlockEntityStorage::Result::SpawnFailed);
+        Tag taken;
+        storage->take(bucket, uniqueId, taken);
+        return at.mApi->makeEntity(*released);
+    }
+
+    // sub_149B65A80: into the target's bucket of the same module, without passing through the world
+    JSValue storageTransfer(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        const ScriptBlockRef *target = argc >= 2 ? at.mApi->native<ScriptBlockRef>(argv[1]) : nullptr;
+        if (argc < 1 || !JS_IsString(argv[0]) || target == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        BlockEntityStorage *storage = nullptr;
+        JSValue refused = storageTarget(at, storage);
+        if (JS_IsException(refused))
+            return refused;
+        const int64_t uniqueId = parseStoredId(toString(ctx, argv[0]));
+        if (uniqueId == -1)
+            return storageError(at, BlockEntityStorage::Result::InvalidId);
+        Level &targetLevel = at.mApi->resolveLevel(target->mWorldId, target->mDimension);
+        const Vector3i targetPosition(target->mX, target->mY, target->mZ);
+        // the wrapper (sub_14E0F7810) answers 10 for a target it cannot use, another dimension among them
+        BlockEntityStorage *destination = nullptr;
+        if (&targetLevel == at.mLevel
+            && targetLevel.peekChunkPtr(targetPosition.x >> 4, targetPosition.z >> 4) != nullptr)
+            destination = entityStorageAt(targetLevel, targetPosition);
+        if (destination == nullptr)
+            return storageError(at, BlockEntityStorage::Result::NoTargetStorage);
+        if (destination == storage)
+            return storageError(at, BlockEntityStorage::Result::SameStorage);
+        const std::string bucket = at.mApi->scriptModuleUuid();
+        const std::vector<Tag> *entities = storage->bucket(bucket);
+        bool found = false;
+        for (size_t i = 0; entities != nullptr && i < entities->size(); ++i)
+            found = found || BlockEntityStorage::uniqueIdOf((*entities)[i]) == uniqueId;
+        if (!found)
+            return storageError(at, BlockEntityStorage::Result::NotFound);
+        if (destination->total() >= BlockEntityStorage::CAPACITY)
+            return storageError(at, BlockEntityStorage::Result::Full);
+        if (destination->contains(uniqueId))
+            return storageError(at, BlockEntityStorage::Result::AlreadyStored);
+        Tag moved;
+        storage->take(bucket, uniqueId, moved);
+        destination->add(bucket, std::move(moved));
+        return JS_UNDEFINED;
+    }
+
+    const ScriptEntityStorageInfo *storageInfoOf(JSContext *ctx, JSValueConst thisVal) {
+        return ScriptApi::fromContext(ctx)->native<ScriptEntityStorageInfo>(thisVal);
+    }
+
+    JSValue storageInfoGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const ScriptEntityStorageInfo *info = storageInfoOf(ctx, thisVal);
+        if (info == nullptr)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return string(ctx, magic == 0 ? info->mDefinitionId : info->mUniqueId);
+    }
 }
 
 namespace ScriptBlockData {
@@ -1737,6 +1953,19 @@ void ScriptApi::_bindBlockSurface() {
         method(dynamic, "BlockDynamicPropertiesComponent", "totalByteCount", dynamicByteCount, 0);
     }
 
+    if (mSurface.has("BlockEntityStorageComponent")) {
+        JSValue storage = defineClass("BlockEntityStorageComponent");
+        method(storage, "BlockEntityStorageComponent", "getEntities", storageGetEntities, 0);
+        method(storage, "BlockEntityStorageComponent", "release", storageRelease, 1);
+        method(storage, "BlockEntityStorageComponent", "size", storageSize, 0);
+        method(storage, "BlockEntityStorageComponent", "store", storageStore, 1);
+        method(storage, "BlockEntityStorageComponent", "transfer", storageTransfer, 2);
+    }
+    if (mSurface.has("BlockEntityStorageInfo")) {
+        JSValue info = defineClass("BlockEntityStorageInfo");
+        propertyMagic(info, "BlockEntityStorageInfo", "definitionId", storageInfoGet, 0);
+        propertyMagic(info, "BlockEntityStorageInfo", "uniqueId", storageInfoGet, 1);
+    }
     if (mSurface.has("BlockRecipeProcessingComponent")) {
         JSValue processing = defineClass("BlockRecipeProcessingComponent");
         property(processing, "BlockRecipeProcessingComponent", "inputSlotCount", processingSlotCount);

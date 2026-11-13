@@ -37,7 +37,15 @@ Tag BlockActor::saveWithPosition() const {
     }
     if (!mDynamicProperties.empty())
         data.put(TAG_DYNAMIC_PROPERTIES, serializeDynamicProperties(mDynamicProperties));
+    if (mEntityStorage.has_value())
+        mEntityStorage->save(data);
     return data;
+}
+
+// sub_143300BF0: the storage comes back with the tag that holds it
+void BlockActor::loadEntityStorage(const Tag &data) {
+    if (data.contains("BlockEntityStorage"))
+        enableEntityStorage().load(data);
 }
 
 void BlockActor::loadDynamicProperties(const Tag &data) {

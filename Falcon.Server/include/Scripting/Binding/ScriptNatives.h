@@ -118,6 +118,12 @@ struct ScriptNeighborChangedEvent : ScriptNative {
     std::vector<NeighborChangeQueue::Change> mChanges;
 };
 
+// one entry of BlockEntityStorageComponent.getEntities: a copy, the stored entity can leave afterwards
+struct ScriptEntityStorageInfo : ScriptNative {
+    std::string mUniqueId;
+    std::string mDefinitionId;
+};
+
 // a structure of the shared registry, by identifier: deleting it leaves the object invalid
 struct ScriptStructureRef : ScriptNative {
     std::string mId;

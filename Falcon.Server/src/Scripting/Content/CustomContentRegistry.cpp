@@ -1071,6 +1071,24 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
                 }
             }
 
+            const json::Value *blockEntity = components->get("minecraft:block_entity");
+            if (blockEntity != nullptr && blockEntity->isObject()) {
+                // sub_14328AA60: container and entity_storage need the experiment, the document fails without it
+                const json::Value *storage = blockEntity->get("entity_storage");
+                const bool storesEntities = storage != nullptr && storage->boolean(false);
+                if (!mUpcomingCreatorFeatures && blockEntity->get("container") != nullptr) {
+                    LOG_ERROR(LogAreaID::Script, "To use 'container' in 'minecraft:block_entity', experimental "
+                                                 "creator features are required");
+                    continue;
+                }
+                if (!mUpcomingCreatorFeatures && storesEntities) {
+                    LOG_ERROR(LogAreaID::Script, "To use 'entity_storage' in 'minecraft:block_entity', experimental "
+                                                 "creator features are required");
+                    continue;
+                }
+                definition.mEntityStorage = storesEntities;
+            }
+
             const json::Value *vibration = components->get("minecraft:vibration_properties");
             if (vibration != nullptr) {
                 // sub_14328ACE0: the document fails without the experiment

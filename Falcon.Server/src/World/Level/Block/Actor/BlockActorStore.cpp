@@ -10,6 +10,7 @@
 #include "World/Level/Block/Actor/CommandBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/CopperGolemStatueBlockActor.h"
+#include "World/Level/Block/Actor/DataDrivenBlockActor.h"
 #include "World/Level/Block/Actor/BedBlockActor.h"
 #include "World/Level/Block/Actor/EndGatewayBlockActor.h"
 #include "World/Level/Block/Actor/EnderChestBlockActor.h"
@@ -197,6 +198,7 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
         blockActor->loadNbt(data, context);
         blockActor->loadLootTable(data);
         blockActor->loadDynamicProperties(data);
+        blockActor->loadEntityStorage(data);
         insert(std::move(blockActor));
     }
 }
@@ -240,6 +242,7 @@ FALCON_REGISTER_BLOCK_ACTOR(ShelfBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ItemFrameBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(GlowItemFrameBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(DataDrivenBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(EndGatewayBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BellBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(StructureBlockActor);

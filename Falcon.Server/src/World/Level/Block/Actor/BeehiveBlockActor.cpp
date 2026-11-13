@@ -3,6 +3,7 @@
 #include "World/Actor/AI/Control/LookControl.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/Actor/StoredActor.h"
 #include "World/Level/Block/BeehiveBlock.h"
 #include "World/Level/Block/FireBlock.h"
 #include "World/Level/Block/LiquidView.h"
@@ -22,7 +23,6 @@ namespace {
     const char *const TAG_ACTOR_IDENTIFIER = "ActorIdentifier";
     const char *const TAG_SAVE_DATA = "SaveData";
     const char *const TAG_TICKS_LEFT_TO_STAY = "TicksLeftToStay";
-    const char *const TAG_HEALTH = "Health";
     const char *const NECTAR_PROPERTY = "minecraft:has_nectar";
     const char *const EXITED_HIVE_EVENT = "minecraft:exited_hive";
     const char *const EXITED_DISTURBED_HIVE_EVENT = "minecraft:exited_disturbed_hive";
@@ -264,12 +264,8 @@ bool BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, cons
         return true;
 
     const Vector3i hive = mPosition;
-    ServerActor *actor = owner.spawnActor(
-            level, identifier, blockCenter(hive), [&owner, &occupant, &hive, face](ServerActor &spawned) {
-                spawned.loadNbt(occupant.mSaveData);
-                if (MobActor *mob = dynamic_cast<MobActor *>(&spawned))
-                    mob->getEquipment().loadNbt(occupant.mSaveData, owner.getCodecContext());
-
+    ServerActor *actor = StoredActor::restore(
+            owner, level, identifier, occupant.mSaveData, blockCenter(hive), [&hive, face](ServerActor &spawned) {
                 const Vector3f position = exitPosition(hive, face, spawned.getSize());
                 spawned.setPosition(position);
                 spawned.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
@@ -289,8 +285,6 @@ bool BeehiveBlockActor::_release(ServerNetworkHandler &owner, Level &level, cons
     MobActor *mob = dynamic_cast<MobActor *>(actor);
     if (mob == nullptr)
         return true;
-
-    mob->setHealth(occupant.mSaveData.getFloat(TAG_HEALTH, mob->getHealth()));
 
     if (deliverNectar && mob->getIntProperty(NECTAR_PROPERTY, 0) != 0) {
         const BlockState *state = level.peekBlockPtr(hive.x, hive.y, hive.z);

@@ -110,6 +110,8 @@ struct CustomBlockDefinition {
     // minecraft:vibration_properties, both optional and false by default (sub_149931CF0)
     bool mCanDampenVibrations = false;
     bool mCanOccludeVibrations = false;
+    // minecraft:block_entity entity_storage: a data-driven block actor keeps entities for scripts
+    bool mEntityStorage = false;
 };
 
 struct CustomActorDefinition {
