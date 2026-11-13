@@ -2,8 +2,10 @@
 
 #include "World/Level/Chunk/ChunkStructureBounds.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 class ChunkGenerator;
@@ -30,4 +32,7 @@ public:
 
     // the box a piece is made with, before its post process sets it on the ground; `top`: the dimension's height
     static ChunkStructureBounds::Box startBox(const Piece &piece, const StructureTemplate &shape, int32_t top);
+
+    // the middle, the far x and z edges, the near x and z edges
+    static std::array<std::pair<int32_t, int32_t>, 5> groundPoints(const ChunkStructureBounds::Box &box);
 };

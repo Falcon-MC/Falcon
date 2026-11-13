@@ -114,7 +114,7 @@ namespace {
             const int32_t maxZ = std::max(piece.z, piece.z + farZ);
             // a prop given up keeps the box it was made with
             int32_t originY = 0;
-            if (!_ground(piece, minX, maxX, minZ, maxZ, originY))
+            if (!_ground(piece, box, originY))
                 return;
             // the top is the template height over the ground, one more than the box it was made with
             box.minY = originY;
@@ -224,16 +224,8 @@ namespace {
             return _inChunk(x, z) ? mChunk.getBlock(x & 15, y, z & 15) : mTerrain.getBlock(x, y, z);
         }
 
-        // five heightmap samples: the middle, the far x and z edges, the near x and z edges
-        bool _ground(const PillagerOutpostStructure::Piece &piece, int32_t minX, int32_t maxX, int32_t minZ,
-                     int32_t maxZ, int32_t &out) {
-            const int32_t halfX = (maxX - minX + 1) >> 1;
-            const int32_t halfZ = (maxZ - minZ + 1) >> 1;
-            const std::array<std::pair<int32_t, int32_t>, 5> points = {{{minX + halfX, minZ + halfZ},
-                                                                        {minX + 2 * halfX, minZ + halfZ},
-                                                                        {minX + halfX, minZ + 2 * halfZ},
-                                                                        {minX, minZ + halfZ},
-                                                                        {minX + halfX, minZ}}};
+        bool _ground(const PillagerOutpostStructure::Piece &piece, const ChunkStructureBounds::Box &box, int32_t &out) {
+            const std::array<std::pair<int32_t, int32_t>, 5> points = PillagerOutpostStructure::groundPoints(box);
             std::array<int32_t, 5> heights = {};
             for (size_t i = 0; i < points.size(); ++i)
                 heights[i] = mTerrain.getTopHeight(points[i].first, points[i].second);
@@ -243,7 +235,7 @@ namespace {
             if (piece.mFeature) {
                 // the piece box still starts at sea level: the block under it is tested
                 for (const std::pair<int32_t, int32_t> &point: points) {
-                    if ((BlockMaterial::flagsOf(_block(point.first, SEA_LEVEL - 1, point.second))
+                    if ((BlockMaterial::flagsOf(_block(point.first, box.minY - 1, point.second))
                          & BlockMaterial::FLAG_LIQUID)
                         != 0)
                         return false;
@@ -394,6 +386,19 @@ void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &lev
             chunk.getStructureBounds().addStart("minecraft:pillager_outpost", START_VALUE, start, pieceBoxes, chunkBox);
         first = last;
     }
+}
+
+// PillagerOutpostPiece::postProcess (sub_1473C5940, 26.60) samples the box the piece was made with: one block wider
+// than the template, on its far side
+std::array<std::pair<int32_t, int32_t>, 5>
+PillagerOutpostStructure::groundPoints(const ChunkStructureBounds::Box &box) {
+    const int32_t halfX = (box.maxX - box.minX + 1) >> 1;
+    const int32_t halfZ = (box.maxZ - box.minZ + 1) >> 1;
+    return {{{box.minX + halfX, box.minZ + halfZ},
+             {box.minX + 2 * halfX, box.minZ + halfZ},
+             {box.minX + halfX, box.minZ + 2 * halfZ},
+             {box.minX, box.minZ + halfZ},
+             {box.minX + halfX, box.minZ}}};
 }
 
 // TemplateStructurePiece::calculateBoundingBox (sub_14699D910, 26.60): the far sides reach one block past the

@@ -27,12 +27,14 @@
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 
+#include <array>
 #include <initializer_list>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -554,6 +556,14 @@ namespace {
         require(turned.minX == 100 - tower->getSizeZ() && turned.maxX == 100 && turned.minZ == 200
                         && turned.maxZ == 200 + tower->getSizeX() && turned.minY == 63 && turned.maxY == 320,
                 "The turned outpost piece box differs");
+
+        // a 15 by 9 template turned once spans x 86..100: its box reaches one block past it
+        const Box odd{85, 63, 200, 100, 320, 209};
+        const std::array<std::pair<int32_t, int32_t>, 5> points = PillagerOutpostStructure::groundPoints(odd);
+        require(points[0] == std::make_pair(93, 205) && points[1] == std::make_pair(101, 205)
+                        && points[2] == std::make_pair(93, 210) && points[3] == std::make_pair(85, 205)
+                        && points[4] == std::make_pair(93, 200),
+                "The outpost ground points differ from the game's box samples");
     }
 }
 
