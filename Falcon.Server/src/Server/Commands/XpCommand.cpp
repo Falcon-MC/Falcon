@@ -4,6 +4,7 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 
@@ -40,7 +41,9 @@ bool XpCommand::execute(CommandOrigin &sender, const std::vector<std::string> &a
     char *end = nullptr;
     errno = 0;
     const long parsed = std::strtol(value.c_str(), &end, 10);
-    if (value.empty() || end == value.c_str() || *end != '\0' || errno == ERANGE) {
+    // long is 64 bits outside Windows: an amount past int32 is refused there too, not truncated
+    if (value.empty() || end == value.c_str() || *end != '\0' || errno == ERANGE || parsed < INT32_MIN
+        || parsed > INT32_MAX) {
         sender.sendTranslation("commands.generic.num.invalid", {arguments[0]});
         return false;
     }
