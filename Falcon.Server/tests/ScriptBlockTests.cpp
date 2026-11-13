@@ -279,6 +279,11 @@ system.runTimeout(() => {
     const dyed = bytes(fluid.fluidColor);
     fluid.addDye(new ItemStack("minecraft:stone").type);
     r.fluidDye = dyed + ":" + bytes(fluid.fluidColor) + ":" + capture(() => fluid.addDye("minecraft:blue_dye"));
+    r.unloadedWrite = capture(() => dim.setBlockType({ x: 100000, y: 100, z: 100000 }, "minecraft:stone")) + ":"
+        + capture(() => dim.spawnItem(new ItemStack("minecraft:stone"), { x: 100000.5, y: 100, z: 100000.5 })) + ":"
+        + capture(() => dim.spawnEntity("minecraft:pig", { x: 1e300, y: 100, z: 0 })) + ":"
+        + capture(() => dim.setBlockType({ x: 0, y: 5000, z: 0 }, "minecraft:stone")) + ":"
+        + capture(() => world.setAbsoluteTime(1e300));
     dim.setBlockType({ x: 44, y: 100, z: 44 }, "minecraft:cauldron");
     const stale = dim.getBlock({ x: 44, y: 100, z: 44 }).getComponent("fluid_container");
     dim.setBlockType({ x: 44, y: 100, z: 44 }, "minecraft:stone");
@@ -757,6 +762,8 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "empty", "true:{\"x\":2,\"y\":3,\"z\":4}:true:true");
         expect(r, "duplicate", "throw:Error");
         expect(r, "outside", "throw:ArgumentOutOfBoundsError");
+        expect(r, "unloadedWrite", "throw:LocationInUnloadedChunkError:throw:LocationInUnloadedChunkError:"
+                                   "throw:TypeError:throw:LocationOutOfWorldBoundariesError:throw:TypeError");
         expect(r, "staleFluid", "throw:InvalidBlockComponentError:throw:InvalidBlockComponentError:"
                                 "throw:InvalidBlockComponentError:minecraft:stone");
         expect(r, "tooBig", "throw:InvalidArgumentError:throw:InvalidArgumentError:throw:InvalidArgumentError:"
