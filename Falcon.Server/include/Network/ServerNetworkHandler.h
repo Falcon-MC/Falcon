@@ -325,6 +325,10 @@ public:
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                  float verticalOffset = 0.0f);
 
+    // no shooter: the definition's power and uncertainty_base aim it along direction
+    ServerActor *spawnDispensedProjectile(Level &level, const std::string &identifier, const Vector3f &position,
+                                          const Vector3f &direction);
+
     bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
 
     bool onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition, ServerPlayer *hitPlayer);

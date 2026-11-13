@@ -7,6 +7,7 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
 #include "World/Item/ItemClassRegistry.h"
+#include "World/Level/Block/DispenseSource.h"
 
 #include <utility>
 
@@ -20,7 +21,7 @@ FALCON_REGISTER_ITEM_CUSTOM(
         });
 
 ThrownPotionItem::ThrownPotionItem(const Item &base, std::string entityIdentifier)
-        : ThrowableItem(base, std::move(entityIdentifier), 1.5f, 0) {}
+        : ThrowableItem(base, std::move(entityIdentifier), 1.5f, 0, DispenseMode::Shoot) {}
 
 bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     ServerActor *projectile = owner.spawnProjectile(player, mEntityIdentifier, mThrowForce,
@@ -33,5 +34,19 @@ bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, 
     owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(), "minecraft:player");
 
     player.consumeOneHeldItem();
+    return true;
+}
+
+// splash sub_143587A70, lingering sub_141ADF1E0 (26.60): the stack's aux is the potion
+bool ThrownPotionItem::dispense(const DispenseSource &source) const {
+    const int32_t potionId = source.getItem().mDamage;
+    ServerActor *projectile = _shootFrom(source);
+    if (projectile == nullptr)
+        return false;
+
+    if (PotionActor *potion = dynamic_cast<PotionActor *>(projectile))
+        potion->setPotionId(potionId);
+    source.removeOne();
+    source.broadcastShootEvent(DispenseSource::LEVEL_EVENT_SHOOT);
     return true;
 }

@@ -14,6 +14,7 @@
 #include <vector>
 
 struct BlockData;
+struct DispenseSource;
 class Actor;
 class BlockBehavior;
 class Container;
@@ -293,6 +294,12 @@ public:
         (void) level;
         (void) position;
         (void) state;
+    }
+
+    // BlockType::dispense (vtable +0x190, 26.60) for the block's item; false drops it as a dropper does
+    virtual bool dispense(const DispenseSource &source) const {
+        (void) source;
+        return false;
     }
 
     virtual std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
