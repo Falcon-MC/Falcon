@@ -128,7 +128,9 @@ namespace {
         Fixture fixture;
         fixture.load("minecraft:arrow", 2);
         fixture.fire();
-        require(fixture.count() == 1, "the dispensed arrow was not taken from the stack");
+        require(fixture.count() == 1,
+                "the dispensed arrow was not taken from the stack: " + std::to_string(fixture.count()) + " left, "
+                        + (fixture.find("minecraft:arrow") != nullptr ? "an" : "no") + " arrow shot");
         ServerActor *arrow = fixture.find("minecraft:arrow");
         require(arrow != nullptr, "the dispenser shot no arrow");
         require(std::fabs(arrow->getPosition().x - 9.2f) < 0.01f, "the arrow left from the wrong position");
