@@ -237,7 +237,7 @@ public:
 
     World *loadWorld(const std::string &name, bool create, int64_t seed);
 
-    // refuses the default world and worlds still holding players
+    // refuses the default world and worlds still holding players; the world goes with the next main thread tasks
     bool unloadWorld(const std::string &name, std::string &error);
 
     static int64_t randomSeed();
@@ -801,6 +801,8 @@ public:
     void _sendToViewers(const ServerActor &actor, const Packet &packet);
 
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
+
+    void _unloadWorldNow(uint32_t id, const std::string &name);
 
     void _unregisterActor(int64_t uniqueId);
 

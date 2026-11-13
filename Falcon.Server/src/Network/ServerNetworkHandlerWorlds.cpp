@@ -86,6 +86,23 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
         }
     }
 
+    // a command block or script of this very world may be ticking under this call: torn down once the tick is over
+    const uint32_t id = world->getId();
+    postToMainThread([this, id, name] { _unloadWorldNow(id, name); });
+    return true;
+}
+
+void ServerNetworkHandler::_unloadWorldNow(uint32_t id, const std::string &name) {
+    World *world = mWorlds.find(id);
+    if (world == nullptr || world->getName() != name)
+        return;
+    for (auto &entry: mPlayers) {
+        if (entry.second.getWorldId() == id) {
+            LOG_WARN(LogAreaID::Server, "Kept world %s loaded: a player entered it before it unloaded", name.c_str());
+            return;
+        }
+    }
+
     for (Level *level: world->getLevels()) {
         PistonSystem::finishMoves(*this, *level);
         std::unordered_set<int64_t> &loadedChunks = world->getActorLoadedChunks(level->getDimensionType());
@@ -132,6 +149,5 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
     AutoCompaction::untrack(world->getOverworld());
     world->close();
     LOG_INFO(LogAreaID::Server, "Unloaded world %s", name.c_str());
-    mWorlds.remove(world->getId());
-    return true;
+    mWorlds.remove(id);
 }
