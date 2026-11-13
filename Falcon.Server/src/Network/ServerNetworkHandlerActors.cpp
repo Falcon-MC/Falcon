@@ -1518,10 +1518,26 @@ void ServerNetworkHandler::playPlayerAnimation(ServerPlayer &player, const std::
 }
 
 
+namespace {
+    // in the world database, not under players/: a player of that name would save over the file
+    const char *const WORLD_DYNAMIC_PROPERTIES_KEY = "falcon_world_dynamic_properties";
+    const char *const LEGACY_WORLD_DYNAMIC_PROPERTIES = "world_dynamic_properties";
+}
+
 void ServerNetworkHandler::loadWorldDynamicProperties() {
+    Level &overworld = mWorlds.getDefault().getOverworld();
     Tag data;
-    if (!mPlayerData.loadData("world_dynamic_properties", data))
-        return;
+    if (!overworld.loadSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false)) {
+        // a player save in its place holds more than this one key: not ours, left to that player
+        Tag legacy;
+        if (!mPlayerData.loadData(LEGACY_WORLD_DYNAMIC_PROPERTIES, legacy) || !legacy.isCompound()
+            || legacy.getKeys().size() != 1 || !legacy.contains("DynamicProperties"))
+            return;
+        if (!overworld.saveSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, legacy, false))
+            return;
+        mPlayerData.removeData(LEGACY_WORLD_DYNAMIC_PROPERTIES);
+        data = std::move(legacy);
+    }
 
     const Tag *properties = data.get("DynamicProperties");
     if (properties != nullptr)
@@ -1529,9 +1545,12 @@ void ServerNetworkHandler::loadWorldDynamicProperties() {
 }
 
 void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
+    Level &overworld = mWorlds.getDefault().getOverworld();
+    if (!overworld.isStorageOpen())
+        return;
     Tag data = Tag::ofCompound();
     data.put("DynamicProperties", serializeDynamicProperties(mWorldDynamicProperties));
-    if (!mPlayerData.saveData("world_dynamic_properties", data) && checked)
+    if (!overworld.saveSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false) && checked)
         throw std::runtime_error("Could not save world dynamic properties");
 }
 
