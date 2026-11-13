@@ -677,16 +677,19 @@ namespace {
         const std::filesystem::path worlds(ServerPaths::file("worlds"));
         JSValue array = JS_NewArray(ctx);
         uint32_t index = 0;
-        std::error_code error;
         for (World *world: host.getWorlds().getWorlds()) {
             const std::filesystem::path folder = worlds / world->getName();
-            for (const auto &entry: std::filesystem::recursive_directory_iterator(folder, error)) {
-                if (!entry.is_regular_file(error))
+            // the non-throwing increment: a file the chunk saver removes mid-walk must not unwind through QuickJS
+            std::error_code walk;
+            std::filesystem::recursive_directory_iterator it(folder, walk);
+            for (const std::filesystem::recursive_directory_iterator end; !walk && it != end; it.increment(walk)) {
+                std::error_code error;
+                if (!it->is_regular_file(error))
                     continue;
-                const std::string name = entry.path().lexically_relative(worlds).generic_string();
+                const std::string name = it->path().lexically_relative(worlds).generic_string();
                 JSValue row = JS_NewArray(ctx);
                 JS_SetPropertyUint32(ctx, row, 0, JS_NewString(ctx, name.c_str()));
-                JS_SetPropertyUint32(ctx, row, 1, JS_NewFloat64(ctx, (double) entry.file_size(error)));
+                JS_SetPropertyUint32(ctx, row, 1, JS_NewFloat64(ctx, (double) it->file_size(error)));
                 JS_SetPropertyUint32(ctx, array, index++, row);
             }
         }
