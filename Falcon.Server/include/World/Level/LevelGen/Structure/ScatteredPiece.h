@@ -25,6 +25,11 @@ public:
     // (sub_147771BF0), an unturned piece swaps 2 and 3
     static BlockState stairs(const BlockState &base, int32_t direction);
 
+    // the temple start keeps the box its piece was made with, one over the sea (sub_1473C7400, 26.60); the piece the
+    // box its first post process moved: registered into the chunk after its post process (sub_14CDACCA0)
+    static void addBounds(const Level &level, LevelChunk &chunk, const char *name, int32_t startValue, int32_t minX,
+                          int32_t pieceMinY, int32_t minZ, int32_t sizeX, int32_t sizeY, int32_t sizeZ);
+
     int32_t worldX(int32_t x) const {
         return mMinX + x;
     }

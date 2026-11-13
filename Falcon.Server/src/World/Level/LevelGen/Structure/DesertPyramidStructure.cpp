@@ -21,6 +21,7 @@
 
 namespace {
     const int32_t WIDTH = 21;
+    const int32_t HEIGHT = 15;
     const int32_t DEPTH = 21;
     const int32_t BURY_RANGE = 3;
     const int32_t MIN_UNCOVERED = 5;
@@ -365,8 +366,11 @@ void DesertPyramidStructure::place(const ChunkGenerator &generator, Level &level
             std::mt19937 random = StructureFeature::createPostProcessRandom(generator.getSeed(), chunk.getX(),
                                                                             chunk.getZ());
             const int32_t lowered = FeatureRandom::nextInt(random, 3);
-            ScatteredPiece piece(level, chunk, startX * 16, floorY(level, chunk, startX, startZ, lowered), startZ * 16);
+            const int32_t pieceY = floorY(level, chunk, startX, startZ, lowered);
+            ScatteredPiece piece(level, chunk, startX * 16, pieceY, startZ * 16);
             placePyramid(level, piece, random);
+            ScatteredPiece::addBounds(level, chunk, "minecraft:desert_pyramid", 0, startX * 16, pieceY, startZ * 16,
+                                      WIDTH, HEIGHT, DEPTH);
         }
     }
 }

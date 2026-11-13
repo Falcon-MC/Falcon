@@ -103,6 +103,9 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         try { new ListBlockVolume([]).getBoundingBox(); r.emptyBox = "ok"; } catch (e) { r.emptyBox = e.name + ":" + e.message; }
         r.boxCtor = (() => { try { new U(); return "ok"; } catch (e) { return e.name; } })();
         r.enums = PoiBlockOccupancyFilter.Any + ":" + WatchdogTerminateReason.Hang;
+        const structures = (p) => { try { return JSON.stringify(overworld.getGeneratedStructures(p)); } catch (e) { return e.name; } };
+        r.structures = [structures({ x: 2.5, y: 70, z: 3 }), structures({ x: 2, y: 65, z: 3 }),
+            structures({ x: 2, y: 400, z: 3 }), structures({ x: 5000, y: 70, z: 5000 })].join("|");
         const stoneBlock = overworld.getBlock({ x: 1, y: 99, z: 1 });
         stoneBlock.setType("minecraft:stone");
         const rgba = (c) => [c.red, c.green, c.blue, c.alpha].map((v) => Math.round(v * 255)).join(",");
@@ -257,6 +260,11 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 
         require(owner.getProperties().getAllowCheats(), "the fixture starts without cheats");
         engine.emitScriptEvent("beta:settings", "");
+        // a swamp hut whose piece sits four blocks over the box its start was made with
+        LevelChunk *hutChunk = level.peekChunkPtr(0, 0);
+        require(hutChunk != nullptr, "the fixture chunk is not resident");
+        hutChunk->getStructureBounds().addStart("minecraft:swamp_hut", -3, {0, 64, 0, 6, 70, 8}, {{0, 68, 0, 6, 74, 8}},
+                                                ChunkStructureBounds::chunkBox(0, 0, level.getMinY(), level.getMaxY()));
         engine.emitScriptEvent("beta:boxes", "");
         require(!owner.getProperties().getAllowCheats(), "allowCheats did not turn cheats off");
         const GameRules::Rule *waypoints = level.getGameRules().find("playerwaypoints");
@@ -291,6 +299,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*r, "emptyBox", "Error:Cannot get bounding box of empty block volume.");
         expect(*r, "boxCtor", "ReferenceError");
         expect(*r, "enums", "Any:Hang");
+        expect(*r, "structures",
+               "[\"minecraft:swamp_hut\"]|[]|LocationOutOfWorldBoundariesError|LocationInUnloadedChunkError");
         expect(*r, "mapColor", "112,112,112,255|0,0,0,0");
         expect(*r, "carry", "CarryOverBlockEntityDataFunction:true,CarryOverBlockEntityDataFunction:false");
         expect(*r, "banner",

@@ -187,6 +187,26 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    // Dimension::getGeneratedStructures (sub_14B5E1220, 26.60) reads the chunk's registry (sub_143871770); when it
+    // finds nothing the game asks the generator's in-memory start cache (sub_142940550), which Falcon does not keep
+    JSValue dimensionGetGeneratedStructures(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        Vector3i at;
+        if (argc < 1 || !readBlockLocation(ctx, argv[0], at))
+            return typeError(ctx);
+        Level &level = levelOf(ctx, thisVal);
+        if (!inHeight(level, at.y))
+            return api->throwError("LocationOutOfWorldBoundariesError", "");
+        const LevelChunk *chunk = level.peekChunkPtr(at.x >> 4, at.z >> 4);
+        if (chunk == nullptr)
+            return api->throwError("LocationInUnloadedChunkError", "");
+        JSValue names = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::string &name: chunk->getStructureBounds().namesAt(at.x, at.y, at.z))
+            JS_SetPropertyUint32(ctx, names, index++, JS_NewString(ctx, name.c_str()));
+        return names;
+    }
+
     JSValue dimensionIsChunkLoaded(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         Vector3i at;
         if (argc < 1 || !readBlockLocation(ctx, argv[0], at))
@@ -959,6 +979,7 @@ void ScriptApi::_bindDimensionSurface() {
     methodMagic(dimension, "Dimension", "getSkyLightLevel", dimensionLight, 1, 1);
     method(dimension, "Dimension", "getTopmostBlock", dimensionGetTopmostBlock, 2);
     method(dimension, "Dimension", "isChunkLoaded", dimensionIsChunkLoaded, 1);
+    method(dimension, "Dimension", "getGeneratedStructures", dimensionGetGeneratedStructures, 1);
     method(dimension, "Dimension", "setBlockPermutation", dimensionSetBlockPermutation, 2);
     method(dimension, "Dimension", "getEntitiesAtBlockLocation", dimensionGetEntitiesAtBlockLocation, 1);
     method(dimension, "Dimension", "getBlocks", dimensionGetBlocks, 3);

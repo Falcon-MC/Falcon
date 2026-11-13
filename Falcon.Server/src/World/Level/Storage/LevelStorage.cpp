@@ -339,6 +339,11 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks));
     else
         batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks), chunk.getNamedTicks());
+    const std::string structures = chunk.getStructureBounds().save();
+    if (structures.empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::StructureBounds));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::StructureBounds), structures);
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const SubChunk &subChunk = chunk.getSubChunk(i);
@@ -454,6 +459,11 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     std::string namedTicks;
     if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks), &namedTicks).ok())
         chunk.setNamedTicks(std::move(namedTicks));
+
+    std::string structures;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::StructureBounds), &structures).ok()
+        && !chunk.getStructureBounds().load(structures))
+        LOG_WARN(LogAreaID::Server, "Malformed structure bounds for chunk %d %d", chunk.getX(), chunk.getZ());
 
     // no version: written by the game, never migrated
     std::string dataVersion;
