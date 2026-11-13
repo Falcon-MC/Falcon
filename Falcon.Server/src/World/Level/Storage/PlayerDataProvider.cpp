@@ -136,6 +136,14 @@ bool PlayerDataProvider::hasData(const std::string &name) const {
     return stat(_getPlayerDataPath(name).c_str(), &info) == 0;
 }
 
+bool PlayerDataProvider::removeData(const std::string &name) const {
+    if (!isSafeName(name))
+        return false;
+
+    std::error_code error;
+    return std::filesystem::remove(_getPlayerDataPath(name), error) && !error;
+}
+
 bool PlayerDataProvider::loadData(const std::string &name, Tag &outData) const {
     if (!isSafeName(name))
         return false;
