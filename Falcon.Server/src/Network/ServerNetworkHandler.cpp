@@ -770,8 +770,12 @@ void ServerNetworkHandler::stopServerListening() {
             ServerPlayer &player = entry.second;
 
             finish([this, &player]() {
-                if (!player.getName().empty() && !player.isSimulated())
-                    _savePlayerData(player, true);
+                if (player.getName().empty() || player.isSimulated())
+                    return;
+                // as on a disconnect: the cursor, the grids and the open workstation go back to the inventory first
+                if (player.isSpawned())
+                    InventoryHandler::resetInventory(*this, player);
+                _savePlayerData(player, true);
             });
             finish([this, &entry, &player]() {
                 _disconnect(entry.first, DisconnectReason::Shutdown, player.localize("falcon.disconnect.disconnected"));
