@@ -1,16 +1,21 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockMaterial.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/LevelGen/GeneratorChunkSource.h"
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
+#include "World/Level/LevelGen/Structure/ScatteredPiece.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
@@ -329,6 +334,57 @@ namespace {
     }
 }
 
+namespace {
+    void checkScatteredPieces() {
+        Level level("scattered-piece-test", 2, 1);
+        LevelChunk chunk(1, 0);
+        const BlockState stone("minecraft:stone");
+        const BlockState air("minecraft:air");
+        require(ScatteredPiece::aboveTopSolid(chunk, 0, 0) == LevelChunk::MIN_Y, "An empty column has no ground");
+        chunk.setBlock(0, 70, 0, stone);
+        require(ScatteredPiece::aboveTopSolid(chunk, 0, 0) == 71, "The ground is one over the top solid block");
+
+        // the box starts in the chunk to the west: only its east part is written
+        ScatteredPiece piece(level, chunk, 8, 64, 0);
+        piece.placeBlock(stone, 0, 0, 1);
+        require(piece.getBlock(0, 0, 1) == nullptr, "A block outside the chunk is read");
+        piece.placeBlock(stone, 8, 0, 1);
+        require(chunk.getBlock(0, 64, 1).mName == "minecraft:stone", "A block inside the chunk is not written");
+
+        piece.generateBox(8, 0, 2, 10, 2, 4, stone, air, false);
+        require(chunk.getBlock(0, 64, 2).mName == "minecraft:stone", "The box edge differs");
+        require(chunk.getBlock(1, 65, 3).mName == "minecraft:air", "The box inside differs");
+        piece.generateBox(8, 0, 2, 10, 2, 4, BlockState("minecraft:dirt"), BlockState("minecraft:dirt"), true);
+        require(chunk.getBlock(1, 65, 3).mName == "minecraft:air", "A box skipping air fills air");
+        require(chunk.getBlock(0, 64, 2).mName == "minecraft:dirt", "A box skipping air leaves blocks");
+
+        const BlockState stairs("minecraft:sandstone_stairs");
+        require(ScatteredPiece::stairs(stairs, 3).mStates.getInt("weirdo_direction", -1) == 2
+                        && ScatteredPiece::stairs(stairs, 2).mStates.getInt("weirdo_direction", -1) == 3
+                        && ScatteredPiece::stairs(stairs, 1).mStates.getInt("weirdo_direction", -1) == 1,
+                "Unturned stairs swap 2 and 3");
+
+        std::mt19937 random(7);
+        require(piece.createChest(random, 12, 0, 6, 5, "loot_tables/chests/desert_pyramid.json"), "No chest placed");
+        require(chunk.getBlock(4, 64, 6).mStates.getString("minecraft:cardinal_direction", "") == "east",
+                "Chest data 5 faces east");
+        require(level.getBlockActors().find<ChestBlockActor>(Vector3i(20, 64, 6)) != nullptr, "The chest has no actor");
+        require(!piece.createChest(random, 12, 0, 6, 5, "loot_tables/chests/desert_pyramid.json"),
+                "A chest is placed twice");
+        require(!piece.createChest(random, 0, 0, 6, 5, "loot_tables/chests/desert_pyramid.json"),
+                "A chest is placed outside the chunk");
+
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        TerrainCache cache(*generator);
+        int32_t value = 0;
+        require(!cache.findStartValue("desert_pyramid", 3, 4, value), "A start value exists before any chunk");
+        require(cache.storeStartValue("desert_pyramid", 3, 4, 70) == 70, "The first start value is not kept");
+        require(cache.storeStartValue("desert_pyramid", 3, 4, 80) == 70, "A later chunk replaces the start value");
+        require(cache.findStartValue("desert_pyramid", 3, 4, value) && value == 70, "The start value is lost");
+        require(!cache.findStartValue("desert_pyramid", 4, 4, value), "Start values leak between starts");
+    }
+}
+
 int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
@@ -341,6 +397,7 @@ int main() {
         checkMaterials();
         checkOceanRuins();
         checkPillagerOutposts();
+        checkScatteredPieces();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;

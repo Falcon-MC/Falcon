@@ -13,72 +13,14 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
+#include "World/Level/LevelGen/Structure/ScatteredPiece.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
-#include "World/Level/LevelGen/Structure/StructureMaterials.h"
 
 #include <random>
 
 namespace {
     const int32_t SIZE_X = 7;
     const int32_t SIZE_Z = 9;
-
-    // LevelChunk::getAboveTopSolidBlock (sub_1438650A0, 26.60) with water counted and leaves looked through
-    int32_t aboveTopSolid(const LevelChunk &chunk, int32_t x, int32_t z) {
-        for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
-            const BlockState &state = chunk.getBlock(x, y, z);
-            if (StructureMaterials::stopsTopSolidSearch(state, true, false))
-                return y + 1;
-        }
-        return LevelChunk::MIN_Y;
-    }
-
-    // the piece's box of blocks in its own coordinates; the hut is never turned: they are the chunk's too
-    class Hut {
-    public:
-        Hut(LevelChunk &chunk, int32_t floorY) : mChunk(chunk), mFloorY(floorY) {}
-
-        void set(int32_t x, int32_t y, int32_t z, const BlockState &state) {
-            const int32_t worldY = mFloorY + y;
-            if (worldY >= LevelChunk::MIN_Y && worldY <= LevelChunk::MAX_Y)
-                mChunk.setBlock(x, worldY, z, state);
-        }
-
-        void fill(int32_t minX, int32_t minY, int32_t minZ, int32_t maxX, int32_t maxY, int32_t maxZ,
-                  const BlockState &state) {
-            for (int32_t y = minY; y <= maxY; y++) {
-                for (int32_t x = minX; x <= maxX; x++) {
-                    for (int32_t z = minZ; z <= maxZ; z++)
-                        set(x, y, z, state);
-                }
-            }
-        }
-
-        // StructurePiece::generateBox with its last flag set: only what is not air already
-        void clear(int32_t minX, int32_t minY, int32_t minZ, int32_t maxX, int32_t maxY, int32_t maxZ) {
-            fill(minX, minY, minZ, maxX, maxY, maxZ, VanillaBlocks::AIR().toBlockState());
-        }
-
-        // StructurePiece::fillColumnDown (sub_147772AF0, 26.60): down through air, liquids and small plants, then
-        // grass under the column turns to dirt
-        void fillColumnDown(int32_t x, int32_t y, int32_t z, const BlockState &state) {
-            int32_t worldY = mFloorY + y;
-            while (worldY > LevelChunk::MIN_Y + 1) {
-                const BlockState &current = mChunk.getBlock(x, worldY, z);
-                if (!DecorationSupport::isAir(current) && !StructureMaterials::isLiquid(current)
-                    && !StructureMaterials::isPlant(current))
-                    break;
-
-                mChunk.setBlock(x, worldY, z, state);
-                worldY--;
-            }
-            if (mChunk.getBlock(x, worldY, z).mName == VanillaBlocks::GRASS_BLOCK().getIdentifier())
-                mChunk.setBlock(x, worldY, z, VanillaBlocks::DIRT().toBlockState());
-        }
-
-    private:
-        LevelChunk &mChunk;
-        int32_t mFloorY;
-    };
 
     // the potion ids the game draws for the hut's cauldron: water breathing, fire resistance, swiftness,
     // slowness, poison, weakness, healing
@@ -128,7 +70,7 @@ void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, Lev
     int32_t total = 0;
     for (int32_t z = 0; z < SIZE_Z; z++) {
         for (int32_t x = 0; x < SIZE_X; x++)
-            total += aboveTopSolid(chunk, x, z);
+            total += ScatteredPiece::aboveTopSolid(chunk, x, z);
     }
     const int32_t floorY = total / (SIZE_X * SIZE_Z) + 1;
 
@@ -138,47 +80,46 @@ void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, Lev
     const BlockState air = VanillaBlocks::AIR().toBlockState();
     const BlockState stairs = VanillaBlocks::SPRUCE_STAIRS().toBlockState();
 
-    Hut hut(chunk, floorY);
-    hut.clear(0, 2, 0, 6, 3, 8);
-    hut.fill(1, 1, 1, 5, 1, 7, planks);
-    hut.fill(1, 5, 2, 5, 5, 7, planks);
-    hut.fill(2, 1, 0, 4, 1, 0, planks);
-    hut.fill(2, 2, 2, 3, 4, 2, planks);
-    hut.fill(1, 2, 3, 1, 4, 6, planks);
-    hut.fill(5, 2, 3, 5, 4, 6, planks);
-    hut.fill(2, 2, 7, 4, 4, 7, planks);
-    hut.fill(1, 0, 2, 1, 4, 2, log);
-    hut.fill(5, 0, 2, 5, 4, 2, log);
-    hut.fill(1, 0, 7, 1, 4, 7, log);
-    hut.fill(5, 0, 7, 5, 4, 7, log);
-    hut.set(2, 3, 2, fence);
-    hut.set(3, 3, 7, fence);
-    hut.set(1, 3, 4, air);
-    hut.set(5, 3, 4, air);
-    hut.set(5, 3, 5, air);
-    hut.set(1, 3, 5, VanillaBlocks::FLOWER_POT().toBlockState());
-    hut.set(4, 4, 2, planks);
-    hut.set(3, 2, 6, VanillaBlocks::CRAFTING_TABLE().toBlockState());
+    ScatteredPiece hut(level, chunk, cornerX, floorY, cornerZ);
+    hut.generateBox(0, 2, 0, 6, 3, 8, air, air, true);
+    hut.generateBox(1, 1, 1, 5, 1, 7, planks, planks, false);
+    hut.generateBox(1, 5, 2, 5, 5, 7, planks, planks, false);
+    hut.generateBox(2, 1, 0, 4, 1, 0, planks, planks, false);
+    hut.generateBox(2, 2, 2, 3, 4, 2, planks, planks, false);
+    hut.generateBox(1, 2, 3, 1, 4, 6, planks, planks, false);
+    hut.generateBox(5, 2, 3, 5, 4, 6, planks, planks, false);
+    hut.generateBox(2, 2, 7, 4, 4, 7, planks, planks, false);
+    hut.generateBox(1, 0, 2, 1, 4, 2, log, log, false);
+    hut.generateBox(5, 0, 2, 5, 4, 2, log, log, false);
+    hut.generateBox(1, 0, 7, 1, 4, 7, log, log, false);
+    hut.generateBox(5, 0, 7, 5, 4, 7, log, log, false);
+    hut.placeBlock(fence, 2, 3, 2);
+    hut.placeBlock(fence, 3, 3, 7);
+    hut.placeBlock(air, 1, 3, 4);
+    hut.placeBlock(air, 5, 3, 4);
+    hut.placeBlock(air, 5, 3, 5);
+    hut.placeBlock(VanillaBlocks::FLOWER_POT().toBlockState(), 1, 3, 5);
+    hut.placeBlock(planks, 4, 4, 2);
+    hut.placeBlock(VanillaBlocks::CRAFTING_TABLE().toBlockState(), 3, 2, 6);
 
     std::mt19937 random = StructureFeature::createPostProcessRandom(generator.getSeed(), chunk.getX(), chunk.getZ());
     const int32_t fillLevel = 2 * FeatureRandom::nextInt(random, 3) + 2;
-    hut.set(4, 2, 6, DecorationSupport::withState(VanillaBlocks::CAULDRON().toBlockState(), "fill_level", fillLevel));
+    hut.placeBlock(DecorationSupport::withState(VanillaBlocks::CAULDRON().toBlockState(), "fill_level", fillLevel), 4,
+                   2, 6);
     const int16_t potion = cauldronPotion(FeatureRandom::nextInt(random, 100));
 
-    hut.set(1, 2, 1, fence);
-    hut.set(5, 2, 1, fence);
+    hut.placeBlock(fence, 1, 2, 1);
+    hut.placeBlock(fence, 5, 2, 1);
 
-    // StructurePiece::getOrientationData (sub_147772040, 26.60): stairs take the weirdo_direction branch
-    // (sub_147771BF0), an unturned piece swaps south and north
-    hut.fill(0, 5, 1, 6, 5, 1, DecorationSupport::withState(stairs, "weirdo_direction", 2));
-    hut.fill(0, 5, 2, 0, 5, 7, DecorationSupport::withState(stairs, "weirdo_direction", 0));
-    hut.fill(6, 5, 2, 6, 5, 7, DecorationSupport::withState(stairs, "weirdo_direction", 1));
-    hut.fill(0, 5, 8, 6, 5, 8, DecorationSupport::withState(stairs, "weirdo_direction", 3));
+    hut.generateBox(0, 5, 1, 6, 5, 1, ScatteredPiece::stairs(stairs, 3), ScatteredPiece::stairs(stairs, 3), false);
+    hut.generateBox(0, 5, 2, 0, 5, 7, ScatteredPiece::stairs(stairs, 0), ScatteredPiece::stairs(stairs, 0), false);
+    hut.generateBox(6, 5, 2, 6, 5, 7, ScatteredPiece::stairs(stairs, 1), ScatteredPiece::stairs(stairs, 1), false);
+    hut.generateBox(0, 5, 8, 6, 5, 8, ScatteredPiece::stairs(stairs, 2), ScatteredPiece::stairs(stairs, 2), false);
 
-    hut.fillColumnDown(1, -1, 2, log);
-    hut.fillColumnDown(5, -1, 2, log);
-    hut.fillColumnDown(1, -1, 7, log);
-    hut.fillColumnDown(5, -1, 7, log);
+    hut.fillColumnDown(log, 1, -1, 2);
+    hut.fillColumnDown(log, 5, -1, 2);
+    hut.fillColumnDown(log, 1, -1, 7);
+    hut.fillColumnDown(log, 5, -1, 7);
 
     BlockActorStore &actors = level.getBlockActors();
     actors.getOrCreate<FlowerPotBlockActor>(Vector3i(cornerX + 1, floorY + 3, cornerZ + 5))

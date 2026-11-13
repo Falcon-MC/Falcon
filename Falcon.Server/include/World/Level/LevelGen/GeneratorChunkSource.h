@@ -8,8 +8,11 @@
 #include <condition_variable>
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -86,6 +89,13 @@ public:
 
     void waitForDecoration(std::chrono::milliseconds timeout);
 
+    // a value the first decorated chunk of a structure start fixes for the whole start, as the game keeps it in the
+    // piece every chunk shares; in memory only, gone on restart
+    bool findStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t &value);
+
+    // keeps the value stored first for the start and returns it
+    int32_t storeStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t value);
+
 private:
     struct Entry {
         // shared and immutable once stored: a worker copies one out after releasing the lock
@@ -127,6 +137,9 @@ private:
     std::condition_variable mReleased;
     std::unordered_map<int64_t, int32_t> mExpected;
     uint64_t mSequence = 0;
+
+    std::mutex mStartMutex;
+    std::map<std::tuple<std::string, int32_t, int32_t>, int32_t> mStartValues;
 };
 
 // per worker: a private scratch level holding a chunk and its neighbours, from the shared TerrainCache, while decorated
