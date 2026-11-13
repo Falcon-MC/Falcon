@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 
+class BiomeRegistry;
 class BlockState;
 
 // what MapColorComponent::getTintMethod picks the multiplier from (sub_145D3D260)
@@ -45,6 +46,9 @@ namespace MapColors {
     uint32_t grassColor(float temperature, float downfall);
 
     uint32_t tintColor(MapTintMethod tint, const MapBiomeColors &biome);
+
+    // the defaults for an id the registry lacks
+    MapBiomeColors biomeColors(const BiomeRegistry &registry, uint32_t biomeId);
 
     bool isWater(const std::string &name);
 

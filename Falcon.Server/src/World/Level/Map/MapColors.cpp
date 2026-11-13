@@ -1,5 +1,7 @@
 #include "World/Level/Map/MapColors.h"
 
+#include "World/Level/Biome/BiomeRegistry.h"
+
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/BlockNames.h"
 
@@ -1297,6 +1299,20 @@ uint32_t MapColors::tintColor(MapTintMethod tint, const MapBiomeColors &biome) {
         default:
             return 0xffffff;
     }
+}
+
+MapBiomeColors MapColors::biomeColors(const BiomeRegistry &registry, uint32_t biomeId) {
+    MapBiomeColors colors;
+    for (const BiomeDefinitionData &biome: registry.getBiomes()) {
+        if (biome.mId != biomeId)
+            continue;
+
+        colors.mTemperature = biome.mTemperature;
+        colors.mDownfall = biome.mDownfall;
+        colors.mWaterColor = (uint32_t) biome.mMapWaterColorArgb;
+        break;
+    }
+    return colors;
 }
 
 void MapColors::getColor(const BlockState &state, const MapBiomeColors &biome, float out[4]) {
