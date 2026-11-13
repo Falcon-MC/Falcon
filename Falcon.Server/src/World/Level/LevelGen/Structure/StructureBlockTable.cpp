@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -334,15 +335,89 @@ namespace {
         out = BlockState(name, states);
         return true;
     }
+
+    // oriented states sub_146993CE0 reaches through paths not ported here: such a block is left out when mirrored
+    const std::array<const char *, 15> UNMIRRORED_STATES = {"facing_direction",
+                                                            "direction",
+                                                            "torch_facing_direction",
+                                                            "pillar_axis",
+                                                            "rail_direction",
+                                                            "lever_direction",
+                                                            "door_hinge_bit",
+                                                            "ground_sign_direction",
+                                                            "coral_direction",
+                                                            "minecraft:facing_direction",
+                                                            "minecraft:block_face",
+                                                            "orientation",
+                                                            "portal_axis",
+                                                            "multi_face_direction_bits",
+                                                            "brewing_stand_slot_a_bit"};
+
+    void swapProperties(std::map<std::string, std::string> &properties, const char *first, const char *second) {
+        const auto a = properties.find(first);
+        const auto b = properties.find(second);
+        const bool hasA = a != properties.end();
+        const bool hasB = b != properties.end();
+        const std::string valueA = hasA ? a->second : std::string();
+        const std::string valueB = hasB ? b->second : std::string();
+        properties.erase(first);
+        properties.erase(second);
+        if (hasA)
+            properties[second] = valueA;
+        if (hasB)
+            properties[first] = valueB;
+    }
 }
 
 bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns,
                                     BlockState &out) {
-    return translate(entry, quarterTurns, out, WoodSpecies());
+    return _translate(entry, quarterTurns, 0, out, WoodSpecies());
 }
 
 bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out,
                                     const WoodSpecies &wood) {
+    return _translate(entry, quarterTurns, 0, out, wood);
+}
+
+bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                                    BlockState &out) {
+    return translate(entry, quarterTurns, mirror, out, WoodSpecies());
+}
+
+bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                                    BlockState &out, const WoodSpecies &wood) {
+    if (mirror == 0)
+        return _translate(entry, quarterTurns, 0, out, wood);
+    // sub_146993CE0 mirrors before it turns: a cardinal_direction outside doors, a weirdo_direction, the kept vine
+    // face and the connection sides (sub_145E93340); the coordinates only flip for 1 and 2 (sub_14775E430)
+    if (mirror != 1 && mirror != 2)
+        return false;
+
+    const char *first = mirror == 1 ? "north" : "east";
+    const char *second = mirror == 1 ? "south" : "west";
+    StructureTemplate::PaletteEntry mirrored = entry;
+    const auto facing = mirrored.mProperties.find("facing");
+    if (facing != mirrored.mProperties.end()) {
+        if (facing->second == first)
+            facing->second = second;
+        else if (facing->second == second)
+            facing->second = first;
+    }
+    // the vine picks its face from the file first
+    if (entry.mName != "minecraft:vine")
+        swapProperties(mirrored.mProperties, first, second);
+
+    if (!_translate(mirrored, quarterTurns, mirror, out, wood))
+        return false;
+    for (const char *state: UNMIRRORED_STATES) {
+        if (out.mStates.contains(state))
+            return false;
+    }
+    return true;
+}
+
+bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                                     BlockState &out, const WoodSpecies &wood) {
     const std::string &name = entry.mName;
 
     if (translateWood(entry, quarterTurns, wood, out))
@@ -535,7 +610,9 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         // the template transform (sub_146993CE0) keeps one face, south then north, east, west, north when none,
         // and turns it clockwise: north, east, south, west
         static const std::array<int32_t, 4> CLOCKWISE_BITS = {4, 8, 1, 2};
-        const int32_t face = (bits & 1) != 0 ? 2 : (bits & 4) != 0 ? 0 : (bits & 8) != 0 ? 1 : (bits & 2) != 0 ? 3 : 0;
+        int32_t face = (bits & 1) != 0 ? 2 : (bits & 4) != 0 ? 0 : (bits & 8) != 0 ? 1 : (bits & 2) != 0 ? 3 : 0;
+        if ((mirror == 1 && (face & 1) == 0) || (mirror == 2 && (face & 1) != 0))
+            face ^= 2;
         states.putInt("vine_direction_bits", CLOCKWISE_BITS[(size_t) ((face + quarterTurns) & 3)]);
         out = BlockState(name, states);
         return true;

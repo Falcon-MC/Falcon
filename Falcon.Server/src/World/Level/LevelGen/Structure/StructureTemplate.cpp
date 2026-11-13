@@ -115,6 +115,13 @@ void StructureTemplate::rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
     }
 }
 
+void StructureTemplate::mirror(int32_t mirror, int32_t &x, int32_t &z) {
+    if (mirror == 1)
+        z = -z;
+    else if (mirror == 2)
+        x = -x;
+}
+
 int32_t StructureTemplate::getSizeX() const {
     return mSizeX;
 }

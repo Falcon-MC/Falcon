@@ -164,6 +164,61 @@ namespace {
                 "A potted plant is no flower pot");
     }
 
+    void checkMirror() {
+        // sub_14775E430: the mirror flips the coordinates before the turn
+        int32_t x = 3, z = 5;
+        StructureTemplate::mirror(1, x, z);
+        StructureTemplate::rotate(1, x, z);
+        require(x == 5 && z == 3, "A mirrored template turns from the wrong side");
+        x = 3, z = 5;
+        StructureTemplate::mirror(2, x, z);
+        require(x == -3 && z == 5, "Mirror 2 does not flip x");
+
+        // sub_146993CE0: 1 swaps north and south, 2 east and west, then the turn
+        StructureTemplate::PaletteEntry chest;
+        chest.mName = "minecraft:chest";
+        chest.mProperties = {{"facing", "north"}, {"type", "single"}, {"waterlogged", "false"}};
+        BlockState out;
+        require(StructureBlockTable::translate(chest, 0, 1, out)
+                        && out.mStates.getString("minecraft:cardinal_direction") == "south",
+                "A mirrored chest keeps its facing");
+        require(StructureBlockTable::translate(chest, 1, 1, out)
+                        && out.mStates.getString("minecraft:cardinal_direction") == "west",
+                "A mirrored chest turns before the mirror");
+        require(StructureBlockTable::translate(chest, 0, 2, out)
+                        && out.mStates.getString("minecraft:cardinal_direction") == "north",
+                "Mirror 2 moves a north chest");
+
+        StructureTemplate::PaletteEntry stairs;
+        stairs.mName = "minecraft:stone_brick_stairs";
+        stairs.mProperties = {
+                {"facing", "east"}, {"half", "bottom"}, {"shape", "outer_left"}, {"waterlogged", "false"}};
+        require(StructureBlockTable::translate(stairs, 0, 2, out) && out.mStates.getInt("weirdo_direction", -1) == 1
+                        && out.mStates.getString("minecraft:corner") == "outer_left",
+                "Mirrored stairs face the wrong way or change their corner");
+
+        StructureTemplate::PaletteEntry vine;
+        vine.mName = "minecraft:vine";
+        vine.mProperties = {{"north", "true"}, {"south", "true"}};
+        require(StructureBlockTable::translate(vine, 0, 1, out) && out.mStates.getInt("vine_direction_bits", -1) == 4,
+                "A mirrored vine does not keep its south face first");
+
+        StructureTemplate::PaletteEntry bars;
+        bars.mName = "minecraft:iron_bars";
+        bars.mProperties = {{"east", "false"}, {"north", "false"}, {"south", "true"}, {"west", "true"}};
+        require(StructureBlockTable::translate(bars, 0, 1, out)
+                        && out.mStates.getByte("minecraft:connection_north", -1) == 1
+                        && out.mStates.getByte("minecraft:connection_south", -1) == 0
+                        && out.mStates.getByte("minecraft:connection_west", -1) == 1,
+                "Mirrored iron bars keep their sides");
+
+        StructureTemplate::PaletteEntry ladder;
+        ladder.mName = "minecraft:ladder";
+        ladder.mProperties = {{"facing", "north"}};
+        require(!StructureBlockTable::translate(ladder, 0, 1, out), "A ladder is mirrored without a known state");
+        require(StructureBlockTable::translate(ladder, 0, 0, out), "A ladder is left out without a mirror");
+    }
+
     void checkBlockActors() {
         std::unique_ptr<BlockActor> smoker = BlockActorClassRegistry::create(FurnaceBlockActor::SMOKER_ID);
         const auto *furnace = dynamic_cast<const FurnaceBlockActor *>(smoker.get());
@@ -416,6 +471,7 @@ int main() {
         checkVillage();
         checkBlockActors();
         checkConversions();
+        checkMirror();
         checkMaterials();
         checkOceanRuins();
         checkPillagerOutposts();
