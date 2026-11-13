@@ -113,20 +113,30 @@ void ServerNetworkHandler::_bindScoreboard() {
 }
 
 void ServerNetworkHandler::loadScoreboard() {
+    mScoreboardUnreadable = false;
+    Level &overworld = mWorlds.getDefault().getOverworld();
     Tag saved;
-    if (!mWorlds.getDefault().getOverworld().loadSavedData(Scoreboard::STORAGE_KEY, saved, false))
+    if (!overworld.loadSavedData(Scoreboard::STORAGE_KEY, saved, false)) {
+        // unreadable is not absent: an empty save would replace the only copy
+        if (overworld.hasSavedData(Scoreboard::STORAGE_KEY)) {
+            mScoreboardUnreadable = true;
+            LOG_WARN(LogAreaID::Server, "The stored scoreboard is unreadable: kept as is, not saved this run");
+        }
         return;
+    }
     try {
         mScoreboard.load(saved);
     } catch (const std::exception &exception) {
         mScoreboard.clear();
-        LOG_WARN(LogAreaID::Server, "Malformed scoreboard data: %s", exception.what());
+        mScoreboardUnreadable = true;
+        LOG_WARN(LogAreaID::Server, "Malformed scoreboard data, kept as is and not saved this run: %s",
+                 exception.what());
     }
 }
 
 void ServerNetworkHandler::saveScoreboard(bool checked) {
     Level &overworld = mWorlds.getDefault().getOverworld();
-    if (!overworld.isStorageOpen())
+    if (!overworld.isStorageOpen() || mScoreboardUnreadable)
         return;
     if (!overworld.saveSavedData(Scoreboard::STORAGE_KEY, mScoreboard.save(), false) && checked)
         throw std::runtime_error("Could not save the scoreboard");

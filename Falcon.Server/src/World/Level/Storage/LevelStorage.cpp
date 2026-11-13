@@ -939,6 +939,14 @@ std::vector<std::pair<std::string, Tag>> LevelStorage::loadSavedDataWithPrefix(c
     return entries;
 }
 
+bool LevelStorage::hasSavedData(const std::string &key) {
+    if (mDb == nullptr)
+        return false;
+
+    std::string raw;
+    return mDb->Get(_readOptions(), key, &raw).ok();
+}
+
 bool LevelStorage::eraseSavedData(const std::string &key) {
     if (mDb == nullptr)
         return false;

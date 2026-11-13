@@ -75,6 +75,30 @@ namespace {
         require(coins(owner).empty(), "a player save was read as the world's properties");
         require(players.hasData("world_dynamic_properties"), "a player save was removed");
     }
+
+    // a record that does not read back is kept: neither the scoreboard nor the properties save over it
+    void keepsUnreadable(const std::filesystem::path &directory) {
+        ServerPaths::setRoot(directory);
+        ServerNetworkHandler owner("World dynamic properties", "", 1);
+        Level &overworld = owner.getWorlds().getDefault().getOverworld();
+        require(overworld.openStorage((directory / "worlds").string()), "the test world database did not open");
+        const Tag notCompound = Tag::ofList(Tag::Type::Compound);
+        require(overworld.saveSavedData(KEY, notCompound, false)
+                        && overworld.saveSavedData("scoreboard", notCompound, false),
+                "the unreadable records were not written");
+
+        owner.loadWorldDynamicProperties();
+        owner.loadScoreboard();
+        owner.getWorldDynamicProperties()["pack:coins"].mString = "1";
+        owner.saveWorldDynamicProperties(true);
+        owner.saveScoreboard(true);
+
+        Tag read;
+        require(!overworld.loadSavedData(KEY, read, false) && overworld.hasSavedData(KEY),
+                "unreadable world dynamic properties were saved over");
+        require(!overworld.loadSavedData("scoreboard", read, false) && overworld.hasSavedData("scoreboard"),
+                "an unreadable scoreboard was saved over");
+    }
 }
 
 int main() {
@@ -86,8 +110,10 @@ int main() {
     try {
         std::filesystem::create_directories(base / "a");
         std::filesystem::create_directories(base / "b");
+        std::filesystem::create_directories(base / "c");
         migrates(base / "a");
         ignoresPlayerSave(base / "b");
+        keepsUnreadable(base / "c");
     } catch (const std::exception &error) {
         std::clog << "World dynamic properties regression failed: " << error.what() << '\n';
         result = 1;

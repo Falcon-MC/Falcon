@@ -268,6 +268,10 @@ public:
         return mStorage.eraseSavedData(key);
     }
 
+    bool hasSavedData(const std::string &key) {
+        return mStorage.hasSavedData(key);
+    }
+
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
     std::vector<Tag> loadBlockEntities(int32_t chunkX, int32_t chunkZ);

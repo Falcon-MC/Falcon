@@ -1211,6 +1211,8 @@ private:
     std::vector<int64_t> mDetachedActors;
     std::unordered_map<std::string, DynamicPropertyValue> mWorldDynamicProperties;
     Scoreboard mScoreboard;
+    bool mScoreboardUnreadable = false;
+    bool mWorldDynamicPropertiesUnreadable = false;
     std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>, NetworkIdentifier::Hasher>
             mModalFormCallbacks;
 
