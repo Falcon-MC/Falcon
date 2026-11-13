@@ -927,6 +927,18 @@ bool InventoryManager::_allowPluginOpen(const Vector3i &position) {
     return true;
 }
 
+void InventoryManager::closeAllWindows() {
+    dispatchPluginClose();
+    mHasPendingOpenMainInventory = false;
+    mHasPendingCloseWindow = false;
+    mPendingCloseWindowId = CONTAINER_ID_NONE;
+    for (const int windowId:
+         {mFurnaceWindowId, mCraftingTableWindowId, mAnvilWindowId, mContainerWindowId, mMainInventoryWindowId}) {
+        if (windowId != CONTAINER_ID_NONE)
+            onClientRemoveWindow(windowId);
+    }
+}
+
 void InventoryManager::dispatchPluginClose() {
     if (!mPluginOpen || mOwner == nullptr || mPlayer == nullptr)
         return;

@@ -1207,8 +1207,11 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         if (player->isRiding())
             RideSystem::dismount(*this, *player, false);
         RideSystem::ejectAll(*this, *player);
-        if (player->isSpawned())
+        if (player->isSpawned()) {
+            // viewer counts, open lids, comparator and close events: nothing else closes them now
+            player->getInventoryManager().closeAllWindows();
             InventoryHandler::resetInventory(*this, *player);
+        }
         if (!player->isSimulated()) {
             _saveTouchedContainers(*player);
             _savePlayerData(*player);
