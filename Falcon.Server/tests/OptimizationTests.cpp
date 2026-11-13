@@ -384,6 +384,14 @@ int main() {
                     "Escaped quote in entity name was lost");
             cow->setNameTag("Bob, Junior");
         });
+        check("rights commands take the whole player name", [&]() {
+            require(handler.getPlayerByName("Regression") == &player, "A name prefix no longer finds the player");
+            require(handler.getPlayerByExactName("regressionplayer") == &player,
+                    "The whole name in another case missed");
+            require(handler.getPlayerByExactName("Regression") == nullptr, "A name prefix found a player for rights");
+            handler.getCommands().dispatch(origin, "deop Regression");
+            require(player.isOp(), "Deop of a name prefix took the rights of another player");
+        });
         check("unavailable world", [&]() {
             LevelStorage locked;
             require(locked.open(WorldManager::getWorldsDirectory(), "Locked", 0), "Could not lock fixture world");

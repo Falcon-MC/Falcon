@@ -13,7 +13,7 @@ bool DeopCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
 
     mHandler.getOpList().removeOp(arguments[0]);
 
-    ServerPlayer *target = mHandler.getPlayerByName(arguments[0]);
+    ServerPlayer *target = mHandler.getPlayerByExactName(arguments[0]);
     if (target != nullptr)
         mHandler.setPlayerOp(*target, false);
 

@@ -596,6 +596,9 @@ public:
 
     ServerPlayer *getPlayerByName(const std::string &name);
 
+    // the whole name, any case: for commands that grant or take away rights, never a prefix
+    ServerPlayer *getPlayerByExactName(const std::string &name);
+
     // keeps what a skin carries beside its image within the limits a skin change is held to
     static void boundSkin(SerializedSkin &skin);
 
