@@ -381,6 +381,11 @@ namespace {
             return false;
         }
 
+        // an empty slot takes one full stack at most: a craft's whole output is taken in several moves
+        if (destination->isAir() && action.mCount > PlayerInventory::getMaxStackSize(*source)) {
+            return false;
+        }
+
         if (!acceptsInOpenContainer(context, destination, *source)) {
             return false;
         }
