@@ -691,6 +691,69 @@ namespace {
         blocks.setBlockStateAt(x, top - 2, z, withState(stalk, "bamboo_leaf_size", "small_leaves"));
         return true;
     }
+
+    // DesertWellFeature::place (vtable 0x14F2F6ED0, sub_14D206E40, 26.60): down through the air onto sand, given up
+    // when a column of the 5x5 base has air in both blocks under the sand level
+    bool placeDesertWell(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+        static const BlockStateSet GROUND{"minecraft:sand", "minecraft:red_sand", "minecraft:suspicious_sand"};
+        static const int32_t CROSS[5][2] = {{0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+
+        while (DecorationSupport::isAir(blocks.getBlockAt(x, y, z)) && y > LevelChunk::MIN_Y + 2)
+            y--;
+        if (!GROUND.contains(blocks.getBlockAt(x, y, z)))
+            return false;
+
+        for (int32_t offsetX = -2; offsetX <= 2; offsetX++) {
+            for (int32_t offsetZ = -2; offsetZ <= 2; offsetZ++) {
+                if (DecorationSupport::isAir(blocks.getBlockAt(x + offsetX, y - 1, z + offsetZ))
+                    && DecorationSupport::isAir(blocks.getBlockAt(x + offsetX, y - 2, z + offsetZ)))
+                    return false;
+            }
+        }
+
+        static const BlockState sandstone = VanillaBlocks::SANDSTONE().toBlockState();
+        static const BlockState slab = VanillaBlocks::SANDSTONE_SLAB().toBlockState();
+        static const BlockState water = VanillaBlocks::WATER().toBlockState();
+        static const BlockState sand = VanillaBlocks::SAND().toBlockState();
+        static const BlockState suspicious = VanillaBlocks::SUSPICIOUS_SAND().toBlockState();
+
+        for (int32_t offsetX = -2; offsetX <= 2; offsetX++) {
+            for (int32_t offsetZ = -2; offsetZ <= 2; offsetZ++) {
+                for (int32_t offsetY = -2; offsetY <= 0; offsetY++)
+                    blocks.setBlockStateAt(x + offsetX, y + offsetY, z + offsetZ, sandstone);
+                if (std::abs(offsetX) == 2 || std::abs(offsetZ) == 2)
+                    blocks.setBlockStateAt(x + offsetX, y + 1, z + offsetZ, sandstone);
+            }
+        }
+        for (const int32_t *offset: CROSS) {
+            blocks.setBlockStateAt(x + offset[0], y, z + offset[1], water);
+            blocks.setBlockStateAt(x + offset[0], y - 1, z + offset[1], sand);
+        }
+
+        blocks.setBlockStateAt(x + 2, y + 1, z, slab);
+        blocks.setBlockStateAt(x - 2, y + 1, z, slab);
+        blocks.setBlockStateAt(x, y + 1, z + 2, slab);
+        blocks.setBlockStateAt(x, y + 1, z - 2, slab);
+        for (int32_t offsetX = -1; offsetX <= 1; offsetX++) {
+            for (int32_t offsetZ = -1; offsetZ <= 1; offsetZ++) {
+                const bool centre = offsetX == 0 && offsetZ == 0;
+                blocks.setBlockStateAt(x + offsetX, y + 4, z + offsetZ, centre ? sandstone : slab);
+                if (offsetX == 0 || offsetZ == 0)
+                    continue;
+
+                for (int32_t offsetY = 1; offsetY <= 3; offsetY++)
+                    blocks.setBlockStateAt(x + offsetX, y + offsetY, z + offsetZ, sandstone);
+            }
+        }
+
+        // sub_14D208230 also gives each one loot_tables/entities/desert_well_brushable_block.json and a seed drawn
+        // after both positions; no brushable block actor here to hold them
+        const int32_t *upper = CROSS[nextInt(random, 5)];
+        const int32_t *lower = CROSS[nextInt(random, 5)];
+        blocks.setBlockStateAt(x + upper[0], y - 1, z + upper[1], suspicious);
+        blocks.setBlockStateAt(x + lower[0], y - 2, z + lower[1], suspicious);
+        return true;
+    }
 }
 
 // a minecraft:ore_feature of the behavior packs
@@ -2475,6 +2538,8 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mPlaced.mFunction = &placeBamboo;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:melon_feature")
         feature.mPlaced.mFunction = &placeMelon;
+    if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == "minecraft:desert_well_feature")
+        feature.mPlaced.mFunction = &placeDesertWell;
     if (entry.mPass == AFTER_SURFACE_PASS && entry.mFeature == SINGLE_BLOCKS[12].mIdentifier)
         feature.mPlaced.mSingleBlock = &SINGLE_BLOCKS[12];
     // jigsaw feature pieces (sub_1469B1230), drawn from the post process random of their chunk
