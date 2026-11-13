@@ -3,7 +3,8 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/DispenseSource.h"
 
-FALCON_REGISTER_BLOCK(DispenserBlock, 60);
+// before ContainerBlock, which matches the dispenser and the dropper too
+FALCON_REGISTER_BLOCK(DispenserBlock, 45);
 
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
