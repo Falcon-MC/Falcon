@@ -22,3 +22,9 @@ bool StructureMaterials::stopsTopSolidSearch(const BlockState &state, bool water
         return true;
     return (BlockMaterial::flagsOf(type) & BlockMaterial::FLAG_SOLID) != 0;
 }
+
+bool StructureMaterials::isBuriedTreasureGround(const BlockState &state) {
+    const uint8_t flags = BlockMaterial::flagsOf(state);
+    return (flags & (BlockMaterial::FLAG_BIT0 | BlockMaterial::FLAG_SOLID)) == BlockMaterial::FLAG_SOLID
+           && BlockMaterial::hasDefaultProperty(state);
+}

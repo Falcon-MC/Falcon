@@ -216,6 +216,17 @@ namespace {
                 "water is looked through otherwise");
         require(!StructureMaterials::stopsTopSolidSearch(BlockState("minecraft:short_grass"), true, true),
                 "grass never stops");
+
+        require(StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:sand")), "sand buries the treasure");
+        require(StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:stone")), "stone buries the treasure");
+        require(StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:normal_stone_double_slab")),
+                "a double slab keeps the default property");
+        require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:normal_stone_slab")),
+                "a slab clears the default property");
+        require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:water")), "water does not bury");
+        require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:glass")), "glass has flag 1");
+        require(!StructureMaterials::isBuriedTreasureGround(BlockState("minecraft:chest")), "a chest clears it");
+        require(!StructureMaterials::isBuriedTreasureGround(BlockState("custom:block")), "unknown blocks do not bury");
     }
 }
 
