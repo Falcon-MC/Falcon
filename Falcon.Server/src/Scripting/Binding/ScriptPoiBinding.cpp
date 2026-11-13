@@ -120,7 +120,7 @@ namespace {
         }
         JS_FreeValue(ctx, name);
         JSValue tags = JS_GetPropertyStr(ctx, value, "tags");
-        if (!JS_IsArray(ctx, tags)) {
+        if (!JS_IsArray(tags)) {
             JS_FreeValue(ctx, tags);
             return false;
         }
