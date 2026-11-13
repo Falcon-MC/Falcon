@@ -212,6 +212,9 @@ public:
 
     void onClientRemoveWindow(int windowId);
 
+    // the player left: every open window closes now, no ContainerClose will come
+    void closeAllWindows();
+
     void dispatchPluginClose();
 
     int getCurrentWindowId() const {
