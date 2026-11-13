@@ -72,6 +72,9 @@ public:
     void loadChunk(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockActors,
                    const PacketCodecContext &context);
 
+    // stored block actors joining a chunk already loaded
+    void addLoaded(const std::vector<Tag> &blockActors, const PacketCodecContext &context);
+
     static std::unique_ptr<BlockActor> create(const std::string &blockActorId);
 
     // a block actor of no registered class lives as long as the block it was loaded with

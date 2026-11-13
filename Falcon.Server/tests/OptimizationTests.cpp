@@ -56,6 +56,10 @@ public:
         }
     }
 
+    static void storeGenerated(Level &level, ChunkLoadResult &result) {
+        level._storeGeneratedContent(result);
+    }
+
     static void stagePending(Level &level, int32_t x, int32_t z, int count,
                              const char *block = "minecraft:diamond_block") {
         auto &changes = level.mPendingBlockChanges[Level::_packChunk(x, z)];
@@ -383,6 +387,51 @@ int main() {
             require(handler.getCommands().dispatch(origin, "testfor @e[name=\"Bob \\\"Junior\\\"\"]"),
                     "Escaped quote in entity name was lost");
             cow->setNameTag("Bob, Junior");
+        });
+        check("a decoration that lands on a loaded chunk joins its loaded actors", [&]() {
+            const int64_t column = ((int64_t) 41 << 32) | (uint32_t) 41;
+            std::unordered_set<int64_t> &loaded =
+                    handler.getWorldOf(level).getActorLoadedChunks(level.getDimensionType());
+            loaded.insert(column);
+            level.getBlockActors().loadChunk(41, 41, {}, handler.getCodecContext());
+
+            ChunkLoadResult result;
+            result.mX = 41;
+            result.mZ = 41;
+            Tag chest = Tag::ofCompound();
+            chest.putString("id", "Chest");
+            chest.putInt("x", 664);
+            chest.putInt("y", 70);
+            chest.putInt("z", 664);
+            result.mBlockActors.push_back(chest);
+            Tag position = Tag::ofList(Tag::Type::Float);
+            position.addToList(Tag::ofFloat(664.5f));
+            position.addToList(Tag::ofFloat(70.0f));
+            position.addToList(Tag::ofFloat(665.5f));
+            Tag pig = Tag::ofCompound();
+            pig.putString("identifier", "minecraft:pig");
+            pig.put("Pos", position);
+            result.mEntities.push_back(pig);
+            LevelPersistenceProbe::storeGenerated(level, result);
+
+            int64_t spawned = 0;
+            for (auto &entry: handler.getActors()) {
+                const Vector3f at = entry.second->getPosition();
+                if (entry.second->isIn(level) && at.x == 664.5f && at.z == 665.5f)
+                    spawned = entry.first;
+            }
+            bool stored = false;
+            for (const Tag &entity: level.loadEntities(41, 41))
+                stored = stored || (spawned != 0 && entity.getLong("UniqueID", 0) == spawned);
+            const bool chestLoaded = level.getBlockActors().find(Vector3i(664, 70, 664)) != nullptr;
+
+            if (spawned != 0)
+                handler.removeActor(spawned);
+            level.getBlockActors().unloadChunk(41, 41);
+            loaded.erase(column);
+            require(chestLoaded, "A generated chest did not join the loaded block actors");
+            require(spawned != 0, "A generated mob did not join the loaded actors");
+            require(stored, "A generated mob was not stored with its unique id");
         });
         check("rights commands take the whole player name", [&]() {
             require(handler.getPlayerByName("Regression") == &player, "A name prefix no longer finds the player");

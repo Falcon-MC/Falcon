@@ -527,6 +527,9 @@ public:
 
     void loadActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ);
 
+    // stored actor tags brought to life, those already alive in `level` skipped
+    void spawnStoredActors(Level &level, const std::vector<Tag> &entities);
+
     void saveActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ, bool cull);
 
     void loadBlockActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ);

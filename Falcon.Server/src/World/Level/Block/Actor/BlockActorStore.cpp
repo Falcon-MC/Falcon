@@ -236,6 +236,10 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
     if (!mLoadedChunks.insert(packChunk(chunkX, chunkZ)).second)
         return;
 
+    addLoaded(blockActors, context);
+}
+
+void BlockActorStore::addLoaded(const std::vector<Tag> &blockActors, const PacketCodecContext &context) {
     for (const Tag &data: blockActors) {
         if (data.getType() != Tag::Type::Compound)
             continue;
