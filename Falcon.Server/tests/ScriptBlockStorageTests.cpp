@@ -83,6 +83,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         const pig = dimension().spawnEntity("minecraft:pig", { x: 4.5, y: 100, z: 4.5 });
         const id = jar.store(pig);
         r.stored = (id === pig.id) + ":" + jar.size();
+        const second = at(3, 3).getComponent("entity_storage");
+        r.twice = fail(() => second.store(pig)) + ":" + second.size();
         const infos = jar.getEntities();
         r.infos = infos.length + ":" + (infos[0] instanceof BlockEntityStorageInfo) + ":" + infos[0].definitionId + ":"
             + (infos[0].uniqueId === id);
@@ -219,6 +221,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         const std::unique_ptr<json::Value> r = result(owner);
         expect(*r, "component", "true:minecraft:entity_storage:minecraft:entity_storage:0");
         expect(*r, "stored", "true:1");
+        expect(*r, "twice", "Error:The entity is already stored.:0");
         expect(*r, "gone", "0");
         expect(*r, "infos", "1:true:minecraft:pig:true");
         expect(*r, "errors",

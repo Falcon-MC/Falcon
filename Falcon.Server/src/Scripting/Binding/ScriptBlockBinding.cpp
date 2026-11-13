@@ -868,8 +868,21 @@ namespace {
         return array;
     }
 
+    // the component stays with the cauldron: a kept one on another block refuses, like the other block components
+    bool isCauldronAt(const BlockAt &at) {
+        return CauldronBlock::matches(at.state().mName);
+    }
+
+    JSValue invalidFluidContainer(const BlockAt &at) {
+        return at.mApi->throwError("InvalidBlockComponentError",
+                                   "Attempting to access invalid block component minecraft:fluid_container.");
+    }
+
     JSValue fluidGetFillLevel(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, CauldronBlock(blockAt(ctx, thisVal).state()).getFillLevel());
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
+        return JS_NewInt32(ctx, CauldronBlock(at.state()).getFillLevel());
     }
 
     void setCauldron(const BlockAt &at, CauldronBlock::Liquid liquid, int fillLevel) {
@@ -885,6 +898,8 @@ namespace {
         // fill_level spans 0 to 6
         if (level < 0 || level > 6)
             return at.mApi->throwError("ArgumentOutOfBoundsError", "");
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         const CauldronBlock cauldron(at.state());
         const CauldronBlock::Liquid liquid = cauldron.getLiquid() == CauldronBlock::Liquid::Empty
                                                      ? CauldronBlock::Liquid::Water
@@ -900,6 +915,8 @@ namespace {
     // a potion cauldron keeps water as its liquid and a PotionId on its block actor
     JSValue fluidGetFluidType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         const CauldronBlock cauldron(at.state());
         if (cauldron.getLiquid() == CauldronBlock::Liquid::Lava)
             return JS_NewString(ctx, "Lava");
@@ -918,6 +935,8 @@ namespace {
         const std::string type = toString(ctx, argv[0]);
         if (type != "Water" && type != "Lava" && type != "PowderSnow")
             return at.mApi->throwError("Error", "Fluid type " + type + " is not supported.");
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         const CauldronBlock cauldron(at.state());
         const int fill = std::max(cauldron.getFillLevel(), 1);
         setCauldron(at,
@@ -946,6 +965,8 @@ namespace {
     // CustomColor as the game saves it: an argb int
     JSValue fluidGetColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         CauldronBlockActor *actor = at.mLevel->getBlockActors().find<CauldronBlockActor>(at.mPosition);
         const Tag saved = actor != nullptr ? actor->saveNbt() : Tag::ofCompound();
         const uint32_t argb = saved.contains("CustomColor") ? (uint32_t) saved.getInt("CustomColor")
@@ -964,6 +985,8 @@ namespace {
                     blue = channel(ctx, argv[0], "blue", valid), alpha = channel(ctx, argv[0], "alpha", valid);
         if (!valid)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         const auto byte = [](float value) { return (uint32_t) std::lround(value * 255.0f); };
         const uint32_t argb = byte(alpha) << 24 | byte(red) << 16 | byte(green) << 8 | byte(blue);
         CauldronBlockActor *actor = cauldronActorAt(at);
@@ -989,6 +1012,8 @@ namespace {
             potionType = 2;
         if (potionType < 0)
             return at.mApi->throwError("Error", "Item " + type + " is not a potion.");
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         const CauldronBlock cauldron(at.state());
         setCauldron(at, CauldronBlock::Liquid::Water, std::max(cauldron.getFillLevel(), 1));
         CauldronBlockActor *actor = cauldronActorAt(at);
@@ -1009,6 +1034,8 @@ namespace {
         JS_FreeValue(ctx, id);
         if (!named)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (!isCauldronAt(at))
+            return invalidFluidContainer(at);
         CauldronBlockActor *actor = cauldronActorAt(at);
         actor->addDye(CauldronBlockActor::dyeColorOf(item));
         BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *actor);
@@ -1905,7 +1932,9 @@ namespace {
         const int64_t uniqueId = mob->getUniqueId();
         if (uniqueId == -1)
             return storageError(at, BlockEntityStorage::Result::InvalidId);
-        if (storage->contains(uniqueId))
+        // a mob stored elsewhere this tick is still in the world until its removal runs
+        std::unordered_set<int64_t> &leaving = at.mApi->host().getScriptEngine().storedActors();
+        if (storage->contains(uniqueId) || leaving.count(uniqueId) != 0)
             return storageError(at, BlockEntityStorage::Result::AlreadyStored);
         if (mob->isRiding() || !mob->getPassengers().empty())
             return storageError(at, BlockEntityStorage::Result::Riding);
@@ -1914,7 +1943,11 @@ namespace {
         saved.putString("Definition", canonicalIdentifier(mob->getIdentifier()));
         // removed like Entity.remove, once the script returns
         ServerNetworkHandler &host = at.mApi->host();
-        host.postToMainThread([&host, uniqueId] { host.removeActor(uniqueId); });
+        leaving.insert(uniqueId);
+        host.postToMainThread([&host, uniqueId] {
+            host.removeActor(uniqueId);
+            host.getScriptEngine().storedActors().erase(uniqueId);
+        });
         storage->add(at.mApi->scriptModuleUuid(), std::move(saved));
         return string(ctx, std::to_string(uniqueId));
     }

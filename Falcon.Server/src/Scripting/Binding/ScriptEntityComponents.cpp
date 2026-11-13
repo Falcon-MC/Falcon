@@ -603,7 +603,8 @@ namespace {
     // false when the value is outside the attribute's range
     bool setAttribute(ComponentTarget &target, float value) {
         const AttributeData *attribute = attributeOf(*target.mActor, target.mPart->mComponentId);
-        if (attribute == nullptr || value < attribute->mMinimum || value > attribute->mMaximum)
+        // written so a NaN fails it too
+        if (attribute == nullptr || !(value >= attribute->mMinimum && value <= attribute->mMaximum))
             return false;
         target.mActor->getAttributes().set(target.mPart->mComponentId, value);
         syncAttributes(*target.mApi, *target.mActor);

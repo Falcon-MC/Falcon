@@ -371,7 +371,8 @@ system.runTimeout(() => {
     r.health = (health instanceof EntityHealthComponent) + ":" + health.effectiveMax + ":" + health.currentValue
         + ":" + (health.entity === cow);
     health.setCurrentValue(4);
-    r.healthSet = health.currentValue + ":" + health.setCurrentValue(1000);
+    r.healthSet = health.currentValue + ":" + health.setCurrentValue(1000) + ":" + health.setCurrentValue(NaN) + ":"
+        + health.currentValue;
     health.resetToMaxValue();
     r.componentsCount = cow.getComponents().length > 5;
     r.movement = cow.hasComponent("minecraft:movement") + ":" + (cow.getComponent("movement").currentValue > 0);
@@ -2694,7 +2695,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "families", "cow,mob");
         expect(e, "familyQuery", "2,0");
         expect(e, "health", "true:10:10:true");
-        expect(e, "healthSet", "4:false");
+        expect(e, "healthSet", "4:false:false:4");
         expect(e, "componentsCount", "true");
         expect(e, "movement", "true:true");
         expect(e, "missing", "true");

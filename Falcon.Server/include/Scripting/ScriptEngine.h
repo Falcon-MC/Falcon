@@ -20,6 +20,7 @@
 #include <random>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -351,6 +352,11 @@ public:
         return mStructures;
     }
 
+    // mobs a block entity storage took this tick: they leave the world with the main thread tasks
+    std::unordered_set<int64_t> &storedActors() {
+        return mStoredActors;
+    }
+
     // the tests every pack registered with @minecraft/server-gametest
     GameTestRunner &gameTests() {
         return mGameTests;
@@ -448,6 +454,7 @@ private:
 
     WorldClockSystem mClocks;
     ScriptStructureRegistry mStructures;
+    std::unordered_set<int64_t> mStoredActors;
     GameTestRunner mGameTests;
     ScriptSoundRegistry mSounds;
     AimAssistRegistry mAimAssist;
