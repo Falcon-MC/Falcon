@@ -29,7 +29,9 @@ namespace {
     };
     // the privilege tags of the definitions: early-execution-allowed and no-restricted-execution
     const check = (label, member) => {
-        const [early, blocked] = native.flags(member);
+        // indexed, not destructured: a pack can replace the array iterator
+        const tags = native.flags(member);
+        const early = tags[0], blocked = tags[1];
         const privilege = native.privilege();
         if (privilege === 1 && !early)
             throw new ReferenceError(label + " [" + member.replace(".", "::") + "] cannot be used in early execution.");
@@ -425,9 +427,10 @@ namespace {
     JSValue flags(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         const std::string member = stringArg(ctx, argc, argv, 0);
         const ScriptSurface &surface = apiOf(ctx).adminSurface();
+        // defined, not set: a setter a pack put on Array.prototype must not see or replace them
         JSValue array = JS_NewArray(ctx);
-        JS_SetPropertyUint32(ctx, array, 0, JS_NewBool(ctx, surface.isEarly(member)));
-        JS_SetPropertyUint32(ctx, array, 1, JS_NewBool(ctx, surface.isBlocked(member)));
+        JS_DefinePropertyValueUint32(ctx, array, 0, JS_NewBool(ctx, surface.isEarly(member)), JS_PROP_C_W_E);
+        JS_DefinePropertyValueUint32(ctx, array, 1, JS_NewBool(ctx, surface.isBlocked(member)), JS_PROP_C_W_E);
         return array;
     }
 
