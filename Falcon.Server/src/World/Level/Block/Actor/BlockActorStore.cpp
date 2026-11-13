@@ -30,6 +30,7 @@
 void BlockActorStore::moveStateFrom(BlockActorStore &&other) {
     mBlockActors = std::move(other.mBlockActors);
     mUnknownBlockActors = std::move(other.mUnknownBlockActors);
+    mChunkIndex = std::move(other.mChunkIndex);
     mLoadedChunks = std::move(other.mLoadedChunks);
 
     for (auto &entry: mBlockActors)
@@ -46,6 +47,13 @@ namespace {
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
 
+    // packPosition's x and z, sign extended back from their 26 bits
+    int64_t chunkOfKey(int64_t key) {
+        const int32_t x = (int32_t) (key >> 38);
+        const int32_t z = (int32_t) ((uint32_t) (key & 0x3ffffff) << 6) >> 6;
+        return packChunk(x >> 4, z >> 4);
+    }
+
     Vector3i positionOf(const Tag &data) {
         return Vector3i(data.getInt("x"), data.getInt("y"), data.getInt("z"));
     }
@@ -57,6 +65,28 @@ namespace {
         spawnData.remove("LootTableSeed");
         NbtIo::writeTag(stream, spawnData, NbtVariant::Network);
     }
+}
+
+void BlockActorStore::_index(int64_t key) {
+    mChunkIndex[chunkOfKey(key)].insert(key);
+}
+
+void BlockActorStore::_unindex(int64_t key) {
+    if (mBlockActors.count(key) != 0 || mUnknownBlockActors.count(key) != 0)
+        return;
+
+    const auto found = mChunkIndex.find(chunkOfKey(key));
+    if (found == mChunkIndex.end())
+        return;
+
+    found->second.erase(key);
+    if (found->second.empty())
+        mChunkIndex.erase(found);
+}
+
+const std::unordered_set<int64_t> *BlockActorStore::_positionsIn(int32_t chunkX, int32_t chunkZ) const {
+    const auto found = mChunkIndex.find(packChunk(chunkX, chunkZ));
+    return found == mChunkIndex.end() ? nullptr : &found->second;
 }
 
 BlockActor *BlockActorStore::find(const Vector3i &position) {
@@ -72,16 +102,23 @@ void BlockActorStore::insert(std::unique_ptr<BlockActor> blockActor) {
     const int64_t key = packPosition(blockActor->getPosition());
     mUnknownBlockActors.erase(key);
     mBlockActors[key] = std::move(blockActor);
+    _index(key);
 }
 
 void BlockActorStore::remove(const Vector3i &position) {
-    mBlockActors.erase(packPosition(position));
-    mUnknownBlockActors.erase(packPosition(position));
+    const int64_t key = packPosition(position);
+    mBlockActors.erase(key);
+    mUnknownBlockActors.erase(key);
+    _unindex(key);
 }
 
 void BlockActorStore::onBlockReplaced(const Vector3i &position) {
-    if (!mUnknownBlockActors.empty())
-        mUnknownBlockActors.erase(packPosition(position));
+    if (mUnknownBlockActors.empty())
+        return;
+
+    const int64_t key = packPosition(position);
+    if (mUnknownBlockActors.erase(key) != 0)
+        _unindex(key);
 }
 
 std::unique_ptr<BlockActor> BlockActorStore::take(const Vector3i &position) {
@@ -89,8 +126,10 @@ std::unique_ptr<BlockActor> BlockActorStore::take(const Vector3i &position) {
     if (found == mBlockActors.end())
         return nullptr;
 
+    const int64_t key = found->first;
     std::unique_ptr<BlockActor> taken = std::move(found->second);
     mBlockActors.erase(found);
+    _unindex(key);
     return taken;
 }
 
@@ -103,82 +142,75 @@ void BlockActorStore::tick(ServerNetworkHandler &owner) {
 
     for (const int64_t key: keys) {
         const auto found = mBlockActors.find(key);
-        if (found != mBlockActors.end() && !found->second->tick(owner))
+        if (found != mBlockActors.end() && !found->second->tick(owner)) {
             mBlockActors.erase(key);
+            _unindex(key);
+        }
     }
 }
 
 std::vector<Tag> BlockActorStore::saveChunk(int32_t chunkX, int32_t chunkZ) {
     std::vector<Tag> saved;
+    const std::unordered_set<int64_t> *positions = _positionsIn(chunkX, chunkZ);
+    if (positions == nullptr)
+        return saved;
 
-    for (const auto &entry: mBlockActors) {
-        const Vector3i &position = entry.second->getPosition();
-        if ((position.x >> 4) != chunkX || (position.z >> 4) != chunkZ)
-            continue;
-
-        saved.push_back(entry.second->saveWithPosition());
-    }
-
-    for (auto it = mUnknownBlockActors.begin(); it != mUnknownBlockActors.end();) {
-        const Vector3i position = positionOf(it->second.mData);
-        if ((position.x >> 4) != chunkX || (position.z >> 4) != chunkZ) {
-            ++it;
+    std::vector<int64_t> dropped;
+    for (const int64_t key: *positions) {
+        const auto known = mBlockActors.find(key);
+        if (known != mBlockActors.end()) {
+            saved.push_back(known->second->saveWithPosition());
             continue;
         }
+
+        const auto unknown = mUnknownBlockActors.find(key);
+        if (unknown == mUnknownBlockActors.end())
+            continue;
 
         // chunk writes replayed past setBlockState() can replace the block too
+        const Vector3i position = positionOf(unknown->second.mData);
         const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
-        if (block != nullptr && it->second.mBlock.empty())
-            it->second.mBlock = block->mName;
-        if (block != nullptr && block->mName != it->second.mBlock) {
-            it = mUnknownBlockActors.erase(it);
+        if (block != nullptr && unknown->second.mBlock.empty())
+            unknown->second.mBlock = block->mName;
+        if (block != nullptr && block->mName != unknown->second.mBlock) {
+            dropped.push_back(key);
             continue;
         }
 
-        saved.push_back(it->second.mData);
-        ++it;
+        saved.push_back(unknown->second.mData);
+    }
+
+    for (const int64_t key: dropped) {
+        mUnknownBlockActors.erase(key);
+        _unindex(key);
     }
 
     return saved;
 }
 
 std::string BlockActorStore::encodeChunkNetwork(int32_t chunkX, int32_t chunkZ) const {
-    BinaryStream stream;
-
-    for (const auto &entry: mBlockActors) {
-        const BlockActor &blockActor = *entry.second;
-        const Vector3i &position = blockActor.getPosition();
-        if ((position.x >> 4) != chunkX || (position.z >> 4) != chunkZ)
-            continue;
-
-        NbtIo::writeTag(stream, blockActor.getSpawnCompound(), NbtVariant::Network);
-    }
-
-    for (const auto &entry: mUnknownBlockActors) {
-        const Vector3i position = positionOf(entry.second.mData);
-        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
-            writeSpawnData(stream, entry.second.mData);
-    }
-
-    return stream.getBuffer();
+    return encodeSubChunkNetwork(chunkX, INT32_MIN, chunkZ);
 }
 
+// sectionY INT32_MIN: the whole column
 std::string BlockActorStore::encodeSubChunkNetwork(int32_t chunkX, int32_t sectionY, int32_t chunkZ) const {
     BinaryStream stream;
+    const std::unordered_set<int64_t> *positions = _positionsIn(chunkX, chunkZ);
+    if (positions == nullptr)
+        return stream.getBuffer();
 
-    for (const auto &entry: mBlockActors) {
-        const BlockActor &blockActor = *entry.second;
-        const Vector3i &position = blockActor.getPosition();
-        if ((position.x >> 4) != chunkX || (position.z >> 4) != chunkZ || (position.y >> 4) != sectionY)
+    for (const int64_t key: *positions) {
+        const auto known = mBlockActors.find(key);
+        if (known != mBlockActors.end()) {
+            if (sectionY == INT32_MIN || (known->second->getPosition().y >> 4) == sectionY)
+                NbtIo::writeTag(stream, known->second->getSpawnCompound(), NbtVariant::Network);
             continue;
+        }
 
-        NbtIo::writeTag(stream, blockActor.getSpawnCompound(), NbtVariant::Network);
-    }
-
-    for (const auto &entry: mUnknownBlockActors) {
-        const Vector3i position = positionOf(entry.second.mData);
-        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ && (position.y >> 4) == sectionY)
-            writeSpawnData(stream, entry.second.mData);
+        const auto unknown = mUnknownBlockActors.find(key);
+        if (unknown != mUnknownBlockActors.end()
+            && (sectionY == INT32_MIN || (positionOf(unknown->second.mData).y >> 4) == sectionY))
+            writeSpawnData(stream, unknown->second.mData);
     }
 
     return stream.getBuffer();
@@ -212,20 +244,13 @@ bool BlockActorStore::isChunkLoaded(int32_t chunkX, int32_t chunkZ) const {
 }
 
 void BlockActorStore::unloadChunk(int32_t chunkX, int32_t chunkZ) {
-    for (auto it = mBlockActors.begin(); it != mBlockActors.end();) {
-        const Vector3i &position = it->second->getPosition();
-        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
-            it = mBlockActors.erase(it);
-        else
-            ++it;
-    }
-
-    for (auto it = mUnknownBlockActors.begin(); it != mUnknownBlockActors.end();) {
-        const Vector3i position = positionOf(it->second.mData);
-        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
-            it = mUnknownBlockActors.erase(it);
-        else
-            ++it;
+    const auto found = mChunkIndex.find(packChunk(chunkX, chunkZ));
+    if (found != mChunkIndex.end()) {
+        for (const int64_t key: found->second) {
+            mBlockActors.erase(key);
+            mUnknownBlockActors.erase(key);
+        }
+        mChunkIndex.erase(found);
     }
 
     mLoadedChunks.erase(packChunk(chunkX, chunkZ));
@@ -249,8 +274,11 @@ void BlockActorStore::addLoaded(const std::vector<Tag> &blockActors, const Packe
         if (blockActor == nullptr) {
             // no class here, or its plugin is gone: the game, or that plugin, still owns this data
             const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
-            mUnknownBlockActors[packPosition(position)] =
-                    UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
+            const int64_t key = packPosition(position);
+            if (mBlockActors.count(key) != 0)
+                continue;
+            mUnknownBlockActors[key] = UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
+            _index(key);
             continue;
         }
 
