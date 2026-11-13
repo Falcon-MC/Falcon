@@ -9,6 +9,7 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Actor/SculkCatalystBlockActor.h"
 #include "World/Level/Block/Actor/StructureBlockActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -147,6 +148,27 @@ gt.register("Suite", "sim", (test) => {
     r.simEnums = gt.LookDuration.UntilMove + "|" + gt.PersonaArmSize.Slim + "|" + gt.PersonaPieceType.Skin;
     test.succeed();
 }).structureName("gt:box");
+// the catalyst is set and taken away by the server between the steps
+gt.register("Suite", "sculk", (test) => {
+    const cell = { x: 1, y: 1, z: 1 };
+    const none = test.getSculkSpreader(cell);
+    let s;
+    test.runAfterDelay(5, () => {
+        const at = test.worldBlockLocation(cell);
+        s = test.getSculkSpreader(cell);
+        s.addCursorsWithOffset({ x: 0, y: 1.7, z: -0.5 }, 2500);
+        const first = s.getCursorPosition(0);
+        r.sculk = String(none) + "|" + (s instanceof gt.SculkSpreader) + "|" + s.maxCharge + "|"
+            + s.getNumberOfCursors() + "|" + s.getTotalCharge() + "|"
+            + (first.x === at.x && first.y === at.y + 1 && first.z === at.z - 1) + "|"
+            + JSON.stringify(s.getCursorPosition(3));
+    });
+    test.runAfterDelay(10, () => {
+        r.sculkGone = s.maxCharge + "|" + s.getNumberOfCursors() + "|" + s.getTotalCharge() + "|"
+            + String(test.getSculkSpreader(cell));
+        test.succeed();
+    });
+}).maxTicks(20).structureName("gt:box");
 gt.setBeforeBatchCallback("", () => { r.before = String(Number(r.before || 0) + 1); });
 r.twice = errorOf(() => gt.setBeforeBatchCallback("", () => {}));
 r.tags = gt.Tags.suiteDefault + "|" + gt.Tags.suiteAll;
@@ -205,7 +227,28 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         return text.find(part) != std::string::npos;
     }
 
+    // charges past 1000 split, the delays and the facing are shorts, an empty spreader writes nothing
+    void spreaderSaves() {
+        SculkSpreader spreader;
+        Tag empty = Tag::ofCompound();
+        spreader.save(empty);
+        require(empty.get("cursors") == nullptr, "an empty spreader saved cursors");
+        spreader.addCursors(Vector3i(1, 2, 3), 1500);
+        Tag saved = Tag::ofCompound();
+        spreader.save(saved);
+        const Tag *cursors = saved.get("cursors");
+        require(cursors != nullptr && cursors->isList() && cursors->getList().size() == 2, "no cursor list");
+        const Tag &second = cursors->getList()[1];
+        require(second.getInt("y") == 2 && second.getShort("charge") == 500 && second.getShort("update") == 0
+                        && second.getShort("decay") == 1 && second.getShort("facing") == -1,
+                "the cursor was saved wrong");
+        SculkSpreader loaded;
+        loaded.load(saved);
+        require(loaded.getCursors().size() == 2 && loaded.getTotalCharge() == 1500, "the cursors did not load");
+    }
+
     void run(const std::filesystem::path &directory) {
+        spreaderSaves();
         const std::filesystem::path packs = directory / "packs";
         writePack(packs, "gametest",
                   "{\"module_name\": \"@minecraft/server\", \"version\": \"2.12.0-beta\"},"
@@ -244,7 +287,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         engine.tick(++tick);
 
         GameTestRunner &runner = engine.gameTests();
-        require(runner.testNames().size() == 10, "the registered tests are not listed");
+        require(runner.testNames().size() == 11, "the registered tests are not listed");
         require(!runner.run(level, Vector3i(0, 100, 0), "Suite:none", 0, false, 1).mSuccess, "an unknown test ran");
         require(runner.run(level, Vector3i(0, 100, 0), "Suite:passes", 0, false, 0).mKey
                         == "gameTest.error.repeatCountTooSmall",
@@ -307,6 +350,22 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         require(runner.run(level, Vector3i(40, 100, 60), "Suite:cauldron", 0, false, 1).mSuccess,
                 "cauldron did not run");
         tickAndRead(owner, engine, tick, 2);
+
+        require(runner.run(level, Vector3i(60, 100, 20), "Suite:sculk", 0, false, 1).mSuccess, "sculk did not run");
+        tickAndRead(owner, engine, tick, 3);
+        const Vector3i catalyst(61, 101, 24);
+        const BlockState catalystState = ScriptApi::defaultBlockState("minecraft:sculk_catalyst");
+        level.setBlock(catalyst, catalystState, false);
+        // the placement hooks run only for a level with its owner, which this harness leaves unset
+        ServerNetworkHandler *previousOwner = level.getOwner();
+        level.setOwner(&owner);
+        level.onBlockPlaced(catalyst, catalystState);
+        level.setOwner(previousOwner);
+        require(level.getBlockActors().find<SculkCatalystBlockActor>(catalyst) != nullptr, "the catalyst has no actor");
+        tickAndRead(owner, engine, tick, 5);
+        level.setBlock(catalyst, ScriptApi::defaultBlockState("minecraft:air"), false);
+        require(level.getBlockActors().find(catalyst) == nullptr, "the catalyst actor outlived its block");
+        tickAndRead(owner, engine, tick, 6);
 
         // a simulated player: no client, its inputs come from its orders, nothing is sent to it
         require(runner.run(level, Vector3i(60, 100, 0), "Suite:sim", 0, false, 1).mSuccess, "sim did not run");
@@ -391,6 +450,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "simSkin", "Slim|1|0|0");
         expect(*report, "simNav", "true|boolean|true");
         expect(*report, "simNavEntity", "TypeError:Native type conversion failed.");
+        expect(*report, "sculk", "undefined|true|1000|3|2500|true|{\"x\":0,\"y\":0,\"z\":0}");
+        expect(*report, "sculkGone", "0|0|0|undefined");
         expect(*report, "fuse",
                "Assert|gameTest.assert.missingExplosionComponent|minecraft:cow|{\"x\":0,\"y\":0,\"z\":0}");
     }
