@@ -131,8 +131,26 @@ bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item
     return true;
 }
 
+bool ServerNetworkHandler::_keepItemUse(ServerPlayer &player) {
+    if (!player.getFlags().get(ActorFlag::UsingItem))
+        return true;
+
+    // the start tick belongs to the item that started the use: another one must not inherit its elapsed time
+    const PlayerInventory &inventory = player.getInventory();
+    const ItemStack &held = inventory.getItemInHand();
+    const ItemStack used = player.getItemUseItem();
+    if (inventory.getSelectedSlot() == player.getItemUseSlot() && !held.isAir() && held.mDefinition == used.mDefinition)
+        return true;
+
+    player.getFlags().set(ActorFlag::UsingItem, false);
+    _sendEntityData(player);
+    const int64_t left = useDurationTicksFor(used) - (mCurrentTick - player.getItemUseStartTick());
+    mScriptEngine.onItemStopUse(player, used, left > 0 ? (int32_t) left : 0, false);
+    return false;
+}
+
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
-    if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
+    if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem) || !_keepItemUse(player))
         return;
 
     const int64_t itemUseTicks = mCurrentTick - player.getItemUseStartTick();
@@ -161,7 +179,7 @@ void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId) {
-    if (!player.getFlags().get(ActorFlag::UsingItem))
+    if (!player.getFlags().get(ActorFlag::UsingItem) || !_keepItemUse(player))
         return;
 
     const ItemStack &heldItem = player.getInventory().getItemInHand();
@@ -266,6 +284,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
             && itemType->onStartUsing(*this, player, heldItem)) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
+            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
             _sendEntityData(player);
             const int32_t duration = itemType->getUseDuration();
             mScriptEngine.onItemStartUse(player, heldItem,
@@ -306,6 +325,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
     player.getFlags().set(ActorFlag::UsingItem, true);
     player.setItemUseStartTick(mCurrentTick);
+    player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
     _sendEntityData(player);
 
     if (heldItem.mDefinition != nullptr) {
@@ -317,6 +337,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
+    _keepItemUse(player);
     const bool wasUsing = player.getFlags().get(ActorFlag::UsingItem);
     const int64_t heldTicks = mCurrentTick - player.getItemUseStartTick();
 

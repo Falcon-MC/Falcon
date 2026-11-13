@@ -761,6 +761,20 @@ public:
         mItemUseStartTick = tick;
     }
 
+    // the slot and item a use started with
+    void setItemUseSource(int slot, const ItemStack &item) {
+        mItemUseSlot = slot;
+        mItemUseItem = item;
+    }
+
+    int getItemUseSlot() const {
+        return mItemUseSlot;
+    }
+
+    const ItemStack &getItemUseItem() const {
+        return mItemUseItem;
+    }
+
     ChunkStreamState &getChunkStreamState() {
         return mChunkStreamState;
     }
@@ -1212,6 +1226,8 @@ private:
     MapRequestQueue mMapRequests;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
+    int mItemUseSlot = -1;
+    ItemStack mItemUseItem;
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;
     bool mAwaitingDimensionAck = false;
