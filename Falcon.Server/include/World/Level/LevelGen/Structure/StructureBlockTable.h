@@ -20,4 +20,7 @@ public:
 
     static bool translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out,
                           const WoodSpecies &wood);
+
+    // the banner Type the template loader gives a banner without one, from its file block name: 1 is the ominous one
+    static int32_t bannerType(const std::string &name);
 };

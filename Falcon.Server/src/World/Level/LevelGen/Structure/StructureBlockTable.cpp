@@ -532,10 +532,11 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
             if (property(entry, face.first) == "true")
                 bits = face.second;
         }
-        // a quarter turn clockwise moves south to west, west to north, north to east
-        for (int32_t turn = 0; turn < (quarterTurns & 3); ++turn)
-            bits = ((bits << 1) | (bits >> 3)) & 15;
-        states.putInt("vine_direction_bits", bits);
+        // the template transform (sub_146993CE0) keeps one face, south then north, east, west, north when none,
+        // and turns it clockwise: north, east, south, west
+        static const std::array<int32_t, 4> CLOCKWISE_BITS = {4, 8, 1, 2};
+        const int32_t face = (bits & 1) != 0 ? 2 : (bits & 4) != 0 ? 0 : (bits & 8) != 0 ? 1 : (bits & 2) != 0 ? 3 : 0;
+        states.putInt("vine_direction_bits", CLOCKWISE_BITS[(size_t) ((face + quarterTurns) & 3)]);
         out = BlockState(name, states);
         return true;
     }
@@ -610,4 +611,9 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     return translateGeneric(entry, quarterTurns, out);
+}
+
+int32_t StructureBlockTable::bannerType(const std::string &name) {
+    // sub_14699A380
+    return name.find("illager_captain") != std::string::npos ? 1 : 0;
 }

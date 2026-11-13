@@ -20,7 +20,10 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
 #include <memory>
+#include <mutex>
+#include <tuple>
 #include <utility>
 
 namespace {
@@ -64,6 +67,19 @@ namespace {
         return mob;
     }
 
+    using PieceKey = std::tuple<const Level *, int32_t, int32_t, size_t>;
+
+    struct PendingMob {
+        int32_t x;
+        int32_t z;
+        Tag mMob;
+    };
+
+    // PillagerOutpostPiece +268: the first chunk to handle data markers of a piece records its mobs; the mobs are
+    // spawned by each chunk holding their spot (postProcessMobsAt, sub_1473C6A20)
+    std::mutex claimsMutex;
+    std::map<PieceKey, std::vector<PendingMob>> claims;
+
     std::string lootTablePath(const std::string &name) {
         const size_t colon = name.find(':');
         return "loot_tables/" + (colon == std::string::npos ? name : name.substr(colon + 1)) + ".json";
@@ -76,7 +92,7 @@ namespace {
                 : mLevel(level), mChunk(chunk), mSeed(seed), mChunkRandom(chunkRandom), mTerrain(terrain) {}
 
         // PillagerOutpostPiece::postProcess (sub_1473C5940) then the template piece post process (sub_14699DA70)
-        void place(const PillagerOutpostStructure::Piece &piece) {
+        void place(const PillagerOutpostStructure::Piece &piece, const PieceKey &key) {
             const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(piece.mTemplate + ".nbt");
             if (shape == nullptr)
                 return;
@@ -128,15 +144,53 @@ namespace {
                     if (!table.empty())
                         chest.setLootTable(lootTablePath(table), seed);
                 } else if (state.mName == "minecraft:wall_banner") {
-                    mLevel.getBlockActors().getOrCreate<BannerBlockActor>(position);
+                    mLevel.getBlockActors().getOrCreate<BannerBlockActor>(position).setType(
+                            StructureBlockTable::bannerType(palette.mName));
                 }
             }
 
+            // the template hands over only the markers inside the chunk (sub_14775B430)
+            std::vector<const StructureTemplate::BlockEntry *> markers;
             for (const StructureTemplate::BlockEntry &entry: shape->getBlocks()) {
-                const std::string marker = entry.mData.getString("metadata", std::string());
-                if (!marker.empty())
-                    _marker(piece, entry, originY, marker);
+                if (entry.mData.getString("metadata", std::string()).empty())
+                    continue;
+                int32_t x = 0;
+                int32_t y = 0;
+                int32_t z = 0;
+                _world(piece, entry, originY, x, y, z);
+                if (_inChunk(x, z) && y - 1 >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y)
+                    markers.push_back(&entry);
             }
+
+            bool recordMobs = false;
+            if (!markers.empty()) {
+                const std::lock_guard<std::mutex> lock(claimsMutex);
+                recordMobs = claims.emplace(key, std::vector<PendingMob>()).second;
+            }
+
+            std::vector<PendingMob> mobs;
+            for (const StructureTemplate::BlockEntry *entry: markers)
+                _marker(piece, *entry, originY, entry->mData.getString("metadata", std::string()), recordMobs, mobs);
+
+            std::vector<Tag> spawned;
+            {
+                const std::lock_guard<std::mutex> lock(claimsMutex);
+                const auto found = claims.find(key);
+                if (found == claims.end())
+                    return;
+                std::vector<PendingMob> &pending = found->second;
+                pending.insert(pending.end(), mobs.begin(), mobs.end());
+                for (auto it = pending.begin(); it != pending.end();) {
+                    if (!_inChunk(it->x, it->z)) {
+                        ++it;
+                        continue;
+                    }
+                    spawned.push_back(std::move(it->mMob));
+                    it = pending.erase(it);
+                }
+            }
+            for (Tag &mob: spawned)
+                mLevel.addGeneratedEntity(std::move(mob));
         }
 
     private:
@@ -195,33 +249,34 @@ namespace {
 
         // PillagerOutpostPiece::handleDataMarker (sub_1473C5ED0) and postProcessMobsAt (sub_1473C6620)
         void _marker(const PillagerOutpostStructure::Piece &piece, const StructureTemplate::BlockEntry &entry,
-                     int32_t originY, const std::string &marker) {
+                     int32_t originY, const std::string &marker, bool recordMobs, std::vector<PendingMob> &mobs) {
             int32_t x = 0;
             int32_t y = 0;
             int32_t z = 0;
             _world(piece, entry, originY, x, y, z);
-            if (!_inChunk(x, z) || y - 1 < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
-                return;
 
-            const BlockState air(BlockNames::AIR);
-            if (marker.compare(0, 4, "cage") == 0) {
-                mChunk.setBlock(x & 15, y, z & 15, air);
-                // the game moves the golem one block east for this turn only
-                mLevel.addGeneratedEntity(
-                        generatedMob(IronGolemActor::IDENTIFIER, piece.mQuarterTurns == 1 ? x + 1 : x, y, z));
-            } else if (marker.compare(0, 8, "pillager") == 0) {
-                mChunk.setBlock(x & 15, y, z & 15, air);
-                mLevel.addGeneratedEntity(generatedMob(PillagerActor::IDENTIFIER, x, y, z));
-            } else if (marker.compare(0, 7, "captain") == 0) {
-                mChunk.setBlock(x & 15, y, z & 15, air);
-                Tag captain = generatedMob(PillagerActor::IDENTIFIER, x, y, z);
-                captain.putString(MobActor::TAG_SPAWN_EVENT, "minecraft:spawn_as_illager_captain");
-                mLevel.addGeneratedEntity(captain);
-            } else if (marker == "Group of Allays") {
-                mChunk.setBlock(x & 15, y, z & 15, air);
-                const int32_t count = FeatureRandom::nextInt(mChunkRandom, MAX_ALLAYS) + 1;
-                for (int32_t i = 0; i < count; ++i)
-                    mLevel.addGeneratedEntity(generatedMob(AllayActor::IDENTIFIER, x, y, z));
+            // a piece already handled by an earlier chunk skips straight to the chest marker
+            if (recordMobs) {
+                const BlockState air(BlockNames::AIR);
+                if (marker.compare(0, 4, "cage") == 0) {
+                    mChunk.setBlock(x & 15, y, z & 15, air);
+                    // the game moves the golem one block east for this turn only
+                    const int32_t golemX = piece.mQuarterTurns == 1 ? x + 1 : x;
+                    mobs.push_back({golemX, z, generatedMob(IronGolemActor::IDENTIFIER, golemX, y, z)});
+                } else if (marker.compare(0, 8, "pillager") == 0) {
+                    mChunk.setBlock(x & 15, y, z & 15, air);
+                    mobs.push_back({x, z, generatedMob(PillagerActor::IDENTIFIER, x, y, z)});
+                } else if (marker.compare(0, 7, "captain") == 0) {
+                    mChunk.setBlock(x & 15, y, z & 15, air);
+                    Tag captain = generatedMob(PillagerActor::IDENTIFIER, x, y, z);
+                    captain.putString(MobActor::TAG_SPAWN_EVENT, "minecraft:spawn_as_illager_captain");
+                    mobs.push_back({x, z, captain});
+                } else if (marker == "Group of Allays") {
+                    mChunk.setBlock(x & 15, y, z & 15, air);
+                    const int32_t count = FeatureRandom::nextInt(mChunkRandom, MAX_ALLAYS) + 1;
+                    for (int32_t i = 0; i < count; ++i)
+                        mobs.push_back({x, z, generatedMob(AllayActor::IDENTIFIER, x, y, z)});
+                }
             }
 
             if (marker.compare(0, 8, "topChest") != 0)
@@ -275,13 +330,14 @@ std::vector<PillagerOutpostStructure::Piece> PillagerOutpostStructure::plan(cons
 
 void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
     const StructureFeature *outposts = StructureFeature::get("pillager_outpost");
-    std::vector<Piece> pieces;
+    std::vector<std::pair<PieceKey, Piece>> pieces;
     for (int32_t startX = chunk.getX() - REACH; startX <= chunk.getX() + REACH; ++startX) {
         for (int32_t startZ = chunk.getZ() - REACH; startZ <= chunk.getZ() + REACH; ++startZ) {
             if (!outposts->isStartChunk(generator, startX, startZ))
                 continue;
             const std::vector<Piece> start = plan(generator, startX, startZ);
-            pieces.insert(pieces.end(), start.begin(), start.end());
+            for (size_t i = 0; i < start.size(); ++i)
+                pieces.emplace_back(PieceKey(&level, startX, startZ, i), start[i]);
         }
     }
     if (pieces.empty())
@@ -291,6 +347,6 @@ void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &lev
     std::mt19937 chunkRandom(seed);
     StructureTerrain terrain(generator);
     PiecePlacer placer(level, chunk, seed, chunkRandom, terrain);
-    for (const Piece &piece: pieces)
-        placer.place(piece);
+    for (const std::pair<PieceKey, Piece> &piece: pieces)
+        placer.place(piece.second, piece.first);
 }
