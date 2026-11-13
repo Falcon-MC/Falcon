@@ -16,6 +16,7 @@
 #include "World/Item/MapItem.h"
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
+#include "World/Level/Block/StonecutterBlock.h"
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "Protocol/Packets/PlayerEnchantOptionsPacket.h"
@@ -527,6 +528,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
                                                 == CartographyTableBlock::IDENTIFIER;
+        const bool stonecutterOpen =
+                manager.isStonecutterOpen()
+                && StonecutterBlock::matches(
+                        level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
 
         // creative only: the spectator shares the creative flag below but has no creative inventory
         bool creativeCraft = false;
@@ -555,7 +560,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 player.getInventoryManager().isCraftingTableOpen(), player.getInventoryManager().isFurnaceOpen(),
                 player.getInventoryManager().getContainer(), &droppedItems, &owner.getCodecContext(), &bundles,
                 player.getExperience().getXpLevel(), creativeMode, &enchantLevelsConsumed, anvilOpen,
-                &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock);
+                &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
+                stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr);
 
         // the copy waits for the request to hold: a rejected one would leave an orphan map behind
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK
@@ -948,6 +954,10 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
             returned.push_back(inventory.getCartographyItem(slot));
         inventory.setCartographyItem(slot, ItemStack::air());
     }
+
+    if (!inventory.getStonecutterInput().isAir())
+        returned.push_back(inventory.getStonecutterInput());
+    inventory.setStonecutterInput(ItemStack::air());
 
     if (!inventory.getCursor().isAir())
         returned.push_back(inventory.getCursor());

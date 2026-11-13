@@ -4,6 +4,7 @@
 #include "World/Inventory/AnvilRepair.h"
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/CartographyRecipes.h"
+#include "World/Inventory/StonecutterRecipes.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/Components/ItemComponentTypes.h"
@@ -75,6 +76,10 @@ namespace {
         int32_t mCartographyInputConsumed = 0;
         int32_t mCartographyAdditionalConsumed = 0;
         CartographyLock mCartographyLock;
+        const std::unordered_map<int32_t, uint32_t> *mStonecutterRecipes = nullptr;
+        bool mStonecutterActive = false;
+        int32_t mStonecutterInputRequired = 0;
+        int32_t mStonecutterInputConsumed = 0;
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -185,6 +190,9 @@ namespace {
         }
         if ((container == ContainerSlotType::CartographyInput || container == ContainerSlotType::CartographyAdditional)
             && context.mCartographyMaps == nullptr) {
+            return nullptr;
+        }
+        if (container == ContainerSlotType::StonecutterInput && context.mStonecutterRecipes == nullptr) {
             return nullptr;
         }
         if (container == ContainerSlotType::FurnaceIngredient || container == ContainerSlotType::BlastFurnaceIngredient
@@ -516,6 +524,10 @@ namespace {
                 context.mCartographyAdditionalConsumed += action.mCount;
         }
 
+        if (context.mStonecutterActive && action.mType == ItemStackRequestActionType::Consume
+            && action.mSource.mContainerName.mContainer == ContainerSlotType::StonecutterInput)
+            context.mStonecutterInputConsumed += action.mCount;
+
         if (dropped && context.mDroppedItems != nullptr) {
             ItemStack drop = *source;
             drop.mCount = action.mCount;
@@ -683,6 +695,39 @@ namespace {
         context.mCartographyInputRequired = result.mInputCost;
         context.mCartographyAdditionalRequired = result.mAdditionalCost;
         context.mCartographyLock = result.mLock;
+        return true;
+    }
+
+    // the client only names the recipe: it must exist and take the item in the input slot
+    bool craftStonecutter(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mCraftRecipeSeen || context.mCodecContext == nullptr)
+            return false;
+        context.mCraftRecipeSeen = true;
+
+        const auto found = context.mStonecutterRecipes->find(action.mRecipeNetworkId);
+        if (found == context.mStonecutterRecipes->end()
+            || found->second >= CraftingRecipeTable::getStonecutterRecipeCount())
+            return false;
+
+        const StonecutterRecipeData &recipe = CraftingRecipeTable::getStonecutterRecipes()[found->second];
+        const ItemStack *input = inventory.resolveSlot(ContainerSlotType::StonecutterInput,
+                                                       PlayerInventory::STONECUTTER_INPUT_NETWORK_SLOT);
+        if (input == nullptr || !StonecutterRecipes::matchesInput(recipe, *input))
+            return false;
+
+        const int repetitions = action.mNumberOfRequestedCrafts <= 0 ? 1 : action.mNumberOfRequestedCrafts;
+        if (repetitions > input->mCount)
+            return false;
+
+        ItemStack output = StonecutterRecipes::createOutput(recipe, *context.mCodecContext);
+        if (output.isAir())
+            return false;
+
+        output.mCount *= repetitions;
+        context.mCreatedOutput = std::move(output);
+        context.mCreatedOutputActive = true;
+        context.mStonecutterActive = true;
+        context.mStonecutterInputRequired = repetitions;
         return true;
     }
 
@@ -902,6 +947,8 @@ namespace {
             case ItemStackRequestActionType::CraftRecipeAuto:
                 if (context.mCartographyMaps != nullptr)
                     return craftCartography(inventory, context, action);
+                if (context.mStonecutterRecipes != nullptr)
+                    return craftStonecutter(inventory, context, action);
                 return craftRecipe(inventory, context, action, touched);
 
             case ItemStackRequestActionType::CraftRecipeOptional:
@@ -932,7 +979,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         bool craftingTableOpen, bool furnaceOpen, Container *openContainer, std::vector<ItemStack> *outDroppedItems,
         const PacketCodecContext *codecContext, std::vector<BundleSyncData> *outBundles, int32_t playerXpLevel,
         bool creativeMode, int32_t *outEnchantLevelsConsumed, bool anvilOpen, int32_t *outAnvilLevelsConsumed,
-        bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock) {
+        bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
+        const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -958,6 +1006,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mRequest = &request;
     context.mAnvilOpen = anvilOpen;
     context.mCartographyMaps = cartographyMaps;
+    context.mStonecutterRecipes = stonecutterRecipes;
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -1009,6 +1058,12 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     if (context.mCartographyActive
         && (context.mCartographyInputConsumed != context.mCartographyInputRequired
             || context.mCartographyAdditionalConsumed != context.mCartographyAdditionalRequired)) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
+    if (context.mStonecutterActive && context.mStonecutterInputConsumed != context.mStonecutterInputRequired) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
         return entry;

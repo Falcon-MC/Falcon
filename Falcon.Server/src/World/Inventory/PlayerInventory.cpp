@@ -16,6 +16,7 @@ PlayerInventory::PlayerInventory()
           mCartography((size_t) CARTOGRAPHY_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
     mCursor = ItemStack::air();
+    mStonecutterInput = ItemStack::air();
 
     for (ItemStack &item: mItems) {
         item = ItemStack::air();
@@ -163,6 +164,11 @@ void PlayerInventory::setCartographyItem(int slot, ItemStack item) {
     mCartography[(size_t) slot] = std::move(item);
 }
 
+void PlayerInventory::setStonecutterInput(ItemStack item) {
+    assignNetId(item);
+    mStonecutterInput = std::move(item);
+}
+
 void PlayerInventory::setOffhand(ItemStack item) {
     assignNetId(item);
     mOffhand = std::move(item);
@@ -237,6 +243,12 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
 
         case ContainerSlotType::CartographyAdditional:
             return &mCartography[(size_t) CARTOGRAPHY_ADDITIONAL];
+
+        case ContainerSlotType::StonecutterInput:
+            if (slot != STONECUTTER_INPUT_NETWORK_SLOT) {
+                return nullptr;
+            }
+            return &mStonecutterInput;
 
         case ContainerSlotType::CraftingInput:
             if (slot >= CRAFTING_NETWORK_SLOT_FIRST && slot < CRAFTING_NETWORK_SLOT_FIRST + CRAFTING_SIZE) {
