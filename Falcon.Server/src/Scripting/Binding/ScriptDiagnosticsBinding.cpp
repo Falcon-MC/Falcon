@@ -3,6 +3,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Net/HttpsClient.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Scripting/Binding/ScriptNetBinding.h"
 #include "Scripting/Net/ScriptNetService.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/ServerHost.h"
@@ -11,7 +12,9 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <optional>
 #include <random>
+#include <regex>
 #include <string>
 
 namespace {
@@ -74,18 +77,15 @@ namespace {
         return client;
     };
 
-    // sub_14BABC030: (https?)://(key)@(host)/(project), the envelope endpoint
-    const DSN = /^(https?):\/\/([^@]+)@([^/]+)\/(\d+)$/;
     method("init", (options) => {
         if (options === null || typeof options !== "object")
             throw conversion();
         if (client !== undefined)
             throw alreadyInitialized();
-        const dsn = native.secret(options.dsn);
-        if (dsn === undefined)
+        const configured = native.configure(options.dsn);
+        if (configured === 1)
             throw conversion();
-        const parts = DSN.exec(dsn);
-        if (parts === null)
+        if (configured === 2)
             throw invalidArgument("DSN format is invalid, see Sentry documentation for correct DSN format.");
         const debug = options.debug === undefined ? false : !!options.debug;
         let maxBreadcrumbs = 20;
@@ -102,8 +102,7 @@ namespace {
         }
         const info = native.info();
         client = {
-            dsn, url: parts[1] + "://" + parts[3] + "/api/" + parts[4] + "/envelope/", debug, maxBreadcrumbs,
-            sampleRate, breadcrumbs: [], sessionId: native.uuid(), info,
+            debug, maxBreadcrumbs, sampleRate, breadcrumbs: [], sessionId: native.uuid(), info,
             // the game's defaults: 10 events a 60 second window (sub_14BA26740)
             maxEvents: 10, window: 60, windowStart: undefined, sent: 0,
             tags: new Map([["minecraft_version", info.version], ["minecraft_edition", info.edition],
@@ -220,10 +219,7 @@ namespace {
             user: { ip_address: "0.0.0.0" },
             sdk: { name: "mojang.minecraft.javascript", version: c.info.version },
         };
-        // sub_14BA294A0: a new event id, the dsn in the envelope header, one event item
-        const header = { event_id: native.uuid(), dsn: c.dsn };
-        native.send(c.url, JSON.stringify(header) + "\n" + JSON.stringify({ type: "event" }) + "\n"
-            + JSON.stringify(payload));
+        native.send(JSON.stringify({ type: "event" }) + "\n" + JSON.stringify(payload));
         c.sent++;
         if (c.debug)
             native.log("Submitted error to Sentry");
@@ -254,7 +250,7 @@ namespace {
     }
 
     // the "{:08x}-{:04x}-{:04x}-{:04x}-{:08x}{:04x}" event and session ids (sub_14BA294A0)
-    JSValue diagUuid(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+    std::string newUuid() {
         static std::mt19937_64 random(std::random_device{}());
         const uint64_t high = random();
         const uint64_t low = random();
@@ -262,7 +258,41 @@ namespace {
         std::snprintf(text, sizeof(text), "%08x-%04x-%04x-%04x-%08x%04x", (unsigned) (high >> 32),
                       (unsigned) ((high >> 16) & 0xFFFF), (unsigned) (high & 0xFFFF), (unsigned) (low >> 48),
                       (unsigned) ((low >> 16) & 0xFFFFFFFF), (unsigned) (low & 0xFFFF));
-        return JS_NewString(ctx, text);
+        return text;
+    }
+
+    JSValue diagUuid(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        return JS_NewString(ctx, newUuid().c_str());
+    }
+
+    // escaped as JSON.stringify writes a string
+    std::string jsonString(const std::string &value) {
+        std::string out = "\"";
+        for (const char character: value) {
+            const unsigned char byte = (unsigned char) character;
+            if (character == '"' || character == '\\') {
+                out.push_back('\\');
+                out.push_back(character);
+            } else if (character == '\b') {
+                out += "\\b";
+            } else if (character == '\f') {
+                out += "\\f";
+            } else if (character == '\n') {
+                out += "\\n";
+            } else if (character == '\r') {
+                out += "\\r";
+            } else if (character == '\t') {
+                out += "\\t";
+            } else if (byte < 0x20) {
+                char escaped[8];
+                std::snprintf(escaped, sizeof(escaped), "\\u%04x", (unsigned) byte);
+                out += escaped;
+            } else {
+                out.push_back(character);
+            }
+        }
+        out.push_back('"');
+        return out;
     }
 
     // _time64: whole seconds
@@ -289,22 +319,27 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // a string, or a SecretString: a secrets.json name or the script's own value
-    JSValue diagSecret(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_UNDEFINED;
-        if (JS_IsString(argv[0]))
-            return JS_DupValue(ctx, argv[0]);
-        if (!JS_IsObject(argv[0]))
-            return JS_UNDEFINED;
+    // a string, or a SecretString: a secrets.json name or the script's own value; nullopt when neither
+    std::optional<std::string> dsnOf(JSContext *ctx, JSValueConst value) {
+        if (JS_IsString(value)) {
+            const char *text = JS_ToCString(ctx, value);
+            std::optional<std::string> result;
+            if (text != nullptr) {
+                result = std::string(text);
+                JS_FreeCString(ctx, text);
+            }
+            return result;
+        }
+        if (!JS_IsObject(value))
+            return std::nullopt;
         ScriptApi *api = ScriptApi::fromContext(ctx);
         JSValue secretOf = api->secretOf();
         if (!JS_IsObject(secretOf))
-            return JS_UNDEFINED;
+            return std::nullopt;
         JSValue get = JS_GetPropertyStr(ctx, secretOf, "get");
-        JSValue entry = JS_Call(ctx, get, secretOf, 1, argv);
+        JSValue entry = JS_Call(ctx, get, secretOf, 1, &value);
         JS_FreeValue(ctx, get);
-        JSValue result = JS_UNDEFINED;
+        std::optional<std::string> result;
         if (JS_IsObject(entry)) {
             JSValue name = JS_GetPropertyStr(ctx, entry, "name");
             JSValue own = JS_GetPropertyStr(ctx, entry, "value");
@@ -318,15 +353,37 @@ namespace {
                 if (text != nullptr)
                     JS_FreeCString(ctx, text);
                 if (secret != nullptr)
-                    result = JS_NewStringLen(ctx, secret->data(), secret->size());
+                    result = *secret;
             } else if (JS_IsString(own)) {
-                result = JS_DupValue(ctx, own);
+                const char *text = JS_ToCString(ctx, own);
+                if (text != nullptr) {
+                    result = std::string(text);
+                    JS_FreeCString(ctx, text);
+                }
             }
             JS_FreeValue(ctx, name);
             JS_FreeValue(ctx, own);
         }
         JS_FreeValue(ctx, entry);
         return result;
+    }
+
+    // 0 set, 1 not a string nor a SecretString, 2 not a dsn; parsed here so a secret never reaches the script
+    JSValue diagConfigure(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        const std::optional<std::string> dsn = argc >= 1 ? dsnOf(ctx, argv[0]) : std::nullopt;
+        if (!dsn.has_value())
+            return JS_NewInt32(ctx, 1);
+
+        // sub_14BABC030: (https?)://(key)@(host)/(project), the envelope endpoint
+        static const std::regex DSN("^(https?)://([^@]+)@([^/]+)/(\\d+)$");
+        std::smatch parts;
+        if (!std::regex_match(*dsn, parts, DSN))
+            return JS_NewInt32(ctx, 2);
+
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        api->diagnosticsDsn() = *dsn;
+        api->diagnosticsUrl() = parts[1].str() + "://" + parts[3].str() + "/api/" + parts[4].str() + "/envelope/";
+        return JS_NewInt32(ctx, 0);
     }
 
     JSValue diagInfo(JSContext *ctx, JSValueConst, int, JSValueConst *) {
@@ -342,26 +399,41 @@ namespace {
         return info;
     }
 
-    // a POST nobody waits on: the answer is dropped like the game's transport drops it
+    // a POST nobody waits on: the answer is dropped like the game's transport drops it; held to the pack's
+    // server-net rules, the only network limits a pack is given
     JSValue diagSend(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        if (argc < 2)
-            return JS_UNDEFINED;
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        const char *url = JS_ToCString(ctx, argv[0]);
+        if (argc < 1 || api->diagnosticsUrl().empty())
+            return JS_UNDEFINED;
         size_t length = 0;
-        const char *body = JS_ToCStringLen(ctx, &length, argv[1]);
-        if (url != nullptr && body != nullptr) {
-            HttpsClient::Request request;
-            request.mMethod = "POST";
-            request.mUrl = url;
-            request.mBody.assign(body, length);
-            request.mTimeoutSeconds = HttpsClient::DEFAULT_TIMEOUT_SECONDS;
-            api->netService().startRequest(api->nextUntrackedRequestId(), std::move(request));
+        const char *items = JS_ToCStringLen(ctx, &length, argv[0]);
+        if (items == nullptr)
+            return JS_UNDEFINED;
+
+        // sub_14BA294A0: a new event id and the dsn in the envelope header, then the event item
+        HttpsClient::Request request;
+        request.mMethod = "POST";
+        request.mUrl = api->diagnosticsUrl();
+        request.mBody = "{\"event_id\":" + jsonString(newUuid()) + ",\"dsn\":" + jsonString(api->diagnosticsDsn())
+                        + "}\n";
+        request.mBody.append(items, length);
+        request.mTimeoutSeconds = HttpsClient::DEFAULT_TIMEOUT_SECONDS;
+        JS_FreeCString(ctx, items);
+
+        const ScriptNetModuleConfig config =
+                api->host().getScriptEngine().packConfigs().get(api->scriptModuleUuid()).netConfig();
+        if (ScriptNetBinding::checkUri(config, request.mUrl, false) != ScriptNetBinding::UriCheck::Allowed) {
+            LOG_WARN(LogAreaID::Script, "[%s] Sentry report not sent: its address is not allowed by the pack's "
+                     "server-net configuration", api->packName().c_str());
+            return JS_UNDEFINED;
         }
-        if (url != nullptr)
-            JS_FreeCString(ctx, url);
-        if (body != nullptr)
-            JS_FreeCString(ctx, body);
+        if (config.mMaxBodyBytes.has_value() && request.mBody.size() > *config.mMaxBodyBytes) {
+            LOG_WARN(LogAreaID::Script, "[%s] Sentry report not sent: larger than the pack's max_body_bytes",
+                     api->packName().c_str());
+            return JS_UNDEFINED;
+        }
+
+        api->netService().startRequest(api->nextUntrackedRequestId(), std::move(request));
         return JS_UNDEFINED;
     }
 
@@ -379,9 +451,9 @@ void ScriptApi::_installDiagnostics() {
     addFunction(mContext, native, "now", diagNow, 0);
     addFunction(mContext, native, "random", diagRandom, 0);
     addFunction(mContext, native, "log", diagLog, 1);
-    addFunction(mContext, native, "secret", diagSecret, 1);
+    addFunction(mContext, native, "configure", diagConfigure, 1);
     addFunction(mContext, native, "info", diagInfo, 0);
-    addFunction(mContext, native, "send", diagSend, 2);
+    addFunction(mContext, native, "send", diagSend, 1);
     JS_SetPropertyStr(mContext, native, "errors", JS_DupValue(mContext, mErrors));
 
     JSValue factory = JS_Eval(mContext, SOURCE, std::strlen(SOURCE), "<diagnostics>", JS_EVAL_TYPE_GLOBAL);

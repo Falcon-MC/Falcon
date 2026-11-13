@@ -450,6 +450,15 @@ public:
         return mUntrackedRequestId++;
     }
 
+    // sentry's dsn and envelope url: kept here, a secret dsn never reaches the pack's code
+    std::string &diagnosticsDsn() {
+        return mDiagnosticsDsn;
+    }
+
+    std::string &diagnosticsUrl() {
+        return mDiagnosticsUrl;
+    }
+
     const ScriptSurface &gameTestSurface() const {
         return mGameTestSurface;
     }
@@ -828,6 +837,8 @@ private:
     std::string mScriptModuleVersion;
     JSValue mSecretOf = JS_UNDEFINED;
     uint32_t mUntrackedRequestId = 0x80000000u;
+    std::string mDiagnosticsDsn;
+    std::string mDiagnosticsUrl;
     std::vector<std::pair<std::string, JSValue>> mDebugExports;
     std::vector<std::pair<std::string, JSValue>> mDiagnosticsExports;
     std::vector<std::pair<std::string, JSValue>> mGameTestExports;

@@ -814,37 +814,24 @@ namespace {
         return fieldsOf(ctx, {{"uri", JS_NewStringLen(ctx, uri.data(), uri.size())}});
     }
 
-    // ScriptNetHttpClient uri check (sub_14B81B7C0, 26.60); webSocket picks wss/ws over https/http
     JSValue validateUri(JSContext *ctx, const ScriptNetModuleConfig &config, const std::string &text, bool webSocket) {
-        const NetUri uri = NetUri::split(text);
         const std::string secureScheme = webSocket ? "wss" : "https";
         const std::string plainScheme = webSocket ? "ws" : "http";
-        const bool secure = iequals(uri.mScheme, secureScheme);
-        const bool plain = iequals(uri.mScheme, plainScheme);
-        // only the presence of force_tls is read, its value is not
-        if (!secure && config.mForceTls.has_value())
-            return refusal(ctx, "TLSOnlyError",
-                           "HTTPS is required for HTTP requests and WSS is required for Web Sockets.",
-                           uriFields(ctx, text));
-        if (!secure && !plain)
-            return refusal(ctx, "MalformedUriError",
-                           "Supported URI schemes are '" + secureScheme + "' and '" + plainScheme + "', the value '"
-                                   + uri.mScheme + "' provided is invalid.");
-        if (uri.mAuthority.empty())
-            return refusal(ctx, "MalformedUriError", "No valid hostname was found in provided URI '" + text + "'.");
-        if (!config.mAllowedUris.has_value())
-            return JS_UNDEFINED;
-        for (const std::string &entry: *config.mAllowedUris) {
-            const NetUri allowed = NetUri::split(entry);
-            if (allowed.mAuthority.empty())
-                continue;
-            if (!allowed.mScheme.empty() && !iequals(allowed.mScheme, uri.mScheme))
-                continue;
-            if (!iequals(allowed.mAuthority, uri.mAuthority))
-                continue;
-            if (!allowed.mPath.empty() && uri.mPath.compare(0, allowed.mPath.size(), allowed.mPath) != 0)
-                continue;
-            return JS_UNDEFINED;
+        switch (ScriptNetBinding::checkUri(config, text, webSocket)) {
+            case ScriptNetBinding::UriCheck::Allowed:
+                return JS_UNDEFINED;
+            case ScriptNetBinding::UriCheck::TlsOnly:
+                return refusal(ctx, "TLSOnlyError",
+                               "HTTPS is required for HTTP requests and WSS is required for Web Sockets.",
+                               uriFields(ctx, text));
+            case ScriptNetBinding::UriCheck::BadScheme:
+                return refusal(ctx, "MalformedUriError",
+                               "Supported URI schemes are '" + secureScheme + "' and '" + plainScheme
+                                       + "', the value '" + NetUri::split(text).mScheme + "' provided is invalid.");
+            case ScriptNetBinding::UriCheck::NoHost:
+                return refusal(ctx, "MalformedUriError", "No valid hostname was found in provided URI '" + text + "'.");
+            case ScriptNetBinding::UriCheck::NotAllowed:
+                break;
         }
         return refusal(ctx, "UriNotAllowedError", "Request URI is not permitted by configuration.",
                        uriFields(ctx, text));
@@ -1149,6 +1136,35 @@ namespace {
 }
 
 namespace ScriptNetBinding {
+    // ScriptNetHttpClient uri check (sub_14B81B7C0, 26.60)
+    UriCheck checkUri(const ScriptNetModuleConfig &config, const std::string &text, bool webSocket) {
+        const NetUri uri = NetUri::split(text);
+        const bool secure = iequals(uri.mScheme, webSocket ? "wss" : "https");
+        const bool plain = iequals(uri.mScheme, webSocket ? "ws" : "http");
+        // only the presence of force_tls is read, its value is not
+        if (!secure && config.mForceTls.has_value())
+            return UriCheck::TlsOnly;
+        if (!secure && !plain)
+            return UriCheck::BadScheme;
+        if (uri.mAuthority.empty())
+            return UriCheck::NoHost;
+        if (!config.mAllowedUris.has_value())
+            return UriCheck::Allowed;
+        for (const std::string &entry: *config.mAllowedUris) {
+            const NetUri allowed = NetUri::split(entry);
+            if (allowed.mAuthority.empty())
+                continue;
+            if (!allowed.mScheme.empty() && !iequals(allowed.mScheme, uri.mScheme))
+                continue;
+            if (!iequals(allowed.mAuthority, uri.mAuthority))
+                continue;
+            if (!allowed.mPath.empty() && uri.mPath.compare(0, allowed.mPath.size(), allowed.mPath) != 0)
+                continue;
+            return UriCheck::Allowed;
+        }
+        return UriCheck::NotAllowed;
+    }
+
     const std::vector<const char *> &exportNames() {
         static const std::vector<const char *> names = {"CloseAfterEventSignal",
                                                         "HttpClient",
