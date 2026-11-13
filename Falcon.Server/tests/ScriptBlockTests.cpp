@@ -142,6 +142,7 @@ system.runTimeout(() => {
     sign.setText("hello");
     r.sign = (sign instanceof BlockSignComponent) + ":" + sign.getText() + ":" + sign.getRawText().rawtext[0].text
         + ":" + sign.getText("Back") + ":" + sign.getTextDyeColor() + ":" + sign.isWaxed;
+    r.signSideObject = capture(() => sign.getText({ toString() { return "Front"; } }));
     sign.setWaxed(true);
     r.signWaxed = sign.isWaxed + ":" + sign.block.typeId;
 
@@ -711,6 +712,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "permutationTags", "true:tile.stone.name:2:false");
         expect(r, "typeKey", "tile.stone.name");
         expect(r, "sign", "true:hello:hello::undefined:false");
+        expect(r, "signSideObject", "throw:TypeError");
         expect(r, "signWaxed", "true:minecraft:standing_sign");
         expect(r, "cauldron", "3:Water");
         expect(r, "cauldronAfter", "6:Lava:throw:Error");

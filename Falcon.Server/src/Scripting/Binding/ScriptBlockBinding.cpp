@@ -717,6 +717,11 @@ namespace {
         valid = true;
         if (argc <= index || JS_IsUndefined(argv[index]))
             return "FrontText";
+        // an enum: no toString of a pack object runs here
+        if (!JS_IsString(argv[index])) {
+            valid = false;
+            return "FrontText";
+        }
         const std::string side = toString(ctx, argv[index]);
         if (side == "Front")
             return "FrontText";
@@ -819,9 +824,9 @@ namespace {
 
     JSValue signSetWaxed(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
-        SignBlockActor *sign = signAt(at);
         if (argc < 1 || !JS_IsBool(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        SignBlockActor *sign = signAt(at);
         if (sign == nullptr)
             return JS_UNDEFINED;
         Tag data = sign->saveNbt();
