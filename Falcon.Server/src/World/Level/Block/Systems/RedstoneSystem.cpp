@@ -1408,9 +1408,14 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
             updateAroundRedstone(owner, level, position);
     }
 
-    // the comparator block actor reads its analog input every tick, no change event involved (sub_14331CF70)
-    for (const auto &entry: redstone.mComparatorOutputs) {
-        const Vector3i position = unpackPosition(entry.first);
+    // the comparator block actor reads its analog input every tick, no change event involved (sub_14331CF70);
+    // keys first: an update chain can place or break another comparator and rehash the table
+    std::vector<int64_t> comparators;
+    comparators.reserve(redstone.mComparatorOutputs.size());
+    for (const auto &entry: redstone.mComparatorOutputs)
+        comparators.push_back(entry.first);
+    for (const int64_t key: comparators) {
+        const Vector3i position = unpackPosition(key);
         if (!isChunkReady(level, position))
             continue;
 
