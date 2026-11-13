@@ -116,6 +116,11 @@ public:
         return mSessionInspected;
     }
 
+    // false once a resource pack chunk went out as often as one login may ask for it
+    bool countPackChunkRequest(const std::string &pack, int32_t index) {
+        return ++mPackChunkRequests[pack + ':' + std::to_string(index)] <= MAX_PACK_CHUNK_REQUESTS;
+    }
+
     void setSessionInspected() {
         mSessionInspected = true;
     }
@@ -1186,8 +1191,11 @@ private:
 
     void _damageShield(ServerNetworkHandler &owner, float damage);
 
+    static const int MAX_PACK_CHUNK_REQUESTS = 3;
+
     NetworkIdentifier mId;
     LoginState mLoginState;
+    std::unordered_map<std::string, int> mPackChunkRequests;
     std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
     std::string mUuid;

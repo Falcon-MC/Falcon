@@ -5,6 +5,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Item/ItemProperties.h"
 #include "World/Item/VanillaItems.h"
 #include "World/Inventory/CraftingManager.h"
 #include "World/Level/Block/Inventory/CraftingTableInventory.h"
@@ -135,6 +136,32 @@ namespace {
 
     // ServerPlayer::attackActor bounds a hit the same way
     const float ENTITY_INTERACT_REACH = 8.0f;
+
+    // LecternHandler's widest reach, as a safety bound: reach is checked when a window opens, and a player
+    // who then leaves must not keep the container
+    const float OPEN_CONTAINER_REACH = 14.0f;
+
+    bool withinContainerReach(const ServerPlayer &player, const Vector3f &center) {
+        const Vector3f &from = player.getPosition();
+        const float dx = from.x - center.x, dy = from.y - center.y, dz = from.z - center.z;
+        return dx * dx + dy * dy + dz * dz <= OPEN_CONTAINER_REACH * OPEN_CONTAINER_REACH;
+    }
+
+    bool hasLeftOpenContainer(ServerNetworkHandler &owner, ServerPlayer &player) {
+        InventoryManager &manager = player.getInventoryManager();
+        if (!manager.isContainerOpen())
+            return false;
+
+        if (manager.getContainerActorId() != -1) {
+            const ServerActor *actor = owner.getActor(manager.getContainerActorId());
+            return actor != nullptr
+                   && (!actor->sharesLevelWith(player) || !withinContainerReach(player, actor->getPosition()));
+        }
+
+        const Vector3i &position = manager.getContainerPosition();
+        return !withinContainerReach(
+                player, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f));
+    }
 
     bool isEnchantingSlot(ContainerSlotType type) {
         return type == ContainerSlotType::EnchantingInput || type == ContainerSlotType::EnchantingMaterial;
@@ -485,6 +512,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         return copyId;
     };
 
+    const bool leftContainer = hasLeftOpenContainer(owner, player);
+
     for (const ItemStackRequest &request: packet.mRequests) {
         const bool anvilOpen = manager.isAnvilOpen()
                                && AnvilBlock::matches(
@@ -511,7 +540,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 strayEnchanting = strayEnchanting || usesEnchantingTable(action);
         }
 
-        if (strayEnchanting || (creativeCraft && gameType != (int32_t) GameType::Creative)
+        if (leftContainer || strayEnchanting || (creativeCraft && gameType != (int32_t) GameType::Creative)
             || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
             rejected.mRequestId = request.mRequestId;
@@ -804,6 +833,12 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     ItemStack *item = inventory.resolveSlot(ContainerSlotType::Inventory, sourceSlot);
     if (item == nullptr || item->isAir() || droppedCount > item->mCount)
         return;
+
+    // the item stack request path refuses to drop a locked item: this older path must too
+    if (ItemProperties::getLockMode(*item) != ItemLockMode::None) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
+        return;
+    }
 
     ItemStack thrown = *item;
     thrown.mCount = droppedCount;

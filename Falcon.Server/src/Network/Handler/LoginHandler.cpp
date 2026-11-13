@@ -581,7 +581,13 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     }
 
     const uint64_t offset = (uint64_t) packet.mChunkIndex * (uint64_t) RESOURCE_PACK_CHUNK_SIZE;
-    if (offset >= pack->mSize)
+    if (packet.mChunkIndex < 0 || offset >= pack->mSize)
+        return;
+
+    // each answer is a megabyte: a chunk goes out a few times per login at most
+    const auto requester = owner.getPlayers().find(id);
+    if (requester == owner.getPlayers().end()
+        || !requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
         return;
 
     const uint64_t remaining = pack->mSize - offset;
