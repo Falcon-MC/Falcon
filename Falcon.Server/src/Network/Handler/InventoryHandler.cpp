@@ -780,6 +780,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     }
 
     if (packet.mTransactionType == InventoryTransactionType::ItemRelease) {
+        owner._keepItemUse(player);
         const bool wasUsing = player.getFlags().get(ActorFlag::UsingItem);
 
         const ItemStack &releasedItem = player.getInventory().getItemInHand();

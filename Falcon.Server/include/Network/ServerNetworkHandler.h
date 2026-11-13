@@ -725,6 +725,9 @@ public:
 
     void _tickItemUse(ServerPlayer &player);
 
+    // false when the held slot or item changed since the use started: the use is then stopped
+    bool _keepItemUse(ServerPlayer &player);
+
     void _completeItemUse(ServerPlayer &player, int32_t itemId);
 
     void _sendInventory(ServerPlayer &player);
