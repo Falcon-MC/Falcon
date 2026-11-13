@@ -278,11 +278,11 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*r, "cheatsOff", "false");
         expect(*r, "cheatsBad", "TypeError");
         expect(*r, "stopped", "ok");
-        // a cow holds 15 s of air and drowns below -1 s
+        // a cow holds 15 s of air, suffocate_time 0
         expect(*r, "air",
                "15|4|PropertyOutOfBoundsError:Unsupported or out of bounds value set on Property: airSupply, Value: -2, "
-               "Property bounds: [-1, 15]|PropertyOutOfBoundsError:Unsupported or out of bounds value set on Property: "
-               "airSupply, Value: 16, Property bounds: [-1, 15]|TypeError:Native type conversion failed.");
+               "Property bounds: [0, 15]|PropertyOutOfBoundsError:Unsupported or out of bounds value set on Property: "
+               "airSupply, Value: 16, Property bounds: [0, 15]|TypeError:Native type conversion failed.");
         expect(*r, "splitScreen", "undefined");
         expect(*r, "boxes",
                "-2,-1,0>3,4,1|-3,-2,-2>4,5,3|true|false|-2,-1,0>6,6,6|4,4,4|1,1,1>3,4,1|undefined|6,6,2|true|true|false|"

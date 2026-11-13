@@ -671,20 +671,27 @@ namespace {
 
     struct AirSupply {
         int32_t mTicks = 0;
+        int32_t mMinTicks = 0;
         int32_t mMaxTicks = 0;
     };
 
-    bool airSupplyOf(Actor &actor, AirSupply &air) {
-        if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
+    // whole seconds in the definition; absent fields take the schema defaults (sub_143796DC0)
+    int32_t definitionSeconds(const ComponentTarget &target, const char *key, int32_t fallback) {
+        const json::Value *value = fieldOf(target, key);
+        return value != nullptr && value->isNumber() ? (int32_t) value->mNumber : fallback;
+    }
+
+    bool airSupplyOf(const ComponentTarget &target, AirSupply &air) {
+        air.mMinTicks = definitionSeconds(target, "suffocate_time", -20) * 20;
+        air.mMaxTicks = definitionSeconds(target, "total_supply", 15) * 20;
+        if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(target.mActor)) {
             air.mTicks = player->getAirSupply();
-            air.mMaxTicks = ServerPlayer::MAX_AIR_SUPPLY;
             return true;
         }
-        MobActor *mob = dynamic_cast<MobActor *>(&actor);
+        MobActor *mob = dynamic_cast<MobActor *>(target.mActor);
         if (mob == nullptr)
             return false;
         air.mTicks = mob->getAirSupply();
-        air.mMaxTicks = mob->getMaxAirSupply();
         return true;
     }
 
@@ -694,7 +701,7 @@ namespace {
         if (!componentOf(ctx, thisVal, target))
             return JS_EXCEPTION;
         AirSupply air;
-        if (!airSupplyOf(*target.mActor, air))
+        if (!airSupplyOf(target, air))
             return target.mApi->throwError("Error", "Failed to call function 'getAirSupply'.");
         return JS_NewInt32(ctx, (int16_t) air.mTicks / 20);
     }
@@ -709,11 +716,11 @@ namespace {
             || number < INT16_MIN || number > INT16_MAX)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         AirSupply air;
-        if (!airSupplyOf(*target.mActor, air))
+        if (!airSupplyOf(target, air))
             return target.mApi->throwError("Error", "Failed to call function 'setAirSupply'.");
 
         const int16_t seconds = (int16_t) number;
-        const int32_t minimum = MobActor::MIN_AIR_SUPPLY / 20;
+        const int32_t minimum = air.mMinTicks / 20;
         const int32_t maximum = (int16_t) air.mMaxTicks / 20;
         if (seconds < minimum || seconds > maximum) {
             JSValue fields = JS_NewObject(ctx);
@@ -727,7 +734,8 @@ namespace {
                                            fields);
         }
 
-        const int32_t ticks = std::clamp<int32_t>((int16_t) (seconds * 20), MobActor::MIN_AIR_SUPPLY, air.mMaxTicks);
+        const int16_t wanted = (int16_t) (seconds * 20);
+        const int32_t ticks = wanted > air.mMaxTicks ? air.mMaxTicks : std::max<int32_t>(wanted, air.mMinTicks);
         if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(target.mActor))
             player->setAirSupply(ticks);
         else
