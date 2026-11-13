@@ -62,8 +62,6 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         return;
     const registry = world.getAimAssist();
     r.statics = AimAssistRegistry.DefaultCategoryId + "," + AimAssistRegistry.DefaultPresetId;
-    r.presets = registry.getPresets().map((p) => p.identifier).join(",");
-    r.categories = registry.getCategories().map((c) => c.identifier).join(",");
     const vanilla = registry.getPreset(AimAssistRegistry.DefaultPresetId);
     r.vanilla = [vanilla.defaultItemSettings, vanilla.handSettings, vanilla.getExcludedBlockTargets().join(";"),
         vanilla.getExcludedEntityTargets().join(";"), vanilla.getExcludedBlockTagTargets().length,
@@ -92,6 +90,9 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     preset.setItemSettings({ "minecraft:stick": "test:cat" });
     preset.setExcludedEntityTargets(["minecraft:cow"]);
     const made = registry.addPreset(preset);
+    // the lists are copies taken at the call, so they are read once both test entries are in
+    r.presets = registry.getPresets().map((p) => p.identifier).join(",");
+    r.categories = registry.getCategories().map((c) => c.identifier).join(",");
     r.preset = [made.identifier, made.defaultItemSettings, made.handSettings, made.getExcludedBlockTargets().length,
         made.getExcludedEntityTargets().join(";"), JSON.stringify(made.getItemSettings())].join(",");
     const unknown = new AimAssistPresetSettings("test:broken");
