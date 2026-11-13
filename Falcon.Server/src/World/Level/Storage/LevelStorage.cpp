@@ -692,6 +692,53 @@ bool LevelStorage::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vecto
     return true;
 }
 
+bool LevelStorage::appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
+    if (mDb == nullptr)
+        return false;
+
+    const std::string digestKey = _makeActorDigestKey(chunkX, chunkZ);
+    std::string digest;
+    const leveldb::Status read = mDb->Get(_readOptions(), digestKey, &digest);
+    if (!read.ok() && !read.IsNotFound()) {
+        _recordWrite(false);
+        LOG_WARN(LogAreaID::Server, "Could not read the entities of chunk %d %d: %s", chunkX, chunkZ,
+                 read.ToString().c_str());
+        return false;
+    }
+
+    leveldb::WriteBatch batch;
+    for (const Tag &entity: entities) {
+        if (!entity.contains(ACTOR_UNIQUE_ID_TAG)) {
+            LOG_WARN(LogAreaID::Server, "Skipped an entity without a unique id in chunk %d %d", chunkX, chunkZ);
+            continue;
+        }
+
+        const std::string storageId = _makeActorStorageId(entity.getLong(ACTOR_UNIQUE_ID_TAG));
+        BinaryStream stream;
+        NbtIo::writeTag(stream, entity, NbtVariant::LittleEndian);
+        batch.Put(ACTOR_PREFIX + storageId, stream.getBuffer());
+
+        bool listed = false;
+        for (size_t offset = 0; offset + ACTOR_STORAGE_ID_SIZE <= digest.size() && !listed;
+             offset += ACTOR_STORAGE_ID_SIZE)
+            listed = digest.compare(offset, ACTOR_STORAGE_ID_SIZE, storageId) == 0;
+        if (!listed)
+            digest += storageId;
+    }
+
+    batch.Put(digestKey, digest);
+
+    const leveldb::Status status = mDb->Write(leveldb::WriteOptions(), &batch);
+    if (!status.ok()) {
+        _recordWrite(false);
+        LOG_WARN(LogAreaID::Server, "Could not save entities for chunk %d %d: %s", chunkX, chunkZ,
+                 status.ToString().c_str());
+        return false;
+    }
+
+    return true;
+}
+
 bool LevelStorage::eraseEntity(int64_t uniqueId) {
     if (mDb == nullptr)
         return false;

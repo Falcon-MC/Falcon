@@ -535,6 +535,9 @@ public:
 
     void saveAllActors();
 
+    // actors of `level` outside `loadedColumns`, added to their chunk's stored actors
+    void saveStrayActors(Level &level, const std::unordered_set<int64_t> &loadedColumns);
+
     void autoSave(bool wait = false);
 
     bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);

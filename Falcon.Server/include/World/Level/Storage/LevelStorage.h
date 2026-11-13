@@ -89,6 +89,9 @@ public:
 
     bool saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
 
+    // adds to the chunk's stored actors instead of replacing them: for a chunk whose actors are not loaded
+    bool appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
+
     std::vector<Tag> loadEntities(int32_t chunkX, int32_t chunkZ);
 
     bool eraseEntity(int64_t uniqueId);

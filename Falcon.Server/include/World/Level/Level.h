@@ -240,6 +240,8 @@ public:
 
     void saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
 
+    void appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
+
     std::vector<Tag> loadEntities(int32_t chunkX, int32_t chunkZ);
 
     void eraseEntity(int64_t uniqueId);

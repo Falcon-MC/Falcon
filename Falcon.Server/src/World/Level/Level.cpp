@@ -283,6 +283,13 @@ void Level::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> 
     mStorage.saveEntities(chunkX, chunkZ, entities);
 }
 
+void Level::appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.appendEntities(chunkX, chunkZ, entities);
+}
+
 std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
     if (!mStorage.isOpen())
         return std::vector<Tag>();
