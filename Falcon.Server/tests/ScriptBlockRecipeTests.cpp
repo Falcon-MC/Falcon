@@ -165,10 +165,11 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         CrafterBlockActor &crafter = level.getBlockActors().getOrCreate<CrafterBlockActor>(crafterAt);
         level.setBlock(Vector3i(6, 100, 6), BlockState("minecraft:stone"), false);
         level.setBlock(Vector3i(7, 100, 7), BlockState("test:dampener"), false);
+        // the server does not listen here: its own tick() would return at once
         engine.tick(0);
 
         engine.emitScriptEvent("recipes:run", "");
-        owner.tick(false);
+        engine.tick(1);
         // the disabled bits land on the block actor, even the one of a filled slot
         require((crafter.getInventory().getDisabledSlots() & 0x3) == 0x3,
                 "setInputSlotEnabled did not reach the crafter");
@@ -176,7 +177,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         level.getBlockActors().remove(crafterAt);
         level.setBlock(crafterAt, BlockState("minecraft:stone"), false);
         engine.emitScriptEvent("recipes:gone", "");
-        owner.tick(false);
+        engine.tick(2);
 
         const std::unique_ptr<json::Value> r = result(owner);
         expect(*r, "processing", "true:minecraft:recipe_processing:minecraft:recipe_processing:9");
