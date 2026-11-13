@@ -8,6 +8,7 @@
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
+#include "World/Level/LevelGen/Structure/StructureMaterials.h"
 #include "World/Level/LevelGen/Structure/StructureProcessors.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
@@ -165,6 +166,20 @@ namespace {
     }
 }
 
+namespace {
+    void checkMaterials() {
+        require(StructureMaterials::isLiquid(BlockState("minecraft:water")), "water is a liquid material");
+        require(StructureMaterials::isLiquid(BlockState("minecraft:flowing_lava")), "lava is a liquid material");
+        require(StructureMaterials::isLiquid(BlockState("minecraft:bubble_column")), "bubble column is a liquid");
+        require(!StructureMaterials::isLiquid(BlockState("minecraft:powder_snow")), "powder snow is no liquid");
+        require(StructureMaterials::isPlant(BlockState("minecraft:short_grass")), "short grass is a plant material");
+        require(StructureMaterials::isPlant(BlockState("minecraft:seagrass")), "seagrass is a plant material");
+        require(!StructureMaterials::isPlant(BlockState("minecraft:waterlily")), "the lily pad is no plant material");
+        require(!StructureMaterials::isPlant(BlockState("minecraft:oak_leaves")), "leaves are no plant material");
+        require(!StructureMaterials::isPlant(BlockState("minecraft:lava")), "lava is no plant material");
+    }
+}
+
 int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
@@ -174,6 +189,7 @@ int main() {
         checkVillage();
         checkBlockActors();
         checkConversions();
+        checkMaterials();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;

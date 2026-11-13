@@ -7,7 +7,6 @@
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/BlockSupport.h"
-#include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -17,6 +16,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
+#include "World/Level/LevelGen/Structure/StructureMaterials.h"
 
 #include <random>
 
@@ -60,13 +60,14 @@ namespace {
             fill(minX, minY, minZ, maxX, maxY, maxZ, VanillaBlocks::AIR().toBlockState());
         }
 
-        // sub_147772AF0: down through air and liquid, then grass under the column turns to dirt
+        // StructurePiece::fillColumnDown (sub_147772AF0, 26.60): down through air, liquids and small plants, then
+        // grass under the column turns to dirt
         void fillColumnDown(int32_t x, int32_t y, int32_t z, const BlockState &state) {
             int32_t worldY = mFloorY + y;
             while (worldY > LevelChunk::MIN_Y + 1) {
                 const BlockState &current = mChunk.getBlock(x, worldY, z);
-                if (!DecorationSupport::isAir(current) && !WaterBlock::matches(current.mName)
-                    && !LavaBlock::matches(current.mName))
+                if (!DecorationSupport::isAir(current) && !StructureMaterials::isLiquid(current)
+                    && !StructureMaterials::isPlant(current))
                     break;
 
                 mChunk.setBlock(x, worldY, z, state);
@@ -80,6 +81,24 @@ namespace {
         LevelChunk &mChunk;
         int32_t mFloorY;
     };
+
+    // the potion ids the game draws for the hut's cauldron: water breathing, fire resistance, swiftness,
+    // slowness, poison, weakness, healing
+    int16_t cauldronPotion(int32_t roll) {
+        if (roll < 10)
+            return 19;
+        if (roll < 15)
+            return 12;
+        if (roll < 30)
+            return 14;
+        if (roll < 40)
+            return 17;
+        if (roll < 65)
+            return 25;
+        if (roll <= 74)
+            return 34;
+        return 21;
+    }
 
     Tag generatedMob(const char *identifier, float x, float y, float z) {
         Tag location = Tag::ofList(Tag::Type::Float);
@@ -143,15 +162,16 @@ void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, Lev
     hut.set(4, 4, 2, planks);
     hut.set(3, 2, 6, VanillaBlocks::CRAFTING_TABLE().toBlockState());
 
-    // the game then draws nextInt(100) for the potion of the cauldron's block actor: not kept here
     std::mt19937 random = StructureFeature::createPostProcessRandom(generator.getSeed(), chunk.getX(), chunk.getZ());
     const int32_t fillLevel = 2 * FeatureRandom::nextInt(random, 3) + 2;
     hut.set(4, 2, 6, DecorationSupport::withState(VanillaBlocks::CAULDRON().toBlockState(), "fill_level", fillLevel));
+    const int16_t potion = cauldronPotion(FeatureRandom::nextInt(random, 100));
 
     hut.set(1, 2, 1, fence);
     hut.set(5, 2, 1, fence);
 
-    // sub_147771BF0: an unturned piece swaps south and north
+    // StructurePiece::getOrientationData (sub_147772040, 26.60): stairs take the weirdo_direction branch
+    // (sub_147771BF0), an unturned piece swaps south and north
     hut.fill(0, 5, 1, 6, 5, 1, DecorationSupport::withState(stairs, "weirdo_direction", 2));
     hut.fill(0, 5, 2, 0, 5, 7, DecorationSupport::withState(stairs, "weirdo_direction", 0));
     hut.fill(6, 5, 2, 6, 5, 7, DecorationSupport::withState(stairs, "weirdo_direction", 1));
@@ -165,7 +185,7 @@ void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, Lev
     BlockActorStore &actors = level.getBlockActors();
     actors.getOrCreate<FlowerPotBlockActor>(Vector3i(cornerX + 1, floorY + 3, cornerZ + 5))
             .setPlant(VanillaBlocks::RED_MUSHROOM().toBlockState());
-    actors.getOrCreate<CauldronBlockActor>(Vector3i(cornerX + 4, floorY + 2, cornerZ + 6));
+    actors.getOrCreate<CauldronBlockActor>(Vector3i(cornerX + 4, floorY + 2, cornerZ + 6)).setPotion(potion);
 
     const float mobX = (float) (cornerX + 2) + 0.5f;
     const float mobZ = (float) (cornerZ + 5) + 0.5f;

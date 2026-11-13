@@ -26,6 +26,11 @@ public:
     // mixes one item into the water color; a non-dye adds nothing but the color is mixed again all the same
     void addDye(int32_t dyeColor);
 
+    // a generated cauldron: the potion alone, its type stays unset like the game's
+    void setPotion(int16_t potionId) {
+        mPotionId = potionId;
+    }
+
     bool hasPotion() const {
         return mPotionId >= 0;
     }
