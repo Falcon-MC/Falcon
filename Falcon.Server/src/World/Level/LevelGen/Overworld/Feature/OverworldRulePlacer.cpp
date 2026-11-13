@@ -9,7 +9,6 @@
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/DoublePlantBlock.h"
 #include "World/Level/Block/FenceBlock.h"
-#include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
 #include "World/Level/Block/IceBlock.h"
 #include "World/Level/Block/KelpBlock.h"
 #include "World/Level/Block/LavaBlock.h"
@@ -39,6 +38,7 @@
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Overworld/Terrain/OverworldClimate.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
+#include "World/Level/LevelGen/Structure/StructureMaterials.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
 #include "World/Level/Block/BlockNames.h"
 
@@ -199,18 +199,12 @@ namespace {
                || DecorationSupport::isAir(blocks.getBlockAt(x + 1, y, z));
     }
 
-    // LevelChunk::getAboveTopSolidBlock (sub_1438650A0) as the query calls it, water and leaves not counted: leaves
-    // (material type 7) are looked through, and the first solid block below them ends the scan
+    // LevelChunk::getAboveTopSolidBlock (sub_1438650A0, 26.60) through BlockSource vfunc +368 (sub_1432D1700), water
+    // and leaves flags off as both callers pass them (query.above_top_solid sub_145E2C850, FossilFeature through
+    // sub_1432DD3C0): leaves looked through, water and air tested on the solid material flag like any block
     int32_t aboveTopSolid(BlockManager &blocks, int32_t x, int32_t z) {
         for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
-            const BlockState &state = blocks.getBlockAt(x, y, z);
-            if (DecorationSupport::isAir(state))
-                continue;
-            if (VanillaBlocks::getAs<LeavesBlock>(state.mName) != nullptr
-                || VanillaBlocks::getAs<FloweredAzaleaLeavesBlock>(state.mName) != nullptr)
-                continue;
-
-            if (BlockSupport::isSolid(state))
+            if (StructureMaterials::stopsTopSolidSearch(blocks.getBlockAt(x, y, z), false, false))
                 return y + 1;
         }
         return LevelChunk::MIN_Y;
