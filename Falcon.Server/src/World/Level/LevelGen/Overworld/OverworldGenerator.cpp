@@ -5,6 +5,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
+#include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/ShipwreckStructure.h"
 #include "World/Level/LevelGen/Structure/SwampHutStructure.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
@@ -127,6 +128,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     IglooStructure::place(*this, level, chunk);
     SwampHutStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);
+    OceanRuinStructure::place(*this, level, chunk);
     VillageStructure::place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }

@@ -35,6 +35,7 @@ namespace BiomeIds {
     static constexpr int32_t MESA = 37;
     static constexpr int32_t MESA_PLATEAU_STONE = 38;
     static constexpr int32_t WARM_OCEAN = 40;
+    static constexpr int32_t DEEP_WARM_OCEAN = 41;
     static constexpr int32_t LUKEWARM_OCEAN = 42;
     static constexpr int32_t DEEP_LUKEWARM_OCEAN = 43;
     static constexpr int32_t COLD_OCEAN = 44;
