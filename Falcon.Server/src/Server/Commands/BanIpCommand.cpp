@@ -44,7 +44,7 @@ bool BanIpCommand::execute(CommandOrigin &sender, const std::vector<std::string>
 
     std::string address = arguments[0];
     if (!isIpAddress(address)) {
-        ServerPlayer *player = mHandler.getPlayerByName(address);
+        ServerPlayer *player = mHandler.getPlayerByExactName(address);
         if (player == nullptr) {
             sender.sendTranslation("commands.banip.invalid", {});
             return false;

@@ -380,7 +380,10 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TickingAreaCommand>(*this));
 }
 
-ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {
+ServerPlayer *ServerNetworkHandler::getPlayerByExactName(const std::string &name) {
+    if (name.empty())
+        return nullptr;
+
     for (auto &entry: mPlayers) {
         if (entry.second.getName() == name)
             return &entry.second;
@@ -393,6 +396,14 @@ ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {
             return &entry.second;
     }
 
+    return nullptr;
+}
+
+ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {
+    if (ServerPlayer *exact = getPlayerByExactName(name))
+        return exact;
+
+    const std::string lowered = toLowerCopy(name);
     ServerPlayer *partial = nullptr;
     for (auto &entry: mPlayers) {
         const std::string candidate = toLowerCopy(entry.second.getName());
