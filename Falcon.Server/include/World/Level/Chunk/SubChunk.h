@@ -72,7 +72,7 @@ public:
 
     bool unpackRaw(RawPack::Reader &in);
 
-    bool readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknown = nullptr);
+    bool readPersistent(ReadOnlyBinaryStream &stream);
 
 private:
     static int _index(int x, int y, int z) {
@@ -86,8 +86,7 @@ private:
 
     void _writeEmptyStorage(BinaryStream &stream, bool persistent, const BlockNetworkIdMap *blockIds) const;
 
-    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette, PaletteIndices &blocks,
-                      bool *replacedUnknown);
+    bool _readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette, PaletteIndices &blocks);
 
     void _ensureLayer1();
 

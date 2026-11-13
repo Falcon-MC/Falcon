@@ -404,7 +404,6 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         return false;
 
     bool loadedAny = false;
-    bool replacedUnknown = false;
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const int8_t subY = (int8_t) (LevelChunk::LOWEST_SUB_CHUNK_Y + i);
@@ -417,7 +416,7 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         stream.setEncodingSettings(_storageEncodingSettings());
 
         try {
-            if (chunk.getSubChunk(i).readPersistent(stream, &replacedUnknown))
+            if (chunk.getSubChunk(i).readPersistent(stream))
                 loadedAny = true;
         } catch (const BinaryDataException &exception) {
             LOG_WARN(LogAreaID::Server, "Malformed sub chunk %d %d %d: %s", chunk.getX(), chunk.getZ(), (int) subY,
@@ -476,8 +475,6 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     }
 
     chunk.clearDirty();
-    if (replacedUnknown)
-        chunk.markDirty();
     return loadedAny;
 }
 
