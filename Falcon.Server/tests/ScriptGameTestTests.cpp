@@ -356,7 +356,11 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         const Vector3i catalyst(61, 101, 24);
         const BlockState catalystState = ScriptApi::defaultBlockState("minecraft:sculk_catalyst");
         level.setBlock(catalyst, catalystState, false);
+        // the placement hooks run only for a level with its owner, which this harness leaves unset
+        ServerNetworkHandler *previousOwner = level.getOwner();
+        level.setOwner(&owner);
         level.onBlockPlaced(catalyst, catalystState);
+        level.setOwner(previousOwner);
         require(level.getBlockActors().find<SculkCatalystBlockActor>(catalyst) != nullptr, "the catalyst has no actor");
         tickAndRead(owner, engine, tick, 5);
         level.setBlock(catalyst, ScriptApi::defaultBlockState("minecraft:air"), false);
