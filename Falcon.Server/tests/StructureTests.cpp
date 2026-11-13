@@ -18,6 +18,7 @@
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
+#include "World/Level/LevelGen/Structure/RuinedPortalStructure.h"
 #include "World/Level/LevelGen/Structure/ScatteredPiece.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
@@ -436,6 +437,36 @@ namespace {
 }
 
 namespace {
+    void checkRuinedPortals() {
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const StructureFeature *portals = StructureFeature::get("ruined_portal");
+        require(portals != nullptr && portals->getSpacing() == 40, "Ruined portals are not registered");
+        StructureChunkPos start;
+        require(portals->findNearest(*generator, 0, 0, start), "No ruined portal near the origin");
+
+        const auto portal = RuinedPortalStructure::plan(*generator, start.x, start.z);
+        require(portal != nullptr, "A ruined portal has no plan");
+        require(portal == RuinedPortalStructure::plan(*generator, start.x, start.z), "The portal plan is not kept");
+        const auto shape = StructureTemplate::load(portal->mTemplate + ".nbt");
+        require(shape != nullptr, "The portal template is missing");
+        const int32_t spanX = portal->mMaxX - portal->mMinX;
+        const int32_t spanZ = portal->mMaxZ - portal->mMinZ;
+        require((portal->mQuarterTurns & 1) == 0 ? spanX == shape->getSizeX() && spanZ == shape->getSizeZ()
+                                                 : spanX == shape->getSizeZ() && spanZ == shape->getSizeX(),
+                "The portal box does not follow the turned template");
+        require(portal->mMaxY - portal->mMinY == shape->getSizeY(), "The portal box has the wrong height");
+
+        bool obsidian = false;
+        for (const RuinedPortalStructure::Change &change: portal->mChanges)
+            obsidian = obsidian || change.mBlock.mName == "minecraft:obsidian"
+                       || change.mBlock.mName == "minecraft:crying_obsidian";
+        require(obsidian, "The portal frame is missing");
+        for (const RuinedPortalStructure::Chest &chest: portal->mChests)
+            require(chest.mLootTable == "loot_tables/chests/ruined_portal.json", "The portal chest has another loot");
+    }
+}
+
+namespace {
     void checkScatteredPieces() {
         Level level("scattered-piece-test", 2, 1);
         LevelChunk chunk(1, 0);
@@ -580,6 +611,7 @@ int main() {
         checkMaterials();
         checkOceanRuins();
         checkPillagerOutposts();
+        checkRuinedPortals();
         checkScatteredPieces();
         checkStructureBounds();
     } catch (const std::exception &error) {
