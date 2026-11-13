@@ -185,6 +185,23 @@ namespace {
                 return api->throwInvalidEntity(bindingAction(binding.mKind), member, *ref);
         }
 
+        // Component members stay readable on a dead component, as isValid reports it
+        ScriptItemRef *item = binding.mStatic ? nullptr : api->native<ScriptItemRef>(thisVal);
+        if (item != nullptr && item->mWeak && binding.mName.compare(0, 11, "Component::") != 0) {
+            std::shared_ptr<ScriptItemData> stack = item->mStack.lock();
+            if (stack == nullptr) {
+                const std::string member = binding.mName.substr(binding.mName.rfind(':') + 1);
+                return api->throwInvalidItemStack(bindingAction(binding.mKind), member, item->mStackTypeId);
+            }
+            std::shared_ptr<ScriptItemData> placeholder = std::move(item->mItem);
+            item->mItem = std::move(stack);
+            JSValue result = binding.mMagicFunction != nullptr
+                                     ? binding.mMagicFunction(ctx, thisVal, argc, argv, binding.mMagic)
+                                     : binding.mFunction(ctx, thisVal, argc, argv);
+            item->mItem = std::move(placeholder);
+            return result;
+        }
+
         if (binding.mMagicFunction != nullptr)
             return binding.mMagicFunction(ctx, thisVal, argc, argv, binding.mMagic);
         return binding.mFunction(ctx, thisVal, argc, argv);
@@ -969,6 +986,27 @@ JSValue ScriptApi::throwInvalidEntity(const char *action, const std::string &mem
     if (JS_IsException(error))
         return JS_EXCEPTION;
     return JS_Throw(mContext, error);
+}
+
+JSValue ScriptApi::throwInvalidItemStack(const char *action, const std::string &member, const std::string &typeId) {
+    const std::string message = std::string("Failed to ") + action + " '" + member
+                                + "' due to the ItemStack being invalid (has the ItemStack been removed?).";
+    JSValue itemType = JS_UNDEFINED;
+    for (const auto &entry: mServerExports) {
+        if (entry.first != "ItemTypes")
+            continue;
+        JSValue get = JS_GetPropertyStr(mContext, entry.second, "get");
+        JSValue id = string(mContext, typeId);
+        itemType = JS_Call(mContext, get, entry.second, 1, &id);
+        JS_FreeValue(mContext, id);
+        JS_FreeValue(mContext, get);
+        if (JS_IsException(itemType))
+            return JS_EXCEPTION;
+        break;
+    }
+    JSValue fields = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, fields, "itemType", itemType);
+    return throwError("InvalidItemStackError", message, fields);
 }
 
 ServerPlayer *ScriptApi::resolvePlayerByHandle(uint32_t handle) {

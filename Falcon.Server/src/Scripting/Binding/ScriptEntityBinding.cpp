@@ -3130,6 +3130,8 @@ namespace {
             return JS_NewBool(ctx, api->resolveLevel(block->mBlock.mWorldId, block->mBlock.mDimension)
                                                    .peekBlockPtr(block->mBlock.mX, block->mBlock.mY, block->mBlock.mZ)
                                            != nullptr);
+        if (const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal))
+            return JS_NewBool(ctx, !item->mWeak || !item->mStack.expired());
         return JS_TRUE;
     }
 }

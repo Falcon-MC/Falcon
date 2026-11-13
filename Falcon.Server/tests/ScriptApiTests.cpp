@@ -735,7 +735,7 @@ import { world, system, ItemStack, ItemType, ItemTypes, Container, ContainerSlot
          EnchantmentSlot, ItemLockMode, Potions, PotionEffectType, ItemDurabilityComponent, ItemEnchantableComponent,
          ItemFoodComponent, ItemBookComponent, ItemPotionComponent, ItemInventoryComponent, ItemCooldownComponent,
          EntityInventoryComponent, EntityEquippableComponent, EntityEnderInventoryComponent,
-         PlayerCursorInventoryComponent, BlockTypes, BlockPermutation } from "@minecraft/server";
+         PlayerCursorInventoryComponent, BlockTypes, BlockPermutation, InvalidItemStackError } from "@minecraft/server";
 
 const log = (line) => { r.events = (r.events || "") + line + ";"; };
 const fail = (f) => { try { f(); return "ok"; } catch (e) { return e.name; } };
@@ -929,7 +929,9 @@ system.runTimeout(() => {
     // no vanilla item declares minecraft:dyeable, leather armor included
     r.dye = (leather === undefined) + ":" + (new ItemStack("stone").getComponent("dyeable") === undefined);
     r.compost = new ItemStack("red_shrub").getComponent("compostable").compostingChance;
-    const quill = new ItemStack("writable_book").getComponent("book");
+    // the book component only references its stack: keep the stack alive
+    const quillStack = new ItemStack("writable_book");
+    const quill = quillStack.getComponent("book");
     quill.setContents(["a", { rawtext: [{ text: "b" }] }, "c"]);
     quill.removePage(2);
     r.bookMore = quill.contents.map((page) => page === undefined ? "~" : page).join(",") + ":"
@@ -955,10 +957,20 @@ system.runTimeout(() => {
     const chestItem = new ItemStack("chest");
     const blockProperties = chestItem.getComponent("minecraft:block_actor_dynamic_properties");
     blockProperties.set("test:key", 5);
+    const chestClone = chestItem.clone();
     r.blockProperties = blockProperties.get("test:key") + ":" + (blockProperties.totalByteCount() > 0) + ":"
-        + chestItem.clone().getComponent("block_actor_dynamic_properties").get("test:key") + ":"
+        + chestClone.getComponent("block_actor_dynamic_properties").get("test:key") + ":"
         + (new ItemStack("apple").getComponent("block_actor_dynamic_properties") === undefined);
     blockProperties.set("test:key", undefined);
+    // a component outlives its ItemStack only as a weak handle: every member then throws
+    const deadBook = new ItemStack("writable_book").getComponent("book");
+    const deadProperties = new ItemStack("chest").getComponent("block_actor_dynamic_properties");
+    const invalid = (read) => { try { read(); return "no throw"; } catch (e) {
+        return e.name + "|" + (e instanceof InvalidItemStackError) + "|" + e.itemType.id + "|" + e.message; } };
+    r.deadBook = deadBook.isValid + ";" + deadBook.typeId + ";" + invalid(() => deadBook.pageCount) + ";"
+        + invalid(() => deadBook.getPageContent(0));
+    r.deadProperties = deadProperties.isValid + ";" + invalid(() => deadProperties.totalByteCount());
+    r.liveBook = quill.isValid + ";" + quill.pageCount;
     r.blockPropertiesCleared = String(blockProperties.get("test:key"));
     const log = new ItemStack("oak_log");
     r.stateMatches = log.matches("oak_log", { pillar_axis: "y" }) + ":" + log.matches("oak_log", { pillar_axis: "x" })
@@ -2870,6 +2882,15 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(it, "dye", "true:true");
         expect(it, "compost", "30");
         expect(it, "bookMore", "a,~:~,b:true:true");
+        expect(it, "deadBook",
+               "false;minecraft:book;InvalidItemStackError|true|minecraft:writable_book|Failed to get property "
+               "'pageCount' due to the ItemStack being invalid (has the ItemStack been removed?).;"
+               "InvalidItemStackError|true|minecraft:writable_book|Failed to call function 'getPageContent' due to "
+               "the ItemStack being invalid (has the ItemStack been removed?).");
+        expect(it, "deadProperties",
+               "false;InvalidItemStackError|true|minecraft:chest|Failed to call function 'totalByteCount' due to "
+               "the ItemStack being invalid (has the ItemStack been removed?).");
+        expect(it, "liveBook", "true;2");
         expect(it, "potionsMore", "49:Consume:true:minecraft:potion");
         expect(it, "cooldownMore", "20:true");
         expect(it, "inventoryMore", "inventory:false:false:false:0:true");
