@@ -64,6 +64,7 @@
 #include "Protocol/Packets/PlayStatusPacket.h"
 #include "Protocol/Packets/MapInfoRequestPacket.h"
 #include "Protocol/Packets/MapCreateLockedCopyPacket.h"
+#include "Protocol/Packets/ServerboundStonecutterSetRecipePacket.h"
 #include "Network/Handler/MapHandler.h"
 #include "Protocol/Packets/RequestChunkRadiusPacket.h"
 #include "Protocol/Packets/RequestAbilityPacket.h"
@@ -2701,6 +2702,14 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const MapCreateLo
         return;
 
     MapHandler::handleCreateLockedCopy(*this, *player, packet);
+}
+
+void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ServerboundStonecutterSetRecipePacket &packet) {
+    ServerPlayer *player = _getPlayer(id);
+    if (player == nullptr)
+        return;
+
+    player->getInventoryManager().onClientSelectStonecutterRecipe(packet.mContainerId, packet.mRecipeIndex);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) {

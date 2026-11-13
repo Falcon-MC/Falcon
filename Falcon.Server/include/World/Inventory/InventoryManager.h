@@ -83,6 +83,22 @@ public:
 
     bool isStonecutterOpen() const;
 
+    int getStonecutterWindowId() const {
+        return isStonecutterOpen() ? mAnvilWindowId : CONTAINER_ID_NONE;
+    }
+
+    // index into StonecutterRecipes::validRecipes of the input
+    int32_t getStonecutterSelectedRecipe() const {
+        return mStonecutterSelectedRecipe;
+    }
+
+    // the server's choice: the client is told
+    void setStonecutterSelectedRecipe(int32_t index);
+
+    void onClientSelectStonecutterRecipe(int containerId, int32_t index);
+
+    void syncStonecutterInput();
+
     // the copy id a MapCreateLockedCopyPacket asked for, kept until the table locks a map
     void setClientMapLock(const CartographyLock &lock) {
         mClientMapLock = lock;
@@ -251,6 +267,7 @@ private:
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
     CartographyLock mClientMapLock;
+    int32_t mStonecutterSelectedRecipe = 0;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     int64_t mContainerActorId = -1;

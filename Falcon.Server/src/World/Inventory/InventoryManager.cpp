@@ -17,6 +17,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Inventory/FurnaceInventory.h"
 #include "World/Inventory/BundleInventory.h"
+#include "World/Inventory/StonecutterRecipes.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/FurnaceExperience.h"
 #include "World/Inventory/CraftingManager.h"
@@ -31,6 +32,7 @@
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/BlockEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Protocol/Packets/ClientboundStonecutterSetRecipePacket.h"
 #include "Protocol/Packets/ContainerOpenPacket.h"
 #include "Protocol/Packets/ContainerSetDataPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
@@ -1004,6 +1006,7 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     mAnvilWindowType = type;
     mAnvilPosition = position;
     mCurrentWindowType = type;
+    mStonecutterSelectedRecipe = 0;
 
     ContainerOpenPacket open;
     open.mWindowId = (int8_t) windowId;
@@ -1024,6 +1027,39 @@ bool InventoryManager::isCartographyOpen() const {
 
 bool InventoryManager::isStonecutterOpen() const {
     return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Stonecutter;
+}
+
+// StonecutterContainerManagerModel::setSelectedRecipe (sub_147184010, 26.60)
+void InventoryManager::setStonecutterSelectedRecipe(int32_t index) {
+    if (mPlayer == nullptr || mSender == nullptr || !isStonecutterOpen())
+        return;
+
+    mStonecutterSelectedRecipe = index;
+    ClientboundStonecutterSetRecipePacket packet;
+    packet.mPlayerUniqueId = mPlayer->getUniqueId();
+    packet.mContainerId = (uint8_t) mAnvilWindowId;
+    packet.mRecipeIndex = index;
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+}
+
+// sub_1471841F0 (26.60): kept only when the input has that many recipes
+void InventoryManager::onClientSelectStonecutterRecipe(int containerId, int32_t index) {
+    if (mPlayer == nullptr || !isStonecutterOpen() || containerId != mAnvilWindowId || index < 0)
+        return;
+
+    if ((size_t) index < StonecutterRecipes::validRecipes(mPlayer->getInventory().getStonecutterInput()).size())
+        mStonecutterSelectedRecipe = index;
+}
+
+void InventoryManager::syncStonecutterInput() {
+    if (mPlayer == nullptr || mSender == nullptr)
+        return;
+
+    InventorySlotPacket packet;
+    packet.mContainerId = CONTAINER_ID_UI;
+    packet.mSlot = PlayerInventory::STONECUTTER_INPUT_NETWORK_SLOT;
+    packet.mItem = mPlayer->getInventory().getStonecutterInput();
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
 }
 
 const Vector3i &InventoryManager::getAnvilPosition() const {
