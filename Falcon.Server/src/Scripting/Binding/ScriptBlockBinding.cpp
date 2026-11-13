@@ -35,6 +35,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Map/MapColors.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Vibration/VibrationProperties.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -1831,17 +1832,16 @@ namespace {
         return at.mApi->throwError("InvalidRecipeError", "Invalid recipe Id " + recipeId, fields);
     }
 
-    // the block where the component stands now, a block without the json component reads false
+    // the block where the component stands now: the flags the vibrations themselves read, wool's included
     JSValue vibrationQuery(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         const BlockAt at = blockAt(ctx, thisVal);
         if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
             return at.mApi->throwError("LocationInUnloadedChunkError", "");
         if (at.mPosition.y < at.mLevel->getMinY() || at.mPosition.y > at.mLevel->getMaxY())
             return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
-        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(at.state().mName);
-        if (custom == nullptr)
-            return JS_FALSE;
-        return JS_NewBool(ctx, magic == 0 ? custom->mCanDampenVibrations : custom->mCanOccludeVibrations);
+        const uint8_t flags = VibrationProperties::of(at.state());
+        return JS_NewBool(ctx,
+                          (flags & (magic == 0 ? VibrationProperties::DAMPENS : VibrationProperties::OCCLUDES)) != 0);
     }
 
     // the location checks come first, then the component
