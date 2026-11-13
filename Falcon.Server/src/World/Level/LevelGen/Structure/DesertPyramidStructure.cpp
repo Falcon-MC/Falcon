@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Structure/DesertPyramidStructure.h"
 
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -26,6 +28,7 @@ namespace {
     const int32_t BURY_RANGE = 3;
     const int32_t MIN_UNCOVERED = 5;
     const char *const LOOT_TABLE = "loot_tables/chests/desert_pyramid.json";
+    const char *const BRUSHABLE_LOOT_TABLE = "loot_tables/entities/desert_pyramid_brushable_block.json";
     const char *const START = "desert_pyramid";
 
     using Position = std::tuple<int32_t, int32_t, int32_t>;
@@ -213,9 +216,16 @@ namespace {
             const int32_t y = std::get<1>(position);
             const int32_t z = std::get<2>(position);
             piece.placeBlock(suspicious, x, y, z);
-            // the loot seed of the brushable block; no brushable block actor here to keep it
-            if (isBrushable(level, piece, x, y, z))
-                archaeology.nextLong();
+            if (!isBrushable(level, piece, x, y, z))
+                return;
+            // the seed is the low half of the next long; a block of a neighbour chunk keeps its own actor
+            const int32_t seed = archaeology.nextInt();
+            if (!piece.inChunk(x, y, z))
+                return;
+            BrushableBlockActor &actor = level.getBlockActors().getOrCreate<BrushableBlockActor>(
+                    Vector3i(piece.worldX(x), piece.worldY(y), piece.worldZ(z)));
+            actor.setType(BlockNames::SUSPICIOUS_SAND);
+            actor.setLootTable(BRUSHABLE_LOOT_TABLE, seed);
         };
         for (int32_t i = 0; i < uncovered; ++i)
             uncover(candidates[(size_t) i]);

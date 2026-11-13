@@ -2,6 +2,8 @@
 
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatures.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/BrushableBlockActor.h"
 
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/BlockIdentifier.h"
@@ -692,6 +694,8 @@ namespace {
         return true;
     }
 
+    const char *const WELL_LOOT_TABLE = "loot_tables/entities/desert_well_brushable_block.json";
+
     // DesertWellFeature::place (vtable 0x14F2F6ED0, sub_14D206E40, 26.60): down through the air onto sand, given up
     // when a column of the 5x5 base has air in both blocks under the sand level
     bool placeDesertWell(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
@@ -746,12 +750,17 @@ namespace {
             }
         }
 
-        // sub_14D208230 also gives each one loot_tables/entities/desert_well_brushable_block.json and a seed drawn
-        // after both positions; no brushable block actor here to hold them
+        // each block's actor takes the table and a seed drawn as it is placed, after both positions (sub_14D208230)
         const int32_t *upper = CROSS[nextInt(random, 5)];
         const int32_t *lower = CROSS[nextInt(random, 5)];
-        blocks.setBlockStateAt(x + upper[0], y - 1, z + upper[1], suspicious);
-        blocks.setBlockStateAt(x + lower[0], y - 2, z + lower[1], suspicious);
+        const int32_t spots[2][3] = {{x + upper[0], y - 1, z + upper[1]}, {x + lower[0], y - 2, z + lower[1]}};
+        for (const int32_t *spot: spots) {
+            blocks.setBlockStateAt(spot[0], spot[1], spot[2], suspicious);
+            BrushableBlockActor &actor = blocks.getLevel().getBlockActors().getOrCreate<BrushableBlockActor>(
+                    Vector3i(spot[0], spot[1], spot[2]));
+            actor.setType(BlockNames::SUSPICIOUS_SAND);
+            actor.setLootTable(WELL_LOOT_TABLE, nextInt(random));
+        }
         return true;
     }
 }
