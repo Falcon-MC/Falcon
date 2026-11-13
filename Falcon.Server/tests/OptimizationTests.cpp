@@ -377,6 +377,14 @@ int main() {
                     "Nether context selected an overworld cow");
             require(handler.resolveTargets(nether, "@e[type=player]").empty(),
                     "Nether context selected an overworld player");
+            require(handler.resolveTargets(nether, "@a").size() == 1, "@a left out a player of another dimension");
+            World *other = handler.loadWorld("SelectorWorld", true, 1);
+            require(other != nullptr, "Could not load the second world");
+            ExecuteCommandOrigin elsewhere(origin, &player, Vector3f(), Vector3f(), &other->getOverworld());
+            require(handler.resolveTargets(elsewhere, "@a").empty() && handler.resolveTargets(elsewhere, "@r").empty(),
+                    "A command of another world selected this world's player");
+            std::string error;
+            require(handler.unloadWorld("SelectorWorld", error), "Could not unload the second world");
         });
         check("quoted selector name", [&]() {
             require(handler.getCommands().dispatch(origin, "testfor @e[name=\"Bob, Junior\"]"),
