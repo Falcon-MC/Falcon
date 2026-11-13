@@ -2,6 +2,7 @@
 
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Misc/ItemActor.h"
+#include "World/Actor/Misc/NpcActor.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/RideSystem.h"
@@ -27,6 +28,7 @@ namespace {
         Riding,
         Item,
         Tamed,
+        Npc,
     };
 
     struct ComponentClass {
@@ -84,6 +86,7 @@ namespace {
             {"minecraft:navigation.generic", "EntityNavigationGenericComponent", Backing::Definition},
             {"minecraft:navigation.hover", "EntityNavigationHoverComponent", Backing::Definition},
             {"minecraft:navigation.walk", "EntityNavigationWalkComponent", Backing::Definition},
+            {"minecraft:npc", "EntityNpcComponent", Backing::Npc},
             {"minecraft:onfire", "EntityOnFireComponent", Backing::OnFire},
             {"minecraft:player.exhaustion", "EntityExhaustionComponent", Backing::Attribute},
             {"minecraft:player.hunger", "EntityHungerComponent", Backing::Attribute},
@@ -172,6 +175,8 @@ namespace {
                 MobActor *mob = dynamic_cast<MobActor *>(&actor);
                 return definitionOf(actor, component.mId) != nullptr || (mob != nullptr && mob->isTamed());
             }
+            case Backing::Npc:
+                return dynamic_cast<NpcActor *>(&actor) != nullptr;
         }
         return false;
     }
@@ -1033,6 +1038,71 @@ namespace {
     }
 }
 
+namespace {
+    enum class NpcField { Name, DefaultScene, SkinIndex };
+
+    NpcActor *npcOf(JSContext *ctx, JSValueConst thisVal, ComponentTarget &target) {
+        if (!componentOf(ctx, thisVal, target))
+            return nullptr;
+        NpcActor *npc = dynamic_cast<NpcActor *>(target.mActor);
+        if (npc == nullptr)
+            target.mApi->throwError("InvalidEntityError", "Failed to get the component: the entity is invalid.");
+        return npc;
+    }
+
+    // ScriptNpcComponent getters (sub_14DEA0400, sub_14DEE1C50, 26.60): the raw text name, the scene, the skin
+    JSValue npcGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        ComponentTarget target;
+        NpcActor *npc = npcOf(ctx, thisVal, target);
+        if (npc == nullptr)
+            return JS_EXCEPTION;
+        switch ((NpcField) magic) {
+            case NpcField::Name:
+                return string(ctx, npc->getRawName());
+            case NpcField::DefaultScene:
+                return string(ctx, npc->getSceneName());
+            case NpcField::SkinIndex:
+                return JS_NewInt32(ctx, npc->getSkinIndex());
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue npcSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        ComponentTarget target;
+        NpcActor *npc = npcOf(ctx, thisVal, target);
+        if (npc == nullptr)
+            return JS_EXCEPTION;
+        const NpcField field = (NpcField) magic;
+        if (field == NpcField::SkinIndex) {
+            int32_t index = 0;
+            if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToInt32(ctx, &index, argv[0]) != 0)
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+            if (npc->setSkinIndex(&target.mApi->host(), index))
+                return JS_UNDEFINED;
+            // sub_14DEDFE30 (26.60): any refused index, the current one too, throws with the list bounds
+            const int32_t maxValue = (int32_t) npc->getSkins().size() - 1;
+            JSValue fields = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, fields, "value", JS_NewInt32(ctx, index));
+            JS_SetPropertyStr(ctx, fields, "minValue", JS_NewInt32(ctx, 0));
+            JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewInt32(ctx, maxValue));
+            return target.mApi->throwError("ArgumentOutOfBoundsError",
+                                           "Unsupported or out of bounds value passed to function argument [0]: "
+                                           "Invalid skin index, Value: "
+                                                   + std::to_string(index) + ", Argument bounds: [0, "
+                                                   + std::to_string(maxValue) + "]",
+                                           fields);
+        }
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const std::string text = toString(ctx, argv[0]);
+        if (field == NpcField::Name)
+            npc->setName(&target.mApi->host(), text);
+        else
+            npc->setSceneName(text);
+        return JS_UNDEFINED;
+    }
+}
+
 JSValue ScriptApi::makeEntityComponent(Actor &actor, const ScriptEntityRef &ref, const std::string &requested) {
     const std::string id = requested.find(':') == std::string::npos ? "minecraft:" + requested : requested;
     const ComponentClass *component = findComponent(id);
@@ -1153,4 +1223,9 @@ void ScriptApi::_bindEntityComponents() {
         propertyMagic(projectile, "EntityProjectileComponent", PROJECTILE_FIELDS[i], projectileGet, (int) i,
                       projectileSet);
     method(projectile, "EntityProjectileComponent", "shoot", projectileShoot, 2);
+
+    JSValue npc = prototypeOf("EntityNpcComponent");
+    propertyMagic(npc, "EntityNpcComponent", "name", npcGet, (int) NpcField::Name, npcSet);
+    propertyMagic(npc, "EntityNpcComponent", "defaultScene", npcGet, (int) NpcField::DefaultScene, npcSet);
+    propertyMagic(npc, "EntityNpcComponent", "skinIndex", npcGet, (int) NpcField::SkinIndex, npcSet);
 }
