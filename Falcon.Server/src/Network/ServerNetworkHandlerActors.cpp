@@ -144,6 +144,8 @@ namespace {
     const float PLAYER_HEIGHT = 1.8f;
     using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PROJECTILE_HIT_GROW = 0.3f;
+    // blocks per axis a projectile sweep reads through the actor index; wider reads every actor once
+    const float SWEEP_INDEX_SPAN = 64.0f;
     const int32_t EXPERIENCE_ORB_PICKUP_DELAY = 10;
 
     bool intersectsActorBox(const Vector3f &actorPosition, float width, float height, const Vector3f &point) {
@@ -387,11 +389,14 @@ void ServerNetworkHandler::_refreshActorIndex() {
         ++it;
     }
 
+    mActorIndexWidestHalf = 0.0f;
     for (auto &entry: mActors) {
         const Vector3f position = entry.second->getPosition();
         const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
         const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
         mActorIndex[_actorIndexKey(chunkX, chunkZ)].push_back(entry.second.get());
+        mActorIndexWidestHalf = std::max(mActorIndexWidestHalf,
+                                         ActorClassRegistry::getSize(entry.second->getTypeId()).mWidth * 0.5f);
     }
 }
 
@@ -1727,6 +1732,12 @@ void ServerNetworkHandler::tickActors() {
             position.y += motion.y;
             position.z += motion.z;
 
+            // a script or plugin impulse can make it non finite: no block or actor lookup survives that
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+                expired.push_back(actorId);
+                continue;
+            }
+
             actor.setMotion(motion);
             actor.setPosition(position);
             faceMotion(actor, motion);
@@ -1782,60 +1793,126 @@ void ServerNetworkHandler::tickActors() {
                 const float sweepY = position.y - previousPosition.y;
                 const float sweepZ = position.z - previousPosition.z;
                 const float sweepLength = std::sqrt(sweepX * sweepX + sweepY * sweepY + sweepZ * sweepZ);
-                const int32_t sampleCount = std::max(1, (int32_t) std::ceil(sweepLength / 0.25f));
+                const int64_t sampleCount = std::max<int64_t>(
+                        1, (int64_t) std::min(std::ceil((double) sweepLength / 0.25), 2147483647.0));
 
                 ServerPlayer *hitPlayer = nullptr;
                 ServerActor *hitActor = nullptr;
                 Vector3f contactPosition = position;
 
-                for (int32_t sample = 1; sample <= sampleCount && hitPlayer == nullptr && hitActor == nullptr;
-                     ++sample) {
-                    const float progress = (float) sample / (float) sampleCount;
-                    const Vector3f samplePosition(previousPosition.x + sweepX * progress,
-                                                  previousPosition.y + sweepY * progress,
-                                                  previousPosition.z + sweepZ * progress);
+                // candidates picked once per tick: only a box meeting the sweep's bounds can hold a sample
+                const Vector3f low(std::min(previousPosition.x, position.x), std::min(previousPosition.y, position.y),
+                                   std::min(previousPosition.z, position.z));
+                const Vector3f high(std::max(previousPosition.x, position.x), std::max(previousPosition.y, position.y),
+                                    std::max(previousPosition.z, position.z));
+                const auto meetsSweep = [&low, &high](const Vector3f &at, float width, float height) {
+                    const float half = width * 0.5f + PROJECTILE_HIT_GROW;
+                    return at.x + half >= low.x && at.x - half <= high.x && at.z + half >= low.z
+                           && at.z - half <= high.z && at.y + height + PROJECTILE_HIT_GROW >= low.y
+                           && at.y - PROJECTILE_HIT_GROW <= high.y;
+                };
 
-                    for (auto &playerEntry: mPlayers) {
-                        ServerPlayer &candidate = playerEntry.second;
-                        if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
-                            continue;
-                        if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId()
-                            && actor.getLifetimeTicks() < 8)
-                            continue;
+                std::vector<ServerPlayer *> nearPlayers;
+                for (auto &playerEntry: mPlayers) {
+                    ServerPlayer &candidate = playerEntry.second;
+                    if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
+                        continue;
+                    if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
+                        continue;
+                    if (meetsSweep(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+                        nearPlayers.push_back(&candidate);
+                }
 
-                        if (intersectsActorBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT, samplePosition)) {
-                            hitPlayer = &candidate;
-                            contactPosition = samplePosition;
-                            break;
+                std::vector<std::pair<ServerActor *, ActorSize>> nearActors;
+                const auto consider = [&](ServerActor &candidate) {
+                    if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
+                        return;
+
+                    const bool candidateIsProjectile = candidate.isProjectile();
+                    if (candidateIsProjectile && candidate.getProjectileData().mStuck)
+                        return;
+                    if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId()
+                        && candidate.getLifetimeTicks() < 8)
+                        return;
+                    if (projectile != nullptr && projectile->passesThroughOwner()
+                        && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
+                        return;
+
+                    const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
+                    if (meetsSweep(candidate.getPosition(), size.mWidth, size.mHeight))
+                        nearActors.emplace_back(&candidate, size);
+                };
+                // a sweep over many columns reads every actor once rather than every column of the index
+                if (high.x - low.x <= SWEEP_INDEX_SPAN && high.z - low.z <= SWEEP_INDEX_SPAN) {
+                    _refreshActorIndex();
+                    const Vector3f middle((low.x + high.x) * 0.5f, position.y, (low.z + high.z) * 0.5f);
+                    const float reach = std::max(high.x - low.x, high.z - low.z) * 0.5f + mActorIndexWidestHalf
+                                        + PROJECTILE_HIT_GROW;
+                    forEachActorNear(middle, reach, consider);
+                } else {
+                    for (auto &actorEntry: mActors)
+                        consider(*actorEntry.second);
+                }
+
+                // the first 0.25 block sample inside a box, from the segment's entry into it; players first on a tie
+                const auto sampleAt = [&](int64_t sample) {
+                    const float progress = (float) ((double) sample / (double) sampleCount);
+                    return Vector3f(previousPosition.x + sweepX * progress, previousPosition.y + sweepY * progress,
+                                    previousPosition.z + sweepZ * progress);
+                };
+                const auto firstSample = [&](const Vector3f &at, float width, float height) -> int64_t {
+                    const float half = width * 0.5f + PROJECTILE_HIT_GROW;
+                    const Vector3f boxLow(at.x - half, at.y - PROJECTILE_HIT_GROW, at.z - half);
+                    const Vector3f boxHigh(at.x + half, at.y + height + PROJECTILE_HIT_GROW, at.z + half);
+                    double enter = 0.0, leave = 1.0;
+                    const float from[3] = {previousPosition.x, previousPosition.y, previousPosition.z};
+                    const float delta[3] = {sweepX, sweepY, sweepZ};
+                    const float lows[3] = {boxLow.x, boxLow.y, boxLow.z};
+                    const float highs[3] = {boxHigh.x, boxHigh.y, boxHigh.z};
+                    for (int axis = 0; axis < 3; ++axis) {
+                        if (delta[axis] == 0.0f) {
+                            if (from[axis] < lows[axis] || from[axis] > highs[axis])
+                                return 0;
+                            continue;
                         }
+                        double slabIn = ((double) lows[axis] - from[axis]) / delta[axis];
+                        double slabOut = ((double) highs[axis] - from[axis]) / delta[axis];
+                        if (slabIn > slabOut)
+                            std::swap(slabIn, slabOut);
+                        enter = std::max(enter, slabIn);
+                        leave = std::min(leave, slabOut);
+                        if (enter > leave)
+                            return 0;
                     }
+                    const int64_t first = std::max<int64_t>(1, (int64_t) std::ceil(enter * (double) sampleCount));
+                    // float rounding at the box edge: the exact test decides between the nearest samples
+                    for (int64_t sample = std::max<int64_t>(1, first - 1); sample <= first + 1 && sample <= sampleCount;
+                         ++sample) {
+                        if (intersectsActorBox(at, width, height, sampleAt(sample)))
+                            return sample;
+                    }
+                    return 0;
+                };
 
-                    if (hitPlayer != nullptr)
-                        break;
-
-                    for (auto &actorEntry: mActors) {
-                        ServerActor &candidate = *actorEntry.second;
-                        if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
-                            continue;
-
-                        const bool candidateIsProjectile = candidate.isProjectile();
-                        if (candidateIsProjectile && candidate.getProjectileData().mStuck)
-                            continue;
-                        if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId()
-                            && candidate.getLifetimeTicks() < 8)
-                            continue;
-                        if (projectile != nullptr && projectile->passesThroughOwner()
-                            && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
-                            continue;
-
-                        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
-                        if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight, samplePosition)) {
-                            hitActor = &candidate;
-                            contactPosition = samplePosition;
-                            break;
-                        }
+                int64_t hitSample = 0;
+                for (ServerPlayer *candidate: nearPlayers) {
+                    const int64_t sample = firstSample(candidate->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
+                    if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
+                        hitSample = sample;
+                        hitPlayer = candidate;
                     }
                 }
+                for (const auto &candidate: nearActors) {
+                    const int64_t sample = firstSample(candidate.first->getPosition(), candidate.second.mWidth,
+                                                       candidate.second.mHeight);
+                    if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
+                        hitSample = sample;
+                        hitPlayer = nullptr;
+                        hitActor = candidate.first;
+                    }
+                }
+                if (hitSample != 0)
+                    contactPosition = sampleAt(hitSample);
 
                 if (hitPlayer != nullptr) {
                     if (!allowProjectileHit(*this, actor, level, contactPosition, hitPlayer, nullptr)) {
