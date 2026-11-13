@@ -81,7 +81,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
     } else if (event.id === "storage:move") {
         const jar = at(1, 1).getComponent("entity_storage");
         const other = at(3, 3).getComponent("entity_storage");
-        r.gone = dimension().getEntities({ type: "minecraft:pig" }).length;
+        r.gone = String(dimension().getEntities({ type: "minecraft:pig" }).length);
         jar.transfer(r.id, at(3, 3));
         r.moved = jar.size() + ":" + other.size();
         const released = other.release(r.id);
@@ -219,7 +219,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 
         // a pack block has no class: its block actor leaves once the block is replaced
         level.setBlock(Vector3i(3, 100, 3), BlockState("minecraft:stone"), false);
-        owner.tick(false);
+        // owner.tick returns at once while the server does not listen: the block actor step of a tick
+        level.getBlockActors().tick(owner);
         require(level.getBlockActors().find(Vector3i(3, 100, 3)) == nullptr, "the replaced jar kept its block actor");
     }
 }
