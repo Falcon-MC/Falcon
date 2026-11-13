@@ -18,6 +18,7 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
+#include "World/Level/Block/Actor/SculkCatalystBlockActor.h"
 #include "World/Level/Block/CauldronBlock.h"
 #include "World/Level/Block/ButtonBlock.h"
 #include "World/Level/Block/LeverBlock.h"
@@ -392,6 +393,44 @@ namespace {
         return JS_TRUE;
     }
 
+    SculkSpreader *spreaderAt(JSContext *ctx, JSValueConst *argv) {
+        Level &level = ScriptApi::fromContext(ctx)->levelOf(argv[0]);
+        SculkCatalystBlockActor *catalyst = level.getBlockActors().find<SculkCatalystBlockActor>(
+                Vector3i(intOf(ctx, argv[1]), intOf(ctx, argv[2]), intOf(ctx, argv[3])));
+        return catalyst == nullptr ? nullptr : &catalyst->getSpreader();
+    }
+
+    // (dimension, xyz): the cursors of the catalyst there, position and charge; undefined without a catalyst
+    JSValue gtSculkCursors(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 4)
+            return typeError(ctx);
+        const SculkSpreader *spreader = spreaderAt(ctx, argv);
+        if (spreader == nullptr)
+            return JS_UNDEFINED;
+        JSValue cursors = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const SculkChargeCursor &cursor: spreader->getCursors()) {
+            JSValue entry = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, entry, "x", JS_NewInt32(ctx, cursor.mPosition.x));
+            JS_SetPropertyStr(ctx, entry, "y", JS_NewInt32(ctx, cursor.mPosition.y));
+            JS_SetPropertyStr(ctx, entry, "z", JS_NewInt32(ctx, cursor.mPosition.z));
+            JS_SetPropertyStr(ctx, entry, "charge", JS_NewInt32(ctx, cursor.mCharge));
+            JS_SetPropertyUint32(ctx, cursors, index++, entry);
+        }
+        return cursors;
+    }
+
+    // (dimension, xyz, cursor xyz, charge): nothing without a catalyst
+    JSValue gtSculkAdd(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 8)
+            return typeError(ctx);
+        SculkSpreader *spreader = spreaderAt(ctx, argv);
+        if (spreader != nullptr)
+            spreader->addCursors(Vector3i(intOf(ctx, argv[4]), intOf(ctx, argv[5]), intOf(ctx, argv[6])),
+                                 intOf(ctx, argv[7]));
+        return JS_UNDEFINED;
+    }
+
     JSValue runBootstrap(JSContext *ctx, const char *source, JSValue argument) {
         JSValue factory = JS_Eval(ctx, source, std::strlen(source), "<gametest>", JS_EVAL_TYPE_GLOBAL);
         if (JS_IsException(factory)) {
@@ -438,6 +477,8 @@ void ScriptApi::_installGameTest() {
     addFunction(mContext, native, "setFuse", gtSetFuse, 2);
     addFunction(mContext, native, "spawn", gtSpawn, 6);
     addFunction(mContext, native, "setCauldron", gtSetCauldron, 5);
+    addFunction(mContext, native, "sculkCursors", gtSculkCursors, 4);
+    addFunction(mContext, native, "sculkAdd", gtSculkAdd, 8);
     ScriptSimulatedPlayerBinding::install(mContext, native);
     JS_SetPropertyStr(mContext, native, "errors", JS_DupValue(mContext, mErrors));
     JSValue server = JS_NewObject(mContext);

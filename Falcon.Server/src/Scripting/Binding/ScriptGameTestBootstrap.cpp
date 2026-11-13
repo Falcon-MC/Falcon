@@ -1133,6 +1133,47 @@ namespace {
         native.sp.navigateRoute(self, route, navigationSpeed(speed));
     });
 
+    // SculkSpreader: the catalyst is looked up again on every call; once gone each member reads 0
+    const SculkSpreader = privateClass("SculkSpreader");
+    const spreaders = new WeakMap();
+    const cursorsOf = (self, member) => {
+        const at = spreaders.get(self);
+        if (at === undefined)
+            throw new ReferenceError("Native function [SculkSpreader::" + member
+                + "] object bound to prototype does not exist.");
+        const cursors = native.sculkCursors(at.dimension, at.x, at.y, at.z);
+        return { at, cursors: cursors === undefined ? [] : cursors, present: cursors !== undefined };
+    };
+    define(SculkSpreader, "SculkSpreader", "maxCharge", (self) => (cursorsOf(self, "maxCharge").present ? 1000 : 0),
+        true);
+    define(SculkSpreader, "SculkSpreader", "addCursorsWithOffset", (self, offset, charge) => {
+        const cell = blockVector(offset);
+        const amount = integer(charge);
+        const { at } = cursorsOf(self, "addCursorsWithOffset");
+        native.sculkAdd(at.dimension, at.x, at.y, at.z, at.x + cell.x, at.y + cell.y, at.z + cell.z, amount);
+    });
+    // an index past the last cursor reads the origin
+    define(SculkSpreader, "SculkSpreader", "getCursorPosition", (self, index) => {
+        const slot = integer(index);
+        const { cursors } = cursorsOf(self, "getCursorPosition");
+        const cursor = slot >= 0 && slot < cursors.length ? cursors[slot] : { x: 0, y: 0, z: 0 };
+        return { x: cursor.x, y: cursor.y, z: cursor.z };
+    });
+    define(SculkSpreader, "SculkSpreader", "getNumberOfCursors",
+        (self) => cursorsOf(self, "getNumberOfCursors").cursors.length);
+    define(SculkSpreader, "SculkSpreader", "getTotalCharge",
+        (self) => cursorsOf(self, "getTotalCharge").cursors.reduce((sum, cursor) => sum + cursor.charge, 0));
+    // undefined when the block holds no catalyst
+    testMethod("getSculkSpreader", (inst, location) => {
+        const cell = blockVector(location);
+        const at = worldBlock(structureOf(inst), cell);
+        if (native.sculkCursors(inst.dimension, at.x, at.y, at.z) === undefined)
+            return undefined;
+        const spreader = new SculkSpreader(token);
+        spreaders.set(spreader, { dimension: inst.dimension, x: at.x, y: at.y, z: at.z });
+        return spreader;
+    }, world);
+
     const spawnPlayer = (dimension, at, yaw, name, gameMode, rotation) => {
         const mode = native.sp.gameMode(string(gameMode));
         if (mode < 0)
@@ -1259,8 +1300,8 @@ namespace {
     };
 
     return {
-        GameTestSequence, NavigationResult, RegistrationBuilder, SimulatedPlayer, Tags, Test, getPlayerSkin,
-        spawnSimulatedPlayer,
+        GameTestSequence, NavigationResult, RegistrationBuilder, SculkSpreader, SimulatedPlayer, Tags, Test,
+        getPlayerSkin, spawnSimulatedPlayer,
         register: registerTest("register", false),
         registerAsync: registerTest("registerAsync", true),
         setAfterBatchCallback: setBatchCallback("after", "setAfterBatchCallback"),
