@@ -1165,6 +1165,8 @@ private:
     std::unordered_map<int64_t, std::vector<ServerActor *>> mActorIndex;
     bool mActorIndexDirty = true;
     int32_t mActorIndexWalks = 0;
+    // half width of the widest indexed actor, for queries that must reach a box and not only its position
+    float mActorIndexWidestHalf = 0.0f;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
     uint32_t mActorUniqueIdCounter = 0;
