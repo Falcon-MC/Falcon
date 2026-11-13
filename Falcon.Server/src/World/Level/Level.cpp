@@ -1586,6 +1586,8 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     // interned: still the old block once the chunk holds the new one
     const BlockState &previous = chunk.getBlock(x & 15, y, z & 15);
     chunk.setBlock(x & 15, y, z & 15, state);
+    if (previous.mName != state.mName)
+        mBlockActors.onBlockReplaced(Vector3i(x, y, z));
     if (mOwner != nullptr && CustomContentRegistry::getInstance().hasNeighborListeners())
         _recordNeighborChange(x, y, z, previous, state);
     if (mBatchLight) {

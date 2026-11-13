@@ -55,7 +55,7 @@ public:
 
     void tick(ServerNetworkHandler &owner);
 
-    std::vector<Tag> saveChunk(int32_t chunkX, int32_t chunkZ) const;
+    std::vector<Tag> saveChunk(int32_t chunkX, int32_t chunkZ);
 
     std::string encodeChunkNetwork(int32_t chunkX, int32_t chunkZ) const;
 
@@ -74,6 +74,9 @@ public:
 
     static std::unique_ptr<BlockActor> create(const std::string &blockActorId);
 
+    // a block actor of no registered class lives as long as the block it was loaded with
+    void onBlockReplaced(const Vector3i &position);
+
     template <typename T>
     std::vector<T *> findAll() {
         std::vector<T *> matches;
@@ -86,7 +89,14 @@ public:
     }
 
 private:
+    // kept as read and written back untouched: dropping it would wipe it from the world
+    struct UnknownBlockActor {
+        Tag mData;
+        std::string mBlock;
+    };
+
     Level *mLevel;
     std::unordered_map<int64_t, std::unique_ptr<BlockActor>> mBlockActors;
+    std::unordered_map<int64_t, UnknownBlockActor> mUnknownBlockActors;
     std::unordered_set<int64_t> mLoadedChunks;
 };

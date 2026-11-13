@@ -21,6 +21,7 @@
 #include "World/Level/Block/Actor/LodestoneBlockActor.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Actor/StructureBlockActor.h"
+#include "World/Level/Level.h"
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/BinaryStream.h"
 
@@ -28,6 +29,7 @@
 
 void BlockActorStore::moveStateFrom(BlockActorStore &&other) {
     mBlockActors = std::move(other.mBlockActors);
+    mUnknownBlockActors = std::move(other.mUnknownBlockActors);
     mLoadedChunks = std::move(other.mLoadedChunks);
 
     for (auto &entry: mBlockActors)
@@ -43,6 +45,18 @@ namespace {
     int64_t packChunk(int32_t chunkX, int32_t chunkZ) {
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
+
+    Vector3i positionOf(const Tag &data) {
+        return Vector3i(data.getInt("x"), data.getInt("y"), data.getInt("z"));
+    }
+
+    void writeSpawnData(BinaryStream &stream, const Tag &blockActor) {
+        Tag spawnData = blockActor;
+        spawnData.remove("Items");
+        spawnData.remove("LootTable");
+        spawnData.remove("LootTableSeed");
+        NbtIo::writeTag(stream, spawnData, NbtVariant::Network);
+    }
 }
 
 BlockActor *BlockActorStore::find(const Vector3i &position) {
@@ -55,11 +69,19 @@ void BlockActorStore::insert(std::unique_ptr<BlockActor> blockActor) {
         return;
 
     blockActor->setLevel(mLevel);
-    mBlockActors[packPosition(blockActor->getPosition())] = std::move(blockActor);
+    const int64_t key = packPosition(blockActor->getPosition());
+    mUnknownBlockActors.erase(key);
+    mBlockActors[key] = std::move(blockActor);
 }
 
 void BlockActorStore::remove(const Vector3i &position) {
     mBlockActors.erase(packPosition(position));
+    mUnknownBlockActors.erase(packPosition(position));
+}
+
+void BlockActorStore::onBlockReplaced(const Vector3i &position) {
+    if (!mUnknownBlockActors.empty())
+        mUnknownBlockActors.erase(packPosition(position));
 }
 
 std::unique_ptr<BlockActor> BlockActorStore::take(const Vector3i &position) {
@@ -86,7 +108,7 @@ void BlockActorStore::tick(ServerNetworkHandler &owner) {
     }
 }
 
-std::vector<Tag> BlockActorStore::saveChunk(int32_t chunkX, int32_t chunkZ) const {
+std::vector<Tag> BlockActorStore::saveChunk(int32_t chunkX, int32_t chunkZ) {
     std::vector<Tag> saved;
 
     for (const auto &entry: mBlockActors) {
@@ -95,6 +117,26 @@ std::vector<Tag> BlockActorStore::saveChunk(int32_t chunkX, int32_t chunkZ) cons
             continue;
 
         saved.push_back(entry.second->saveWithPosition());
+    }
+
+    for (auto it = mUnknownBlockActors.begin(); it != mUnknownBlockActors.end();) {
+        const Vector3i position = positionOf(it->second.mData);
+        if ((position.x >> 4) != chunkX || (position.z >> 4) != chunkZ) {
+            ++it;
+            continue;
+        }
+
+        // chunk writes replayed past setBlockState() can replace the block too
+        const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
+        if (block != nullptr && it->second.mBlock.empty())
+            it->second.mBlock = block->mName;
+        if (block != nullptr && block->mName != it->second.mBlock) {
+            it = mUnknownBlockActors.erase(it);
+            continue;
+        }
+
+        saved.push_back(it->second.mData);
+        ++it;
     }
 
     return saved;
@@ -112,6 +154,12 @@ std::string BlockActorStore::encodeChunkNetwork(int32_t chunkX, int32_t chunkZ) 
         NbtIo::writeTag(stream, blockActor.getSpawnCompound(), NbtVariant::Network);
     }
 
+    for (const auto &entry: mUnknownBlockActors) {
+        const Vector3i position = positionOf(entry.second.mData);
+        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
+            writeSpawnData(stream, entry.second.mData);
+    }
+
     return stream.getBuffer();
 }
 
@@ -127,20 +175,20 @@ std::string BlockActorStore::encodeSubChunkNetwork(int32_t chunkX, int32_t secti
         NbtIo::writeTag(stream, blockActor.getSpawnCompound(), NbtVariant::Network);
     }
 
+    for (const auto &entry: mUnknownBlockActors) {
+        const Vector3i position = positionOf(entry.second.mData);
+        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ && (position.y >> 4) == sectionY)
+            writeSpawnData(stream, entry.second.mData);
+    }
+
     return stream.getBuffer();
 }
 
 std::string BlockActorStore::encodeNetwork(const std::vector<Tag> &blockActors) {
     BinaryStream stream;
     for (const Tag &blockActor: blockActors) {
-        if (!blockActor.isCompound())
-            continue;
-
-        Tag spawnData = blockActor;
-        spawnData.remove("Items");
-        spawnData.remove("LootTable");
-        spawnData.remove("LootTableSeed");
-        NbtIo::writeTag(stream, spawnData, NbtVariant::Network);
+        if (blockActor.isCompound())
+            writeSpawnData(stream, blockActor);
     }
 
     return stream.getBuffer();
@@ -152,14 +200,8 @@ std::string BlockActorStore::encodeNetworkForSection(const std::vector<Tag> &blo
         if (!blockActor.isCompound())
             continue;
 
-        if ((blockActor.getInt("y") >> 4) != sectionY)
-            continue;
-
-        Tag spawnData = blockActor;
-        spawnData.remove("Items");
-        spawnData.remove("LootTable");
-        spawnData.remove("LootTableSeed");
-        NbtIo::writeTag(stream, spawnData, NbtVariant::Network);
+        if ((blockActor.getInt("y") >> 4) == sectionY)
+            writeSpawnData(stream, blockActor);
     }
 
     return stream.getBuffer();
@@ -178,6 +220,14 @@ void BlockActorStore::unloadChunk(int32_t chunkX, int32_t chunkZ) {
             ++it;
     }
 
+    for (auto it = mUnknownBlockActors.begin(); it != mUnknownBlockActors.end();) {
+        const Vector3i position = positionOf(it->second.mData);
+        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
+            it = mUnknownBlockActors.erase(it);
+        else
+            ++it;
+    }
+
     mLoadedChunks.erase(packChunk(chunkX, chunkZ));
 }
 
@@ -190,11 +240,17 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
         if (data.getType() != Tag::Type::Compound)
             continue;
 
+        const Vector3i position = positionOf(data);
         std::unique_ptr<BlockActor> blockActor = create(data.getString("id"));
-        if (blockActor == nullptr)
+        if (blockActor == nullptr) {
+            // no class here, or its plugin is gone: the game, or that plugin, still owns this data
+            const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
+            mUnknownBlockActors[packPosition(position)] =
+                    UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
             continue;
+        }
 
-        blockActor->setPosition(Vector3i(data.getInt("x"), data.getInt("y"), data.getInt("z")));
+        blockActor->setPosition(position);
         blockActor->loadNbt(data, context);
         blockActor->loadLootTable(data);
         blockActor->loadDynamicProperties(data);
