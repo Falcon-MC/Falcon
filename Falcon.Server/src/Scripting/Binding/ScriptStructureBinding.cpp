@@ -10,6 +10,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <memory>
@@ -29,12 +30,22 @@ namespace {
         return JS_ThrowTypeError(ctx, "Native type conversion failed.");
     }
 
+    bool inIntRange(double value) {
+        return std::isfinite(value) && value >= (double) INT32_MIN && value < (double) INT32_MAX + 1.0;
+    }
+
     bool readInts(JSContext *ctx, JSValueConst value, Vector3i &out) {
         double x = 0.0, y = 0.0, z = 0.0;
-        if (!readVector3(ctx, value, x, y, z) || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z))
+        if (!readVector3(ctx, value, x, y, z) || !inIntRange(x) || !inIntRange(y) || !inIntRange(z))
             return false;
         out = Vector3i((int32_t) std::floor(x), (int32_t) std::floor(y), (int32_t) std::floor(z));
         return true;
+    }
+
+    JSValue tooBig(ScriptApi &api, int32_t height) {
+        const std::string side = std::to_string(McStructure::MAX_HORIZONTAL_SIZE);
+        return api.throwError("InvalidArgumentError", "Structure size exceeds the maximum of " + side + "x"
+                                                              + std::to_string(height) + "x" + side + ".");
     }
 
     // a Structure or its identifier
@@ -89,6 +100,11 @@ namespace {
             return invalidIdentifier(*api, raw);
         if (size.x < 1 || size.y < 1 || size.z < 1)
             return api->throwError("InvalidArgumentError", "Structure size must be at least 1 on each axis.");
+        // the game measures against the overworld height
+        const int32_t height = Dimension::getMaxY(DimensionType::Overworld)
+                               - Dimension::getMinY(DimensionType::Overworld) + 1;
+        if (size.x > McStructure::MAX_HORIZONTAL_SIZE || size.y > height || size.z > McStructure::MAX_HORIZONTAL_SIZE)
+            return tooBig(*api, height);
         const std::string id = ScriptStructureRegistry::normalize(raw);
         if (!registryOf(*api).add(id, std::make_shared<McStructure>(size), toWorld))
             return api->throwError("Error", "Structure " + id + " already exists.");
@@ -117,6 +133,12 @@ namespace {
             if (corner.y < level.getMinY() || corner.y > level.getMaxY())
                 return api->throwError("LocationOutOfWorldBoundariesError", "");
         }
+        // sub_14B856F40: the corner spans, before any block is read
+        const int32_t height = level.getMaxY() - level.getMinY() + 1;
+        if (std::abs((int64_t) to.x - from.x) >= McStructure::MAX_HORIZONTAL_SIZE
+            || std::abs((int64_t) to.y - from.y) >= height
+            || std::abs((int64_t) to.z - from.z) >= McStructure::MAX_HORIZONTAL_SIZE)
+            return tooBig(*api, height);
         const std::string id = ScriptStructureRegistry::normalize(raw);
         if (registryOf(*api).exists(id))
             return api->throwError("Error", "Structure " + id + " already exists.");
