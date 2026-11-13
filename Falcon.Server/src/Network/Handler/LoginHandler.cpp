@@ -384,7 +384,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     }
 
     // one session per account: two would load the same save, and the last to leave would write over the other.
-    // the older one is closed and this login refused: its save lands before the next attempt reads it
+    // this login is refused; a signed login of the same account also closes the older one, its save landing
+    // before the next attempt reads it. a name alone proves nothing: the session holding it stays
     bool alreadyOnline = false;
     const std::string loweredName = StringUtil::toLowerCase(player.getName());
     for (auto &entry: owner.getPlayers()) {
@@ -397,8 +398,9 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
             continue;
 
         alreadyOnline = true;
-        owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
-                          "disconnectionScreen.loggedinOtherLocation");
+        if (sameAccount)
+            owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
+                              "disconnectionScreen.loggedinOtherLocation");
     }
     if (alreadyOnline) {
         LOG_INFO(LogAreaID::Server, "Player %s logged in from another location", player.getName().c_str());
