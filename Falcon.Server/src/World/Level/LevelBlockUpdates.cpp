@@ -202,6 +202,9 @@ void Level::onBlockPlaced(const Vector3i &position, const BlockState &state) {
         return;
 
     ServerNetworkHandler &owner = *mOwner;
+    const Block *placed = VanillaBlocks::fromState(state);
+    if (placed != nullptr)
+        placed->onPlacedInLevel(owner, *this, position, state);
 
     if (FallingBlockSystem::matches(state.mName)) {
         updateAround(position);
