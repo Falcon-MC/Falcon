@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace {
     // clockwise order, seen from above
@@ -518,6 +519,23 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
 
     if (name == "minecraft:flower_pot") {
         states.putByte("update_bit", 0);
+        out = BlockState(name, states);
+        return true;
+    }
+
+    if (name == "minecraft:vine") {
+        // sub_1469957B0 sets the bits of each true face in key order: the last one wins, up standing for all four
+        static const std::array<std::pair<const char *, int32_t>, 5> FACES = {
+                {{"east", 8}, {"north", 4}, {"south", 1}, {"up", 15}, {"west", 2}}};
+        int32_t bits = 0;
+        for (const std::pair<const char *, int32_t> &face: FACES) {
+            if (property(entry, face.first) == "true")
+                bits = face.second;
+        }
+        // a quarter turn clockwise moves south to west, west to north, north to east
+        for (int32_t turn = 0; turn < (quarterTurns & 3); ++turn)
+            bits = ((bits << 1) | (bits >> 3)) & 15;
+        states.putInt("vine_direction_bits", bits);
         out = BlockState(name, states);
         return true;
     }

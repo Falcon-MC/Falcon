@@ -19,6 +19,7 @@ namespace BiomeIds {
     static constexpr int32_t MUSHROOM_ISLAND_SHORE = 15;
     static constexpr int32_t BEACH = 16;
     static constexpr int32_t DESERT_HILLS = 17;
+    static constexpr int32_t TAIGA_HILLS = 19;
     static constexpr int32_t JUNGLE = 21;
     static constexpr int32_t JUNGLE_HILLS = 22;
     static constexpr int32_t JUNGLE_EDGE = 23;
@@ -28,6 +29,7 @@ namespace BiomeIds {
     static constexpr int32_t BIRCH_FOREST = 27;
     static constexpr int32_t ROOFED_FOREST = 29;
     static constexpr int32_t COLD_TAIGA = 30;
+    static constexpr int32_t COLD_TAIGA_HILLS = 31;
     static constexpr int32_t MEGA_TAIGA = 32;
     static constexpr int32_t EXTREME_HILLS_PLUS_TREES = 34;
     static constexpr int32_t SAVANNA = 35;
