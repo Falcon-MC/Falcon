@@ -5,7 +5,7 @@
 #include <vector>
 
 // Density the game adds around jigsaw structure pieces before the aquifer runs, so that the terrain
-// meets the pieces (sub_145C33980 gathers the pieces, sub_145C34670 samples them).
+// meets the pieces.
 // TODO: junctions and the bury, beard_box and encapsulate adaptations; villages only use beard_thin
 class TerrainBeard {
 public:

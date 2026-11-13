@@ -544,7 +544,7 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     if (brokenData != nullptr && brokenData->mHardness > 0.0f)
         owner.damagePlayerHeldItem(player, 1);
 
-    // the destroyed-by-player event goes out once the tool took its wear (sub_143773220, 26.60)
+    // the destroyed-by-player event goes out once the tool took its wear
     PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenState);
     brokenEvent.mItemBeforeBreak = heldItem;
     brokenEvent.mItemAfterBreak = player.getInventory().getItemInHand();
@@ -1050,7 +1050,7 @@ bool BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     bool handled = false;
 
-    // GameMode::useItemOn (sub_141038440) checks no reach for a simulated player
+    // the game checks no reach for a simulated player
     if (player.isSimulated() || canInteractWithBlock(player, transaction.mBlockPosition)) {
         if (player.isCreative())
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);

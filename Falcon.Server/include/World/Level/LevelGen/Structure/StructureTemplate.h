@@ -31,7 +31,7 @@ public:
     // quarter turns clockwise seen from above, about the template origin
     static void rotate(int32_t quarterTurns, int32_t &x, int32_t &z);
 
-    // the template settings' mirror, applied before the turn (sub_14775E430): 1 flips z, 2 flips x, 3 neither
+    // the template settings' mirror, applied before the turn: 1 flips z, 2 flips x, 3 neither
     static void mirror(int32_t mirror, int32_t &x, int32_t &z);
 
     int32_t getSizeX() const;

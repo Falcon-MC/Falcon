@@ -13,7 +13,7 @@
 namespace {
     enum class ComponentKind { None, Source, Wire, Consumer };
 
-    // a block setting up its own component (block vtable slot 56) or a producer hook (slot 115, sub_14331D5D0)
+    // a block setting up its own component (block vtable slot 56) or a producer hook
     const std::unordered_set<std::string> &sources() {
         static const std::unordered_set<std::string> names = {
                 "minecraft:redstone_torch",
@@ -32,7 +32,7 @@ namespace {
                 "minecraft:detector_rail",
                 "minecraft:sculk_sensor",
                 "minecraft:calibrated_sculk_sensor",
-                // sub_14A2FDAE0 only for the trapped chest type
+                // only the trapped chest type
                 "minecraft:trapped_chest",
                 "minecraft:jukebox",
                 "minecraft:lectern",
@@ -40,7 +40,7 @@ namespace {
         return names;
     }
 
-    // consumer descriptions (vtable 0x14F187140 in sub_14CE9AD30), consumer hooks (sub_1449BAFC0) and
+    // consumer descriptions, consumer hooks and
     // the rail and piston components
     const std::unordered_set<std::string> &consumers() {
         static const std::unordered_set<std::string> names = {
@@ -90,7 +90,7 @@ namespace {
         if (consumers().count(name) != 0 || endsWith(name, "copper_bulb") || endsWith(name, "_shelf")
             || endsWith(name, "door") || endsWith(name, "fence_gate") || endsWith(name, "shulker_box"))
             return ComponentKind::Consumer;
-        // a pack block with minecraft:redstone_consumer (sub_143879850)
+        // a pack block with minecraft:redstone_consumer
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(name);
         if (custom != nullptr && custom->mRedstoneConsumer)
             return ComponentKind::Consumer;

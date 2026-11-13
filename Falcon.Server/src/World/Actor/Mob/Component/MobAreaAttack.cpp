@@ -17,7 +17,7 @@ namespace {
     const float TICKS_PER_SECOND = 20.0f;
     // reach of the actor index around the attacker, past its own box
     const float SEARCH_MARGIN = 4.0f;
-    // sub_147B40020 drops expired cooldowns every 1200 ticks, staggered by the attacker id
+    // the game drops expired cooldowns every 1200 ticks, staggered by the attacker id
     const int64_t COOLDOWN_PURGE_INTERVAL = 1200;
 
     float numberIn(const json::Value &component, const char *key, float fallback) {
@@ -47,7 +47,6 @@ void MobAreaAttack::_read(const json::Value &component) {
 }
 
 void MobAreaAttack::tick(ServerNetworkHandler &owner, MobActor &mob) {
-    // sub_147B40020
     const json::Value *component = mob.getComponent(AREA_ATTACK_COMPONENT);
     if (component != mComponent) {
         mComponent = component;

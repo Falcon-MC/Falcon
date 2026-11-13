@@ -20,7 +20,7 @@ FALCON_REGISTER_ITEM(CushionItem, 110);
 
 namespace {
     // another cushion under the clicked point blocks the placement: the game fetches cushions in a box 0.001 high
-    // around it (sub_147B980C0)
+    // around it
     bool isOccupied(ServerNetworkHandler &owner, Level &level, const Vector3f &point) {
         const AxisAlignedBB probe(point.x, point.y - 0.001f, point.z, point.x, point.y + 0.001f, point.z);
         for (auto &entry: owner.getActors()) {
@@ -61,7 +61,7 @@ bool CushionItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player
     if (color == DyeColor::INVALID)
         return false;
 
-    // top faces only; the cushion sits where the face was clicked: a snow layer keeps it low (sub_147B980C0)
+    // top faces only; the cushion sits where the face was clicked: a snow layer keeps it low
     if (face != 1 || !std::isfinite(clickPosition.x) || !std::isfinite(clickPosition.y)
         || !std::isfinite(clickPosition.z))
         return false;

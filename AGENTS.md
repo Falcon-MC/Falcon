@@ -129,11 +129,10 @@ nothing, delete it.
 - **Tone:** fragments, lowercase, no final period. No filler (`so`, `which`, `that`, `in order to`): join the
   parts with `:` or `;`. One line, two at most; longer only for a real trap: binary format, protocol order, race.
 - **Keep:** the reason for a value or an order, what the game or protocol does that the code copies, traps
-  for the next change, short game references (`// ClientInstance::_tickBuildAction`), binary and network
-  formats field by field.
-- **Game addresses:** a bare `sub_` address changes with every game version. Give the real name when it is
-  known, then the address and the version: `// CrafterBlock::tick (sub_14C9123C0, 26.60)`. Complete old
-  ones in files you already touch; never in a sweep of their own.
+  for the next change, binary and network formats field by field.
+- **No game symbols:** never name a function of the game or give one of its addresses (`sub_14C9123C0`,
+  `0x14F2F8890`, `CrafterBlock::tick`). Say what the game does in plain words: `// the game retracts a sticky
+  piston first`.
 - **Drop:** narration, history, commented-out code, names of other servers or clients, authors, dates,
   tickets, apologies and hedging.
 - **TODO** only for a real gap, on one line: `// TODO: catmullrom keyframes, linear for now`.

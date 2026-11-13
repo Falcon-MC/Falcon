@@ -28,7 +28,7 @@ bool CarpetBlock::canSurvive(Level &level, const Vector3i &position, const Block
     return canPlaceAt(level, position, PlacementOrientation::FACE_UP);
 }
 
-// dampen only: the carpet registrations leave occlude off (sub_14CE9AD30 at 0x14CF87579, 26.60)
+// dampen only: the carpet registrations leave occlude off
 uint8_t CarpetBlock::getVibrationProperties() const {
     return VibrationProperties::DAMPENS;
 }

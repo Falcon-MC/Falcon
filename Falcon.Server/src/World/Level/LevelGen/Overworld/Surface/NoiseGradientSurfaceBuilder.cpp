@@ -31,7 +31,6 @@ namespace {
     }
 }
 
-// sub_1471326A0
 NoiseGradientSurfaceBuilder::NoiseGradientSurfaceBuilder(int64_t levelSeed, const std::string &noiseName,
                                                          int32_t firstOctave, const std::vector<float> &amplitudes,
                                                          std::vector<Range> ranges,
@@ -49,7 +48,7 @@ NoiseGradientSurfaceBuilder NoiseGradientSurfaceBuilder::sulfurCaves(int64_t lev
             {&bedrockState()});
 }
 
-// sub_147132F40: clamped to [-1, 1], low bound excluded
+// clamped to [-1, 1], low bound excluded
 const BlockState *NoiseGradientSurfaceBuilder::blockAt(int32_t x, int32_t y, int32_t z) const {
     const float noise = mNoise->getValue(static_cast<double>(x), static_cast<double>(y), static_cast<double>(z));
     const float value = 1.0f < noise ? 1.0f : std::fmax(noise, -1.0f);

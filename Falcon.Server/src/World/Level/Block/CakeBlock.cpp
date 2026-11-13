@@ -11,7 +11,7 @@ bool CakeBlock::matches(const std::string &identifier) {
     return identifier == BlockNames::CAKE;
 }
 
-// CakeBlock::getComparatorSignal (sub_1435BE320, 26.60): two less per slice eaten
+// CakeBlock::getComparatorSignal: two less per slice eaten
 int CakeBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) level;
     (void) position;

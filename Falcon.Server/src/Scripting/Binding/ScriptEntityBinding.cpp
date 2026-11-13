@@ -354,7 +354,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // entity.<name>.name, the vanilla namespace dropped (sub_14C0E56A0)
+    // entity.<name>.name, the vanilla namespace dropped
     std::string localizationKeyOf(const std::string &typeId) {
         const std::string prefix = "minecraft:";
         const std::string name = typeId.compare(0, prefix.size(), prefix) == 0 ? typeId.substr(prefix.size()) : typeId;
@@ -384,7 +384,7 @@ namespace {
         }
         if (target.mServerActor != nullptr)
             return target.mServerActor->getSize();
-        // the item entity's setSize(0.25, 0.25): sub_1438CA890
+        // the item entity's setSize(0.25, 0.25)
         return ActorSize{0.25f, 0.25f};
     }
 
@@ -538,7 +538,7 @@ namespace {
         return array;
     }
 
-    // relative head offsets: up times the box height, forward times the box width (sub_14297BAA0 callers)
+    // relative head offsets: up times the box height, forward times the box width
     struct HeadOffset {
         const char *mIdentifier;
         float mForward;
@@ -568,7 +568,7 @@ namespace {
             {"minecraft:parrot", 0.85f, 0.85f},
             {"minecraft:pig", 0.85f, 0.85f},
             {"minecraft:polar_bear", 0.85f, 0.85f},
-            // its constructor leaves the head unset (sub_14616A9B0)
+            // its constructor leaves the head unset
             {"minecraft:pufferfish", 0.0f, 0.0f},
             {"minecraft:rabbit", 0.85f, 0.85f},
             {"minecraft:sheep", 0.85f, 0.85f},
@@ -579,7 +579,7 @@ namespace {
     };
 
     // player position sits 1.62001 above the feet, lowered when sneaking (0.35), lying (0.4) or asleep (0.2);
-    // the head is 0.1 below it (sub_142CED370, sub_1402B5670)
+    // the head is 0.1 below it
     float playerEyeHeight(const ServerPlayer &player) {
         const ActorFlags &flags = player.getFlags();
         if (flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling))
@@ -599,7 +599,7 @@ namespace {
         if (dynamic_cast<const MobActor *>(target.mActor) == nullptr)
             return position;
 
-        // the mob default: straight up, 0.85 of the box height (sub_142C1F350)
+        // the mob default: straight up, 0.85 of the box height
         float forward = 0.0f, up = 0.85f;
         const std::string &identifier = target.mRef->mTypeId;
         for (const HeadOffset &offset: HEAD_OFFSETS) {
@@ -610,7 +610,7 @@ namespace {
             }
         }
         const ActorSize size = sizeOf(target);
-        // turned by the head yaw: sub_1437DB6A0 mode 3
+        // turned by the head yaw
         const float yaw = target.mActor->getRotation().z * 0.017453292f;
         const float ahead = forward * size.mWidth;
         return Vector3f(position.x - ahead * std::sin(yaw), position.y + up * size.mHeight,
@@ -619,7 +619,7 @@ namespace {
 
     using VectorMath::wrapDegrees;
 
-    // both angles wrapped to [-180, 180), never clamped (sub_14C351740)
+    // both angles wrapped to [-180, 180), never clamped
     void applyRotation(const EntityTarget &target, float pitch, float yaw) {
         target.mActor->setRotation(Vector3f(wrapDegrees(pitch), wrapDegrees(yaw), 0.0f));
         if (target.mPlayer != nullptr)
@@ -641,7 +641,6 @@ namespace {
         if (argc < 1 || !readVector3(ctx, argv[0], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         // from the state position: the eyes of a player, the feet of anything else; a zero direction gives 0
-        // (sub_14C359D90)
         Vector3f from = target.mActor->getPosition();
         if (target.mPlayer != nullptr)
             from.y += playerEyeHeight(*target.mPlayer);
@@ -811,7 +810,7 @@ namespace {
             target.mApi->host().syncActorFlags(*target.mServerActor);
     }
 
-    // actor flag 129 (sub_14C35A6F0, sub_14C35A770)
+    // actor flag 129
     JSValue entityGetNameplateDepthTested(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return JS_NewBool(ctx, entityOf(ctx, thisVal).mActor->getFlags().get(ActorFlag::NameplateDepthTested));
     }
@@ -829,7 +828,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // float data 140 (sub_14C356570, sub_14C356640)
+    // float data 140
     JSValue entityGetNameplateRenderDistance(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return JS_NewFloat64(ctx, entityOf(ctx, thisVal).mActor->getNameplateRenderDistance());
     }
@@ -862,7 +861,7 @@ namespace {
     }
 
     // a solid block inside the collision box at the destination
-    // 2 for an unloaded chunk, 1 for a solid block, 0 when clear, like sub_14BE1B5A0
+    // 2 for an unloaded chunk, 1 for a solid block, 0 when clear, like
     int destinationBlocked(Level &level, const Vector3f &position, const ActorSize &size) {
         const float half = size.mWidth / 2.0f;
         int result = 0;
@@ -906,7 +905,7 @@ namespace {
             double pitch = 0.0, yaw = 0.0;
             if (JS_IsObject(rotationValue) && readNumber(ctx, rotationValue, "x", pitch)
                 && readNumber(ctx, rotationValue, "y", yaw)) {
-                // pitch clamped to 89 and yaw wrapped to [-180, 180) (sub_14BE16000)
+                // pitch clamped to 89 and yaw wrapped to [-180, 180)
                 rotation = Vector3f(std::clamp((float) pitch, -89.0f, 89.0f), wrapDegrees((float) yaw), 0.0f);
                 rotate = true;
             }
@@ -915,7 +914,7 @@ namespace {
             JSValue facing = JS_GetPropertyStr(ctx, options, "facingLocation");
             double fx = 0.0, fy = 0.0, fz = 0.0;
             if (JS_IsObject(facing) && readVector3(ctx, facing, fx, fy, fz)) {
-                // aimed from the destination itself, not the eyes (sub_14BE16000)
+                // aimed from the destination itself, not the eyes
                 float pitch2 = 0.0f, yaw2 = 0.0f;
                 rotationTowards(position, Vector3f((float) fx, (float) fy, (float) fz), pitch2, yaw2);
                 rotation = Vector3f(pitch2, yaw2, 0.0f);
@@ -932,11 +931,11 @@ namespace {
             JS_FreeValue(ctx, check);
         }
 
-        // the game has no height check here (sub_14C35A800)
+        // the game has no height check here
         if (keepVelocity && target.mPlayer != nullptr)
             return target.mApi->throwError("InvalidArgumentError",
                                            "keepVelocity is not supported for player teleportation.");
-        // name tag then id, like sub_14C35A800
+        // name tag then id, like
         if (!target.mActor->isIn(*destination) && target.mActor->hasPassengers()) {
             const std::string name = target.mPlayer != nullptr        ? target.mPlayer->getName()
                                      : target.mServerActor != nullptr ? target.mServerActor->getNameTag()
@@ -1283,7 +1282,7 @@ namespace {
         return target.mApi->runCommand(target.mApi->host().getLevelFor(*target.mActor), target.mActor, line);
     }
 
-    // the entity's inventory component container takes it (sub_14C4ADC70, 26.60)
+    // the entity's inventory component container takes it
     JSValue entityAddItem(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         // the entity's own getComponent: the inventory component has its own binding path
@@ -1400,7 +1399,7 @@ namespace {
                                        + boundText(maxValue) + "]");
     }
 
-    // ScriptActor::setProperty (sub_14C34F070, 26.60): the value arrives as a float, bool or string; an int is the
+    // the value arrives as a float, bool or string; an int is the
     // truncated float, and every mismatch names the property kind the game expected
     JSValue entitySetProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
@@ -1547,7 +1546,7 @@ namespace {
         return string(ctx, playerOf(ctx, thisVal)->getName());
     }
 
-    // the identity component's playfab id, the "pfid" of the spawn log (sub_14D5F0110, sub_141EC1280)
+    // the identity component's playfab id, the "pfid" of the spawn log
     JSValue playerGetPersistentId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return string(ctx, playerOf(ctx, thisVal)->getPlayFabId());
     }
@@ -1801,11 +1800,11 @@ namespace {
         return JS_NewBool(ctx, player->getInputState().mTouchOnlyHotbar);
     }
 
-    // GraphicsMode and PlatformType by native value (sub_14D819AD0, sub_14C6FFF30, 26.60)
+    // GraphicsMode and PlatformType by native value
     const char *const GRAPHICS_MODES[] = {"Simple", "Fancy", "Deferred", "RayTraced"};
     const char *const PLATFORM_TYPES[] = {"Desktop", "Mobile", "Console"};
 
-    // the overridden entity and its property, with the game's errors (sub_14D5422A0, 26.60)
+    // the overridden entity and its property, with the game's errors
     const ActorPropertyDescription *overrideTarget(JSContext *ctx, JSValueConst entity, JSValueConst identifier,
                                                    ServerActor *&actor, JSValue &error) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -1846,7 +1845,6 @@ namespace {
     }
 
     // the value must fit the property: an int truncated then ranged, a float ranged, a bool, an enum name
-    // (sub_14D541720, 26.60)
     JSValue playerSetPropertyOverride(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         if (argc < 3)
@@ -1929,11 +1927,11 @@ namespace {
         return JS_NewString(ctx, mode >= 0 && mode <= 3 ? GRAPHICS_MODES[mode] : GRAPHICS_MODES[1]);
     }
 
-    // ControlScheme::Scheme in the order the game reflects it (sub_142D31E30, sub_145D0FBB0)
+    // control schemes in the order the game reflects them
     const char *const CONTROL_SCHEMES[] = {"LockedPlayerRelativeStrafe", "CameraRelative", "CameraRelativeStrafe",
                                            "PlayerRelative", "PlayerRelativeStrafe"};
 
-    // the schemes each vanilla camera allows, its default first (sub_145D336F0, sub_145D0E980, 26.60)
+    // the schemes each vanilla camera allows, its default first
     std::vector<int32_t> allowedControlSchemes(const std::string &preset) {
         if (preset == "minecraft:free")
             return {0, 4, 3, 1, 2};
@@ -1952,7 +1950,7 @@ namespace {
         return JS_NewString(ctx, CONTROL_SCHEMES[scheme >= 0 && scheme <= 4 ? scheme : 0]);
     }
 
-    // ScriptPlayer::setControlScheme (sub_14D5E2CB0, 26.60): needs a camera state; no scheme falls back to the
+    // needs a camera state; no scheme falls back to the
     // camera's default, a given one must be allowed by the active camera
     JSValue playerSetControlScheme(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
@@ -2061,7 +2059,7 @@ namespace {
 
     enum class EffectField { TypeId, Amplifier, Duration, DisplayName };
 
-    // sub_1435541B0: the description id each effect registers with
+    // the description id each effect registers with
     const char *effectDescriptionId(const std::string &name) {
         static const std::unordered_map<std::string, const char *> ids = {
                 {"speed", "potion.moveSpeed"},
@@ -2107,7 +2105,7 @@ namespace {
         return found == ids.end() ? "" : found->second;
     }
 
-    // sub_14355CDA0: the translated name, then the translated potency for amplifiers 1 to 5
+    // the translated name, then the translated potency for amplifiers 1 to 5
     std::string effectDisplayName(const MobEffectInstance &effect) {
         const VanillaTexts &texts = VanillaTexts::getInstance();
         std::string name = texts.translate(effectDescriptionId(ScriptApi::effectTypeId(effect.mId)));
@@ -2262,7 +2260,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_1443AA2B0: the id and value go out as a ScriptMessagePacket
+    // the id and value go out as a ScriptMessagePacket
     JSValue playerPostClientMessage(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const EntityTarget target = entityOf(ctx, thisVal);
         if (argc < 2)
@@ -2282,7 +2280,7 @@ namespace {
         return JS_NewInt32(ctx, ping);
     }
 
-    // the connection's split screen slot (sub_14D5F2540); every Falcon connection carries one player alone
+    // the connection's split screen slot; every Falcon connection carries one player alone
     JSValue playerGetSplitScreenSlot(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
@@ -2346,7 +2344,7 @@ namespace {
         player.sendSubtitle(text, isJson);
     }
 
-    // ScriptScreenDisplay::setTitle (sub_14B9171E0): the times first, 10/70/20 without options, then the
+    // the times first, 10/70/20 without options, then the
     // subtitle and the title; an empty title string clears it
     JSValue screenSetTitle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
@@ -2435,7 +2433,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_141031010: everything but the listed elements is hidden; those keep their state
+    // everything but the listed elements is hidden; those keep their state
     JSValue screenHideAllExcept(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         bool all = true;
@@ -2615,7 +2613,7 @@ namespace {
         player.recordCamera(packet);
     }
 
-    // ScriptCamera::setCamera (sub_14C871D00): the preset, then whichever options the bag holds
+    // the preset, then whichever options the bag holds
     JSValue cameraSetCamera(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -2695,8 +2693,8 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ScriptCamera::setCameraWithEase (sub_14C916830); an ease to a minecraft preset outside this list throws
-    // (sub_14C8748D0); first_person joins it only with the experimental cameras toggle (sub_142FB6880)
+    // an ease to a minecraft preset outside this list throws;
+    // first_person joins it only with the experimental cameras toggle
     const char *const EASE_TARGETS[] = {"minecraft:free", "minecraft:follow_orbit", "minecraft:fixed_boom",
                                         "minecraft:third_person", "minecraft:third_person_front"};
 
@@ -2740,7 +2738,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_14C913F70: the preset becomes the player's default camera
+    // the preset becomes the player's default camera
     JSValue cameraSetDefaultCamera(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -2769,7 +2767,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ScriptCamera::fade (sub_14C910F70): times within [0, 10], colour channels within [0, 1]
+    // times within [0, 10], colour channels within [0, 1]
     JSValue cameraFade(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -2917,7 +2915,7 @@ namespace {
         return nullptr;
     }
 
-    // ScriptCamera::playAnimation (sub_14C90B920, 26.60): rotation frames, then progress frames with alpha
+    // rotation frames, then progress frames with alpha
     // clamped to [0, 1], then the curve size
     JSValue cameraPlayAnimation(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
@@ -2992,7 +2990,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ScriptCamera::setFov (sub_14C905CC0): no fov clears the custom one; a custom one lies in [30, 110]
+    // no fov clears the custom one; a custom one lies in [30, 110]
     JSValue cameraSetFov(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -3026,7 +3024,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ScriptCamera::attachToEntity (sub_14C919F30): without options the camera detaches
+    // without options the camera detaches
     JSValue cameraAttachToEntity(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -3048,7 +3046,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ScriptCamera::addShake (sub_14C91C8E0): a positive duration, an intensity in (0, 4]
+    // a positive duration, an intensity in (0, 4]
     JSValue cameraAddShake(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ServerPlayer *player = partOwner(ctx, thisVal);
         ScriptApi *api = ScriptApi::fromContext(ctx);

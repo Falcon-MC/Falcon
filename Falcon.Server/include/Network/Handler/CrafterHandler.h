@@ -7,7 +7,7 @@ class ServerPlayer;
 // the server side of the crafter window
 class CrafterHandler {
 public:
-    // sub_1422B95D0: only for the crafter whose window the player has open
+    // only for the crafter whose window the player has open
     static void handleToggleSlot(ServerNetworkHandler &owner, ServerPlayer &player,
                                  const PlayerToggleCrafterSlotRequestPacket &packet);
 };

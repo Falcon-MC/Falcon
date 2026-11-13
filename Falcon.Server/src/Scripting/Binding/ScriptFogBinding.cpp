@@ -18,7 +18,7 @@ namespace {
         return JS_ThrowTypeError(ctx, "Native type conversion failed.");
     }
 
-    // FogSettings resolves its player on every call: a missing one names the method (sub_14A5B3E50)
+    // FogSettings resolves its player on every call: a missing one names the method
     ServerPlayer *fogOwner(JSContext *ctx, JSValueConst thisVal, const char *method, JSValue &error) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptFogRef *fog = api->native<ScriptFogRef>(thisVal);
@@ -36,7 +36,7 @@ namespace {
                                                 "has been reached.");
     }
 
-    // sub_142BC93D0 (26.60): the lowercased identifier must read namespace:name
+    // the lowercased identifier must read namespace:name
     bool validFogId(const std::string &id) {
         static const std::regex PATTERN("[a-z0-9._]+:[a-z0-9._]+");
         std::string lowered = id;
@@ -47,7 +47,7 @@ namespace {
         return std::regex_match(lowered, PATTERN);
     }
 
-    // an absent tag files the entry under "untagged" (sub_142BC9A10)
+    // an absent tag files the entry under "untagged"
     bool readTag(JSContext *ctx, int argc, JSValueConst *argv, int index, std::string &tag, bool &present) {
         present = argc > index && !JS_IsUndefined(argv[index]);
         if (!present) {
@@ -74,8 +74,8 @@ namespace {
         return hash;
     }
 
-    // getTags walks a std::unordered_set<std::string> (sub_142BCA580): this replays its insertion and rehash
-    // order (sub_14011A720, sub_140077D80) so the tags come out as the game lists them
+    // getTags walks a std::unordered_set<std::string>: this replays its insertion and rehash
+    // order so the tags come out as the game lists them
     class TagSet {
     public:
         void insert(const std::string &tag) {
@@ -155,7 +155,7 @@ namespace {
         return list;
     }
 
-    // ScriptFogSettings::push (sub_14D598DA0, 26.60): the identifier first, then the limit
+    // the identifier first, then the limit
     JSValue fogPush(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         std::string tag;
         bool tagged = false;
@@ -176,7 +176,7 @@ namespace {
         return JS_NewInt32(ctx, (int32_t) stack.size() - 1);
     }
 
-    // sub_142BC9C00: a tag pops the topmost entry carrying it, none pops the top
+    // a tag pops the topmost entry carrying it, none pops the top
     JSValue fogPop(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         std::string tag;
         bool tagged = false;
@@ -202,7 +202,7 @@ namespace {
         return string(ctx, id);
     }
 
-    // sub_142BC9DC0: a tag drops every entry carrying it, none clears the stack
+    // a tag drops every entry carrying it, none clears the stack
     JSValue fogRemove(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         std::string tag;
         bool tagged = false;
@@ -226,7 +226,7 @@ namespace {
         return JS_TRUE;
     }
 
-    // ScriptFogSettings::setStack (sub_14D59C620, 26.60): the limit first, then every identifier
+    // the limit first, then every identifier
     JSValue fogSetStack(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         std::string tag;
         bool tagged = false;

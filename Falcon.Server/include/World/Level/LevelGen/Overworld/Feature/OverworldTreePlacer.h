@@ -11,8 +11,8 @@
 
 class BlockManager;
 
-// the game's minecraft:tree_feature with the trunks and canopies of the overworld's vanilla trees
-// (VanillaTreeFeature, place sub_14A2C9A20); every draw comes from the placement twister it is given
+// the game's minecraft:tree_feature with the trunks and canopies of the overworld's vanilla trees;
+// every draw comes from the placement twister it is given
 class OverworldTreePlacer {
 public:
     enum class Trunk { Simple, Fancy, Fallen, Mega, Acacia, Mangrove, Cherry, Poplar };
@@ -207,7 +207,7 @@ public:
                       const Acacia *acacia, int32_t x, int32_t y, int32_t z, std::mt19937 &random,
                       const Decorate &decorate, int32_t *placedAt = nullptr);
 
-    // the blocks a trunk's log may replace besides may_replace (sub_1471C66B0)
+    // the blocks a trunk's log may replace besides may_replace
     static bool logReplaces(const Definition &tree, const BlockState &state);
 
 private:

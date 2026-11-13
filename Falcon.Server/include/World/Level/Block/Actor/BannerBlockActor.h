@@ -22,7 +22,7 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    // the reverse of the banner's asItemInstance (sub_143149EA0): the item's data value is the base color, its other
+    // the reverse of the banner's asItemInstance: the item's data value is the base color, its other
     // tag fields the banner's saved ones
     static void placeFromItem(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                               const BlockState &state, const ItemStack &item);

@@ -47,7 +47,7 @@
 using namespace ScriptValues;
 
 namespace {
-    // BlockBoundingBoxUtils (sub_14DD4B0F0): a box is two block positions; vectors given to the utils truncate toward
+    // BlockBoundingBoxUtils: a box is two block positions; vectors given to the utils truncate toward
     // zero (cvttps), the corners read as block positions, which BlockPos(Vec3) floors
     struct BlockBox {
         int32_t mMin[3];
@@ -110,7 +110,7 @@ namespace {
         return makeBox(ctx, box);
     }
 
-    // sub_14DD50D40: the corners move out by the truncated size, then each axis is put back in order
+    // the corners move out by the truncated size, then each axis is put back in order
     JSValue boxDilate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         BlockBox box;
         int32_t size[3];
@@ -148,7 +148,7 @@ namespace {
         return makeBox(ctx, out);
     }
 
-    // sub_14DD50E50: whole blocks, the half span rounds toward zero
+    // whole blocks, the half span rounds toward zero
     JSValue boxGetCenter(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         BlockBox box;
         if (argc < 1 || !readBox(ctx, argv[0], box))
@@ -173,7 +173,7 @@ namespace {
         return makeBox(ctx, out);
     }
 
-    // sub_14DD50E20: both corners count
+    // both corners count
     JSValue boxGetSpan(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         BlockBox box;
         if (argc < 1 || !readBox(ctx, argv[0], box))
@@ -207,7 +207,6 @@ namespace {
         return JS_NewBool(ctx, box.mMax[0] >= box.mMin[0] && box.mMax[1] >= box.mMin[1] && box.mMax[2] >= box.mMin[2]);
     }
 
-    // sub_14DD50DC0
     JSValue boxTranslate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         BlockBox box;
         int32_t delta[3];
@@ -287,8 +286,8 @@ namespace {
         return identifier;
     }
 
-    // BlockType vtable +784 (sub_1435AC4B0): mDescriptionId + ".name", "tile." + the name without a minecraft namespace
-    // (sub_1435A8150); a display_name component replaces it (sub_143169930)
+    // BlockType vtable +784: mDescriptionId + ".name", "tile." + the name without a minecraft namespace;
+    // a display_name component replaces it
     std::string localizationKeyOf(const std::string &identifier) {
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(identifier);
         if (custom != nullptr && !custom->mDisplayName.empty())
@@ -298,16 +297,14 @@ namespace {
         if (!vanilla)
             return "tile." + name + ".name";
 
-        // sub_14A433AC0
         static const std::unordered_map<std::string, std::string> fences = {
                 {"oak_fence", "fence"},          {"acacia_fence", "acaciaFence"},
                 {"birch_fence", "birchFence"},   {"dark_oak_fence", "darkOakFence"},
                 {"jungle_fence", "jungleFence"}, {"spruce_fence", "spruceFence"}};
-        // sub_1476FEEB0 over qword_14F319098
         static const std::unordered_map<std::string, std::string> planks = {
                 {"oak_planks", "oak"},       {"spruce_planks", "spruce"}, {"birch_planks", "birch"},
                 {"jungle_planks", "jungle"}, {"acacia_planks", "acacia"}, {"dark_oak_planks", "big_oak"}};
-        // sub_14A429250 over off_14F3E5E38: element 1 to 118, any other number reads unknown
+        // element 1 to 118, any other number reads unknown
         static const char *const elements[] = {
                 "h",  "he", "li", "be", "b",  "c",  "n",  "o",  "f",  "ne", "na", "mg", "al", "si", "p",  "s",  "cl",
                 "ar", "k",  "ca", "sc", "ti", "v",  "cr", "mn", "fe", "co", "ni", "cu", "zn", "ga", "ge", "as", "se",
@@ -323,7 +320,7 @@ namespace {
         const auto plank = planks.find(name);
         if (plank != planks.end())
             return "tile.planks." + plank->second + ".name";
-        // sub_148F8B380: the skull class swaps tile. for item.
+        // the skull class swaps tile. for item.
         if (BlockIdentifier::equalsAny(identifier,
                                        {"minecraft:skeleton_skull", "minecraft:wither_skeleton_skull",
                                         "minecraft:zombie_head", "minecraft:player_head", "minecraft:creeper_head",
@@ -457,7 +454,7 @@ namespace {
         if (argc < 1 || !JS_IsBool(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         const bool waterlogged = JS_ToBool(ctx, argv[0]) == 1;
-        // sub_14A754340: only setting true checks the block type
+        // only setting true checks the block type
         if (waterlogged && !liquidAnswers(at.state()).mCanContain)
             return at.mApi->throwError("Error", "Block type cannot be waterlogged.");
 
@@ -516,7 +513,7 @@ namespace {
         return at.mApi->makeBlock(*at.mLevel, target.x, target.y, target.z);
     }
 
-    // sub_1432D1500: a block filtering all light reads 0, else the brighter of block light and darkened sky light
+    // a block filtering all light reads 0, else the brighter of block light and darkened sky light
     JSValue blockGetLightLevel(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         if (BlockLightProperties::lightFilter(BlockLightProperties::packed(at.state())) >= 15)
@@ -532,7 +529,7 @@ namespace {
         return JS_NewInt32(ctx, at.mLevel->getSkyLightAt(at.mPosition.x, at.mPosition.y, at.mPosition.z));
     }
 
-    // undefined without a circuit component (sub_14A752ED0)
+    // undefined without a circuit component
     JSValue blockGetRedstonePower(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         const std::optional<int> strength = CircuitComponents::strengthAt(at.mApi->host(), *at.mLevel, at.mPosition);
@@ -570,7 +567,7 @@ namespace {
         return custom != nullptr && custom->mEntityStorage;
     }
 
-    // the storage the block actor carries (sub_14E0DD0A0); a pack block declaring entity_storage always has one
+    // the storage the block actor carries; a pack block declaring entity_storage always has one
     BlockEntityStorage *entityStorageAt(Level &level, const Vector3i &position) {
         BlockActor *actor = level.getBlockActors().find(position);
         if (actor != nullptr && actor->getEntityStorage() != nullptr)
@@ -609,7 +606,7 @@ namespace {
         if (PistonSystem::isPiston(state.mName))
             ids.emplace_back("minecraft:piston");
         ids.emplace_back("minecraft:precipitation_interactions");
-        // sub_14E0E0F70: the stonecutter alone
+        // the stonecutter alone
         if (StonecutterBlock::matches(state.mName))
             ids.emplace_back("minecraft:recipe_crafting");
         if (dynamic_cast<CrafterBlockActor *>(actor) != nullptr)
@@ -620,7 +617,7 @@ namespace {
             ids.emplace_back("minecraft:redstone_producer");
         if (dynamic_cast<SignBlockActor *>(actor) != nullptr)
             ids.emplace_back("minecraft:sign");
-        // sub_14E0E4630: every block has one
+        // every block has one
         ids.emplace_back("minecraft:vibration_properties");
         return ids;
     }
@@ -784,7 +781,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ItemColor order with the dye texture rgb (qword_14F103E50); the sign keeps opaque rgb
+    // ItemColor order with the dye texture rgb; the sign keeps opaque rgb
     struct SignDye {
         const char *name;
         int32_t rgb;
@@ -796,7 +793,7 @@ namespace {
             {"LightBlue", 0x3AB3DA}, {"Magenta", 0xC74EBD}, {"Orange", 0xF9801D}, {"White", 0xF0F0F0},
     };
 
-    // only an exact dye rgb answers: the default black text (0) is undefined, sub_141A66520
+    // only an exact dye rgb answers: the default black text (0) is undefined
     JSValue signGetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         bool valid = true;
@@ -1025,7 +1022,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // ScriptBlockFluidContainerComponent::addDye (sub_14C8D2390, 26.60): the dye as a one item stack in dye slot 2
+    // the dye as a one item stack in dye slot 2
     JSValue fluidAddDye(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         JSValue id = argc >= 1 && JS_IsObject(argv[0]) ? JS_GetPropertyStr(ctx, argv[0], "id") : JS_UNDEFINED;
@@ -1050,7 +1047,7 @@ namespace {
         return JS_NewInt32(ctx, power);
     }
 
-    // the face's note sound, note.none when undeclared; only Down and Up have one (sub_14E0A7680, 26.60)
+    // the face's note sound, note.none when undeclared; only Down and Up have one
     JSValue instrumentOf(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, BlockAt &at,
                          std::string &sound) {
         at = blockAt(ctx, thisVal);
@@ -1081,7 +1078,7 @@ namespace {
         return JS_IsException(refused) ? refused : string(ctx, sound);
     }
 
-    // note.none is played too: the client has no such sound (sub_14E10C700, 26.60)
+    // note.none is played too: the client has no such sound
     JSValue instrumentPlaySound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         BlockAt at;
         std::string sound;
@@ -1126,7 +1123,7 @@ namespace {
         return rgba(ctx, color);
     }
 
-    // sub_14A764AF0: the colour a map draws for the block, tinted by the biome it stands in
+    // the colour a map draws for the block, tinted by the biome it stands in
     JSValue blockGetMapColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         MapBiomeColors biome;
@@ -1196,7 +1193,7 @@ namespace {
         stopAt(at);
         jukebox->getContainer()->setContainerItem(0, stack);
         BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
-        // the one-argument overload plays (sub_14E153BD0); the other stores !startPlaying (sub_14E14CF60)
+        // the one-argument overload plays; the other stores !startPlaying
         if (argc < 2 || JS_IsUndefined(argv[1]) || JS_ToBool(ctx, argv[1]) == 1)
             playAt(at, *jukebox);
         return JS_UNDEFINED;
@@ -1212,7 +1209,7 @@ namespace {
             return JS_UNDEFINED;
         stopAt(at);
         jukebox->getContainer()->setContainerItem(0, ItemStack::air());
-        // sub_143C803A0: up, north, south, east, west, down, the first free block takes the record
+        // up, north, south, east, west, down, the first free block takes the record
         static const int SIDES[6][3] = {{0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {1, 0, 0}, {-1, 0, 0}, {0, -1, 0}};
         Vector3i target(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
         for (const int *side: SIDES) {
@@ -1296,7 +1293,7 @@ namespace {
         BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, jukebox);
     }
 
-    // no sound event: the game only raises FinishedRecording, the client stops the disc (sub_144C37130)
+    // no sound event: the game only raises FinishedRecording, the client stops the disc
     void stopAt(const BlockAt &at) {
         JukeboxBlockActor *jukebox = jukeboxAt(at);
         if (jukebox == nullptr || !jukebox->isPlaying())
@@ -1371,7 +1368,7 @@ namespace {
         return JS_NewInt64(ctx, properties == nullptr ? 0 : dynamicPropertyByteCount(*properties));
     }
 
-    // undefined writes opaque black, a dye its texture rgb with full alpha (sub_14C8C4BD0)
+    // undefined writes opaque black, a dye its texture rgb with full alpha
     JSValue signSetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         bool valid = true;
@@ -1412,7 +1409,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_14A766340: the events are namespaced with the script module uuid, due tickDelay level ticks from now
+    // the events are namespaced with the script module uuid, due tickDelay level ticks from now
     JSValue blockScheduleNamedTick(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 2 || !JS_IsNumber(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
@@ -1494,7 +1491,7 @@ namespace {
         return changes;
     }
 
-    // only the crafter carries minecraft:recipe_processing (sub_14E0E3D70: block actor type 55)
+    // only the crafter carries minecraft:recipe_processing
     CrafterBlockActor *crafterAt(const BlockAt &at) {
         return at.mLevel->getBlockActors().find<CrafterBlockActor>(at.mPosition);
     }
@@ -1514,7 +1511,7 @@ namespace {
         return true;
     }
 
-    // sub_14E0B6AE0: slots 0-8, else ArgumentOutOfBoundsError named after the method, bounds 0 and 9
+    // slots 0-8, else ArgumentOutOfBoundsError named after the method, bounds 0 and 9
     JSValue checkInputSlot(const BlockAt &at, const char *method, uint32_t slot) {
         if (slot < (uint32_t) CrafterBlockActor::SIZE)
             return JS_UNDEFINED;
@@ -1548,7 +1545,7 @@ namespace {
         return at.mApi->makeItem(crafter->getInventory().getContainerItem((int) slot));
     }
 
-    // sub_14E143330: written whatever the slot's disabled state, an omitted item clears it
+    // written whatever the slot's disabled state, an omitted item clears it
     JSValue processingSetInput(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         uint32_t slot = 0;
@@ -1572,7 +1569,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_14E147470: the game names the slot check after the old getInputSlotDisabled
+    // the game names the slot check after the old getInputSlotDisabled
     JSValue processingGetSlotEnabled(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         uint32_t slot = 0;
@@ -1587,7 +1584,7 @@ namespace {
         return JS_NewBool(ctx, !crafter->getInventory().isSlotDisabled((int) slot));
     }
 
-    // sub_14E1451F0: flips the disabled bit even on a filled slot, the change alone reaches clients
+    // flips the disabled bit even on a filled slot, the change alone reaches clients
     JSValue processingSetSlotEnabled(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         uint32_t slot = 0;
@@ -1611,7 +1608,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_144C20530: the first output of the grid's recipe
+    // the first output of the grid's recipe
     JSValue processingGetOutput(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         CrafterBlockActor *crafter = crafterAt(at);
@@ -1707,7 +1704,7 @@ namespace {
         return at;
     }
 
-    // the component maps its one input to ui slot 3 (sub_14E0E0F70); past it the bounds error of sub_148548380
+    // the component maps its one input to ui slot 3; past it the bounds error of
     // names argument 0 "slot", bounds 0 and the mapping count
     JSValue checkContextSlot(ScriptApi &api, uint32_t slot) {
         if (slot < 1)
@@ -1764,7 +1761,7 @@ namespace {
         return at.mApi->makeItem(at.mPlayer->getInventory().getStonecutterInput());
     }
 
-    // sub_14C8D96D0: undefined with no input or no recipe, the selected recipe's output otherwise
+    // undefined with no input or no recipe, the selected recipe's output otherwise
     JSValue contextGetOutput(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ContextAt at = contextAt(ctx, thisVal);
         if (at.mPlayer == nullptr)
@@ -1783,7 +1780,7 @@ namespace {
                 StonecutterRecipes::createOutput(*recipes[(size_t) selected], at.mApi->host().getCodecContext()));
     }
 
-    // sub_14C8DBCF0: writes the player's ui slot, an omitted item clears it; the selected recipe stays
+    // writes the player's ui slot, an omitted item clears it; the selected recipe stays
     JSValue contextSetInput(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         uint32_t slot = 0;
         if (!readSlotIndex(ctx, argc, argv, slot))
@@ -1806,7 +1803,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_14C8DDC10: an empty input or an id outside its recipes throws InvalidRecipeError
+    // an empty input or an id outside its recipes throws InvalidRecipeError
     JSValue contextSetSelected(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
@@ -1834,7 +1831,7 @@ namespace {
         return at.mApi->throwError("InvalidRecipeError", "Invalid recipe Id " + recipeId, fields);
     }
 
-    // sub_14C8533F0: the block where the component stands now, a block without the json component reads false
+    // the block where the component stands now, a block without the json component reads false
     JSValue vibrationQuery(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         const BlockAt at = blockAt(ctx, thisVal);
         if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
@@ -1847,7 +1844,7 @@ namespace {
         return JS_NewBool(ctx, magic == 0 ? custom->mCanDampenVibrations : custom->mCanOccludeVibrations);
     }
 
-    // the location checks come first (sub_14A5E5600, sub_14B538980), then the component
+    // the location checks come first, then the component
     JSValue storageTarget(const BlockAt &at, BlockEntityStorage *&storage) {
         if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
             return at.mApi->throwError("LocationInUnloadedChunkError", "");
@@ -1894,7 +1891,7 @@ namespace {
         if (entities == nullptr)
             return list;
         uint32_t index = 0;
-        // sub_149B65E60: UniqueID and Definition of every entity of this module's bucket
+        // UniqueID and Definition of every entity of this module's bucket
         for (const Tag &entity: *entities) {
             ScriptEntityStorageInfo *info = new ScriptEntityStorageInfo();
             info->mUniqueId = std::to_string(BlockEntityStorage::uniqueIdOf(entity));
@@ -1914,7 +1911,7 @@ namespace {
         return JS_NewInt32(ctx, entities == nullptr ? 0 : (int32_t) entities->size());
     }
 
-    // sub_149B64930: the actor's save plus UniqueID and Definition, then the actor leaves the world
+    // the actor's save plus UniqueID and Definition, then the actor leaves the world
     JSValue storageStore(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         Actor *actor = argc >= 1 ? at.mApi->resolveEntity(argv[0]) : nullptr;
@@ -1952,7 +1949,7 @@ namespace {
         return string(ctx, std::to_string(uniqueId));
     }
 
-    // sub_149B652C0: the saved actor spawns where it was stored, then leaves the bucket
+    // the saved actor spawns where it was stored, then leaves the bucket
     JSValue storageRelease(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         if (argc < 1 || !JS_IsString(argv[0]))
@@ -1992,7 +1989,7 @@ namespace {
         return at.mApi->makeEntity(*released);
     }
 
-    // sub_149B65A80: into the target's bucket of the same module, without passing through the world
+    // into the target's bucket of the same module, without passing through the world
     JSValue storageTransfer(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
         const ScriptBlockRef *target = argc >= 2 ? at.mApi->native<ScriptBlockRef>(argv[1]) : nullptr;
@@ -2007,7 +2004,7 @@ namespace {
             return storageError(at, BlockEntityStorage::Result::InvalidId);
         Level &targetLevel = at.mApi->resolveLevel(target->mWorldId, target->mDimension);
         const Vector3i targetPosition(target->mX, target->mY, target->mZ);
-        // the wrapper (sub_14E0F7810) answers 10 for a target it cannot use, another dimension among them
+        // the wrapper answers 10 for a target it cannot use, another dimension among them
         BlockEntityStorage *destination = nullptr;
         if (&targetLevel == at.mLevel
             && targetLevel.peekChunkPtr(targetPosition.x >> 4, targetPosition.z >> 4) != nullptr)

@@ -13,7 +13,7 @@ public:
     // false once the actor exploded
     bool tick(ServerNetworkHandler &owner, MobActor &mob);
 
-    // ExplodeComponent's fuse length (sub_144AF6240 writes it): the fuse burns from it once lit
+    // ExplodeComponent's fuse length: the fuse burns from it once lit
     void setFuseLength(ServerNetworkHandler &owner, MobActor &mob, int32_t ticks);
 
 private:

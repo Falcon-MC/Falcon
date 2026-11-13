@@ -1,7 +1,7 @@
 #include "Scripting/Binding/ScriptDebugBootstrap.h"
 
 namespace {
-    // shape defaults from the shape constructors (sub_14B8D88B0 and the per-type ones, 26.60); type ids are
+    // shape defaults from the shape constructors; type ids are
     // ScriptDebugShapeType, the PrimitiveShapes payload order
     const char *SOURCE = R"JS(
 (function (native) {
@@ -111,7 +111,7 @@ namespace {
         state.viewers = new Set();
     };
 
-    // DebugShape and the server's PrimitiveShape are one native shape (sub_14B8CF080); only the debug one has
+    // DebugShape and the server's PrimitiveShape are one native shape; only the debug one has
     // defaultVisibleToAll and hiddenFrom
     const baseClass = (name, debug) => {
         const cls = class {
@@ -271,7 +271,7 @@ namespace {
     };
     textMembers(DebugText, "DebugText");
 
-    // the server module's text label (sub_14B8D4360), drawn by the same stream as the debug shapes
+    // the server module's text label, drawn by the same stream as the debug shapes
     const PrimitiveShape = baseClass("PrimitiveShape", false);
     const TextPrimitive = shapeClass("TextPrimitive", PrimitiveShape, TYPES.Text, TEXT_DEFAULTS, textFields);
     textMembers(TextPrimitive, "TextPrimitive");
@@ -319,7 +319,7 @@ namespace {
     });
     const debugDrawer = new DebugDrawer(token);
 
-    // PrimitiveShapesManager (sub_14B966010 and its siblings, 26.60): only its own text shapes, at most 1000 of them
+    // PrimitiveShapesManager: only its own text shapes, at most 1000 of them
     const MAX_SHAPES = 1000;
     class PrimitiveShapesManager {
         constructor(key) {
@@ -371,7 +371,7 @@ namespace {
             throw conversion();
         removeShape(states.get(text));
     });
-    // sub_14B96CE70: attachedTo must match, and with a location the shape lies within [minDistance, maxDistance]
+    // attachedTo must match, and with a location the shape lies within [minDistance, maxDistance]
     managerMethod("getShapes", (options) => {
         if (options !== undefined && (options === null || typeof options !== "object"))
             throw conversion();

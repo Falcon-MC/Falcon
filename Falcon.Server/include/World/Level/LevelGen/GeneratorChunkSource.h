@@ -21,7 +21,7 @@ class ChunkGenerator;
 class LevelChunk;
 
 // shared by every worker: chunks as the decorations left them, handed out as copies; the game decorates its live
-// chunks: reads what neighbours placed, writes into them at once (sub_1432CD550, sub_1432CE930)
+// chunks: reads what neighbours placed, writes into them at once
 class TerrainCache {
 public:
     static constexpr size_t MAX_CACHED_CHUNKS = 1024;
@@ -77,7 +77,7 @@ public:
 
     void setStoredLoader(StoredLoader loader);
 
-    // sub_145CEA040 locks the 3x3 too: two neighbours never decorate at once; waits instead of retrying later
+    // the game locks the 3x3 too: two neighbours never decorate at once; waits instead of retrying later
     std::unique_ptr<DecorationArea> lockArea(int32_t chunkX, int32_t chunkZ);
 
     // a decoration of this chunk is queued: neighbours of a later class wait for it
@@ -91,7 +91,7 @@ public:
 
     // a value the first decorated chunk of a structure start fixes for the whole start, as the game keeps it in the
     // piece every chunk shares; in memory only, as in the game: temple starts and pieces are only ever built by
-    // createStart (sub_1473C7400, 26.60), never loaded, so the next session draws the value again
+    // createStart, never loaded, so the next session draws the value again
     bool findStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t &value);
 
     // keeps the value stored first for the start and returns it

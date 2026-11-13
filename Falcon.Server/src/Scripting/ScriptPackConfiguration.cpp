@@ -66,7 +66,7 @@ const std::string *ScriptPackConfig::findSecret(const std::string &name) const {
 bool ScriptPackConfig::allowsModule(const std::string &module) const {
     if (!mHasPermissions)
         return true;
-    // sub_147DBA5C0: the name itself or a lone "*"
+    // the name itself or a lone "*"
     for (const std::string &allowed: mAllowedModules) {
         if (allowed == module || allowed == "*")
             return true;
@@ -91,7 +91,7 @@ ScriptNetModuleConfig ScriptPackConfig::netConfig() const {
             config.mAllowedUris = std::move(list);
         }
     }
-    // ScriptPackConfigurationManager::getNetModuleConfig: the old force_https key replaces force_tls
+    // the old force_https key replaces force_tls
     const json::Value *forceTls = net.get("force_https");
     if (forceTls == nullptr)
         forceTls = net.get("force_tls");

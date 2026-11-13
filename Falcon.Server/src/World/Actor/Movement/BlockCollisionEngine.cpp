@@ -373,7 +373,7 @@ BlockCollisionEngine::Result BlockCollisionEngine::move(Level &level, const Axis
     result.mPenetration = resolved.penetration;
     result.mKeepsHorizontalVelocity = unloaded;
 
-    // FinalizeMoveSystem (0x140C638A0): an axis collided when the move fell short by more than one float epsilon
+    // FinalizeMoveSystem: an axis collided when the move fell short by more than one float epsilon
     const float epsilon = std::numeric_limits<float>::epsilon();
     const float shortY = std::fabs(requested[1] - resolved.displacement[1]);
     result.mCollidedX = std::fabs(requested[0] - resolved.displacement[0]) > epsilon;

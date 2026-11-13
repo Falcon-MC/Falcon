@@ -20,7 +20,6 @@ namespace {
 BiomeZoom::BiomeZoom(uint32_t seed, int32_t originX, int32_t originY, int32_t originZ, int32_t countX, int32_t countY,
                      int32_t countZ)
         : mOriginX(originX), mOriginY(originY), mOriginZ(originZ), mCountY(countY), mCountZ(countZ) {
-    // sub_14A227520
     const uint64_t scrambled = static_cast<uint64_t>(seed) ^ LCG_MULTIPLIER;
     mJitter.reserve(static_cast<size_t>(countX * countY * countZ));
     for (int32_t indexX = 0; indexX < countX; indexX++) {

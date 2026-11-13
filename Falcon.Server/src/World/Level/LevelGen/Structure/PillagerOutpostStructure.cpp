@@ -38,10 +38,10 @@ namespace {
     const int32_t MAX_ALLAYS = 3;
 
     const char *const LOOT_TABLE = "loot_tables/chests/pillager_outpost.json";
-    // the outpost start's vfunc +24 (sub_1473C53C0)
+    // the outpost start's vfunc +24
     const int32_t START_VALUE = -3;
 
-    // sub_1473C3C20, table 0x14F2F8820
+    // table
     const std::array<const char *, 7> FEATURES = {"pillageroutpost/feature_cage1",
                                                   "pillageroutpost/feature_cage2",
                                                   "pillageroutpost/feature_cage_with_allays",
@@ -49,7 +49,7 @@ namespace {
                                                   "pillageroutpost/feature_targets",
                                                   "pillageroutpost/feature_tent1",
                                                   "pillageroutpost/feature_tent2"};
-    // table 0x14F2F8890: one prop spot per corner around the middle of the tower area
+    // the game's table: one prop spot per corner around the middle of the tower area
     const std::array<std::pair<int32_t, int32_t>, 4> SPOTS = {{{16, 16}, {-16, 16}, {16, -16}, {-16, -16}}};
 
     // by quarter turns: how far the rotated 16 by 16 area reaches from the start corner
@@ -57,7 +57,7 @@ namespace {
     const std::array<int32_t, 4> AREA_Z = {15, 15, -15, -15};
 
     Tag generatedMob(const char *identifier, int32_t x, int32_t y, int32_t z) {
-        // sub_1473C6A20 spawns on the block corner
+        // the game spawns on the block corner
         Tag location = Tag::ofList(Tag::Type::Float);
         location.addToList(Tag::ofFloat((float) x));
         location.addToList(Tag::ofFloat((float) y));
@@ -78,7 +78,7 @@ namespace {
     };
 
     // PillagerOutpostPiece +268: the first chunk to handle data markers of a piece records its mobs; the mobs are
-    // spawned by each chunk holding their spot (postProcessMobsAt, sub_1473C6A20)
+    // spawned by each chunk holding their spot
     std::mutex claimsMutex;
     std::map<PieceKey, std::vector<PendingMob>> claims;
 
@@ -93,7 +93,7 @@ namespace {
                     StructureTerrain &terrain)
                 : mLevel(level), mChunk(chunk), mSeed(seed), mChunkRandom(chunkRandom), mTerrain(terrain) {}
 
-        // PillagerOutpostPiece::postProcess (sub_1473C5940) then the template piece post process (sub_14699DA70);
+        // the outpost's post process then the template piece's;
         // `box`: the box the piece is left with
         void place(const PillagerOutpostStructure::Piece &piece, const PieceKey &key, ChunkStructureBounds::Box &box) {
             const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(piece.mTemplate + ".nbt");
@@ -160,7 +160,7 @@ namespace {
                 }
             }
 
-            // the template hands over only the markers inside the chunk (sub_14775B430)
+            // the template hands over only the markers inside the chunk
             std::vector<const StructureTemplate::BlockEntry *> markers;
             for (const StructureTemplate::BlockEntry &entry: shape->getBlocks()) {
                 if (entry.mData.getString("metadata", std::string()).empty())
@@ -250,7 +250,6 @@ namespace {
             return true;
         }
 
-        // PillagerOutpostPiece::handleDataMarker (sub_1473C5ED0) and postProcessMobsAt (sub_1473C6620)
         void _marker(const PillagerOutpostStructure::Piece &piece, const StructureTemplate::BlockEntry &entry,
                      int32_t originY, const std::string &marker, bool recordMobs, std::vector<PendingMob> &mobs) {
             int32_t x = 0;
@@ -300,7 +299,7 @@ namespace {
 
 std::vector<PillagerOutpostStructure::Piece> PillagerOutpostStructure::plan(const ChunkGenerator &generator,
                                                                             int32_t startX, int32_t startZ) {
-    // createStart (sub_1473C3C20) goes on with the random isFeatureChunk drew the start from
+    // createStart goes on with the random isFeatureChunk drew the start from
     std::mt19937 random =
             StructureFeature::get("pillager_outpost")->createStartRandom(generator.getSeed(), startX, startZ);
     const int32_t turns = FeatureRandom::nextInt(random, 4);
@@ -357,7 +356,7 @@ void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &lev
         boxes.push_back(box);
     }
 
-    // registered once the chunk's pieces are done (sub_14CDACCA0), one start at a time
+    // registered once the chunk's pieces are done, one start at a time
     const int32_t top = level.getMaxY() + 1;
     const ChunkStructureBounds::Box chunkBox = ChunkStructureBounds::chunkBox(chunk.getX(), chunk.getZ(),
                                                                               level.getMinY(), level.getMaxY());
@@ -373,7 +372,7 @@ void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &lev
                                                                                            + ".nbt");
             if (shape == nullptr)
                 continue;
-            // StructureStart::calculateBoundingBox over the boxes the pieces were made with
+            // the bounding box over the boxes the pieces were made with
             const ChunkStructureBounds::Box made = startBox(pieces[last].second, *shape, top);
             start = any ? ChunkStructureBounds::Box{std::min(start.minX, made.minX), std::min(start.minY, made.minY),
                                                     std::min(start.minZ, made.minZ), std::max(start.maxX, made.maxX),
@@ -388,7 +387,7 @@ void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &lev
     }
 }
 
-// PillagerOutpostPiece::postProcess (sub_1473C5940, 26.60) samples the box the piece was made with: one block wider
+// the outpost samples the box the piece was made with: one block wider
 // than the template, on its far side
 std::array<std::pair<int32_t, int32_t>, 5>
 PillagerOutpostStructure::groundPoints(const ChunkStructureBounds::Box &box) {
@@ -401,8 +400,8 @@ PillagerOutpostStructure::groundPoints(const ChunkStructureBounds::Box &box) {
              {box.minX + halfX, box.minZ}}};
 }
 
-// TemplateStructurePiece::calculateBoundingBox (sub_14699D910, 26.60): the far sides reach one block past the
-// template; the outpost piece then spans from the sea to the top of the dimension (ctor sub_1473C53F0)
+// the far sides reach one block past the
+// template; the outpost piece then spans from the sea to the top of the dimension
 ChunkStructureBounds::Box PillagerOutpostStructure::startBox(const Piece &piece, const StructureTemplate &shape,
                                                              int32_t top) {
     const int32_t sizeX = shape.getSizeX();

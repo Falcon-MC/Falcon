@@ -27,7 +27,6 @@ class BuoyancySystem {
 public:
     static BuoyancySettings read(const json::Value *component);
 
-    // sub_1437A1760 and sub_1437A18F0
     static BuoyancyContact contact(Level &level, const Vector3f &position, const BuoyancySettings &settings);
 
     // IncreaseBuoyancyTimer

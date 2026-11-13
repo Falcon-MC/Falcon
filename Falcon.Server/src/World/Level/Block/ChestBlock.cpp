@@ -125,7 +125,7 @@ bool ChestBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, c
     return true;
 }
 
-// ChestBlock::getComparatorSignal (sub_14314BD30, 26.60): a double chest counts both halves
+// ChestBlock::getComparatorSignal: a double chest counts both halves
 int ChestBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) state;
     return containerSignal(level, position);

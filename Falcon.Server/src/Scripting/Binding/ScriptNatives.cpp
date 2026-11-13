@@ -215,8 +215,8 @@ namespace ScriptValues {
         return true;
     }
 
-    // entity, world and item getters all read the collection total (sub_1432AD970), recomputed on load: key + 1,
-    // then 8 for a double, 1 for a bool, length + 1 for a string, 12 for a vector (sub_143D41120)
+    // entity, world and item getters all read the collection total, recomputed on load: key + 1,
+    // then 8 for a double, 1 for a bool, length + 1 for a string, 12 for a vector
     int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store) {
         int64_t total = 0;
         for (const auto &entry: store) {

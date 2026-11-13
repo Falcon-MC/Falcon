@@ -202,7 +202,7 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
     }
 
-    // the fall waits for a queued tick: 1 when the block below changed, else 2 (sub_14A431360)
+    // the fall waits for a queued tick: 1 when the block below changed, else 2
     const bool below = changed != nullptr && changed->x == position.x && changed->z == position.z
                        && changed->y < position.y;
     level.scheduleUpdate(position, below ? 1 : 2);
@@ -231,7 +231,7 @@ void FallingBlockSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &l
     spawnFallingBlock(owner, level, position, state);
 }
 
-// BlockPlaceEvent queues the fall check 2 ticks later (sub_14A4300F0)
+// BlockPlaceEvent queues the fall check 2 ticks later
 void FallingBlockSystem::onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) {
     (void) owner;

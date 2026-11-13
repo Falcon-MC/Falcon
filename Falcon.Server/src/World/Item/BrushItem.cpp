@@ -15,7 +15,7 @@
 FALCON_REGISTER_ITEM(BrushItem, 135);
 
 namespace {
-    // a stroke queues the block tick checking for a pause (sub_1433074C0)
+    // a stroke queues the block tick checking for a pause
     const int32_t RESET_CHECK_DELAY = 40;
     // the brushing sound repeats at most this often per player
     const int64_t SOUND_INTERVAL = 8;
@@ -30,7 +30,7 @@ bool BrushItem::matches(const std::string &identifier) {
     return identifier == "minecraft:brush";
 }
 
-// BrushItem::useOn (sub_143F9B370, 26.60): any block takes the brush; only a brushable one counts the strokes
+// any block takes the brush; only a brushable one counts the strokes
 bool BrushItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                              const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) item;

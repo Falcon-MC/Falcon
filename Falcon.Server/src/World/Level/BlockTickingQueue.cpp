@@ -70,7 +70,7 @@ void BlockTickingQueue::_pushHeap(std::vector<Entry> &heap, const Entry &entry) 
     heap[hole] = entry;
 }
 
-// _Pop_heap_hole_by_index: the hole walks down to a leaf, then the last element sifts up from it (sub_143838ED0)
+// _Pop_heap_hole_by_index: the hole walks down to a leaf, then the last element sifts up from it
 BlockTickingQueue::Entry BlockTickingQueue::_popHeap(std::vector<Entry> &heap) {
     const Entry top = heap.front();
     const Entry last = heap.back();

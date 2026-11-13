@@ -9,7 +9,7 @@
 #include <random>
 #include <vector>
 
-// everything the end places after its terrain, in the game's order and from one random (sub_14D1ED640)
+// everything the end places after its terrain, in the game's order and from one random
 class TheEndDecorationFeature : public IFeature {
 public:
     TheEndDecorationFeature(int64_t seed, const TheEndSimplexNoise &islandNoise);
@@ -23,7 +23,7 @@ public:
     /** An end gateway with its bedrock frame, as the islands and the dragon fight both place it. */
     static void placeGateway(int32_t x, int32_t y, int32_t z, const EndSpikes::BlockSink &sink);
 
-    /** The end stone island of the outer islands and of a gateway exit without land (sub_14A2BC410). */
+    /** The end stone island of the outer islands and of a gateway exit without land. */
     static void placeIsland(std::mt19937 &random, int32_t x, int32_t y, int32_t z, const EndSpikes::BlockSink &sink);
 
 private:

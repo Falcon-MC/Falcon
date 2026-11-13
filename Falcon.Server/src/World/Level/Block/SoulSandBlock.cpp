@@ -11,13 +11,13 @@ bool SoulSandBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:soul_sand";
 }
 
-// place and queued tick both grow the column (sub_148F92C90)
+// place and queued tick both grow the column
 void SoulSandBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
     (void) state;
     BubbleColumnBlock::growAbove(ticks, position);
 }
 
-// sub_148F93390: water changing just above, two ticks later on the second queue
+// water changing just above, two ticks later on the second queue
 void SoulSandBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                            const BlockState &state, const Vector3i &changed) const {
     (void) state;

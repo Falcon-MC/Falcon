@@ -180,7 +180,7 @@ namespace {
     }
 
     // a list of booleans, integers or strings, or {"values": {"min", "max"}} for an integer range; a state the game
-    // refuses is left out (sub_145E8E130, sub_145E8DD90)
+    // refuses is left out
     void readStateValues(const std::string &block, const std::string &name, const json::Value &value,
                          std::vector<CustomBlockStateValues> &out) {
         const auto refuse = [&](const char *reason) {
@@ -236,7 +236,7 @@ namespace {
         return bits;
     }
 
-    // a block's states share 16 bits (2^16 permutations, sub_1435A6E10): a state past them is not applied
+    // a block's states share 16 bits: a state past them is not applied
     void fitStateBits(const std::string &block, std::vector<CustomBlockStateValues> &states) {
         int32_t total = 0;
         for (const CustomBlockStateValues &state: states)
@@ -449,7 +449,7 @@ void CustomContentRegistry::load(const BehaviorPackManager &packs, ItemDefinitio
 }
 
 namespace {
-    // neighbor_directions: an array of down, up, north, south, west, east (0 to 5) or all (sub_1486DFFB0)
+    // neighbor_directions: an array of down, up, north, south, west, east (0 to 5) or all
     bool readNeighborDirections(const json::Value &component, uint8_t &directions) {
         static const char *const NAMES[] = {"down", "up", "north", "south", "west", "east"};
         directions = 0;
@@ -886,7 +886,7 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
 }
 
 namespace {
-    // MolangVersion::Latest (sub_1446C5450): LeafSupportingInFirstSolidBlockBelow, one below NumValidVersions
+    // LeafSupportingInFirstSolidBlockBelow, one below NumValidVersions
     const int16_t MOLANG_VERSION_LATEST = 12;
 }
 
@@ -961,7 +961,7 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     }
 
     // the client previews anvil repairs from this: sent as the game writes it, each repair_amount an ExpressionNode
-    // in object form (sub_141D3B840): expression plus short MolangVersion, Latest (12) for pack content
+    // in object form: expression plus short MolangVersion, Latest (12) for pack content
     if (!item.mRepairItems.empty()) {
         Tag repairItems = Tag::ofList(Tag::Type::Compound);
         for (const CustomRepairEntry &entry: item.mRepairItems) {
@@ -1067,11 +1067,11 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
             definition.mCustomComponents = readCustomComponents(*components);
 
             const json::Value *consumer = components->get("minecraft:redstone_consumer");
-            // sub_147A9F440, sub_145C7C0F0: both descriptions start zeroed, min_power 0, min_fall_distance 0
+            // both descriptions start zeroed, min_power 0, min_fall_distance 0
             if (consumer != nullptr && consumer->isObject()) {
                 definition.mRedstoneConsumer = true;
                 if (consumer->get("min_power") != nullptr) {
-                    // sub_142A6A5A0: outside 0-15 is error 64; the block loader's mask (sub_1431DD4C0) drops the block
+                    // outside 0-15 is error 64; the block loader's mask drops the block
                     const double power = consumer->get("min_power")->number(0.0);
                     if (power < 0.0 || power > 15.0) {
                         LOG_WARN(LogAreaID::Script, "Skipping custom block %s: min_power outside 0-15",
@@ -1114,7 +1114,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
             const json::Value *neighbor = components->get("minecraft:neighbor_change");
             if (neighbor != nullptr) {
-                // BlockDefinitionNeighborChangeValidate (sub_14328ADB0): the document fails without the experiment
+                // BlockDefinitionNeighborChangeValidate: the document fails without the experiment
                 if (!mUpcomingCreatorFeatures) {
                     LOG_ERROR(LogAreaID::Script,
                               "To use 'minecraft:neighbor_change', experimental creator features are required");
@@ -1129,7 +1129,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
             const json::Value *blockEntity = components->get("minecraft:block_entity");
             if (blockEntity != nullptr && blockEntity->isObject()) {
-                // sub_14328AA60: container and entity_storage need the experiment, the document fails without it
+                // container and entity_storage need the experiment, the document fails without it
                 const json::Value *storage = blockEntity->get("entity_storage");
                 const bool storesEntities = storage != nullptr && storage->boolean(false);
                 if (!mUpcomingCreatorFeatures && blockEntity->get("container") != nullptr) {
@@ -1147,7 +1147,7 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
 
             const json::Value *vibration = components->get("minecraft:vibration_properties");
             if (vibration != nullptr) {
-                // sub_14328ACE0: the document fails without the experiment
+                // the document fails without the experiment
                 if (!mUpcomingCreatorFeatures) {
                     LOG_ERROR(LogAreaID::Script,
                               "To use 'minecraft:vibration_properties', experimental creator features are required");
@@ -1379,7 +1379,7 @@ Tag CustomContentRegistry::_buildBlockPropertyNbt(const CustomBlockDefinition &b
     const Tag components = clientComponents(block);
     properties.put("components", components);
 
-    // sub_1431BD560: properties [{name, enum}], permutations [{condition, components}]
+    // properties [{name, enum}], permutations [{condition, components}]
     if (!block.mStates.empty()) {
         Tag states = Tag::ofList(Tag::Type::Compound);
         for (const CustomBlockStateValues &state: block.mStates) {

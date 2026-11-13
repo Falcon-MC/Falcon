@@ -111,7 +111,7 @@ public:
         return 0;
     }
 
-    // Material type 18: liquid falling onto it turns it to stone (sub_149C3E1F0)
+    // Material type 18: liquid falling onto it turns it to stone
     virtual bool isIceMaterial() const {
         return false;
     }
@@ -305,7 +305,7 @@ public:
         (void) state;
     }
 
-    // BlockType::dispense (vtable +0x190, 26.60) for the block's item; false drops it as a dropper does
+    // the block's own dispense for its item; false drops it as a dropper does
     virtual bool dispense(const DispenseSource &source) const {
         (void) source;
         return false;

@@ -11,7 +11,7 @@ class Actor;
 
 class RangedAttackGoal : public Goal {
 public:
-    // field order and defaults of the game's definition: sub_1476914D0, sub_14D4170A0
+    // field order and defaults of the game's definition
     struct Settings {
         float mSpeed = 1.0f;
         float mAttackRadius = 0.0f;

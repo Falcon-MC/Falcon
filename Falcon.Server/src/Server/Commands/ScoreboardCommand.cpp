@@ -40,7 +40,7 @@ namespace {
         return true;
     }
 
-    // sub_1405D3490: false on overflow, INT_MIN by -1 included; truncating division, a zero divisor keeps the target
+    // false on overflow, INT_MIN by -1 included; truncating division, a zero divisor keeps the target
     bool applyOperation(const std::string &operation, int32_t &target, int32_t &source) {
         int64_t result = target;
         if (operation == "+=")
@@ -252,7 +252,7 @@ bool ScoreboardCommand::_objectives(CommandOrigin &sender, const std::vector<std
             sender.sendTranslation("commands.scoreboard.objectiveNotFound", {arguments[3]});
             return false;
         }
-        // sub_14BE51E00: the command starts descending
+        // the command starts descending
         ObjectiveSortOrder order = ObjectiveSortOrder::Descending;
         if (arguments.size() >= 5 && slot != Scoreboard::SLOT_BELOW_NAME) {
             if (arguments[4] == "ascending")
@@ -357,7 +357,7 @@ bool ScoreboardCommand::_change(CommandOrigin &sender, const std::vector<std::st
     for (int64_t id: ids) {
         const int32_t *current = objective->find(id);
         int32_t value = count;
-        // sub_1405CE790: an add or remove past the int range is refused, the score kept
+        // an add or remove past the int range is refused, the score kept
         if (action != "set"
             && !checkedAdd(current == nullptr ? 0 : *current, action == "add" ? count : -count, value)) {
             sender.sendTranslation("commands.scoreboard.players.operation.integerOverflow", {});
@@ -483,7 +483,7 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
                                {parseInt(arguments[4], min) ? arguments[5] : arguments[4]});
         return false;
     }
-    // sub_14BDDC010 refuses min >= max
+    // the game refuses min >= max
     if (min >= max) {
         sender.sendTranslation("commands.scoreboard.players.random.invalidRange",
                                {std::to_string(min), std::to_string(max)});
@@ -501,9 +501,9 @@ bool ScoreboardCommand::_random(CommandOrigin &sender, const std::vector<std::st
     }
 
     static std::mt19937 random{std::random_device{}()};
-    // sub_14BDDC010: min + nextInt(max - min + 1); mt19937 output is the same everywhere, distributions are not
+    // min + nextInt(max - min + 1); mt19937 output is the same everywhere, distributions are not
     const uint64_t range = (uint64_t) ((int64_t) max - min + 1);
-    // the game has no random success line: set.success, sub_14BDE3530
+    // the game has no random success line: set.success
     for (int64_t id: ids) {
         const int32_t value = (int32_t) ((int64_t) min + (int64_t) ((uint64_t) random() % range));
         scoreboard.setScore(*objective, id, value);
@@ -533,7 +533,6 @@ bool ScoreboardCommand::_operation(CommandOrigin &sender, const std::vector<std:
         return false;
     }
 
-    // sub_14BDDC010
     if (arguments[2] == "*" && arguments[5] == "*") {
         sender.sendTranslation("commands.scoreboard.noMultiWildcard", {});
         return false;
@@ -557,7 +556,7 @@ bool ScoreboardCommand::_operation(CommandOrigin &sender, const std::vector<std:
 
     size_t updated = 0;
     for (int64_t target: targets) {
-        // sub_1405D3490: a target without a score starts from 0
+        // a target without a score starts from 0
         const int32_t *current = targetObjective->find(target);
         int32_t value = current == nullptr ? 0 : *current;
         bool overflow = false;

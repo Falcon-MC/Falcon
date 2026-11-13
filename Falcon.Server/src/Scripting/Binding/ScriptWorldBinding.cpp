@@ -98,8 +98,8 @@ namespace {
         return JS_FALSE;
     }
 
-    // the server tier (sub_1430151B0, read by the script system info sub_14C568150): total physical memory up to
-    // 1.5, 2, 4 and 8 GiB, above is SuperHigh; the platform reads ullTotalPhys (sub_140083100)
+    // the server tier: total physical memory up to
+    // 1.5, 2, 4 and 8 GiB, above is SuperHigh; the platform reads ullTotalPhys
     int32_t memoryTierOf(uint64_t bytes) {
         const uint64_t gib = 1024ull * 1024ull * 1024ull;
         if (bytes <= gib * 3 / 2)
@@ -261,7 +261,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // PlayerWaypointsMode in its registration order (sub_14B557A90): Off is 0, Everyone 1
+    // PlayerWaypointsMode in its registration order: Off is 0, Everyone 1
     JSValue gameRulesGetPlayerWaypoints(JSContext *ctx, JSValueConst, int, JSValueConst *) {
         const GameRules::Rule *rule = defaultWorld(ctx).getOverworld().getGameRules().find("playerwaypoints");
         if (rule == nullptr)
@@ -282,7 +282,7 @@ namespace {
         return JS_NewBool(ctx, ScriptApi::fromContext(ctx)->host().getProperties().getAllowCheats());
     }
 
-    // the level's commands flag (sub_14C418400); the clients learn it from a set commands enabled packet
+    // the level's commands flag; the clients learn it from a set commands enabled packet
     JSValue worldSetAllowCheats(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         if (argc < 1 || !JS_IsBool(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
@@ -290,7 +290,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the level's packet sender carries a script message packet to every client (sub_14C3FF0A0)
+    // the level's packet sender carries a script message packet to every client
     JSValue worldBroadcastClientMessage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         if (argc < 2 || !JS_IsString(argv[0]) || !JS_IsString(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
@@ -419,7 +419,7 @@ namespace {
         return settings;
     }
 
-    // the 1.x World.playSound (sub_14C2FCE20, 26.60): every player hears it, whatever their dimension, and no
+    // the 1.x World.playSound: every player hears it, whatever their dimension, and no
     // SoundInstance tracks it
     JSValue worldPlaySound(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
@@ -763,7 +763,7 @@ namespace {
         if (JS_IsException(refused))
             return refused;
         ServerActor *actor = api->host().spawnActor(level, type, Vector3f((float) x, (float) y, (float) z));
-        // the game's messages by failure (sub_14C377CE0): only the peaceful refusal and the fallback reach here
+        // the game's messages by failure: only the peaceful refusal and the fallback reach here
         if (actor == nullptr)
             return api->throwError("EntitySpawnError",
                                    api->host().getProperties().getDifficulty() == Difficulty::Peaceful
@@ -1015,7 +1015,7 @@ namespace {
         return JS_NewInt64(ctx, scriptChunkCount(*ScriptApi::fromContext(ctx)));
     }
 
-    // the limit is an optional<int> the level gets at creation, -1 when unset (sub_14C3A58D0, sub_14C2BBDD0)
+    // the limit is an optional<int> the level gets at creation, -1 when unset
     JSValue tickingMaxChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
         return JS_NewInt64(ctx, TickingAreaManager::MAX_SCRIPT_CHUNKS);
     }

@@ -195,7 +195,7 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     if (length <= 0.0f || force <= 0.0f)
         return;
 
-    // sub_1437DED50: a negative resistance pushes harder
+    // a negative resistance pushes harder
     const float base = force * std::max(1.0f - getAttributes().get("minecraft:knockback_resistance"), 0.0f);
     if (base <= 0.0f)
         return;

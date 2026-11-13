@@ -93,7 +93,7 @@ BiomeSearch::Result BiomeSearch::findInBox(const ChunkGenerator &generator, cons
     Vector3i found;
     if (!_search(generator, biomeId, center, min, max, COARSE_STEP, found))
         return result;
-    // sub_14A2298E0: the column's height, the noise terrain standing in for an unloaded chunk
+    // the column's height, the noise terrain standing in for an unloaded chunk
     result.mFound = true;
     result.mPosition = Vector3i(found.x, generator.getPreliminaryHeight(found.x, found.z), found.z);
     return result;
@@ -186,7 +186,7 @@ bool BiomeSearch::_searchGroup(const ChunkGenerator &generator, int32_t biomeId,
                               (clampToRange(center.z, min.z, max.z) - min.z) / step);
     const int32_t shells = std::max(countX - 1, std::max(countY - 1, countZ - 1));
 
-    // the game fills the whole group from the biome source first (vfunc +0x20, sub_147186360); each
+    // the game fills the whole group from the biome source first; each
     // cell lies on one shell only: sampling it when visited gives the same answer for less work
     for (int32_t shell = 0; shell <= shells; shell++) {
         for (int32_t x = centerCell.x - shell; x <= centerCell.x + shell; x++) {

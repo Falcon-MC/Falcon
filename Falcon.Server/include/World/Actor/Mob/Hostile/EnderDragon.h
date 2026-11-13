@@ -15,7 +15,7 @@
 class EndCrystalActor;
 class ServerPlayer;
 
-// goals pick where it flies; the dragon steers, moves its parts, heals from crystals, breaks blocks (sub_14ACCA850)
+// goals pick where it flies; the dragon steers, moves its parts, heals from crystals, breaks blocks
 class EnderDragon : public HostileActor {
 public:
     static constexpr const char *IDENTIFIER = "minecraft:ender_dragon";
@@ -73,12 +73,12 @@ public:
         return false;
     }
 
-    // the fight tracks it outside chunk storage (sub_1432BA7E0 marks it, sub_140BC76E0)
+    // the fight tracks it outside chunk storage
     bool isAutonomous() const override {
         return true;
     }
 
-    // the dragon's experience falls during its death (sub_144AE8C40), not when it dies
+    // the dragon's experience falls during its death, not when it dies
     int getExperienceDrop() const override {
         return 0;
     }
@@ -111,7 +111,7 @@ public:
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 
-    // sub_14ACCD880: the head takes the full damage
+    // the head takes the full damage
     bool hurtPart(ServerNetworkHandler &owner, Part part, float amount, const ActorDamageSource &source);
 
     void onCrystalDestroyed(ServerNetworkHandler &owner, EndCrystalActor &crystal, Actor *attacker);
@@ -191,7 +191,7 @@ public:
 
     int32_t findClosestNode(ServerNetworkHandler &owner, float x, float y, float z);
 
-    // sub_14ACCFA90: ends on finalNode when given
+    // ends on finalNode when given
     std::unique_ptr<Path> findPath(int32_t from, int32_t to, const std::optional<Vector3i> &finalNode);
 
     // for tests: 12 outer, 8 middle, 4 inner

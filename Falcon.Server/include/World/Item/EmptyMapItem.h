@@ -13,6 +13,5 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    // EmptyMapItem::use (sub_147B9F900)
     bool onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
 };

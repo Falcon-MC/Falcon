@@ -20,17 +20,17 @@ public:
         uint8_t mTickets = 0;
     };
 
-    // false from the visitor stops the walk; min and max are inclusive (sub_14B8C2BF0, 26.60)
+    // false from the visitor stops the walk; min and max are inclusive
     void forEachInBox(Level &level, const Vector3i &min, const Vector3i &max,
                       const std::function<bool(Entry &)> &visitor);
 
     // nullptr without a poi there or in an unloaded chunk
     Entry *at(Level &level, const Vector3i &position);
 
-    // ScriptBlockManager::addTemporary (sub_14B959AB0, 26.60): every instance starts with all its type's tickets
+    // every instance starts with all its type's tickets
     void addTemporary(Level &level, const Vector3i &position, uint16_t type);
 
-    // PoiRegion::release (sub_1485096E0, 26.60): one ticket back while below the type's count
+    // one ticket back while below the type's count
     bool release(Level &level, const Vector3i &position);
 
 private:

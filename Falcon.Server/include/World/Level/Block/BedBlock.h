@@ -24,7 +24,7 @@ public:
     static bool use(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state);
 
-    // where a sleeper stands up; previous is where they stood when lying down (sub_143155EB0)
+    // where a sleeper stands up; previous is where they stood when lying down
     static bool findStandUpPosition(Level &level, const Vector3i &bed, const Vector3f &previous, Vector3i &standUp);
 
     static std::vector<Vector3i> otherPiece(Level &level, const Vector3i &position, const BlockState &state);

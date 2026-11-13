@@ -16,7 +16,7 @@ class ServerPlayer;
 // a gametest simulated player: the server writes its inputs, the movement pipeline plays them
 class SimulatedPlayerController {
 public:
-    // LookDuration, in the game's order (sub_141039370)
+    // LookDuration, in the game's order
     enum class LookDuration : uint8_t { Instant = 0, Continuous = 1, UntilMove = 2 };
 
     // the test the player was spawned by turns its relative moves and body angles
@@ -28,21 +28,21 @@ public:
         return mTestRotation;
     }
 
-    // move and moveRelative: a normalized direction, the speed argument is not read (sub_141037350)
+    // move and moveRelative: a normalized direction, the speed argument is not read
     void moveInDirection(const Vector3f &direction, bool world);
 
     void moveToLocation(const Vector3f &target, bool faceTarget, float speed);
 
     void stopMoving();
 
-    // sub_141036BB0: the jump goes out now and the delay starts, a second jump the same tick does nothing
+    // the jump goes out now and the delay starts, a second jump the same tick does nothing
     bool jump(ServerNetworkHandler &owner, ServerPlayer &player);
 
     void setSprinting(bool sprinting) {
         mSprinting = sprinting;
     }
 
-    // Actor::startSwimming and stopSwimming (vtable +0x310, +0x318), played as the client's swim inputs
+    // start and stop swimming, played as the client's swim inputs
     void setSwimming(bool swimming) {
         mSwimRequest = swimming ? Request::Start : Request::Stop;
     }
@@ -50,7 +50,6 @@ public:
     // false when already gliding, without an elytra, in water or on the ground
     bool glide(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    // sub_1402C7EF0
     void stopGliding() {
         mGlideRequest = Request::Stop;
     }
@@ -59,16 +58,16 @@ public:
 
     void lookAtEntity(ServerPlayer &player, int64_t uniqueId, const Vector3f &eyes, LookDuration duration);
 
-    // sets the yaw and drops any look target (sub_141037CD0)
+    // sets the yaw and drops any look target
     void setBodyRotation(ServerPlayer &player, float yaw);
 
-    // attacks and item uses wait this many ticks after the previous one (sub_141038210, sub_141038670)
+    // attacks and item uses wait this many ticks after the previous one
     static constexpr int64_t ACTION_COOLDOWN_TICKS = 10;
 
-    // sub_141038210: the swing, then the target if any; no reach nor facing check
+    // the swing, then the target if any; no reach nor facing check
     bool attack(ServerNetworkHandler &owner, ServerPlayer &player, Actor *target);
 
-    // Player::interact with no click position (sub_1402D2520)
+    // an interaction with no click position
     bool interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, Actor &target);
 
     // a click on a block face with the held item: the client's ItemUse transaction
@@ -77,44 +76,44 @@ public:
 
     bool useBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face);
 
-    // sub_14DCFD060, sub_141038670: false when dead, without an item or still cooling down
+    // false when dead, without an item or still cooling down
     bool useItem(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item);
 
     bool useItemInSlot(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot);
 
-    // sub_141038440: the item held for the click, the selected slot restored after
+    // the item held for the click, the selected slot restored after
     bool useItemOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item, const Vector3i &block,
                         int32_t face, const Vector3f &clickPosition);
 
     bool useItemInSlotOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot, const Vector3i &block,
                               int32_t face, const Vector3f &clickPosition);
 
-    // the item in use as it was before the release, air when none (sub_14DCFD8B0)
+    // the item in use as it was before the release, air when none
     ItemStack stopUsingItem(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    // sub_141039180: true while it hits the block; a solid block and no item in use to start
+    // true while it hits the block; a solid block and no item in use to start
     bool breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block, int32_t face);
 
     void stopBreakingBlock();
 
-    // sub_1410325B0: the slot selected, then the held item used on the block in view and used again while it
-    // stays in view (GameMode::continueBuildBlock, sub_14376BB80)
+    // the slot selected, then the held item used on the block in view and used again while it
+    // stays in view
     void startBuild(ServerNetworkHandler &owner, ServerPlayer &player, int32_t slot);
 
-    // sub_14DD01AB0: GameMode::stopBuildBlock
+    // GameMode::stopBuildBlock
     void stopBuild() {
         mBuilding = false;
     }
 
-    // sub_141037660: a path from the navigation, then walked; false with no path at all
+    // a path from the navigation, then walked; false with no path at all
     bool navigateToLocation(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &target, float speed,
                             std::vector<Vector3i> &path, bool &fullPath);
 
-    // sub_141036D90: the entity followed to within a block, its path made again as it moves away
+    // the entity followed to within a block, its path made again as it moves away
     bool navigateToEntity(ServerNetworkHandler &owner, ServerPlayer &player, int64_t uniqueId, const Vector3f &target,
                           float speed, std::vector<Vector3i> &path, bool &fullPath);
 
-    // sub_141037990: each location in turn, a path to the next once the last is walked
+    // each location in turn, a path to the next once the last is walked
     void navigateToLocations(const std::vector<Vector3f> &route, float speed);
 
     // the next input, built from the current orders

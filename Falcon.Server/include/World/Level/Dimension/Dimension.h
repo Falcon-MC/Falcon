@@ -12,7 +12,7 @@ class Dimension {
 public:
     static constexpr double NETHER_COORDINATE_SCALE = 8.0;
 
-    // sub_14382DA00: ids above 999 name custom dimensions; 3 is Undefined
+    // ids above 999 name custom dimensions; 3 is Undefined
     static constexpr int32_t FIRST_CUSTOM_ID = 1000;
 
     // registered custom dimensions: namespaced name by id
@@ -93,7 +93,7 @@ public:
         }
     }
 
-    // sub_14C703FD0: a script dimension spans -64 to 320, like the overworld
+    // a script dimension spans -64 to 320, like the overworld
     static int32_t getMinY(DimensionType dimension) {
         if (dimension == DimensionType::Overworld || isCustom(dimension)) {
             return -64;

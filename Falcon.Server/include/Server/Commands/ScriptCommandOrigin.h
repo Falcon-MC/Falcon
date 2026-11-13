@@ -23,7 +23,7 @@ public:
     void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) override;
 
     CommandPermission getCommandPermission() const override {
-        // sub_14C34A800, sub_14B59EF00: the script origin is built with level 1, whoever the entity is
+        // the script origin is built with level 1, whoever the entity is
         return CommandPermission::GameDirectors;
     }
 

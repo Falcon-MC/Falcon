@@ -5,8 +5,8 @@
 #include <memory>
 #include <vector>
 
-// climate quantized like the game: (int64) (value * 10000.0) in double (sub_147186B10); a biome is the entry at the
-// smallest squared distance to its parameter ranges (sub_147186B70)
+// climate quantized like the game: (int64) (value * 10000.0) in double; a biome is the entry at the
+// smallest squared distance to its parameter ranges
 class OverworldBiomeParameters {
 public:
     static constexpr int32_t DIMENSIONS = 7;
@@ -36,7 +36,7 @@ public:
     // seed independent and immutable: one tree for every generator, built on first use
     static const OverworldBiomeParameters &shared();
 
-    // nearest leaf, starting from the previous result of the same column like the game (sub_147188720)
+    // nearest leaf, starting from the previous result of the same column like the game
     const Node *search(const Target &target, const Node *lastResult) const;
 
     static int64_t quantize(float value);

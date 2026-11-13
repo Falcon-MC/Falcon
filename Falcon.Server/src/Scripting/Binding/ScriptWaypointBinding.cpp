@@ -14,20 +14,20 @@
 using namespace ScriptValues;
 
 namespace {
-    // ScriptLocatorBar's waypoint group holds 0x100 (sub_14D519BB0, 26.60)
+    // ScriptLocatorBar's waypoint group holds 0x100
     const int32_t MAX_WAYPOINTS = 256;
     // the typings cap textureBoundsList
     const size_t MAX_TEXTURE_BOUNDS = 16;
 
-    // LocatorBarWaypointPayload update bits (sub_140B87D00, 26.60)
+    // LocatorBarWaypointPayload update bits
     const int32_t UPDATE_POSITION = 0x01;
     const int32_t UPDATE_VISIBLE = 0x02;
     const int32_t UPDATE_TEXTURE = 0x04;
     const int32_t UPDATE_ICON_SIZE = 0x08;
     const int32_t UPDATE_COLOR = 0x10;
 
-    // WaypointTexture values as VanillaWaypointManagerConstants::ImageType 2 to 5: the dot texture and its icon
-    // scale (sub_14C2C9150, sub_142990370, qword_14F47FE40, 26.60)
+    // WaypointTexture values as image types 2 to 5: the dot texture and its icon
+    // scale
     struct BuiltInTexture {
         const char *mValue;
         const char *mPath;
@@ -431,7 +431,6 @@ namespace {
         return count;
     }
 
-    // ScriptLocatorBar::addWaypoint (sub_14D59E890, 26.60)
     JSValue locatorAddWaypoint(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const std::shared_ptr<ScriptWaypointState> state = argc >= 1 ? stateOf(ctx, argv[0]) : nullptr;

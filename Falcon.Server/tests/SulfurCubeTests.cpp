@@ -132,8 +132,8 @@ namespace {
     }
 
     // a regression check, not a vanilla measurement: the IDA formulas written out again in the same order
-    // (ComputeRestitution sub_1484C9200, ApplyGravityWithBounceCorrection sub_143368B50, MobMovementFriction
-    // sub_1433563E0 / sub_1433307F0) so a change to the movement pipeline shows up here
+    // (ComputeRestitution, ApplyGravityWithBounceCorrection, MobMovementFriction)
+    // so a change to the movement pipeline shows up here
 
     struct Expected {
         float mX;
@@ -331,7 +331,7 @@ namespace {
         require(!EntityFilter::test(filter, fixture.mOwner, hot, &player), "frost walker boots walk over the hot cube");
     }
 
-    // pushable_by_entity ball: sub_143A0C040 with the regular preset
+    // pushable_by_entity ball with the regular preset
     void checkKick() {
         const auto preset = json::parse(R"({"push_mode":"ball","min_distance":0.0,"max_distance":1.0,
             "require_collision_overlap":false,"push_scale_self":2.0,"kick_speed_scale":0.3,"min_kick_speed":0.0,
@@ -351,7 +351,7 @@ namespace {
         require(!PushableByEntity::inReach(settings, 1.4f, 0.0f, 0.6f), "too far for the preset");
     }
 
-    // BuoyancyFloat sub_146959470 with the bobbing timer of sub_14695ACE0
+    // BuoyancyFloat with the bobbing timer of
     void checkBuoyancy() {
         const auto component = json::parse(R"({"base_buoyancy":1.0,"apply_gravity":false,"movement_type":"bobbing",
             "liquid_blocks":["minecraft:water","minecraft:flowing_water","minecraft:lava","minecraft:flowing_lava"]})");

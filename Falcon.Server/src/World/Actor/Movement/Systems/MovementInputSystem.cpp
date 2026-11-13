@@ -46,7 +46,7 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
     // would slow a sneaking player to 0.09
     const float sideways = std::clamp(input.getPacket().mMotionX, -maxImpulse, maxImpulse);
     const float forward = std::clamp(input.getPacket().mMotionY, -maxImpulse, maxImpulse);
-    // 0x140E70890 normalizes the 2D input before damping
+    // the game normalizes the 2D input before damping
     const float length = std::sqrt(sideways * sideways + forward * forward);
     const float scale = IMPULSE_SCALE / std::max(1.0f, length);
     input.sideways = sideways * scale;

@@ -17,10 +17,10 @@ public:
 
     static void destroy(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
-    // sub_1437F93C0: the record goes to everyone, an unknown id back to the asker as NotFound
+    // the record goes to everyone, an unknown id back to the asker as NotFound
     static void handleRequest(ServerNetworkHandler &owner, ServerPlayer &player,
                               const PositionTrackingDBClientRequestPacket &packet);
 
-    // sub_1437F94F0: Update while valid, Destroy once destroyed, nothing while pending
+    // Update while valid, Destroy once destroyed, nothing while pending
     static void broadcast(ServerNetworkHandler &owner, World &world, const TrackingRecord &record);
 };

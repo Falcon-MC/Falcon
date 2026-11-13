@@ -85,7 +85,7 @@ public:
         return mDynamicProperties;
     }
 
-    // any block actor can carry one (sub_143300CF0 saves it with the common fields), data-driven blocks ask for it
+    // any block actor can carry one, data-driven blocks ask for it
     BlockEntityStorage &enableEntityStorage() {
         if (!mEntityStorage.has_value())
             mEntityStorage.emplace();

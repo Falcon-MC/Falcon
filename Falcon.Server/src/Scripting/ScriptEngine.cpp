@@ -432,7 +432,6 @@ void ScriptEngine::_installConsole(JSContext *context) {
 size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     size_t loaded = 0;
     // the game reads sound definitions from the end of the pack stack and keeps the first: the last pack wins
-    // (sub_143808EB0, 26.60)
     for (auto pack = packs.rbegin(); pack != packs.rend(); ++pack)
         mSounds.addPack(pack->mPath);
     for (const BehaviorPack &pack: packs) {
@@ -456,7 +455,7 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
         return false;
     }
 
-    // the module permission filter of the plugin manager (sub_147DBA5C0)
+    // the module permission filter of the plugin manager
     const ScriptPackConfig &config = mPackConfigs.get(pack.mScriptModuleUuid);
     for (const ScriptModuleVersion &module: modules.getModules()) {
         if (!config.allowsModule(module.mName)) {
@@ -799,7 +798,7 @@ void ScriptEngine::createCustomDimensions() {
     if (mHost == nullptr)
         return;
 
-    // sub_14382A4C0: DimensionNameIdTable keeps each custom name's id across restarts
+    // DimensionNameIdTable keeps each custom name's id across restarts
     Level &overworld = mHost->getWorlds().getDefault().getOverworld();
     Tag table;
     if (!overworld.loadSavedData("DimensionNameIdTable", table, false))
@@ -879,7 +878,7 @@ void ScriptEngine::onCustomBlockRandomTick(Level &level, const std::string &bloc
                    [&](ScriptApi &api, JSValue event) { api.fillBlockEvent(event, level, position); });
 }
 
-// every pack's onNamedTick sees the event; isName answers only for the one that scheduled it (sub_1432C6B20)
+// every pack's onNamedTick sees the event; isName answers only for the one that scheduled it
 void ScriptEngine::onCustomBlockNamedTick(Level &level, const Vector3i &position, const BlockState &state,
                                           const std::string &eventNamespace, const std::string &eventName) {
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(state.mName);
@@ -1377,7 +1376,7 @@ void ScriptEngine::onEntityItemPickup(Actor &collector, const ItemStack &picked)
 void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {
     if (used.isAir() || used.mDefinition == nullptr)
         return;
-    // ScriptDeferredEventCoordinator flushes item custom components before world after events (sub_142BC3FF0, 26.60)
+    // ScriptDeferredEventCoordinator flushes item custom components before world after events
     const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
     if (item != nullptr) {
         _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent",
@@ -1398,7 +1397,7 @@ void ScriptEngine::onItemConsume(ServerPlayer &player, const ItemStack &used) {
     if (used.isAir() || used.mDefinition == nullptr)
         return;
     const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
-    // the game subscribes onConsume to the food component's signal only (sub_14A7F6070)
+    // the game subscribes onConsume to the food component's signal only
     if (item == nullptr || !item->mIsFood)
         return;
 
@@ -1902,7 +1901,7 @@ void ScriptEngine::tick(int64_t currentTick) {
     for (const auto &event: queued)
         emitScriptEvent(event.first, event.second);
 
-    // sub_145D0A460: every clock stands still without the daylight cycle
+    // every clock stands still without the daylight cycle
     if (mHost == nullptr || mHost->getWorlds().getDefault().getOverworld().getGameRules().getBool("dodaylightcycle"))
         mClocks.tick();
     if (currentTick - mLastClockSync >= WorldClockSystem::SYNC_INTERVAL_TICKS) {
@@ -2095,7 +2094,7 @@ bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> do
         subscribed = api->hasJoinSubscribers() || subscribed;
     if (!subscribed)
         return false;
-    // sub_14E2FAB20 (26.60): a paused world lets the join through untouched
+    // a paused world lets the join through untouched
     if (mHost->isSimulationPaused()) {
         LOG_ERROR(LogAreaID::Script, "Joins cannot be processed by scripting when the world is paused. Disable pause "
                                      "when using AsyncPlayerJoinBeforeEvent.");
@@ -2108,7 +2107,7 @@ bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> do
     join.mDone = std::move(done);
     // counted before the first emit: a callback that settles at once must not finish the join early
     join.mOutstanding = 1;
-    // the playfab id of the identity component, what Player.persistentId reads too (sub_14D5F0110)
+    // the playfab id of the identity component, what Player.persistentId reads too
     // a subscriber may refuse the player while it is called: the player is erased, keep copies
     const std::string persistentId = player.getPlayFabId();
     const std::string name = player.getName();

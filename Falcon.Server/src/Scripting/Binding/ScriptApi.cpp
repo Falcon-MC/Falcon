@@ -395,7 +395,7 @@ namespace {
     }
 
     // (biome, player | undefined, parameter, reset, mode, data): mode 0 keyframes [[time, [x, y, z]]...],
-    // 1 a float, 2 a vector; a player override goes to that player only, a biome one to everyone (sub_14DD0C6C0)
+    // 1 a float, 2 a vector; a player override goes to that player only, a biome one to everyone
     JSValue graphicsSend(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 6)
@@ -1402,7 +1402,7 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
 }
 
 JSValue ScriptApi::registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers) {
-    // sub_14B4F5CB0: only the startup event's registries accept components
+    // only the startup event's registries accept components
     if (!mRegistrationOpen)
         return throwError("CustomComponentInvalidRegistryError",
                           "Cannot register custom component outside of the ModuleStartup event.");
@@ -1438,7 +1438,6 @@ JSValue ScriptApi::registerCustomComponent(bool blocks, const std::string &name,
 }
 
 JSValue ScriptApi::registerCustomDimension(const std::string &name) {
-    // sub_14C846B40
     if (!mRegistrationOpen)
         return throwError("CustomDimensionInvalidRegistryError",
                           "Cannot register custom dimension '" + name + "' outside of StartupEvent.");
@@ -1455,7 +1454,7 @@ JSValue ScriptApi::registerCustomDimension(const std::string &name) {
         return throwError("NamespaceNameError", "", fields);
     }
 
-    // sub_142CA2AF0, sub_1403ED180: one colon, no space, tab, cr or lf
+    // one colon, no space, tab, cr or lf
     if (name.find(':', colon + 1) != std::string::npos || name.find_first_of(" \t\n\r") != std::string::npos)
         return throwError("CustomDimensionNameError", "Custom dimension '" + name + "' has invalid characters.");
 

@@ -22,7 +22,7 @@ namespace {
     const float RADIANS_TO_DEGREES = 57.295776f;
     // no ballistic solution in reach: the game shoots 45 degrees up
     const float UNREACHABLE_PITCH = -45.0f;
-    // gaussian spread per uncertainty unit: sub_143CB38D0
+    // gaussian spread per uncertainty unit
     const float SPREAD_PER_UNCERTAINTY = 0.0075f;
 
     enum class Anchor { Feet, EyeHeight, Middle };
@@ -126,7 +126,7 @@ namespace {
         return settings;
     }
 
-    // first entry of projectiles whose chance and filters pass, the target as other; else def: sub_143CD14E0
+    // first entry of projectiles whose chance and filters pass, the target as other; else def
     Shot chooseShot(ServerNetworkHandler &owner, const MobActor &mob, const Actor &target, const json::Value &shooter) {
         Shot shot;
         shot.mIdentifier = shooter.get("def");
@@ -184,7 +184,7 @@ namespace {
         else
             return;
 
-        // viewers draw the potion color from it (sub_14299A250 hands aux_val to the projectile)
+        // viewers draw the potion color from it
         EntityDataEntry entry;
         entry.mId = ACTOR_DATA_POTION_AUX_VALUE;
         entry.mFormat = EntityDataFormat::Short;
@@ -195,7 +195,6 @@ namespace {
     }
 }
 
-// sub_143CD17A0, sub_14299A250
 bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor &target) {
     const json::Value *shooter = mob.getComponent(SHOOTER_COMPONENT);
     if (shooter == nullptr)
@@ -272,7 +271,6 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
     return true;
 }
 
-// sub_14299A250
 float MobShooter::aimPitch(float horizontal, float height, float power, float gravity) {
     if (gravity == 0.0f)
         return -std::atan2(height, horizontal) * RADIANS_TO_DEGREES;
@@ -289,7 +287,7 @@ float MobShooter::aimPitch(float horizontal, float height, float power, float gr
     return -std::min(high, low);
 }
 
-// uncertainty_base - difficulty * uncertainty_multiplier, never negative: sub_143CB3740
+// uncertainty_base - difficulty * uncertainty_multiplier, never negative
 float MobShooter::uncertainty(float base, float multiplier, int32_t difficulty) {
     return std::max(base - (float) difficulty * multiplier, 0.0f);
 }

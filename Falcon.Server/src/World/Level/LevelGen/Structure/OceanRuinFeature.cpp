@@ -7,7 +7,7 @@
 #include <array>
 
 namespace {
-    // ctor sub_1473BDFA0, isFeatureChunk sub_1473BE530 (26.60); worlds older than 1.18 use 12 and 7
+    //worlds older than 1.18 use 12 and 7
     const int32_t SPACING = 20;
     const int32_t SEPARATION = 8;
     const int32_t SALT = 14357621;
@@ -29,7 +29,7 @@ namespace {
 OceanRuinFeature::OceanRuinFeature() : StructureFeature("ocean_ruin", SPACING, SEPARATION, SALT, Spread::Linear) {}
 
 bool OceanRuinFeature::getConfig(int32_t biomeId, Config &out) {
-    // written by the vanilla biome registration (sub_14719EA30)
+    // written by the vanilla biome registration
     switch (biomeId) {
         case BiomeIds::OCEAN:
         case BiomeIds::LEGACY_FROZEN_OCEAN:

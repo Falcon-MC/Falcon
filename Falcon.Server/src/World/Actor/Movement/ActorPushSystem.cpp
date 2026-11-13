@@ -69,7 +69,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
         const PushableByEntityPreset *preset = presets == nullptr
                                                        ? nullptr
                                                        : PushableByEntity::findPreset(owner, *mob, *presets, pusher);
-        // sub_143A0AF90: push_mode none leaves without pushing
+        // push_mode none leaves without pushing
         if (preset != nullptr && preset->mMode == PushMode::None)
             return;
 
@@ -135,7 +135,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
 void ActorPushSystem::_playKickSound(ServerNetworkHandler &owner, ServerActor &actor,
                                      const PushableByEntityPreset &preset, const Vector3f &kick) {
-    // sub_143A0AF90: the sound has its own cooldown and needs a strong enough kick
+    // the sound has its own cooldown and needs a strong enough kick
     if (!preset.mPlaySound)
         return;
 

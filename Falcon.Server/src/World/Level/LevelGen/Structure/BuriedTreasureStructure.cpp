@@ -23,7 +23,7 @@ namespace {
                && StructureMaterials::isBuriedTreasureGround(chunk.getBlock(x, y, z));
     }
 
-    // BlockSource::getAboveTopSolidBlock (sub_1432DD3C0, 26.60): water and leaves looked through
+    // water and leaves looked through
     int32_t aboveTopSolid(const LevelChunk &chunk, int32_t x, int32_t z) {
         for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {
             if (StructureMaterials::stopsTopSolidSearch(chunk.getBlock(x, y, z), false, false))
@@ -33,7 +33,6 @@ namespace {
     }
 }
 
-// BuriedTreasurePiece::postProcess (sub_14728EAC0, 26.60)
 void BuriedTreasureStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
     const StructureFeature *feature = StructureFeature::get("buried_treasure");
     if (feature == nullptr || !feature->isStartChunk(generator, chunk.getX(), chunk.getZ()))

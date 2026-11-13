@@ -150,7 +150,7 @@ void BlockPickItem::applyActorItemData(ItemStack &item, const BlockActor &actor)
         return;
     }
 
-    // the pot's saved data without its item, animation and loot table (sub_149C52680): the sherds
+    // the pot's saved data without its item, animation and loot table: the sherds
     if (const DecoratedPotBlockActor *pot = dynamic_cast<const DecoratedPotBlockActor *>(&actor)) {
         if (pot->getSherds() == nullptr)
             return;

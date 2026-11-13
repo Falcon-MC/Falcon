@@ -25,7 +25,7 @@ namespace {
     const float WHITE[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     const float NETHER_RED[4] = {1.0f, 0.0f, 0.0f, 1.0f};
     const float END_MAGENTA[4] = {1.0f, 0.0f, 1.0f, 1.0f};
-    // sub_1483F0C40 (qword_14F3557C0): frame facings 2 to 5 turn the marker by these degrees
+    // frame facings 2 to 5 turn the marker by these degrees
     const float FRAME_ROTATIONS[4] = {180.0f, 0.0f, 90.0f, 270.0f};
 
     class LevelMapSource final : public MapRenderSource {
@@ -260,7 +260,7 @@ void MapItem::updateTrackedDecorations(ServerNetworkHandler &owner, World &world
 }
 
 void MapItem::tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data, const ItemStack *item) {
-    // GameplayUserManager::_addTrackedMapPlayers: every player of the world follows the map
+    // every player of the world follows the map
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent || &owner.getWorldFor(player) != &world)

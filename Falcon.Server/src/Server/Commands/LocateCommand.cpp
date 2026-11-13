@@ -14,7 +14,7 @@
 #include <thread>
 
 namespace {
-    // an empty search runs once more from here (sub_14BEA2690, xmmword_14F1FBCD0)
+    // an empty search runs once more from here
     const int32_t RETRY_OFFSET = 32;
 
     std::atomic<bool> gSearchRunning{false};

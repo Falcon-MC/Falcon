@@ -20,7 +20,7 @@ public:
     XoroshiroPositionalFactory mLocationFactory;
 };
 
-// fluids and barriers in one chunk's negative density, one source per 16x12x16 cell (sub_14CDA3560)
+// fluids and barriers in one chunk's negative density, one source per 16x12x16 cell
 class OverworldAquifer {
 public:
     struct Substance {

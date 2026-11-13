@@ -64,7 +64,7 @@ public:
         return !mUnclaimed[(size_t) PoiType::Bed].empty();
     }
 
-    // unclaimed beds plus beds claimed by inhabitants; like the game (sub_1439E5420), a queued bed counts even
+    // unclaimed beds plus beds claimed by inhabitants; like the game, a queued bed counts even
     // broken: only claimed pois are validated
     size_t countBeds() const;
 

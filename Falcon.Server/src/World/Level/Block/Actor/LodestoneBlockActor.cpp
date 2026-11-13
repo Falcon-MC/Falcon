@@ -6,7 +6,7 @@ namespace {
     const char *const TAG_TRACKING_HANDLE = "trackingHandle";
 }
 
-// sub_144C40FF0: written only once linked
+// written only once linked
 Tag LodestoneBlockActor::saveNbt() const {
     Tag data = Tag::ofCompound();
     if (mTrackingId != PositionTrackingDB::INVALID_ID)
@@ -14,7 +14,6 @@ Tag LodestoneBlockActor::saveNbt() const {
     return data;
 }
 
-// sub_144C40C90
 void LodestoneBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
     (void) context;
     const Tag *handle = data.get(TAG_TRACKING_HANDLE);

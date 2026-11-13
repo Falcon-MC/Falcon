@@ -13,7 +13,7 @@
 namespace {
     const int64_t DAY_LENGTH_TICKS = Level::TICKS_PER_DAY;
 
-    // BedBlock::use (sub_143155010, 26.60): network position of a sleeper above the bed's block position
+    // BedBlock::use: network position of a sleeper above the bed's block position
     const float BED_SLEEP_HEIGHT = 0.90625f;
 
     bool countsForSleep(const ServerPlayer &player, const Level &level) {
@@ -79,7 +79,7 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
     wakeUp.mAction = AnimatePacket::Action::WakeUp;
     mNetworkHandler->send(player.getNetworkIdentifier(), wakeUp, mCodecContext);
 
-    // the client stands itself up the same way on the wake up (sub_1402BE690)
+    // the client stands itself up the same way on the wake up
     Level &level = getLevelFor(player);
     Vector3i standUp = head;
     const BlockState bedState = level.getBlockState(head.x, head.y, head.z);

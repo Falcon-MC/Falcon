@@ -127,7 +127,7 @@ namespace {
         float mDefault;
     };
 
-    // ranges and defaults registered by sub_142C374F0
+    // ranges and defaults registered by
     const MovementAttribute MOVEMENT_ATTRIBUTES[] = {
             {"minecraft:friction_modifier", "minecraft:friction_modifier", 0.0f, 256.0f, 1.0f},
             {"minecraft:bounciness", "minecraft:bounciness", 0.0f, 1.0f, 0.0f},
@@ -1948,7 +1948,7 @@ ActorSize MobActor::definitionSize(const ActorSize &fallback) const {
 }
 
 bool MobActor::_syncMovementAttributes() {
-    // sub_142C731B0: the three attributes behind MovementAttributesComponent, client synced
+    // the three attributes behind MovementAttributesComponent, client synced
     bool changed = false;
     for (const MovementAttribute &attribute: MOVEMENT_ATTRIBUTES) {
         const json::Value *component = getComponent(attribute.mComponent);
@@ -2147,7 +2147,7 @@ bool MobActor::burnsInDaylight() const {
     return getComponent(BURNS_IN_DAYLIGHT_COMPONENT) != nullptr;
 }
 
-// anything in protection_slot (the head by default) blocks the fire and is not worn: sub_14CE80670
+// anything in protection_slot (the head by default) blocks the fire and is not worn
 bool MobActor::shieldFromSunlight() const {
     const json::Value *component = getComponent(BURNS_IN_DAYLIGHT_COMPONENT);
     const json::Value *slotName = component == nullptr ? nullptr : component->get("protection_slot");
@@ -2276,7 +2276,7 @@ Tag MobActor::saveNbt() const {
         definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + group));
     data.put(TAG_DEFINITIONS, Tag::ofList(Tag::Type::String, std::move(definitions)));
     data.putInt(TAG_AGE, mAgeTicks);
-    // written only when set (sub_140BB77E0)
+    // written only when set
     if (mActorVersion != 0)
         data.putInt(TAG_ACTOR_VERSION, mActorVersion);
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
@@ -2517,8 +2517,8 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
         return;
 
     // only the transformation the fatal hit's damage sensor added (villager_v2 become_zombie) carries on:
-    // the game keeps ticking transformations of a dying actor until Actor::remove flags it (+649,
-    // sub_140BA3460; checked in sub_14773B730 and sub_147C27700); one from another source dies with it
+    // the game keeps ticking transformations of a dying actor until it is flagged removed;
+    // one from another source dies with it
     const std::string transformation = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
     mConvertsOnDeath = !transformation.empty() && transformation == mHitTransformation;
     mHitTransformation.clear();

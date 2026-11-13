@@ -25,10 +25,10 @@ namespace {
     const int32_t RESET_RECHECK = 20;
     const int32_t RESET_STEP_DELAY = 10;
     const int32_t RESET_STEP = 2;
-    // level event 2021 with the block, sent at the block corner (sub_1433076F0)
+    // level event 2021 with the block, sent at the block corner
     const int32_t BREAK_PARTICLES_EVENT = 2021;
 
-    // table 0x14F166AC4: down, up, north, south, west, east
+    // the game's table: down, up, north, south, west, east
     const std::array<std::array<int32_t, 3>, 6> FACE_OFFSETS = {
             {{{0, -1, 0}}, {{0, 1, 0}}, {{0, 0, -1}}, {{0, 0, 1}}, {{-1, 0, 0}}, {{1, 0, 0}}}};
 
@@ -41,7 +41,7 @@ BrushableBlockActor::BrushableBlockActor() {
     setLootTable(EMPTY_LOOT_TABLE, 0);
 }
 
-// BrushableBlockActor::save (sub_143308520, 26.60): the item only while one is held
+// the item only while one is held
 void BrushableBlockActor::_putFields(Tag &data) const {
     data.putByte(TAG_BRUSH_DIRECTION, (int8_t) mBrushDirection);
     data.putInt(TAG_BRUSH_COUNT, mBrushCount);
@@ -63,7 +63,7 @@ Tag BrushableBlockActor::getSpawnCompound() const {
     return data;
 }
 
-// BrushableBlockActor::load (sub_143308270, 26.60): nothing read without a type; a missing field reads as 0
+// nothing read without a type; a missing field reads as 0
 void BrushableBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
     if (!data.contains(TAG_TYPE))
         return;
@@ -130,7 +130,7 @@ void BrushableBlockActor::complete(ServerNetworkHandler &owner, Level &level) {
         const std::array<int32_t, 3> &offset = FACE_OFFSETS[mBrushDirection];
         const Vector3f spawn((float) (position.x + offset[0]) + 0.5f, (float) (position.y + offset[1]) + 0.5f,
                              (float) (position.z + offset[2]) + 0.5f);
-        // Spawner::spawnItem with a throw time of 10, its motion cleared after
+        // spawned with a throw time of 10, its motion cleared after
         owner.dropItem(level, spawn, item, Vector3f(), ItemActorHandler::DROP_PICKUP_DELAY);
     }
     mInventory.setContainerItem(0, ItemStack::air());

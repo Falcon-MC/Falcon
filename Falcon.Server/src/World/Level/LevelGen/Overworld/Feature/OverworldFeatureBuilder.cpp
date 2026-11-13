@@ -48,7 +48,7 @@ namespace {
     }
 
     // the chunk's biomes, bottom section first, each section's cells in the order the generator fills them; the
-    // game lists them from its sections' palettes (sub_14386B520), whose order is not reproduced exactly
+    // game lists them from its sections' palettes, whose order is not reproduced exactly
     std::vector<int32_t> biomesInSectionOrder(const LevelChunk &chunk) {
         std::vector<int32_t> biomes;
         for (int32_t sectionY = LevelChunk::MIN_Y; sectionY <= LevelChunk::MAX_Y; sectionY += 16) {

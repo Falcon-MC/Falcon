@@ -9,19 +9,18 @@ namespace {
     // the game's 25 orientations: 0-3 north, east, south, west, then axes, diagonals and curves, 24 none
     const int32_t NO_ORIENTATION = 24;
 
-    // sub_145E929F0
     const int32_t ROTATIONS[3][25] = {
             {1, 2, 3, 0, 5, 4, 8, 6, 9, 7, 11, 10, 14, 12, 15, 13, 19, 18, 16, 17, 21, 22, 23, 20, 24},
             {2, 3, 0, 1, 4, 5, 9, 8, 7, 6, 10, 11, 15, 14, 13, 12, 17, 16, 19, 18, 22, 23, 20, 21, 24},
             {3, 0, 1, 2, 5, 4, 7, 9, 6, 8, 11, 10, 13, 15, 12, 14, 18, 19, 17, 16, 23, 20, 21, 22, 24}};
 
-    // sub_145E97A10; the third is the half turn
+    // the third is the half turn
     const int32_t MIRRORS[3][25] = {
             {2, 1, 0, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12, 14, 13, 15, 16, 17, 19, 18, 23, 22, 21, 20, 24},
             {0, 3, 2, 1, 4, 5, 9, 7, 8, 6, 10, 11, 15, 13, 14, 12, 17, 16, 18, 19, 21, 20, 23, 22, 24},
             {2, 3, 0, 1, 4, 5, 9, 8, 7, 6, 10, 11, 15, 14, 13, 12, 17, 16, 19, 18, 22, 23, 20, 21, 24}};
 
-    // a door's cardinal direction mirrors through qword_14F282A30, qword_14F282A90 and qword_14F282AF0
+    // a door's cardinal direction mirrors through three tables
     const int32_t DOOR_MIRRORS[3][24] = {
             {0, 3, 2, 1, 4, 5, 9, 7, 8, 6, 10, 11, 15, 13, 14, 12, 17, 16, 18, 19, 21, 20, 23, 22},
             {2, 1, 0, 3, 4, 5, 6, 8, 7, 9, 10, 11, 12, 14, 13, 15, 16, 17, 19, 18, 23, 22, 21, 20},
@@ -30,23 +29,22 @@ namespace {
     using ValueTable = std::vector<std::pair<int32_t, int32_t>>;
 
     // value of the state, orientation; the first match wins both ways
-    const ValueTable CARDINAL = {{2, 0}, {3, 1}, {0, 2}, {1, 3}}; // xmmword_14F280FF8
-    const ValueTable FACING = {{2, 0}, {5, 1}, {3, 2}, {4, 3}, {1, 24}, {0, 24}}; // byte_14F281018
-    const ValueTable PORTAL_AXIS = {{2, 0}, {1, 1}, {2, 2}, {1, 3}}; // xmmword_14F280FD8
+    const ValueTable CARDINAL = {{2, 0}, {3, 1}, {0, 2}, {1, 3}};
+    const ValueTable FACING = {{2, 0}, {5, 1}, {3, 2}, {4, 3}, {1, 24}, {0, 24}};
+    const ValueTable PORTAL_AXIS = {{2, 0}, {1, 1}, {2, 2}, {1, 3}};
     const ValueTable RAIL = {{0, 4},  {1, 5},  {4, 18}, {2, 16}, {5, 19},
-                             {3, 17}, {9, 23}, {6, 20}, {7, 21}, {8, 22}}; // xmmword_14F281048
-    const ValueTable TORCH = {{3, 0}, {2, 1}, {4, 2}, {1, 3}, {5, 24}, {0, 24}}; // xmmword_14F281098
-    const ValueTable WEIRDO = {{3, 0}, {0, 1}, {2, 2}, {1, 3}}; // xmmword_14F2810C8
-    const ValueTable CORAL = {{2, 0}, {1, 1}, {3, 2}, {0, 3}}; // xmmword_14F2810E8
-    const ValueTable LEVER = {{4, 0}, {1, 1}, {3, 2}, {2, 3}, {0, 5}, {7, 4}, {6, 11}, {5, 10}}; // xmmword_14F281108
-    const ValueTable PILLAR = {{2, 0}, {1, 1}, {2, 2}, {1, 3}, {0, 24}}; // xmmword_14F281148
+                             {3, 17}, {9, 23}, {6, 20}, {7, 21}, {8, 22}};
+    const ValueTable TORCH = {{3, 0}, {2, 1}, {4, 2}, {1, 3}, {5, 24}, {0, 24}};
+    const ValueTable WEIRDO = {{3, 0}, {0, 1}, {2, 2}, {1, 3}};
+    const ValueTable CORAL = {{2, 0}, {1, 1}, {3, 2}, {0, 3}};
+    const ValueTable LEVER = {{4, 0}, {1, 1}, {3, 2}, {2, 3}, {0, 5}, {7, 4}, {6, 11}, {5, 10}};
+    const ValueTable PILLAR = {{2, 0}, {1, 1}, {2, 2}, {1, 3}, {0, 24}};
     const ValueTable ORIENTATION = {{0, 6},  {1, 7},  {2, 8}, {3, 9}, {4, 12}, {5, 13},
-                                    {6, 14}, {7, 15}, {8, 3}, {9, 1}, {10, 0}, {11, 2}}; // xmmword_14F281170
+                                    {6, 14}, {7, 15}, {8, 3}, {9, 1}, {10, 0}, {11, 2}};
 
     // the value names of the string states, by value; their tables above fix the order
     const std::vector<std::string> CARDINAL_NAMES = {"south", "west", "north", "east"};
     const std::vector<std::string> FACING_NAMES = {"down", "up", "north", "south", "west", "east"};
-    // the name tables at 0x14F31E048, 0x14F3B3F48 and 0x14F3E4FA8
     const std::vector<std::string> CORNER_NAMES = {"none", "inner_left", "inner_right", "outer_left", "outer_right"};
     const std::vector<std::string> LEVER_NAMES = {
             "down_east_west", "east", "west", "south", "north", "up_north_south", "up_east_west", "down_north_south"};
@@ -149,7 +147,7 @@ namespace {
         return orientation;
     }
 
-    // sub_145E92860, sub_145ECA380 and the per state copies: a value without an orientation stays
+    // the game and the per state copies: a value without an orientation stays
     int32_t turnValue(const ValueTable &table, int32_t value, int rotation, int mirror) {
         const int32_t orientation = orientationOf(table, value);
         if (orientation == NO_ORIENTATION)
@@ -201,7 +199,7 @@ namespace {
         states.write(KEY, valueOf(CARDINAL, orientation), &CARDINAL_NAMES);
     }
 
-    // a trapdoor's direction counts east, west, south, north (0x2000103, qword_14F0EED00)
+    // a trapdoor's direction counts east, west, south, north
     void turnDirection(States &states, const std::string &name, int rotation, int mirror) {
         static const char *const KEY = "direction";
         if (!states.has(KEY))
@@ -306,7 +304,7 @@ namespace {
         states.write(KEY, (value & 3) + 4 * (((shifted & 0xFF) | ((shifted >> 4) & 0xFF)) & 0xF));
     }
 
-    // sub_145E92E50 and sub_145E93340: every side present, the values move with the sides
+    // every side present, the values move with the sides
     void turnSides(States &states, const char *const sides[4], int rotation, int mirror) {
         for (int i = 0; i < 4; ++i) {
             if (!states.has(sides[i]))

@@ -239,7 +239,7 @@ void ExplorationMapFunction::apply(LootDrop &drop, const LootContext &context) c
         return;
     }
 
-    // sub_1418BC9A0 flags loot maps with map_regenerate: the first player to carry one searches from where he is
+    // the game flags loot maps with map_regenerate: the first player to carry one searches from where he is
     drop.mIdentifier = MapItem::IDENTIFIER;
     drop.mData = entry->mAux;
     drop.mExtraData.putByte(MapItem::TAG_REGENERATE, 1);

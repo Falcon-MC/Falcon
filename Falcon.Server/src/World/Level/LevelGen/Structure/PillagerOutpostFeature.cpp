@@ -7,7 +7,6 @@
 #include <array>
 
 namespace {
-    // ctor sub_1473C3330, isFeatureChunk sub_1473C3980 (26.60)
     const int32_t SPACING = 80;
     const int32_t SEPARATION = 24;
     const int32_t SALT = 165745296;

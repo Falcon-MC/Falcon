@@ -9,7 +9,7 @@ class ServerActor;
 class ThrowableItem : public Item {
 public:
     // None: the dispenser drops it; Shoot: launch event only; ShootWithClick: block.click first, as
-    // ComponentItem::dispense does for data-driven projectiles (sub_148F11C60, 26.60)
+    // the game does for data-driven projectiles
     enum class DispenseMode { None, Shoot, ShootWithClick };
 
     ThrowableItem(const Item &base, std::string entityIdentifier, float throwForce, int32_t cooldownTicks,

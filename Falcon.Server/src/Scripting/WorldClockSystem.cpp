@@ -11,7 +11,7 @@ namespace {
     const int32_t DAY_LENGTH = (int32_t) Level::TICKS_PER_DAY;
     const char *const OVERWORLD = "minecraft:overworld";
 
-    // sub_142CA2AF0: one colon, two non-empty parts, no whitespace, case-insensitive, no minecraft namespace
+    // one colon, two non-empty parts, no whitespace, case-insensitive, no minecraft namespace
     bool validName(const std::string &name) {
         std::string lower = name;
         std::transform(lower.begin(), lower.end(), lower.begin(),
@@ -54,7 +54,7 @@ namespace {
 }
 
 WorldClockSystem::WorldClockSystem() {
-    // sub_145D01CF0: the overworld clock and its day markers, each repeating every day
+    // the overworld clock and its day markers, each repeating every day
     WorldClock overworld;
     overworld.mName = OVERWORLD;
     const std::pair<const char *, int32_t> markers[] = {{"minecraft:day", 1000},       {"minecraft:noon", 6000},
@@ -170,7 +170,7 @@ void WorldClockSystem::_checkMarkers(WorldClock &clock) {
         return;
     clock.mMarkersChecked = true;
 
-    // sub_145D049E0: a marker hits at its time, or every period at time modulo period
+    // a marker hits at its time, or every period at time modulo period
     const std::vector<WorldClockMarker> markers = clock.mMarkers;
     for (const WorldClockMarker &marker: markers) {
         const bool hit = clock.mTime == marker.mTime
@@ -252,7 +252,7 @@ void WorldClockSystem::setPaused(WorldClock &clock, bool paused) {
 }
 
 bool WorldClockSystem::rewindTo(WorldClock &clock, const WorldClockMarker &marker) {
-    // sub_14C9751D0: the latest occurrence at or before the current time
+    // the latest occurrence at or before the current time
     const int32_t time = clock.mTime;
     if (time < marker.mTime)
         return false;
@@ -274,7 +274,7 @@ bool WorldClockSystem::rewindTo(WorldClock &clock, const WorldClockMarker &marke
 }
 
 void WorldClockSystem::skipTo(WorldClock &clock, const WorldClockMarker &marker) {
-    // sub_14C8B1BD0: the next occurrence at or after the current time, the first one past the maximum
+    // the next occurrence at or after the current time, the first one past the maximum
     int64_t target = marker.mTime;
     const int64_t time = clock.mTime;
     if (time >= 0 && marker.mHasPeriod && marker.mPeriod > 0) {
@@ -300,7 +300,7 @@ void WorldClockSystem::tick() {
             continue;
         }
 
-        // sub_145D06B10: markers of the current time first, then the step or the restart at the maximum
+        // markers of the current time first, then the step or the restart at the maximum
         _checkMarkers(clock);
         if (clock.mTime != INT32_MAX) {
             ++clock.mTime;

@@ -18,7 +18,7 @@ namespace {
         return state.mStates.getByte(STATE_POWERED, 0) != 0;
     }
 
-    // minecarts touching (x+0.2, y, z+0.2)-(x+0.8, y+0.8, z+0.8), as DetectorRailBlock fetches them (sub_149C54970)
+    // minecarts touching (x+0.2, y, z+0.2)-(x+0.8, y+0.8, z+0.8), as DetectorRailBlock fetches them
     template <typename Visitor>
     void forEachMinecart(ServerNetworkHandler &owner, Level &level, const Vector3i &position, Visitor visit) {
         const float minX = (float) position.x + 0.2f;
@@ -47,7 +47,7 @@ bool DetectorRailBlock::matches(const std::string &identifier) {
     return identifier == BlockNames::DETECTOR_RAIL;
 }
 
-// a producer of 15 while a minecart is on it, attached downward so it charges the block below (sub_149C552D0)
+// a producer of 15 while a minecart is on it, attached downward so it charges the block below
 int DetectorRailBlock::getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
                                         bool strong) const {
     (void) level;
@@ -58,7 +58,7 @@ int DetectorRailBlock::getEmittedSignal(Level &level, const Vector3i &position, 
     return !strong || face == RedstoneFace::UP ? RedstoneSystem::MAX_SIGNAL : 0;
 }
 
-// DetectorRailBlock::entityInside (sub_149C547F0, 26.60): only a minecart on an unpowered rail checks
+// only a minecart on an unpowered rail checks
 void DetectorRailBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                                       const BlockState &state) const {
     if (!actor.isMinecart() || isPowered(state))
@@ -67,14 +67,14 @@ void DetectorRailBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor,
     checkPressed(owner, owner.getLevelFor(actor), position, state);
 }
 
-// DetectorRailBlock tick (sub_149C54F20, 26.60): a powered rail checks again until the minecart leaves
+// DetectorRailBlock tick: a powered rail checks again until the minecart leaves
 void DetectorRailBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                           const BlockState &state) const {
     if (isPowered(state))
         checkPressed(owner, level, position, state);
 }
 
-// DetectorRailBlock::getComparatorSignal (sub_149C550D0, 26.60): the first minecart with a container on the rail
+// DetectorRailBlock::getComparatorSignal: the first minecart with a container on the rail
 int DetectorRailBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) state;
     ServerNetworkHandler *owner = level.getOwner();
@@ -93,7 +93,7 @@ int DetectorRailBlock::getComparatorSignal(Level &level, const Vector3i &positio
     return signal;
 }
 
-// DetectorRailBlock::_updateState (sub_149C54970, 26.60): rail_data_bit follows the minecarts, then rechecked in 20
+// rail_data_bit follows the minecarts, then rechecked in 20
 void DetectorRailBlock::checkPressed(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state) {
     bool pressed = false;

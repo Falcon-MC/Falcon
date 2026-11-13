@@ -431,7 +431,7 @@ namespace {
         return record;
     }
 
-    // SeatDescription defaults (sub_14B015000, 26.60): lock_rider_rotation 181, the rest 0
+    // SeatDescription defaults: lock_rider_rotation 181, the rest 0
     JSValue rideableGetSeats(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -676,7 +676,7 @@ namespace {
         int32_t mMaxTicks = 0;
     };
 
-    // whole seconds in the definition; absent fields take the schema defaults (sub_143796DC0)
+    // whole seconds in the definition; absent fields take the schema defaults
     int32_t definitionSeconds(const ComponentTarget &target, const char *key, int32_t fallback) {
         const json::Value *value = fieldOf(target, key);
         return value != nullptr && value->isNumber() ? (int32_t) value->mNumber : fallback;
@@ -696,7 +696,7 @@ namespace {
         return true;
     }
 
-    // whole seconds, truncated (sub_14BDBB230)
+    // whole seconds, truncated
     JSValue breathableGetAirSupply(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -707,7 +707,7 @@ namespace {
         return JS_NewInt32(ctx, (int16_t) air.mTicks / 20);
     }
 
-    // seconds within [suffocation, total supply] in whole seconds, stored as ticks (sub_14BDB9D20)
+    // seconds within [suffocation, total supply] in whole seconds, stored as ticks
     JSValue breathableSetAirSupply(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -1005,7 +1005,7 @@ namespace {
             case ProjectileField::HitGroundSound:
                 return optionalText(ctx, LevelSoundEventIds::nameOf(projectile->mHitGroundSound));
             case ProjectileField::HitParticle:
-                // ParticleType 0 and a type without a name read as undefined (sub_14C6A7B50, 26.60)
+                // ParticleType 0 and a type without a name read as undefined
                 return optionalText(ctx, ProjectileComponent::particleName(projectile->mParticle));
             case ProjectileField::Lightning:
                 return JS_NewBool(ctx, projectile->mLightning);
@@ -1014,7 +1014,7 @@ namespace {
             case ProjectileField::OnFireTime:
                 return JS_NewFloat64(ctx, projectile->mOnFireTime);
             case ProjectileField::ShouldBounce:
-                // the getter tests the should_bounce byte (sub_14C6A8770, 26.60)
+                // the getter tests the should_bounce byte
                 return JS_NewBool(ctx, projectile->mShouldBounce != ProjectileComponent::Bounce::No);
             case ProjectileField::StopOnHit:
                 return JS_NewBool(ctx, projectile->mStopOnHurt);
@@ -1061,7 +1061,7 @@ namespace {
                 break;
             case ProjectileField::HitEntitySound:
             case ProjectileField::HitGroundSound: {
-                // undefined clears the sound; a name that maps to Undefined throws, "undefined" too (sub_14C6A5960)
+                // undefined clears the sound; a name that maps to Undefined throws, "undefined" too
                 const int32_t sound = JS_IsUndefined(value) ? LevelSoundEventIds::UNDEFINED
                                                             : LevelSoundEventIds::fromName(name);
                 if (sound == LevelSoundEventIds::UNDEFINED && !JS_IsUndefined(value))
@@ -1071,7 +1071,7 @@ namespace {
                 break;
             }
             case ProjectileField::HitParticle: {
-                // undefined clears the particle, a name without a type throws (sub_14C6A8150, 26.60)
+                // undefined clears the particle, a name without a type throws
                 const int32_t type = JS_IsUndefined(value) ? 0 : ProjectileComponent::particleType(name);
                 if (type == 0 && !JS_IsUndefined(value))
                     return target.mApi->throwError("InvalidArgumentError", "Invalid particle identifier.");
@@ -1088,7 +1088,7 @@ namespace {
                 projectile->mOnFireTime = (float) amount;
                 break;
             case ProjectileField::ShouldBounce:
-                // the setter stores the boolean in the should_bounce byte (sub_14C6A8A30, 26.60)
+                // the setter stores the boolean in the should_bounce byte
                 projectile->mShouldBounce = (ProjectileComponent::Bounce)(flag ? 1 : 0);
                 break;
             case ProjectileField::StopOnHit:
@@ -1127,7 +1127,7 @@ namespace {
         return npc;
     }
 
-    // ScriptNpcComponent getters (sub_14DEA0400, sub_14DEE1C50, 26.60): the raw text name, the scene, the skin
+    // ScriptNpcComponent getters: the raw text name, the scene, the skin
     JSValue npcGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         ComponentTarget target;
         NpcActor *npc = npcOf(ctx, thisVal, target);
@@ -1156,7 +1156,7 @@ namespace {
                 return JS_ThrowTypeError(ctx, "Native type conversion failed.");
             if (npc->setSkinIndex(&target.mApi->host(), index))
                 return JS_UNDEFINED;
-            // sub_14DEDFE30 (26.60): any refused index, the current one too, throws with the list bounds
+            // any refused index, the current one too, throws with the list bounds
             const int32_t maxValue = (int32_t) npc->getSkins().size() - 1;
             JSValue fields = JS_NewObject(ctx);
             JS_SetPropertyStr(ctx, fields, "value", JS_NewInt32(ctx, index));

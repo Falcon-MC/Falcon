@@ -288,7 +288,7 @@ McStructure McStructure::capture(ServerNetworkHandler &owner, Level &level, cons
     return structure;
 }
 
-// sub_147772E00: a cell stays when the integrity percent beats a draw from a twister seeded with its index plus the
+// a cell stays when the integrity percent beats a draw from a twister seeded with its index plus the
 // seed
 bool McStructure::_kept(size_t index, float integrity, uint32_t seed) {
     if (integrity == 0.0f)
@@ -304,8 +304,8 @@ Vector3i McStructure::rotatedSize(int32_t rotation) const {
     return (rotation & 1) != 0 ? Vector3i(mSize.z, mSize.y, mSize.x) : mSize;
 }
 
-// StructureTemplate::_placeNextBlockSegmentInWorld (sub_146986070): mirror then rotate about the pivot, the script's
-// pivot being (size - 1) / 2 (sub_14B860340); mirror X flips z, Z flips x
+// mirror then rotate about the pivot, the script's
+// pivot being (size - 1) / 2; mirror X flips z, Z flips x
 Vector3i McStructure::transform(const Vector3i &local, const PlaceOptions &options) const {
     int32_t x = local.x, z = local.z;
     if (options.mMirror == Mirror::X || options.mMirror == Mirror::XZ)
@@ -345,7 +345,7 @@ void McStructure::place(ServerNetworkHandler &owner, Level &level, const Vector3
                         || level.peekBlockPtr(target.x, target.y, target.z) == nullptr)
                         continue;
 
-                    // the states turn with the structure (sub_146986070 through sub_145E93850)
+                    // the states turn with the structure
                     BlockState chosen = StructureBlockRotation::apply(*state, options.mRotation, (int) options.mMirror);
                     if (options.mFilter && !options.mFilter(target, chosen))
                         continue;

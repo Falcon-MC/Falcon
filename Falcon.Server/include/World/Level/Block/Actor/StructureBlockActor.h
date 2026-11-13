@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-// StructureBlockActor, fields as sub_14776A560 loads and sub_14776ADE0 saves them (26.60)
+// fields as the game loads and saves them
 class StructureBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "StructureBlock";

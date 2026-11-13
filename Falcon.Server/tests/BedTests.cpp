@@ -109,7 +109,7 @@ namespace {
     }
 
     void sleepTime() {
-        // the sky darkening of sub_142938180: 3 at 12540, 4 at 12550, 6 at 13000
+        // the sky darkening: 3 at 12540, 4 at 12550, 6 at 13000
         BedFixture fixture;
         fixture.mLevel.setTime(12540);
         require(LightSystem::calculateSkyLightSubtracted(fixture.mLevel) == 3, "the dusk darkening is not 3");

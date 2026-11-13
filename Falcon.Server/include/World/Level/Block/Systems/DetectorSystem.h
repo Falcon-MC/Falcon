@@ -13,12 +13,11 @@ class ServerNetworkHandler;
 // trip wires and target blocks: the two detectors RedstoneSystem asks for power
 class DetectorSystem {
 public:
-    // cells a hook scans for the facing hook: 40 wires between them at most; TripWireHookBlock::calculateState
-    // (sub_1449BF670, 26.60)
+    // cells a hook scans for the facing hook: 40 wires between them at most
     static constexpr int32_t MAX_HOOK_REACH = 41;
-    // a tripped wire's scheduled recheck; TripWireBlock::_checkPressed (sub_1449C0D50, 26.60)
+    // a tripped wire's scheduled recheck
     static constexpr int32_t WIRE_RECHECK_TICKS = 10;
-    // a target's scheduled reset: arrows and tridents, then other projectiles; TargetBlock (sub_14B273550, 26.60)
+    // a target's scheduled reset: arrows and tridents, then other projectiles; TargetBlock
     static constexpr int32_t TARGET_ARROW_TICKS = 20;
     static constexpr int32_t TARGET_OTHER_TICKS = 8;
 

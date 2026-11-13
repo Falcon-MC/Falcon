@@ -418,7 +418,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
                   R"({"format_version": "1.26.50", "minecraft:jigsaw": {
                       "description": {"identifier": "test:tower"}, "start_pool": "test:start_pool", "max_depth": 1,
                       "start_height": {"type": "constant", "value": {"below_top": 3}}}})");
-        // a uniform height provider between two anchors (sub_1492DB6B0: min and max)
+        // a uniform height provider between two anchors
         writeFile(pack / "worldgen" / "jigsaw_structures" / "spire.json",
                   R"({"format_version": "1.21.20", "minecraft:jigsaw": {
                       "description": {"identifier": "test:spire"}, "start_pool": "test:start_pool", "max_depth": 1,
@@ -441,7 +441,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         require(spire != nullptr && spire->mHasStartHeight && spire->mStartUniform && spire->mStartOffset == 10
                         && spire->mStartMaxOffset == 20,
                 "the uniform start_height was not read");
-        // the legacy random of world seed 12345 at 50, 100, 50 (sub_14383F470) draws 7 in [0, 10]
+        // the legacy random of world seed 12345 at 50, 100, 50 draws 7 in [0, 10]
         require(PackJigsaw::startHeight(*spire, 12345, Vector3i(50, 100, 50), -64, 319) == 17
                         && PackJigsaw::startHeight(*tower, 12345, Vector3i(50, 100, 50), -64, 319) == 316,
                 "the start height was not drawn like the game");
@@ -509,7 +509,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         const Vector3i mirrored = structure.transform(Vector3i(0, 0, 0), options);
         require(mirrored.x == 0 && mirrored.z == 2, "the x mirror did not flip z");
 
-        // the placed states turn with the structure (sub_145E93850)
+        // the placed states turn with the structure
         const auto turn = [](const char *name, const Tag &states, int rotation, int mirror) {
             return StructureBlockRotation::apply(BlockState(name, states), rotation, mirror).mStates;
         };
@@ -709,7 +709,7 @@ system.runTimeout(() => world.setDynamicProperty("blocks", JSON.stringify(r)), 3
         expect(r, "offset", "2,99,3");
         expect(r, "item", "minecraft:stonex3");
         expect(r, "light", "number:number");
-        // stone holds no circuit component (sub_14A752ED0)
+        // stone holds no circuit component
         expect(r, "power", "undefined");
         expect(r, "components", "minecraft:map_color,minecraft:movable,minecraft:precipitation_interactions");
         expect(r, "movable", "PushPull:None");

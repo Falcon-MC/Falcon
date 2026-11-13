@@ -101,7 +101,7 @@ public:
     static const int32_t PIXEL_COUNT = MAP_SIZE * MAP_SIZE;
     static const int8_t MAX_SCALE = 4;
     static const int64_t INVALID_ID = -1;
-    // sub_141AE17C0 writes this for a column whose blocks all lack a map colour
+    // the game writes this for a column whose blocks all lack a map colour
     static const uint32_t UNEXPLORED_PIXEL = 0xff000000u;
 
     explicit MapItemSavedData(int64_t mapId);
@@ -130,7 +130,7 @@ public:
         return mOrigin;
     }
 
-    // sub_1483ED0B0, with the infinite world settings the game passes
+    // with the infinite world settings the game passes
     void setOrigin(const Vector3f &position, int8_t scale, int32_t dimension);
 
     bool isLocked() const {
@@ -193,10 +193,10 @@ public:
     bool writePixels(int32_t x, int32_t y, int32_t width, int32_t height, const uint32_t *pixels,
                      MapPixelArea &changed);
 
-    // sub_14228D8A0: client side generation pixels; blank ones and those out of the map are dropped
+    // client side generation pixels; blank ones and those out of the map are dropped
     bool applyClientPixels(const std::vector<MapPixel> &pixels);
 
-    // the tick counter of MapItem::inventoryTick (sub_141AE31C0): the map renders when it reaches 20
+    // the tick counter of MapItem::inventoryTick: the map renders when it reaches 20
     int64_t &getUpdateCounter() {
         return mUpdateCounter;
     }
@@ -205,18 +205,17 @@ public:
 
     void load(const Tag &tag);
 
-    // sub_1483F2E30: a copy through save and load, keeping this map's id
+    // a copy through save and load, keeping this map's id
     void copyFrom(const MapItemSavedData &other);
 
     const std::vector<MapDecorationEntry> &getDecorations() const {
         return mDecorations;
     }
 
-    // sub_1483EFEB0; position holds x, the rotation in degrees, then z
+    // position holds x, the rotation in degrees, then z
     void addDecoration(MapDecorationType type, const MapItemTrackedActorKey &key, const Vector3f &position,
                        const std::string &label, const float color[4], int32_t rotationNoise);
 
-    // sub_1483F13D0
     void removeDecoration(const MapItemTrackedActorKey &key);
 
     std::vector<MapItemTrackingInfo> &getTracked() {
@@ -225,10 +224,9 @@ public:
 
     MapItemTrackingInfo *findTracked(const MapItemTrackedActorKey &key);
 
-    // sub_1483F1910 without the decoration refresh, which the caller runs
+    // without the decoration refresh, which the caller runs
     MapItemTrackingInfo &addTracked(const MapItemTrackedActorKey &key, int32_t dimension, MapDecorationType type);
 
-    // sub_1483F21F0
     void removeTracked(const MapItemTrackedActorKey &key);
 
     // update returns false when the tracked thing is gone: a frame only hides its marker, an actor drops its
@@ -251,13 +249,13 @@ public:
         }
     }
 
-    // sub_1483F2F20: every pixel and decoration
+    // every pixel and decoration
     ClientboundMapItemDataPacket buildFullPacket() const;
 
-    // sub_1483F2450: the changed area, otherwise the decorations every fifth call; false when nothing is due
+    // the changed area, otherwise the decorations every fifth call; false when nothing is due
     bool buildUpdatePacket(MapItemTrackingInfo &tracking, ClientboundMapItemDataPacket &packet) const;
 
-    // sub_144169380: the ids of this map and of its parents, which the client links for zooming
+    // the ids of this map and of its parents, which the client links for zooming
     ClientboundMapItemDataPacket buildCreationPacket(const std::vector<int64_t> &mapIds) const;
 
     ClientboundMapItemDataPacket buildAreaPacket(const MapPixelArea &area) const;

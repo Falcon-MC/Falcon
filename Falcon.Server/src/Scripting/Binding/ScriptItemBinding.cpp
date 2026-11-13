@@ -54,7 +54,7 @@ namespace {
     const char *const TAG_TITLE = "title";
     const char *const TAG_AUTHOR = "author";
     const char *const TAG_GENERATION = "generation";
-    // int argb: sub_141A51A00
+    // int argb
     const char *const TAG_CUSTOM_COLOR = "customColor";
 
     const char *const WRITABLE_BOOK = "minecraft:writable_book";
@@ -65,8 +65,8 @@ namespace {
                                                 {"ThrownLingering", "minecraft:lingering_potion"}};
 
     // EnchantmentTargets bits as EnchantmentSlot values
-    // EnchantSlot names: sub_149C81280; the data-driven spears carry melee_spear
-    // trident and mask keep their generic class: their item constructors are only reached from sub_144997DC0
+    // EnchantSlot names; the data-driven spears carry melee_spear
+    // trident and mask keep their generic class: their item constructors are only reached from
     const std::pair<uint32_t, const char *> ENCHANTMENT_SLOTS[] = {
             {EnchantmentTargets::HELMET, "ArmorHead"},
             {EnchantmentTargets::CHESTPLATE, "ArmorTorso"},
@@ -185,7 +185,7 @@ namespace {
         return identifier == WRITABLE_BOOK || identifier == WRITTEN_BOOK;
     }
 
-    // only an item json declares minecraft:dyeable (sub_143F0F5E0); no vanilla item does, leather armor included
+    // only an item json declares minecraft:dyeable; no vanilla item does, leather armor included
     bool isDyeable(const ScriptItemData &data) {
         const DyeableItemComponent *dyeable = gameComponents(data).get<DyeableItemComponent>();
         return dyeable != nullptr && dyeable->isDyeable();
@@ -730,7 +730,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // description ids set by the item virtual +0x18 after registration in sub_144744830; others keep the name
+    // description ids the game sets after registration; others keep the name
     const std::pair<const char *, const char *> ITEM_DESCRIPTION_IDS[] = {
             {"minecraft:carrot_on_a_stick", "carrotOnAStick"},
             {"minecraft:cod", "fish"},
@@ -792,7 +792,7 @@ namespace {
     }
 
     // "item." + description id + ".name"
-    // item description ids only: block ids and per-class overrides (buckets by content, sub_148EE72C0) are not mapped
+    // item description ids only: block ids and per-class overrides are not mapped
     JSValue itemGetLocalizationKey(JSContext *ctx, ScriptApi &api, ScriptItemData &data, int, JSValueConst *) {
         if (const Tag *name = vanillaComponent(data.mTypeId, "minecraft:display_name"))
             return string(ctx, name->getString("value"));
@@ -1013,7 +1013,7 @@ namespace {
         return JS_TRUE;
     }
 
-    // compound at the top of the item tag, one child compound per collection: sub_14B4A9E90, sub_149B62E40
+    // compound at the top of the item tag, one child compound per collection
     // collections named by the pack name, not checked against the game
     const char *const TAG_BLOCK_DYNAMIC_PROPERTIES = "BlockEntityDynamicProperties";
 
@@ -1229,7 +1229,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // minecraft:durability damage_chance; the description defaults to 100..100: sub_143F0A930
+    // minecraft:durability damage_chance; the description defaults to 100..100
     void damageChanceRange(const ScriptItemData &data, int32_t &min, int32_t &max) {
         min = 100;
         max = 100;
@@ -1241,7 +1241,7 @@ namespace {
         }
     }
 
-    // Item::getDamageChance ignores the component range: sub_141A53D40
+    // the damage chance ignores the component range
     JSValue durabilityGetDamageChance(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         int32_t unbreaking = 0;
         if (argc >= 1 && !JS_IsUndefined(argv[0]) && JS_ToInt32(ctx, &unbreaking, argv[0]) != 0)
@@ -1363,7 +1363,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the component's default_color once the stack has customColor (sub_14B3FDBA0); no vanilla item has the component
+    // the component's default_color once the stack has customColor; no vanilla item has the component
     JSValue dyeableGetDefaultColor(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_UNDEFINED;
     }
@@ -1831,7 +1831,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the binding's bounds error (sub_148548380); argument: the index of the slot in the call
+    // the binding's bounds error; argument: the index of the slot in the call
     JSValue checkSlot(JSContext *ctx, const ScriptContainerView &view, int32_t slot, int argument = 0) {
         if (slot < 0 || slot >= view.mSize)
             return ScriptApi::fromContext(ctx)->throwError(
@@ -2316,7 +2316,7 @@ namespace {
         return api->makeInstance("ContainerSlot", slot);
     }
 
-    // every armor container slot, body included, and no base armor: Mob vtable slot 153 sub_142C31810
+    // every armor container slot, body included, and no base armor: Mob vtable slot 153
     JSValue equippableTotal(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int toughness) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptContainerRef *ref = api->native<ScriptContainerRef>(thisVal);
@@ -2369,7 +2369,7 @@ namespace {
             {"minecraft:cursor_inventory", "PlayerCursorInventoryComponent", ScriptContainerRef::Kind::Cursor},
     };
 
-    // equippable on any mob: its natives only test the mob type flag, sub_140B9C800(actor, 256)
+    // equippable on any mob: its natives only test the mob type flag
     bool hasContainerComponent(Actor &actor, ScriptContainerRef::Kind kind) {
         if (actor.isPlayer())
             return true;

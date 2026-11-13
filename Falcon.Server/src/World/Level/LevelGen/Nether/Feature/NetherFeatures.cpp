@@ -95,7 +95,6 @@ namespace {
         return length;
     }
 
-    // sub_1432ECE10
     void growWeepingVines(BlockManager &blocks, int32_t x, int32_t y, int32_t z, int32_t length, int32_t minAge,
                           int32_t maxAge, std::mt19937 &random) {
         for (int32_t i = 0; i <= length; i++, y--) {
@@ -226,7 +225,6 @@ namespace {
         return count;
     }
 
-    // sub_14D206C90
     bool deltaFits(BlockManager &blocks, int32_t x, int32_t y, int32_t z) {
         return !isLava(blocks.getBlockAt(x, y, z)) && isAirAt(blocks, x, y + 1, z) && !isAirAt(blocks, x, y - 1, z)
                && !isAirAt(blocks, x, y, z - 1) && !isAirAt(blocks, x, y, z + 1) && !isAirAt(blocks, x + 1, y, z)

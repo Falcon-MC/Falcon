@@ -12,7 +12,7 @@ class Level;
 class LevelChunk;
 class TerrainCache;
 
-// the whole portal is worked out by the start chunk (RuinedPortalPiece::postProcess, sub_1473C9A30); each chunk
+// the whole portal is worked out by the start chunk; each chunk
 // it reaches places its own share of the result
 class RuinedPortalStructure {
 public:

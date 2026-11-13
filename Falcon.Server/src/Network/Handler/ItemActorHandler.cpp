@@ -44,7 +44,7 @@ Vector3f ItemActorHandler::randomDropMotion() {
     return Vector3f(randomUnitFloat() * 0.2f - 0.1f, 0.2f, randomUnitFloat() * 0.2f - 0.1f);
 }
 
-// Block::popResource: 0.15 to 0.85 inside the block on each axis (sub_1435AACD0)
+// 0.15 to 0.85 inside the block on each axis
 Vector3f ItemActorHandler::randomPopPosition(const Vector3i &block) {
     const float x = randomUnitFloat() * 0.7f + 0.15f;
     const float y = randomUnitFloat() * 0.7f + 0.15f;

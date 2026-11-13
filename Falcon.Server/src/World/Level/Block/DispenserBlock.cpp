@@ -112,7 +112,7 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     Container &inventory = actor->getInventory();
     const int slot = pickSlot(inventory);
     if (slot < 0) {
-        // the sound at the block corner, the vibration at its center (BlockSource::postGameEvent, sub_1432CD050)
+        // the sound at the block corner, the vibration at its center
         owner.playLevelSound(level, SOUND_DISPENSE_FAIL,
                              Vector3f((float) position.x, (float) position.y, (float) position.z));
         level.postGameEvent(GameEvents::DISPENSE_FAIL, centerOf(position));
@@ -152,7 +152,7 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     owner.refreshContainerViewers(position);
 }
 
-// DispenserBlock::dispenseFrom (sub_149C59030, 26.60): a block item goes to its block, any other to its item;
+// a block item goes to its block, any other to its item;
 // a refusal drops it, and either way the shoot particles follow
 void DispenserBlock::_dispense(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
                                Container &inventory, int slot) {

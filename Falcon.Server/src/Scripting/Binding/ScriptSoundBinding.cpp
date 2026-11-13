@@ -49,12 +49,12 @@ namespace {
         return std::fmod(state.mElapsedUnits, (double) state.mDurationUnits);
     }
 
-    // only sounds with a duration and a finite loop count are tracked (sub_141ECB3C0, sub_14C555130, 26.60)
+    // only sounds with a duration and a finite loop count are tracked
     bool isActive(const ScriptSoundState &state) {
         return state.mHasDuration && state.mLoopCount >= 0 && !state.mStopped && !state.mCompleted;
     }
 
-    // whole ticks or milliseconds; untracked, it reports the full duration (sub_14380C5C0, 26.60)
+    // whole ticks or milliseconds; untracked, it reports the full duration
     float playbackPosition(const ScriptSoundState &state) {
         if (!isActive(state))
             return state.durationSeconds();
@@ -144,7 +144,7 @@ namespace {
         double seconds = 0.0;
         if (state == nullptr || !readNumberArgument(ctx, argc, argv, 0, seconds))
             return typeError(ctx);
-        // the known duration bounds the float seconds (sub_14C55BBC0, 26.60)
+        // the known duration bounds the float seconds
         const double maxValue = state->mHasDuration ? (double) state->durationSeconds() : MAX_SEEK;
         if (seconds < 0.0 || (state->mHasDuration ? (float) seconds > state->durationSeconds() : seconds > MAX_SEEK))
             return outOfBounds(ctx, "ArgumentOutOfBoundsError", seconds, 0.0, maxValue, true, 0);
@@ -205,7 +205,7 @@ namespace {
 
     JSValue durationGetDuration(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptSoundState *state = soundOf(ctx, thisVal);
-        // a float of ticks / 20 or milliseconds / 1000 (sub_14C554800, 26.60)
+        // a float of ticks / 20 or milliseconds / 1000
         return state == nullptr ? typeError(ctx) : JS_NewFloat64(ctx, state->durationSeconds());
     }
 
@@ -364,8 +364,8 @@ namespace {
     }
 }
 
-// one counter for every pack: the handles reach the same clients; the sound manager starts it at 1 (sub_141EC70D0)
-// and hands out the value before its increment (sub_141ECB3C0)
+// one counter for every pack: the handles reach the same clients; the sound manager starts it at 1
+// and hands out the value before its increment
 int64_t ScriptApi::nextSoundHandle() {
     static int64_t next = 0;
     return ++next;
@@ -396,7 +396,7 @@ JSValue ScriptApi::readSoundOptions(JSValueConst options, ScriptSoundOptions &re
     JS_FreeValue(mContext, broadcast);
     if (!ok)
         return typeError(mContext);
-    // compared as the floats the game keeps (sub_14D4FB100, 26.60)
+    // compared as the floats the game keeps
     if ((float) read.mVolume < 0.0f)
         return outOfBounds(mContext, "PropertyOutOfBoundsError", read.mVolume, 0.0, 0.0, false);
     if ((float) read.mPitch < 0.01f)
@@ -419,7 +419,6 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
         state->mRealTime = definition->mRealTime;
     }
     // isBroadcast: only players whose chunk view covers the sound, within a declared broadcast_range horizontally
-    // Dimension::playSound (sub_14B53D880, 26.60)
     const bool ranged = options.mBroadcast && definition != nullptr && definition->mHasBroadcastRange;
     const float rangeSquared = ranged ? definition->mBroadcastRange * definition->mBroadcastRange : 0.0f;
     const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
@@ -501,12 +500,12 @@ void ScriptApi::_tickSounds() {
 }
 
 namespace {
-    // the music manager's level events (sub_14C529CB0, sub_14C529A80, 26.60)
+    // the music manager's level events
     const int32_t MUSIC_QUEUE = 1900;
     const int32_t MUSIC_PLAY = 1901;
     const int32_t MUSIC_STOP = 1902;
 
-    // MusicOptions as the game reads it (sub_14D4EB0C0, 26.60): volume 1 and fade 0 by default, neither negative
+    // MusicOptions as the game reads it: volume 1 and fade 0 by default, neither negative
     bool readMusicTag(JSContext *ctx, int argc, JSValueConst *argv, Tag &tag, JSValue &error) {
         error = JS_UNDEFINED;
         if (argc < 1 || !JS_IsString(argv[0])) {

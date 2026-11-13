@@ -37,7 +37,7 @@ namespace {
     const float CRACKED_INTEGRITY = 0.7f;
     const float MOSSY_INTEGRITY = 0.5f;
 
-    // the capped archaeology rule (sub_1469AFE80)
+    // the capped archaeology rule
     const int32_t ARCHAEOLOGY_CAP = 5;
     const char *const WARM_LOOT_TABLE = "loot_tables/entities/warm_ocean_ruins_brushable_block.json";
     const char *const COLD_LOOT_TABLE = "loot_tables/entities/cold_ocean_ruins_brushable_block.json";
@@ -45,7 +45,7 @@ namespace {
     const char *const BIG_LOOT = "loot_tables/chests/underwater_ruin_big.json";
     const char *const SMALL_LOOT = "loot_tables/chests/underwater_ruin_small.json";
 
-    // sub_1473BFBA0: the cold small lists all open with the unfinished ruin4
+    // the cold small lists all open with the unfinished ruin4
     const std::array<const char *, 8> WARM_PIECES = {"ruin_warm1", "ruin_warm2", "ruin_warm3", "ruin_warm4",
                                                      "ruin_warm5", "ruin_warm6", "ruin_warm7", "ruin_warm8"};
     const std::array<const char *, 4> BIG_WARM_PIECES = {"big_ruin_warm4", "big_ruin_warm5", "big_ruin_warm6",
@@ -54,7 +54,7 @@ namespace {
                                                      "ruin5", "ruin6", "ruin7", "ruin8"};
     const std::array<const char *, 4> BIG_COLD_PIECES = {"big_ruin1", "big_ruin2", "big_ruin3", "big_ruin8"};
 
-    // by quarter turns (sub_1473BE700): the corner the rotated piece grows from, and the far side of the area
+    // by quarter turns: the corner the rotated piece grows from, and the far side of the area
     const std::array<int32_t, 4> START_X = {0, 15, 15, 0};
     const std::array<int32_t, 4> START_Z = {0, 0, 15, 15};
     const std::array<int32_t, 4> MAIN_REACH_X = {15, -15, -15, 15};
@@ -106,7 +106,7 @@ namespace {
         }
     }
 
-    // sub_1473C2B30: what the chest marker turns into, the chest itself going one block lower
+    // what the chest marker turns into, the chest itself going one block lower
     BlockState markerBlock(const OceanRuinStructure::Piece &piece) {
         const std::string &name = piece.mTemplate;
         if (name == "ruin/big_ruin1_brick" || name == "ruin/big_ruin8_brick" || name == "ruin/ruin2_brick")
@@ -116,7 +116,7 @@ namespace {
         return piece.mWarm ? defaultState(BlockNames::SANDSTONE) : waterState();
     }
 
-    // Mth::getSeed with the product cut to 32 bits before the xoroshiro seeding (sub_1477607B0)
+    // the position seed with the product cut to 32 bits before the xoroshiro seeding
     int64_t positionSeed(int32_t x, int32_t y, int32_t z) {
         const int64_t mixed = (116129781LL * (int64_t) z) ^ (int64_t) y ^ (int64_t) (int32_t) ((uint32_t) x * 3129871U);
         const uint64_t spread = (uint64_t) mixed * (42317861ULL * (uint64_t) mixed + 11ULL);
@@ -129,7 +129,7 @@ namespace {
                     StructureTerrain &terrain)
                 : mLevel(level), mChunk(chunk), mSeed(seed), mChunkRandom(chunkRandom), mTerrain(terrain) {}
 
-        // sub_1473C1030 then the template piece post process (sub_14699DA70)
+        // then the template piece post process
         void place(const OceanRuinStructure::Piece &piece) {
             const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(piece.mTemplate + ".nbt");
             if (shape == nullptr)
@@ -206,7 +206,7 @@ namespace {
 
         void _set(int32_t x, int32_t y, int32_t z, const BlockState &state) {
             mChunk.setBlock(x & 15, y, z & 15, state);
-            // the piece settings ask for the sea in what can hold it (sub_14775E430)
+            // the piece settings ask for the sea in what can hold it
             if (y < SEA_LEVEL && LiquidPhysicsSystem::getWaterloggingLevel(state) > 0)
                 mChunk.setBlock(x & 15, y, z & 15, 1, waterState());
         }
@@ -264,7 +264,7 @@ namespace {
         }
 
         // the sand or gravel the piece laid here, shuffled, the first five still there made suspicious; each actor
-        // takes the archaeology table and the random's next int (sub_1469B9460, loot type 3 warm, 2 cold)
+        // takes the archaeology table and the random's next int
         void _uncover(std::vector<Position> &candidates, int64_t seed, bool warm) {
             XoroshiroRandom random(seed);
             for (size_t i = 1; i < candidates.size(); ++i) {
@@ -312,7 +312,7 @@ std::vector<OceanRuinStructure::Piece> OceanRuinStructure::plan(const ChunkGener
         return pieces;
 
     // isFeatureChunk ends on the monument test of the chunk four further on both axes, which reseeds the random
-    // createStart then draws from (sub_1473BE530)
+    // createStart then draws from
     std::mt19937 random = StructureFeature::get("monument")
                                   ->createStartRandom(generator.getSeed(), startX + MONUMENT_OFFSET,
                                                       startZ + MONUMENT_OFFSET);

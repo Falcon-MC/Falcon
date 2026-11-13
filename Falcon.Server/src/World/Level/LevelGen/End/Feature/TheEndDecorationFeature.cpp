@@ -87,7 +87,7 @@ void TheEndDecorationFeature::_placeSpike(ChunkGenerateContext &context, const E
         mRoot->setBlockStateAt(x, y, z, state);
     });
 
-    // sub_14D1EE710 sets each spike's crystal on bedrock once the spike stands
+    // the game sets each spike's crystal on bedrock once the spike stands
     const Vector3i top = spike.getTop();
     mRoot->setBlockStateAt(top.x, top.y, top.z, EndSpikes::getCrystalBaseState());
 
@@ -240,7 +240,7 @@ void TheEndDecorationFeature::apply(ChunkGenerateContext &context) {
     const uint32_t decorationSeed = (multiplierZ * (uint32_t) chunkZ + multiplierX * (uint32_t) chunkX) ^ mSeed;
     std::mt19937 random(decorationSeed);
 
-    // sub_14CDABCD0 runs the biome's rules on this random before the end features, and they leave it reseeded
+    // the game runs the biome's rules on this random before the end features, and they leave it reseeded
     OverworldRulePlacer::drawBiomeRules(*mRoot, chunk, TheEndGeneratorConstants::BIOME_ID, decorationSeed, random);
 
     // a spike belongs to the chunk of its lowest corner

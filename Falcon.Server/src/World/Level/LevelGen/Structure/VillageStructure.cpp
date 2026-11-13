@@ -286,8 +286,8 @@ namespace {
         return "loot_tables/" + (colon == std::string::npos ? name : name.substr(colon + 1)) + ".json";
     }
 
-    // sub_145C22000, clipped to the chunk: jigsaw final states first (sub_145C24D90), then the file order
-    // (sub_14775E430); rules draw from MT(post process seed), reseeded per jigsaw block; chest seeds from the
+    // clipped to the chunk: jigsaw final states first, then the file order;
+    // rules draw from MT(post process seed), reseeded per jigsaw block; chest seeds from the
     // post process random itself, after the feature pieces before it
     class PiecePlacer {
     public:
@@ -316,9 +316,9 @@ namespace {
         }
 
     private:
-        // sub_147761B80: each column of the box with a block on the bottom layer draws nextInt(3), wherever it is;
+        // each column of the box with a block on the bottom layer draws nextInt(3), wherever it is;
         // the columns of this chunk then fill down through air and water with the foundation block
-        // sub_14699EA50: the biome's top material, dirt instead of grass or without one
+        // the biome's top material, dirt instead of grass or without one
         static BlockState foundationBlock(int32_t biome) {
             static const BlockState DIRT = VanillaBlocks::DIRT().toBlockState();
             const SurfaceBuilderComponent *surface = SurfaceBuilderComponent::getForBiome(biome);
@@ -386,7 +386,7 @@ namespace {
             return mTerrain.getBlock(std::get<0>(position), std::get<1>(position), std::get<2>(position));
         }
 
-        // into the world at once: a later feature piece reads it and may replace it (sub_145C22000, sub_1469B1230)
+        // into the world at once: a later feature piece reads it and may replace it
         void _set(const VillageStructure::Position &position, const BlockState &block) {
             mShare.mBlocks[position] = block;
             if (mWorld != nullptr)
@@ -457,7 +457,7 @@ namespace {
             if (mob.empty())
                 return;
 
-            // abandoned_golems, abandoned_mobs (sub_14CD6B070)
+            // abandoned_golems, abandoned_mobs
             if (mob == "minecraft:iron_golem" && hasProcessor(mRules.mProcessors, ABANDONED_GOLEMS))
                 return;
             // the metadata becomes minecraft:zombie_villager_v2:from_village
@@ -570,7 +570,7 @@ VillageStructure::ChunkShare VillageStructure::placeInChunk(const ChunkGenerator
     const uint32_t seed = StructureFeature::getPostProcessSeed(generator.getSeed(), chunkX, chunkZ);
     std::mt19937 chunkRandom(seed);
     for (const JigsawPiece &piece: pieces) {
-        // chunk post process random (sub_1469B1230)
+        // chunk post process random
         if (piece.mElement->mFeature != nullptr) {
             if (features != nullptr && insideChunk(piece.x, piece.z, chunkX, chunkZ))
                 OverworldRulePlacer::placeFeature(*features, piece.mElement->mFeature, piece.x, piece.y, piece.z,

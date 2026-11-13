@@ -182,7 +182,7 @@ void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
                                                     (int32_t) std::floor(position.z)));
 }
 
-// any removal asks for the raid, milk and death included: the game does not check for expiry (sub_14355FD20)
+// any removal asks for the raid, milk and death included: the game does not check for expiry
 void RaidOmenMobEffect::onRemove(Actor &actor, const MobEffectInstance &) const {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
     if (player != nullptr && !player->isSpectator())
@@ -432,7 +432,7 @@ void MobEffectManager::setMovementSpeedBonus(float bonus) {
     refreshDerivedAttributes();
 }
 
-// sub_145E14260: climbs 1/140 a tick, thaws 1/70 a tick
+// climbs 1/140 a tick, thaws 1/70 a tick
 float MobEffectManager::advanceFreezing(bool rising) {
     if (!rising) {
         mFreezingDamageTicks = 0;

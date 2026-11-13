@@ -12,7 +12,7 @@
 #include <limits>
 
 namespace {
-    // up first, then down, north, south, west, east (0x14F1A9250 into the facing table, 26.60)
+    // up first, then down, north, south, west, east
     const std::array<Vector3f, 6> RAY_NUDGES = {Vector3f(0.0f, 1.0f, 0.0f),  Vector3f(0.0f, -1.0f, 0.0f),
                                                 Vector3f(0.0f, 0.0f, -1.0f), Vector3f(0.0f, 0.0f, 1.0f),
                                                 Vector3f(-1.0f, 0.0f, 0.0f), Vector3f(1.0f, 0.0f, 0.0f)};
@@ -48,7 +48,7 @@ namespace {
         return nullptr;
     }
 
-    // a projectile answers for its shooter (sub_143FA7EE0)
+    // a projectile answers for its shooter
     Actor *responsibleActor(Level &level, Actor &source) {
         const ServerActor *actor = dynamic_cast<const ServerActor *>(&source);
         if (actor == nullptr || !actor->isProjectile())
@@ -131,7 +131,7 @@ bool VibrationListener::getPosition(Level &level, Vector3f &position) const {
     return true;
 }
 
-// VibrationListener::handleGameEvent (sub_143FA8830, 26.60): one signal at a time, then the filters in game order
+// VibrationListener::handleGameEvent: one signal at a time, then the filters in game order
 void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, const GameEventContext &context) {
     if (mPending.has_value() || !mConfig.canReceive(event))
         return;
@@ -147,7 +147,7 @@ void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, co
     }
 
     if (event.has(GameEvent::DAMPENED_UNDER_SOURCE) && context.mSource != nullptr) {
-        // Actor::getBlockPosCurrentlyStandingOn (sub_140B9B280) looks 0.2 below the feet, then the feet block
+        // the standing block: 0.2 below the feet, then the feet block
         const Vector3f &feet = context.mSource->getPosition();
         if (hasProperty(level, blockOf(Vector3f(feet.x, feet.y - BELOW_FEET, feet.z)), VibrationProperties::DAMPENS)
             || hasProperty(level, blockOf(feet), VibrationProperties::DAMPENS))
@@ -175,7 +175,7 @@ void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, co
         _select(owner->getCurrentTick(), event, context);
 }
 
-// VibrationSelector::addCandidate (sub_143FA9250): the candidates of one tick only, the closest wins, a tie goes to
+// the candidates of one tick only, the closest wins, a tie goes to
 // the higher frequency
 void VibrationListener::_select(int64_t tick, const GameEvent &event, const GameEventContext &context) {
     if (mSelectorTick != -1 && tick != mSelectorTick)
@@ -221,7 +221,7 @@ bool VibrationListener::_adjacentChunksTicking(Level &level) const {
     return true;
 }
 
-// VibrationListener::tick (sub_143FAA060): a candidate of an earlier tick leaves as a signal, travels a tick a block
+// VibrationListener::tick: a candidate of an earlier tick leaves as a signal, travels a tick a block
 void VibrationListener::tick(Level &level) {
     ServerNetworkHandler *owner = level.getOwner();
     if (!mPending.has_value() && owner != nullptr && mSelectorTick != -1 && mSelectorTick != owner->getCurrentTick()) {
@@ -236,7 +236,6 @@ void VibrationListener::tick(Level &level) {
         }
     }
 
-    // sub_143FA9530
     if (!mPending.has_value() || --mTravelTicks > 0)
         return;
     if (mConfig.requiresAdjacentChunksToBeTicking() && !_adjacentChunksTicking(level))

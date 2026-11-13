@@ -105,7 +105,7 @@ namespace {
         const xuid = value.xuid === undefined ? "" : value.xuid;
         if (typeof name !== "string" || typeof xuid !== "string")
             throw conversion();
-        // sub_14E2E7450 (26.60): InvalidArgumentErrorType.Empty, argument 0
+        // InvalidArgumentErrorType.Empty, argument 0
         if (name === "" && xuid === "")
             throw invalidArgument("Entry data must contain a name and/or a xuid", "Empty", 0);
         return [name, xuid];
@@ -218,7 +218,7 @@ namespace {
             joinOf.set(this, join);
             Object.defineProperty(this, "name", { value: name, enumerable: true });
             Object.defineProperty(this, "persistentId", { value: persistentId, enumerable: true });
-            // no split screen session: the game leaves it undefined (sub_14E2FAB20)
+            // no split screen session: the game leaves it undefined
             Object.defineProperty(this, "splitScreenSlot", { value: undefined, enumerable: true });
         }
     }, "AsyncPlayerJoinBeforeEvent");
@@ -333,7 +333,7 @@ namespace {
         if ("netherNetId" in options) {
             if (typeof options.netherNetId !== "string")
                 throw conversion();
-            // sub_14E310CC0 (26.60): InvalidArgumentErrorType.Unknown, argument 1
+            // InvalidArgumentErrorType.Unknown, argument 1
             if (!native.transfer(target, options.netherNetId, -1))
                 throw invalidArgument("NetherNet Id provided '" + options.netherNetId
                     + "' does not match expected format.", "Unknown", 1);
@@ -564,7 +564,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_14202EC10 (26.60): a decimal uint64 or a uuid, written back the way sub_14201AB90 prints it
+    // a decimal uint64 or a uuid, written back the way the game prints it
     bool canonicalNetherNetId(const std::string &text, std::string &out) {
         if (text.empty())
             return false;
@@ -613,7 +613,7 @@ namespace {
         TransferPacket packet;
         packet.mAddress = stringArg(ctx, argc, argv, 1);
         if (port < 0.0) {
-            // the NetherNet form leaves the port at 0 (sub_143D7C340)
+            // the NetherNet form leaves the port at 0
             if (!canonicalNetherNetId(packet.mAddress, packet.mAddress))
                 return JS_FALSE;
             packet.mPort = 0;

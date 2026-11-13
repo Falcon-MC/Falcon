@@ -58,7 +58,7 @@ void BeaconBlockActor::loadNbt(const Tag &data, const PacketCodecContext &contex
     mSecondaryEffect = data.getInt(TAG_SECONDARY);
 }
 
-// sub_144C3E4B0: nothing at all without a book, else the book and where it is open
+// nothing at all without a book, else the book and where it is open
 Tag LecternBlockActor::saveNbt() const {
     Tag data = Tag::ofCompound();
     if (!hasBook())
@@ -98,7 +98,7 @@ ItemStack LecternBlockActor::takeBook() {
     return book;
 }
 
-// the record alone goes to disk; TicksPlaying and FinishedRecording ride the update packet only (sub_144C358E0)
+// the record alone goes to disk; TicksPlaying and FinishedRecording ride the update packet only
 Tag JukeboxBlockActor::saveNbt() const {
     Tag data = Tag::ofCompound();
     const ItemStack &record = mInventory.getContainerItem(0);
@@ -115,7 +115,7 @@ void JukeboxBlockActor::loadNbt(const Tag &data, const PacketCodecContext &conte
         mInventory.setContainerItem(0, ItemStackNbt::read(*record, context));
 }
 
-// the client reads both back from the update packet to start or stop the disc (sub_144C366D0)
+// the client reads both back from the update packet to start or stop the disc
 Tag JukeboxBlockActor::getSpawnCompound() const {
     Tag data = BlockActor::getSpawnCompound();
     data.putByte(TAG_FINISHED_RECORDING, mFinishedRecording ? 1 : 0);

@@ -103,7 +103,7 @@ void EndSpikes::place(const EndSpike &spike, bool clearAbove, const BlockSink &s
 }
 
 const BlockState &EndSpikes::getCrystalBaseState() {
-    // sub_1471E9580 sets the crystal on bedrock that keeps a fire burning
+    // the game sets the crystal on bedrock that keeps a fire burning
     static const BlockState state = []() {
         BlockState bedrock = VanillaBlocks::BEDROCK().toBlockState();
         bedrock.mStates.putByte("infiniburn_bit", 1);

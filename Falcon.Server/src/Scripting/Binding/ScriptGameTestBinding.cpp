@@ -323,7 +323,7 @@ namespace {
         return JS_TRUE;
     }
 
-    // (entity, ticks): 0 set, 1 no explode component, 2 a negative length (sub_144AF6240)
+    // (entity, ticks): 0 set, 1 no explode component, 2 a negative length
     JSValue gtSetFuse(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         Actor *entity = argc >= 2 ? api->resolveEntity(argv[0]) : nullptr;
@@ -366,7 +366,7 @@ namespace {
     }
 
     // (dimension, xyz, fluid): false when the block is no cauldron; the fluid as FluidType counts it, Water 0,
-    // Lava 1, PowderSnow 2, Potion 3; the cauldron keeps its fill level (sub_144B02590)
+    // Lava 1, PowderSnow 2, Potion 3; the cauldron keeps its fill level
     JSValue gtSetCauldron(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 5)

@@ -33,7 +33,7 @@ struct AimAssistPreset {
 };
 
 // the world's aim assist presets and categories: the vanilla pack's (BedrockData's aim_assist.json), then the
-// script ones; an identifier added again replaces its entry in place (sub_14C8A34D0, 26.60)
+// script ones; an identifier added again replaces its entry in place
 class AimAssistRegistry {
 public:
     static constexpr const char *DEFAULT_CATEGORY = "minecraft:default";
@@ -57,7 +57,7 @@ public:
 
     void addPreset(AimAssistPreset preset);
 
-    // every entry, as a joining player receives them (sub_143779C10, 26.60)
+    // every entry, as a joining player receives them
     CameraAimAssistPresetsPacket makePacket() const;
 
     static CameraAimAssistCategory toPacket(const AimAssistCategory &category);

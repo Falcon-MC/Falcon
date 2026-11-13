@@ -4,7 +4,7 @@
 
 class ServerNetworkHandler;
 
-// GameTestCommand (sub_14BE7C040 sets it up, sub_14BE80D30 runs it)
+// GameTestCommand
 class GameTestCommand : public Command {
 public:
     explicit GameTestCommand(ServerNetworkHandler &handler);

@@ -523,7 +523,7 @@ namespace {
         return block == nullptr ? -1 : block->getComparatorSignal(level, position, state);
     }
 
-    // ComparatorBlockActor::tick (sub_14331CF70, 26.60): the block behind, or the one past it through a solid
+    // the block behind, or the one past it through a solid
     // block that is no power source; -1 when neither gives an analog signal
     int comparatorAnalogInput(Level &level, const Vector3i &position, const BlockState &state) {
         const int facing = diodeFacing(state);
@@ -835,7 +835,7 @@ int RedstoneSystem::getWeakPower(ServerNetworkHandler &owner, Level &level, cons
     if (dynamic_cast<const ButtonBlock *>(block) != nullptr)
         return stateBool(state, "button_pressed_bit", false) ? MAX_SIGNAL : 0;
 
-    // sub_143C87D50: 15 while a page turn holds powered_bit
+    // 15 while a page turn holds powered_bit
     if (dynamic_cast<const LecternBlock *>(block) != nullptr)
         return stateBool(state, "powered_bit", false) ? MAX_SIGNAL : 0;
 
@@ -1408,7 +1408,7 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
             updateAroundRedstone(owner, level, position);
     }
 
-    // the comparator block actor reads its analog input every tick, no change event involved (sub_14331CF70);
+    // the comparator block actor reads its analog input every tick, no change event involved;
     // keys first: an update chain can place or break another comparator and rehash the table
     std::vector<int64_t> comparators;
     comparators.reserve(redstone.mComparatorOutputs.size());

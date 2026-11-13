@@ -34,7 +34,7 @@ namespace {
     }
 }
 
-// Container::getRedstoneSignalFromContainer (sub_1417030A0, 26.60): fullness over 14, plus one once anything is in
+// fullness over 14, plus one once anything is in
 int Block::containerSignal(Level &level, const Vector3i &position) {
     BlockActor *actor = level.getBlockActors().find(position);
     Container *container = actor == nullptr ? nullptr : actor->getContainer();

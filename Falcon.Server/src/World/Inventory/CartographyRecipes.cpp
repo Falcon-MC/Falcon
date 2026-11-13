@@ -19,7 +19,6 @@ namespace {
             item.mTag = Tag::ofCompound();
     }
 
-    // sub_142F63880 and sub_142F63D30
     bool extend(const ItemStack &input, const CartographyRecipes::Maps &maps, ItemStack &result) {
         if (input.mDamage > (int32_t) MapItemType::Locator)
             return false;
@@ -37,7 +36,6 @@ namespace {
         return true;
     }
 
-    // sub_142F644E0 and sub_142F64860
     bool lock(const ItemStack &input, const CartographyRecipes::Maps &maps, CartographyResult &result) {
         const int64_t mapId = MapItem::getMapId(input);
         const MapItemSavedData *data = maps.mGetMap(mapId);
@@ -59,7 +57,7 @@ namespace {
         return true;
     }
 
-    // sub_142F656B0: a compass makes a locator map out of a plain one
+    // a compass makes a locator map out of a plain one
     bool upgrade(const ItemStack &input, ItemStack &result) {
         if (input.mDamage == (int32_t) MapItemType::Locator)
             return false;
@@ -118,7 +116,7 @@ CartographyResult CartographyRecipes::createResult(const ItemStack &input, const
         if (filledMap && is(additional, PAPER))
             crafted = extend(input, maps, result.mResult);
         else if (filledMap && is(additional, EmptyMapItem::IDENTIFIER)) {
-            // sub_142F63130: one copy per slot holding empty maps, on top of the original
+            // one copy per slot holding empty maps, on top of the original
             result.mResult = input;
             result.mResult.mCount = 2;
             crafted = true;

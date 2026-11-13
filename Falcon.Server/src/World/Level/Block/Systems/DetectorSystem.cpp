@@ -69,7 +69,7 @@ namespace {
                                              RedstoneFace::relative(hook, RedstoneFace::opposite(facing)));
     }
 
-    // TripWireHookBlock::calculateState (sub_1449BF670, 26.60): attached only to a facing hook over unbroken wire,
+    // attached only to a facing hook over unbroken wire,
     // powered only while attached and a wire that isn't disarmed is
     void refreshHook(ServerNetworkHandler &owner, Level &level, const Vector3i &hook) {
         const BlockState state = stateAt(level, hook);
@@ -120,7 +120,7 @@ namespace {
         }
     }
 
-    // TripWireBlock::_updateSource (sub_1449BEE30, 26.60): only south and west; calculateState sets both ends
+    // only south and west; calculateState sets both ends
     void refreshHooksOf(ServerNetworkHandler &owner, Level &level, const Vector3i &wire) {
         for (const int face: {RedstoneFace::SOUTH, RedstoneFace::WEST}) {
             Vector3i cursor = wire;
@@ -192,7 +192,7 @@ int DetectorSystem::strongPower(Level &level, const Vector3i &position, const Bl
     if (isHook(state)) {
         if (!state.mStates.getBool("powered_bit", false))
             return 0;
-        // the producer's strong face is the support behind the hook (sub_1449C3260, 26.60)
+        // the producer's strong face is the support behind the hook
         return face == hookFacing(state) ? RedstoneSystem::MAX_SIGNAL : 0;
     }
     if (isTarget(state))
@@ -201,7 +201,7 @@ int DetectorSystem::strongPower(Level &level, const Vector3i &position, const Bl
 }
 
 namespace {
-    // TripWireBlock::_checkPressed (sub_1449C0D50, 26.60): the after event only on a change, a recheck while occupied
+    // the after event only on a change, a recheck while occupied
     void checkPressed(ServerNetworkHandler &owner, Level &level, const Vector3i &cell, const BlockState &state) {
         std::vector<Actor *> sources = actorsOn(owner, level, cell);
         const bool pressed = !sources.empty();
@@ -219,7 +219,7 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
     DetectorState &detectors = stateOf(level);
     const int64_t now = ++detectors.mTick;
 
-    // TripWireBlock::entityInside (sub_1449C0D10, 26.60): an unpowered wire only, disarmed or not
+    // an unpowered wire only, disarmed or not
     const auto visit = [&](Actor &actor) {
         const Vector3f &feet = actor.getPosition();
         const Vector3i cell((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y), (int32_t) std::floor(feet.z));
@@ -251,14 +251,13 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
-// TripWireBlock::tick (sub_1449BEA40, 26.60)
 void DetectorSystem::onWireScheduled(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state) {
     if (isWire(state) && state.mStates.getBool("powered_bit", false))
         checkPressed(owner, level, position, state);
 }
 
-// TargetBlock (sub_14B273550, 26.60): the struck face is the axis farthest from the centre; power falls with the
+// TargetBlock: the struck face is the axis farthest from the centre; power falls with the
 // distance from the face centre over sqrt(0.5)
 int DetectorSystem::targetPowerFor(const Vector3i &position, const Vector3f &hit) {
     const float epsilon = 1.1920929e-7f;

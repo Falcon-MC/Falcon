@@ -17,7 +17,7 @@ FALCON_REGISTER_ITEM(EmptyMapItem, 100);
 #include <cmath>
 
 namespace {
-    // LevelSoundEvent 275, which sub_147B9F900 plays at the player
+    // LevelSoundEvent 275, which the game plays at the player
     const char *const USE_SOUND = "ui.cartography_table.take_result";
 }
 

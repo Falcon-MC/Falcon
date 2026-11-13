@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-    // the page limit of every edit (sub_1447CE350, sub_1447CE930)
+    // the page limit of every edit
     const int32_t MAX_PAGES = 50;
 
     Tag page(const std::string &text, const std::string &photo) {
@@ -78,7 +78,7 @@ void BookHandler::handleEdit(ServerNetworkHandler &owner, ServerPlayer &player, 
         edited = owner.createItemStack("minecraft:written_book", held.mCount);
         if (edited.isAir())
             return;
-        // sub_1447CD9D0: the signed fields next to the pages
+        // the signed fields next to the pages
         edited.mTag = held.mTag.isCompound() ? held.mTag : Tag::ofCompound();
         edited.mTag.putString("author", packet.mAuthor);
         edited.mTag.putString("xuid", player.getXuid());

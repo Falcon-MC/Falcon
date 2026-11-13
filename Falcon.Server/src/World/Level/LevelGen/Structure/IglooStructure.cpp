@@ -33,7 +33,7 @@ namespace {
     const int32_t SHAFT_MIN_PIECES = 4;
     const int32_t SHAFT_PIECE_RANGE = 8;
     const int8_t RED_BED_COLOR = 14;
-    // the temple piece the start makes for an igloo (sub_1473C7400)
+    // the temple piece the start makes for an igloo
     const int32_t BOX_X = 7;
     const int32_t BOX_Y = 5;
     const int32_t BOX_Z = 8;
@@ -55,7 +55,7 @@ namespace {
             return choice;
 
         choice.mShaftPieces = FeatureRandom::nextInt(random, SHAFT_PIECE_RANGE) + SHAFT_MIN_PIECES;
-        // placing a chest draws a loot seed of its own (sub_14775E430); the piece's marker then replaces it
+        // placing a chest draws a loot seed of its own; the piece's marker then replaces it
         random();
         choice.mLootSeed = FeatureRandom::nextInt(random);
         return choice;
@@ -184,7 +184,7 @@ void IglooStructure::place(const ChunkGenerator &generator, Level &level, LevelC
                 continue;
 
             const int32_t floorY = generator.getGeneratedSolidHeight(cornerX, cornerZ) - 1;
-            // IglooPiece::postProcess (sub_1473DCD60) first sets its box one under the mean ground (sub_1473CE840):
+            // the igloo first sets its box one under the mean ground:
             // the box only covers the start chunk
             const bool inStart = startX == chunk.getX() && startZ == chunk.getZ();
             const int32_t boxY = inStart ? ScatteredPiece::averageGround(chunk, 0, 0, BOX_X, BOX_Z) - 1 : 0;

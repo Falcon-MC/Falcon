@@ -8,7 +8,7 @@ namespace {
         int32_t mId;
     };
 
-    // the LevelSoundEvent names the game reflects, in its order (sub_141D35580, 26.60)
+    // the LevelSoundEvent names the game reflects, in its order
     const SoundEventName SOUND_EVENTS[] = {
             {"item.use.on", 0},
             {"hit", 1},

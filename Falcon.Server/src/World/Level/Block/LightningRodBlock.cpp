@@ -49,7 +49,7 @@ bool LightningRodBlock::matches(const std::string &identifier) {
                          BlockNames::WAXED_WEATHERED_LIGHTNING_ROD, BlockNames::WAXED_OXIDIZED_LIGHTNING_ROD});
 }
 
-// the producer is attached to the support, opposite facing_direction (sub_149C3C230), so only that block is charged
+// the producer is attached to the support, opposite facing_direction, so only that block is charged
 int LightningRodBlock::getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
                                         bool strong) const {
     (void) level;
@@ -60,7 +60,7 @@ int LightningRodBlock::getEmittedSignal(Level &level, const Vector3i &position, 
     return !strong || face == facingOf(state) ? RedstoneSystem::MAX_SIGNAL : 0;
 }
 
-// LightningRodBlock tick (sub_149C3BFC0, 26.60): the strike's power ends
+// LightningRodBlock tick: the strike's power ends
 void LightningRodBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                           const BlockState &state) const {
     if (!isPowered(state))
@@ -71,8 +71,7 @@ void LightningRodBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &le
     updateNeighbours(owner, level, position, unpowered);
 }
 
-// LightningRodBlock::onLightningHit (sub_149C3CAD0, 26.60); the weathering rods first lose one oxidation stage
-// (sub_149C3D5B0, sub_14771FCA0)
+// LightningRodBlock::onLightningHit; the weathering rods first lose one oxidation stage
 void LightningRodBlock::onLightningHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
     BlockState state = level.getBlockState(position.x, position.y, position.z);
     if (!matches(state.mName))
@@ -91,8 +90,8 @@ void LightningRodBlock::onLightningHit(ServerNetworkHandler &owner, Level &level
                               0);
 }
 
-// lightning target search (sub_143858510, 26.60): rods in a cylinder of 64 blocks around and 64 up or down
-// (sub_1432DD4A0), nearest first (sub_1432E6DE0); the first with nothing solid above where it rains takes the bolt
+// lightning target search: rods in a cylinder of 64 blocks around and 64 up or down,
+// nearest first; the first with nothing solid above where it rains takes the bolt
 std::optional<Vector3i> LightningRodBlock::findAttractingRod(Level &level, const Vector3i &target) {
     struct Candidate {
         Vector3i mPosition;

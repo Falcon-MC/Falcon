@@ -6,7 +6,7 @@
 class BlockManager;
 class LevelChunk;
 
-// the features the nether generator places itself around the biome rules, from one random (sub_14CDAD2C0)
+// the features the nether generator places itself around the biome rules, from one random
 class NetherDecoration {
 public:
     NetherDecoration(BlockManager &blocks, const LevelChunk &chunk, uint32_t levelSeed);

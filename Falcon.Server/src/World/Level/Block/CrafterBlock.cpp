@@ -25,7 +25,7 @@ namespace {
     const char *const SOUND_FAIL = "crafter.fail";
     const int32_t LEVEL_EVENT_PARTICLE_CRAFTER = 3609;
 
-    // the facing of each orientation, down/up/north/south/west/east as 0..5 (asc_14F3E5070)
+    // the facing of each orientation, down/up/north/south/west/east as 0..5
     struct Orientation {
         const char *mName;
         int mFacing;
@@ -78,7 +78,7 @@ namespace {
         return results;
     }
 
-    // sub_144C21270: whatever fits goes one item at a time into the container in front
+    // whatever fits goes one item at a time into the container in front
     bool insertInFront(ServerNetworkHandler &owner, Level &level, const Vector3i &front,
                        std::vector<ItemStack> &results) {
         BlockActor *target = level.getBlockActors().find(front);

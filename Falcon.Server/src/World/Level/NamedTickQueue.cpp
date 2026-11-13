@@ -101,7 +101,7 @@ std::vector<std::pair<int32_t, int32_t>> NamedTickQueue::getColumns() const {
     return columns;
 }
 
-// sub_1432C7AC0, the event fields by sub_147BBEAC0: position in the chunk, y above its floor
+// the event fields: position in the chunk, y above its floor
 std::string NamedTickQueue::save(int32_t chunkX, int32_t chunkZ, int32_t minY) const {
     const auto found = mColumns.find(column(chunkX, chunkZ));
     if (found == mColumns.end() || found->second.entries.empty())
@@ -136,7 +136,7 @@ std::string NamedTickQueue::save(int32_t chunkX, int32_t chunkZ, int32_t minY) c
     return stream.getBuffer();
 }
 
-// sub_1432C82B0: an event of an unknown namespace, a bad name or time, air or a fifth one at its block is left out
+// an event of an unknown namespace, a bad name or time, air or a fifth one at its block is left out
 void NamedTickQueue::load(int32_t chunkX, int32_t chunkZ, int32_t minY, const std::string &record, int64_t levelTick) {
     if (record.empty())
         return;

@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-// MaterialType, in the game's order (names at 0x14F185120, 26.60)
+// MaterialType, in the game's order
 enum class BlockMaterialType : uint8_t {
     Air,
     Dirt,
@@ -39,7 +39,7 @@ namespace BlockMaterial {
     inline constexpr uint8_t FLAG_BIT0 = 1;
     // water, lava and the bubble column
     inline constexpr uint8_t FLAG_LIQUID = 2;
-    // the flag LevelChunk::getAboveTopSolidBlock stops on
+    // the flag the top solid block search stops on
     inline constexpr uint8_t FLAG_SOLID = 4;
 
     // false for a name the game does not register: custom blocks have no entry

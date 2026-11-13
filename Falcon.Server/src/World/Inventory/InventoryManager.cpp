@@ -1041,7 +1041,6 @@ bool InventoryManager::isStonecutterOpen() const {
     return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Stonecutter;
 }
 
-// StonecutterContainerManagerModel::setSelectedRecipe (sub_147184010, 26.60)
 void InventoryManager::setStonecutterSelectedRecipe(int32_t index) {
     if (mPlayer == nullptr || mSender == nullptr || !isStonecutterOpen())
         return;
@@ -1054,7 +1053,7 @@ void InventoryManager::setStonecutterSelectedRecipe(int32_t index) {
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
 }
 
-// sub_1471841F0 (26.60): kept only when the input has that many recipes
+// kept only when the input has that many recipes
 void InventoryManager::onClientSelectStonecutterRecipe(int containerId, int32_t index) {
     if (mPlayer == nullptr || !isStonecutterOpen() || containerId != mAnvilWindowId || index < 0)
         return;

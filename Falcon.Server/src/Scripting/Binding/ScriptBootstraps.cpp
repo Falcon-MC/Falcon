@@ -424,14 +424,14 @@ namespace {
             const min = this.getMin(), max = this.getMax();
             return { x: max.x - min.x + 1, y: max.y - min.y + 1, z: max.z - min.z + 1 };
         }
-        // sub_14DD56160: the volume's own bounds, refused while it holds no location
+        // the volume's own bounds, refused while it holds no location
         getBoundingBox() {
             if (this[CAPACITY] !== undefined && this[CAPACITY]() === 0)
                 throw native.error("Error", "Cannot get bounding box of empty block volume.");
             const min = this[MIN](), max = this[MAX]();
             return { min: { x: min.x, y: min.y, z: min.z }, max: { x: max.x, y: max.y, z: max.z } };
         }
-        // sub_14DD6ADE0, sub_14DD6B520: a bounded min-heap over (key, x, y, z) as floats; a location replaces
+        // a bounded min-heap over (key, x, y, z) as floats; a location replaces
         // the least kept one only on a strictly larger key, then all come out from the largest
         #nearest(count, location, sign) {
             const n = Math.max(0, count | 0);
@@ -514,7 +514,7 @@ namespace {
             return this.isInside(at) && (at.x === min.x || at.x === max.x || at.y === min.y || at.y === max.y
                 || at.z === min.z || at.z === max.z);
         }
-        // sub_148F89560: within one block of this volume, apart on one axis at most; from inside, on a face
+        // within one block of this volume, apart on one axis at most; from inside, on a face
         doesVolumeTouchFaces(other) {
             const lo = this.getMin(), hi = this.getMax(), mn = other.getMin(), mx = other.getMax();
             let apart = 0, inside = true, onFace = false;
@@ -530,7 +530,7 @@ namespace {
             }
             return inside ? onFace : apart <= 1;
         }
-        // other inside this one is Contains: sub_148F89760(this, other)
+        // other inside this one is Contains
         intersects(other) {
             const a = this.getMin(), b = this.getMax(), c = other.getMin(), d = other.getMax();
             if (c.x > b.x || d.x < a.x || c.y > b.y || d.y < a.y || c.z > b.z || d.z < a.z)
@@ -539,7 +539,7 @@ namespace {
                 return 1;
             return 2;
         }
-        // forEach runs x, then z, then y innermost: sub_148F88D80
+        // forEach runs x, then z, then y innermost
         [EACH](visit) {
             const min = this.getMin(), max = this.getMax();
             for (let x = min.x; x <= max.x; ++x)
@@ -547,7 +547,7 @@ namespace {
                     for (let y = min.y; y <= max.y; ++y)
                         visit({ x, y, z });
         }
-        // x, then z, then y outermost: sub_14314C1B0
+        // x, then z, then y outermost
         [ITERATE]() {
             const min = this.getMin(), max = this.getMax();
             let x = min.x, y = min.y, z = min.z;
@@ -639,7 +639,6 @@ namespace {
         throw new ReferenceError("No constructor for native class '" + name + "'.");
     };
     const field = (target, key, value) => Object.defineProperty(target, key, { value, enumerable: true });
-    // sub_14B6271B0
     const REJECT_MESSAGES = {
         ServerShutdown: "Server is shutting down.",
         PlayerQuit: "Player quit before responding.",
@@ -717,7 +716,7 @@ namespace {
             return this;
         }
         show(player) {
-            // sub_143964F00: any integer, taken as the client sends it
+            // any integer, taken as the client sends it
             return settle(player, this.#data, ActionFormResponse, (v) => Number.isInteger(v) ? v : undefined);
         }
     }
@@ -748,7 +747,7 @@ namespace {
         }
     }
 
-    // sub_14A3D16F0: an options interface takes only an object; undefined and null mean none
+    // an options interface takes only an object; undefined and null mean none
     const optionBag = (value) => {
         if (value === undefined || value === null) return {};
         if (typeof value === "object" || typeof value === "function") return value;
@@ -950,7 +949,7 @@ namespace {
     const tooltipOf = (reader, entry, tooltip) => tooltip === undefined ? entry : optional(entry, "tooltip", reader.text(tooltip));
     const descriptionOf = (reader, entry, description) =>
         description === undefined ? entry : optional(entry, "description", reader.text(description));
-    // sub_14B660830: a button in the layout or a row
+    // a button in the layout or a row
     const layoutButton = (reader, label, options) => {
         const o = optionsOf(options);
         const entry = { button_visible: true, label: reader.text(label), onClick: 0, visible: reader.flag(o.visible, true),
@@ -1230,7 +1229,7 @@ namespace {
                     writable(key + ".onClick", () => {
                         this.#selection = index;
                     });
-                    // sub_14B65F7C0: label, onClick and visible, then the optional tooltip and image
+                    // label, onClick and visible, then the optional tooltip and image
                     const entry = { label: button === undefined ? "" : reader.text(button.label), onClick: 0,
                         visible: button !== undefined };
                     if (button !== undefined) {
@@ -1525,12 +1524,12 @@ namespace {
             itemTagsAny: strings(j["minecraft:match_tool_filter_any"]),
             itemTagsNone: strings(j["minecraft:match_tool_filter_none"]) })],
     };
-    // the ItemColor names the files use (sub_1416826B0) and the ones scripts read back (the table at aBlack)
+    // the ItemColor names the files use and the ones scripts read back (the table at aBlack)
     const COLOR_KEYS = ["black", "red", "green", "brown", "blue", "purple", "cyan", "silver", "gray", "pink", "lime",
         "yellow", "light_blue", "magenta", "orange", "white"];
     const COLOR_NAMES = ["black", "red", "green", "brown", "blue", "purple", "cyan", "silver", "gray", "pink", "lime",
         "yellow", "lightBlue", "magenta", "orange", "white"];
-    // the banner pattern registry by name (sub_143324FC0)
+    // the banner pattern registry by name
     const BANNER_PATTERNS = new Set(["base", "border", "bricks", "circle", "creeper", "skull", "cross", "curly_border",
         "diagonal_up_left", "diagonal_up_right", "diagonal_left", "diagonal_right", "flower", "gradient", "gradient_up",
         "half_horizontal", "half_horizontal_bottom", "half_vertical", "half_vertical_right", "illager", "mojang",
@@ -1551,7 +1550,7 @@ namespace {
         return fallback;
     };
     const BannerPattern = add("BannerPattern", null, ["color", "pattern"]);
-    // sub_14BC47E70: white by default; patterns only on a plain banner, unknown names skipped, six at most
+    // white by default; patterns only on a plain banner, unknown names skipped, six at most
     const bannerDetails = (j) => {
         const type = number(j.type, 0);
         const patterns = [];
@@ -1604,7 +1603,7 @@ namespace {
         set_name: ["SetItemNameFunction", (j) => ({ name: String(j.name ?? "") })],
         set_actor_id: ["SetSpawnEggFunction", (j) => ({ id: String(j.id ?? "") })],
         fill_container: ["FillContainerFunction", (j) => ({ lootTable: String(j.loot_table ?? "") })],
-        // sub_1455570E0: a dynamic_properties that is not a bool reads as false
+        // a dynamic_properties that is not a bool reads as false
         carry_over_block_entity_data: ["CarryOverBlockEntityDataFunction",
             (j) => ({ dynamicProperties: j.dynamic_properties === true })],
     };

@@ -44,12 +44,12 @@ namespace EndGatewayExit {
 
     /**
      * The point 1024 blocks out from the origin in the gateway's direction, walked back towards the origin while it
-     * has terrain, then out again until it has some, 16 blocks at a time (sub_14714F400). Its y is always 0.
+     * has terrain, then out again until it has some, 16 blocks at a time. Its y is always 0.
      */
     Vector3i findRoughExit(const Vector3i &gateway, const TerrainCheck &hasTerrain);
 
     /**
-     * The closest column top within chunkRadius chunks of around (sub_14714FCB0). endStoneOnly keeps only end stone
+     * The closest column top within chunkRadius chunks of around. endStoneOnly keeps only end stone
      * tops, which count as valid when they are surrounded by blocks and open above: a valid top wins over any other.
      * fallback climbs the column of around itself when nothing was found. (0, 0, 0) means nothing was found.
      */
@@ -57,16 +57,16 @@ namespace EndGatewayExit {
                        bool fallback, int32_t minY, int32_t maxY);
 
     /**
-     * The highest full solid block of the columns within radius of around, scanning down from maxY (the search of
-     * sub_14716C8B0). The first column found keeps a tie. (0, 0, 0) means nothing was found.
+     * The highest full solid block of the columns within radius of around, scanning down from maxY.
+     * The first column found keeps a tie. (0, 0, 0) means nothing was found.
      */
     Vector3i findTallestBlock(const BlockReader &reader, const Vector3i &around, int32_t radius, bool allowBedrock,
                               bool skipCenter, int32_t maxY);
 
-    /** Whether an entity sent to exit would land in a block or over nothing, so the game moves it (sub_14716AEC0). */
+    /** Whether an entity sent to exit would land in a block or over nothing, so the game moves it. */
     bool isExitBlocked(const BlockReader &reader, const Vector3i &exit);
 
-    /** The seed of the island raised at position: the game's hash of the block position (sub_14716ACB0). */
+    /** The seed of the island raised at position: the game's hash of the block position. */
     uint32_t islandSeed(const Vector3i &position);
 
     bool isZero(const Vector3i &position);

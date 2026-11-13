@@ -402,8 +402,8 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
 
     applyFood(player, usedItem);
 
-    // both ride publisher_use_time_depleted (sub_14483F960): food at priority 0 eats and fires onConsume,
-    // custom onCompleteUse at priority 3 runs after (sub_143EBF6E0, sub_14A7F6070)
+    // both ride publisher_use_time_depleted: food at priority 0 eats and fires onConsume,
+    // custom onCompleteUse at priority 3 runs after
     mScriptEngine.onItemConsume(player, usedItem);
     mScriptEngine.onItemCompleteUse(player, usedItem);
 

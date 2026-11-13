@@ -209,7 +209,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     if (configure)
         configure(*actor);
 
-    // an identifier carrying its own spawn event makes the cause Event (sub_143708AF0)
+    // an identifier carrying its own spawn event makes the cause Event
     if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
         cause = "Event";
 
@@ -469,8 +469,8 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
-// Spawner::spawnProjectile without an owner (sub_145E171C0, 26.60) into ProjectileComponent::shoot
-// (sub_143CB38D0): the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
+// a projectile spawned without an owner, then shot:
+// the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
 ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
                                                             const Vector3f &position, const Vector3f &direction) {
     ServerActor *projectile = spawnActor(level, identifier, position);
@@ -526,7 +526,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         ProjectileData &data = projectile.getProjectileData();
         const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
-        // hit_ground_sound (ProjectileComponent::onHit, sub_143CB0330, 26.60); arrow.json defines none and keeps
+        // hit_ground_sound; arrow.json defines none and keeps
         // its bow.hit
         const int32_t groundSound = projectile.getProjectileComponent().mHitGroundSound;
         if (groundSound != LevelSoundEventIds::UNDEFINED)
@@ -841,7 +841,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     }
 
     Level &level = getLevelFor(projectile);
-    // hit_sound (sub_143CB0330, 26.60): bow.hit and item.trident.hit in the vanilla definitions
+    // hit_sound: bow.hit and item.trident.hit in the vanilla definitions
     const int32_t hitSound = projectile.getProjectileComponent().mHitSound;
     if (hitSound != LevelSoundEventIds::UNDEFINED)
         playLevelSound(level, LevelSoundEventIds::nameOf(hitSound), hitPosition);
@@ -968,7 +968,7 @@ bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &
     if (player.getSentChunks().count(ChunkStreamHandler::packChunk(chunkX, chunkZ)) == 0)
         return false;
 
-    // only chunks the server holds fully loaded hand out their actors (sub_14294B4A0)
+    // only chunks the server holds fully loaded hand out their actors
     return getLevelFor(actor).isChunkPopulated(chunkX, chunkZ);
 }
 
@@ -1064,7 +1064,7 @@ void ServerNetworkHandler::updateActorVisibility() {
         for (auto &actorEntry: mActors) {
             ServerActor &actor = *actorEntry.second;
             const bool seen = visible.find(actor.getRuntimeId()) != visible.end();
-            // an autonomous actor stays known once sent, wherever it goes (sub_14102EF40)
+            // an autonomous actor stays known once sent, wherever it goes
             const bool kept = seen && actor.isAutonomous() && player.sharesLevelWith(actor);
             const bool shouldSee = (actor.isAlive() || (actor.isDead() && seen))
                                    && (kept || canPlayerSeeActor(player, actor));

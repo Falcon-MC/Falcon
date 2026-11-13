@@ -212,7 +212,7 @@ ScriptCustomCommand::~ScriptCustomCommand() {
 std::vector<CommandOverloadData> ScriptCustomCommand::getOverloads() const {
     CommandOverloadData overload;
     for (const ScriptCommandParameter &parameter: mParameters) {
-        // sub_14BD0DB00 orders the types, sub_14BD18040 maps each to the vanilla typeid: bool, int, float, string,
+        // the game orders the types and maps each to the vanilla typeid: bool, int, float, string,
         // actor and player selectors, float position, then the block, entity and item enums
         CommandParamData data;
         if (parameter.mType == "Integer")
@@ -294,7 +294,7 @@ JSValue ScriptApi::registerCustomCommand(JSValueConst definition, JSValueConst c
     if (JS_IsException(invalid))
         return invalid;
 
-    // sub_14BD1B5A0: commands and enums share the check and its enum wording
+    // commands and enums share the check and its enum wording
     const std::string space = namespaceOf(name);
     if (!mCommandNamespace.empty() && mCommandNamespace != space)
         return throwCommandError(*this, "NamespaceMismatch",
@@ -304,7 +304,7 @@ JSValue ScriptApi::registerCustomCommand(JSValueConst definition, JSValueConst c
     if (mHost.getCommands().getCommand(name) != nullptr)
         return throwCommandError(*this, "AlreadyRegistered", "Custom Command '" + name + "' was already registered.");
 
-    // sub_14BD77D00: mandatory and optional together, at most 8
+    // mandatory and optional together, at most 8
     if (parameters.size() > MAX_PARAMETERS)
         return throwCommandError(*this, "ParameterLimit",
                                  "Custom Command '" + name + "' has '" + std::to_string(parameters.size())
@@ -319,7 +319,7 @@ JSValue ScriptApi::registerCustomCommand(JSValueConst definition, JSValueConst c
         if (parameter.mType == ENUM_TYPE && mHost.getScriptEngine().findCommandEnum(parameter.mEnum) == nullptr)
             missing += (missing.empty() ? "" : ", ") + parameter.mEnum;
     }
-    // sub_14BD77D00: names joined with ", "
+    // names joined with ", "
     if (!missing.empty())
         return throwCommandError(*this, "EnumDependencyMissing",
                                  "Custom Command depends on one or more unknown enums [" + missing + "].");
@@ -464,7 +464,7 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
     callArgs.push_back(origin);
     callArgs.insert(callArgs.end(), args.begin(), args.end());
 
-    // sub_14BD03A90 calls the closure with privilege 0x101 (sub_147BE5230 -> sub_14A3FB360): restricted execution
+    // the game calls the closure with privilege 0x101: restricted execution
     const ScriptPrivilege previous = mPrivilege;
     mPrivilege = ScriptPrivilege::Restricted;
     JSValue result = JS_Call(mContext, command.getCallback(), JS_UNDEFINED, (int) callArgs.size(), callArgs.data());
@@ -473,7 +473,7 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
     release();
 
     if (JS_IsException(result)) {
-        // sub_14BD03A90: the thrown error's message is the command's error output
+        // the thrown error's message is the command's error output
         JSValue exception = JS_GetException(mContext);
         JSValue messageValue = JS_GetPropertyStr(mContext, exception, "message");
         const std::string exceptionText = JS_IsString(messageValue) ? toString(mContext, messageValue)
@@ -494,7 +494,7 @@ bool ScriptApi::runCustomCommand(const ScriptCustomCommand &command, CommandOrig
         JS_ToInt32(mContext, &code, status);
         success = code == 0;
         if (JS_IsString(message)) {
-            // sub_14BD03A90: a Failure message goes out as error output (sub_145576240 type 1)
+            // a Failure message goes out as error output
             const std::string text = toString(mContext, message);
             if (success)
                 sender.sendMessage(text);
@@ -528,7 +528,7 @@ JSValue ScriptApi::runCommand(Level &level, Actor *entity, const std::string &co
 }
 
 namespace {
-    // the game queues at most 128 (sub_14C3448D0, 26.60)
+    // the game queues at most 128
     const int32_t MAX_QUEUED_COMMANDS = 128;
 
     JSValue runCommandAsync(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {

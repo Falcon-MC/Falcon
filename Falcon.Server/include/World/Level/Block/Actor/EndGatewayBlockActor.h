@@ -8,8 +8,7 @@
 class Actor;
 
 /**
- * The block actor of an end gateway (EndGatewayBlockActor: load sub_14714E3D0, save sub_14714E630, tick
- * sub_14714E830). Its exit is found by the dragon fight once both ends are loaded; the gateway then sends what
+ * The block actor of an end gateway. Its exit is found by the dragon fight once both ends are loaded; the gateway then sends what
  * enters it there, one entity per cooldown.
  */
 class EndGatewayBlockActor final : public BlockActor {
@@ -21,10 +20,10 @@ public:
 
     static constexpr int32_t COOLDOWN_TICKS = 20;
 
-    // the block event that starts the cooldown beam on the client (sub_14714F7F0)
+    // the block event that starts the cooldown beam on the client
     static constexpr int32_t COOLDOWN_EVENT = 1;
 
-    // older worlds saved exits near the origin: these are found again once (sub_14714E3D0)
+    // older worlds saved exits near the origin: these are found again once
     static constexpr int64_t BAD_EXIT_DISTANCE = 99;
 
     static constexpr int64_t BAD_GATEWAY_DISTANCE = 299;
@@ -81,12 +80,12 @@ public:
     /** Whether the client must get the gateway again after this tick: the spawn beam or the cooldown changed. */
     bool needsClientUpdate() const;
 
-    /** Starts the cooldown after a teleport (sub_14714F7F0 on the client). */
+    /** Starts the cooldown after a teleport. */
     void triggerCooldown() {
         mCooldown = COOLDOWN_TICKS;
     }
 
-    /** Where an entity sent through lands: one block above the exit, centred (sub_14714E830). */
+    /** Where an entity sent through lands: one block above the exit, centred. */
     static Vector3f getTeleportTarget(const Vector3i &exit);
 
     static bool isBadPosition(const Vector3i &exit, const Vector3i &gateway);

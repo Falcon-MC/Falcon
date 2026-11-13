@@ -9,7 +9,7 @@
 namespace {
 
     // exp(-(dx^2 + dz^2 + (dy + 0.5)^2) / 16) on a 24^3 lattice centred on 12, built in doubles and stored
-    // as floats (first table of sub_145C32C40)
+    // as floats
     const std::array<float, 24 * 24 * 24> &beardKernel() {
         static const std::array<float, 24 * 24 * 24> kernel = [] {
             std::array<float, 24 * 24 * 24> table{};
@@ -31,7 +31,7 @@ namespace {
         return kernel;
     }
 
-    // one entry of the second table of sub_145C32C40: the kernel weighted by the distance to the ground,
+    // one entry of the game's second table: the kernel weighted by the distance to the ground,
     // with the double fast inverse square root of the game
     double beard(int32_t dx, int32_t dz, int32_t kernelY, int32_t toGround) {
         const double ground = (double) toGround + 0.5;

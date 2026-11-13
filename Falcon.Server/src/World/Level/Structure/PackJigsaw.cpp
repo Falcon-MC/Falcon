@@ -12,7 +12,7 @@
 #include <utility>
 
 namespace {
-    // the placer's translations of commands.place.generation.error and .outofbounds.error (0x14F432B10)
+    // the placer's translations of commands.place.generation.error and .outofbounds.error
     const char *const GENERATION_FAILED = "Jigsaw structure generation failed.";
     const char *const OUT_OF_BOUNDS = "Jigsaw structure generation failed. Structure placed out of bounds.";
     std::string readText(const std::filesystem::path &path) {
@@ -123,8 +123,8 @@ namespace {
         return true;
     }
 
-    // a vertical anchor {"absolute" | "above_bottom" | "below_top": n} (sub_14930A460); from_sea is left out:
-    // it adds the dimension's sea level (sub_14383EC10, Dimension +0xCC), whose overworld value is unproven
+    // a vertical anchor {"absolute" | "above_bottom" | "below_top": n}; from_sea is left out:
+    // it adds the dimension's sea level, whose overworld value is unproven
     bool readAnchor(const json::Value *value, PackJigsaw::Anchor &anchor, int32_t &offset) {
         if (value == nullptr || !value->isObject())
             return false;
@@ -144,7 +144,7 @@ namespace {
     }
 
     // start_height: {"type": "constant", "value": anchor} or {"type": "uniform", "min": anchor, "max": anchor}, the
-    // height provider schemas (sub_14930A460, sub_1492DB6B0)
+    // height provider schemas
     bool readStartHeight(const json::Value *value, PackJigsaw::Structure &structure) {
         if (value == nullptr || !value->isObject())
             return false;
@@ -160,7 +160,7 @@ namespace {
                && readAnchor(value->get("value"), structure.mStartAnchor, structure.mStartOffset);
     }
 
-    // the game's legacy random (vtable 0x14F1ABF10): 48 bit linear congruence, nextInt as sub_145A2BCC0
+    // the game's legacy random: 48 bit linear congruence, nextInt as
     class LegacyRandom {
     public:
         explicit LegacyRandom(int64_t seed) : mState(((uint64_t) seed ^ MULTIPLIER) & MASK) {}
@@ -194,7 +194,7 @@ namespace {
         uint64_t mState;
     };
 
-    // sub_14383F470: the forked seed mixed with the position's hash
+    // the forked seed mixed with the position's hash
     LegacyRandom positionalRandom(int64_t worldSeed, const Vector3i &at) {
         LegacyRandom base(worldSeed);
         const int64_t fork = base.nextLong();
@@ -234,7 +234,7 @@ namespace {
         return rule;
     }
 
-    // field names from the processor schema (sub_149301D80)
+    // field names from the processor schema
     bool readProcessor(const json::Value &value, PackJigsaw::Processor &processor) {
         const json::Value *type = value.get("processor_type");
         if (type == nullptr)
@@ -361,8 +361,8 @@ namespace {
     }
 }
 
-// field names from the 26.60 schemas: template pool sub_1492F7D00, jigsaw structure sub_1492DB6B0, processor
-// sub_149301D80, rule sub_149301BE0, predicates sub_14930F4D0
+// field names from the 26.60 schemas: template pool, jigsaw structure, processor
+// rule, predicates
 void PackJigsaw::addPack(const std::string &packRoot) {
     const std::filesystem::path root = std::filesystem::path(packRoot) / "worldgen";
     eachJson(root / "template_pools", [&](const json::Value &file) {
@@ -428,7 +428,7 @@ void PackJigsaw::addPack(const std::string &packRoot) {
     });
 }
 
-// VerticalAnchor resolvers (sub_140EE4B30, sub_14383EBF0, sub_14383EC00, 26.60): below_top counts down from the
+// VerticalAnchor resolvers: below_top counts down from the
 // top block
 int32_t PackJigsaw::resolveAnchor(Anchor anchor, int32_t offset, int32_t minY, int32_t maxY) {
     switch (anchor) {

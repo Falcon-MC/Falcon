@@ -15,17 +15,16 @@
 using namespace ScriptValues;
 
 namespace {
-    // ScriptPlayerAimAssist::set (sub_14B92E4A0, 26.60)
     const float DEFAULT_VIEW_ANGLE = 50.0f;
     const float MIN_VIEW_ANGLE = 10.0f;
     const float MAX_VIEW_ANGLE = 90.0f;
     const float DEFAULT_DISTANCE = 8.5f;
     const float MIN_DISTANCE = 1.0f;
     const float MAX_DISTANCE = 16.0f;
-    // what an addPreset without them stores and sends (sub_14C94D040)
+    // what an addPreset without them stores and sends
     const char *const FALLBACK_ITEM_SETTINGS = "default";
     const char *const FALLBACK_HAND_SETTINGS = "hand";
-    // the packet a cleared aim assist sends (sub_142FC3670)
+    // the packet a cleared aim assist sends
     const float CLEAR_VIEW_ANGLE_X = 30.0f;
     const float CLEAR_VIEW_ANGLE_Y = 45.0f;
     const float CLEAR_DISTANCE = 5.7f;
@@ -38,7 +37,7 @@ namespace {
         return ScriptApi::fromContext(ctx)->host().getScriptEngine().aimAssist();
     }
 
-    // InvalidArgumentErrorType: Empty is 1, Unknown 5 (sub_148527430)
+    // InvalidArgumentErrorType: Empty is 1, Unknown 5
     JSValue invalidArgument(JSContext *ctx, const std::string &message, const char *type) {
         JSValue fields = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, fields, "type", JS_NewString(ctx, type));
@@ -46,13 +45,12 @@ namespace {
         return ScriptApi::fromContext(ctx)->throwError("InvalidArgumentError", message, fields);
     }
 
-    // sub_1468E7EF0
     JSValue invalidValue(JSContext *ctx, const std::string &argument, const char *type) {
         return invalidArgument(ctx, "Invalid provided value to argument '" + argument + "'.", type);
     }
 
-    // sub_14C512410 with the minecraft namespace allowed: the namespace constraint (sub_1419A24C0) first, then one
-    // namespace only when asked; NoNamespace is reason 1, DisallowedNamespace 2 (sub_14C514030)
+    // with the minecraft namespace allowed: the namespace constraint first, then one
+    // namespace only when asked; NoNamespace is reason 1, DisallowedNamespace 2
     bool checkNamespace(JSContext *ctx, const std::string &name, bool single, JSValue &error) {
         const size_t colon = name.find(':');
         const char *reason = nullptr;
@@ -68,13 +66,12 @@ namespace {
             return true;
         JSValue fields = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, fields, "reason", JS_NewString(ctx, reason));
-        // sub_14C512240
         error = ScriptApi::fromContext(ctx)->throwError(
                 "NamespaceNameError", "There was an error with name '" + name + "': " + detail + ".", fields);
         return false;
     }
 
-    // a category a preset names must exist (sub_14C89D280)
+    // a category a preset names must exist
     bool checkCategory(JSContext *ctx, const std::string &id, JSValue &error) {
         if (!checkNamespace(ctx, id, false, error))
             return false;
@@ -359,7 +356,7 @@ namespace {
         return ref == nullptr ? nullptr : registryOf(ctx).findCategory(ref->mIdentifier);
     }
 
-    // an unset default reads 1 (sub_14C88DB00)
+    // an unset default reads 1
     JSValue categoryGetDefault(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
         const AimAssistCategory *category = categoryOf(ctx, thisVal);
         if (category == nullptr)
@@ -421,7 +418,6 @@ namespace {
 
     // AimAssistRegistry
 
-    // ScriptAimAssistRegistry::addCategory (sub_14C951720)
     JSValue registryAddCategory(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         const ScriptAimAssistCategorySettingsRef *settings = argc < 1 ? nullptr : categorySettingsOf(ctx, argv[0]);
         if (settings == nullptr)
@@ -450,7 +446,7 @@ namespace {
         return makeHandle(ctx, "AimAssistCategory", settings->mIdentifier);
     }
 
-    // ScriptAimAssistRegistry::addPreset (sub_14C94D040): the item categories, then the default, then the hand one
+    // the item categories, then the default, then the hand one
     JSValue registryAddPreset(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         const ScriptAimAssistPresetSettingsRef *settings = argc < 1 ? nullptr : presetSettingsOf(ctx, argv[0]);
         if (settings == nullptr)
@@ -603,7 +599,7 @@ namespace {
         return ok && readOptionalNumber(ctx, object, "distance", request.mDistance);
     }
 
-    // sub_148548380: argument 0, the member path and the bounds
+    // argument 0, the member path and the bounds
     JSValue outOfBounds(JSContext *ctx, const char *member, double value, double minValue, double maxValue) {
         JSValue fields = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, fields, "index", JS_NewInt32(ctx, 0));
@@ -618,7 +614,7 @@ namespace {
                 fields);
     }
 
-    // ScriptPlayerAimAssist::set (sub_14B92E4A0): settings converted, then the player, then each value in order
+    // settings converted, then the player, then each value in order
     JSValue aimAssistSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptPlayerAimAssistRef *ref = api->native<ScriptPlayerAimAssistRef>(thisVal);
@@ -655,7 +651,7 @@ namespace {
         const float distance = (float) request.mDistance.value_or(DEFAULT_DISTANCE);
         if (!(distance <= MAX_DISTANCE && distance >= MIN_DISTANCE))
             return outOfBounds(ctx, "distance", distance, MIN_DISTANCE, MAX_DISTANCE);
-        // sub_142FC12B0: an unknown preset names itself as the argument
+        // an unknown preset names itself as the argument
         if (registryOf(ctx).findPreset(request.mPresetId) == nullptr)
             return invalidValue(ctx, request.mPresetId, "Unknown");
 

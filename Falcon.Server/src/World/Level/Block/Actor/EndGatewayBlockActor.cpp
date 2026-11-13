@@ -187,7 +187,7 @@ void EndGatewayBlockActor::_requestExitWork(ServerNetworkHandler &owner, Level &
 }
 
 bool EndGatewayBlockActor::_canTeleport(const Actor &actor) {
-    // ender pearls fly through, and the game never sends a rider or a ridden entity (sub_14714E830)
+    // ender pearls fly through, and the game never sends a rider or a ridden entity
     if (dynamic_cast<const EnderPearlActor *>(&actor) != nullptr)
         return false;
 
@@ -223,7 +223,7 @@ void EndGatewayBlockActor::_teleportEntities(ServerNetworkHandler &owner, Level 
             inside.push_back(&actor);
     });
 
-    // the game's fetch takes every entity type, dropped items included (sub_14714E830)
+    // the game's fetch takes every entity type, dropped items included
     for (const std::unique_ptr<ItemActor> &item: owner.getItemEntities()) {
         if (!item->isRemoved() && item->isIn(level)
             && boxAt(item->getPosition(), ITEM_SIZE, ITEM_SIZE).intersectsWith(block))
