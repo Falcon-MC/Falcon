@@ -230,11 +230,12 @@ namespace {
 }
 
 int _scriptInterruptHandler(JSRuntime *, void *opaque) {
-    const ScriptEngine *engine = (const ScriptEngine *) opaque;
-    if (engine == nullptr)
+    ScriptEngine *engine = (ScriptEngine *) opaque;
+    if (engine == nullptr || nowMs() <= engine->mExecutionDeadlineMs)
         return 0;
 
-    return nowMs() > engine->mExecutionDeadlineMs ? 1 : 0;
+    engine->_noteHang();
+    return 1;
 }
 
 ScriptEngine::ScriptEngine() : mRuntime(nullptr), mWatchdogMs(DEFAULT_WATCHDOG_MS), mExecutionDeadlineMs(0) {
@@ -413,7 +414,53 @@ void ScriptEngine::sendAimAssist(ServerPlayer &player) {
 }
 
 void ScriptEngine::_arm() {
+    _dispatchWatchdog();
+    ++mArmSerial;
     mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+}
+
+void ScriptEngine::_noteHang() {
+    if (mDispatchingWatchdog || mHangSerial == mArmSerial || mApis.empty())
+        return;
+    mHangSerial = mArmSerial;
+
+    // every pack's code is named under its own root; bootstrap frames carry no such name
+    JSContext *ctx = mApis.front()->context();
+    for (int level = 0;; ++level) {
+        const JSAtom atom = JS_GetScriptOrModuleName(ctx, level);
+        if (atom == JS_ATOM_NULL)
+            return;
+        const char *name = JS_AtomToCString(ctx, atom);
+        JS_FreeAtom(ctx, atom);
+        if (name == nullptr)
+            return;
+        const std::string file(name);
+        JS_FreeCString(ctx, name);
+        for (const std::unique_ptr<ScriptApi> &api: mApis) {
+            const std::string root = api->packRoot() + "/";
+            if (file.compare(0, root.size(), root) == 0) {
+                mHungApi = api.get();
+                return;
+            }
+        }
+    }
+}
+
+void ScriptEngine::_dispatchWatchdog() {
+    if (mHungApi == nullptr || mDispatchingWatchdog)
+        return;
+    const ScriptApi *hung = mHungApi;
+    mHungApi = nullptr;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (api.get() != hung)
+            continue;
+        mDispatchingWatchdog = true;
+        mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+        api->watchdogTerminate("Hang");
+        _pumpJobs();
+        mDispatchingWatchdog = false;
+        return;
+    }
 }
 
 void ScriptEngine::_installConsole(JSContext *context) {
@@ -570,6 +617,7 @@ void ScriptEngine::_pumpJobs() {
             break;
         }
     }
+    _dispatchWatchdog();
 }
 
 template <typename Fill>

@@ -1633,6 +1633,15 @@ void ScriptApi::worldLoad() {
         emit("after.worldLoad", makeEvent("WorldAfterEvents.worldLoad"));
 }
 
+void ScriptApi::watchdogTerminate(const char *reason) {
+    if (!hasSubscribers("system.before.watchdogTerminate"))
+        return;
+    JSValue event = makeEvent("SystemBeforeEvents.watchdogTerminate");
+    JS_SetPropertyStr(mContext, event, "terminateReason", JS_NewString(mContext, reason));
+    JS_SetPropertyStr(mContext, event, "cancel", JS_FALSE);
+    emit("system.before.watchdogTerminate", event);
+}
+
 void ScriptApi::shutdown() {
     emit("system.before.shutdown", makeEvent("SystemBeforeEvents.shutdown"));
     std::vector<uint32_t> pending;

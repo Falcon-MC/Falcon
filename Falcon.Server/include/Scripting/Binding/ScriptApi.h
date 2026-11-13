@@ -410,6 +410,9 @@ public:
 
     void shutdown();
 
+    // reason: a WatchdogTerminateReason value; cancel has nothing to stop, this server never shuts down on a hang
+    void watchdogTerminate(const char *reason);
+
 
     // EntityQueryOptions over spawned players and, unless playersOnly, live actors; null level: every dimension
     JSValue queryEntities(JSValueConst options, const Level *level, bool playersOnly);
