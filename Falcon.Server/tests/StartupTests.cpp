@@ -2,6 +2,10 @@
 #include "BlockPaletteNbt.h"
 #include "Core/Archive/Gzip.h"
 #include "Core/NBT/NbtIo.h"
+#include "Protocol/PacketCodecContext.h"
+#include "Protocol/Types/BlockDefinitionRegistry.h"
+#include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/Level.h"
 #include "World/Level/Storage/LevelStorage.h"
@@ -92,6 +96,70 @@ namespace {
         require(reopened.loadSavedData("check", loaded) && loaded == saved, "Preopened database lost its data");
     }
 
+    Tag unknownBlockActor(const char *id, const Vector3i &position) {
+        Tag data = Tag::ofCompound();
+        data.putString("id", id);
+        data.putInt("x", position.x);
+        data.putInt("y", position.y);
+        data.putInt("z", position.z);
+        data.putByte("isMovable", 1);
+        return data;
+    }
+
+    const Tag *savedAt(const std::vector<Tag> &saved, const Vector3i &position) {
+        for (const Tag &data: saved) {
+            if (data.getInt("x") == position.x && data.getInt("y") == position.y && data.getInt("z") == position.z)
+                return &data;
+        }
+        return nullptr;
+    }
+
+    void checkUnknownBlockActors(const std::filesystem::path &directory) {
+        BlockDefinitionRegistry blocks;
+        ItemDefinitionRegistry items;
+        PacketCodecContext context(blocks, items);
+        const Vector3i spawnerPosition(1, 70, 1);
+        const Vector3i skullPosition(2, 70, 2);
+
+        Tag spawner = unknownBlockActor("MobSpawner", spawnerPosition);
+        spawner.putString("EntityIdentifier", "minecraft:zombie");
+        spawner.putShort("Delay", 20);
+        Tag skull = unknownBlockActor("Skull", skullPosition);
+        skull.putByte("SkullType", 1);
+        skull.putFloat("Rotation", 90.0f);
+
+        Level level("BlockActors", 4, 12345);
+        require(level.openStorage(directory.string()), "Could not create block actor world");
+        level.getChunk(0, 0);
+        level.setBlockState(spawnerPosition.x, spawnerPosition.y, spawnerPosition.z,
+                            VanillaBlocks::MOB_SPAWNER().toBlockState());
+        level.setBlockState(skullPosition.x, skullPosition.y, skullPosition.z,
+                            VanillaBlocks::SKELETON_SKULL().toBlockState());
+        level.saveBlockEntities(0, 0, {spawner, skull});
+
+        BlockActorStore &store = level.getBlockActors();
+        store.loadChunk(0, 0, level.loadBlockEntities(0, 0), context);
+        require(store.find(spawnerPosition) == nullptr, "A block actor of no class got one");
+        std::vector<Tag> saved = store.saveChunk(0, 0);
+        require(saved.size() == 2, "A block actor of no class was dropped on save");
+        require(savedAt(saved, spawnerPosition) != nullptr && *savedAt(saved, spawnerPosition) == spawner,
+                "The spawner was not saved back untouched");
+        require(savedAt(saved, skullPosition) != nullptr && *savedAt(saved, skullPosition) == skull,
+                "The skull was not saved back untouched");
+        require(!store.encodeChunkNetwork(0, 0).empty(), "A block actor of no class is not sent");
+
+        level.saveBlockEntities(0, 0, saved);
+        store.unloadChunk(0, 0);
+        store.loadChunk(0, 0, level.loadBlockEntities(0, 0), context);
+        require(store.saveChunk(0, 0).size() == 2, "A block actor of no class did not survive a reload");
+
+        level.setBlockState(skullPosition.x, skullPosition.y, skullPosition.z, VanillaBlocks::AIR().toBlockState());
+        saved = store.saveChunk(0, 0);
+        require(saved.size() == 1 && savedAt(saved, spawnerPosition) != nullptr,
+                "A replaced block kept its unknown block actor");
+        level.closeStorage();
+    }
+
     void checkDimensions(const std::filesystem::path &directory, int64_t seed) {
         World world(7, "World", 4, seed);
         require(world.open(directory.string(), 1, Level::PacketBroadcaster(), nullptr), "Could not open world");
@@ -150,6 +218,7 @@ int main() {
         checkDimensions(directory, 12345);
         checkDimensions(directory, 67890);
         checkPreopenedStorage(directory);
+        checkUnknownBlockActors(directory);
         {
             LevelStorage legacy;
             require(legacy.open(directory.string(), "Legacy"), "Could not create legacy world");
