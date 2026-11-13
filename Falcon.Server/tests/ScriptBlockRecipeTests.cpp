@@ -93,6 +93,10 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
             + stone.getCanOccludeVibrations() + ":" + dampener.getCanDampenVibrations() + ":"
             + dampener.getCanOccludeVibrations() + ":" + BlockVibrationPropertiesComponent.componentId;
         r.vibrationListed = at(7, 7).getComponents().some((c) => c.typeId === "minecraft:vibration_properties");
+        const wool = at(8, 8).getComponent("vibration_properties");
+        const carpet = at(9, 9).getComponent("vibration_properties");
+        r.vibrationVanilla = wool.getCanDampenVibrations() + ":" + wool.getCanOccludeVibrations() + ":"
+            + carpet.getCanDampenVibrations() + ":" + carpet.getCanOccludeVibrations();
         save();
     } else if (event.id === "recipes:gone") {
         r.gone = fail(() => kept.getOutputItem());
@@ -165,6 +169,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         CrafterBlockActor &crafter = level.getBlockActors().getOrCreate<CrafterBlockActor>(crafterAt);
         level.setBlock(Vector3i(6, 100, 6), BlockState("minecraft:stone"), false);
         level.setBlock(Vector3i(7, 100, 7), BlockState("test:dampener"), false);
+        level.setBlock(Vector3i(8, 100, 8), BlockState("minecraft:white_wool"), false);
+        level.setBlock(Vector3i(9, 100, 9), BlockState("minecraft:white_carpet"), false);
         // the server does not listen here: its own tick() would return at once
         engine.tick(0);
 
@@ -194,6 +200,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*r, "stoneProcessing", "undefined");
         expect(*r, "vibration", "true:false:false:true:false:minecraft:vibration_properties");
         expect(*r, "vibrationListed", "true");
+        // the vanilla flags the vibrations read: wool dampens and occludes, a carpet only dampens
+        expect(*r, "vibrationVanilla", "true:true:true:false");
         expect(*r, "gone",
                "InvalidBlockComponentError:Attempting to access invalid block component minecraft:recipe_processing.");
     }
