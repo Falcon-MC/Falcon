@@ -35,6 +35,7 @@ const r = {};
 const errorOf = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ":" + e.message; } };
 r.uninitialized = errorOf(() => sentry.getTags());
 r.badDsn = errorOf(() => sentry.init({ dsn: "not a dsn" }));
+r.plainDsn = errorOf(() => sentry.init({ dsn: "http://key@127.0.0.1:1/42" }));
 // a pack watching the strings its code handles: the secret dsn must never be one of them
 const seen = [];
 const exec = RegExp.prototype.exec;
@@ -101,6 +102,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         expect(*report, "badDsn",
                "InvalidArgumentError:Invalid value passed. DSN format is invalid, see Sentry documentation for "
                "correct DSN format.");
+        expect(*report, "plainDsn",
+               "InvalidArgumentError:Invalid value passed. DSN must use TLS when force_tls is enabled.");
         expect(*report, "init", "ok");
         expect(*report, "again", "SentryAlreadyInitializedError:Sentry is already initialized");
         expect(*report, "tags", "blue|true|diagnostics|1.26.60");
@@ -143,7 +146,7 @@ int main() {
         writeFile(config / "permissions.json",
                   "{\"allowed_modules\": [\"*\"], \"module_permissions\": "
                   "{\"@minecraft/server-net\": {\"force_tls\": true}}}");
-        writeFile(config / "secrets.json", R"({"dsn": "http://topsecret@127.0.0.1:1/42"})");
+        writeFile(config / "secrets.json", R"({"dsn": "https://topsecret@127.0.0.1:1/42"})");
         uriRules();
         run(directory);
     } catch (const std::exception &error) {

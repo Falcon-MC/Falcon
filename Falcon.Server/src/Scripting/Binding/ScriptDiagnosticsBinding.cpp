@@ -87,6 +87,8 @@ namespace {
             throw conversion();
         if (configured === 2)
             throw invalidArgument("DSN format is invalid, see Sentry documentation for correct DSN format.");
+        if (configured === 3)
+            throw invalidArgument("DSN must use TLS when force_tls is enabled.");
         const debug = options.debug === undefined ? false : !!options.debug;
         let maxBreadcrumbs = 20;
         if (options.maxBreadcrumbs !== undefined) {
@@ -368,7 +370,8 @@ namespace {
         return result;
     }
 
-    // 0 set, 1 not a string nor a SecretString, 2 not a dsn; parsed here so a secret never reaches the script
+    // 0 set, 1 not a string nor a SecretString, 2 not a dsn, 3 plain http under force_tls (sub_14BABC030); parsed
+    // here so a secret never reaches the script
     JSValue diagConfigure(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         const std::optional<std::string> dsn = argc >= 1 ? dsnOf(ctx, argv[0]) : std::nullopt;
         if (!dsn.has_value())
@@ -381,6 +384,11 @@ namespace {
             return JS_NewInt32(ctx, 2);
 
         ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptNetModuleConfig config =
+                api->host().getScriptEngine().packConfigs().get(api->scriptModuleUuid()).netConfig();
+        // only the presence of force_tls is read, as for server-net
+        if (parts[1].str() != "https" && config.mForceTls.has_value())
+            return JS_NewInt32(ctx, 3);
         api->diagnosticsDsn() = *dsn;
         api->diagnosticsUrl() = parts[1].str() + "://" + parts[3].str() + "/api/" + parts[4].str() + "/envelope/";
         return JS_NewInt32(ctx, 0);
