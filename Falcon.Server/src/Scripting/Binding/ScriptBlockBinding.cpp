@@ -728,11 +728,11 @@ namespace {
 
     JSValue signGetText(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
         const BlockAt at = blockAt(ctx, thisVal);
-        SignBlockActor *sign = signAt(at);
         bool valid = true;
         const char *side = signSide(ctx, argc, argv, 0, valid);
         if (!valid)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        SignBlockActor *sign = signAt(at);
         if (sign == nullptr)
             return JS_UNDEFINED;
         const Tag saved = sign->saveNbt();
@@ -761,15 +761,16 @@ namespace {
 
     JSValue signSetText(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
-        SignBlockActor *sign = signAt(at);
         bool valid = true;
         const char *side = signSide(ctx, argc, argv, 1, valid);
         if (argc < 1 || !valid)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        if (sign == nullptr)
-            return JS_UNDEFINED;
+        // the message is read before the sign: its getters can run script that breaks the block
         bool isJson = false;
         const std::string text = JS_IsString(argv[0]) ? toString(ctx, argv[0]) : messageToRawText(ctx, argv[0], isJson);
+        SignBlockActor *sign = signAt(at);
+        if (sign == nullptr)
+            return JS_UNDEFINED;
         Tag data = sign->saveNbt();
         Tag face = data.get(side) != nullptr ? *data.get(side) : Tag::ofCompound();
         face.putString("Text", text);
@@ -793,11 +794,11 @@ namespace {
     // only an exact dye rgb answers: the default black text (0) is undefined, sub_141A66520
     JSValue signGetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
-        SignBlockActor *sign = signAt(at);
         bool valid = true;
         const char *side = signSide(ctx, argc, argv, 0, valid);
         if (!valid)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        SignBlockActor *sign = signAt(at);
         if (sign == nullptr)
             return JS_UNDEFINED;
         const Tag saved = sign->saveNbt();
@@ -1145,9 +1146,7 @@ namespace {
 
     JSValue recordSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
-        JukeboxBlockActor *jukebox = jukeboxAt(at);
-        if (jukebox == nullptr)
-            return JS_UNDEFINED;
+        // the record is read before the jukebox: its getters can run script that breaks the block
         ItemStack stack = ItemStack::air();
         if (argc >= 1 && !JS_IsUndefined(argv[0])) {
             JSValue id = JS_IsObject(argv[0]) ? JS_GetPropertyStr(ctx, argv[0], "id") : JS_DupValue(ctx, argv[0]);
@@ -1157,6 +1156,9 @@ namespace {
             if (!at.mApi->toItemStack(data, stack))
                 return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         }
+        JukeboxBlockActor *jukebox = jukeboxAt(at);
+        if (jukebox == nullptr)
+            return JS_UNDEFINED;
         if (!stack.isAir() && recordSound(stack).empty())
             return at.mApi->throwError("Error", "Item is not a record.");
         stopAt(at);
@@ -1309,13 +1311,22 @@ namespace {
         const BlockAt at = blockAt(ctx, thisVal);
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        // a vector's getters can run script that breaks the block: convert into a scratch map first
+        const std::string id = toString(ctx, argv[0]);
+        const JSValueConst value = argc >= 2 ? argv[1] : JS_UNDEFINED;
+        std::unordered_map<std::string, DynamicPropertyValue> converted;
+        dynamicPropertySet(ctx, converted, id, value);
+        if (JS_HasException(ctx))
+            return JS_EXCEPTION;
         auto *properties = propertiesAt(at);
         if (properties == nullptr)
             return JS_UNDEFINED;
         const auto before = *properties;
-        dynamicPropertySet(ctx, *properties, toString(ctx, argv[0]), argc >= 2 ? argv[1] : JS_UNDEFINED);
-        if (JS_HasException(ctx))
-            return JS_EXCEPTION;
+        const auto entry = converted.find(id);
+        if (entry != converted.end())
+            (*properties)[id] = entry->second;
+        else if (JS_IsUndefined(value) || JS_IsNull(value))
+            properties->erase(id);
         if (dynamicPropertyByteCount(*properties) > BLOCK_PROPERTY_LIMIT) {
             *properties = before;
             return at.mApi->throwError("Error", "Block dynamic properties exceed 1KB.");
@@ -1331,7 +1342,6 @@ namespace {
     // undefined writes opaque black, a dye its texture rgb with full alpha (sub_14C8C4BD0)
     JSValue signSetTextDyeColor(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const BlockAt at = blockAt(ctx, thisVal);
-        SignBlockActor *sign = signAt(at);
         bool valid = true;
         const char *side = signSide(ctx, argc, argv, 1, valid);
         if (!valid)
@@ -1345,6 +1355,7 @@ namespace {
                 return JS_ThrowTypeError(ctx, "Native type conversion failed.");
             color = (int32_t) (0xFF000000u | (uint32_t) dye->rgb);
         }
+        SignBlockActor *sign = signAt(at);
         if (sign == nullptr)
             return JS_UNDEFINED;
         Tag data = sign->saveNbt();
@@ -1928,12 +1939,18 @@ namespace {
         const std::string identifier = canonicalIdentifier(saved.getString("identifier").c_str());
         if (identifier.empty())
             return storageError(at, BlockEntityStorage::Result::DeserializeFailed);
-        const Vector3f center((float) at.mPosition.x + 0.5f, (float) at.mPosition.y, (float) at.mPosition.z + 0.5f);
-        ServerActor *released = StoredActor::restore(at.mApi->host(), *at.mLevel, identifier, saved, center);
-        if (released == nullptr)
-            return storageError(at, BlockEntityStorage::Result::SpawnFailed);
+        // out of the bucket before the spawn: its after event runs script that can release it again or break the
+        // block
         Tag taken;
         storage->take(bucket, uniqueId, taken);
+        const Vector3f center((float) at.mPosition.x + 0.5f, (float) at.mPosition.y, (float) at.mPosition.z + 0.5f);
+        ServerActor *released = StoredActor::restore(at.mApi->host(), *at.mLevel, identifier, saved, center);
+        if (released == nullptr) {
+            BlockActor *holder = at.mLevel->getBlockActors().find(at.mPosition);
+            if (BlockEntityStorage *live = holder == nullptr ? nullptr : holder->getEntityStorage())
+                live->add(bucket, std::move(taken));
+            return storageError(at, BlockEntityStorage::Result::SpawnFailed);
+        }
         return at.mApi->makeEntity(*released);
     }
 
