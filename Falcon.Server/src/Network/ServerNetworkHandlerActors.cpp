@@ -483,7 +483,7 @@ bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor 
     if (!launchEvent.mCancelled)
         return true;
 
-    removeActor((int64_t) projectile.getRuntimeId());
+    removeActor(projectile.getUniqueId());
     return false;
 }
 
