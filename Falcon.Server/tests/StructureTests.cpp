@@ -10,6 +10,7 @@
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
+#include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
@@ -190,8 +191,7 @@ namespace {
         }
         BlockMaterialType type;
         require(!BlockMaterial::find(BlockState("custom:block"), type), "an unknown block has no material");
-        require(BlockMaterial::find(BlockState("minecraft:cobblestone_wall"), type)
-                        && type == BlockMaterialType::Solid,
+        require(BlockMaterial::find(BlockState("minecraft:cobblestone_wall"), type) && type == BlockMaterialType::Solid,
                 "walls take the material of cobblestone");
         require(BlockMaterial::find(BlockState("minecraft:white_wool_stairs"), type)
                         && type == BlockMaterialType::Solid,
@@ -286,6 +286,49 @@ namespace {
     }
 }
 
+namespace {
+    void checkPillagerOutposts() {
+        // every block the outposts lay has a Bedrock state
+        for (const char *name:
+             {"watchtower", "watchtower_overgrown", "feature_cage1", "feature_cage2", "feature_cage_with_allays",
+              "feature_logs", "feature_targets", "feature_tent1", "feature_tent2"}) {
+            const auto shape = StructureTemplate::load(std::string("pillageroutpost/") + name + ".nbt");
+            require(shape != nullptr, "An outpost template is missing");
+            for (const StructureTemplate::PaletteEntry &entry: shape->getPalette()) {
+                BlockState out;
+                require(entry.mName == "minecraft:structure_block" || entry.mName == "minecraft:jigsaw"
+                                || StructureBlockTable::translate(entry, 2, out),
+                        "An outpost block has no state");
+            }
+        }
+
+        // the last true face wins, up covering all four
+        StructureTemplate::PaletteEntry vine;
+        vine.mName = "minecraft:vine";
+        vine.mProperties = {{"east", "false"}, {"north", "false"}, {"south", "true"}, {"up", "true"}, {"west", "true"}};
+        BlockState out;
+        require(StructureBlockTable::translate(vine, 0, out) && out.mStates.getInt("vine_direction_bits", -1) == 2,
+                "The vine faces differ");
+        vine.mProperties = {{"south", "true"}};
+        require(StructureBlockTable::translate(vine, 1, out) && out.mStates.getInt("vine_direction_bits", -1) == 2,
+                "A turned vine keeps its face");
+
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const StructureFeature *outposts = StructureFeature::get("pillager_outpost");
+        require(outposts != nullptr, "Pillager outposts are not registered");
+        StructureChunkPos start;
+        require(outposts->findNearest(*generator, 0, 0, start), "No outpost near the origin");
+        const auto pieces = PillagerOutpostStructure::plan(*generator, start.x, start.z);
+        require(pieces.size() >= 2 && pieces.size() <= 6, "An outpost has a wrong piece count");
+        require(pieces[0].mTemplate == "pillageroutpost/watchtower"
+                        && pieces[1].mTemplate == "pillageroutpost/watchtower_overgrown",
+                "The outpost does not open with its towers");
+        for (size_t i = 2; i < pieces.size(); ++i)
+            require(pieces[i].mFeature && StructureTemplate::load(pieces[i].mTemplate + ".nbt") != nullptr,
+                    "An outpost prop has no template");
+    }
+}
+
 int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
@@ -297,6 +340,7 @@ int main() {
         checkConversions();
         checkMaterials();
         checkOceanRuins();
+        checkPillagerOutposts();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;

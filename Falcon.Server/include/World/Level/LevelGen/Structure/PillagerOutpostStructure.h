@@ -1,0 +1,27 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+class ChunkGenerator;
+class Level;
+class LevelChunk;
+
+// a watchtower, its overgrown copy and up to four props around it, all drawn in the start chunk
+class PillagerOutpostStructure {
+public:
+    struct Piece {
+        std::string mTemplate;
+        int32_t x = 0;
+        int32_t z = 0;
+        int32_t mQuarterTurns = 0;
+        float mIntegrity = 1.0f;
+        // a prop: laid on the ground at its middle, dropped where the sea is
+        bool mFeature = false;
+    };
+
+    static std::vector<Piece> plan(const ChunkGenerator &generator, int32_t startX, int32_t startZ);
+
+    static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
+};
