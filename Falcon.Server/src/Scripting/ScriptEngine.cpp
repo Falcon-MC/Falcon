@@ -473,6 +473,15 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
                      pack.mName.c_str(), module.mName.c_str());
     }
 
+    // the entry stays inside its pack, like the modules it imports
+    std::string entryPath = pack.scriptPath();
+    std::replace(entryPath.begin(), entryPath.end(), '\\', '/');
+    const std::string packRoot = canonicalPath(pack.mPath) + "/";
+    if (canonicalPath(entryPath).compare(0, packRoot.size(), packRoot) != 0) {
+        LOG_ERROR(LogAreaID::Script, "Script entry of %s is outside its pack", pack.mName.c_str());
+        return false;
+    }
+
     const std::string source = readFile(pack.scriptPath());
     if (source.empty()) {
         LOG_ERROR(LogAreaID::Script, "Could not open script %s", pack.scriptPath().c_str());
