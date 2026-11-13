@@ -1,6 +1,7 @@
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/BlockMaterial.h"
 #include "World/Level/Block/BlockNames.h"
@@ -38,6 +39,8 @@ namespace {
 
     // the capped archaeology rule (sub_1469AFE80)
     const int32_t ARCHAEOLOGY_CAP = 5;
+    const char *const WARM_LOOT_TABLE = "loot_tables/entities/warm_ocean_ruins_brushable_block.json";
+    const char *const COLD_LOOT_TABLE = "loot_tables/entities/cold_ocean_ruins_brushable_block.json";
 
     const char *const BIG_LOOT = "loot_tables/chests/underwater_ruin_big.json";
     const char *const SMALL_LOOT = "loot_tables/chests/underwater_ruin_small.json";
@@ -188,7 +191,7 @@ namespace {
                     _chest(piece, entry, originY);
             }
 
-            _uncover(candidates, positionSeed(piece.x, originY, piece.z));
+            _uncover(candidates, positionSeed(piece.x, originY, piece.z), piece.mWarm);
         }
 
     private:
@@ -260,8 +263,9 @@ namespace {
             chest.setLootTable(piece.mLarge ? BIG_LOOT : SMALL_LOOT, FeatureRandom::nextInt(mChunkRandom));
         }
 
-        // the sand or gravel the piece laid here, shuffled, the first five still there made suspicious
-        void _uncover(std::vector<Position> &candidates, int64_t seed) {
+        // the sand or gravel the piece laid here, shuffled, the first five still there made suspicious; each actor
+        // takes the archaeology table and the random's next int (sub_1469B9460, loot type 3 warm, 2 cold)
+        void _uncover(std::vector<Position> &candidates, int64_t seed, bool warm) {
             XoroshiroRandom random(seed);
             for (size_t i = 1; i < candidates.size(); ++i) {
                 const size_t j = (size_t) random.nextInt((int32_t) i + 1);
@@ -282,6 +286,10 @@ namespace {
                     continue;
 
                 mChunk.setBlock(x & 15, y, z & 15, defaultState(suspicious));
+                BrushableBlockActor &actor = mLevel.getBlockActors().getOrCreate<BrushableBlockActor>(
+                        Vector3i(x, y, z));
+                actor.setType(suspicious);
+                actor.setLootTable(warm ? WARM_LOOT_TABLE : COLD_LOOT_TABLE, random.nextInt());
                 if (++uncovered == ARCHAEOLOGY_CAP)
                     return;
             }

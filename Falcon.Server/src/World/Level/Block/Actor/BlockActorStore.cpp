@@ -3,6 +3,7 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
+#include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
@@ -339,6 +340,7 @@ FALCON_REGISTER_BLOCK_ACTOR(BannerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FlowerPotBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(CauldronBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(SignBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(BrushableBlockActor);
 
 namespace {
     std::unique_ptr<BlockActor> createHangingSign() {

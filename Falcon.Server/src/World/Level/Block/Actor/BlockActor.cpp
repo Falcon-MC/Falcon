@@ -59,7 +59,10 @@ void BlockActor::setLootTable(const std::string &table, int32_t seed) {
     mLootSeed = seed;
 }
 
+// sub_144C4D670: both kept as made when the tag has no table
 void BlockActor::loadLootTable(const Tag &data) {
+    if (!data.contains(TAG_LOOT_TABLE))
+        return;
     setLootTable(data.getString(TAG_LOOT_TABLE, std::string()), data.getInt(TAG_LOOT_SEED, 0));
 }
 

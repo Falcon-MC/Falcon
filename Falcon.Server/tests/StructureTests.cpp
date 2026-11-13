@@ -1,5 +1,6 @@
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
+#include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
@@ -234,6 +235,21 @@ namespace {
         const Tag saved = banner.saveNbt();
         require(saved.getInt("Base", -1) == 3 && saved.getInt("Type", -1) == 0, "The banner colour is lost");
         require(!saved.contains("Patterns"), "An empty pattern list is saved");
+
+        std::unique_ptr<BlockActor> created = BlockActorClassRegistry::create(BrushableBlockActor::BLOCK_ACTOR_ID);
+        auto *brushable = dynamic_cast<BrushableBlockActor *>(created.get());
+        require(brushable != nullptr, "BrushableBlock does not load as a brushable block");
+        brushable->setType("minecraft:suspicious_gravel");
+        brushable->loadLootTable(Tag::ofCompound());
+        const Tag fresh = brushable->saveWithPosition();
+        require(fresh.getString("LootTable") == BrushableBlockActor::EMPTY_LOOT_TABLE
+                        && fresh.getInt("LootTableSeed", -1) == 0,
+                "A fresh brushable block lost the empty table");
+        require(fresh.getByte("brush_direction", 0) == 6 && fresh.getInt("brush_count", -1) == 0
+                        && fresh.getString("type") == "minecraft:suspicious_gravel" && !fresh.contains("item"),
+                "A fresh brushable block saves other fields than the game");
+        brushable->setLootTable("loot_tables/entities/desert_well_brushable_block.json", -7);
+        require(brushable->saveWithPosition().getInt("LootTableSeed", 0) == -7, "The archaeology seed is lost");
     }
 }
 
