@@ -11,6 +11,7 @@
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -49,6 +50,24 @@ void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool chec
         if (checked)
             throw std::runtime_error("Could not save player: " + player.getName());
     }
+}
+
+void ServerNetworkHandler::_saveTouchedContainers(ServerPlayer &player) {
+    const std::vector<Level *> levels = getLevels();
+    for (const std::pair<const Level *, int64_t> &touched: player.getInventoryManager().getTouchedColumns()) {
+        const auto found = std::find(levels.begin(), levels.end(), touched.first);
+        if (found == levels.end() || !(*found)->isStorageOpen())
+            continue;
+
+        Level &level = **found;
+        const int32_t chunkX = (int32_t) (touched.second >> 32);
+        const int32_t chunkZ = (int32_t) (touched.second & 0xffffffff);
+        if (level.getBlockActors().isChunkLoaded(chunkX, chunkZ))
+            saveBlockActorsForChunk(level, chunkX, chunkZ, false);
+        if (getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(touched.second) != 0)
+            saveActorsForChunk(level, chunkX, chunkZ, false);
+    }
+    player.getInventoryManager().clearTouchedColumns();
 }
 
 void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
@@ -281,6 +300,8 @@ void ServerNetworkHandler::autoSave(bool wait) {
     saveScoreboard(wait);
     mScriptEngine.saveWorldClocks();
     saveAllActors();
+    for (auto &entry: mPlayers)
+        entry.second.getInventoryManager().clearTouchedColumns();
 
     for (World *world: mWorlds.getWorlds())
         world->saveAll(wait);

@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <array>
+#include <utility>
 #include <vector>
 
 class NetworkIdentifier;
@@ -181,6 +182,16 @@ public:
         return mCurrentWindowType;
     }
 
+    // packed columns of the containers opened since the last save: written with the player when it leaves,
+    // its items and theirs together
+    const std::vector<std::pair<const Level *, int64_t>> &getTouchedColumns() const {
+        return mTouchedColumns;
+    }
+
+    void clearTouchedColumns() {
+        mTouchedColumns.clear();
+    }
+
     bool refreshEnchantInput(const ItemStack &current, int32_t newSeed);
 
     int32_t getEnchantSeed() const {
@@ -221,6 +232,8 @@ private:
     int _getNewWindowId();
 
     bool _allowPluginOpen(const Vector3i &position);
+
+    void _touchColumn(const Vector3i &position);
 
     int _getWindowId(InventoryId inventory) const;
 
@@ -271,6 +284,7 @@ private:
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     int64_t mContainerActorId = -1;
+    std::vector<std::pair<const Level *, int64_t>> mTouchedColumns;
     std::string mEnchantInputId;
     int32_t mEnchantInputCount = 0;
     int32_t mEnchantInputDamage = 0;

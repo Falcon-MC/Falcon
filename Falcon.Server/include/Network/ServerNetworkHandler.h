@@ -1051,6 +1051,9 @@ private:
 
     void _savePlayerData(const ServerPlayer &player, bool checked = false);
 
+    // the containers the player opened since the last save, written before the player itself
+    void _saveTouchedContainers(ServerPlayer &player);
+
     void _handleVoidDamage(ServerPlayer &player);
 
     void _handleSuffocationDamage(ServerPlayer &player);
