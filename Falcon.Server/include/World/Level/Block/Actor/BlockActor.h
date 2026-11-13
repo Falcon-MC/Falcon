@@ -5,7 +5,9 @@
 #include "Core/NBT/Tag.h"
 #include "World/Inventory/Container.h"
 #include "World/Actor/DynamicPropertyValue.h"
+#include "World/Level/Block/Actor/BlockEntityStorage.h"
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -77,6 +79,19 @@ public:
         return mDynamicProperties;
     }
 
+    // any block actor can carry one (sub_143300CF0 saves it with the common fields), data-driven blocks ask for it
+    BlockEntityStorage &enableEntityStorage() {
+        if (!mEntityStorage.has_value())
+            mEntityStorage.emplace();
+        return *mEntityStorage;
+    }
+
+    BlockEntityStorage *getEntityStorage() {
+        return mEntityStorage.has_value() ? &*mEntityStorage : nullptr;
+    }
+
+    void loadEntityStorage(const Tag &data);
+
 protected:
     Vector3i mPosition;
     Level *mLevel = nullptr;
@@ -86,4 +101,5 @@ private:
     std::string mLootTable;
     int32_t mLootSeed = 0;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
+    std::optional<BlockEntityStorage> mEntityStorage;
 };

@@ -88,6 +88,7 @@ BOUND = {
         'PlayerWaypointsMode', 'BlockBoundingBoxUtils', 'BannerPattern', 'CarryOverBlockEntityDataFunction', 'PoiBlockOccupancyFilter',
         'PoiManager', 'PoiBlockManager', 'PoiBlockType', 'PoiBlockInstance',
         'WatchdogTerminateReason', 'BlockRecipeProcessingComponent', 'BlockVibrationPropertiesComponent',
+        'BlockEntityStorageComponent', 'BlockEntityStorageInfo',
     },
     'server-ui': None,
     'common': None,
