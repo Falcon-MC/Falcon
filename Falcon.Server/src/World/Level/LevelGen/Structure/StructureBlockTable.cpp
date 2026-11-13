@@ -170,6 +170,7 @@ namespace {
                 {"minecraft:terracotta", "minecraft:hardened_clay"},
                 {"minecraft:grass", "minecraft:short_grass"},
                 {"minecraft:melon", "minecraft:melon_block"},
+                {"minecraft:magma_block", "minecraft:magma"},
                 {"minecraft:cobblestone_stairs", "minecraft:stone_stairs"},
                 {"minecraft:oak_fence_gate", "minecraft:fence_gate"},
                 {"minecraft:oak_pressure_plate", "minecraft:wooden_pressure_plate"},

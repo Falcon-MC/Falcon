@@ -8,10 +8,13 @@
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
+#include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
+#include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
 #include "World/Level/LevelGen/Structure/StructureProcessors.h"
+#include "World/Level/LevelGen/Structure/StructureTemplate.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 
@@ -216,6 +219,60 @@ namespace {
     }
 }
 
+namespace {
+    void checkOceanRuins() {
+        OceanRuinFeature::Config config;
+        require(OceanRuinFeature::getConfig(BiomeIds::DEEP_COLD_OCEAN, config) && !config.mWarm
+                        && config.mLargeChance == 0.5f && config.mClusterChance == 0.4f,
+                "Deep cold ruins differ");
+        require(OceanRuinFeature::getConfig(BiomeIds::LUKEWARM_OCEAN, config) && config.mWarm
+                        && config.mLargeChance == 0.3f && config.mClusterChance == 0.5f,
+                "Lukewarm ruins are not warm");
+        require(!OceanRuinFeature::getConfig(BiomeIds::PLAINS, config), "Plains have ruins");
+
+        // every block the ruins lay has a Bedrock state
+        for (const std::string finish: {"_brick", "_cracked", "_mossy"}) {
+            for (const char *name: {"ruin1", "ruin2", "ruin3", "ruin4", "ruin5", "ruin6", "ruin7", "ruin8", "big_ruin1",
+                                    "big_ruin2", "big_ruin3", "big_ruin8"}) {
+                const auto shape = StructureTemplate::load(std::string("ruin/") + name + finish + ".nbt");
+                require(shape != nullptr, "A cold ruin template is missing");
+                for (const StructureTemplate::PaletteEntry &entry: shape->getPalette()) {
+                    BlockState out;
+                    require(entry.mName == "minecraft:air" || entry.mName == "minecraft:structure_block"
+                                    || StructureBlockTable::translate(entry, 1, out),
+                            "A cold ruin block has no state");
+                }
+            }
+        }
+        for (const char *name: {"ruin4", "ruin_warm1", "ruin_warm8", "big_ruin_warm4", "big_ruin_warm7"}) {
+            const auto shape = StructureTemplate::load(std::string("ruin/") + name + ".nbt");
+            require(shape != nullptr, "A ruin template is missing");
+            for (const StructureTemplate::PaletteEntry &entry: shape->getPalette()) {
+                BlockState out;
+                require(entry.mName == "minecraft:air" || entry.mName == "minecraft:structure_block"
+                                || StructureBlockTable::translate(entry, 3, out),
+                        "A ruin block has no state");
+            }
+        }
+
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const StructureFeature *ruins = StructureFeature::get("ocean_ruin");
+        require(ruins != nullptr, "Ocean ruins are not registered");
+        StructureChunkPos start;
+        require(ruins->findNearest(*generator, 0, 0, start), "No ocean ruin near the origin");
+        const auto pieces = OceanRuinStructure::plan(*generator, start.x, start.z);
+        require(!pieces.empty(), "An ocean ruin start has no piece");
+        require(OceanRuinStructure::plan(*generator, start.x, start.z).size() == pieces.size(),
+                "The ruin plan is not reproducible");
+        for (const OceanRuinStructure::Piece &piece: pieces) {
+            require(StructureTemplate::load(piece.mTemplate + ".nbt") != nullptr, "A planned ruin has no template");
+            require(piece.mIntegrity > 0.0f && piece.mIntegrity < 1.0f, "A ruin keeps all its blocks");
+        }
+        if (!pieces.front().mWarm)
+            require(pieces.size() % 3 == 0, "A cold ruin lacks a finish");
+    }
+}
+
 int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
@@ -226,6 +283,7 @@ int main() {
         checkBlockActors();
         checkConversions();
         checkMaterials();
+        checkOceanRuins();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;
