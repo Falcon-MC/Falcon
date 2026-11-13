@@ -4,6 +4,8 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/SculkSensorBlock.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
@@ -22,6 +24,13 @@ class ServerTickProbe {
 public:
     static void advance(ServerNetworkHandler &owner) {
         ++owner.mCurrentTick;
+    }
+
+    // the steps of a server tick a sensor needs, in its order
+    static void tick(ServerNetworkHandler &owner, Level &level) {
+        ++owner.mCurrentTick;
+        level.tickBlockUpdates();
+        level.getBlockActors().tick(owner);
     }
 };
 
@@ -270,6 +279,74 @@ namespace {
         require(restored.ticksUntilReceived(10) == 4, "the restored signal did not land where it left off");
         require(restored.mProbe->mReceived.front().mEvent == &GameEvents::EXPLODE, "the restored event changed");
     }
+
+    void sculkSensorActivates() {
+        ServerNetworkHandler owner("Sculk", "", 1);
+        Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        std::vector<int64_t> columns;
+        for (int32_t chunkX = -1; chunkX <= 1; ++chunkX) {
+            for (int32_t chunkZ = -1; chunkZ <= 1; ++chunkZ) {
+                level.getChunk(chunkX, chunkZ);
+                columns.push_back(((int64_t) chunkX << 32) | (uint32_t) chunkZ);
+            }
+        }
+        level.setActiveColumns(columns);
+        for (int x = 0; x < 16; ++x) {
+            for (int z = 0; z < 16; ++z) {
+                for (int y = 60; y <= 72; ++y)
+                    level.setBlockState(x, y, z, BlockState(BlockNames::AIR));
+                level.setBlockState(x, 63, z, VanillaBlocks::STONE().toBlockState());
+            }
+        }
+
+        const BlockState sensor = VanillaBlocks::SCULK_SENSOR().toBlockState();
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z, sensor);
+        level.onBlockPlaced(LISTENER, sensor);
+        require(level.getBlockActors().find(LISTENER) != nullptr, "a placed sculk sensor has no block actor");
+
+        const auto phase = [&level]() {
+            return SculkSensorBlock::phaseOf(level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z));
+        };
+        level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(12.5f, 64.5f, 8.5f));
+        int ticks = 0;
+        while (phase() != SculkSensorBlock::PHASE_ACTIVE && ticks < 10) {
+            ServerTickProbe::tick(owner, level);
+            ++ticks;
+        }
+        require(ticks == 4, "the sensor did not turn active when the signal landed");
+
+        const BlockState active = level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z);
+        const Block *block = VanillaBlocks::fromState(active);
+        require(block != nullptr && block->getComparatorSignal(level, LISTENER, active) == 11,
+                "the comparator does not read block_change's frequency");
+        require(block->getEmittedSignal(level, LISTENER, active, RedstoneFace::NORTH, false) == 8
+                        && block->getEmittedSignal(level, LISTENER, active, RedstoneFace::DOWN, true) == 8
+                        && block->getEmittedSignal(level, LISTENER, active, RedstoneFace::UP, true) == 0,
+                "4 blocks away in range 8 did not give 8, strong below only");
+
+        ticks = 0;
+        while (phase() == SculkSensorBlock::PHASE_ACTIVE && ticks < 40) {
+            ServerTickProbe::tick(owner, level);
+            ++ticks;
+        }
+        require(ticks == SculkSensorBlock::ACTIVE_TICKS && phase() == SculkSensorBlock::PHASE_COOLDOWN,
+                "the sensor did not cool down after 30 ticks");
+        const BlockState cooling = level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z);
+        require(block->getEmittedSignal(level, LISTENER, cooling, RedstoneFace::NORTH, false) == 0,
+                "a cooling sensor still gives power");
+
+        level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(10.5f, 64.5f, 8.5f));
+        ticks = 0;
+        while (phase() == SculkSensorBlock::PHASE_COOLDOWN && ticks < 20) {
+            ServerTickProbe::tick(owner, level);
+            ++ticks;
+        }
+        require(ticks == SculkSensorBlock::COOLDOWN_TICKS && phase() == SculkSensorBlock::PHASE_INACTIVE,
+                "the cooldown did not last 10 ticks");
+        for (int i = 0; i < 10; ++i)
+            ServerTickProbe::tick(owner, level);
+        require(phase() == SculkSensorBlock::PHASE_INACTIVE, "a vibration heard while cooling down activated it");
+    }
 }
 
 int main() {
@@ -283,6 +360,7 @@ int main() {
         sourceRules();
         closestThenFrequency();
         savesTheSignalInFlight();
+        sculkSensorActivates();
         std::cout << "vibration checks passed\n";
         return 0;
     } catch (const std::exception &error) {

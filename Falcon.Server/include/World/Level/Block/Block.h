@@ -244,6 +244,15 @@ public:
         (void) blockFace;
     }
 
+    // set by anything reporting through Level::onBlockPlaced: a player, /setblock, fire
+    virtual void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           const BlockState &state) const {
         (void) owner;
