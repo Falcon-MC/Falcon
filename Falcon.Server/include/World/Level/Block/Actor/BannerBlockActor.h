@@ -32,6 +32,10 @@ public:
         mBase = base;
     }
 
+    void setType(int32_t type) {
+        mType = type;
+    }
+
 private:
     void _putFields(Tag &data) const;
 

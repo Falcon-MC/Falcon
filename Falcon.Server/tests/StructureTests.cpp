@@ -317,6 +317,19 @@ namespace {
         vine.mProperties = {{"south", "true"}};
         require(StructureBlockTable::translate(vine, 1, out) && out.mStates.getInt("vine_direction_bits", -1) == 2,
                 "A turned vine keeps its face");
+        // the placement keeps a single face: up stands for all four, south first
+        vine.mProperties = {{"up", "true"}};
+        require(StructureBlockTable::translate(vine, 0, out) && out.mStates.getInt("vine_direction_bits", -1) == 1,
+                "An up vine keeps more than its south face");
+        require(StructureBlockTable::translate(vine, 3, out) && out.mStates.getInt("vine_direction_bits", -1) == 8,
+                "A turned up vine is not east");
+        vine.mProperties = {};
+        require(StructureBlockTable::translate(vine, 1, out) && out.mStates.getInt("vine_direction_bits", -1) == 8,
+                "A faceless vine is not read as north");
+
+        require(StructureBlockTable::bannerType("minecraft:illager_captain_wall_banner") == 1
+                        && StructureBlockTable::bannerType("minecraft:brown_wall_banner") == 0,
+                "The captain banner is not ominous");
 
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const StructureFeature *outposts = StructureFeature::get("pillager_outpost");
