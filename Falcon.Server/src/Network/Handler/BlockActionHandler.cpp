@@ -534,11 +534,14 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
-    PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenState);
-    owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
-
     if (brokenData != nullptr && brokenData->mHardness > 0.0f)
         owner.damagePlayerHeldItem(player, 1);
+
+    // the destroyed-by-player event goes out once the tool took its wear (sub_143773220, 26.60)
+    PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenState);
+    brokenEvent.mItemBeforeBreak = heldItem;
+    brokenEvent.mItemAfterBreak = player.getInventory().getItemInHand();
+    owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
 
     const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
     if (!creative && !silkTouch && harvested) {

@@ -1985,6 +1985,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         engine.onItemCompleteUse(player, snack);
         require(engine.onItemHitEntity(player, player, true, 2) == 7, "onBeforeDurabilityDamage was not applied");
         PlayerBreakBlockAfterEvent broken(player, at, "test:block");
+        broken.mItemBeforeBreak = wand;
         owner.getEventBus().after().mPlayerBreakBlock.emit(broken);
         player.getInventory().setItemInHand(ItemStack::air());
 

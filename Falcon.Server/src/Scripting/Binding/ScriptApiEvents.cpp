@@ -556,10 +556,12 @@ void ScriptApi::_subscribeGameEvents() {
             JS_SetPropertyStr(mContext, object, "brokenBlockPermutation",
                               event.mBrokenState ? makePermutation(*event.mBrokenState)
                                                  : makePermutation(event.mBrokenBlockIdentifier));
+            JS_SetPropertyStr(mContext, object, "itemStackBeforeBreak", makeItem(event.mItemBeforeBreak));
+            JS_SetPropertyStr(mContext, object, "itemStackAfterBreak", makeItem(event.mItemAfterBreak));
             emit("after.playerBreakBlock", object);
         }
 
-        const ItemStack &held = event.mPlayer.getInventory().getItemInHand();
+        const ItemStack &held = event.mItemBeforeBreak;
         const CustomItemDefinition *item = held.isAir() || held.mDefinition == nullptr
                                                    ? nullptr
                                                    : CustomContentRegistry::getInstance().findItem(
@@ -683,6 +685,7 @@ void ScriptApi::_subscribeGameEvents() {
         JS_SetPropertyStr(mContext, object, "block",
                           makeBlock(level, event.mBlockPosition.x, event.mBlockPosition.y, event.mBlockPosition.z));
         JS_SetPropertyStr(mContext, object, "dimension", makeDimension(level));
+        JS_SetPropertyStr(mContext, object, "itemStack", makeItem(event.mPlayer.getInventory().getItemInHand()));
         JS_SetPropertyStr(mContext, object, "cancel", JS_FALSE);
         if (emit("before.playerBreakBlock", object))
             event.cancel();
