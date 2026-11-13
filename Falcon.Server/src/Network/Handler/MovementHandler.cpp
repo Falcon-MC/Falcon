@@ -81,11 +81,14 @@ namespace {
 
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
             for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
-                const BlockState water = level.getBlockState(x, y, z);
-                if (water.mName != BlockNames::WATER || water.mStates.getInt("liquid_depth", 0) != 0)
+                // a column not loaded is unknown, never read through: that would generate it here
+                const BlockState *water = level.peekBlockPtr(x, y, z);
+                if (water == nullptr || water->mName != BlockNames::WATER
+                    || water->mStates.getInt("liquid_depth", 0) != 0)
                     continue;
 
-                if (level.getBlockState(x, y + 1, z).mName != BlockNames::AIR)
+                const BlockState *above = level.peekBlockPtr(x, y + 1, z);
+                if (above == nullptr || above->mName != BlockNames::AIR)
                     continue;
 
                 Tag states = Tag::ofCompound();
