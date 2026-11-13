@@ -73,7 +73,7 @@ namespace {
         return std::to_string(value);
     }
 
-    // StructureTemplate::getTransformedBounds: the box the rotated structure fills
+    // the box the rotated structure fills
     Vector3i rotatedSize(const Vector3i &size, int32_t rotation) {
         return (rotation & 1) != 0 ? Vector3i(size.z, size.y, size.x) : size;
     }
@@ -215,7 +215,7 @@ void GameTestRunner::_clearSpace(Level &level, const Vector3i &low, const Vector
     }
 }
 
-// StructureUtils::spawnStructure (sub_144B27400): the structure over its structure block, a redstone block under
+// the structure over its structure block, a redstone block under
 bool GameTestRunner::_spawn(Instance &instance) {
     ++instance.mAttempts;
     ScriptEngine &engine = mHost->getScriptEngine();
@@ -238,7 +238,7 @@ bool GameTestRunner::_spawn(Instance &instance) {
     const Vector3i corner(at.x, at.y + 1, at.z);
     structure->place(*mHost, level, corner, options);
 
-    // GameTestInstanceLedger::testStructureLoaded (sub_144B234B0): the loaded structure's bounds
+    // the loaded structure's bounds
     const Vector3i box = rotatedSize(instance.mSize, instance.mRotation);
     Ledger ledger;
     ledger.mLevel = &level;
@@ -248,7 +248,7 @@ bool GameTestRunner::_spawn(Instance &instance) {
 
     _setBlock(level, Vector3i(at.x, at.y - 1, at.z), "minecraft:redstone_block");
     _setBlock(level, at, "minecraft:structure_block");
-    // sub_144B27160: load mode, the structure's size, rotation and a centred pivot, offset (0, 1, 0)
+    // load mode, the structure's size, rotation and a centred pivot, offset (0, 1, 0)
     StructureBlockActor &block = level.getBlockActors().getOrCreate<StructureBlockActor>(at);
     block.mMode = StructureBlockActor::Mode::Load;
     block.mStructureName = instance.mDescriptor.mStructureName;
@@ -258,7 +258,7 @@ bool GameTestRunner::_spawn(Instance &instance) {
     block.mShowBoundingBox = true;
     BlockActionHandler::broadcastBlockActorData(*mHost, level, block);
 
-    // StructureUtils::addCommandBlockAndButtonToStartTest (sub_144B278E0): (1, 0, -1), the button north of it
+    // (1, 0, -1), the button north of it
     const Vector3i commandBlock(at.x + 1, at.y, at.z - 1);
     _setBlock(level, commandBlock, "minecraft:command_block");
     CommandBlockActor &command = CommandBlockSystem::getOrCreate(level, commandBlock);
@@ -312,7 +312,7 @@ void GameTestRunner::_say(const char *color,
     }
 }
 
-// ReportGameListener::spawnBeacon (sub_144B08F80): the beacon a block below and west-north of the structure block,
+// the beacon a block below and west-north of the structure block,
 // the glass over it, iron under it
 void GameTestRunner::_beacon(Instance &instance, const char *glass) {
     Level &level = *instance.mLevel;
@@ -326,7 +326,7 @@ void GameTestRunner::_beacon(Instance &instance, const char *glass) {
     }
 }
 
-// the failure report on a lectern west, up and north of the structure block (sub_144B0E160)
+// the failure report on a lectern west, up and north of the structure block
 void GameTestRunner::_lectern(Instance &instance, const std::string &page) {
     Level &level = *instance.mLevel;
     const Vector3i position(instance.mStructureBlock.x - 1, instance.mStructureBlock.y + 1,
@@ -374,7 +374,7 @@ void GameTestRunner::_rerun(Instance &instance) {
     _spawn(instance);
 }
 
-// ReportGameListener::testPassed (sub_144B09610), the flaky branch as GameTest's java side runs it
+// the flaky branch as GameTest's java side runs it
 void GameTestRunner::_passed(Instance &instance) {
     instance.mRunning = false;
     ++instance.mSuccesses;
@@ -404,7 +404,6 @@ void GameTestRunner::_passed(Instance &instance) {
     _rerun(instance);
 }
 
-// ReportGameListener::testFailed (sub_144B0E160)
 void GameTestRunner::_failed(Instance &instance, const Failure &failure) {
     instance.mRunning = false;
     const Descriptor &test = instance.mDescriptor;
@@ -492,7 +491,7 @@ void GameTestRunner::_complete(Instance &instance, bool passed) {
     }
 }
 
-// the closing summary (sub_144B133C0)
+// the closing summary
 void GameTestRunner::_report(const Tracker &tracker) {
     _say("§f", {{"gameTest.report.testCount", {number(tracker.mTotal)}}});
     if (tracker.mRequiredFailed > 0)
@@ -503,7 +502,7 @@ void GameTestRunner::_report(const Tracker &tracker) {
         _say("§7", {{"gameTest.report.optionalFailures", {number(tracker.mOptionalFailed)}}});
 }
 
-// GameTestBatchRunner::runBatch (sub_144B157F0): the next batch's tests in rows of TESTS_PER_ROW
+// the next batch's tests in rows of TESTS_PER_ROW
 void GameTestRunner::_startBatch() {
     // a spawn that fails completes its test, which comes back here
     if (mStartingBatch)
@@ -573,7 +572,7 @@ GameTestRunner::Outcome GameTestRunner::run(Level &level, const Vector3i &origin
     std::shared_ptr<Tracker> tracker = std::make_shared<Tracker>();
     tracker->mTotal = 1;
     Level *target = &level;
-    // a position over the build limit asks the spawn for the ground under it (sub_144AEAB40)
+    // a position over the build limit asks the spawn for the ground under it
     Vector3i at(origin.x, level.getMaxY() + 1, origin.z + 3);
     if (test->mHasStructureLocation)
         at = test->mStructureLocation;
@@ -690,14 +689,14 @@ GameTestRunner::Outcome GameTestRunner::runSet(Level &level, const Vector3i &ori
     if (tagged.empty())
         return Outcome{false, "gameTest.error.noTestsFound", {tag}};
 
-    // GameTestRunner::groupTestsIntoBatches (sub_144AEC160): by pack and batch name, MAX_TESTS_PER_BATCH at most
+    // by pack and batch name, MAX_TESTS_PER_BATCH at most
     std::unique_ptr<BatchRun> run(new BatchRun());
     run->mLevel = &level;
     run->mCorner = Vector3i(origin.x, level.getAboveTopSolidBlock(origin.x, level.getMaxY(), origin.z), origin.z + 3);
     run->mRotation = rotation & 3;
     run->mUntilFail = untilFail;
     run->mTracker = std::make_shared<Tracker>();
-    // a rotateTest test runs once per rotation: the started count adds three for it (sub_14BE848F0)
+    // a rotateTest test runs once per rotation: the started count adds three for it
     std::vector<std::pair<std::pair<ScriptApi *, std::string>, std::vector<std::pair<Descriptor, int32_t>>>> groups;
     int32_t started = 0;
     for (const Descriptor &test: tagged) {
@@ -736,7 +735,7 @@ GameTestRunner::Outcome GameTestRunner::runSet(Level &level, const Vector3i &ori
     return Outcome{true, "gameTest.success.testsStarted", {number(started), tag}};
 }
 
-// StructureUtils::createNewEmptyStructureBlock (sub_144B28530) and the polished andesite floor of sub_14BE80D30
+// the empty structure block and the polished andesite floor of
 GameTestRunner::Outcome GameTestRunner::create(Level &level, const Vector3i &origin, const std::string &name,
                                                int32_t width, int32_t height, int32_t depth) {
     if (height == 0)
@@ -780,7 +779,7 @@ GameTestRunner::Outcome GameTestRunner::clearAll(Level &level) {
         if (entry.second.isSpawned())
             mHost->sendPacketTo(entry.second.getNetworkIdentifier(), clear);
     }
-    // MinecraftGameTest::clearAllTests (sub_144AEBE20): the running tests go, then the space of every structure
+    // the running tests go, then the space of every structure
     // the ledger holds in this dimension, its floor the structure's lowest layer
     stopAll();
     std::vector<Ledger> cleared;
@@ -821,7 +820,7 @@ GameTestRunner::Outcome GameTestRunner::position(Level &level, const Vector3i &t
             Vector3i(target.x - hit.mPosition.x, target.y - hit.mPosition.y, target.z - hit.mPosition.z), hit.mRotation,
             hit.mSize);
     const std::string where = number(relative.x) + ", " + number(relative.y) + ", " + number(relative.z);
-    // a green cube on the block for ten seconds, the relative position over it (sub_14BE80D30)
+    // a green cube on the block for ten seconds, the relative position over it
     ClientboundDebugRendererPacket marker;
     marker.mDebugMarkerType = ClientboundDebugRendererType::AddDebugMarkerCube;
     marker.mMarkerText = where;

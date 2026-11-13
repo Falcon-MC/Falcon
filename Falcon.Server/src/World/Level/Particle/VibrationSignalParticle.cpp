@@ -6,7 +6,7 @@ namespace {
     const int32_t PARTICLE_VIBRATION_SIGNAL = 2027;
     const float SIGNAL_SPEED = 20.0f;
 
-    // a vec3 PositionSource as sub_143FA7470 writes it
+    // a vec3 PositionSource as the game writes it
     Tag positionSource(const Vector3f &position) {
         Tag source = Tag::ofCompound();
         source.putString("type", "vec3");

@@ -21,15 +21,15 @@ namespace {
     // claims and dweller timeouts run on the ticks where tick % 30 == 15
     const int64_t CLAIM_INTERVAL = 30;
     const int64_t CLAIM_PHASE = 15;
-    const int64_t DWELLER_TIMEOUT = 24000; // 0x1439d2bb1
-    const float DWELLER_BOUNDS_MARGIN = 48.0f; // xmmword at 0x14f1b3850, read at 0x1439d2bba
+    const int64_t DWELLER_TIMEOUT = 24000;
+    const float DWELLER_BOUNDS_MARGIN = 48.0f;
     const int32_t CLAIM_PARTICLE_EVENT = 2009;
     const int32_t CLAIM_PARTICLE_DATA = 41;
     const int32_t LOSS_PARTICLE_DATA = 40;
     const int32_t CLAIM_PARTICLE_COUNT = 5;
     const char *const NITWIT_FAMILY = "nitwit";
     const float RAID_BOUNDS_MARGIN = 32.0f;
-    // a wave not cleared within this many ticks expires the raid (0x1439e90e6)
+    // a wave not cleared within this many ticks expires the raid
     const int64_t RAID_EXPIRY_TICKS = 48001;
     const char *const RAID_EXPIRY_MESSAGE = R"({"rawtext":[{"text":"\u00a77"},{"translate":"raid.expiry"}]})";
 
@@ -42,7 +42,7 @@ namespace {
         return std::uniform_real_distribution<float>(0.0f, 1.0f)(villageRandom());
     }
 
-    // the level random's nextInt: the raw 32 bit draw modulo the bound, 0 for a bound of 0 (0x140391F20)
+    // the level random's nextInt: the raw 32 bit draw modulo the bound, 0 for a bound of 0
     uint32_t nextInt(uint32_t bound) {
         return bound == 0 ? 0 : (uint32_t) villageRandom()() % bound;
     }
@@ -377,7 +377,7 @@ void Village::_tickPoiValidity(ServerNetworkHandler &owner, Level &level) {
             if (state == nullptr)
                 continue;
 
-            // the scan's own check: an occupied bed is lost too, a player sleeping in it frees it (0x1439d2164)
+            // the scan's own check: an occupied bed is lost too, a player sleeping in it frees it
             const PoiBlueprint *blueprint = PoiScanner::findValidBlueprint(*state);
             if (blueprint != nullptr && manager.isRegistered(blueprint->mType, position, blueprint->mName))
                 continue;
@@ -410,7 +410,7 @@ void Village::_tickDwellerTimeouts(ServerNetworkHandler &owner, Level &level) {
             }
 
             // a missing dweller counts as seen while its chunk is not loaded, and leaves when the chunk is loaded
-            // without it: a transformed or despawned dweller never reaches the death handler (0x1439d2f4a)
+            // without it: a transformed or despawned dweller never reaches the death handler
             const MobActor *mob = VillageManager::findMob(owner, entry.mId);
             if (mob == nullptr && !level.isChunkPopulated(entry.mPosition.x >> 4, entry.mPosition.z >> 4)) {
                 entry.mLastSeenTick = mLastTick;

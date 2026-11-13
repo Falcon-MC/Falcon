@@ -14,7 +14,7 @@ namespace {
     const char *const TAG_STATUS = "status";
     const int8_t VERSION = 1;
 
-    // sub_1437F6DF0: "0x" then eight lowercase hex digits
+    // "0x" then eight lowercase hex digits
     std::string formatId(int32_t id) {
         char text[16];
         std::snprintf(text, sizeof(text), "0x%08x", (uint32_t) id);
@@ -25,7 +25,6 @@ namespace {
         return (int32_t) std::strtoull(text.c_str(), nullptr, 0);
     }
 
-    // sub_1437F8D10
     std::string recordKey(int32_t id) {
         return "PosTrackDB-" + formatId(id);
     }

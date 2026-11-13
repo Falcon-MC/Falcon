@@ -12,7 +12,7 @@ class Level;
 
 // the ray of BlockRaycastOptions and EntityRaycastOptions
 namespace ScriptRaycast {
-    // sub_14C51AE00, sub_14C51B0C0: 250 blocks without maxDistance, never more than 1000
+    // 250 blocks without maxDistance, never more than 1000
     constexpr int32_t DEFAULT_DISTANCE = 250;
     constexpr int32_t MAX_DISTANCE = 1000;
 

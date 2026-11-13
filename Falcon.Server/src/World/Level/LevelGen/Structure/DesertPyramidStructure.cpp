@@ -44,7 +44,7 @@ namespace {
         BlockState mSand = VanillaBlocks::SAND().toBlockState();
     };
 
-    // Mth::getSeed with the product cut to 32 bits before the xoroshiro seeding
+    // the position seed with the product cut to 32 bits before the xoroshiro seeding
     int64_t positionSeed(int32_t x, int32_t y, int32_t z) {
         const int64_t mixed = (116129781LL * (int64_t) z)
                               ^ (int64_t) (int32_t) (((uint32_t) x * 3129871U) ^ (uint32_t) y);
@@ -74,7 +74,7 @@ namespace {
         return lowest;
     }
 
-    // DesertPyramidPiece::postProcess (sub_1473CE9F0, 26.60), first draw: the piece keeps the floor of the first
+    // first draw: the piece keeps the floor of the first
     // chunk it is post processed in (+0x44), whatever the others see
     int32_t floorY(Level &level, const LevelChunk &chunk, int32_t startX, int32_t startZ, int32_t lowered) {
         const int32_t minX = startX * 16;
@@ -121,7 +121,7 @@ namespace {
         }
     }
 
-    // a block actor of the brushable kind stands there: the game draws its loot seed (sub_1473D4780)
+    // a block actor of the brushable kind stands there: the game draws its loot seed
     bool isBrushable(Level &level, const ScatteredPiece &piece, int32_t x, int32_t y, int32_t z) {
         const BlockState *state = piece.getBlock(x, y, z);
         if (state == nullptr)

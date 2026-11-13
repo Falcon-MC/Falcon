@@ -40,7 +40,7 @@ bool MobAttack::isTouching(const MobActor &mob, const Actor &target, float reach
 }
 
 bool MobAttack::attackEffect(const MobActor &mob, MobEffectInstance &effect) {
-    // effect_name, effect_duration in seconds and effect_amplifier defaulting to 0; sub_147C33930
+    // effect_name, effect_duration in seconds and effect_amplifier defaulting to 0
     const json::Value *attack = mob.getComponent(ATTACK_COMPONENT);
     const json::Value *name = attack == nullptr ? nullptr : attack->get("effect_name");
     if (name == nullptr || !parseDefinitionMobEffect(name->string(), effect.mId))
@@ -48,7 +48,7 @@ bool MobAttack::attackEffect(const MobActor &mob, MobEffectInstance &effect) {
 
     const json::Value *duration = attack->get("effect_duration");
     const json::Value *amplifier = attack->get("effect_amplifier");
-    // truncated to ticks, never below 0; sub_1437DA310
+    // truncated to ticks, never below 0
     effect.mDuration = duration == nullptr ? 0
                                            : std::max(0, (int32_t) ((float) duration->number(0.0) * TICKS_PER_SECOND));
     effect.mAmplifier = amplifier == nullptr ? 0 : amplifier->integer(0);

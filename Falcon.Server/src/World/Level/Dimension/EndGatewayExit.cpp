@@ -41,7 +41,7 @@ namespace {
     }
 
     /**
-     * Moves y down to the first air of the column, then on to the first solid block under it (sub_1432DD020). False
+     * Moves y down to the first air of the column, then on to the first solid block under it. False
      * when the column has no air or nothing solid under it.
      */
     bool findColumnTop(const EndGatewayExit::BlockReader &reader, int32_t x, int32_t &y, int32_t z, int32_t minY) {

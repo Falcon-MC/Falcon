@@ -45,7 +45,7 @@ class ServerPlayer;
 class MobActor : public ServerActor {
 public:
     // the share of the ageable duration one feed item takes off when its growth is left out: a feed_items entry
-    // starts at 0.1 (sub_147C30220, from the ageable schema sub_147C29BD0)
+    // starts at 0.1
     static constexpr float DEFAULT_FEED_GROWTH = 0.1f;
 
     bool canFreeze() const override {
@@ -123,7 +123,7 @@ public:
 
     void applyDefaults(Difficulty difficulty);
 
-    // only a loaded actor runs its pending upgrades; any other cause takes the current version (sub_140B938D0)
+    // only a loaded actor runs its pending upgrades; any other cause takes the current version
     void upgradeDefinition(ServerNetworkHandler &owner, bool loaded);
 
     static int randomRange(int minimum, int maximum);
@@ -146,7 +146,7 @@ public:
         return mJumpControl;
     }
 
-    // Mob::setGoals with none (sub_142C23480): spawnWithoutBehaviors stops every goal for good
+    // spawnWithoutBehaviors stops every goal for good
     void removeBehaviors(ServerNetworkHandler &owner);
 
     bool hasBehaviorsRemoved() const {
@@ -454,7 +454,7 @@ public:
     // the success of minecraft:tameable or minecraft:tamemount; false when untameable, tamed or cancelled
     bool tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects);
 
-    // tamed with no owner, as a script's EntityTameMountComponent.tame does (sub_143C9C590)
+    // tamed with no owner, as a script's EntityTameMountComponent.tame does
     bool tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects);
 
     float getJumpStrength() const;

@@ -18,8 +18,8 @@
 #include <string>
 
 namespace {
-    // ScriptModuleDiagnostics::ScriptSentry (26.60): the client behind sentry, its envelope built like
-    // SentryEnvelopeHeader / SentryEnvelopeItem / SentryEnvelopePayload (reflection names, sub_143007970)
+    // the client behind sentry, its envelope built like
+    // SentryEnvelopeHeader / SentryEnvelopeItem / SentryEnvelopePayload
     const char *SOURCE = R"JS(
 (function (native) {
     const token = Symbol();
@@ -44,11 +44,10 @@ namespace {
             throw conversion();
         return value;
     };
-    // sub_14BA24690, sub_14BA24510
     const uninitialized = () => native.errors.make("SentryUninitializedError", "Sentry is not initialized");
     const alreadyInitialized = () => native.errors.make("SentryAlreadyInitializedError",
         "Sentry is already initialized");
-    // sub_148549BD0 with InvalidArgumentErrorType.Unspecified and no argument index
+    // with InvalidArgumentErrorType.Unspecified and no argument index
     const invalidArgument = (text) => {
         const error = new native.errors.classes.InvalidArgumentError(undefined, undefined, "Unspecified", undefined);
         Object.defineProperty(error, "message", { value: "Invalid value passed. " + text, writable: true,
@@ -105,7 +104,7 @@ namespace {
         const info = native.info();
         client = {
             debug, maxBreadcrumbs, sampleRate, breadcrumbs: [], sessionId: native.uuid(), info,
-            // the game's defaults: 10 events a 60 second window (sub_14BA26740)
+            // the game's defaults: 10 events a 60 second window
             maxEvents: 10, window: 60, windowStart: undefined, sent: 0,
             tags: new Map([["minecraft_version", info.version], ["minecraft_edition", info.edition],
                 ["module_uuid", info.moduleUuid], ["module_name", info.moduleName],
@@ -128,7 +127,7 @@ namespace {
             tags[key] = value;
         return tags;
     });
-    // sub_14BAC08E0: the oldest breadcrumb goes once the limit is reached, none kept with a limit of 0
+    // the oldest breadcrumb goes once the limit is reached, none kept with a limit of 0
     method("addBreadcrumb", (crumbLevel, message, category) => {
         const c = initialized();
         const entry = { level: level(crumbLevel), message: string(message),
@@ -140,7 +139,7 @@ namespace {
         c.breadcrumbs.push(entry);
     });
 
-    // sub_14BA26740: sample rate, then at most maxEvents a window
+    // sample rate, then at most maxEvents a window
     const skipped = (c) => {
         if (c.maxEvents === 0) {
             if (c.debug)
@@ -251,7 +250,7 @@ namespace {
         return flags;
     }
 
-    // the "{:08x}-{:04x}-{:04x}-{:04x}-{:08x}{:04x}" event and session ids (sub_14BA294A0)
+    // the "{:08x}-{:04x}-{:04x}-{:04x}-{:08x}{:04x}" event and session ids
     std::string newUuid() {
         static std::mt19937_64 random(std::random_device{}());
         const uint64_t high = random();
@@ -370,14 +369,14 @@ namespace {
         return result;
     }
 
-    // 0 set, 1 not a string nor a SecretString, 2 not a dsn, 3 plain http under force_tls (sub_14BABC030); parsed
+    // 0 set, 1 not a string nor a SecretString, 2 not a dsn, 3 plain http under force_tls; parsed
     // here so a secret never reaches the script
     JSValue diagConfigure(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         const std::optional<std::string> dsn = argc >= 1 ? dsnOf(ctx, argv[0]) : std::nullopt;
         if (!dsn.has_value())
             return JS_NewInt32(ctx, 1);
 
-        // sub_14BABC030: (https?)://(key)@(host)/(project), the envelope endpoint
+        // (https?)://(key)@(host)/(project), the envelope endpoint
         static const std::regex DSN("^(https?)://([^@]+)@([^/]+)/(\\d+)$");
         std::smatch parts;
         if (!std::regex_match(*dsn, parts, DSN))
@@ -418,7 +417,7 @@ namespace {
         if (items == nullptr)
             return JS_UNDEFINED;
 
-        // sub_14BA294A0: a new event id and the dsn in the envelope header, then the event item
+        // a new event id and the dsn in the envelope header, then the event item
         HttpsClient::Request request;
         request.mMethod = "POST";
         request.mUrl = api->diagnosticsUrl();

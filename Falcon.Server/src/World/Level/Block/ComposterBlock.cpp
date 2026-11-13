@@ -11,7 +11,7 @@ bool ComposterBlock::matches(const std::string &identifier) {
     return identifier == BlockNames::COMPOSTER;
 }
 
-// ComposterBlock::getComparatorSignal (sub_14771A230, 26.60): the fill level as is
+// ComposterBlock::getComparatorSignal: the fill level as is
 int ComposterBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) level;
     (void) position;

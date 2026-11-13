@@ -995,7 +995,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.putString(TAG_LAST_KNOWN_XUID, mXuid);
     data.putString(TAG_NAME, mName);
 
-    // sub_1402CD950: block position, dimension, then where the player stood
+    // block position, dimension, then where the player stood
     if (mHasSpawnPoint) {
         const Vector3i block = mHasSpawnBlock ? mSpawnPoint
                                               : Vector3i(UNSET_SPAWN_COORDINATE, UNSET_SPAWN_COORDINATE,

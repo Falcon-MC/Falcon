@@ -259,7 +259,7 @@ namespace {
         return 1;
     }
 
-    // sub_141037E70: creative reaches 7 blocks, any other mode 3
+    // creative reaches 7 blocks, any other mode 3
     JSValue spAttack(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -289,7 +289,7 @@ namespace {
         return JS_NewBool(ctx, player->getSimulatedController()->interactWithEntity(api->host(), *player, *target));
     }
 
-    // sub_141038A50: a 5 block ray, the entity in front of the block wins
+    // a 5 block ray, the entity in front of the block wins
     JSValue spInteract(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -389,7 +389,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_141039C20: a chat TextPacket handed to the server as if the client sent it
+    // a chat TextPacket handed to the server as if the client sent it
     JSValue spChat(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 2 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -404,7 +404,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // sub_14DCFDE50: the whole selected stack, the slot emptied
+    // the whole selected stack, the slot emptied
     JSValue spDrop(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -418,7 +418,7 @@ namespace {
         return JS_TRUE;
     }
 
-    // (player, flying): the Flying ability, whatever the game mode allows (sub_14DCFE250)
+    // (player, flying): the Flying ability, whatever the game mode allows
     JSValue spFly(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 2 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -429,7 +429,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // (player, item, select): sub_141038940, Player::add then the pick block selection
+    // (player, item, select): the pick block selection
     JSValue spGive(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 3 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -445,7 +445,7 @@ namespace {
         return JS_NewBool(ctx, added);
     }
 
-    // (player, item, slot, select): sub_14DCFDCC0, a hotbar slot only gets selected
+    // (player, item, slot, select): a hotbar slot only gets selected
     JSValue spSetItem(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 4 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -464,7 +464,7 @@ namespace {
         return JS_TRUE;
     }
 
-    // sub_14DCFDFA0: only a dead player respawns
+    // only a dead player respawns
     JSValue spRespawn(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -491,7 +491,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // Player vtable +0x6E0 (sub_1402C7640): the open container closes
+    // Player vtable +0x6E0: the open container closes
     JSValue spStopInteracting(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -504,14 +504,14 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // mce::Color to ARGB: each channel clamped to [0, 1], times 255, truncated (sub_141996440)
+    // a colour to ARGB: each channel clamped to [0, 1], times 255, truncated
     int32_t argbOf(float red, float green, float blue, float alpha) {
         const auto channel = [](float value) { return (uint32_t) (std::min(1.0f, std::max(0.0f, value)) * 255.0f); };
         return (int32_t) ((channel(alpha) << 24) | (channel(red) << 16) | (channel(green) << 8) | channel(blue));
     }
 
     // (player, arm size 0 slim / 1 wide, { red, green, blue } or null, [{ id, type, packId, productId,
-    // isDefaultPiece }] or null): sub_14DCFE3B0, the tints dropped, wide arms and white skin by default
+    // isDefaultPiece }] or null): the tints dropped, wide arms and white skin by default
     JSValue spSetSkin(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 4 ? simulatedOf(*api, argv[0]) : nullptr;
@@ -561,7 +561,7 @@ namespace {
             }
         }
         player->setSkin(skin);
-        // a PlayerSkinPacket to everyone, its names "new_id" and "old_id" (sub_14404E3F0)
+        // a PlayerSkinPacket to everyone, its names "new_id" and "old_id"
         PlayerSkinPacket packet;
         packet.mUuid = LoginHandler::playerListUuid(*player);
         packet.mSkin = player->getSkin();

@@ -336,7 +336,7 @@ namespace {
         return true;
     }
 
-    // oriented states sub_146993CE0 reaches through paths not ported here: such a block is left out when mirrored
+    // oriented states the game reaches through paths not ported here: such a block is left out when mirrored
     const std::array<const char *, 15> UNMIRRORED_STATES = {"facing_direction",
                                                             "direction",
                                                             "torch_facing_direction",
@@ -388,8 +388,8 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
                                     BlockState &out, const WoodSpecies &wood) {
     if (mirror == 0)
         return _translate(entry, quarterTurns, 0, out, wood);
-    // sub_146993CE0 mirrors before it turns: a cardinal_direction outside doors, a weirdo_direction, the kept vine
-    // face and the connection sides (sub_145E93340); the coordinates only flip for 1 and 2 (sub_14775E430)
+    // the game mirrors before it turns: a cardinal_direction outside doors, a weirdo_direction, the kept vine
+    // face and the connection sides; the coordinates only flip for 1 and 2
     if (mirror != 1 && mirror != 2)
         return false;
 
@@ -474,7 +474,7 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
     }
 
     if (name == "minecraft:torch") {
-        // standing by name (sub_1469994B0); a file facing is the flame side, the state the wall side
+        // standing by name; a file facing is the flame side, the state the wall side
         states.putString("torch_facing_direction", entry.mProperties.count("facing") == 0
                                                            ? std::string("top")
                                                            : rotatedFacing(entry, quarterTurns + 2));
@@ -599,7 +599,7 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
     }
 
     if (name == "minecraft:vine") {
-        // sub_1469957B0 sets the bits of each true face in key order: the last one wins, up standing for all four
+        // the game sets the bits of each true face in key order: the last one wins, up standing for all four
         static const std::array<std::pair<const char *, int32_t>, 5> FACES = {
                 {{"east", 8}, {"north", 4}, {"south", 1}, {"up", 15}, {"west", 2}}};
         int32_t bits = 0;
@@ -607,7 +607,7 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
             if (property(entry, face.first) == "true")
                 bits = face.second;
         }
-        // the template transform (sub_146993CE0) keeps one face, south then north, east, west, north when none,
+        // the template transform keeps one face, south then north, east, west, north when none,
         // and turns it clockwise: north, east, south, west
         static const std::array<int32_t, 4> CLOCKWISE_BITS = {4, 8, 1, 2};
         int32_t face = (bits & 1) != 0 ? 2 : (bits & 4) != 0 ? 0 : (bits & 8) != 0 ? 1 : (bits & 2) != 0 ? 3 : 0;
@@ -619,7 +619,7 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
     }
 
     if (name == "minecraft:iron_bars") {
-        // the sides turn with the template (sub_145E93340); written in palette key order
+        // the sides turn with the template; written in palette key order
         static const std::array<const char *, 4> CLOCKWISE = {"north", "east", "south", "west"};
         for (const size_t side: {(size_t) 1, (size_t) 0, (size_t) 2, (size_t) 3}) {
             const char *from = CLOCKWISE[(side + 4 - (size_t) (quarterTurns & 3)) & 3];
@@ -696,6 +696,5 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
 }
 
 int32_t StructureBlockTable::bannerType(const std::string &name) {
-    // sub_14699A380
     return name.find("illager_captain") != std::string::npos ? 1 : 0;
 }

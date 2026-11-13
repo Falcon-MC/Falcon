@@ -39,7 +39,7 @@ RangedAttackGoal::RangedAttackGoal(Settings settings) : mSettings(std::move(sett
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }
 
-// needs a navigation component; an empty crossbow waits for charge_held_item: sub_14D4297E0
+// needs a navigation component; an empty crossbow waits for charge_held_item
 bool RangedAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (!mSettings.mHasNavigation || !_hasShooter(mob) || holdsUnchargedCrossbow(mob))
         return false;
@@ -53,7 +53,7 @@ bool RangedAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     return true;
 }
 
-// a path still being walked keeps the goal: sub_14D429A50
+// a path still being walked keeps the goal
 bool RangedAttackGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     return !mob.getNavigation().isDone() || canUse(owner, mob);
 }
@@ -77,7 +77,7 @@ void RangedAttackGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     setFlag(owner, mob, ActorFlag::FacingTargetToRangeAttack, true);
 }
 
-// the charged flag stays on a loaded crossbow: sub_14D429CB0
+// the charged flag stays on a loaded crossbow
 void RangedAttackGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     mSeeTime = 0;
     mChargeTime = 0;
@@ -91,7 +91,6 @@ void RangedAttackGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
     setFlag(owner, mob, ActorFlag::FacingTargetToRangeAttack, false);
 }
 
-// sub_14D429E10
 void RangedAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     Actor *target = mob.getTarget(owner);
     if (target == nullptr || !target->isAlive())
@@ -219,7 +218,7 @@ void RangedAttackGoal::_tickBurst(ServerNetworkHandler &owner, MobActor &mob, Ac
         return;
     }
 
-    // last shot of a loaded crossbow empties it: sub_14D42A9E0
+    // last shot of a loaded crossbow empties it
     if (mHeldCharged) {
         mHeldCharged = false;
         CrossbowItem::unloadHeld(owner, mob);
@@ -236,7 +235,7 @@ int32_t RangedAttackGoal::_intervalFor(float distanceSquared) const {
     return (int32_t) std::floor(interval);
 }
 
-// angle between the head's view and the target, against ranged_fov: sub_14333B8F0
+// angle between the head's view and the target, against ranged_fov
 bool RangedAttackGoal::_inFieldOfView(const MobActor &mob, const Actor &target) const {
     const Vector3f position = mob.getPosition();
     const Vector3f eye(position.x, position.y + mob.getSize().mHeight * EYE_HEIGHT_RATIO, position.z);

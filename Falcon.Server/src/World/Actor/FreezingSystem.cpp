@@ -12,7 +12,7 @@
 #include <cmath>
 
 bool FreezingSystem::isSuppressed(Level &level, const Actor &actor) {
-    // sub_145E14260: spectators always thaw
+    // spectators always thaw
     const auto *player = dynamic_cast<const ServerPlayer *>(&actor);
     if (player != nullptr && player->isSpectator())
         return true;
@@ -40,7 +40,7 @@ bool FreezingSystem::isSuppressed(Level &level, const Actor &actor) {
     return suppressed;
 }
 
-// sub_145E14260: the same blocks as the game, its box trimmed by 0.001 on every side
+// the same blocks as the game, its box trimmed by 0.001 on every side
 bool FreezingSystem::isInFreezingBlock(Level &level, const Actor &actor) {
     const auto *serverActor = dynamic_cast<const ServerActor *>(&actor);
     const ActorSize size = serverActor != nullptr ? serverActor->getSize() : ActorSize{0.6f, 1.8f};

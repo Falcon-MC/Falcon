@@ -26,7 +26,7 @@ public:
 
     void setIncendiary(bool incendiary);
 
-    // replaces the in-water check at the center (Explosion +0x74, sub_1422E8870)
+    // replaces the in-water check at the center
     void setInWater(bool inWater) {
         mInWater = inWater;
     }

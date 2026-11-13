@@ -23,7 +23,7 @@ public:
     // the id of a type that no document names
     static constexpr uint16_t INVALID_ID = 0xFFFF;
 
-    // by id: PoiTypeRegistry::registerType (sub_14850DE20, 26.60) appends each new type
+    // by id: each new type is appended
     static const std::vector<PoiBlockType> &getAll();
 
     static const PoiBlockType *get(uint16_t id);

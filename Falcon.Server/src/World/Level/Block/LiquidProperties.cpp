@@ -854,7 +854,7 @@ namespace {
         }
 
         if (BubbleColumnBlock::matches(name)) {
-            // not of water material: sponges clear it by name, liquids never feed from it (sub_148F9A380); its
+            // not of water material: sponges clear it by name, liquids never feed from it; its
             // water sits on layer 1
             result.bubbleColumn = true;
             result.solid = false;

@@ -4,7 +4,6 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 
 namespace {
-    // ctor sub_14728DDE0, isFeatureChunk sub_14728E0D0 (26.60)
     const int32_t SPACING = 4;
     const int32_t SEPARATION = 2;
     const int32_t SALT = 16842397;

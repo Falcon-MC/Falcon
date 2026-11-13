@@ -35,11 +35,10 @@ namespace {
 
     const float GIANT_CHANCE = 0.05f;
     const float MAGMA_CHANCE = 0.05f;
-    // the netherrack spread around the middle, by distance (table 0x14F2F8A88)
+    // the netherrack spread around the middle, by distance
     const std::array<float, 14> SPREAD = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
                                           0.9f, 0.9f, 0.8f, 0.7f, 0.6f, 0.4f, 0.2f};
 
-    // tables 0x152A06DF0 and 0x152A06F30, filled by sub_14743E810
     const std::array<const char *, 10> PORTALS = {
             "ruined_portal/portal_1", "ruined_portal/portal_2", "ruined_portal/portal_3", "ruined_portal/portal_4",
             "ruined_portal/portal_5", "ruined_portal/portal_6", "ruined_portal/portal_7", "ruined_portal/portal_8",
@@ -47,7 +46,7 @@ namespace {
     const std::array<const char *, 3> GIANT_PORTALS = {"ruined_portal/giant_portal_1", "ruined_portal/giant_portal_2",
                                                        "ruined_portal/giant_portal_3"};
 
-    // block lists 0x1529AA690 and 0x1529B2808, then the blocks compared one by one
+    // the game's block lists, then the blocks compared one by one
     const std::array<const char *, 14> FULL_BLOCKS = {"minecraft:stone_bricks",
                                                       "minecraft:mossy_stone_bricks",
                                                       "minecraft:cracked_stone_bricks",
@@ -62,12 +61,11 @@ namespace {
                                                       "minecraft:nether_brick_double_slab",
                                                       "minecraft:oak_double_slab",
                                                       "minecraft:stone"};
-    // list 0x1529B27F0 then oak_slab
+    // the game's list then oak_slab
     const std::array<const char *, 9> SLABS = {
             "minecraft:smooth_stone_slab", "minecraft:sandstone_slab",    "minecraft:petrified_oak_slab",
             "minecraft:cobblestone_slab",  "minecraft:brick_slab",        "minecraft:stone_brick_slab",
             "minecraft:quartz_slab",       "minecraft:nether_brick_slab", "minecraft:oak_slab"};
-    // list 0x1529B28C8
     const std::array<const char *, 14> WALLS = {
             "minecraft:cobblestone_wall",   "minecraft:mossy_cobblestone_wall", "minecraft:granite_wall",
             "minecraft:diorite_wall",       "minecraft:andesite_wall",          "minecraft:sandstone_wall",
@@ -106,7 +104,7 @@ namespace {
         return BlockState(name, states);
     }
 
-    // sub_1473CD080: any side, either half
+    // any side, either half
     BlockState randomStairs(std::mt19937 &random, const char *name) {
         const int32_t direction = FeatureRandom::nextInt(random, 4);
         const bool upsideDown = FeatureRandom::nextFloat(random) < 0.5f;
@@ -149,7 +147,7 @@ namespace {
                 mWater.insert(Position(x, y, z));
         }
 
-        // BlockSource::getAboveTopSolidBlock (vt+0x178) without leaves; water stops it only when asked
+        // above the top solid block, without leaves; water stops it only when asked
         int32_t aboveTopSolid(int32_t x, int32_t z, bool waterStops) {
             for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; --y) {
                 if (_stops(get(x, y, z), waterStops))
@@ -186,7 +184,7 @@ namespace {
         std::set<Position> mWater;
     };
 
-    // sub_1473CD230: the block and up to eight more under it, each one a coin flip
+    // the block and up to eight more under it, each one a coin flip
     void dripColumn(World &world, std::mt19937 &random, int32_t x, int32_t y, int32_t z) {
         static const BlockState netherrack = defaultState(BlockNames::NETHERRACK);
         static const BlockState magma = defaultState(BlockNames::MAGMA);
@@ -198,7 +196,7 @@ namespace {
         }
     }
 
-    // sub_1473CCD50: a gold block by lava turns into lava, else into air
+    // a gold block by lava turns into lava, else into air
     void ageGold(World &world, std::mt19937 &random, int32_t x, int32_t y, int32_t z) {
         if ((double) FeatureRandom::nextFloat(random) >= 0.3)
             return;
@@ -214,7 +212,7 @@ namespace {
                 : mGenerator(generator), mTerrain(generator, cache), mWorld(mTerrain),
                   mRandom(StructureFeature::createPostProcessRandom(generator.getSeed(), startX, startZ)),
                   mOriginX(startX * 16), mOriginZ(startZ * 16) {
-            // createStart (sub_1473C8FC0) keeps the biome over the preliminary surface
+            // createStart keeps the biome over the preliminary surface
             const int32_t height = generator.getPreliminarySurfaceLevel(startX * 4, startZ * 4);
             mBiome = generator.pickBiome(mOriginX + 8, height, mOriginZ + 8);
         }
@@ -377,7 +375,7 @@ namespace {
             }
         }
 
-        // worlds from 1.18.0 on: any corner of the box in water (0x1473CA801)
+        // worlds from 1.18.0 on: any corner of the box in water
         bool _isUnderWater(const RuinedPortalStructure::Plan &plan) {
             for (const int32_t x: {plan.mMinX, plan.mMaxX}) {
                 for (const int32_t y: {plan.mMinY, plan.mMaxY}) {
@@ -390,7 +388,7 @@ namespace {
             return false;
         }
 
-        // StructureTemplate::placeInWorld (sub_14775E430) with the settings of sub_147760C60: full integrity,
+        // placed with full integrity,
         // structure and jigsaw blocks left out
         void _placeTemplate(RuinedPortalStructure::Plan &plan, const StructureTemplate &shape, bool keepAir,
                             bool waterlogged) {
@@ -429,7 +427,7 @@ namespace {
             }
         }
 
-        // the blocks of the box age once the template is down, x then y then z (0x1473CAC60)
+        // the blocks of the box age once the template is down, x then y then z
         void _age(const RuinedPortalStructure::Plan &plan, float mossiness, bool ice) {
             for (int32_t x = plan.mMinX; x <= plan.mMaxX; ++x) {
                 for (int32_t y = plan.mMinY; y <= plan.mMaxY; ++y) {
@@ -517,7 +515,7 @@ namespace {
             mWorld.set(x, y, z, mossiness > chance ? mossy[index] : plain[index]);
         }
 
-        // the corner of every stair in the box, from its neighbours (sub_149B8D8A0)
+        // the corner of every stair in the box, from its neighbours
         void _shapeStairs(const RuinedPortalStructure::Plan &plan) {
             const StructureConnections::Lookup at = [this](int32_t x, int32_t y, int32_t z) {
                 return mWorld.get(x, y, z);

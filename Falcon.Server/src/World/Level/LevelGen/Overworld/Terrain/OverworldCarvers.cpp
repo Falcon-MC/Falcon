@@ -34,7 +34,7 @@ namespace {
         return range[0] + (range[1] - range[0]) * nextFloat(random);
     }
 
-    // the cave carver's replaceable blocks (sub_14D1F5960); glazed terracotta stands where terracotta is expected
+    // the cave carver's replaceable blocks; glazed terracotta stands where terracotta is expected
     const BlockStateSet &caveReplaceable() {
         static const BlockStateSet names = {"minecraft:stone",
                                             "minecraft:dirt",
@@ -85,7 +85,7 @@ namespace {
         return names;
     }
 
-    // the canyon's carvable blocks (list at 0x1529AA8D0, filled from 0x14F1F6CA8)
+    // the canyon's carvable blocks
     const BlockStateSet &canyonReplaceable() {
         static const BlockStateSet names = {"minecraft:stone",
                                             "minecraft:granite",
@@ -144,7 +144,6 @@ namespace {
         return names;
     }
 
-    // list at 0x1529B3B88
     const BlockStateSet &dirt() {
         static const BlockStateSet names = {"minecraft:dirt", "minecraft:coarse_dirt"};
         return names;
@@ -207,7 +206,7 @@ namespace {
             chunk.setBlock(x, y, z, airState());
     }
 
-    // CanyonFeature's carve (sub_14D1F4CC0); rows count from the bottom of the world
+    // CanyonFeature's carve; rows count from the bottom of the world
     void carveCanyonBox(LevelChunk &chunk, OverworldAquifer &aquifer, const float *widths, float centerX, float centerY,
                         float centerZ, float horizontalRadius, float verticalRadius, int32_t minX, int32_t maxX,
                         int32_t minRow, int32_t maxRow, int32_t minZ, int32_t maxZ) {
@@ -250,7 +249,7 @@ OverworldCarvers::OverworldCarvers(int64_t seed) : mSeed(static_cast<uint32_t>(s
 
 void OverworldCarvers::carve(LevelChunk &chunk, OverworldAquifer &aquifer) const {
     // underground_extra_cave_carver_feature then underground_cave_carver_feature: every overworld biome places
-    // both, in this order, in its pregeneration_pass (sub_14CDABBD0, sub_14A22E5F0)
+    // both, in this order, in its pregeneration_pass
     static const CaveSettings FEATURES[2] = {{66, 103, {0.1f, 0.9f}, {0.7f, 1.4f}, {0.8f, 1.3f}, {-1.0f, -0.4f}},
                                              {33, 236, {0.1f, 0.9f}, {0.7f, 1.4f}, {0.8f, 1.3f}, {-1.0f, -0.4f}}};
     _carveCaves(FEATURES[0], chunk, aquifer);
@@ -259,7 +258,7 @@ void OverworldCarvers::carve(LevelChunk &chunk, OverworldAquifer &aquifer) const
 }
 
 void OverworldCarvers::_carveCaves(const CaveSettings &settings, LevelChunk &chunk, OverworldAquifer &aquifer) const {
-    // the feature rule seeds the chunk random with the level seed before placing (sub_14A22E5F0)
+    // the feature rule seeds the chunk random with the level seed before placing
     std::mt19937 random(mSeed);
     const uint32_t multiplierX = static_cast<uint32_t>(nextInt(random)) | 1u;
     const uint32_t multiplierZ = static_cast<uint32_t>(nextInt(random)) | 1u;
@@ -270,7 +269,7 @@ void OverworldCarvers::_carveCaves(const CaveSettings &settings, LevelChunk &chu
     const float centerZ = static_cast<float>((chunkZ << 4) | 8);
 
     // the game caches each source chunk's segments and carves every one that can reach the chunk, where the
-    // uncached path would stop a tunnel at its first unreachable step (sub_14D1F6250)
+    // uncached path would stop a tunnel at its first unreachable step
     std::vector<CaveSegment> segments;
     for (int32_t sourceX = chunkX - RANGE; sourceX <= chunkX + RANGE; sourceX++) {
         for (int32_t sourceZ = chunkZ - RANGE; sourceZ <= chunkZ + RANGE; sourceZ++) {
@@ -305,7 +304,6 @@ void OverworldCarvers::_carveCaves(const CaveSettings &settings, LevelChunk &chu
 
 void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &random, int32_t sourceX, int32_t sourceZ,
                                  std::vector<CaveSegment> &segments) {
-    // CaveFeature::addFeature (sub_14D1F8E30)
     const int32_t count = nextInt(random, nextInt(random, nextInt(random, 40) + 1) + 1);
     const int32_t skip = nextInt(random, settings.mSkipCarveChance);
     if (count <= 0 || skip != 0)
@@ -337,7 +335,6 @@ void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &ran
             const float pitchRoll = nextFloat(random) + -0.5f;
             const float pitch = (pitchRoll + pitchRoll) * 0.125f;
 
-            // sub_14D1F5610
             const float thicknessRoll = nextFloat(random);
             float thickness = nextFloat(random) + (thicknessRoll + thicknessRoll);
             if (nextInt(random, 10) == 0) {
@@ -345,7 +342,6 @@ void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &ran
                 thickness = thickness * ((nextFloat(random) * first) * 3.0f + 1.0f);
             }
 
-            // sub_14D1F56C0
             const int32_t length = 112 - nextInt(random, 28);
             _addTunnel(random, startX, startY, startZ, thickness, yaw, pitch, 0, length, shape, segments);
         }
@@ -354,7 +350,6 @@ void OverworldCarvers::_addCaves(const CaveSettings &settings, std::mt19937 &ran
 
 void OverworldCarvers::_addRoom(const CaveSettings &settings, std::mt19937 &random, float x, float y, float z,
                                 const float *shape, std::vector<CaveSegment> &segments) {
-    // sub_14D1F7610
     const float size = nextFloat(random) * 6.0f;
     std::mt19937 local(static_cast<uint32_t>(nextInt(random)));
 
@@ -383,7 +378,7 @@ void OverworldCarvers::_addRoom(const CaveSettings &settings, std::mt19937 &rand
 void OverworldCarvers::_addTunnel(std::mt19937 &parent, float x, float y, float z, float thickness, float yaw,
                                   float pitch, int32_t step, int32_t length, const float *shape,
                                   std::vector<CaveSegment> &segments) {
-    // sub_14D1F7A90; the radius multipliers only shape rooms
+    // the radius multipliers only shape rooms
     std::mt19937 random(static_cast<uint32_t>(nextInt(parent)));
     if (length <= 0)
         length = static_cast<int32_t>(112u - nextUnsigned(random) % 28u);
@@ -452,7 +447,6 @@ void OverworldCarvers::_addTunnel(std::mt19937 &parent, float x, float y, float 
 
 void OverworldCarvers::_carveSegment(const CaveSegment &segment, int32_t heightLimit, LevelChunk &chunk,
                                      OverworldAquifer &aquifer) {
-    // box from sub_14D1F6250, carve from sub_14D1F83A0
     const int32_t baseX = chunk.getX() << 4;
     const int32_t baseZ = chunk.getZ() << 4;
     const float radius = segment.mHorizontalRadius;
@@ -526,7 +520,6 @@ void OverworldCarvers::_carveSegment(const CaveSegment &segment, int32_t heightL
 }
 
 void OverworldCarvers::_carveCanyons(LevelChunk &chunk, OverworldAquifer &aquifer) const {
-    // sub_14D1F3E10 with the canyon at generator +600 and the parameters at 0x14F4A0D10
     std::mt19937 random(mSeed);
     const uint32_t multiplierX = static_cast<uint32_t>(nextInt(random)) | 1u;
     const uint32_t multiplierZ = static_cast<uint32_t>(nextInt(random)) | 1u;
@@ -543,7 +536,7 @@ void OverworldCarvers::_carveCanyons(LevelChunk &chunk, OverworldAquifer &aquife
 
 void OverworldCarvers::_addCanyon(std::mt19937 &random, int32_t sourceX, int32_t sourceZ, LevelChunk &chunk,
                                   OverworldAquifer &aquifer) {
-    // sub_14D1F4070; heights are rows from the bottom of the world
+    // heights are rows from the bottom of the world
     if (nextInt(random, CANYON_RARITY) != 0)
         return;
 

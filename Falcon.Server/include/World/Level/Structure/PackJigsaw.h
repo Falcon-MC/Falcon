@@ -70,8 +70,8 @@ public:
         int32_t mStartMaxOffset = 0;
     };
 
-    // the start height of a structure placed at location (sub_14BEF2320): a uniform provider draws with the
-    // world seed's random at the location (sub_14383F470, sub_14383E610)
+    // the start height of a structure placed at location: a uniform provider draws with the
+    // world seed's random at the location
     static int32_t startHeight(const Structure &structure, int64_t worldSeed, const Vector3i &location, int32_t minY,
                                int32_t maxY);
 

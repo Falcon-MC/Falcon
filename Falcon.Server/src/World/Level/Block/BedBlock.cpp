@@ -37,16 +37,15 @@ namespace {
         int32_t mZ;
     };
 
-    // qword_14F1806E0
     const StandUpOffset STAND_UP_OFFSETS[12] = {{1, 0, 0},  {1, 0, 1},   {1, 0, 2},  {0, 0, 2},  {-1, 0, 2}, {-1, 0, 1},
                                                 {-1, 0, 0}, {-1, 0, -1}, {0, 0, -1}, {1, 0, -1}, {0, 1, 0},  {0, 1, 1}};
 
-    // qword_14F180770, taken when the sleeper lay down from the other side
+    // taken when the sleeper lay down from the other side
     const StandUpOffset MIRRORED_STAND_UP_OFFSETS[12] = {{-1, 0, 0}, {-1, 0, 1},  {-1, 0, 2}, {0, 0, 2},
                                                          {1, 0, 2},  {1, 0, 1},   {1, 0, 0},  {1, 0, -1},
                                                          {0, 0, -1}, {-1, 0, -1}, {0, 1, 0},  {0, 1, 1}};
 
-    // byte_14F0F3DA0, indexed by the direction state
+    // indexed by the direction state
     const int STAND_UP_ROTATIONS[4] = {2, 3, 0, 1};
 
     // the direction state the face was read from
@@ -63,7 +62,7 @@ namespace {
         }
     }
 
-    // the magma flag (+306 & 0x40, set only for magma in sub_14CE9AD30), the lava material (type 6) and the wither rose
+    // the magma flag, the lava material (type 6) and the wither rose
     bool isUnsafeToStandOn(const BlockState &state) {
         return VanillaBlocks::getAs<MagmaBlock>(state.mName) != nullptr || LavaBlock::matches(state.mName)
                || state.mName == BlockNames::WITHER_ROSE;
@@ -223,7 +222,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
     player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(), level.getName());
     player.sendTranslation("§7%tile.bed.respawnSet", {});
 
-    // refused while the dimension has a day (vfunc 8) and its sky darkening stays under 4 (sub_1402BDB80)
+    // refused while the dimension has a day (vfunc 8) and its sky darkening stays under 4
     if (level.getSkyLightSubtracted() < MIN_SLEEP_SKY_DARKEN) {
         player.sendTranslation("§7%tile.bed.noSleep", {});
         return true;
@@ -245,7 +244,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
             return true;
     }
 
-    // kept as the actor's position, at the eyes, only once the player lies down (sub_143155010)
+    // kept as the actor's position, at the eyes, only once the player lies down
     const Vector3f previousEnterPosition = player.getBedEnterPosition();
     const Vector3f feet = player.getPosition();
     player.setBedEnterPosition(Vector3f(feet.x, feet.y + MovementPhysics::PLAYER_EYE_HEIGHT, feet.z));
@@ -320,7 +319,7 @@ bool BedBlock::findStandUpPosition(Level &level, const Vector3i &bed, const Vect
 
         const BlockState candidateState = level.getBlockState(candidate.x, candidate.y, candidate.z);
         const bool candidateIsBed = matches(candidateState.mName);
-        // BlockSource vfunc 432 (sub_1432D1C00)
+        // BlockSource vfunc 432
         if (!candidateIsBed
             && (BlockSupport::isSolid(candidateState) || candidateState.mName == BlockNames::END_PORTAL
                 || candidateState.mName == BlockNames::END_PORTAL_FRAME))

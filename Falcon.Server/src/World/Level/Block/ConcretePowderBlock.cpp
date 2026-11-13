@@ -17,7 +17,7 @@ void ConcretePowderBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i
     _harden(ticks, position);
 }
 
-// hardens on a tick one later (sub_14316AAD0)
+// hardens on a tick one later
 void ConcretePowderBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                                  const BlockState &state, const Vector3i &changed) const {
     (void) state;
@@ -31,7 +31,7 @@ void ConcretePowderBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3
     _harden(ticks, position);
 }
 
-// water on layer 0 above or beside, never below (sub_14771E480, sub_14771DA60)
+// water on layer 0 above or beside, never below
 void ConcretePowderBlock::_harden(LiquidPhysicsSystem &ticks, const Vector3i &position) const {
     static const int32_t sides[5][3] = {{0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
     bool touching = false;

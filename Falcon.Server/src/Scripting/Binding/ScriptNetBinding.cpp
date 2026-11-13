@@ -205,7 +205,7 @@ namespace {
         fn("HttpClient.cancelAll");
         if (typeof reason !== "string")
             throw conversion();
-        // sub_14B88F7F0: every pending promise is rejected with a plain Error carrying the reason
+        // every pending promise is rejected with a plain Error carrying the reason
         const cancelled = Array.from(pending.values());
         pending.clear();
         native.cancelAll();
@@ -502,7 +502,7 @@ namespace {
 })
 )JS";
 
-    // the content type of the structure serializer, sub_14DE87990 (26.60)
+    // the content type of the structure serializer
     const char *const STRUCTURE_CONTENT_TYPE = "application/x-minecraft-nbt; type=structure";
     const char *const BODY_TOO_LARGE = "HTTP request or Web Socket message body exceeds allowed size.";
 
@@ -781,7 +781,7 @@ namespace {
         return lower(a) == lower(b);
     }
 
-    // sub_14B8291D0 (26.60): lowercase, spaces dropped except one between two words, none next to ';'
+    // lowercase, spaces dropped except one between two words, none next to ';'
     std::string normalizeContentType(const std::string &value) {
         std::string out;
         bool afterSpace = false;
@@ -847,7 +847,7 @@ namespace {
         return false;
     }
 
-    // sub_14B8159D0 (26.60): the session headers first, then the script's headers whose name is still free
+    // the session headers first, then the script's headers whose name is still free
     HttpsClient::Headers mergeHeaders(ScriptApi &api, JSContext *ctx, JSValueConst list) {
         HttpsClient::Headers headers;
         for (const auto &header: api.netConfig().mSessionHeaders) {
@@ -945,7 +945,7 @@ namespace {
         return JS_NewBool(ctx, argc >= 1 && apiOf(ctx).native<ScriptStructureRef>(argv[0]) != nullptr);
     }
 
-    // order of ScriptNetHttpClient::request (sub_14B819F70) and _sendRequest (sub_14B81D770), 26.60
+    // the game's request order
     JSValue request(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = apiOf(ctx);
         if (argc < 6)
@@ -1015,7 +1015,6 @@ namespace {
         return refusal(ctx, "SerializableParseError", message);
     }
 
-    // HttpResponse::deserialize (sub_14B8AB640) and the structure deserializer (sub_14DE13650), 26.60
     JSValue deserialize(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = apiOf(ctx);
         const ScriptNetBody *body = argc >= 1 ? api.native<ScriptNetBody>(argv[0]) : nullptr;
@@ -1055,7 +1054,7 @@ namespace {
         const ScriptNetModuleConfig &config = api.netConfig();
         ScriptNetService &service = api.netService();
 
-        // sub_14DE1ACA0 (26.60): the socket limit comes before the uri check
+        // the socket limit comes before the uri check
         if (config.mMaxWebsocketConnections.has_value() && service.sockets().size() >= *config.mMaxWebsocketConnections)
             return refusal(ctx, "WebSocketLimitExceededError", "Maximum concurrent web socket connections exceeded.",
                            fieldsOf(ctx, {{"connectedSockets", JS_NewFloat64(ctx, (double) service.sockets().size())},
@@ -1145,7 +1144,7 @@ namespace {
 }
 
 namespace ScriptNetBinding {
-    // ScriptNetHttpClient uri check (sub_14B81B7C0, 26.60)
+    // ScriptNetHttpClient uri check
     UriCheck checkUri(const ScriptNetModuleConfig &config, const std::string &text, bool webSocket) {
         const NetUri uri = NetUri::split(text);
         const bool secure = iequals(uri.mScheme, webSocket ? "wss" : "https");

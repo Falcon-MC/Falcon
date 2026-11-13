@@ -159,9 +159,9 @@ namespace {
     const float TAKE_DEFAULT_MAX_XZ = 1.0f;
     const float TAKE_DEFAULT_MIN_Y = 0.0f;
     const float TAKE_DEFAULT_MAX_Y = 2.0f;
-    // the comprehensive goal definition defaults (sub_147C0AC20)
+    // the comprehensive goal definition defaults
     const float MOVE_TO_VILLAGE_DEFAULT_RADIUS = 0.5f;
-    // the celebrate definition defaults (sub_147685170, xmmword_14F30CC20), sound 286
+    // the celebrate definition defaults, sound 286
     const char *const CELEBRATE_DEFAULT_SOUND = "celebrate";
     const float CELEBRATE_DEFAULT_SOUND_MIN = 2.0f;
     const float CELEBRATE_DEFAULT_SOUND_MAX = 7.0f;
@@ -176,7 +176,7 @@ namespace {
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
 
-    // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s (sub_147C0B710)
+    // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s
     const int32_t TARGET_SCAN_INTERVAL = 10;
     const float TARGET_FORGET_DEFAULT_SECONDS = 3.0f;
 
@@ -315,7 +315,7 @@ namespace {
         return value != nullptr && value->boolean(false);
     }
 
-    // seconds truncate to ticks and an unset interval reads as 0: sub_14D4170A0
+    // seconds truncate to ticks and an unset interval reads as 0
     int32_t truncatedTicks(float seconds) {
         return std::max(0, (int32_t) (seconds * TICKS_PER_SECOND));
     }
@@ -940,8 +940,8 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     }
 
     if (behavior == "move_to_village") {
-        // sub_147534DC0 drops the cooldown's fraction of a second before converting to ticks; search_range only
-        // seeds the closest-village search (sub_1439EA7F0), which takes its first candidate regardless
+        // the game drops the cooldown's fraction of a second before converting to ticks; search_range only
+        // seeds the closest-village search, which takes its first candidate regardless
         MoveToVillageGoal::Settings settings;
         settings.mSpeed = speed;
         settings.mCooldownTicks = TICKS_PER_SECOND * (int64_t) std::fabs(numberOf(component, "cooldown_time", 0.0f));

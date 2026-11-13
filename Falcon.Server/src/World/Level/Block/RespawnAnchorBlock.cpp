@@ -20,7 +20,7 @@ FALCON_REGISTER_BLOCK(RespawnAnchorBlock, 405);
 
 namespace {
     const char *CHARGE = "respawn_anchor_charge";
-    // level sound events 308, 309, 310 (sub_141E293F0 and its neighbours)
+    // level sound events 308, 309, 310
     const char *SOUND_CHARGE = "respawn_anchor.charge";
     const char *SOUND_DEPLETE = "respawn_anchor.deplete";
     const char *SOUND_SET_SPAWN = "respawn_anchor.set_spawn";
@@ -74,7 +74,7 @@ int RespawnAnchorBlock::getCharge(const BlockState &state) {
     return state.mStates.getInt(CHARGE, 0);
 }
 
-// sub_14A24D580: no neighbour update, sound at the center
+// no neighbour update, sound at the center
 void RespawnAnchorBlock::addCharge(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int delta) {
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     Tag states = state.mStates;
@@ -83,13 +83,12 @@ void RespawnAnchorBlock::addCharge(ServerNetworkHandler &owner, Level &level, co
     owner.playLevelSound(level, delta > 0 ? SOUND_CHARGE : SOUND_DEPLETE, centerOf(position));
 }
 
-// sub_14A24DD00
 bool RespawnAnchorBlock::isChargedAnchor(Level &level, const Vector3i &position) {
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     return VanillaBlocks::getAs<RespawnAnchorBlock>(state.mName) != nullptr && getCharge(state) > 0;
 }
 
-// sub_14A24C210: two of the six neighbours in water keep the blast from breaking blocks
+// two of the six neighbours in water keep the blast from breaking blocks
 bool RespawnAnchorBlock::isSurroundedByWater(Level &level, const Vector3i &position) {
     int sides = 0;
     for (const int *offset: NEIGHBOURS) {
@@ -100,7 +99,7 @@ bool RespawnAnchorBlock::isSurroundedByWater(Level &level, const Vector3i &posit
     return sides >= WATER_SIDES_TO_SHIELD;
 }
 
-// sub_14380F1E0: the position itself, else x-1..x+2 then z-1..z+2 on its layer, z fastest
+// the position itself, else x-1..x+2 then z-1..z+2 on its layer, z fastest
 std::optional<Vector3i> RespawnAnchorBlock::findStandUpPosition(Level &level, const Vector3i &position) {
     if (canStandAt(level, position.x, position.y, position.z))
         return position;
@@ -115,7 +114,7 @@ std::optional<Vector3i> RespawnAnchorBlock::findStandUpPosition(Level &level, co
     return std::nullopt;
 }
 
-// sub_1402DCF30: the anchor must still be charged and the spot standable
+// the anchor must still be charged and the spot standable
 std::optional<Vector3f> RespawnAnchorBlock::findRespawnPosition(Level &level, const Vector3i &anchor,
                                                                 const Vector3i &standPosition) {
     if (!isChargedAnchor(level, anchor))
@@ -137,7 +136,6 @@ void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, cons
     explosion.explode();
 }
 
-// sub_14A24C210
 bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                     const BlockState &state) const {
     Level &level = owner.getLevelFor(player);
@@ -170,13 +168,13 @@ bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &p
     return true;
 }
 
-// sub_14A24DF80: charge / 4 * 15, truncated
+// charge / 4 * 15, truncated
 int RespawnAnchorBlock::getLightEmission(const BlockState &state, int dataEmission) const {
     (void) dataEmission;
     return (int) ((float) getCharge(state) / (float) MAX_CHARGE * 15.0f);
 }
 
-// RespawnAnchorBlock::getComparatorSignal (sub_14A24E0C0, 26.60): the charge scaled to 15, rounded down
+// RespawnAnchorBlock::getComparatorSignal: the charge scaled to 15, rounded down
 int RespawnAnchorBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) level;
     (void) position;

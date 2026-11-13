@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-// minecraft:behavior.panic (PanicGoal, vtable 0x14F3437B0)
+// minecraft:behavior.panic
 class PanicGoal : public Goal {
 public:
     struct Settings {
@@ -16,7 +16,7 @@ public:
         bool mIgnoreMobDamage = false;
         bool mForce = false;
         bool mPreferWater = false;
-        // the game's default when the definition lists none (xmmword_14F343708)
+        // the game's default when the definition lists none
         std::vector<std::string> mDamageSources = {
                 "campfire",         "fire",      "fire_tick",     "freezing",    "lava",
                 "lightning",        "magma",     "soul_campfire", "temperature", "entity_attack",

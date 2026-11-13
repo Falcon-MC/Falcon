@@ -21,7 +21,7 @@ namespace {
     }
 }
 
-// sub_141034460: no saved data, the given place, game mode and yaw, then the usual first spawn
+// no saved data, the given place, game mode and yaw, then the usual first spawn
 ServerPlayer &ServerNetworkHandler::spawnSimulatedPlayer(const std::string &name, Level &level,
                                                          const Vector3f &position, float yaw, int32_t gameType) {
     const NetworkIdentifier id("simulated-player", ++mSimulatedPlayerCount);
@@ -79,7 +79,7 @@ void ServerNetworkHandler::_tickSimulatedPlayer(ServerPlayer &player) {
     SimulatedPlayerController *controller = player.getSimulatedController();
     if (controller == nullptr || !player.isSpawned())
         return;
-    // sub_141031D90: a dead player's build stops
+    // a dead player's build stops
     if (player.isDead()) {
         controller->stopBuild();
         return;
@@ -90,7 +90,7 @@ void ServerNetworkHandler::_tickSimulatedPlayer(ServerPlayer &player) {
     player.markActive(mCurrentTick);
 }
 
-// sub_14DCFDFA0: Player::respawn, as a client's ready respawn runs it
+// Player::respawn, as a client's ready respawn runs it
 void ServerNetworkHandler::respawnSimulatedPlayer(ServerPlayer &player) {
     _respawnPlayer(player);
 }

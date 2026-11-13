@@ -22,14 +22,14 @@
 #include <vector>
 
 namespace {
-    // octaves of minecraft:surface built in sub_14CDE1490
+    // octaves of minecraft:surface built in
     constexpr int32_t SURFACE_NOISE_OCTAVES = 4;
 
-    // the surface_material_adjustments stack of sub_14CDDFC50 and the draws its twister made before it
+    // the game's surface_material_adjustments stack and the draws its twister made before it
     constexpr int32_t ADJUSTMENT_NOISE_OCTAVES = 3;
     constexpr unsigned long long ADJUSTMENT_NOISE_DRAWS = 20202;
 
-    // the swamp builder's stack (sub_1471363F0) and its sampling scale (sub_147136880)
+    // the swamp builder's stack and its sampling scale
     constexpr int32_t SWAMP_NOISE_OCTAVES = 2;
     constexpr float SWAMP_NOISE_SCALE = 0.25f;
     constexpr int32_t SWAMP_SEA_LEVEL = 63;
@@ -71,10 +71,10 @@ namespace {
         return LIQUIDS.contains(state);
     }
 
-    // the game's starting value for the column's liquid top, far below any height (0x800003E8 in sub_14A22BF80)
+    // the game's starting value for the column's liquid top, far below any height
     constexpr int32_t NO_LIQUID = INT32_MIN + 1000;
 
-    // the only blocks the builder replaces (list at 0x1529AB1B8, filled from 0x14F1F5B40)
+    // the only blocks the builder replaces
     bool isReplaceable(const BlockState &state) {
         static const BlockStateSet REPLACEABLE = {VanillaBlocks::STONE().getIdentifier(),
                                                   VanillaBlocks::GRANITE().getIdentifier(),
@@ -100,7 +100,7 @@ namespace {
 }
 
 namespace {
-    // sub_1471334C0 takes the seed as an int and sign-extends it
+    // the game takes the seed as an int and sign-extends it
     XoroshiroPositionalFactory icebergFactory(int64_t levelSeed) {
         XoroshiroRandom random(static_cast<int64_t>(static_cast<int32_t>(levelSeed)));
         return random.forkPositional();
@@ -118,7 +118,7 @@ OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactor
 
     mNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, {1.0f, 1.0f, 1.0f});
 
-    // the generator's adjustment stack (ctor sub_14CDDFC50, +3408): its twister has drawn for every stack before it
+    // the generator's adjustment stack: its twister has drawn for every stack before it
     std::mt19937 adjustmentRandom(static_cast<uint32_t>(levelSeed));
     adjustmentRandom.discard(ADJUSTMENT_NOISE_DRAWS);
     for (int32_t i = 0; i < ADJUSTMENT_NOISE_OCTAVES; i++)
@@ -128,14 +128,14 @@ OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactor
     for (int32_t i = 0; i < SWAMP_NOISE_OCTAVES; i++)
         mSwampNoise.emplace_back(swampRandom);
 
-    // the frozen ocean builder's noises (sub_1471334C0)
+    // the frozen ocean builder's noises
     mIcebergPillarNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar", -6,
                                               {1.0f, 1.0f, 1.0f, 1.0f});
     mIcebergPillarRoofNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_pillar_roof", -3, {1.0f});
     mIcebergSurfaceNoise = NormalNoise::create(mIcebergFactory, "minecraft:iceberg_surface", -6, {1.0f, 1.0f, 1.0f});
 }
 
-// per column x + 16 * z, in sub_14CDD16A0
+// per column x + 16 * z, in
 void OverworldSurfaceBuilder::_fillSurfaceNoise(int32_t chunkX, int32_t chunkZ, float *noise) const {
     std::fill(noise, noise + 256, 0.0f);
 
@@ -160,7 +160,7 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
     float noise[256];
     _fillSurfaceNoise(chunk.getX(), chunk.getZ(), noise);
 
-    // columns in the order of sub_14A22FC50, each with the biome just above its highest block (sub_14A22F190)
+    // columns in the game's order, each with the biome just above its highest block
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
             int32_t top = LevelChunk::MAX_Y;
@@ -181,10 +181,10 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
             if (component == nullptr)
                 continue;
 
-            // the frozen ocean builder (vtable 0x14F2EF500) raises its ice, then builds like the overworld one
+            // the frozen ocean builder raises its ice, then builds like the overworld one
             if (component->mType == SurfaceBuilderType::FrozenOcean)
                 _buildIcebergColumn(chunk, x, z, height);
-            // the swamp builder (sub_147136880) floods its puddle, then builds like the overworld one
+            // the swamp builder floods its puddle, then builds like the overworld one
             if (component->mType == SurfaceBuilderType::Swamp)
                 _digSwampPuddle(chunk, x, z, height, component->mMaxPuddleDepth);
             if (component->mType == SurfaceBuilderType::Overworld || component->mType == SurfaceBuilderType::FrozenOcean
@@ -202,7 +202,7 @@ const NoiseGradientSurfaceBuilder *OverworldSurfaceBuilder::_noiseGradientFor(in
     return biome == BiomeIds::SULFUR_CAVES ? &mSulfurCaves : nullptr;
 }
 
-// sub_14CDD16A0: runs of one biome up to the lowest surface block; a run's top block and a last lone block are left
+// runs of one biome up to the lowest surface block; a run's top block and a last lone block are left
 void OverworldSurfaceBuilder::_buildSubsurface(LevelChunk &chunk) const {
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
@@ -236,7 +236,7 @@ void OverworldSurfaceBuilder::_adjustMaterials(const SurfaceBuilderComponent &co
     if (component.mSurfaceMaterialAdjustments.empty())
         return;
 
-    // sub_145D43EF0: one 3D simplex sum per adjustment at its own frequency, the low bound included
+    // one 3D simplex sum per adjustment at its own frequency, the low bound included
     for (const SurfaceMaterialAdjustmentAttributes &element: component.mSurfaceMaterialAdjustments) {
         float value = 0.0f;
         float amplitude = 1.0f;
@@ -264,7 +264,7 @@ void OverworldSurfaceBuilder::_adjustMaterials(const SurfaceBuilderComponent &co
     }
 }
 
-// the game's overworld builder (sub_14A22BF80), in absolute heights
+// the game's overworld builder, in absolute heights
 void OverworldSurfaceBuilder::_buildOverworldColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height,
                                                     const SurfaceBuilderComponent &component, float noise,
                                                     std::mt19937 &random) const {
@@ -411,7 +411,7 @@ void OverworldSurfaceBuilder::_digSwampPuddle(LevelChunk &chunk, int32_t x, int3
 }
 
 void OverworldSurfaceBuilder::_buildIcebergColumn(LevelChunk &chunk, int32_t x, int32_t z, int32_t height) const {
-    // sub_147135EC0, in floats: a pillar where the noises rise above 1.8, packed ice into the air above the sea and
+    // in floats: a pillar where the noises rise above 1.8, packed ice into the air above the sea and
     // into the water a little under it, a few snow blocks on top, each block drawn from the column's own random
     constexpr int32_t SEA_LEVEL = 63;
     const int32_t worldX = (chunk.getX() << 4) + x;

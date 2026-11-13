@@ -14,7 +14,7 @@ class ServerPlayer;
 // newest bar shows, the others wait; a raid bar uses the same actor and replaces all of them
 class PlayerBossBars {
 public:
-    // wire values of the client's BossBarColor (0x147E1D5A0)
+    // wire values of the client's BossBarColor
     enum class Color : int32_t { Pink, Blue, Red, Green, Yellow, Purple, RebeccaPurple, White };
 
     // the id of the new bar; plugins may call this from any thread

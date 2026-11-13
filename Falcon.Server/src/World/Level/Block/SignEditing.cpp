@@ -26,7 +26,7 @@ namespace {
     const char *TAG_FRONT = "FrontText";
     const char *TAG_BACK = "BackText";
 
-    // text colors by item color, black first (sub_148F866F0 reads qword_14F103E50; color 0 stays pure black)
+    // text colors by item color, black first
     const int32_t DYE_TEXT_COLORS[DyeColor::COUNT] = {
             0x000000, 0xB02E26, 0x5E7C16, 0x835432, 0x3C44AA, 0x8932B8, 0x169C9C, 0x9D9D97,
             0x474F52, 0xF38BAA, 0x80C71F, 0xFED83D, 0x3AB3DA, 0xC74EBD, 0xF9801D, 0xF0F0F0,
@@ -63,8 +63,8 @@ int32_t SignEditing::dyeTextColor(uint8_t itemColor) {
     return (int32_t) (0xFF000000u | (uint32_t) DYE_TEXT_COLORS[std::min<uint8_t>(itemColor, DyeColor::COUNT - 1)]);
 }
 
-// SignBlock::getYRotation (sub_148F88490, 26.60): from ground_sign_direction when the sign has it, else from
-// facing_direction; the hanging sign reads ground_sign_direction only while attached (sub_146D79A30)
+// from ground_sign_direction when the sign has it, else from
+// facing_direction; the hanging sign reads ground_sign_direction only while attached
 float SignEditing::rotationOf(const BlockState &state) {
     const bool hanging = state.mName.find("hanging") != std::string::npos;
     const bool attached = state.mStates.getByte("attached_bit", 0) != 0;
@@ -84,7 +84,7 @@ float SignEditing::rotationOf(const BlockState &state) {
     return rotation - 180.0f;
 }
 
-// SignBlockActor side test (sub_144C5B0F0, 26.60): the side the player stands in front of; the client centers on
+// SignBlockActor side test: the side the player stands in front of; the client centers on
 // the block shape, the block center here, the same answer anywhere a player can stand
 bool SignEditing::isFrontFacing(const BlockState &state, const Vector3i &position, float playerX, float playerZ) {
     const float radians = rotationOf(state) * 0.017453292f;
@@ -106,7 +106,7 @@ bool SignEditing::editorStillHolds(ServerNetworkHandler &owner, SignBlockActor &
     return false;
 }
 
-// Player::openSign (sub_14102B130, 26.60): one editor at a time, the lock goes to the opening player
+// one editor at a time, the lock goes to the opening player
 bool SignEditing::openEditor(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, bool front) {
     SignBlockActor *sign = owner.getLevelFor(player).getBlockActors().find<SignBlockActor>(position);
     if (sign == nullptr || editorStillHolds(owner, *sign))
@@ -120,7 +120,7 @@ bool SignEditing::openEditor(ServerNetworkHandler &owner, ServerPlayer &player, 
     return true;
 }
 
-// SignBlock interaction choice (sub_148F87C10, 26.60)
+// SignBlock interaction choice
 SignEditing::Action SignEditing::decide(ServerNetworkHandler &owner, SignBlockActor &sign, ServerPlayer &player,
                                         bool front, const ItemStack &held) {
     if (player.isAdventure() || editorStillHolds(owner, sign))
@@ -148,7 +148,6 @@ SignEditing::Action SignEditing::decide(ServerNetworkHandler &owner, SignBlockAc
     return Action::Edit;
 }
 
-// SignBlock::use (sub_148F866F0, 26.60)
 bool SignEditing::interact(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                            const BlockState &state) {
     Level &level = owner.getLevelFor(player);
@@ -199,7 +198,7 @@ bool SignEditing::interact(ServerNetworkHandler &owner, ServerPlayer &player, co
     return true;
 }
 
-// SignItem::_useOn (sub_143583340, 26.60): a sign placed from an item without written sides opens on its front
+// a sign placed from an item without written sides opens on its front
 void SignEditing::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                            const ItemStack &usedItem) {
     if (usedItem.mTag.isCompound()
@@ -218,7 +217,7 @@ void SignEditing::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, co
     openEditor(owner, player, position, true);
 }
 
-// SignBlockActor::_onUpdatePacket (sub_144C5A630, 26.60): only the text of each side, its owner is the editor;
+// only the text of each side, its owner is the editor;
 // the lock is released afterwards
 bool SignEditing::applyUpdate(ServerNetworkHandler &owner, ServerPlayer &player, SignBlockActor &sign,
                               const Tag &update) {

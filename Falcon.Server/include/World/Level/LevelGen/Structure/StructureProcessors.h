@@ -7,14 +7,12 @@
 #include <string>
 #include <vector>
 
-// rule lists of the jigsaw pieces, built in code (sub_14CCD0800); every rule runs on what the earlier ones left
-// (sub_14775E430)
+// rule lists of the jigsaw pieces, built in code; every rule runs on what the earlier ones left
 class StructureProcessors {
 public:
     enum class Test : uint8_t {
         AlwaysTrue,
         BlockMatch,
-        // sub_1469B2D30
         RandomBlockMatch,
     };
 

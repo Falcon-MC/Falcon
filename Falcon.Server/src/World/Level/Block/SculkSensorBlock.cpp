@@ -26,7 +26,7 @@ namespace {
     // down, up, north, south, west, east, as the activation walks them
     const std::array<Vector3i, 6> RESONATING_NEIGHBOURS = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
                                                            Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
-    // semitones by frequency (0x14F3D08B8, 26.60)
+    // semitones by frequency
     const std::array<int32_t, 16> RESONATE_NOTES = {0, 0, 2, 4, 6, 7, 9, 10, 12, 14, 15, 18, 19, 21, 22, 24};
 
     Vector3f centerOf(const Vector3i &position) {
@@ -126,7 +126,7 @@ void SculkSensorBlock::activate(ServerNetworkHandler &owner, Level &level, const
     level.scheduleUpdate(position, block->getActiveTicks());
 }
 
-// SculkSensorBlock tick (sub_14B255200, 26.60): active turns to cooldown and its power drops, cooldown ends
+// SculkSensorBlock tick: active turns to cooldown and its power drops, cooldown ends
 void SculkSensorBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &state) const {
     const int32_t phase = phaseOf(state);
@@ -143,7 +143,7 @@ void SculkSensorBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &lev
         level.setBlock(position, withPhase(state, PHASE_INACTIVE), true);
 }
 
-// the producer is set up facing down (sub_14B255CE0): every neighbour hears it, only the block below is charged
+// the producer is set up facing down: every neighbour hears it, only the block below is charged
 int SculkSensorBlock::getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
                                        bool strong) const {
     if (phaseOf(state) != PHASE_ACTIVE)
@@ -155,7 +155,7 @@ int SculkSensorBlock::getEmittedSignal(Level &level, const Vector3i &position, c
     return !strong || face == RedstoneFace::DOWN ? actor->getPower() : 0;
 }
 
-// sub_14B256540: the frequency of the last vibration, while active only
+// the frequency of the last vibration, while active only
 int SculkSensorBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     if (phaseOf(state) != PHASE_ACTIVE)
         return 0;

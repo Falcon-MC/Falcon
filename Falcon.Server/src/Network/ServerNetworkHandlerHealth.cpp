@@ -425,7 +425,7 @@ Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *
     if (!player.hasSpawnPoint() || player.getSpawnWorld() != world.getName())
         return overworld.getSpawnPositionForPlayer();
 
-    // a /spawnpoint spawn has no block to check (sub_1402BF690 needs one)
+    // a /spawnpoint spawn has no block to check
     if (!player.hasSpawnBlock()) {
         destination = &world.getLevel(player.getSpawnDimension());
         const Vector3i stand = player.getSpawnStandPosition();
@@ -442,7 +442,7 @@ Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *
             return *respawn;
         }
 
-        // sub_1402D44A0: the message follows the spawn dimension
+        // the message follows the spawn dimension
         player.clearSpawnPoint();
         player.sendTranslation("§7%tile.respawn_anchor.notValid", {});
         return overworld.getSpawnPositionForPlayer();

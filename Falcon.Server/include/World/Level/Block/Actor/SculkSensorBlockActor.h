@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <optional>
 
-// SculkSensorBlockActor (vtable 0x14F18B9B0, 26.60): the block's VibrationListener and the power it gives out
+// SculkSensorBlockActor: the block's VibrationListener and the power it gives out
 class SculkSensorBlockActor : public BlockActor, public VibrationListenerConfig {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "SculkSensor";

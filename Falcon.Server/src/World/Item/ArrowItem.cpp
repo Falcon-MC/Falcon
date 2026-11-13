@@ -15,8 +15,8 @@ bool ArrowItem::matches(const std::string &identifier) {
     return identifier == RangedWeaponHelpers::ARROW_IDENTIFIER;
 }
 
-// ArrowItem::dispense (sub_143F8FFC0, 26.60): the facing side 0.1 up; a tipped arrow carries aux - 1 as
-// its potion (sub_143F8F7E0)
+// ArrowItem::dispense: the facing side 0.1 up; a tipped arrow carries aux - 1 as
+// its potion
 bool ArrowItem::dispense(const DispenseSource &source) const {
     ItemStack pickup = source.getItem();
     pickup.mCount = 1;

@@ -12,10 +12,10 @@
 #include <random>
 
 namespace {
-    // a hurt panics for 40 ticks (sub_147C19E20); the path is checked every 8 (sub_147C19FC0)
+    // a hurt panics for 40 ticks; the path is checked every 8
     const int64_t PANIC_TICKS = 40;
     const int64_t REPATH_TICKS = 8;
-    // RandomPos (sub_1439CCB90, sub_1439CE2D0): 5 out, 4 up or down, 10 tries
+    // RandomPos: 5 out, 4 up or down, 10 tries
     const int32_t HORIZONTAL_RANGE = 5;
     const int32_t VERTICAL_RANGE = 4;
     const int32_t TRIES = 10;
@@ -56,7 +56,7 @@ bool PanicGoal::_shouldPanic(ServerNetworkHandler &owner, MobActor &mob) const {
 }
 
 std::optional<Vector3f> PanicGoal::_findTarget(ServerNetworkHandler &owner, MobActor &mob) const {
-    // away from the attacker when there is one: an offset pointing toward it is mirrored (sub_1439CD170)
+    // away from the attacker when there is one: an offset pointing toward it is mirrored
     Actor *attacker = mob.getLastHurtBy() == 0 ? nullptr : MobActor::findActor(owner, mob.getLastHurtBy());
     const Vector3f position = mob.getPosition();
     const bool away = attacker != nullptr;

@@ -11,7 +11,7 @@ class PlayerAuthInputPacket;
 // main-thread input timeline; network arrival never advances the simulation
 class ServerPlayerMovementComponent {
 public:
-    // ServerPlayerMovementComponent input admission (0x14127B1A0, 1.26.10)
+    // ServerPlayerMovementComponent input admission
     static constexpr size_t MAX_PENDING_INPUTS = 1000;
 
     bool enqueue(const PlayerAuthInputPacket &packet);

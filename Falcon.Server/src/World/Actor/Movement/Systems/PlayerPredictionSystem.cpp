@@ -100,7 +100,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     const bool needsCorrection = prediction.validator->reconcile(
             acceptedPosition, *prediction.feetPosition, (uint64_t) input.getPacket().mTick,
             context.owner.getProperties().getPlayerPositionAcceptanceThreshold(), prediction.strict, &details);
-    // ReplayState (0x140E70E40) steers next tick's velocity toward acceptPos; this tick's position stays,
+    // ReplayState steers next tick's velocity toward acceptPos; this tick's position stays,
     // fine-threshold adoption included
     state.velocity.x += acceptedPosition.x - state.simulated.x;
     state.velocity.y += acceptedPosition.y - state.simulated.y;

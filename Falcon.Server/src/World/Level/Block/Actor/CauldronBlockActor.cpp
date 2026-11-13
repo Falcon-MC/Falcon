@@ -8,7 +8,7 @@ namespace {
     const char *TAG_POTION_TYPE = "PotionType";
     const char *TAG_COLOR = "CustomColor";
 
-    // ItemColor order and the rgb of each dye: qword_14F103E50 (26.60)
+    // ItemColor order and the rgb of each dye
     const char *const DYE_ITEMS[] = {
             "minecraft:black_dye",      "minecraft:red_dye",     "minecraft:green_dye",  "minecraft:brown_dye",
             "minecraft:blue_dye",       "minecraft:purple_dye",  "minecraft:cyan_dye",   "minecraft:light_gray_dye",
@@ -16,7 +16,7 @@ namespace {
             "minecraft:light_blue_dye", "minecraft:magenta_dye", "minecraft:orange_dye", "minecraft:white_dye"};
     const uint32_t DYE_COLORS[] = {0x1D1D21, 0xB02E26, 0x5E7C16, 0x835432, 0x3C44AA, 0x8932B8, 0x169C9C, 0x9D9D97,
                                    0x474F52, 0xF38BAA, 0x80C71F, 0xFED83D, 0x3AB3DA, 0xC74EBD, 0xF9801D, 0xF0F0F0};
-    // nothing to mix: the color the game falls back to (xmmword_15243CF68, 26.60)
+    // nothing to mix: the color the game falls back to
     const float NO_DYE_COLOR[4] = {0.2065f, 0.3185f, 0.35f, 0.75f};
 
     float channelOf(uint32_t rgb, int shift) {
@@ -36,8 +36,8 @@ int32_t CauldronBlockActor::dyeColorOf(const std::string &itemId) {
     return -1;
 }
 
-// the item goes in dye slot 2, then the mix replaces CustomColor and empties the dye slots: sub_14330C4D0,
-// sub_14330C6A0 (26.60); the custom color weighs one, a dye its count (always one here)
+// the item goes in dye slot 2, then the mix replaces CustomColor and empties the dye slots
+// the custom color weighs one, a dye its count (always one here)
 void CauldronBlockActor::addDye(int32_t dyeColor) {
     float mixed[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     int32_t weight = 0;
@@ -70,7 +70,7 @@ void CauldronBlockActor::addDye(int32_t dyeColor) {
     mColor = (int32_t) (byteOf(color[3]) << 24 | byteOf(color[0]) << 16 | byteOf(color[1]) << 8 | byteOf(color[2]));
 }
 
-// the float color packed as ARGB, each channel truncated (sub_14A2F26F0, 26.60)
+// the float color packed as ARGB, each channel truncated
 uint32_t CauldronBlockActor::getEventColor() const {
     if (!mHasColor)
         return byteOf(NO_DYE_COLOR[3]) << 24 | byteOf(NO_DYE_COLOR[0]) << 16 | byteOf(NO_DYE_COLOR[1]) << 8

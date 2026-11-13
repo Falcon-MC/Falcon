@@ -23,7 +23,7 @@ namespace {
     const int32_t LEVEL_EVENT_FIZZ = 2029;
     const int32_t LEVEL_EVENT_DESTROY_NO_SOUND = 2021;
 
-    // sub_14A23B050: melts with the destroy particles and no break sound
+    // melts with the destroy particles and no break sound
     void melt(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
         level.setBlock(position, BlockState(BlockNames::AIR), true);
         owner.broadcastLevelEvent(level, LEVEL_EVENT_DESTROY_NO_SOUND,
@@ -31,7 +31,7 @@ namespace {
                                   (int32_t) BlockStateHasher::hash(state.mName, state.mStates));
     }
 
-    // sub_14CE412A0: every powder snow block the burning actor stands in
+    // every powder snow block the burning actor stands in
     void meltAround(ServerNetworkHandler &owner, Level &level, const Vector3f &feet, const ActorSize &size) {
         const int32_t minX = (int32_t) std::floor(feet.x - size.mWidth * 0.5f);
         const int32_t maxX = (int32_t) std::floor(feet.x + size.mWidth * 0.5f);
@@ -53,7 +53,7 @@ namespace {
 
     const AxisAlignedBB NO_SHAPE(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     const AxisAlignedBB FULL_SHAPE(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
-    // xmmword_15296B4EC: a long fall lands on a 0.9 high shape
+    // a long fall lands on a 0.9 high shape
     const AxisAlignedBB FALLING_SHAPE(0.0f, 0.0f, 0.0f, 1.0f, 0.9f, 1.0f);
     const float FALLING_SHAPE_DISTANCE = 2.5f;
     const float ABOVE_EPSILON = 0.00000011920929f;
@@ -79,7 +79,7 @@ void PowderSnowBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
     if (player != nullptr && player->isSpectator())
         return;
 
-    // sub_143611E40, sub_143531350: put out with a fizz sized to the box
+    // put out with a fizz sized to the box
     auto *serverActor = dynamic_cast<ServerActor *>(&actor);
     const ActorSize size = serverActor != nullptr ? serverActor->getSize() : ActorSize{0.6f, 1.8f};
     const Vector3f feet = actor.getPosition();
@@ -93,7 +93,7 @@ void PowderSnowBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
     owner.broadcastLevelEvent(level, LEVEL_EVENT_FIZZ,
                               Vector3f(feet.x - size.mWidth * 0.5f, feet.y, feet.z - size.mWidth * 0.5f), fizzData);
 
-    // mob griefing gamerule, sub_140B9C800 319: players always melt it
+    // mob griefing gamerule: players always melt it
     if (level.getGameRules().getBool("mobgriefing") || player != nullptr)
         meltAround(owner, level, feet, size);
 }
@@ -104,7 +104,7 @@ bool PowderSnowBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplie
     return true;
 }
 
-// sub_14A23ADA0: solid only under an actor above the block that does not descend
+// solid only under an actor above the block that does not descend
 bool PowderSnowBlock::getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
                                           AxisAlignedBB &shape) const {
     (void) state;

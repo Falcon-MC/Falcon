@@ -94,7 +94,7 @@ namespace {
         const Level &level = levelOf(ctx, thisVal);
         JSValue range = JS_NewObject(ctx);
         JS_SetPropertyStr(ctx, range, "min", JS_NewInt32(ctx, level.getMinY()));
-        // sub_14B5B5520 returns the stored bound: exclusive, the top block is max - 1 (0x143848dbc)
+        // the game returns the stored bound: exclusive, the top block is max - 1
         JS_SetPropertyStr(ctx, range, "max", JS_NewInt32(ctx, level.getMaxY() + 1));
         return range;
     }
@@ -157,7 +157,7 @@ namespace {
         const int sky = level.getSkyLightAt(at.x, at.y, at.z);
         if (magic == 1)
             return JS_NewInt32(ctx, sky);
-        // BlockSource::getRawBrightness (sub_1432D1500), as Block.getLightLevel
+        // as Block.getLightLevel
         const BlockState *state = level.peekBlockPtr(at.x, at.y, at.z);
         if (state != nullptr && BlockLightProperties::lightFilter(BlockLightProperties::packed(*state)) >= 15)
             return JS_NewInt32(ctx, 0);
@@ -192,8 +192,8 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // Dimension::getGeneratedStructures (sub_14B5E1220, 26.60) reads the chunk's registry (sub_143871770); when it
-    // finds nothing the game asks the generator's in-memory start cache (sub_142940550), which Falcon does not keep
+    // the game reads the chunk's registry; when it
+    // finds nothing the game asks the generator's in-memory start cache, which Falcon does not keep
     JSValue dimensionGetGeneratedStructures(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         Vector3i at;
@@ -439,7 +439,7 @@ namespace {
         if (argc < 2 || !readPoint(ctx, argv[0], center) || JS_ToFloat64(ctx, &radius, argv[1]) != 0
             || !std::isfinite(radius))
             return typeError(ctx);
-        // argument range of the createExplosion registration (sub_14B4FA790)
+        // argument range of the createExplosion registration
         if (radius < 0.0 || radius > 1000.0)
             return api->throwError("ArgumentOutOfBoundsError", "");
         Level &level = levelOf(ctx, thisVal);
@@ -471,7 +471,7 @@ namespace {
             if (JS_ToInt32(ctx, &duration, argv[1]) != 0)
                 return typeError(ctx);
         } else {
-            // sub_14B5B4B90: 20 * nextInt(600) + 6000 ticks
+            // 20 * nextInt(600) + 6000 ticks
             SimpleRandom random((int64_t) std::chrono::steady_clock::now().time_since_epoch().count());
             duration = 20 * random.nextInt(600) + 6000;
         }
@@ -490,7 +490,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the dimension's weather levels (sub_14B5E0440): only the overworld has weather
+    // the dimension's weather levels: only the overworld has weather
     JSValue dimensionGetWeather(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         Level &level = levelOf(ctx, thisVal);
@@ -502,7 +502,7 @@ namespace {
         return string(ctx, rain * level.getLightningLevel() > 0.9f ? "Thunder" : "Rain");
     }
 
-    // a stop sound packet to each player of the dimension (sub_14B5E0800)
+    // a stop sound packet to each player of the dimension
     JSValue dimensionStopSound(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int all) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (all == 0 && (argc < 1 || !JS_IsString(argv[0])))
@@ -699,7 +699,7 @@ namespace {
         const int32_t id = BiomeChunkGenDataRegistry::getBiomeId(name);
         if (id < 0)
             return api->throwError("Error", "Unknown biome " + name);
-        // without boundingSize the box is 8000, 1024, 8000 (qword_14F4298A0)
+        // without boundingSize the box is 8000, 1024, 8000
         Vector3f size(8000.0f, 1024.0f, 8000.0f);
         if (argc >= 3 && JS_IsObject(argv[2])) {
             JSValue bounds = JS_GetPropertyStr(ctx, argv[2], "boundingSize");
@@ -853,7 +853,6 @@ namespace {
             if (name == candidate.mName)
                 tree = &candidate;
         }
-        // sub_14B5C5B50
         if (tree == nullptr)
             return api->throwError("InvalidArgumentError", "Feature name " + name + " cannot be found in the registry");
 
@@ -904,7 +903,6 @@ namespace {
             if (feature != nullptr)
                 break;
         }
-        // sub_14B5C7EC0
         if (feature == nullptr)
             return api->throwError("InvalidArgumentError", "Feature rule " + name + " cannot be found");
 

@@ -26,14 +26,14 @@
 namespace {
     const float DEGREES = 57.295776f;
     const float RADIANS = 0.017453292f;
-    // moveToLocation stops this close to the target (sub_141035590)
+    // moveToLocation stops this close to the target
     const float ARRIVAL_DISTANCE = 0.25f;
     const float MINIMUM_STEP = 0.1f;
-    // an instant look holds for this many ticks (sub_141039370)
+    // an instant look holds for this many ticks
     const int32_t INSTANT_LOOK_TICKS = 20;
-    // startBuild picks the block in view this far (sub_141031E80)
+    // startBuild picks the block in view this far
     const float BUILD_REACH = 10.0f;
-    // GameMode::continueBuildBlock (sub_14376BB80): the repeat delay in milliseconds
+    // the repeat delay in milliseconds
     const float BUILD_DELAY_MS = 200.0f;
     const float SNEAK_BUILD_DELAY_MS = 300.0f;
     const float MOVING_BUILD_DELAY_MS = 180.0f;
@@ -124,13 +124,13 @@ void SimulatedPlayerController::stopMoving() {
     mWaypoints.clear();
 }
 
-// sub_141036BB0: alive, on the ground and past the jump delay
+// alive, on the ground and past the jump delay
 bool SimulatedPlayerController::jump(ServerNetworkHandler &owner, ServerPlayer &player) {
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround() : player.isOnGround();
     if (!player.isAlive() || !onGround)
         return false;
     mJump = true;
-    // Mob::jumpFromGround runs at once and starts the 10 tick delay: a second call this tick finds it running
+    // the jump runs at once and starts the 10 tick delay: a second call this tick finds it running
     if (player.getJumpDelay() != 0 || mJumpTick == owner.getCurrentTick())
         return false;
     mJumpTick = owner.getCurrentTick();
@@ -236,7 +236,7 @@ bool SimulatedPlayerController::interactWithBlock(ServerNetworkHandler &owner, S
     return BlockActionHandler::placeBlock(owner, player, transaction);
 }
 
-// sub_14DD00600: Block::use (sub_143168110) on the block, no item and no click position
+// a use on the block, no item and no click position
 bool SimulatedPlayerController::useBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block,
                                          int32_t face) {
     if (!player.isAlive())
@@ -381,7 +381,7 @@ void SimulatedPlayerController::_breakingActions(ServerNetworkHandler &owner, Se
     packet.mPlayerActions.push_back(action);
 }
 
-// sub_141035590: the order becomes a move vector relative to the yaw, then the look target turns the head
+// the order becomes a move vector relative to the yaw, then the look target turns the head
 void SimulatedPlayerController::buildInput(ServerNetworkHandler &owner, ServerPlayer &player,
                                            PlayerAuthInputPacket &packet) {
     float sideways = 0.0f;
@@ -469,7 +469,7 @@ void SimulatedPlayerController::buildInput(ServerNetworkHandler &owner, ServerPl
     }
 }
 
-// sub_141035590: towards the point at most `speed` a tick; only a flying player keeps the height difference
+// towards the point at most `speed` a tick; only a flying player keeps the height difference
 void SimulatedPlayerController::_stepTowards(ServerPlayer &player, const Vector3f &target, float speed, bool faceTarget,
                                              float &sideways, float &forward, float &vertical) {
     const Vector3f &feet = player.getPosition();
@@ -484,7 +484,7 @@ void SimulatedPlayerController::_stepTowards(ServerPlayer &player, const Vector3
         mLookUntilMove = true;
     }
     const float step = std::fmin(speed, std::fmax(distance, MINIMUM_STEP));
-    // sub_1402BF7D0: the flying ability
+    // the flying ability
     const float dy = player.isFlying() ? target.y - feet.y : 0.0f;
     const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
     if (length == 0.0f)
@@ -506,7 +506,7 @@ bool SimulatedPlayerController::_buildOn(ServerNetworkHandler &owner, ServerPlay
         mLastBuild = now;
         return true;
     }
-    // GameMode::continueBuildBlock: sneaking or standing repeats at a fixed pace, moving faster with the speed
+    // sneaking or standing repeats at a fixed pace, moving faster with the speed
     const Vector3f &motion = player.getMotion();
     const float speed = std::sqrt(motion.x * motion.x + motion.y * motion.y + motion.z * motion.z) * 20.0f;
     const bool sneaking = player.getFlags().get(ActorFlag::Sneaking);
@@ -522,7 +522,7 @@ bool SimulatedPlayerController::_buildOn(ServerNetworkHandler &owner, ServerPlay
     return true;
 }
 
-// sub_141031D90 each tick: the block in view again (sub_14376B8D0 needs a block hit)
+// each tick: the block in view again
 void SimulatedPlayerController::_continueBuild(ServerNetworkHandler &owner, ServerPlayer &player) {
     ScriptRaycast::BlockOptions ray;
     ray.mMaxDistance = BUILD_REACH;
@@ -537,13 +537,12 @@ void SimulatedPlayerController::startBuild(ServerNetworkHandler &owner, ServerPl
         mHasBuilt = false;
         return;
     }
-    // Player::setSelectedSlot (sub_1402DC830)
     PlayerInventory &inventory = player.getInventory();
     if (slot >= 0 && slot < PlayerInventory::HOTBAR_SIZE) {
         inventory.setSelectedSlot(slot);
         player.getInventoryManager().syncSelectedHotbarSlot();
     }
-    // sub_141031E80: the block in view, else the liquid in view
+    // the block in view, else the liquid in view
     Level &level = owner.getLevelFor(player);
     ScriptRaycast::BlockOptions ray;
     ray.mMaxDistance = BUILD_REACH;
@@ -561,7 +560,7 @@ void SimulatedPlayerController::startBuild(ServerNetworkHandler &owner, ServerPl
         return;
     mBuilding = true;
     mHasBuilt = false;
-    // GameMode::startBuildBlock (vtable +40): the first use at once
+    // the first use at once
     if (found)
         _buildOn(owner, player, hit.mBlock, face, hit.mFaceLocation, false);
 }
@@ -590,7 +589,7 @@ bool SimulatedPlayerController::navigateToLocation(ServerNetworkHandler &owner, 
     fullPath = _findPath(owner, player, target);
     mMove = mWaypoints.empty() ? Move::None : Move::Navigate;
     path.clear();
-    // sub_1410370A0: the path's nodes are block positions
+    // the path's nodes are block positions
     for (const Vector3f &waypoint: mWaypoints)
         path.emplace_back((int32_t) std::floor(waypoint.x), (int32_t) std::floor(waypoint.y),
                           (int32_t) std::floor(waypoint.z));
@@ -616,7 +615,7 @@ void SimulatedPlayerController::navigateToLocations(const std::vector<Vector3f> 
     mMove = route.empty() ? Move::None : Move::Navigate;
 }
 
-// sub_141035590 state 3 and 4: the path walked node after node, stopping when stuck
+// the path walked node after node, stopping when stuck
 void SimulatedPlayerController::_tickNavigation(ServerNetworkHandler &owner, ServerPlayer &player, float &sideways,
                                                 float &forward, float &vertical) {
     if (mFollowEntity != 0) {

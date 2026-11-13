@@ -180,7 +180,7 @@ namespace {
         return endPoint;
     }
 
-    // https on the port, plus 443 for 19132 only: sub_143A904D0; http after every https probe ends: sub_143A92EB0
+    // https on the port, plus 443 for 19132 only; http after every https probe ends
     const unsigned short DEFAULT_GAME_PORT = 19132;
     const unsigned short HTTPS_PORT = 443;
 

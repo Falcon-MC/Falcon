@@ -19,8 +19,8 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     if (context.abilities.spectator || travel.isStuck)
         return;
 
-    // ClientAcceptanceSystem (0x141038FF0) picks the solid-shape thresholds when the collision list holds block
-    // shapes (defaults 0x1402C1190); the floor is in every grounded sweep: counting it would refill 0.1 per tick and
+    // ClientAcceptanceSystem picks the solid-shape thresholds when the collision list holds block
+    // shapes; the floor is in every grounded sweep: counting it would refill 0.1 per tick and
     // accept 0.1 extra blocks per tick of speed; only a wall or ceiling hit selects them
     const bool solid = travel.moved.mCollidedX || travel.moved.mCollidedZ
                        || (travel.moved.mCollidedY && travel.moved.mRequested.y > 0.0f);
@@ -49,7 +49,7 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     }
     const float spent = std::fabs(accepted.x) + std::fabs(accepted.y) + std::fabs(accepted.z);
     if (spent > minimum) {
-        // 0x141038C40 collision-tests acceptance separately; physical velocity untouched
+        // the game collision-tests acceptance separately; physical velocity untouched
         const auto moved = ActorCollisionSystem::move(context.level, travel.box, accepted, 0.0f, state.onGround,
                                                       &context.player);
         travel.accepted = moved.mMoved;
@@ -66,7 +66,7 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
         }
         if (!verticalCollision)
             travel.moved.mRequested.y += accepted.y;
-        // 0x141038C40 snaps sub-0.0001 collision residuals before finalizing
+        // the game snaps sub-0.0001 collision residuals before finalizing
         const auto snap = [](float requested, float &actual) {
             if (std::fabs(requested - actual) <= 0.0001f)
                 actual = requested;

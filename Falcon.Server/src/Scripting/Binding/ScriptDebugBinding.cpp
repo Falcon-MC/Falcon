@@ -62,7 +62,7 @@ namespace {
         return pair;
     }
 
-    // mce::Color goes out as ARGB, one byte per channel
+    // a colour goes out as ARGB, one byte per channel
     uint32_t argbOf(JSContext *ctx, JSValueConst object, const char *name) {
         JSValue value = JS_GetPropertyStr(ctx, object, name);
         uint32_t argb = 0;

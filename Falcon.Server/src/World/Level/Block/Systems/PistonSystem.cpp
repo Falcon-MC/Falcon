@@ -161,7 +161,7 @@ namespace {
         return 0;
     }
 
-    // PistonBlockActor::_attachedBlockWalker (client 26.60 sub_144C4AFD0): slime and honey reach every neighbour
+    // slime and honey reach every neighbour
     // but the one walked from; along the move direction pushed, from a sticky side only dragged if pullable
     struct MoveResolver {
         Level &mLevel;
@@ -181,7 +181,7 @@ namespace {
             return position.y >= mLevel.getMinY() && position.y <= mLevel.getMaxY();
         }
 
-        // _checkAttachedBlocks (sub_144C49B90) starts the walk with the piston's facing as the branch
+        // _checkAttachedBlocks starts the walk with the piston's facing as the branch
         bool resolve(const Vector3i &origin, int facing) {
             return walk(origin, facing) && mToMove.size() <= (size_t) PistonSystem::MOVE_BLOCK_LIMIT;
         }
@@ -399,7 +399,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
                 if (!resolver.resolve(origin, face)) {
                     if (extending)
                         return false;
-                    // PistonBlockActor::tick (sub_144C481C0) still retracts a sticky piston whose blocks cannot be
+                    // the game still retracts a sticky piston whose blocks cannot be
                     // pulled: it drops the collected blocks and pulls nothing
                     toMove.clear();
                     toDestroy.clear();

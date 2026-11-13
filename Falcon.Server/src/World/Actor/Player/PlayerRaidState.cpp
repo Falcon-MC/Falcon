@@ -16,16 +16,15 @@ namespace {
     // no amplifier given: the bad omen level isn't carried over
     const int32_t RAID_OMEN_DURATION_TICKS = 600;
 
-    // RaidBossComponent, set up in sub_141022F80 and named in sub_142CD7520
+    // RaidBossComponent
     const char *const BAR_NAME = "raid.name";
     const char *const BAR_VICTORY_TITLE = "%raid.name - %raid.victory";
     const char *const BAR_DEFEAT_TITLE = "%raid.name - %raid.defeat";
     const char *const BAR_REMAINING_TITLE = "%raid.name - %raid.progress ";
     const size_t BAR_REMAINING_MAX = 2;
-    // BossBarColor::RED and BossBarOverlay::PROGRESS (sub_142CD92E0)
     const int32_t BAR_COLOR = 2;
     const int32_t BAR_OVERLAY = 0;
-    // the client is offered the bar at most once per second of real time (sub_142CD8F00)
+    // the client is offered the bar at most once per second of real time
     const std::chrono::seconds BAR_CHECK_INTERVAL(1);
 
     Vector3i floored(const Vector3f &position) {
@@ -71,8 +70,8 @@ void PlayerRaidState::_tickTrigger(ServerNetworkHandler &owner, ServerPlayer &pl
     if (!mTriggerPending)
         return;
 
-    // the omen position is used once, then the player's own position until a village takes the raid (sub_147737BD0,
-    // then the legacy trigger sub_14CE891B0): player.json only drops raid_trigger through its triggered_event
+    // the omen position is used once, then the player's own position until a village takes the raid:
+    // player.json only drops raid_trigger through its triggered_event
     const Vector3i position = mHasOmenPosition ? mOmenPosition : floored(player.getPosition());
     mHasOmenPosition = false;
 
@@ -86,8 +85,8 @@ void PlayerRaidState::_tickTrigger(ServerNetworkHandler &owner, ServerPlayer &pl
 }
 
 void PlayerRaidState::_tickBossBar(ServerNetworkHandler &owner, ServerPlayer &player) {
-    // RaidBossSystem, sub_1477374B0: the bar stays with its village until the raid ends or a closer raid takes over,
-    // even out of range, and its name and fill are sent every tick (sub_142CD7210)
+    // RaidBossSystem: the bar stays with its village until the raid ends or a closer raid takes over,
+    // even out of range, and its name and fill are sent every tick
     VillageManager &villages = owner.getLevelFor(player).getVillageManager();
     const std::shared_ptr<Village> closest = villages.getClosestRaidingVillage(floored(player.getPosition()));
     if (closest != nullptr && closest != mBarVillage.lock()) {
@@ -153,7 +152,6 @@ void PlayerRaidState::_refreshBossBarRegistration(ServerNetworkHandler &owner, S
     mLastBarCheck = now;
 
     // the bar is only offered while the player stands in the raid area it was shown for, in its dimension
-    // (sub_142CD90D0)
     if (mBarSent || player.getDimension() != mBarDimension || !village.isInRaidBounds(player.getPosition()))
         return;
 

@@ -77,7 +77,7 @@ bool ChunkStructureBounds::Box::contains(int32_t x, int32_t y, int32_t z) const 
     return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
 }
 
-// the box LevelChunk keeps at +0x1900 (ctor sub_143848D20): the dimension's height, top excluded
+// the box LevelChunk keeps at +0x1900: the dimension's height, top excluded
 ChunkStructureBounds::Box ChunkStructureBounds::chunkBox(int32_t chunkX, int32_t chunkZ, int32_t minY, int32_t maxY) {
     Box box;
     box.minX = chunkX * 16;
@@ -103,7 +103,7 @@ uint32_t ChunkStructureBounds::_create() {
 
 void ChunkStructureBounds::addStart(const std::string &name, int32_t startValue, const Box &start,
                                     const std::vector<Box> &pieces, const Box &chunk) {
-    // sub_147791540 tests the start box first; the name entity comes before any box
+    // the game tests the start box first; the name entity comes before any box
     if (!start.intersects(chunk) || hasName(name))
         return;
 

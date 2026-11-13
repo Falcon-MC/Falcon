@@ -37,7 +37,7 @@ namespace {
         return state;
     }
 
-    // biome samples every 8 blocks from 8 blocks before the chunk, 2 extra in y (sub_147186040)
+    // biome samples every 8 blocks from 8 blocks before the chunk, 2 extra in y
     constexpr int32_t BIOME_SAMPLE_COUNT_XZ = 4;
     constexpr int32_t BIOME_SAMPLE_COUNT_Y =
             ((OverworldGeneratorConstants::MAX_Y + 1 - OverworldGeneratorConstants::MIN_Y) >> 3) + 2;
@@ -63,7 +63,7 @@ OverworldGenerator::OverworldGenerator(int64_t seed) : mSeed(seed), mAirHash(Blo
 
 OverworldGenerator::~OverworldGenerator() = default;
 
-// climate only, without the zoom: the game's biome search samples the same way (sub_147186890 -> sub_14CDA32A0)
+// climate only, without the zoom: the game's biome search samples the same way
 int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
     const OverworldClimate::Column column = mClimate->sampleColumn(x >> 2, z >> 2);
     const OverworldBiomeParameters::Target target = OverworldBiomeParameters::target(
@@ -73,9 +73,9 @@ int32_t OverworldGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
 }
 
 namespace {
-    // the game fills the column with its noise terrain only, before surface rules and carvers (generator
-    // vfunc +0x170 in sub_14A2298E0, which runs sub_14CDF0330), into a volume 320 blocks tall from the
-    // bottom of the world (sub_14CDD12F0): higher terrain is cut at that top
+    // the game fills the column with its noise terrain only, before surface rules and carvers,
+    // into a volume 320 blocks tall from the
+    // bottom of the world: higher terrain is cut at that top
     const int32_t PRELIMINARY_HEIGHT = 320;
 
     int32_t topOfColumn(const LevelChunk &chunk, int32_t localX, int32_t localZ, int32_t airHash) {
@@ -138,7 +138,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     ShipwreckStructure::place(*this, level, chunk);
     OceanRuinStructure::place(*this, level, chunk);
     PillagerOutpostStructure::place(*this, level, chunk);
-    // created after the outpost and the ocean ruins in createGenerator (sub_147163360)
+    // created after the outpost and the ocean ruins in createGenerator
     RuinedPortalStructure::place(*this, level, chunk);
     VillageStructure::place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
@@ -164,13 +164,12 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
 void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
                                           OverworldAquifer &aquifer) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
-    // jigsaw pieces near the chunk; the preliminary heights leave it out (sub_145C33980)
+    // jigsaw pieces near the chunk; the preliminary heights leave it out
     TerrainBeard beard;
     VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed
-    // (sub_14A22D380)
     for (int32_t x = 0; x < 16; x++) {
         for (int32_t z = 0; z < 16; z++) {
             const int32_t layers = (int32_t) (random() % 4u) + 2;
@@ -185,7 +184,6 @@ void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk) const {
     const int32_t originY = OverworldGeneratorConstants::MIN_Y - 8;
     const int32_t originZ = (chunk.getZ() << 4) - 8;
 
-    // sub_147185D00, sub_1471AC680
     std::vector<int32_t> samples((size_t) (BIOME_SAMPLE_COUNT_XZ * BIOME_SAMPLE_COUNT_XZ * BIOME_SAMPLE_COUNT_Y));
     size_t index = 0;
     for (int32_t indexX = 0; indexX < BIOME_SAMPLE_COUNT_XZ; indexX++) {
@@ -205,7 +203,7 @@ void OverworldGenerator::_generateBiomeMap(LevelChunk &chunk) const {
         }
     }
 
-    // the zoom takes the level's 32-bit seed (vfunc +0x430 in sub_147186040)
+    // the zoom takes the level's 32-bit seed
     const BiomeZoom zoom((uint32_t) mSeed, originX, originY, originZ, BIOME_SAMPLE_COUNT_XZ, BIOME_SAMPLE_COUNT_Y,
                          BIOME_SAMPLE_COUNT_XZ);
     // A section only reads the 3x3x3 samples around it: when they all hold one biome, so does every block of it.
@@ -245,7 +243,7 @@ void OverworldGenerator::generate(LevelChunk &chunk) const {
     for (int32_t i = 0; i < 256; i++)
         heightMap[i] = 0;
 
-    // the chunk's random, seeded in sub_14CDD16A0, shared by the bedrock floor and the surface
+    // the chunk's random, shared by the bedrock floor and the surface
     std::mt19937 random(132899541u * (uint32_t) chunk.getZ() + 341872712u * (uint32_t) chunk.getX());
     OverworldAquifer aquifer = mTerrainFiller->createAquifer();
     _generateTerrain(chunk, heightMap, random, aquifer);

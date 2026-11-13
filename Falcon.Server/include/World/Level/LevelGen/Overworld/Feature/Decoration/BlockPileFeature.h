@@ -5,7 +5,7 @@
 
 class BlockManager;
 
-// the village piles of hay, melons, pumpkins, snow and ice (vtable 0x14F2F01D0, registered in sub_14726F340)
+// the village piles of hay, melons, pumpkins, snow and ice
 class BlockPileFeature {
 public:
     enum class Pile { Hay, Melon, Pumpkin, Snow, Ice };

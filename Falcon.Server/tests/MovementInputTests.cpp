@@ -429,7 +429,7 @@ namespace {
                 "Catchup used the server tick as the input tick");
     }
 
-    // jump 0x140EAFAF0, cooldown 0x140EB0DA0, ground/air travel and gravity
+    // jump, cooldown, ground/air travel and gravity
     void checkGroundJumpTrajectory() {
         for (bool strict: {false, true}) {
             ServerNetworkHandler owner("Ground trajectory regression", "", 1);
@@ -957,7 +957,7 @@ namespace {
         packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 1);
-        // the client's FlyTriggerActionSystem (26.60 sub_145E0FB40) only queues the ability change:
+        // the client's FlyTriggerActionSystem only queues the ability change:
         // the input carrying the toggle still travels with the old abilities
         require(player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.09f) > 0.000002f,
                 "AuthInput StartFlying was not applied after the input that carries it");
@@ -1330,8 +1330,8 @@ namespace {
         }
     }
 
-    // 1.26.10: ground 0x140E104A0, water 0x140F1E690/0x14103D110,
-    // levitation 0x14104F680, flight 0x14104F280/0x140F1D980, glide 0x140C66F70
+    // 1.26.10: ground, water,
+    // levitation, flight, glide
     void checkTravelPhysics() {
         ServerNetworkHandler owner("Travel regression", "", 1);
         const auto path = ServerPaths::getRoot() / "travel.properties";
@@ -1457,7 +1457,7 @@ namespace {
         }
 
         terrain(stone, WaterBlock::source());
-        // LiquidPhysicsSystem 0x140FC98E0 contracts the sensing volume, independent of eye water
+        // LiquidPhysicsSystem contracts the sensing volume, independent of eye water
         const Vector3f shallowFeet(50.5f, 250.75f, 2.5f);
         for (int x = 49; x <= 52; ++x)
             for (int z = 1; z <= 4; ++z)
@@ -1500,7 +1500,7 @@ namespace {
         close(swimming->getSimulatedVelocity().y, 0.0f, "Persistent swimming state was lost");
         step(*swimming, {(int32_t) PlayerAuthInputData::StopSwimming});
         close(swimming->getSimulatedVelocity().y, -0.005f, "StopSwimming failed to restore sinking gravity");
-        // SwimControlSystem 0x140F4FB60 and MobJumpSystem 0x140EB1110
+        // SwimControlSystem and MobJumpSystem
         terrain(air, WaterBlock::source());
         const std::vector<int32_t> swimFlags{(int32_t) PlayerAuthInputData::StartSwimming};
         for (bool sprinting: {false, true}) {

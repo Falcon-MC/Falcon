@@ -56,7 +56,6 @@ namespace {
         if (argc < 1 || !JS_IsString(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         const std::string name = toString(ctx, argv[0]);
-        // sub_14C8A8710
         if (!api->registrationOpen())
             return api->throwError("WorldClockInvalidRegistryError",
                                    "Cannot register world clock '" + name + "' outside of StartupEvent.");
@@ -187,7 +186,6 @@ namespace {
         const WorldClockMarker *marker = markerArgument(ctx, *clock, argc, argv, thrown);
         if (marker == nullptr)
             return thrown;
-        // sub_14C9797B0
         if (marker->mName.compare(0, 10, "minecraft:") == 0)
             return api->throwError("WorldClockRemoveMinecraftTimeMarkerError",
                                    "Failed to remove time marker '" + marker->mName + "' from world clock '"

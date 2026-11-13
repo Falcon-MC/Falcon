@@ -28,7 +28,7 @@ namespace {
         return read;
     }
 
-    // ScriptMolangVariableMap name check (sub_14DE9CC40, 26.60): "variable." kept, a short "v." kept, any other
+    // ScriptMolangVariableMap name check: "variable." kept, a short "v." kept, any other
     // dot refused, a bare name prefixed
     bool normalizeName(JSContext *ctx, JSValueConst value, std::string &name) {
         if (!JS_IsString(value)) {
@@ -117,7 +117,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // members in the order sub_1416BB390 (26.60) builds them
+    // members in the order the game builds them
     JSValue molangSetSpeedAndDirection(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptMolangMap *map = mapOf(ctx, thisVal);
         ScriptMolangMap::Variable variable;
@@ -164,7 +164,7 @@ namespace {
     }
 }
 
-// MolangVariableMap as the client reads it (sub_142C9D4A0, sub_142C9E0B0, 26.60): an array of {name, value},
+// MolangVariableMap as the client reads it: an array of {name, value},
 // a value either a float or a member_array of named floats
 std::string ScriptMolangMap::toJson() const {
     std::string out = "[";

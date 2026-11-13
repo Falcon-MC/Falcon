@@ -25,7 +25,7 @@ namespace {
         return player.getLoginState() >= ServerPlayer::LoginState::StartGameSent;
     }
 
-    // sub_141ADF6A0: the lodestone gets a record on its first link, the compass its id
+    // the lodestone gets a record on its first link, the compass its id
     void link(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ItemStack &compass) {
         LodestoneBlockActor &lodestone = level.getBlockActors().getOrCreate<LodestoneBlockActor>(position);
         if (!compass.mTag.isCompound())
@@ -65,7 +65,7 @@ bool LodestoneHandler::useCompassOn(ServerNetworkHandler &owner, ServerPlayer &p
     if (identifier != COMPASS)
         return false;
 
-    // sub_148EED3F0: a new lodestone compass keeping the vanishing curse and the custom name
+    // a new lodestone compass keeping the vanishing curse and the custom name
     ItemStack compass = owner.createItemStack(LODESTONE_COMPASS, 1);
     if (compass.isAir())
         return false;

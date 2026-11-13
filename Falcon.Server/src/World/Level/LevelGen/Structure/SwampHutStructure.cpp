@@ -22,7 +22,7 @@ namespace {
     const int32_t SIZE_X = 7;
     const int32_t SIZE_Y = 7;
     const int32_t SIZE_Z = 9;
-    // the temple start's vfunc +24 (sub_1473C6CC0): -3 for a swamp hut, 0 for the other temples
+    // the temple start's vfunc +24: -3 for a swamp hut, 0 for the other temples
     const int32_t START_VALUE = -3;
 
     // the potion ids the game draws for the hut's cauldron: water breathing, fire resistance, swiftness,
@@ -56,7 +56,6 @@ namespace {
     }
 }
 
-// SwampHutPiece::postProcess (sub_1473DADC0, 26.60) and postProcessMobsAt (sub_1473DC300)
 void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
     const StructureFeature *temple = StructureFeature::get("temple");
     if (temple == nullptr || !temple->isStartChunk(generator, chunk.getX(), chunk.getZ()))

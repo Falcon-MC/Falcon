@@ -19,7 +19,7 @@ struct EndSpike;
 
 /**
  * The fight of one End: when the dragon spawns, what its death leaves behind and the respawn ritual. The game keeps
- * it on its End dimension and saves it in the dimension's "TheEnd" data (sub_147170120, sub_1471706E0).
+ * it on its End dimension and saves it in the dimension's "TheEnd" data.
  */
 class EndDragonFight {
 public:
@@ -32,7 +32,7 @@ public:
         SummoningDragon = 4
     };
 
-    // one ritual tick from its stage and ticks spent in it (sub_14716C8B0)
+    // one ritual tick from its stage and ticks spent in it
     struct RespawnStep {
         RespawnStage mNextStage = RespawnStage::None;
         bool mRestartTimer = false;
@@ -62,15 +62,15 @@ public:
 
     static RespawnStep stepRespawn(RespawnStage stage, int32_t ticks, size_t spikeCount);
 
-    // opening order: 0 to 19 shuffled with the level seed (sub_147170120)
+    // opening order: 0 to 19 shuffled with the level seed
     static std::vector<int32_t> createGatewayOrder(int64_t seed);
 
     static Vector3i getGatewayPosition(int32_t index);
 
-    // per tick of the death (sub_144AE8C40)
+    // per tick of the death
     static int32_t getDeathExperience(int32_t deathTicks, bool previouslyKilled);
 
-    // dragon spawn point, aimed at by the respawn crystals (fight constructor, sub_14716B720)
+    // dragon spawn point, aimed at by the respawn crystals
     static Vector3i getSummonPoint();
 
     void load(const Tag &dimensionData);
@@ -84,22 +84,22 @@ public:
 
     void onCrystalDestroyed(ServerNetworkHandler &owner, Level &level, EndCrystalActor &crystal, Actor *attacker);
 
-    /** The end of the dragon's death: exit portal, next gateway and, the first time, the egg (sub_14717D450). */
+    /** The end of the dragon's death: exit portal, next gateway and, the first time, the egg. */
     void onDragonKilled(ServerNetworkHandler &owner, Level &level, const EnderDragon &dragon);
 
     /**
      * Gives the gateway at position an exit and a gateway back from it once both ends are loaded, placing the gateway
-     * itself too when placeGateway (sub_14714F240). The game aims the exit right away from the terrain generator.
+     * itself too when placeGateway. The game aims the exit right away from the terrain generator.
      */
     void requestGatewayExit(const Level &level, const Vector3i &gateway, bool placeGateway);
 
     /**
      * Loads both ends of a gateway that already has an exit and moves an exit that would leave an entity in a block
-     * or over the void, at either end (sub_14716A610, sub_14716AEC0).
+     * or over the void, at either end.
      */
     void requestGatewayCheck(const Vector3i &gateway, const Vector3i &exit);
 
-    /** The rough exit of a gateway, from the End's terrain generator alone (sub_14714F400). */
+    /** The rough exit of a gateway, from the End's terrain generator alone. */
     static Vector3i findRoughExit(const Level &level, const Vector3i &gateway);
 
     size_t getGatewayRequestCount() const {

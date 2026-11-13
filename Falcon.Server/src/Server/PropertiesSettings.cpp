@@ -112,7 +112,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
             {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
             {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
-            // 1.26.10 movement settings (0x1437F5420): -1 for both policy limits
+            // 1.26.10 movement settings: -1 for both policy limits
             {"player-tick-throttled-input-batch-size", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-tick-throttled-max-tick-credits", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-movement-action-direction-threshold", "0.85", PropertyKind::Float, 0, 0, nullptr},

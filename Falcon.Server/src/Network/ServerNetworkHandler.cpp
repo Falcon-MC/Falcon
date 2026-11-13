@@ -880,7 +880,7 @@ void ServerNetworkHandler::tick(bool paused) {
     mProfiler.beginTick(mCurrentTick);
 
     mProfiler.beginSection(ProfilerSection::Weather);
-    // the dimension ticks its weather before it darkens the sky (sub_142938180)
+    // the dimension ticks its weather before it darkens the sky
     tickWeather();
     for (World *world: mWorlds.getWorlds()) {
         for (Level *level: world->getLevels())
@@ -2127,7 +2127,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerToggl
     CrafterHandler::handleToggleSlot(*this, *player, packet);
 }
 
-// ServerNetworkHandler::handle(UpdateClientOptionsPacket) (sub_14228D1E0, 26.60): an absent field keeps its value
+// ServerNetworkHandler::handle(UpdateClientOptionsPacket): an absent field keeps its value
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const UpdateClientOptionsPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr)
@@ -2681,7 +2681,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
     radius.mRadius = granted;
     mNetworkHandler->send(id, radius, mCodecContext);
 
-    // sub_14102BCD0: the share of the view left to the server follows the client's hardware unless
+    // the share of the view left to the server follows the client's hardware unless
     // server-build-radius-ratio fixes it. A client that cannot generate chunks gets everything built.
     float ratio = 1.0f;
     if (player->isClientSideGenerationCompatible()) {

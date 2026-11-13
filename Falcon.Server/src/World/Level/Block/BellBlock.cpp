@@ -20,10 +20,10 @@ FALCON_REGISTER_BLOCK(BellBlock, 200);
 namespace {
     const char *const SOUND_BELL_HIT = "block.bell.hit";
 
-    // the ring direction the bell swings to for each axis the player faces (byte_14F0F3DA0)
+    // the ring direction the bell swings to for each axis the player faces
     const int32_t RING_DIRECTION[] = {2, 3, 0, 1};
 
-    // the player's facing axis from its yaw: 0 and 2 along z, 1 and 3 along x (sub_14315C7C0)
+    // the player's facing axis from its yaw: 0 and 2 along z, 1 and 3 along x
     int32_t facingOf(float yaw) {
         const float radians = yaw * 0.017453292f;
         const float sine = std::sin(radians);
@@ -97,7 +97,7 @@ bool BellBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, co
     Level &level = owner.getLevelFor(player);
     BellBlockActor *bell = &bellAt(owner, level, position, state);
 
-    // then the hit and toggle_bit flipped, as sub_1432FFE10 does
+    // then the hit and toggle_bit flipped, as the game does
     bell->ring(RING_DIRECTION[facing]);
     BlockActionHandler::broadcastBlockActorData(owner, level, *bell);
     owner.playLevelSound(level, SOUND_BELL_HIT, Vector3f((float) position.x, (float) position.y, (float) position.z));

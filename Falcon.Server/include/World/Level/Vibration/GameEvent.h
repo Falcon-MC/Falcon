@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-// a game event as the game registers it (sub_143FCCBC0): an id and a flag byte
+// a game event as the game registers it: an id and a flag byte
 class GameEvent {
 public:
     enum Flags : uint8_t {
@@ -32,7 +32,7 @@ public:
         return (mFlags & flag) != 0;
     }
 
-    // 1 to 15, 0 for an event no listener hears as a vibration (sub_143FA7FF0)
+    // 1 to 15, 0 for an event no listener hears as a vibration
     int32_t getFrequency() const;
 
 private:
@@ -94,10 +94,10 @@ namespace GameEvents {
     extern const GameEvent TELEPORT;
     extern const GameEvent UNEQUIP;
 
-    // resonate_1 to resonate_15 (table at 0x14F1CD420, 26.60); INVALID outside 1..15
+    // resonate_1 to resonate_15; INVALID outside 1..15
     const GameEvent &resonate(int32_t frequency);
 
-    // INVALID for an unknown id: what a saved vibration falls back to (sub_143FA7A80)
+    // INVALID for an unknown id: what a saved vibration falls back to
     const GameEvent &fromId(int32_t id);
 
     const GameEvent *fromName(const std::string &name);

@@ -162,8 +162,8 @@ public:
     void onAdd(Actor &, const MobEffectInstance &) const override;
     void onRemove(Actor &, const MobEffectInstance &) const override;
 
-    // Actor::addEffect updates a running effect in place (sub_140BCF250 -> sub_14355C370), only refreshing its
-    // modifiers (sub_14355CC80): a refreshed omen stores no position and asks for no raid
+    // Actor::addEffect updates a running effect in place, only refreshing its
+    // modifiers: a refreshed omen stores no position and asks for no raid
     void onRefresh(Actor &, const MobEffectInstance &, const MobEffectInstance &) const override {}
 };
 

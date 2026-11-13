@@ -73,7 +73,7 @@ namespace {
         return out;
     }
 
-    // a number lands on a double, as the store keeps it (sub_1468F7010)
+    // a number lands on a double, as the store keeps it
     bool assignScalar(DataStoreChangeValue &leaf, const DataStoreScalar &scalar) {
         switch (scalar.mType) {
             case DataStoreScalarType::Number:
@@ -198,7 +198,7 @@ void ServerNetworkHandler::_endDataDrivenScreens(const NetworkIdentifier &id, Da
     }
 }
 
-// the server side of sub_1468FBE80: the property count first, then the path count, which must be one ahead
+// the property count first, then the path count, which must be one ahead
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ServerboundDataStorePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned() || !_allowPacket(id, RateLimitedPacket::FormResponse))

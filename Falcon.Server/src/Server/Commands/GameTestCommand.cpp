@@ -54,7 +54,7 @@ CommandPermission GameTestCommand::getRequiredPermission() const {
     return CommandPermission::GameDirectors;
 }
 
-// the overloads of sub_14BE7C040, each mode with its own one value enum; names and tags are soft enums
+// the game's overloads, each mode with its own one value enum; names and tags are soft enums
 std::vector<CommandOverloadData> GameTestCommand::getOverloads() const {
     GameTestRunner &runner = mHandler.getScriptEngine().gameTests();
     const std::vector<std::string> names = runner.testNames();
@@ -114,7 +114,7 @@ bool GameTestCommand::execute(CommandOrigin &sender, const std::vector<std::stri
                           (int32_t) std::floor(position.z));
     const std::string &modeName = arguments[0];
 
-    // the rotation step counts only below 4 (sub_14BE80D30)
+    // the rotation step counts only below 4
     const auto rotationAt = [&arguments](size_t index) {
         int32_t step = 0;
         if (index < arguments.size() && parseInt(arguments[index], step) && step >= 0 && step < 4)
@@ -175,7 +175,7 @@ bool GameTestCommand::execute(CommandOrigin &sender, const std::vector<std::stri
             sender.sendError("Command was not executed from an Actor");
             return false;
         }
-        // the eyes, ten blocks along the view (sub_14BE80D30)
+        // the eyes, ten blocks along the view
         const Vector3f &rotation = entity->getRotation();
         const float pitch = rotation.x * 0.017453292f, yaw = rotation.y * 0.017453292f;
         const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));

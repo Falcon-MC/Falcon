@@ -55,7 +55,7 @@ namespace {
 
         const json::Value *duration = entry.get("duration_info");
         if (duration != nullptr && duration->isObject()) {
-            // mode 0 game_time, 1 real_time (schema sub_1486E2450, read by sub_143809380)
+            // mode 0 game_time, 1 real_time
             const json::Value *mode = duration->get("mode");
             definition.mRealTime = mode != nullptr && mode->isString() && mode->string() == "real_time";
             const json::Value *seconds = duration->get("seconds");
@@ -175,7 +175,7 @@ std::vector<const ScriptSoundDefinition *> ScriptSoundRegistry::definitions(cons
     for (const ScriptSoundDefinition &definition: mDefinitions) {
         if ((filter.mHasMinDuration || filter.mHasMaxDuration) && !definition.mHasDuration)
             continue;
-        // compared as floats (sub_14B835FD0, 26.60)
+        // compared as floats
         if (filter.mHasMinDuration && (float) filter.mMinDuration > definition.durationSeconds())
             continue;
         if (filter.mHasMaxDuration && definition.durationSeconds() > (float) filter.mMaxDuration)

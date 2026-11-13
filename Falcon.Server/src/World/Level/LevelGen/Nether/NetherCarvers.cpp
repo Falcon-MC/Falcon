@@ -58,7 +58,7 @@ namespace {
 NetherCarvers::NetherCarvers(int64_t seed) : mSeed(static_cast<uint32_t>(seed)) {}
 
 void NetherCarvers::carve(LevelChunk &chunk) const {
-    // the feature rule seeds the chunk random with the level seed before placing (sub_14D226750)
+    // the feature rule seeds the chunk random with the level seed before placing
     std::mt19937 random(mSeed);
     const uint32_t multiplierX = static_cast<uint32_t>(nextInt(random)) | 1u;
     const uint32_t multiplierZ = static_cast<uint32_t>(nextInt(random)) | 1u;
@@ -74,7 +74,6 @@ void NetherCarvers::carve(LevelChunk &chunk) const {
 }
 
 void NetherCarvers::_addCaves(std::mt19937 &random, int32_t sourceX, int32_t sourceZ, LevelChunk &chunk) {
-    // sub_14D2278A0
     const int32_t count = nextInt(random, nextInt(random, nextInt(random, CAVE_BOUND) + 1) + 1);
     const int32_t skip = nextInt(random, SKIP_CARVE_CHANCE);
     if (count <= 0 || skip != 0)
@@ -88,7 +87,6 @@ void NetherCarvers::_addCaves(std::mt19937 &random, int32_t sourceX, int32_t sou
 
         int32_t tunnels = 1;
         if (nextInt(random, 4) == 0) {
-            // sub_14D226A00
             const float thickness = nextFloat(random) * 6.0f + 1.0f;
             _addTunnel(random, chunk, start, thickness, 0.0f, 0.0f, -1, -1, 0.5f);
             tunnels = nextInt(random, 4) + 1;
@@ -108,7 +106,7 @@ void NetherCarvers::_addCaves(std::mt19937 &random, int32_t sourceX, int32_t sou
 
 void NetherCarvers::_addTunnel(std::mt19937 &parent, LevelChunk &chunk, Position position, float thickness, float yaw,
                                float pitch, int32_t start, int32_t length, float yScale) {
-    // sub_14D226AE0; a start of -1 is a room, which walks from the middle of its length and stops once carved
+    // a start of -1 is a room, which walks from the middle of its length and stops once carved
     std::mt19937 random(static_cast<uint32_t>(nextInt(parent)));
     if (length <= 0)
         length = static_cast<int32_t>(112u - nextUnsigned(random) % 28u);

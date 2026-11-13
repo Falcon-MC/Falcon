@@ -11,14 +11,14 @@
 #include <random>
 
 namespace {
-    // the base move-to goal (sub_14704F910): give up after 1200 ticks of travel or 1200 ticks at the target
+    // the base move-to goal: give up after 1200 ticks of travel or 1200 ticks at the target
     const int32_t MAX_TRAVEL_TICKS = 1200;
     const int32_t MAX_TICKS_AT_TARGET = 1200;
-    // a new path is asked for every 100 ticks of travel (vtable slot 17, sub_140B49D10)
+    // a new path is asked for every 100 ticks of travel
     const int32_t REPATH_INTERVAL = 100;
-    // the start check runs every 50 to 99 ticks (sub_1474FA230 sets the base 200 to 50)
+    // the start check runs every 50 to 99 ticks
     const int32_t START_INTERVAL = 50;
-    // a mob without the dweller component takes the closest village whose box grown by 64 holds it (sub_1474FA4A0)
+    // a mob without the dweller component takes the closest village whose box grown by 64 holds it
     const int32_t VILLAGE_SEARCH_RADIUS = 64;
     const float LEG_FRACTION = 0.75f;
     const float DIRECTION_EPSILON = 0.0001f;
@@ -91,13 +91,13 @@ bool MoveToVillageGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &
 }
 
 void MoveToVillageGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    // sub_1474FA350: the path itself is asked for by the first tick
+    // the path itself is asked for by the first tick
     const Vector3i target = _selectTarget(owner, mob);
     mTarget = Vector3f((float) target.x, (float) target.y, (float) target.z);
 }
 
 void MoveToVillageGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
-    // sub_1470507C0 resets the travel time only, the time at the target and the entered flag are kept
+    // the game resets the travel time only, the time at the target and the entered flag are kept
     (void) owner;
     mob.getNavigation().stop(mob);
     mTravelTicks = 0;
@@ -108,7 +108,7 @@ void MoveToVillageGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (mPathCheckPending)
         _checkRepeatedPath(mob);
 
-    // the base tick (sub_1470508E0) measures to the middle of the mob's box
+    // the base tick measures to the middle of the mob's box
     const Vector3f target = _targetPosition();
     const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(mob);
     const Vector3f &position = mob.getPosition();
@@ -126,7 +126,7 @@ void MoveToVillageGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         }
     }
 
-    // a leg whose end is within the squared goal radius is extended before the mob stops (sub_143A08830)
+    // a leg whose end is within the squared goal radius is extended before the mob stops
     const Path *path = mob.getNavigation().getPath();
     if (path != nullptr && !path->isEmpty()) {
         const Vector3f &end = path->last();
@@ -155,7 +155,7 @@ std::shared_ptr<Village> MoveToVillageGoal::_findVillage(ServerNetworkHandler &o
 }
 
 Vector3i MoveToVillageGoal::_selectTarget(ServerNetworkHandler &owner, const MobActor &mob) const {
-    // sub_1474FAB80: x, z then y are drawn in the village box, and y is replaced by the ground below it
+    // x, z then y are drawn in the village box, and y is replaced by the ground below it
     const std::shared_ptr<Village> village = _findVillage(owner, mob);
     if (village == nullptr)
         return Vector3i(0, 0, 0);
@@ -173,12 +173,12 @@ Vector3i MoveToVillageGoal::_selectTarget(ServerNetworkHandler &owner, const Mob
 }
 
 Vector3f MoveToVillageGoal::_targetPosition() const {
-    // the base goal aims one block above the chosen block (sub_147050CF0)
+    // the base goal aims one block above the chosen block
     return Vector3f(mTarget.x, mTarget.y + TARGET_HEIGHT_OFFSET, mTarget.z);
 }
 
 void MoveToVillageGoal::_moveCloser(ServerNetworkHandler &owner, MobActor &mob) const {
-    // sub_1474FA890: a leg of three quarters of the follow range towards the target, on the ground at its end
+    // a leg of three quarters of the follow range towards the target, on the ground at its end
     const Vector3f &position = mob.getPosition();
     const float dx = mTarget.x - position.x;
     const float dy = mTarget.y - position.y;
@@ -192,7 +192,7 @@ void MoveToVillageGoal::_moveCloser(ServerNetworkHandler &owner, MobActor &mob) 
 }
 
 void MoveToVillageGoal::_checkRepeatedPath(const MobActor &mob) {
-    // sub_143A08990, once the new path is computed: no path, or one starting from the last one's start block, puts
+    // once the new path is computed: no path, or one starting from the last one's start block, puts
     // the goal on cooldown; our paths keep no start node: the mob's block stands in
     const PathNavigation &navigation = mob.getNavigation();
     if (navigation.getPath() == nullptr && !navigation.isDone())

@@ -21,7 +21,7 @@ namespace {
 
     using Mode = ThrowableItem::DispenseMode;
 
-    // snowball sub_1435861D0, egg sub_147B9F5D0, experience bottle sub_141ADF1E0; the ender pearl keeps
+    // snowball, egg and experience bottle; the ender pearl keeps
     // Item::dispense; ice ball and wind charge are ComponentItems (26.60)
     const ThrowableDefinition THROWABLES[] = {
             {"minecraft:ice_ball", "minecraft:ice_ball", 1.0f, 0, Mode::ShootWithClick},
@@ -86,7 +86,7 @@ bool ThrowableItem::dispense(const DispenseSource &source) const {
     return true;
 }
 
-// the facing side, 0.1 up (sub_1435861D0, 26.60)
+// the facing side, 0.1 up
 ServerActor *ThrowableItem::_shootFrom(const DispenseSource &source) const {
     Vector3f direction = source.getFacingVector();
     direction.y += 0.1f;

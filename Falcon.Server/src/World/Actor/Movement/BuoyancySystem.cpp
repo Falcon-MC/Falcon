@@ -91,7 +91,6 @@ bool BuoyancySystem::_isFloatLiquid(const BuoyancySettings &settings, const Bloc
 
 double BuoyancySystem::advanceTimer(double timer, const BuoyancySettings &settings, const Vector3f &velocity,
                                     std::mt19937 &random) {
-    // sub_14695ACE0
     if (settings.mMovement == BuoyancyMovement::Bobbing)
         return timer + 1.0;
 
@@ -103,7 +102,7 @@ double BuoyancySystem::advanceTimer(double timer, const BuoyancySettings &settin
 
 float BuoyancySystem::floatVelocity(float velocityY, float positionY, double timer, const BuoyancySettings &settings,
                                     const BuoyancyContact &contact, bool leashed) {
-    // sub_146959470: under the surface the lift is full and the waves do not count
+    // under the surface the lift is full and the waves do not count
     float buoyancy = 1.0f;
     float wave = 0.0f;
     if (contact.mSurface) {

@@ -252,7 +252,7 @@ void ServerNetworkHandler::_tickWeather(World &world) {
         while (surfaceY > 0 && !level.isSolidAt(targetX, surfaceY, targetZ))
             --surfaceY;
 
-        // a lightning rod near the top block takes the bolt at its own position (sub_143858510)
+        // a lightning rod near the top block takes the bolt at its own position
         const std::optional<Vector3i> rod = LightningRodBlock::findAttractingRod(
                 level, Vector3i(targetX, surfaceY + 1, targetZ));
         if (rod.has_value()) {

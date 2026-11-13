@@ -272,7 +272,7 @@ struct ScriptFogRef : ScriptNative {
     ScriptEntityRef mEntity;
 };
 
-// AimAssistCategorySettings: what addCategory reads; both defaults start at 1 (sub_14C936250, 26.60)
+// AimAssistCategorySettings: what addCategory reads; both defaults start at 1
 struct ScriptAimAssistCategorySettingsRef : ScriptNative {
     std::string mIdentifier;
     std::vector<std::pair<std::string, int32_t>> mEntityPriorities;
@@ -347,7 +347,7 @@ namespace ScriptValues {
 
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
 
-    // a bound as the binding prints it (sub_148552370): whole numbers bare, others with two decimals
+    // a bound as the binding prints it: whole numbers bare, others with two decimals
     std::string boundText(double value);
 
     // block states: bytes are booleans, as the palette stores them

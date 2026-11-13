@@ -40,7 +40,7 @@ public:
         std::function<bool(const Vector3i &target, BlockState &state)> mFilter;
     };
 
-    // ScriptStructureManager::createEmptyStructure (sub_14B85BCE0, 26.60): x and z, y being the dimension height
+    // x and z, y being the dimension height
     static constexpr int32_t MAX_HORIZONTAL_SIZE = 64;
 
     McStructure() = default;

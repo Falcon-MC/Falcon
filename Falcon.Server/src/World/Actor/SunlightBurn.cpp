@@ -9,14 +9,14 @@
 
 namespace {
     const int32_t BURN_TICKS = 8 * 20;
-    // strictly above: sub_140BAEA60
+    // strictly above
     const float MIN_BRIGHTNESS = 0.5f;
     const float MAX_LIGHT = 15.0f;
     // the sky darkens past this at dusk and dawn: no burning
     const int32_t MAX_SKY_DARKEN = 3;
     const float WATER_BOX_INSET = 0.001f;
 
-    // any water in the box shrunk by 0.001: sub_1432D9CB0
+    // any water in the box shrunk by 0.001
     bool touchesWater(Level &level, const ServerActor &actor) {
         const Vector3f position = actor.getPosition();
         const ActorSize size = actor.getSize();
@@ -52,7 +52,7 @@ void SunlightBurn::tick(ServerNetworkHandler &owner, ServerActor &actor) {
     if (actor.shieldFromSunlight())
         return;
 
-    // the top of the box has to reach the heightmap: sub_140BAEA60
+    // the top of the box has to reach the heightmap
     const Vector3f position = actor.getPosition();
     const int32_t top = (int32_t) std::round(position.y + actor.getSize().mHeight);
     const int32_t blockX = (int32_t) std::floor(position.x);

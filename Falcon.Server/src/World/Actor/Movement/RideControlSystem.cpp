@@ -106,7 +106,7 @@ namespace {
     }
 
     float ridingCharge(int32_t ticks) {
-        // VehicleJumpInput (0x140EF0920): held past the peak, decays toward 0.8
+        // VehicleJumpInput: held past the peak, decays toward 0.8
         return ticks < 10 ? (float) ticks * 0.1f : 0.8f + 0.2f / (float) (ticks - 9);
     }
 
@@ -482,7 +482,7 @@ bool RideControlSystem::_tryDash(ServerNetworkHandler &owner, MobActor &mob, Rid
     const float yaw = (entityDirection ? mob.getRotation().y : state.mInput.mYaw) * DEGREES_TO_RADIANS;
     const float pitch = (direction == DASH_DIRECTION_PASSENGER ? state.mInput.mPitch : 0.0f) * DEGREES_TO_RADIANS;
 
-    // DashActionSystem (0x140B50800, 1.26.10) scales the impulse linearly
+    // DashActionSystem scales the impulse linearly
     const float horizontalMomentum = numberIn(dash, "horizontal_momentum", DASH_DEFAULT_HORIZONTAL);
     const float verticalMomentum = numberIn(dash, "vertical_momentum", DASH_DEFAULT_VERTICAL);
     const float horizontal = charge * horizontalMomentum * mob.getMovementSpeed() * mob.getMovementSpeedMultiplier();
@@ -663,7 +663,7 @@ void RideControlSystem::_applySlipperyImpulse(MobActor &mob, float wishX, float 
 
 void RideControlSystem::_applyAirRotation(MobActor &mob, float targetYaw) {
     Vector3f rotation = mob.getRotation();
-    // VehicleAirControlledMoveSystem (0x140B71470) follows the latest target
+    // VehicleAirControlledMoveSystem follows the latest target
     const float delta = wrapDegrees(targetYaw - rotation.y);
     const float factor = std::max((45.0f - std::min(std::fabs(delta), 45.0f)) / 90.0f, 0.18f);
     rotation.x = mob.getRideControl().mInput.mPitch * 0.5f;

@@ -186,7 +186,7 @@ void Level::_tickNamedTicks() {
             continue;
         mNamedTicks.tickColumn(column.first, column.second, levelTick,
                                [&](const NamedTickQueue::Entry &entry, const std::string &eventNamespace) {
-                                   // the event belongs to the block type it was scheduled on (sub_1432C6B20)
+                                   // the event belongs to the block type it was scheduled on
                                    const BlockState state = getBlockState(entry.position.x, entry.position.y,
                                                                           entry.position.z);
                                    if (state.mName != entry.blockType || state.mName == BlockNames::AIR)

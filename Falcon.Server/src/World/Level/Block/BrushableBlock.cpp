@@ -17,7 +17,7 @@ const char *BrushableBlock::getBlockActorId() const {
     return BrushableBlockActor::BLOCK_ACTOR_ID;
 }
 
-// the block makes its actor with the empty table (sub_147154390)
+// the block makes its actor with the empty table
 void BrushableBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                               const BlockState &state, const ItemStack &usedItem, int blockFace) const {
     (void) player;
@@ -27,7 +27,7 @@ void BrushableBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     level.getBlockActors().getOrCreate<BrushableBlockActor>(position).setType(state.mName);
 }
 
-// BrushableBlock::tick (sub_1435B36F0, 26.60); the fall check runs from the falling block system
+// the fall check runs from the falling block system
 void BrushableBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) const {
     (void) state;

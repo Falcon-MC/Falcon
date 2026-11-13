@@ -3,7 +3,7 @@
 namespace {
     // the GameTest framework: registrations, the Test helper of each running instance, its sequences and its
     // errors. The runner in ScriptGameTests places the structures and reports; this side runs the test code.
-    // Registration defaults from sub_14BA2A220 (26.60), sequence steps from GameTestSequence
+    // Registration defaults from the game, sequence steps from GameTestSequence
     const char *SOURCE = R"JS(
 (function (native) {
     const token = Symbol();
@@ -669,8 +669,8 @@ namespace {
         if (!isEntity(entity))
             throw conversion();
         const ticks = integer(fuseLength);
-        // sub_144AF6240: the explode component first, then the length, both naming the entity type at the
-        // test's relative origin (sub_144B199E0)
+        // the explode component first, then the length, both naming the entity type at the
+        // test's relative origin
         const result = native.setFuse(entity, ticks);
         const origin = { x: 0, y: 0, z: 0 };
         if (result === 1)
@@ -792,7 +792,7 @@ namespace {
     Object.setPrototypeOf(SimulatedPlayer, S.Player);
     native.sp.prototype(SimulatedPlayer.prototype);
     const playerTests = new WeakMap();
-    // sub_144B06CD0, qword_14F1FC468: the body faces the test's turn
+    // the body faces the test's turn
     const TEST_YAWS = [0, 90, 180, -90];
     const LOOK_DURATIONS = ["Instant", "Continuous", "UntilMove"];
     const invalidPlayer = (self, member) => {
@@ -814,7 +814,7 @@ namespace {
                 throw invalidPlayer(self, member);
             return run(self, ...args);
         }, getter);
-    // sub_144AF1740: a test whose structure block is gone converts nothing
+    // a test whose structure block is gone converts nothing
     const structureOf = (inst) => {
         const block = inst.dimension.getBlock(inst.origin);
         if (block === undefined || block.typeId !== "minecraft:structure_block")
@@ -876,7 +876,7 @@ namespace {
         const at = playerWorld(self, location);
         native.sp.look(self, at.x, at.y, at.z, lookDuration(duration));
     });
-    // sub_14DCF9ED0: west-east and north-south turned with the test
+    // west-east and north-south turned with the test
     simulatedMethod("move", (self, westEast, northSouth, speed) => {
         let x = number(westEast);
         let z = number(northSouth);
@@ -906,7 +906,7 @@ namespace {
         return { faceTarget: options.faceTarget === undefined ? true : bool(options.faceTarget),
             speed: options.speed === undefined ? 1 : number(options.speed) };
     };
-    // sub_14DCFA890: the bottom centre of the block
+    // the bottom centre of the block
     simulatedMethod("moveToBlock", (self, blockLocation, options) => {
         const block = blockVector(blockLocation);
         const opts = moveOptions(options);
@@ -918,12 +918,12 @@ namespace {
         const at = playerWorld(self, location);
         native.sp.moveTo(self, at.x, at.y, at.z, opts.faceTarget, opts.speed);
     });
-    // sub_14DCF80B0: added to the current yaw
+    // added to the current yaw
     simulatedMethod("rotateBody", (self, angleInDegrees) => {
         const angle = number(angleInDegrees);
         native.sp.yaw(self, native.sp.rotationOf(self).body + angle);
     });
-    // sub_14DCF8120: turned with the test
+    // turned with the test
     simulatedMethod("setBodyRotation", (self, angleInDegrees) => {
         const angle = number(angleInDegrees);
         const rotation = native.sp.rotation(self);
@@ -935,7 +935,7 @@ namespace {
     simulatedMethod("glide", (self) => native.sp.glide(self));
     simulatedMethod("stopGliding", (self) => { native.sp.stopGliding(self); });
 
-    // Direction as the block face index, turned with the test (sub_144B1C800)
+    // Direction as the block face index, turned with the test
     const FACES = ["Down", "Up", "North", "South", "West", "East"];
     const playerFace = (self, direction) => {
         if (direction === undefined)
@@ -949,7 +949,7 @@ namespace {
             face = DIRECTIONS[(index + inst.rotation) % 4];
         return FACES.indexOf(face);
     };
-    // sub_14DD00E50: without a face location the centre of the (turned) face, a given one unchanged
+    // without a face location the centre of the (turned) face, a given one unchanged
     const FACE_CENTRES = [{ x: 0.5, y: 0, z: 0.5 }, { x: 0.5, y: 1, z: 0.5 }, { x: 0.5, y: 0.5, z: 0 },
         { x: 0.5, y: 0.5, z: 1 }, { x: 0, y: 0.5, z: 0.5 }, { x: 1, y: 0.5, z: 0.5 }];
     const clickOf = (faceLocation, face) => (faceLocation === undefined || faceLocation === null ? FACE_CENTRES[face]
@@ -989,7 +989,7 @@ namespace {
     simulatedMethod("setItem", (self, item, slot, selectSlot) => native.sp.setItem(self, itemStack(item),
         integer(slot), selectSlot === undefined ? false : bool(selectSlot)));
     simulatedMethod("interact", (self) => native.sp.interact(self));
-    // sub_14DD00600: the face is not turned with the test
+    // the face is not turned with the test
     simulatedMethod("interactWithBlock", (self, blockLocation, direction) => {
         let face = 1;
         if (direction !== undefined) {
@@ -1028,7 +1028,7 @@ namespace {
     simulatedMethod("stopBuild", (self) => { native.sp.stopBuild(self); });
     simulatedMethod("stopInteracting", (self) => { native.sp.stopInteracting(self); });
 
-    // PlayerSkinData: persona::ArmSize and persona::PieceType in the game's order (sub_14BA81B50)
+    // PlayerSkinData: arm sizes and piece types in the game's order
     const ARM_SIZES = ["Slim", "Wide"];
     const PIECE_TYPES = ["Unknown", "Skeleton", "Body", "Skin", "Bottom", "Feet", "Dress", "Top", "HighPants", "Hands",
         "Outerwear", "FacialHair", "Mouth", "Eyes", "Hair", "Hood", "Back", "FaceAccessory", "Head", "Legs", "LeftLeg",
@@ -1081,7 +1081,7 @@ namespace {
                 packId: piece.packId, productId: piece.productId, type: PIECE_TYPES[piece.type] })) };
     };
 
-    // NavigationResult: the path in block positions, relative to the player's test (sub_14DD020A0)
+    // NavigationResult: the path in block positions, relative to the player's test
     const NavigationResult = privateClass("NavigationResult");
     const navigations = new WeakMap();
     const navigationOf = (self, member) => {
@@ -1106,7 +1106,7 @@ namespace {
         const at = playerWorld(self, location);
         return navigationResult(self, native.sp.navigate(self, at.x, at.y, at.z, navigationSpeed(speed)));
     });
-    // sub_14DCFBD20: the bottom centre of the block
+    // the bottom centre of the block
     simulatedMethod("navigateToBlock", (self, blockLocation, speed) => {
         const at = playerBlock(self, blockLocation);
         return navigationResult(self, native.sp.navigate(self, at.x + 0.5, at.y, at.z + 0.5, navigationSpeed(speed)));
@@ -1116,7 +1116,7 @@ namespace {
             throw conversion();
         const pace = navigationSpeed(speed);
         const result = entity.isValid ? native.sp.navigateEntity(self, entity, pace) : undefined;
-        // sub_148549BD0: InvalidArgumentErrorType.Unspecified on the "entity" argument, no index
+        // InvalidArgumentErrorType.Unspecified on the "entity" argument, no index
         if (result === undefined) {
             const error = new native.errors.classes.InvalidArgumentError(undefined, undefined, "Unspecified",
                 undefined);

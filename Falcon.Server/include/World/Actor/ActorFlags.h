@@ -46,7 +46,7 @@ enum class ActorFlag : int {
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
     FacingTargetToRangeAttack = 88,
-    // read by Player.isEmoting (sub_14D53E890)
+    // read by Player.isEmoting
     Emoting = 92,
     Celebrating = 93,
     Admiring = 94,
@@ -70,9 +70,9 @@ enum class ActorFlag : int {
 
 class ActorFlags {
 public:
-    // the three flag words: data ids 0, 92 and 139 (sub_142C6F4D0)
+    // the three flag words: data ids 0, 92 and 139
     static const int32_t FLAGS_DATA_ID = 0;
-    // sub_142C6F4D0: the flag words go out as data 0, 92 and 139
+    // the flag words go out as data 0, 92 and 139
     static const int32_t FLAGS_2_DATA_ID = 92;
     static const int32_t FLAGS_3_DATA_ID = 139;
     static const int32_t VARIANT_DATA_ID = 2;

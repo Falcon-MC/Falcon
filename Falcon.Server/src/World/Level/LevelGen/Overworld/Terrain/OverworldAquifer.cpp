@@ -12,7 +12,7 @@ namespace {
     constexpr int32_t LAVA_FLOOR_Y = -55;
     constexpr int32_t NO_FLUID_LEVEL = -4096;
 
-    // chunk offsets of the surface samples, in the game's order (qword_14F49A788)
+    // chunk offsets of the surface samples, in the game's order
     const int32_t SURFACE_SAMPLE_OFFSETS[13][2] = {{-2, -1}, {-1, -1}, {0, -1}, {1, -1}, {-3, 0}, {-2, 0}, {-1, 0},
                                                    {0, 0},   {1, 0},   {-2, 1}, {-1, 1}, {0, 1},  {1, 1}};
 

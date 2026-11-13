@@ -113,7 +113,7 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     const BlockState air("minecraft:air");
     const std::string placementMode = mode == "destroy" ? "destroy" : (mode == "keep" ? "keep" : "replace");
 
-    // every block first, then the neighbours of each in placing order (sub_14BE6B770); a block that ticks at
+    // every block first, then the neighbours of each in placing order; a block that ticks at
     // random gets a tick one later, so still lava starts flowing at once
     std::vector<std::pair<Vector3i, bool>> placed;
     LiquidPhysicsSystem &liquids = level->getLiquidPhysics();

@@ -506,7 +506,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             && mapLevel.getMapData(requested.mCopyId) == nullptr)
             return requested.mCopyId;
 
-        // sub_142F64860 draws the id of the locked copy at random
+        // the game draws the id of the locked copy at random
         int64_t copyId = (int64_t) (uint32_t) MapItem::random()();
         while (copyId == MapItemSavedData::INVALID_ID || mapLevel.getMapData(copyId) != nullptr)
             copyId = (int64_t) (uint32_t) MapItem::random()();

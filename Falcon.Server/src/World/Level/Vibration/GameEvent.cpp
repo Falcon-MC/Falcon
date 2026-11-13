@@ -11,7 +11,7 @@ namespace {
 
     constexpr int32_t EVENT_COUNT = 66;
 
-    // by id, from 1 (table at 0x14F1D0D20, 26.60)
+    // by id, from 1
     constexpr std::array<int32_t, EVENT_COUNT - 1> FREQUENCIES = {
             10, 10, 11, 9, 9,  12, 9,  10, 13, 2,  9,  10, 10, 8,  8, 4,  7,  15, 5, 6,  6, 1,
             14, 4,  4,  5, 15, 1,  12, 13, 2,  3,  0,  14, 6,  10, 9, 10, 10, 2,  3, 1,  2, 3,

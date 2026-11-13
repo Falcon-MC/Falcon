@@ -25,22 +25,21 @@ struct TrackingRecord {
 // PositionTrackingDB: lodestone positions by tracking id, level-wide under PosTrackDB-0x%08x; main thread only
 class PositionTrackingDB {
 public:
-    // 0 never names a record (dword_152972CE4)
+    // 0 never names a record
     static const int32_t INVALID_ID = 0;
 
-    // sub_1437F7640: the last id handed out, from PositionTrackDB-LastId
+    // the last id handed out, from PositionTrackDB-LastId
     void load(Level &storage);
 
-    // sub_1437F7EC0 then sub_1437F8250: a new id for the position, saved with the last id
+    // a new id for the position, saved with the last id
     const TrackingRecord &track(const Vector3i &position, int32_t dimension);
 
-    // sub_1437F8F40: the cached record, else the stored one; nullptr when neither exists
+    // the cached record, else the stored one; nullptr when neither exists
     const TrackingRecord *find(int32_t id);
 
-    // the Destroy operation (sub_143814990): marked destroyed and erased from storage
+    // the Destroy operation: marked destroyed and erased from storage
     const TrackingRecord *destroy(int32_t id);
 
-    // sub_1437F6B80
     static Tag toTag(const TrackingRecord &record);
 
 private:

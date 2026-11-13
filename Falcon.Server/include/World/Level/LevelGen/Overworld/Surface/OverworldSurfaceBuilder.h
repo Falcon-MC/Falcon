@@ -40,7 +40,7 @@ private:
     // after every column has its surface
     void _buildSubsurface(LevelChunk &chunk) const;
 
-    // the lowest block a column's builders may change (sub_14A22FC50)
+    // the lowest block a column's builders may change
     int32_t _lowestSurfaceY(int32_t worldX, int32_t worldZ) const;
 
     // builders other than the overworld one, not ported yet

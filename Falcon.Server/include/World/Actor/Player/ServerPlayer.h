@@ -190,7 +190,7 @@ public:
         mBuildPlatform = platform;
     }
 
-    // CompatibleWithClientSideChunkGen from the login client data (sub_1422AA4E0, ServerPlayer+3576).
+    // CompatibleWithClientSideChunkGen from the login client data.
     bool isClientSideGenerationCompatible() const {
         return mClientSideGenerationCompatible;
     }
@@ -199,7 +199,7 @@ public:
         mClientSideGenerationCompatible = compatible;
     }
 
-    // the text filtering half of SyncedClientOptionsComponent, from the login client data (sub_143A10DC0, 26.60)
+    // the text filtering half of SyncedClientOptionsComponent, from the login client data
     void readSyncedClientOptions(const std::string &clientData);
 
     // SyncedClientOptionsComponent+24: FilterProfanity at login, then UpdateClientOptionsPacket
@@ -225,7 +225,7 @@ public:
         mServerBuildRatio = ratio;
     }
 
-    // Player+0xBC0, which EmptyMapItem::use numbers its maps with (sub_147B9F900)
+    // the counter empty maps number their maps with
     int32_t takeMapNameIndex() {
         return mMapNameIndex++;
     }
@@ -284,7 +284,7 @@ public:
     }
 
     // hitPosition: where the client says it hit, in world space; null when unknown
-    // checkReach false: a gametest simulated player attacks at any distance, facing anywhere (sub_141038210)
+    // checkReach false: a gametest simulated player attacks at any distance, facing anywhere
     bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition = nullptr,
                      bool checkReach = true);
 
@@ -314,7 +314,7 @@ public:
         bool mTouchOnlyHotbar = false;
     };
 
-    // the device the client reported in its login client data (sub_143A10DC0, 26.60), graphics mode updated by
+    // the device the client reported in its login client data, graphics mode updated by
     // UpdateClientOptionsPacket: memory tier clamped to 0-4, Fancy until told otherwise
     struct ClientDevice {
         int32_t mMemoryTier = 0;
@@ -327,7 +327,7 @@ public:
         return mClientDevice;
     }
 
-    // the server camera state (sub_14C918000, sub_145EB0C60, 26.60): the first camera instruction creates it unnamed,
+    // the server camera state: the first camera instruction creates it unnamed,
     // a set names it after the preset, a clear puts it back on first person
     struct CameraState {
         bool mPresent = false;
@@ -340,7 +340,7 @@ public:
 
     void recordCamera(const CameraInstructionPacket &packet);
 
-    // one entry of the scripted fog stack (sub_142BC95B0, 26.60), bottom first
+    // one entry of the scripted fog stack, bottom first
     struct FogEntry {
         std::string mId;
         std::string mTag;
@@ -363,7 +363,7 @@ public:
         return mAimAssist;
     }
 
-    // ControlSchemeComponent, LockedPlayerRelativeStrafe until set (sub_145D0FD90)
+    // ControlSchemeComponent, LockedPlayerRelativeStrafe until set
     int32_t getControlScheme() const {
         return mControlScheme;
     }
@@ -715,7 +715,7 @@ public:
 
     static const int HUD_ELEMENT_COUNT = 13;
 
-    // Player::setHudVisibility (sub_141030B10): no elements means all of them
+    // no elements means all of them
     void setHudVisibility(bool hidden, const std::vector<int32_t> *elements = nullptr);
 
     // ClientInputLocks: one bit per InputPermissionCategory value, set when locked; true when it changed
@@ -819,7 +819,7 @@ public:
         mSleeping = false;
     }
 
-    // actor data 133, the position before lying down (sub_143155010)
+    // actor data 133, the position before lying down
     const Vector3f &getBedEnterPosition() const {
         return mBedEnterPosition;
     }
@@ -878,13 +878,13 @@ public:
         mSpawnWorld = world;
     }
 
-    // sub_1402DC450: /spawnpoint keeps the position and dimension, clears the block
+    // /spawnpoint keeps the position and dimension, clears the block
     void setSpawnPosition(const Vector3i &standPosition, DimensionType dimension, const std::string &world) {
         setSpawnPoint(standPosition, standPosition, dimension, world);
         mHasSpawnBlock = false;
     }
 
-    // sub_1402DC130: floor x and z, ceil of the feet
+    // floor x and z, ceil of the feet
     Vector3i getSpawnStandPositionHere() const;
 
     void clearSpawnPoint() {

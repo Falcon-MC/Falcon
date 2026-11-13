@@ -28,7 +28,7 @@ bool SnowLayerBlock::canBeReplaced(const BlockState &state) const {
     return state.mStates.getInt(SNOW_LAYER_HEIGHT, 0) < SNOW_LAYER_MAX_HEIGHT;
 }
 
-// sub_14B27C5D0: one layer below its look, a single layer is walked through
+// one layer below its look, a single layer is walked through
 bool SnowLayerBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
     int eighths = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
     if (actor != nullptr && actor->collidesAtSnowLayerLook())

@@ -18,13 +18,13 @@ class ServerNetworkHandler;
 // runs the batches; the test code itself runs in the pack's script
 class GameTestRunner {
 public:
-    // gameTest.error.structureTooBig: every side below 49 (sub_14BE80D30)
+    // gameTest.error.structureTooBig: every side below 49
     static constexpr int32_t MAX_CREATE_SIZE = 48;
     static constexpr int32_t DEFAULT_CREATE_SIZE = 5;
     // runthis looks this far for a structure block, runthese and pos up to the second radius
     static constexpr int32_t NEAR_RADIUS = 15;
     static constexpr int32_t FAR_RADIUS = 200;
-    // the batch runner's row length and the largest batch (0x6400000005 in sub_14BE80D30)
+    // the batch runner's row length and the largest batch
     static constexpr int32_t TESTS_PER_ROW = 5;
     static constexpr int32_t MAX_TESTS_PER_BATCH = 100;
 
@@ -182,7 +182,7 @@ private:
 
     void _setBlock(Level &level, const Vector3i &position, const BlockState &state);
 
-    // StructureUtils::clearSpaceForStructure (sub_144B1DFA0): air from the floor up, dirt under it
+    // air from the floor up, dirt under it
     void _clearSpace(Level &level, const Vector3i &low, const Vector3i &high, int32_t floor);
 
     const Descriptor *_find(const std::string &name, const std::vector<Descriptor> &all) const;

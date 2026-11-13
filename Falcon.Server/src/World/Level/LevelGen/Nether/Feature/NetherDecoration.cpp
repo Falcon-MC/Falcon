@@ -179,7 +179,6 @@ void NetherDecoration::placeAfterBiomes() {
 }
 
 void NetherDecoration::_placeSpring(int32_t x, int32_t y, int32_t z, bool closed) {
-    // sub_14D22B700
     if (!same(mBlocks.getBlockAt(x, y + 1, z), netherrackState()))
         return;
 
@@ -201,7 +200,6 @@ void NetherDecoration::_placeSpring(int32_t x, int32_t y, int32_t z, bool closed
 }
 
 void NetherDecoration::_placeFire(int32_t x, int32_t y, int32_t z) {
-    // sub_14D22A340
     for (int32_t i = 0; i < 64; i++) {
         const int32_t offsetZ = spread(mRandom, 7);
         const int32_t offsetY = spread(mRandom, 3);
@@ -221,7 +219,6 @@ void NetherDecoration::_placeFire(int32_t x, int32_t y, int32_t z) {
 }
 
 void NetherDecoration::_placeGlowstone(int32_t x, int32_t y, int32_t z) {
-    // sub_14D213320
     if (!same(mBlocks.getBlockAt(x, y, z), airState()))
         return;
 
@@ -251,7 +248,7 @@ void NetherDecoration::_placeGlowstone(int32_t x, int32_t y, int32_t z) {
 }
 
 void NetherDecoration::_placeMushrooms(int32_t x, int32_t y, int32_t z, const BlockState &mushroom) {
-    // sub_14D2261D0 always draws its 64 tries, whatever they find
+    // the game always draws its 64 tries, whatever they find
     int32_t blockX = x;
     int32_t blockY = y;
     int32_t blockZ = z;
@@ -270,7 +267,7 @@ void NetherDecoration::_placeMushrooms(int32_t x, int32_t y, int32_t z, const Bl
 }
 
 void NetherDecoration::_placeDebris(int32_t x, int32_t y, int32_t z, int32_t maxCount) {
-    // sub_14D22BB00, the scatter ore of nether_netherite_deep_feature and nether_netherite_tall_feature
+    // the scatter ore of nether_netherite_deep_feature and nether_netherite_tall_feature
     const int32_t count = nextInt(mRandom, maxCount);
     for (int32_t i = 0; i < count; i++) {
         int32_t blockX = x;

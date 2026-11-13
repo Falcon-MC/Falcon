@@ -34,7 +34,7 @@ CushionActor::CushionActor(uint64_t runtimeId, const std::string &identifier) : 
     getFlags().set(ActorFlag::HasGravity, false);
 }
 
-// the block 1/64 under the cushion must have a collision shape: a slab or a fence holds it (sub_142DCA020)
+// the block 1/64 under the cushion must have a collision shape: a slab or a fence holds it
 bool CushionActor::hasSupportingBlock(ServerNetworkHandler &owner) const {
     Level &level = owner.getLevelFor(*this);
     const Vector3f position = getPosition();

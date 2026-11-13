@@ -7,16 +7,16 @@
 
 class Actor;
 
-// SculkSensorBlock (vtable 0x14F41B030, 26.60): both sensors are this class, the calibrated one stays active less
+// SculkSensorBlock: both sensors are this class, the calibrated one stays active less
 class SculkSensorBlock : public Block {
 public:
     // sculk_sensor_phase
     static constexpr int32_t PHASE_INACTIVE = 0;
     static constexpr int32_t PHASE_ACTIVE = 1;
     static constexpr int32_t PHASE_COOLDOWN = 2;
-    // BlockLegacy +0x378 set at registration (sub_14CE9AD30): 30 for the sensor, 10 for the calibrated one
+    // BlockLegacy +0x378 set at registration: 30 for the sensor, 10 for the calibrated one
     static constexpr int32_t ACTIVE_TICKS = 30;
-    // sub_14B255200 schedules the cooldown's end 10 ticks on
+    // the game schedules the cooldown's end 10 ticks on
     static constexpr int32_t COOLDOWN_TICKS = 10;
 
     explicit SculkSensorBlock(const Block &block) : Block(block) {}
@@ -25,7 +25,7 @@ public:
 
     static int32_t phaseOf(const BlockState &state);
 
-    // SculkSensorBlock::activate (sub_14B256960, 26.60)
+    // SculkSensorBlock::activate
     static void activate(ServerNetworkHandler &owner, Level &level, const Vector3i &position, Actor *source,
                          int32_t power, int32_t frequency);
 

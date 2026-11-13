@@ -16,7 +16,7 @@ public:
     // the raw text name the client shows in the npc screen
     static constexpr int32_t NAME_RAW_TEXT_DATA_ID = 112;
 
-    // NpcComponent::setName (sub_143CA7100, 26.60): the name tag keeps 32 code points at most
+    // the name tag keeps 32 code points at most
     static constexpr size_t MAX_NAME_TAG_LENGTH = 32;
 
     struct Skin {
@@ -34,10 +34,10 @@ public:
         return mSkins;
     }
 
-    // -1 when the index points past the skin list, like the script getter (sub_14DEE1C50, 26.60)
+    // -1 when the index points past the skin list, like the script getter
     int32_t getSkinIndex() const;
 
-    // false on a negative index, one past the list or the current one (NpcComponent::setSkinIndex, sub_143CAAE10)
+    // false on a negative index, one past the list or the current one
     bool setSkinIndex(ServerNetworkHandler *owner, int32_t index);
 
     const std::string &getRawName() const {

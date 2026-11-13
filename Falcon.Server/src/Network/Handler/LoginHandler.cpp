@@ -79,7 +79,7 @@ namespace {
     using MovementPhysics::PLAYER_BASE_OFFSET;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
 
-    // sub_14C703FD0: the definition the game gives every script dimension
+    // the definition the game gives every script dimension
     const int32_t CUSTOM_DIMENSION_GENERATOR = 5;
     const char *const CUSTOM_DIMENSION_BIOME = "minecraft:ocean";
     const int32_t CUSTOM_DIMENSION_CLOUD_HEIGHT = 128;
@@ -422,7 +422,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     ServerNetworkHandler::boundSkin(skin);
     player.setSkin(skin);
     player.setBuildPlatform(request.getBuildPlatform());
-    // sub_1404B9270 reads the flag as a JSON bool that defaults to true when the client leaves it out.
+    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
     player.setClientSideGenerationCompatible(
             ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
     player.setLocale(request.getLanguageCode());
@@ -603,7 +603,7 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     chunk.mProgress = (int64_t) offset;
     chunk.mData = pack->mData.substr(offset, length);
     // packs are zips: deflate saves ~0.3% for ~30 ms per MiB on the main thread; the client asks for
-    // 100 chunks at once (sub_145AA6E40)
+    // 100 chunks at once
     chunk.mCompressible = Packet::Compressibility::Incompressible;
     owner.getNetworkHandler().send(id, chunk, owner.getCodecContext());
 }
@@ -640,7 +640,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
-    // sub_1422AA6C0: only a client able to generate chunks is told the server leaves some to it.
+    // only a client able to generate chunks is told the server leaves some to it.
     startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled()
                                              && player.isClientSideGenerationCompatible();
     startGame.mDisablingCustomSkins = owner.getProperties().getDisableCustomSkins();
@@ -682,7 +682,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
-    // sub_1422AA6C0: right after StartGame, only when there are definitions to send
+    // right after StartGame, only when there are definitions to send
     if (!Dimension::customDimensions().empty()) {
         DimensionDataPacket dimensions;
         for (const auto &entry: Dimension::customDimensions()) {
@@ -690,7 +690,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
             DimensionDefinition definition;
             definition.mId = entry.second;
             definition.mMinimumHeight = Dimension::getMinY(custom);
-            // sub_14295DD30: the second field is the height range, not the top
+            // the second field is the height range, not the top
             definition.mMaximumHeight = Dimension::getMaxY(custom) + 1 - Dimension::getMinY(custom);
             definition.mGeneratorType = CUSTOM_DIMENSION_GENERATOR;
             definition.mDimensionType = Dimension::toId(custom);
@@ -709,12 +709,12 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getInventoryManager().attach(&player, &owner);
 
     sendItemComponents(owner, player);
-    // sub_1422AA6C0: the clock registry follows the item registry
+    // the clock registry follows the item registry
     owner.getScriptEngine().sendWorldClocks(player);
     owner.sendScoreboard(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
-    // sub_1422AA6C0 (26.60): the whole aim assist registry, sub_143779AE0
+    // the whole aim assist registry
     owner.getScriptEngine().sendAimAssist(player);
     sendSharedLoginPacket(
             owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
@@ -1376,7 +1376,7 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
         data.mName = command->getName();
         data.mDescription = command->getDescription();
         data.mPermission = command->getRequiredPermission();
-        // sub_1455ACCB0: <name>CommandAliases, the name then its aliases
+        // <name>CommandAliases, the name then its aliases
         if (!command->getAliases().empty()) {
             data.mHasAliases = true;
             data.mAliases.mName = command->getName() + "CommandAliases";

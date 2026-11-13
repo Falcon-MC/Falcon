@@ -16,15 +16,15 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    // sub_14772D900: a rising edge sets triggered_bit and asks for the craft 4 ticks later
+    // a rising edge sets triggered_bit and asks for the craft 4 ticks later
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
 
-    // sub_14772C510: crafts the grid's recipe once
+    // crafts the grid's recipe once
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 
-    // sub_144C20530: every output of the grid's recipe, none when nothing matches
+    // every output of the grid's recipe, none when nothing matches
     static std::vector<ItemStack> craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter);
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;

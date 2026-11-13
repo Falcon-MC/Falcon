@@ -103,7 +103,7 @@ public:
     void onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
                                    int32_t face, const Vector3f &clickPosition);
 
-    // Block::use: the custom block's onPlayerInteract, without the world's playerInteractWithBlock event
+    // the custom block's onPlayerInteract, without the world's playerInteractWithBlock event
     void onCustomBlockUse(ServerPlayer &player, const std::string &blockId, const Vector3i &position, int32_t face,
                           const Vector3f &clickPosition);
 
@@ -345,7 +345,7 @@ public:
         return mAimAssist;
     }
 
-    // a script-added entry: every spawned player receives it (sub_14ACE5E90, 26.60)
+    // a script-added entry: every spawned player receives it
     void broadcastAimAssist(const CameraAimAssistPresetsPacket &packet);
 
     void sendAimAssist(ServerPlayer &player);

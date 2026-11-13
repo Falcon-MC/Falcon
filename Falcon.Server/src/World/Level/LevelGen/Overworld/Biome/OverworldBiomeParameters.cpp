@@ -17,7 +17,7 @@ namespace {
     constexpr int32_t NONE = -1;
     constexpr size_t CHILDREN_PER_NODE = 6;
 
-    // biome tables as the game stores them from xmmword_14F49ABC8, with the tables it picks for new worlds
+    // biome tables as the game stores them, with the tables it picks for new worlds
     const int32_t OCEANS[2][5] = {{BiomeIds::DEEP_FROZEN_OCEAN, BiomeIds::DEEP_COLD_OCEAN, BiomeIds::DEEP_OCEAN,
                                    BiomeIds::DEEP_LUKEWARM_OCEAN, BiomeIds::WARM_OCEAN},
                                   {BiomeIds::FROZEN_OCEAN, BiomeIds::COLD_OCEAN, BiomeIds::OCEAN,
@@ -38,7 +38,7 @@ namespace {
             {NONE, NONE, BiomeIds::PLAINS, BiomeIds::JUNGLE_EDGE, BiomeIds::BAMBOO_JUNGLE},
             {NONE, NONE, NONE, NONE, NONE}};
 
-    // the pale garden table, chosen for worlds newer than the gate in sub_14CDB0CB0
+    // the pale garden table, chosen for worlds newer than the gate in
     const int32_t PLATEAU_BIOMES[5][5] = {
             {BiomeIds::ICE_PLAINS, BiomeIds::ICE_PLAINS, BiomeIds::ICE_PLAINS, BiomeIds::COLD_TAIGA,
              BiomeIds::COLD_TAIGA},
@@ -78,7 +78,7 @@ namespace {
         return span(value, value);
     }
 
-    // ranges from the static initializers next to sub_14718E740
+    // ranges from the static initializers next to
     const Parameter FULL_RANGE = span(-1.0f, 1.0f);
     const Parameter TEMPERATURES[5] = {span(-1.0f, -0.45f), span(-0.45f, -0.15f), span(-0.15f, 0.2f), span(0.2f, 0.55f),
                                        span(0.55f, 1.0f)};
@@ -256,7 +256,7 @@ namespace {
         }
     }
 
-    // sub_14CDF2910 with the slices sub_14CDB9F30, sub_14CDC0FC0, sub_14CDC6D90 and sub_14CDCBF50, for a new world
+    // the game's slices for a new world
     // with every vanilla biome
     class Builder {
     public:
@@ -517,7 +517,7 @@ namespace {
         }
 
         void _addUndergroundBiomes() {
-            // sub_14CDF2910: the cave biomes and their ranges (ice caves need an experiment)
+            // the cave biomes and their ranges (ice caves need an experiment)
             const Parameter caveDepth = span(0.2f, 0.9f);
             _addUnderground(FULL_RANGE, span(-1.0f, 0.7f), span(0.8f, 1.0f), FULL_RANGE, caveDepth, FULL_RANGE,
                             BiomeIds::DRIPSTONE_CAVES);

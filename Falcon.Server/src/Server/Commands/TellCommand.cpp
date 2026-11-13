@@ -45,7 +45,7 @@ bool TellCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     ServerPlayer *self = sender.asPlayer();
     const std::string senderName = sender.getSenderName();
 
-    // a player's message goes through the chat event with its targets, and stops if cancelled (sub_14BE1E6E0)
+    // a player's message goes through the chat event with its targets, and stops if cancelled
     if (self != nullptr) {
         PlayerChatBeforeEvent before(*self, message);
         before.mTargets = &targets;

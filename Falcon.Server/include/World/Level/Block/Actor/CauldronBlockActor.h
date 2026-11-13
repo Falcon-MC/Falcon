@@ -47,7 +47,7 @@ public:
     // the water as the level events show it: the custom color with full alpha, else the game's fallback
     uint32_t getEventColor() const;
 
-    // an emptied cauldron forgets its potion and its color (sub_14A2EEEA0, sub_14330C860)
+    // an emptied cauldron forgets its potion and its color
     void clearContents();
 
 private:

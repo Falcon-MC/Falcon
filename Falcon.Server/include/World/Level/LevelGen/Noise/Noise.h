@@ -10,7 +10,7 @@ class Noise {
 public:
     explicit Noise(IRandom &rand);
 
-    // drawn from the game's Mersenne twister Random: nextDouble, then nextInt(256 - i) (sub_145C2AF90)
+    // drawn from the game's Mersenne twister Random: nextDouble, then nextInt(256 - i)
     explicit Noise(std::mt19937 &random);
 
     virtual ~Noise() = default;

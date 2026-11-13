@@ -185,7 +185,7 @@ public:
 
     static const int SIZE = 9;
 
-    // sub_144C20C50: how long the crafting state stays on after a craft
+    // how long the crafting state stays on after a craft
     static const int CRAFTING_TICKS = 6;
 
     CrafterBlockActor() : ContainerBlockActor(SIZE) {}
@@ -194,21 +194,20 @@ public:
         return BLOCK_ACTOR_ID;
     }
 
-    // sub_144C20180: the items and the disabled slots; the crafting ticks only travel to clients
+    // the items and the disabled slots; the crafting ticks only travel to clients
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    // sub_144C1F670
     Tag getSpawnCompound() const override;
 
-    // sub_144C20F40: the crafting state goes off when the ticks run out
+    // the crafting state goes off when the ticks run out
     bool tick(ServerNetworkHandler &owner) override;
 
-    // sub_144C1FDB0: only an empty slot can be disabled; false when nothing changed
+    // only an empty slot can be disabled; false when nothing changed
     bool setSlotDisabled(int slot, bool disabled);
 
-    // sub_14772E360: disabled slots plus filled slots
+    // disabled slots plus filled slots
     int getComparatorSignal() const;
 
     int mCraftingTicks = 0;
@@ -356,10 +355,10 @@ public:
         return mInventory.getContainerItem(0);
     }
 
-    // sub_144C3E260: one book in slot 0, back to its first page
+    // one book in slot 0, back to its first page
     void setBook(ItemStack book);
 
-    // sub_144C3E130: the book, now out of the lectern; air when there was none
+    // the book, now out of the lectern; air when there was none
     ItemStack takeBook();
 
     int mPage = 0;

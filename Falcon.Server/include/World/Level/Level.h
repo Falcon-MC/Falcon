@@ -121,7 +121,7 @@ public:
             ++mTime;
     }
 
-    // sub_140B49930: the day is the minecraft:overworld clock, paused with it
+    // the day is the minecraft:overworld clock, paused with it
     void setTimePaused(bool paused) {
         mTimePaused = paused;
     }
@@ -160,7 +160,7 @@ public:
 
     void initializeWeather();
 
-    // Weather::tick (sub_145E27530, 26.60): each level moves 0.01 a tick toward its state, within [0, 1]
+    // each level moves 0.01 a tick toward its state, within [0, 1]
     void tickWeatherLevels();
 
     float getRainLevel() const {
@@ -181,7 +181,7 @@ public:
 
     void addParticle(const Particle &particle);
 
-    // listeners of the chunks within 16 blocks hear it now, each inside its own range (sub_143FA66C0, 26.60)
+    // listeners of the chunks within 16 blocks hear it now, each inside its own range
     void postGameEvent(const GameEvent &event, const Vector3f &position, Actor *source = nullptr,
                        const BlockState *block = nullptr);
 
@@ -322,7 +322,7 @@ public:
     bool isChunkPopulated(int32_t chunkX, int32_t chunkZ) const;
 
     /**
-     * Whether storage holds the chunk (DBChunkStorage::isChunkSaved, sub_1406CAF60). The answers are cached as the
+     * Whether storage holds the chunk. The answers are cached as the
      * game does, until the cache fills or storage is reopened; a chunk queued for saving counts as saved.
      */
     bool isChunkSaved(int32_t chunkX, int32_t chunkZ);
@@ -333,7 +333,7 @@ public:
      */
     bool isNearStructure(const std::vector<const StructureFeature *> &features, int32_t chunkX, int32_t chunkZ);
 
-    // sub_14228D8A0; false for an unknown map
+    // false for an unknown map
     bool applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels);
 
     // the world's maps, kept on the overworld whose database stores them; written by the next saveAll
@@ -397,7 +397,7 @@ public:
 
     int32_t getHeightAt(int32_t x, int32_t z);
 
-    // BlockSource::getAboveTopSolidBlock without water or leaves (0x1432D1700, LevelChunk part sub_1438650A0);
+    // above the top solid block, without water or leaves;
     // Nether: skips the solid blocks at y first, a column under the ceiling finds the ground
     int32_t getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z);
 

@@ -17,7 +17,6 @@ namespace {
 }
 
 float MobMovementFrictionSystem::factor(float friction, float frictionModifier, float airDragModifier) {
-    // sub_1433563E0 on the ground, sub_1433307F0 in the air
     return keep((1.0f - friction) * frictionModifier) * keep(AIR_DRAG * airDragModifier);
 }
 

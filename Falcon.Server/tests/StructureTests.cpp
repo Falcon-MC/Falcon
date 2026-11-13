@@ -173,7 +173,7 @@ namespace {
     }
 
     void checkMirror() {
-        // sub_14775E430: the mirror flips the coordinates before the turn
+        // the mirror flips the coordinates before the turn
         int32_t x = 3, z = 5;
         StructureTemplate::mirror(1, x, z);
         StructureTemplate::rotate(1, x, z);
@@ -182,7 +182,7 @@ namespace {
         StructureTemplate::mirror(2, x, z);
         require(x == -3 && z == 5, "Mirror 2 does not flip x");
 
-        // sub_146993CE0: 1 swaps north and south, 2 east and west, then the turn
+        // 1 swaps north and south, 2 east and west, then the turn
         StructureTemplate::PaletteEntry chest;
         chest.mName = "minecraft:chest";
         chest.mProperties = {{"facing", "north"}, {"type", "single"}, {"waterlogged", "false"}};

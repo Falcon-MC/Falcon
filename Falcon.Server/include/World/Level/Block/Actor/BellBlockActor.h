@@ -18,7 +18,7 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    // BellBlockActor::ring (sub_1432FFE10): the swing starts over towards direction
+    // BellBlockActor::ring: the swing starts over towards direction
     void ring(int32_t direction) {
         mTicks = 0;
         mRinging = true;

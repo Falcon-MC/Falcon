@@ -9,7 +9,6 @@
 FALCON_REGISTER_ACTOR(NpcActor, NpcActor::IDENTIFIER);
 
 namespace {
-    // NpcComponent::addAdditionalSaveData (sub_143CA79B0, 26.60)
     const char *const RAW_NAME_TAG = "RawtextName";
     const char *const SCENE_NAME_TAG = "SceneName";
     const char *const VARIANT_TAG = "Variant";
@@ -71,7 +70,7 @@ bool NpcActor::setSkinIndex(ServerNetworkHandler *owner, int32_t index) {
 }
 
 std::string NpcActor::resolveName(const std::string &rawName) {
-    // ResolvedTextObject (sub_143525AA0, 26.60): the components' text joined; a plain string is kept
+    // ResolvedTextObject: the components' text joined; a plain string is kept
     const std::unique_ptr<json::Value> parsed = json::parse(rawName);
     const json::Value *rawtext = parsed == nullptr ? nullptr : parsed->get("rawtext");
     if (rawtext == nullptr || !rawtext->isArray())
@@ -104,7 +103,7 @@ void NpcActor::_appendSkin(EntityDataMap &metadata) const {
     const int32_t index = getSkinIndex();
     if (index < 0)
         return;
-    // SkinAdjustments::apply (sub_142C47C80, 26.60): each value the skin sets lands in its actor data
+    // each value the skin sets lands in its actor data
     const Skin &skin = mSkins[(size_t) index];
     if (skin.mVariant.has_value()) {
         EntityDataEntry variant;

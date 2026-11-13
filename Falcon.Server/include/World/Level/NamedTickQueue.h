@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-// the script named ticks of each chunk (LevelChunk +0x140; schedule sub_1432C56A0, tick sub_1432C6B20, 26.60);
+// the script named ticks of each chunk;
 // times are level ticks, saved under LevelDB tag 'z'
 class NamedTickQueue {
 public:
@@ -23,7 +23,7 @@ public:
         int64_t triggerTime = 0;
     };
 
-    // the codes sub_1432C56A0 returns, in its order
+    // the codes the game returns, in its order
     enum class Result { Scheduled, BeforeCurrentTick, NoNamespace, TooManyEvents, NamespaceConflict, InvalidName };
 
     static constexpr size_t MAX_EVENTS_PER_BLOCK = 4;

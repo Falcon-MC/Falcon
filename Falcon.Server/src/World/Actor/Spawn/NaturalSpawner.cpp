@@ -19,12 +19,12 @@
 #include <limits>
 
 namespace {
-    // pool indices of the 26.60 population_control parser (sub_142D9F9A0, switch at 0x142DA2D95)
+    // pool indices of the 26.60 population_control parser
     const char *const POOLS[NaturalSpawner::POOL_COUNT] = {"animal",  "monster", "water_animal", "villager",
                                                            "ambient", "cat",     "pillager"};
 
-    // written by the 26.60 Dimension constructor (sub_142930ED0, 0x142932480-0x1429324F0), read by the spawner at
-    // 0x1432C21A8 (rows at Dimension+0x104 and +0x120); row 0 underground, row 1 surface
+    // written by the 26.60 Dimension constructor, read by the spawner;
+    // row 0 underground, row 1 surface
     const int32_t POOL_CAPS[2][NaturalSpawner::POOL_COUNT] = {{4, 16, 36, 0, 2, 0, 8}, {4, 8, 36, 0, 0, 4, 8}};
 
     const int32_t CHUNK_SPAWN_ROLL = 2000;
@@ -163,7 +163,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     const int32_t difficulty = (int32_t) owner.getProperties().getDifficulty();
     const std::vector<int64_t> columns(level.getActiveColumns().begin(), level.getActiveColumns().end());
     for (const int64_t column: columns) {
-        // a ticking chunk goes on only when nextInt(2000) <= 10 (0x1432C3021)
+        // a ticking chunk goes on only when nextInt(2000) <= 10
         if (_nextInt(CHUNK_SPAWN_ROLL) > CHUNK_SPAWN_THRESHOLD)
             continue;
         _tickChunk(owner, level, (int32_t) (column >> 32), (int32_t) (column & 0xffffffff), difficulty, mobCount,
@@ -180,7 +180,7 @@ void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32
     const int32_t z = chunkZ * 16 + _nextInt(16);
 
     // column walked down from the top: the first floor is surface, every one below underground; each spawns one
-    // herd after recounting the mobs around the chunk (sub_1432C2EF0)
+    // herd after recounting the mobs around the chunk
     bool surface = true;
     int32_t y = level.getMaxY();
     while (y > level.getMinY()) {
@@ -279,7 +279,7 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
     if (condition.mRarity > 0 && _nextInt(condition.mRarity) != 0)
         return;
 
-    // squaring the roll biases herds toward their minimum size (0x1432C1E8F)
+    // squaring the roll biases herds toward their minimum size
     const SpawnHerd &herd = condition.mHerds[(size_t) _nextInt((int32_t) condition.mHerds.size())];
     const float factor = _nextFloat();
     int32_t size = herd.mMinSize + (int32_t) std::round((float) (herd.mMaxSize - herd.mMinSize) * (factor * factor));
@@ -297,7 +297,7 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
             size = density - existing;
     }
 
-    // one position for the whole herd; members stop only at the pool cap (0x1432C21E2, 0x1432C27DD)
+    // one position for the whole herd; members stop only at the pool cap
     const int32_t pool = poolIndex(rule.mPopulation);
     const Vector3f position((float) site.mPosition.x + HERD_OFFSET, (float) site.mPosition.y,
                             (float) site.mPosition.z + HERD_OFFSET);
@@ -422,7 +422,7 @@ bool NaturalSpawner::_matches(Level &level, const SpawnSite &site, const SpawnCo
     if (condition.mHasHeight && (site.mPosition.y < condition.mMinHeight || site.mPosition.y > condition.mMaxHeight))
         return false;
 
-    // every environment flag of the site must be allowed by the rule (sub_145D43A40)
+    // every environment flag of the site must be allowed by the rule
     if (site.mWater && !condition.mUnderwater)
         return false;
     if (site.mLava && !condition.mLava)
@@ -448,7 +448,7 @@ bool NaturalSpawner::_matches(Level &level, const SpawnSite &site, const SpawnCo
 }
 
 bool NaturalSpawner::_canSpawnAt(Level &level, const SpawnSite &site, const SpawnCondition &condition) const {
-    // needs its neighbouring chunks and a player within the rule's distances (sub_145E16490)
+    // needs its neighbouring chunks and a player within the rule's distances
     const int32_t chunkX = site.mPosition.x >> 4;
     const int32_t chunkZ = site.mPosition.z >> 4;
     for (int32_t neighbourX = chunkX - 1; neighbourX <= chunkX + 1; ++neighbourX) {

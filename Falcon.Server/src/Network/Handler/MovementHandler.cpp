@@ -212,7 +212,7 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &previousFee
                                        const Actor *actor) {
     if (checkGroundState(level, feetPosition, actor))
         return true;
-    // Y resolves before X/Z (sub_147B42620): a move sliding off an edge lands on the column it left
+    // Y resolves before X/Z: a move sliding off an edge lands on the column it left
     return feetPosition.y <= previousFeet.y
            && checkGroundState(level, Vector3f(previousFeet.x, feetPosition.y, previousFeet.z), actor);
 }
@@ -614,7 +614,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     }
     recordInput(owner, player, packet);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
-        // sprint changes the movement attribute too (0x140F4D3F0); client-requested: no validation reset
+        // sprint changes the movement attribute too; client-requested: no validation reset
         owner._sendAttributes(player, false);
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
     }

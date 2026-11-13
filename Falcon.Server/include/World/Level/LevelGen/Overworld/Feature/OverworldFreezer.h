@@ -5,7 +5,7 @@
 class LevelChunk;
 
 // the end of the game's chunk post-processing, once every feature pass has run: the water at the top of each column
-// of the chunk freezes and snow falls on it where it is cold enough (sub_14CDD4880)
+// of the chunk freezes and snow falls on it where it is cold enough
 class OverworldFreezer {
 public:
     static void apply(LevelChunk &chunk);

@@ -8,7 +8,7 @@
 #include <cstdlib>
 
 namespace {
-    // command defaults from client 0x1485BBD20
+    // command defaults from client
     const float DEFAULT_INTENSITY = 0.5f;
     const float DEFAULT_SECONDS = 1.0f;
 

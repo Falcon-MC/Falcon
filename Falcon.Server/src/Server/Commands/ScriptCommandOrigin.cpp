@@ -6,7 +6,7 @@
 ScriptCommandOrigin::ScriptCommandOrigin(Level &level, Actor *entity) : mLevel(level), mEntity(entity) {}
 
 std::string ScriptCommandOrigin::getSenderName() const {
-    // sub_1468F4510: commands.origin.script once translated
+    // commands.origin.script once translated
     return mEntity != nullptr ? mEntity->getName()
                               : Localization::getInstance().translate(getLocale(), "commands.origin.script", {});
 }
@@ -33,7 +33,7 @@ void ScriptCommandOrigin::sendTranslation(const std::string &key, const std::vec
 }
 
 Vector3f ScriptCommandOrigin::getPosition() {
-    // sub_140BA41D0: a dimension's script origin sits at the world origin
+    // a dimension's script origin sits at the world origin
     return mEntity != nullptr ? mEntity->getPosition() : Vector3f(0.0f, 0.0f, 0.0f);
 }
 

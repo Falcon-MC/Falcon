@@ -9,7 +9,7 @@
 struct ScriptSoundDefinition {
     std::string mEventId;
     bool mHasDuration = false;
-    // duration_info kept as the game stores it: real_time in milliseconds, game_time in ticks (sub_143809380, 26.60)
+    // duration_info kept as the game stores it: real_time in milliseconds, game_time in ticks
     int64_t mDurationUnits = 0;
     bool mRealTime = false;
     bool mHasBroadcastRange = false;
@@ -21,7 +21,7 @@ struct ScriptSoundDefinition {
     bool mHasTags = false;
     std::vector<std::pair<std::string, std::vector<std::string>>> mTags;
 
-    // the float the game exposes and filters on (sub_14BA00470, 26.60)
+    // the float the game exposes and filters on
     float durationSeconds() const {
         return (float) mDurationUnits / (mRealTime ? 1000.0f : 20.0f);
     }

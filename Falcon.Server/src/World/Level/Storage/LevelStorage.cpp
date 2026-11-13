@@ -334,7 +334,7 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks));
     else
         batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), chunk.getRandomTicks());
-    // sub_1406D1BC0: written while an event waits, deleted otherwise
+    // written while an event waits, deleted otherwise
     if (chunk.getNamedTicks().empty())
         batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks));
     else

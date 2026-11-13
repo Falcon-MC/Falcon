@@ -632,7 +632,7 @@ void DragonScanningGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (angle >= 0.0f && angle <= SCAN_VIEW_ANGLE)
         return;
 
-    // sub_14D1D2130 turns the head toward the player, faster the closer it is
+    // the game turns the head toward the player, faster the closer it is
     const Vector3f head = dragon.getPartCenter(EnderDragon::Part::Head);
     const float dx = other.x - std::floor(head.x);
     const float dz = other.z - std::floor(head.z);

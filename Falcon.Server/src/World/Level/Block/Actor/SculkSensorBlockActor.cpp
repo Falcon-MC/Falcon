@@ -26,7 +26,7 @@ VibrationListener &SculkSensorBlockActor::listener() {
     return *mListener;
 }
 
-// sub_144C4FAA0: the listener's compound, its selector at least
+// the listener's compound, its selector at least
 Tag SculkSensorBlockActor::saveNbt() const {
     Tag data = Tag::ofCompound();
     if (mListener.has_value()) {
@@ -53,7 +53,7 @@ bool SculkSensorBlockActor::tick(ServerNetworkHandler &owner) {
     return true;
 }
 
-// sub_144C501D0: its own breaking or placing is not a vibration, sculk_touch only on the block itself, and only an
+// its own breaking or placing is not a vibration, sculk_touch only on the block itself, and only an
 // inactive sensor listens
 bool SculkSensorBlockActor::shouldListen(Level &level, const GameEvent &event, const GameEventContext &context) {
     const bool here = blockOf(context.mPosition) == mPosition;
@@ -66,7 +66,7 @@ bool SculkSensorBlockActor::shouldListen(Level &level, const GameEvent &event, c
     return state != nullptr && SculkSensorBlock::phaseOf(*state) == SculkSensorBlock::PHASE_INACTIVE;
 }
 
-// sub_144C50130: 15 at the sensor, down to 1 at the edge of its range
+// 15 at the sensor, down to 1 at the edge of its range
 void SculkSensorBlockActor::onSignalReceive(Level &level, const Vector3i &position, const GameEvent &event,
                                             Actor *source, float distance, uint32_t range, Actor *projectileOwner) {
     (void) position;

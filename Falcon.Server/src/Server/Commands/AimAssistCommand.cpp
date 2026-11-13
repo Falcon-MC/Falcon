@@ -8,7 +8,7 @@
 #include <cstdlib>
 
 namespace {
-    // defaults from client 0x1485B94B0, limits from its execute 0x14857B770
+    // defaults from the client, limits from its execute
     const float DEFAULT_ANGLE = 50.0f;
     const float DEFAULT_DISTANCE = 8.5f;
     const float MIN_ANGLE = 10.0f;

@@ -47,7 +47,7 @@ namespace {
     }
 } // namespace
 
-// MoveTowardsClosestSpaceSystemFromActor per actor (sub_1436273E0)
+// MoveTowardsClosestSpaceSystemFromActor per actor
 void MoveTowardsClosestSpaceSystem::tick(PlayerMovementContext &context) {
     // spectators fly through blocks: HasCollision stays set for them on this server
     const ActorFlags &flags = context.player.getFlags();

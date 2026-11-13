@@ -24,6 +24,6 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    // sub_14A231EA0: outside creative, 12% chance to drop one damage stage; past the last stage it breaks
+    // outside creative, 12% chance to drop one damage stage; past the last stage it breaks
     static void onUsed(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool creative);
 };

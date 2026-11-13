@@ -56,7 +56,7 @@ void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &
     owner.playNamedSound(level, PlaySoundName::FUSE, spawnPosition, 1.0f, 1.0f);
 }
 
-// TntBlock::dispense (sub_14B27A1D0, 26.60): refused while tntexplodes is off (sub_14B27A720 reads game rule
+// TntBlock::dispense: refused while tntexplodes is off (the game reads game rule
 // 21, the rule every TNT ignition reads); the primed TNT spawns through the same call as a primed block
 bool TntBlock::dispense(const DispenseSource &source) const {
     if (!source.mLevel.getGameRules().getBool("tntexplodes"))

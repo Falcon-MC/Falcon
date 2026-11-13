@@ -175,7 +175,7 @@ namespace {
         return !out.empty();
     }
 
-    // sub_1455ECBD0: a target without a score fails, negated or not
+    // a target without a score fails, negated or not
     bool matchesScores(const SelectorFilter &filter, Scoreboard &scoreboard, const Actor &actor) {
         if (filter.mScores.empty())
             return true;
@@ -609,7 +609,7 @@ void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const Command
     output.mType = CommandOutputType::AllOutput;
     output.mSuccessCount = success ? 1 : 0;
 
-    // sub_147EFA4B0: the per-message bool is "Successful?", the client shows a failed one as an error
+    // the per-message bool is "Successful?", the client shows a failed one as an error
     CommandOutputMessage line;
     line.mInternal = success;
     line.mMessageId = message;

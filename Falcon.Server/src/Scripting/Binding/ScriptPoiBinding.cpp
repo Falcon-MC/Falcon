@@ -12,7 +12,7 @@
 using namespace ScriptValues;
 
 namespace {
-    // the Poi experiment's level.dat toggle (sub_147AE99B0, 26.60)
+    // the Poi experiment's level.dat toggle
     const char *const POI_EXPERIMENT = "epoi";
 
     // PoiManager and PoiBlockManager: one dimension
@@ -75,7 +75,7 @@ namespace {
         return true;
     }
 
-    // the radius arrives as an unsigned short (sub_14B8C4270, 26.60)
+    // the radius arrives as an unsigned short
     bool readRadius(JSContext *ctx, JSValueConst value, uint16_t &out) {
         int32_t radius = 0;
         if (!JS_IsNumber(value) || JS_ToInt32(ctx, &radius, value) != 0)
@@ -174,7 +174,7 @@ namespace {
         switch (occupancy) {
             case Occupancy::Any:
                 return true;
-            // sub_148508940 / sub_148508930 (26.60): no ticket left, at least one left
+            // no ticket left, at least one left
             case Occupancy::Full:
                 return entry.mTickets == 0;
             case Occupancy::HasVacancy:
@@ -217,8 +217,8 @@ namespace {
         return true;
     }
 
-    // ScriptBlockManager::getInSquare (sub_14B8C2BF0, 26.60): the box of blockRadius around the center, then the
-    // distance check of getInRange (sub_14B8C4270) when inRange is set; false when a callback threw
+    // the box of blockRadius around the center, then the
+    // distance check of getInRange when inRange is set; false when a callback threw
     bool collect(Query &query, bool inRange, const std::function<bool(PoiManager::Entry &)> &visit) {
         const Vector3i &center = query.mCenter;
         const int32_t radius = query.mRadius;
@@ -312,7 +312,7 @@ namespace {
         return array;
     }
 
-    // the first matching instance of getInRange with a ticket left gives one up (sub_14B95C680, 26.60)
+    // the first matching instance of getInRange with a ticket left gives one up
     JSValue blocksTake(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         Query query;
         if (!readQuery(ctx, thisVal, argc, argv, -1, query))
@@ -371,7 +371,7 @@ namespace {
         return JS_NewBool(ctx, matched);
     }
 
-    // a number is the id as it is, a name the registry's id or none, a type its own id (sub_14B959AB0, 26.60)
+    // a number is the id as it is, a name the registry's id or none, a type its own id
     JSValue blocksAddTemporary(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = apiOf(ctx);
         Vector3i position;

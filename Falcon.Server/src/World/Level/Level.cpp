@@ -1216,7 +1216,7 @@ bool Level::isChunkSaved(int32_t chunkX, int32_t chunkZ) {
     if (cached != mSavedChunkCache.end())
         return cached->second;
 
-    // the game empties the whole cache rather than evicting single entries // sub_1406C99E0
+    // the game empties the whole cache rather than evicting single entries
     if (mSavedChunkCache.size() >= ClientSideGeneration::SAVED_CHUNK_CACHE_LIMIT)
         mSavedChunkCache.clear();
 
@@ -1240,7 +1240,7 @@ void Level::_saveLoadedMaps() {
 }
 
 void Level::_markChunkSaved(int64_t key) {
-    // the game flags a chunk queued for saving so storage is read again // sub_1406D1BC0
+    // the game flags a chunk queued for saving so storage is read again
     mSavedChunkCache[key] = true;
 }
 
@@ -1350,7 +1350,7 @@ void Level::setActiveColumns(std::vector<int64_t> columns) {
         if (previous.find(column) == previous.end())
             mBlockUpdates.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
     }
-    // a view source walks its bounds in rows of x when it does not shuffle (sub_147BD96C0)
+    // a view source walks its bounds in rows of x when it does not shuffle
     std::sort(mActiveColumnOrder.begin(), mActiveColumnOrder.end(), [](int64_t left, int64_t right) {
         const int32_t leftZ = (int32_t) (left & 0xffffffff);
         const int32_t rightZ = (int32_t) (right & 0xffffffff);
@@ -1587,7 +1587,7 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, c
 
 void Level::appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *actor,
                                        std::vector<AxisAlignedBB> &out) {
-    // a mob with minecraft:is_collidable carries actor flag 121 (sub_147C52140): others stand on it like a block
+    // a mob with minecraft:is_collidable carries actor flag 121: others stand on it like a block
     if (mOwner != nullptr) {
         const Vector3f center((area.mMinX + area.mMaxX) * 0.5f, (area.mMinY + area.mMaxY) * 0.5f,
                               (area.mMinZ + area.mMaxZ) * 0.5f);

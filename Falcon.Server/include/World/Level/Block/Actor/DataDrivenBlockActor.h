@@ -2,7 +2,7 @@
 
 #include "World/Level/Block/Actor/BlockActor.h"
 
-// the block actor of a pack block declaring minecraft:block_entity (block actor type 62, sub_143301110)
+// the block actor of a pack block declaring minecraft:block_entity
 class DataDrivenBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "DataDriven";

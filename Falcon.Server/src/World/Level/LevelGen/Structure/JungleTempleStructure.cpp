@@ -18,7 +18,7 @@ namespace {
     const int32_t WIDTH = 12;
     const int32_t HEIGHT = 10;
     const int32_t DEPTH = 15;
-    // the vine_direction_bits the game keeps at 0x1529B2B68: all four sides
+    // the vine_direction_bits the game keeps: all four sides
     const int32_t VINE_SIDES = 15;
     const float COBBLESTONE_CHANCE = 0.4f;
     const char *const CHEST_LOOT = "loot_tables/chests/jungle_temple.json";
@@ -32,7 +32,7 @@ namespace {
         BlockState mRedstone = VanillaBlocks::REDSTONE_WIRE().toBlockState();
     };
 
-    // StructurePiece::generateBox with the moss stone selector (sub_147786600, sub_14738C300): one nextFloat for
+    // a box filled with the moss stone selector: one nextFloat for
     // every block of the box, in or out of the chunk
     void mossyBox(ScatteredPiece &piece, const Blocks &blocks, std::mt19937 &random, int32_t minX, int32_t minY,
                   int32_t minZ, int32_t maxX, int32_t maxY, int32_t maxZ) {
@@ -173,7 +173,7 @@ namespace {
         piece.createDispenser(random, 3, -2, 1, 3, DISPENSER_LOOT);
         piece.placeBlock(vine(), 3, -2, 2);
 
-        // the east trap; unlike the west one its hooks stay unattached (0x1473D9925)
+        // the east trap; unlike the west one its hooks stay unattached
         piece.placeBlock(hook(0, false), 7, -3, 1);
         piece.placeBlock(hook(2, false), 7, -3, 5);
         for (int32_t z = 2; z <= 4; z++)
@@ -206,7 +206,7 @@ namespace {
     void placeLeverRoom(ScatteredPiece &piece, const Blocks &blocks, std::mt19937 &random) {
         airBox(piece, blocks, 8, -3, 8, 10, -1, 10);
         const BlockState chiseled = VanillaBlocks::CHISELED_STONE_BRICKS().toBlockState();
-        // lever_direction 3: the fourth name of the game's table at 0x14F3B3F48
+        // lever_direction 3: the fourth name of the game's table at
         const BlockState lever = DecorationSupport::withState(VanillaBlocks::LEVER().toBlockState(), "lever_direction",
                                                               "south");
         for (int32_t x = 8; x <= 10; x++)
@@ -231,7 +231,6 @@ namespace {
     }
 }
 
-// JunglePyramidPiece::postProcess (sub_1473D4A60, 26.60)
 void JungleTempleStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
     const StructureFeature *temple = StructureFeature::get("temple");
     if (temple == nullptr || !temple->isStartChunk(generator, chunk.getX(), chunk.getZ()))

@@ -3,7 +3,7 @@
 NetUri NetUri::split(const std::string &text) {
     NetUri uri;
     size_t pathStart = 0;
-    // sub_1403F0480 (26.60): "://" ends the scheme, then the authority runs to the first '/' or '?'
+    // "://" ends the scheme, then the authority runs to the first '/' or '?'
     const size_t schemeEnd = text.size() >= 3 ? text.find("://") : std::string::npos;
     if (schemeEnd != std::string::npos) {
         uri.mScheme = text.substr(0, schemeEnd);

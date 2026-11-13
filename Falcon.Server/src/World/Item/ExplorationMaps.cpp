@@ -13,7 +13,7 @@
 namespace {
     using Type = MapDecorationType;
 
-    // sub_1418BA320; the abandoned camps search a biome rather than a structure
+    // the abandoned camps search a biome rather than a structure
     const ExplorationMaps::Entry ENTRIES[] = {
             {3, Type::Monument, "monument", "monument"},
             {4, Type::Mansion, "", "mansion"},

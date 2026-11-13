@@ -33,7 +33,7 @@ void LecternHandler::handleUpdate(ServerNetworkHandler &owner, ServerPlayer &pla
     if (page < 0 || page >= lectern->mTotalPages || page == lectern->mPage)
         return;
 
-    // sub_144C3E050: the page moves and the lectern pulses
+    // the page moves and the lectern pulses
     lectern->mPage = page;
     LecternBlock::pulse(level, position);
     BlockActionHandler::broadcastBlockActorData(owner, level, *lectern);

@@ -276,7 +276,7 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
         }
     }
 
-    // the pot item keeps its sherds in its tag (sub_149C525A0 writes them back on breaking)
+    // the pot item keeps its sherds in its tag
     if (DecoratedPotBlockActor *pot = dynamic_cast<DecoratedPotBlockActor *>(created.get())) {
         const Tag *sherds = usedItem.mTag.isCompound() ? usedItem.mTag.get("sherds") : nullptr;
         if (sherds != nullptr && sherds->isList())
@@ -396,8 +396,8 @@ uint8_t ContainerBlock::getLiquidBlockedFaces(const BlockState &state) const {
     return (uint8_t) (1 << face);
 }
 
-// each class reads its container: Hopper (sub_146D7CBF0), Dispenser (sub_149C58F60), BrewingStand (sub_1435B2C20),
-// DecoratedPot (sub_149C532A0) and Barrel through ChestBlock (sub_14314BD30), 26.60
+// each class reads its container: Hopper, Dispenser, BrewingStand,
+// DecoratedPot and Barrel through ChestBlock
 int ContainerBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition == nullptr)
@@ -416,7 +416,7 @@ int ContainerBlock::getComparatorSignal(Level &level, const Vector3i &position, 
     }
 }
 
-// HopperBlock::onRedstoneUpdate (sub_146D7BA60, 26.60): toggle_bit follows the power and locks the hopper
+// toggle_bit follows the power and locks the hopper
 void ContainerBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);

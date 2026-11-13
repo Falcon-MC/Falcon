@@ -20,7 +20,7 @@ int32_t StructureTerrain::getTopHeight(int32_t x, int32_t z) {
     if (top != INT16_MIN)
         return top;
 
-    // the chunk heightmap: a snow layer or a plant on top lets the street under it (sub_14775E430)
+    // the chunk heightmap: a snow layer or a plant on top lets the street under it
     int32_t y = LevelChunk::MAX_Y;
     while (y >= LevelChunk::MIN_Y) {
         const int32_t packed = BlockLightProperties::packed(chunk.mChunk->getBlock(x & 15, y, z & 15));

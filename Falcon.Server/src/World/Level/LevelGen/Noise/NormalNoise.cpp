@@ -5,7 +5,7 @@
 
 namespace {
 
-    // float 0x3F8251FB in the game (dword_14F279BE0)
+    // float 0x3F8251FB in the game
     constexpr float INPUT_FACTOR = 1.01812684535980224609375f;
 
 }
@@ -64,7 +64,7 @@ std::shared_ptr<NormalNoise> NormalNoise::create(XoroshiroRandom &random, int32_
 // second stack sampled at a slightly scaled position: the lattices never line up; scale and normalisation stay
 // exact, or seeds give other terrain
 float NormalNoise::getValue(double x, double y, double z) const {
-    // stacks summed separately, then added (sub_145C2C790)
+    // stacks summed separately, then added
     const float fx = static_cast<float>(x);
     const float fy = static_cast<float>(y);
     const float fz = static_cast<float>(z);
@@ -95,7 +95,7 @@ std::vector<double> NormalNoise::_octaveAmplitudes(const std::vector<float> &amp
     return octaveAmplitudes;
 }
 
-// float, in the game's order (sub_1471326A0, sub_14D20B390); span term is 2 with no non-zero amplitude
+// float, in the game's order; span term is 2 with no non-zero amplitude
 float NormalNoise::_valueFactor(int32_t minOctave, int32_t maxOctave) {
     const float span = minOctave > maxOctave ? 2.0f : static_cast<float>(maxOctave - minOctave) + 1.0f;
     return 0.16666667f / ((1.0f / span + 1.0f) * 0.1f);

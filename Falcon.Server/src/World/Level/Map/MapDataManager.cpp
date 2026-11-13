@@ -58,7 +58,7 @@ MapItemSavedData &MapDataManager::createMapSavedData(const IdAllocator &allocate
     for (int64_t &id: ids)
         id = allocate();
 
-    // sub_141ECF1A0 walks from the widest scale down, so each map knows its parent when created
+    // the game walks from the widest scale down, so each map knows its parent when created
     int64_t parent = MapItemSavedData::INVALID_ID;
     for (int32_t level = SCALE_COUNT - 1; level >= 0; --level) {
         MapItemSavedData &map = createMap(ids[level]);

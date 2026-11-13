@@ -11,7 +11,7 @@ namespace {
     const char *const CLOSE_VIOLATION =
             "Server sent a ContainerClosePacket response packet when it should have sent the server initiated packet";
 
-    // sub_146BD7130: a close marked as a response, while a container screen is open that the client did
+    // a close marked as a response, while a container screen is open that the client did
     // not ask to close, is reported back as a violation naming the warning packet itself. The screen
     // stays open
     class ContainerCloseProbe final : public ClientProbe {

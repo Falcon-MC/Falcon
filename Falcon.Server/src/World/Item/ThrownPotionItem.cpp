@@ -37,7 +37,7 @@ bool ThrownPotionItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, 
     return true;
 }
 
-// splash sub_143587A70, lingering sub_141ADF1E0 (26.60): the stack's aux is the potion
+// splash and lingering: the stack's aux is the potion
 bool ThrownPotionItem::dispense(const DispenseSource &source) const {
     const int32_t potionId = source.getItem().mDamage;
     ServerActor *projectile = _shootFrom(source);

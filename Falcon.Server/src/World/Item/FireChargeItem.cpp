@@ -50,7 +50,7 @@ bool FireChargeItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     return true;
 }
 
-// FireChargeItem::dispense (sub_147BA2860, 26.60): the facing axis with a 0.05 gaussian on each axis, then
+// FireChargeItem::dispense: the facing axis with a 0.05 gaussian on each axis, then
 // the small fireball's own shot
 bool FireChargeItem::dispense(const DispenseSource &source) const {
     static std::mt19937 generator{std::random_device{}()};

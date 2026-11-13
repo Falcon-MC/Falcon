@@ -4,7 +4,6 @@
 #include <cmath>
 
 Vector3f RestitutionSystem::compute(const Vector3f &velocity, const ActorMoveResult &result, float bounciness) {
-    // sub_1484C9200
     if (std::fabs(bounciness) <= EPSILON)
         return Vector3f(0.0f, 0.0f, 0.0f);
 
@@ -19,7 +18,6 @@ Vector3f RestitutionSystem::compute(const Vector3f &velocity, const ActorMoveRes
 }
 
 void RestitutionSystem::applyBlock(Vector3f &restitution, const Vector3f &velocity, float landingBounce) {
-    // sub_1484BC1E0
     if (!(velocity.y < 0.0f) || std::fabs(velocity.y) < MIN_FLOOR_SPEED || std::fabs(landingBounce) <= EPSILON)
         return;
 
@@ -33,7 +31,7 @@ void RestitutionSystem::applyBlock(Vector3f &restitution, const Vector3f &veloci
 }
 
 float RestitutionSystem::correctedGravity(float gravity, float startVelocityY, float movedY) {
-    // sub_143368B50: the move reached the floor after a fraction of the tick, gravity only acts on the rest;
+    // the move reached the floor after a fraction of the tick, gravity only acts on the rest;
     // without a distance or a gravity the game adds nothing
     const float distance = std::fabs(movedY);
     const float strength = std::fabs(gravity);

@@ -10,12 +10,12 @@
 #include <limits>
 
 namespace {
-    const size_t MAX_SCAN_REQUESTS = 64; // 0x1439e9c03
-    const int32_t POI_FILING_RADIUS = 64; // 0x1439ec654
-    const float NEW_VILLAGE_DISTANCE = 16.0f; // 0x1439ec84f
-    const int32_t UNINITIALIZED_REMOVAL_TICKS = 121; // 0x1439e54a5
-    const float SQUARE_EPSILON = 1.1920929e-7f; // 0x1439ec7ff
-    const float FLAT_RADIUS_SCALE = 0.6f; // 0x1439ec843
+    const size_t MAX_SCAN_REQUESTS = 64;
+    const int32_t POI_FILING_RADIUS = 64;
+    const float NEW_VILLAGE_DISTANCE = 16.0f;
+    const int32_t UNINITIALIZED_REMOVAL_TICKS = 121;
+    const float SQUARE_EPSILON = 1.1920929e-7f;
+    const float FLAT_RADIUS_SCALE = 0.6f;
 
     struct Candidate {
         bool mInside;
@@ -99,7 +99,7 @@ void VillageManager::tickVillagesNear(ServerNetworkHandler &owner, Level &level,
             village->tick(owner, level, currentTick);
         } else if (village->getRaid() == nullptr
                    || (village->countBeds() != 0 && village->getInhabitantCount() != 0 && !village->isRaidFinished())) {
-            // out of range, a raid only advances once its village is lost or the raid is over (0x1439e9060)
+            // out of range, a raid only advances once its village is lost or the raid is over
             continue;
         }
         village->tickRaid(owner, level, currentTick);
@@ -202,7 +202,7 @@ void VillageManager::_removeVillages() {
         const Village &village = **it;
         const bool neverInhabited = !village.isInitialized() && village.getTickCount() >= UNINITIALIZED_REMOVAL_TICKS
                                     && village.getInhabitantCount() == 0;
-        // a village under raid is kept until the raid is over: it can still be lost (0x1439e55a2)
+        // a village under raid is kept until the raid is over: it can still be lost
         const Raid *raid = village.getRaid();
         const bool abandoned = village.isInitialized() && (raid == nullptr || raid->getState() == Raid::State::Removed)
                                && (village.getInhabitantCount() == 0 || village.countBeds() == 0);

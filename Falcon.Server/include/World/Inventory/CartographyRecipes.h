@@ -21,7 +21,7 @@ struct CartographyResult {
     CartographyLock mLock;
 };
 
-// the cartography recipes of sub_1436438D0: cloning, extending, locking, upgrading, plus renaming
+// the cartography recipes: cloning, extending, locking, upgrading, plus renaming
 class CartographyRecipes {
 public:
     // the multi recipes of the cartography table, as the client knows them
@@ -32,9 +32,8 @@ public:
 
     struct Maps {
         std::function<MapItemSavedData *(int64_t)> mGetMap;
-        // MapDataManager::expandMapByID (sub_141ECFD30)
         std::function<int64_t(int64_t, bool)> mExpand;
-        // a free id for the locked copy of a map (sub_142F64860); the copy itself is not made here
+        // a free id for the locked copy of a map; the copy itself is not made here
         std::function<int64_t(int64_t)> mAllocateLockId;
     };
 

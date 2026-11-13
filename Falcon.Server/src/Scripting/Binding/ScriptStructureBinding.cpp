@@ -133,7 +133,7 @@ namespace {
             if (corner.y < level.getMinY() || corner.y > level.getMaxY())
                 return api->throwError("LocationOutOfWorldBoundariesError", "");
         }
-        // sub_14B856F40: the corner spans, before any block is read
+        // the corner spans, before any block is read
         const int32_t height = level.getMaxY() - level.getMinY() + 1;
         if (std::abs((int64_t) to.x - from.x) >= McStructure::MAX_HORIZONTAL_SIZE
             || std::abs((int64_t) to.y - from.y) >= height
@@ -203,7 +203,7 @@ namespace {
         return true;
     }
 
-    // sub_141EC6740: trimmed, a whole base 10 integer as is, else a 31 hash over the code points; empty reads none
+    // trimmed, a whole base 10 integer as is, else a 31 hash over the code points; empty reads none
     bool readIntegritySeed(const std::string &text, uint32_t &seed) {
         const char *const blanks = "\t\n\v\f\r ";
         const size_t first = text.find_first_not_of(blanks);
@@ -336,7 +336,7 @@ namespace {
         const bool placed = registry.jigsaw().place(
                 api.host(), level, pool, jigsaw, depth, at, options,
                 [&](const std::string &id) { return registry.find(id); }, jigsawSeed(), box, error);
-        // sub_14B7F2440: the game wraps the placer's message in PlaceJigsawError
+        // the game wraps the placer's message in PlaceJigsawError
         if (!placed)
             return api.throwError("PlaceJigsawError", error);
         return boundingBox(api.context(), box);
@@ -364,7 +364,7 @@ namespace {
             return typeError(ctx);
         const std::string id = toString(ctx, argv[0]);
         const PackJigsaw::Structure *structure = registryOf(*api).jigsaw().structure(id);
-        // commands.place.invalidstructure.error (sub_14BEF2320)
+        // commands.place.invalidstructure.error
         if (structure == nullptr)
             return api->throwError("PlaceJigsawError", "Invalid structure name.");
         JSValueConst options = argc >= 4 ? argv[3] : JS_UNDEFINED;

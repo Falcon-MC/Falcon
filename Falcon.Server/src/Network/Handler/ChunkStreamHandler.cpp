@@ -90,13 +90,13 @@ namespace {
         return hash;
     }
 
-    // Client side generation from server.properties; every player of a level follows it (Level+1016, sub_1402C0030).
+    // Client side generation from server.properties; every player of a level follows it.
     bool isClientSideGeneration(const ServerNetworkHandler &owner) {
         return owner.getProperties().getClientSideChunkGenerationEnabled();
     }
 
     // A chunk the server holds with all eight neighbours decorated, without loading anything. It is what the
-    // publisher view takes as it is (generate mode 0, sub_1430014E0) even when the player view leaves it to
+    // publisher view takes as it is even when the player view leaves it to
     // the client, because another player or a ticking area made the server build it.
     bool isBuiltWithNeighbours(const Level &level, int32_t chunkX, int32_t chunkZ) {
         for (int32_t dx = -1; dx <= 1; ++dx) {
@@ -294,7 +294,7 @@ namespace {
             const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
             const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
 
-            // The view leaves the chunk to the client: nothing is loaded for it (sub_1430014E0, generate mode 1).
+            // The view leaves the chunk to the client: nothing is loaded for it.
             if (clientSideGeneration && !decision.isServerBuilt(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
                 if (isBuiltWithNeighbours(level, chunkX, chunkZ))
@@ -435,7 +435,7 @@ namespace {
             ++added;
             ++state.mSendsThisTick;
 
-            // sub_142561970: every chunk sent under client side generation is one the server built, and the
+            // every chunk sent under client side generation is one the server built, and the
             // client learns it from the next publisher update.
             if (clientSideGeneration) {
                 state.mSavedChunks.add(chunkX, chunkZ);
@@ -455,7 +455,7 @@ namespace {
                         (int32_t) std::floor(position.z));
     }
 
-    // sub_14255F580: the update carries the chunks sent since the previous one, then the view follows it.
+    // the update carries the chunks sent since the previous one, then the view follows it.
     void publishClientSideGeneration(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
         Level &level = owner.getLevelFor(player);
         const int32_t radius = streamRadius(state, level);
@@ -589,7 +589,7 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
 
     const bool clientSideGeneration = isClientSideGeneration(owner);
     if (clientSideGeneration) {
-        // ServerPlayer::tick moves the publisher before sending its queue (sub_14102EC10).
+        // ServerPlayer::tick moves the publisher before sending its queue.
         publishClientSideGeneration(state, owner, player);
     } else {
         const int64_t loaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);

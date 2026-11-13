@@ -50,7 +50,7 @@ public:
 
     /**
      * The highest y of the chunk's terrain alone, 0 when it has none. The game reads the heightmap of terrain it
-     * generates into a scratch buffer, without touching the level, to aim an end gateway (sub_14714F9C0).
+     * generates into a scratch buffer, without touching the level, to aim an end gateway.
      */
     int32_t getTerrainTop(int32_t chunkX, int32_t chunkZ) const;
 

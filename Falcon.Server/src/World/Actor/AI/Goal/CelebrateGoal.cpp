@@ -19,7 +19,7 @@ namespace {
 }
 
 CelebrateGoal::CelebrateGoal(Settings settings) : mSettings(std::move(settings)) {
-    // control flags 5, as the definition builds the goal (sub_147685A50)
+    // control flags 5, as the definition builds the goal
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Jump);
 }
 
@@ -29,14 +29,14 @@ bool CelebrateGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 bool CelebrateGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
-    // sub_14D2FF940: the elapsed time is never reset, the goal runs once for the life of the component group
+    // the elapsed time is never reset, the goal runs once for the life of the component group
     (void) owner;
     (void) mob;
     return mElapsedTicks < (int32_t) (mSettings.mDuration * TICKS_PER_SECOND);
 }
 
 void CelebrateGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    // sub_14D2FF140: the sound interval is drawn before the jump interval
+    // the sound interval is drawn before the jump interval
     mSoundTicks = _rollTicks(mSettings.mSoundIntervalMin, mSettings.mSoundIntervalMax);
     mJumpTicks = _rollTicks(mSettings.mJumpIntervalMin, mSettings.mJumpIntervalMax);
     _setCelebrating(owner, mob, true);

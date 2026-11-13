@@ -11,7 +11,7 @@ namespace {
         bool mProperty;
     };
 
-    // FLAGS: the (type, flags) pairs at 0x14F1ABBD8 (26.60), indexed by type
+    // FLAGS: the game's (type, flags) pairs, indexed by type
 #include "BlockMaterialTable.inc"
 
     static_assert(sizeof(FLAGS) == static_cast<size_t>(BlockMaterialType::NonSolid) + 1, "one flag byte per type");

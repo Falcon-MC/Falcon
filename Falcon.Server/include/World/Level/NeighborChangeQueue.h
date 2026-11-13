@@ -9,7 +9,7 @@
 #include <vector>
 
 // neighbor changes of blocks with minecraft:neighbor_change, gathered over a tick and fired once a block
-// (BlockEvents::BlockNeighborChangedEvent); one change per direction: before its first change, after its last
+// one change per direction: before its first change, after its last
 class NeighborChangeQueue {
 public:
     struct Change {

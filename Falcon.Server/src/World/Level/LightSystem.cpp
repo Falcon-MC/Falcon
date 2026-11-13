@@ -160,9 +160,9 @@ float LightSystem::calculateCelestialAngle(int64_t time) {
     return angle + (smoothed - angle) / 3.0f;
 }
 
-// Dimension::tick (sub_142938180) writes it to the byte the sleep check reads (sub_1402BDB80)
+// the dimension tick writes it to the byte the sleep check reads
 int32_t LightSystem::calculateSkyLightSubtracted(const Level &level, bool includeWeather) {
-    // the time of day (sub_14293F500) one tick ahead while the day moves (game rule 1)
+    // the time of day one tick ahead while the day moves (game rule 1)
     const float alpha = level.getGameRules().getBool("dodaylightcycle") ? 1.0f : 0.0f;
     float angle = ((float) ((int32_t) level.getTime() % 24000) + alpha) / 24000.0f + -0.25f;
     if (angle < 0.0f)

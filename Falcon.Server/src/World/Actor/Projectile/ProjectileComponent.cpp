@@ -10,7 +10,7 @@ namespace {
         int32_t mType;
     };
 
-    // the ParticleType names the game reflects (sub_141D1BDB0, 26.60)
+    // the ParticleType names the game reflects
     const ParticleTypeName PARTICLE_TYPES[] = {{"none", 0},
                                                {"bubble", 1},
                                                {"bubblemanual", 2},
@@ -148,14 +148,14 @@ ProjectileComponent ProjectileComponent::read(const json::Value &component) {
     readFlag(component, "destroy_on_hurt", "destroyOnHurt", projectile.mDestroyOnHurt);
     readFlag(component, "lightning", nullptr, projectile.mLightning);
     readFlag(component, "stop_on_hurt", "stopOnHurt", projectile.mStopOnHurt);
-    // a sound name the game does not know becomes LevelSoundEvent::Undefined (sub_143CAEFD0)
+    // a sound name the game does not know becomes the undefined sound event
     std::string sound;
     readText(component, "hit_sound", "hitSound", sound);
     projectile.mHitSound = sound.empty() ? LevelSoundEventIds::UNDEFINED : LevelSoundEventIds::fromName(sound);
     sound.clear();
     readText(component, "hit_ground_sound", "hitGroundSound", sound);
     projectile.mHitGroundSound = sound.empty() ? LevelSoundEventIds::UNDEFINED : LevelSoundEventIds::fromName(sound);
-    // an unknown name leaves ParticleType 0 (sub_141D33140)
+    // an unknown name leaves ParticleType 0
     std::string particle = ProjectileComponent::particleName(ProjectileComponent::PARTICLE_ICON_CRACK);
     readText(component, "particle", nullptr, particle);
     projectile.mParticle = ProjectileComponent::particleType(particle);

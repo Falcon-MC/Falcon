@@ -11,10 +11,10 @@
 // entities kept inside a block, one bucket per script module; the block actor saves them as BlockEntityStorage
 class BlockEntityStorage {
 public:
-    // sub_149B64930: a store or transfer is refused once the buckets together hold four
+    // a store or transfer is refused once the buckets together hold four
     static constexpr size_t CAPACITY = 4;
 
-    // the codes sub_14E09F160 turns into messages
+    // the codes the game turns into messages
     enum class Result : uint8_t {
         Ok = 0,
         Full = 2,
@@ -44,10 +44,9 @@ public:
     // the stored entity leaves its bucket, an emptied bucket goes too
     bool take(const std::string &key, int64_t uniqueId, Tag &entity);
 
-    // sub_149B66680: buckets without entities are left out, no bucket at all removes the tag
+    // buckets without entities are left out, no bucket at all removes the tag
     void save(Tag &data) const;
 
-    // sub_149B66F80
     void load(const Tag &data);
 
     static int64_t uniqueIdOf(const Tag &entity);

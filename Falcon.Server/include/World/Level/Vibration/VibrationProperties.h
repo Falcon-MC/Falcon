@@ -4,7 +4,7 @@
 
 class BlockState;
 
-// the block's vibration flags as the game packs them: dampen | occlude << 1 (sub_147ABD080)
+// the block's vibration flags as the game packs them: dampen | occlude << 1
 namespace VibrationProperties {
     constexpr uint8_t DAMPENS = 0x1;
     constexpr uint8_t OCCLUDES = 0x2;

@@ -13,7 +13,7 @@ namespace {
                                             ObjectiveSortOrder order) {
         SetDisplayObjectivePacket packet;
         packet.mDisplaySlot = slot;
-        // sub_1405DBDE0: a cleared slot sends empty strings and sort order 0
+        // a cleared slot sends empty strings and sort order 0
         packet.mObjectiveId = objective == nullptr ? std::string() : objective->mName;
         packet.mDisplayName = objective == nullptr ? std::string() : objective->mDisplayName;
         packet.mCriteria = objective == nullptr ? std::string() : objective->mCriteria;
@@ -173,13 +173,13 @@ void ServerNetworkHandler::sendScoreboard(ServerPlayer &player) {
 std::string ServerNetworkHandler::getScoreboardName(const ScoreboardIdentity &identity, bool script) {
     if (identity.mType == ScoreboardIdentityType::FakePlayer)
         return identity.mFakeName;
-    // sub_14BE520A0, sub_14B9D7950: the loaded actor's name string, empty otherwise
+    // the loaded actor's name string, empty otherwise
     std::string name;
     if (Actor *actor = findScoreboardActor(identity)) {
         const ServerActor *entity = dynamic_cast<const ServerActor *>(actor);
         name = entity != nullptr ? entity->getNameTag() : actor->getName();
     }
-    // the client translates a leading %: the game's own string, sub_14BDDC010
+    // the client translates a leading %: the game's own string
     if (name.empty() && !script)
         return "%commands.scoreboard.players.offlinePlayerName";
     return name;

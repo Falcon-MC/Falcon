@@ -42,7 +42,7 @@ Tag BlockActor::saveWithPosition() const {
     return data;
 }
 
-// sub_143300BF0: the storage comes back with the tag that holds it
+// the storage comes back with the tag that holds it
 void BlockActor::loadEntityStorage(const Tag &data) {
     if (data.contains("BlockEntityStorage"))
         enableEntityStorage().load(data);
@@ -59,7 +59,7 @@ void BlockActor::setLootTable(const std::string &table, int32_t seed) {
     mLootSeed = seed;
 }
 
-// sub_144C4D670: both kept as made when the tag has no table
+// both kept as made when the tag has no table
 void BlockActor::loadLootTable(const Tag &data) {
     if (!data.contains(TAG_LOOT_TABLE))
         return;

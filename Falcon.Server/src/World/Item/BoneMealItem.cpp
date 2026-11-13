@@ -198,7 +198,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     return true;
 }
 
-// BoneMealItem::dispense (sub_147BA1DC0, 26.60): the block the dispense position is in; a block that takes
+// BoneMealItem::dispense: the block the dispense position is in; a block that takes
 // no bone meal keeps the item with block.click.fail, and the dispense still counts as done
 bool BoneMealItem::dispense(const DispenseSource &source) const {
     const Vector3i target((int32_t) std::floor(source.mPosition.x), (int32_t) std::floor(source.mPosition.y),

@@ -313,9 +313,9 @@ void ScriptApi::closeScreen(JSValueConst playerValue, int32_t formId) {
         mHost.closeDataDrivenScreen(*player, formId);
 }
 
-// getFilteredText (sub_14B65D150) through TextFilteringUtils::processMessagesWithClientsideDebugTimingsAsync
-// (sub_145A2E9D0, 26.60): without a text processor the text comes back as sent, after the client's debug
-// timeout when it set one; a player who turned the filter off gets DisabledByPlayer (error 5, sub_14B6C7190)
+// getFilteredText:
+// without a text processor the text comes back as sent, after the client's debug
+// timeout when it set one; a player who turned the filter off gets DisabledByPlayer
 JSValue ScriptApi::filterText(JSValueConst playerValue, const std::string &text) {
     ServerPlayer *player = resolvePlayer(playerValue);
     if (player == nullptr)

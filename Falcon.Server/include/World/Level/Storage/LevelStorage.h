@@ -77,8 +77,8 @@ public:
     bool loadChunk(LevelChunk &chunk);
 
     /**
-     * Whether a chunk of any format is stored, from the same version and legacy terrain records the game checks
-     * (DBChunkStorage, sub_1406CA2F0). It reads storage, so callers cache the answer.
+     * Whether a chunk of any format is stored, from the same version and legacy terrain records the game checks.
+     * It reads storage, so callers cache the answer.
      */
     bool hasChunk(int32_t chunkX, int32_t chunkZ) const;
 

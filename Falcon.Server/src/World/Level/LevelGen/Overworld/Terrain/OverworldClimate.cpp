@@ -5,12 +5,12 @@
 
 namespace {
 
-    // float 0xBF00F5C3 and 128 next to the splines (sub_14718F810)
+    // float 0xBF00F5C3 and 128 next to the splines
     constexpr float OFFSET_BASE = -0.50375f;
     constexpr float FACTOR_SCALE = 128.0f;
     constexpr float JAGGED_SCALE = 1500.0f;
 
-    // initial density of the preliminary surface, positive part scaled by 4 (qword_14F49A628)
+    // initial density of the preliminary surface, positive part scaled by 4
     float quarterNegative(float density) {
         return density * (density > 0.0f ? 4.0f : 1.0f);
     }

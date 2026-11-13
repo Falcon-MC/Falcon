@@ -9,7 +9,7 @@ namespace {
     using Test = StructureProcessors::Test;
     using Rule = StructureProcessors::Rule;
 
-    // sub_14CCD0800, in registration order
+    // in registration order
     const std::unordered_map<std::string, std::vector<Rule>> &lists() {
         static const std::unordered_map<std::string, std::vector<Rule>> LISTS = {
                 {"minecraft:cobblestone_building_low_decay",
@@ -243,7 +243,7 @@ namespace {
         return LISTS;
     }
 
-    // sub_1402FF250: no draw at or past the bounds
+    // no draw at or past the bounds
     bool chance(std::mt19937 &random, float probability) {
         if (probability <= 0.0f)
             return false;

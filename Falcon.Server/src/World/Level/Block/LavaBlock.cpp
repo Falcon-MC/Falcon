@@ -23,7 +23,7 @@ int32_t LavaBlock::getTickDelay(DimensionType dimension) const {
     return dimension == DimensionType::Nether ? 10 : 30;
 }
 
-// LiquidBlock on BlockRandomTickEvent sets fire too (sub_149C3DE80)
+// LiquidBlock on BlockRandomTickEvent sets fire too
 void LavaBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state) const {
     (void) owner;

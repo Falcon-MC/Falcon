@@ -242,7 +242,7 @@ void EndDragonFight::load(const Tag &dimensionData) {
         if (fight->contains(VERSION_TAG))
             mVersion = (uint8_t) fight->getByte(VERSION_TAG);
 
-        // a fight saved before the version tag forgets the earlier kill, like sub_147170120 does
+        // a fight saved before the version tag forgets the earlier kill, like the game does
         if (mVersion == 0) {
             mPreviouslyKilled = false;
             mVersion = CURRENT_VERSION;
@@ -341,7 +341,7 @@ void EndDragonFight::_tickDragon(ServerNetworkHandler &owner, Level &level) {
     if (dragon != nullptr) {
         _attachDragon(*dragon);
     } else if (!mDragonSpawned || !level.hasStoredEntity(mDragonUniqueId)) {
-        // a spawned dragon saved in an unloaded chunk is waited for instead (sub_1432BAB90)
+        // a spawned dragon saved in an unloaded chunk is waited for instead
         _initializeDragon(owner, level);
         _spawnExitPortal(owner, level, false);
     }
@@ -354,7 +354,7 @@ void EndDragonFight::_tickDragon(ServerNetworkHandler &owner, Level &level) {
 
 EnderDragon *EndDragonFight::_findDragon(ServerNetworkHandler &owner, Level &level) {
     if (mDragonUniqueId != -1) {
-        // the tracked dragon still counts while it dies, or a second one would spawn (sub_14716C8B0)
+        // the tracked dragon still counts while it dies, or a second one would spawn
         EnderDragon *known = dynamic_cast<EnderDragon *>(owner.getActor(mDragonUniqueId));
         if (known != nullptr && known->isIn(level))
             return known;
@@ -374,7 +374,7 @@ EnderDragon *EndDragonFight::_findDragon(ServerNetworkHandler &owner, Level &lev
 }
 
 void EndDragonFight::_attachDragon(EnderDragon &dragon) {
-    // the dragon learns the crystal count only when one is destroyed (sub_1471697A0, sub_14716B290)
+    // the dragon learns the crystal count only when one is destroyed
     dragon.setPreviouslyKilled(mPreviouslyKilled);
     mDragonUniqueId = dragon.getUniqueId();
     mDragonSpawned = true;
@@ -392,7 +392,7 @@ void EndDragonFight::_initializeDragon(ServerNetworkHandler &owner, Level &level
     if (dragon != nullptr)
         _attachDragon(*dragon);
 
-    // _initializeDragon rebuilds a missing spike's obsidian, without its crystal (sub_1471E91E0)
+    // _initializeDragon rebuilds a missing spike's obsidian, without its crystal
     for (const EndSpike &spike: EndSpikes::create((uint32_t) mSeed)) {
         bool standing = true;
         for (int32_t x = -spike.mRadius; x <= spike.mRadius && standing; x++) {
@@ -485,7 +485,7 @@ EndDragonFight::_loadGatewayBlockActors(ServerNetworkHandler &owner, Level &leve
     if (!level.isStorageOpen())
         return loaded;
 
-    // the game reads the block actors of both ends through its chunk views (sub_14716AEC0): columns without a
+    // the game reads the block actors of both ends through its chunk views: columns without a
     // player keep theirs on disk, so they are read here and written back once the request is done
     BlockActorStore &blockActors = level.getBlockActors();
     for (const Vector3i &center: {request.mGateway, request.mExit}) {
@@ -530,7 +530,7 @@ void EndDragonFight::_tickGatewayRequests(ServerNetworkHandler &owner, Level &le
     if (mGatewayRequests.empty())
         return;
 
-    // one request at a time, as the game keeps a single pair of chunk views for them (sub_14716C8B0)
+    // one request at a time, as the game keeps a single pair of chunk views for them
     const GatewayRequest request = mGatewayRequests.front();
     const bool registerLoaders = !mGatewayEndsRequested;
     mGatewayEndsRequested = true;
@@ -559,7 +559,7 @@ EndGatewayBlockActor &EndDragonFight::_placeGateway(Level &level, const Vector3i
 }
 
 void EndDragonFight::_raiseIsland(Level &level, const Vector3i &position) {
-    // the island's random is seeded with the hash of its position (sub_14716ACB0)
+    // the island's random is seeded with the hash of its position
     std::mt19937 random(EndGatewayExit::islandSeed(position));
     TheEndDecorationFeature::placeIsland(random, position.x, position.y, position.z,
                                          [&level](int32_t x, int32_t y, int32_t z, const BlockState &state) {
@@ -717,7 +717,7 @@ void EndDragonFight::tryRespawn(ServerNetworkHandler &owner, Level &level) {
             return;
     }
 
-    // one crystal on each side of the exit portal (sub_1471687D0)
+    // one crystal on each side of the exit portal
     const Vector3i portal = *mExitPortalLocation;
     const int32_t sides[4][2] = {{0, RESPAWN_CRYSTAL_OFFSET},
                                  {-RESPAWN_CRYSTAL_OFFSET, 0},
@@ -769,7 +769,7 @@ void EndDragonFight::_rebuildSpike(ServerNetworkHandler &owner, Level &level, co
         setIfChanged(level, x, y, z, state);
     });
 
-    // the rebuilt crystal cannot be hurt until the ritual ends and points at the summon point (sub_1471E9580)
+    // the rebuilt crystal cannot be hurt until the ritual ends and points at the summon point
     const Vector3i top = spike.getTop();
     setIfChanged(level, top.x, top.y, top.z, EndSpikes::getCrystalBaseState());
 
@@ -788,7 +788,7 @@ void EndDragonFight::_rebuildSpike(ServerNetworkHandler &owner, Level &level, co
 }
 
 void EndDragonFight::_finishRespawn(ServerNetworkHandler &owner, Level &level) {
-    // the ritual ends before the crystals explode: one caught in the blast is no broken ritual (sub_14716C8B0)
+    // the ritual ends before the crystals explode: one caught in the blast is no broken ritual
     mRespawnStage = RespawnStage::None;
     mDragonKilled = false;
     _initializeDragon(owner, level);
