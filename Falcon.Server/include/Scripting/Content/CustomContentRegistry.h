@@ -107,6 +107,9 @@ struct CustomBlockDefinition {
     std::vector<std::pair<std::string, std::string>> mInstrumentSounds;
     // minecraft:neighbor_change: one bit a face (down 0 ... east 5)
     uint8_t mNeighborDirections = 0;
+    // minecraft:vibration_properties, both optional and false by default (sub_149931CF0)
+    bool mCanDampenVibrations = false;
+    bool mCanOccludeVibrations = false;
 };
 
 struct CustomActorDefinition {

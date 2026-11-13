@@ -1,8 +1,12 @@
 #pragma once
 
+#include "Protocol/Types/ItemStack.h"
 #include "World/Level/Block/ContainerBlock.h"
 
 #include <string>
+#include <vector>
+
+class CrafterBlockActor;
 
 class CrafterBlock final : public ContainerBlock {
 public:
@@ -19,6 +23,9 @@ public:
     // sub_14772C510: crafts the grid's recipe once
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
+
+    // sub_144C20530: every output of the grid's recipe, none when nothing matches
+    static std::vector<ItemStack> craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter);
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 };

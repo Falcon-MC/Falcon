@@ -16,6 +16,7 @@
 #include "World/Level/Block/BlockPrecipitation.h"
 #include "World/Level/Block/BlockTags.h"
 #include "World/Level/Block/CauldronBlock.h"
+#include "World/Level/Block/CrafterBlock.h"
 #include "World/Level/Block/LiquidProperties.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
@@ -574,12 +575,16 @@ namespace {
         if (PistonSystem::isPiston(state.mName))
             ids.emplace_back("minecraft:piston");
         ids.emplace_back("minecraft:precipitation_interactions");
+        if (dynamic_cast<CrafterBlockActor *>(actor) != nullptr)
+            ids.emplace_back("minecraft:recipe_processing");
         if (dynamic_cast<JukeboxBlockActor *>(actor) != nullptr)
             ids.emplace_back("minecraft:record_player");
         if (RedstoneSystem::isPowerSource(state))
             ids.emplace_back("minecraft:redstone_producer");
         if (dynamic_cast<SignBlockActor *>(actor) != nullptr)
             ids.emplace_back("minecraft:sign");
+        // sub_14E0E4630: every block has one
+        ids.emplace_back("minecraft:vibration_properties");
         return ids;
     }
 
@@ -592,9 +597,11 @@ namespace {
             {"minecraft:movable", "BlockMovableComponent"},
             {"minecraft:piston", "BlockPistonComponent"},
             {"minecraft:precipitation_interactions", "BlockPrecipitationInteractionsComponent"},
+            {"minecraft:recipe_processing", "BlockRecipeProcessingComponent"},
             {"minecraft:record_player", "BlockRecordPlayerComponent"},
             {"minecraft:redstone_producer", "BlockRedstoneProducerComponent"},
             {"minecraft:sign", "BlockSignComponent"},
+            {"minecraft:vibration_properties", "BlockVibrationPropertiesComponent"},
     };
 
     const char *componentClassOf(const std::string &id) {
@@ -1404,6 +1411,146 @@ namespace {
         }
         return changes;
     }
+
+    // only the crafter carries minecraft:recipe_processing (sub_14E0E3D70: block actor type 55)
+    CrafterBlockActor *crafterAt(const BlockAt &at) {
+        return at.mLevel->getBlockActors().find<CrafterBlockActor>(at.mPosition);
+    }
+
+    JSValue invalidProcessing(const BlockAt &at) {
+        return at.mApi->throwError("InvalidBlockComponentError",
+                                   "Attempting to access invalid block component minecraft:recipe_processing.");
+    }
+
+    // the slot binds as an unsigned int
+    bool readSlotIndex(JSContext *ctx, int argc, JSValueConst *argv, uint32_t &slot) {
+        double value = 0.0;
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &value, argv[0]) != 0 || !std::isfinite(value)
+            || value < 0.0 || value > 4294967295.0)
+            return false;
+        slot = (uint32_t) value;
+        return true;
+    }
+
+    // sub_14E0B6AE0: slots 0-8, else ArgumentOutOfBoundsError named after the method, bounds 0 and 9
+    JSValue checkInputSlot(const BlockAt &at, const char *method, uint32_t slot) {
+        if (slot < (uint32_t) CrafterBlockActor::SIZE)
+            return JS_UNDEFINED;
+        JSContext *ctx = at.mApi->context();
+        JSValue fields = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewFloat64(ctx, (double) CrafterBlockActor::SIZE));
+        JS_SetPropertyStr(ctx, fields, "minValue", JS_NewFloat64(ctx, 0.0));
+        JS_SetPropertyStr(ctx, fields, "value", JS_NewFloat64(ctx, (double) slot));
+        return at.mApi->throwError("ArgumentOutOfBoundsError", method, fields);
+    }
+
+    JSValue processingSlotCount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        CrafterBlockActor *crafter = crafterAt(at);
+        if (crafter == nullptr)
+            return invalidProcessing(at);
+        return JS_NewInt32(ctx, crafter->getInventory().getContainerSize());
+    }
+
+    JSValue processingGetInput(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        uint32_t slot = 0;
+        if (!readSlotIndex(ctx, argc, argv, slot))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        CrafterBlockActor *crafter = crafterAt(at);
+        if (crafter == nullptr)
+            return invalidProcessing(at);
+        JSValue refused = checkInputSlot(at, "getInputItem", slot);
+        if (JS_IsException(refused))
+            return refused;
+        return at.mApi->makeItem(crafter->getInventory().getContainerItem((int) slot));
+    }
+
+    // sub_14E143330: written whatever the slot's disabled state, an omitted item clears it
+    JSValue processingSetInput(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        uint32_t slot = 0;
+        if (!readSlotIndex(ctx, argc, argv, slot))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ItemStack stack = ItemStack::air();
+        if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+            const ScriptItemRef *item = at.mApi->native<ScriptItemRef>(argv[1]);
+            if (item == nullptr || !at.mApi->toItemStack(*item->mItem, stack))
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        }
+        CrafterBlockActor *crafter = crafterAt(at);
+        if (crafter == nullptr)
+            return invalidProcessing(at);
+        JSValue refused = checkInputSlot(at, "setInputItem", slot);
+        if (JS_IsException(refused))
+            return refused;
+        crafter->getInventory().setContainerItem((int) slot, std::move(stack));
+        at.mApi->host().refreshContainerViewers(at.mPosition);
+        RedstoneSystem::queueRedstoneNotification(*at.mLevel, at.mPosition);
+        return JS_UNDEFINED;
+    }
+
+    // sub_14E147470: the game names the slot check after the old getInputSlotDisabled
+    JSValue processingGetSlotEnabled(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        uint32_t slot = 0;
+        if (!readSlotIndex(ctx, argc, argv, slot))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        CrafterBlockActor *crafter = crafterAt(at);
+        if (crafter == nullptr)
+            return invalidProcessing(at);
+        JSValue refused = checkInputSlot(at, "getInputSlotDisabled", slot);
+        if (JS_IsException(refused))
+            return refused;
+        return JS_NewBool(ctx, !crafter->getInventory().isSlotDisabled((int) slot));
+    }
+
+    // sub_14E1451F0: flips the disabled bit even on a filled slot, the change alone reaches clients
+    JSValue processingSetSlotEnabled(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        uint32_t slot = 0;
+        if (!readSlotIndex(ctx, argc, argv, slot) || argc < 2 || !JS_IsBool(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const bool enabled = JS_ToBool(ctx, argv[1]) == 1;
+        CrafterBlockActor *crafter = crafterAt(at);
+        if (crafter == nullptr)
+            return invalidProcessing(at);
+        JSValue refused = checkInputSlot(at, "setInputSlotDisabled", slot);
+        if (JS_IsException(refused))
+            return refused;
+        SimpleContainerInventory &inventory = crafter->getInventory();
+        const uint16_t before = inventory.getDisabledSlots();
+        const uint16_t bit = (uint16_t) (1u << slot);
+        inventory.setDisabledSlots(enabled ? (uint16_t) (before & ~bit) : (uint16_t) (before | bit));
+        if (inventory.getDisabledSlots() == before)
+            return JS_UNDEFINED;
+        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *crafter);
+        RedstoneSystem::queueRedstoneNotification(*at.mLevel, at.mPosition);
+        return JS_UNDEFINED;
+    }
+
+    // sub_144C20530: the first output of the grid's recipe
+    JSValue processingGetOutput(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        CrafterBlockActor *crafter = crafterAt(at);
+        if (crafter == nullptr)
+            return invalidProcessing(at);
+        const std::vector<ItemStack> results = CrafterBlock::craftResults(at.mApi->host(), *crafter);
+        return results.empty() ? JS_UNDEFINED : at.mApi->makeItem(results.front());
+    }
+
+    // sub_14C8533F0: the block where the component stands now, a block without the json component reads false
+    JSValue vibrationQuery(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const BlockAt at = blockAt(ctx, thisVal);
+        if (at.mLevel->peekChunkPtr(at.mPosition.x >> 4, at.mPosition.z >> 4) == nullptr)
+            return at.mApi->throwError("LocationInUnloadedChunkError", "");
+        if (at.mPosition.y < at.mLevel->getMinY() || at.mPosition.y > at.mLevel->getMaxY())
+            return at.mApi->throwError("LocationOutOfWorldBoundariesError", "");
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(at.state().mName);
+        if (custom == nullptr)
+            return JS_FALSE;
+        return JS_NewBool(ctx, magic == 0 ? custom->mCanDampenVibrations : custom->mCanOccludeVibrations);
+    }
 }
 
 namespace ScriptBlockData {
@@ -1588,6 +1735,21 @@ void ScriptApi::_bindBlockSurface() {
         method(dynamic, "BlockDynamicPropertiesComponent", "get", dynamicGet, 1);
         method(dynamic, "BlockDynamicPropertiesComponent", "set", dynamicSet, 2);
         method(dynamic, "BlockDynamicPropertiesComponent", "totalByteCount", dynamicByteCount, 0);
+    }
+
+    if (mSurface.has("BlockRecipeProcessingComponent")) {
+        JSValue processing = defineClass("BlockRecipeProcessingComponent");
+        property(processing, "BlockRecipeProcessingComponent", "inputSlotCount", processingSlotCount);
+        method(processing, "BlockRecipeProcessingComponent", "getInputItem", processingGetInput, 1);
+        method(processing, "BlockRecipeProcessingComponent", "setInputItem", processingSetInput, 2);
+        method(processing, "BlockRecipeProcessingComponent", "getInputSlotEnabled", processingGetSlotEnabled, 1);
+        method(processing, "BlockRecipeProcessingComponent", "setInputSlotEnabled", processingSetSlotEnabled, 2);
+        method(processing, "BlockRecipeProcessingComponent", "getOutputItem", processingGetOutput, 0);
+    }
+    if (mSurface.has("BlockVibrationPropertiesComponent")) {
+        JSValue vibration = defineClass("BlockVibrationPropertiesComponent");
+        methodMagic(vibration, "BlockVibrationPropertiesComponent", "getCanDampenVibrations", vibrationQuery, 0, 0);
+        methodMagic(vibration, "BlockVibrationPropertiesComponent", "getCanOccludeVibrations", vibrationQuery, 0, 1);
     }
 
     // the 1.x typings declare componentId before BlockComponentTypes lists the component
