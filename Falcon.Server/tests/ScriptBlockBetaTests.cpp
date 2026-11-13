@@ -7,6 +7,7 @@
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/BlockTickingQueue.h"
 #include "World/Level/Level.h"
 #include "World/Level/NamedTickQueue.h"
 #include "World/Level/World.h"
@@ -19,6 +20,16 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+
+// tick() returns at once while the server does not listen: the steps of a tick these events need, in its order
+class ServerTickProbe {
+public:
+    static void tick(ServerNetworkHandler &owner, Level &level) {
+        ++owner.mCurrentTick;
+        level.tickBlockUpdates();
+        owner.getScriptEngine().tick(owner.mCurrentTick);
+    }
+};
 
 namespace {
     void require(bool condition, const std::string &message) {
@@ -213,6 +224,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         // World::open hands the levels their owner; without it no neighbor change or named tick runs
         level.setOwner(&owner);
         level.insertChunk(LevelChunk(0, 0));
+        // named ticks run in the columns players keep active
+        level.setActiveColumns({BlockTickingQueue::column(0, 0)});
         ServerPlayer &player = addPlayer(owner, level, "Alex", Vector3f(0.5f, 100.0f, 0.5f));
         level.setBlock(Vector3i(1, 100, 1), BlockState("test:timer"), false);
         engine.tick(0);
@@ -220,7 +233,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 
         engine.emitScriptEvent("named:schedule", "");
         for (int tick = 0; tick < 8; ++tick)
-            owner.tick(false);
+            ServerTickProbe::tick(owner, level);
 
         // one event a tick: a direction keeps its first previous and last permutation, east is not watched
         level.setBlock(Vector3i(3, 100, 3), BlockState("test:watcher"), false);
@@ -228,11 +241,11 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         level.setBlock(Vector3i(3, 100, 2), BlockState("minecraft:stone"), false);
         level.setBlock(Vector3i(3, 100, 2), BlockState("minecraft:dirt"), false);
         level.setBlock(Vector3i(4, 100, 3), BlockState("minecraft:stone"), false);
-        owner.tick(false);
+        ServerTickProbe::tick(owner, level);
         level.setBlock(Vector3i(4, 100, 3), BlockState("minecraft:air"), false);
-        owner.tick(false);
+        ServerTickProbe::tick(owner, level);
         level.setBlock(Vector3i(3, 101, 3), BlockState("minecraft:air"), false);
-        owner.tick(false);
+        ServerTickProbe::tick(owner, level);
 
         const std::unique_ptr<json::Value> r = result(owner);
         expect(*r, "neighbor",
