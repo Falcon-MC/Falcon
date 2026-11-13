@@ -483,6 +483,23 @@ int main() {
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();
         });
+        check("a teleport streams the whole view and keeps the chunks still in it", [&]() {
+            auto &state = player.getChunkStreamState();
+            player.setPosition(Vector3f(0, 140, 0));
+            const int64_t kept = ChunkStreamHandler::packChunk(2, 0);
+            state.mInRadius.insert(kept);
+            player.getSentChunks().insert(kept);
+            level.registerChunkLoader(player.getRuntimeId(), 2, 0);
+            player.setPosition(Vector3f(8, 140, 8));
+            ChunkStreamHandler::handleTeleport(handler, player);
+            require(player.getSentChunks().count(kept) == 1, "A short teleport dropped a chunk still in view");
+            const auto afterTeleport = state.mInRadius;
+            ChunkStreamHandler::handleViewDistanceChange(handler, player);
+            require(state.mInRadius == afterTeleport, "A teleport did not stream the whole view distance");
+            state = ChunkStreamState();
+            level.unregisterAllChunkLoaders(player.getRuntimeId());
+            player.resetChunkStreaming();
+        });
         check("chunk send budget shared across triggers", [&]() {
             auto &state = player.getChunkStreamState();
             // a player waiting for its spawn chunks gets them all in one tick; the tick drops the join burst
