@@ -469,6 +469,35 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
+// Spawner::spawnProjectile without an owner (sub_145E171C0, 26.60) into ProjectileComponent::shoot
+// (sub_143CB38D0): the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
+ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
+                                                            const Vector3f &position, const Vector3f &direction) {
+    ServerActor *projectile = spawnActor(level, identifier, position);
+    if (projectile == nullptr)
+        return nullptr;
+
+    projectile->setProjectile(true);
+    ProjectileComponent component;
+    if (ProjectileComponent::find(identifier, projectile->getDefinition(), component)) {
+        static std::mt19937 generator{std::random_device{}()};
+        std::normal_distribution<float> gaussian(0.0f, 1.0f);
+        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
+                                       + direction.z * direction.z);
+        Vector3f motion;
+        if (length >= 0.001f)
+            motion = Vector3f(direction.x / length, direction.y / length, direction.z / length);
+        const float spread = 0.0075f * component.mUncertaintyBase;
+        motion.x = (motion.x + gaussian(generator) * spread) * component.mPower;
+        motion.y = (motion.y + gaussian(generator) * spread) * component.mPower;
+        motion.z = (motion.z + gaussian(generator) * spread) * component.mPower;
+        projectile->setMotion(motion);
+        faceMotion(*projectile, motion);
+        broadcastActorMove(*projectile);
+    }
+    return allowProjectileLaunch(*projectile, nullptr) ? projectile : nullptr;
+}
+
 bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
     PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PROJECTILE_LAUNCH);
     if (plugins == nullptr)

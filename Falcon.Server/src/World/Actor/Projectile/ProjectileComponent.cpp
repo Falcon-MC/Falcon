@@ -141,6 +141,8 @@ ProjectileComponent ProjectileComponent::read(const json::Value &component) {
     readNumber(component, "inertia", nullptr, projectile.mInertia);
     readNumber(component, "liquid_inertia", nullptr, projectile.mLiquidInertia);
     readNumber(component, "on_fire_time", "onFireTime", projectile.mOnFireTime);
+    readNumber(component, "power", nullptr, projectile.mPower);
+    readNumber(component, "uncertainty_base", "uncertaintyBase", projectile.mUncertaintyBase);
     readFlag(component, "catch_fire", "catchFire", projectile.mCatchFire);
     readFlag(component, "crit_particle_on_hurt", "critParticleOnHurt", projectile.mCritParticleOnHurt);
     readFlag(component, "destroy_on_hurt", "destroyOnHurt", projectile.mDestroyOnHurt);

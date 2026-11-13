@@ -21,6 +21,8 @@ struct ProjectileComponent {
     float mInertia = 0.99f;
     float mLiquidInertia = 0.6f;
     float mOnFireTime = 5.0f;
+    float mPower = 1.3f;
+    float mUncertaintyBase = 0.0f;
     bool mCatchFire = false;
     bool mCritParticleOnHurt = false;
     bool mDestroyOnHurt = false;
