@@ -90,7 +90,8 @@ public:
     void waitForDecoration(std::chrono::milliseconds timeout);
 
     // a value the first decorated chunk of a structure start fixes for the whole start, as the game keeps it in the
-    // piece every chunk shares; in memory only, gone on restart
+    // piece every chunk shares; in memory only, as in the game: temple starts and pieces are only ever built by
+    // createStart (sub_1473C7400, 26.60), never loaded, so the next session draws the value again
     bool findStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t &value);
 
     // keeps the value stored first for the start and returns it
