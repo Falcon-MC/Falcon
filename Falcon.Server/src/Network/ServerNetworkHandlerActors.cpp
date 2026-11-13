@@ -1961,12 +1961,20 @@ void ServerNetworkHandler::tickActors() {
     }
 
     std::vector<int64_t> expiredClouds;
-    for (auto &entry: mLingeringClouds) {
-        LingeringCloud &cloud = entry.second;
+    // ids first: an effect can kill, and the death's script events can spawn another cloud
+    std::vector<int64_t> cloudIds;
+    cloudIds.reserve(mLingeringClouds.size());
+    for (const auto &entry: mLingeringClouds)
+        cloudIds.push_back(entry.first);
+    for (const int64_t cloudId: cloudIds) {
+        const auto found = mLingeringClouds.find(cloudId);
+        if (found == mLingeringClouds.end())
+            continue;
+        LingeringCloud &cloud = found->second;
         cloud.mAge += 1;
 
-        if (mActors.find(entry.first) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
-            expiredClouds.push_back(entry.first);
+        if (mActors.find(cloudId) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
+            expiredClouds.push_back(cloudId);
             continue;
         }
 
@@ -2000,9 +2008,10 @@ void ServerNetworkHandler::tickActors() {
                 touched = true;
             }
 
+            std::vector<int64_t> inside;
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
-                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
+                if (actorEntry.first == cloudId || !nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
                     || nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
                     || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
                     continue;
@@ -2014,7 +2023,14 @@ void ServerNetworkHandler::tickActors() {
                 if (dx * dx + dz * dz > radiusSquared || std::fabs(dy) > 1.0f)
                     continue;
 
-                touched = true;
+                inside.push_back(actorEntry.first);
+            }
+            // applied after the walk: an instant damage can kill and remove the actor
+            for (const int64_t uniqueId: inside) {
+                if (ServerActor *nearby = getActor(uniqueId)) {
+                    applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
+                    touched = true;
+                }
             }
 
             if (touched) {
@@ -2024,12 +2040,12 @@ void ServerNetworkHandler::tickActors() {
         }
 
         if (cloud.mRadius <= LINGERING_CLOUD_MIN_RADIUS) {
-            expiredClouds.push_back(entry.first);
+            expiredClouds.push_back(cloudId);
             continue;
         }
 
         if (cloud.mAge % 10 == 0) {
-            ServerActor *cloudActor = getActor(entry.first);
+            ServerActor *cloudActor = getActor(cloudId);
             if (cloudActor != nullptr) {
                 EntityDataMap metadata;
 
