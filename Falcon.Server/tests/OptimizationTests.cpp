@@ -19,6 +19,7 @@
 #include <chrono>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <random>
 #include <stdexcept>
@@ -117,6 +118,20 @@ public:
         finishWrites(level);
         if (!level.mStorage.open(WorldManager::getWorldsDirectory(), level.getName(), level.getDimensionId()))
             throw std::runtime_error("Could not reopen pending-write fixture storage");
+    }
+};
+
+// runs the queued main thread tasks: the tests have no server loop
+class ServerTickProbe {
+public:
+    static void runMainThreadTasks(ServerNetworkHandler &owner) {
+        std::vector<std::function<void()>> tasks;
+        {
+            std::lock_guard<std::mutex> lock(owner.mMainThreadTaskMutex);
+            tasks.swap(owner.mMainThreadTasks);
+        }
+        for (const std::function<void()> &task: tasks)
+            task();
     }
 };
 
@@ -385,6 +400,10 @@ int main() {
                     "A command of another world selected this world's player");
             std::string error;
             require(handler.unloadWorld("SelectorWorld", error), "Could not unload the second world");
+            // torn down with the main thread tasks, never inside the call
+            require(handler.getWorlds().find("SelectorWorld") == other, "The world was torn down inside the call");
+            ServerTickProbe::runMainThreadTasks(handler);
+            require(handler.getWorlds().find("SelectorWorld") == nullptr, "The world was not unloaded after the tick");
         });
         check("quoted selector name", [&]() {
             require(handler.getCommands().dispatch(origin, "testfor @e[name=\"Bob, Junior\"]"),
