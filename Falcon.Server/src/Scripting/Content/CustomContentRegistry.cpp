@@ -179,29 +179,84 @@ namespace {
             definition.mDisplayName = displayName->string(definition.mDisplayName);
     }
 
-    // a list of booleans, integers or strings, or {"values": {"min", "max"}} for an integer range
-    void readStateValues(const std::string &name, const json::Value &value, std::vector<CustomBlockStateValues> &out) {
+    // a list of booleans, integers or strings, or {"values": {"min", "max"}} for an integer range; a state the game
+    // refuses is left out (sub_145E8E130, sub_145E8DD90)
+    void readStateValues(const std::string &block, const std::string &name, const json::Value &value,
+                         std::vector<CustomBlockStateValues> &out) {
+        const auto refuse = [&](const char *reason) {
+            LOG_WARN(LogAreaID::Script, "Skipping block state %s of %s: %s", name.c_str(), block.c_str(), reason);
+        };
         CustomBlockStateValues state;
         state.mName = name;
         if (value.isArray()) {
+            if (value.mArray.size() <= 1)
+                return refuse("Block State enum array must have more than 1 value");
+            if (value.mArray.size() > 16)
+                return refuse("Block State enum array must have 16 or less elements");
+            const json::Value::Type type = value.mArray.front()->mType;
             for (const std::unique_ptr<json::Value> &entry: value.mArray) {
+                if (entry->mType != type)
+                    return refuse("Block State enum array values are not all of one type");
                 if (entry->mType == json::Value::Type::Boolean)
                     state.mValues.push_back(Tag::ofByte(entry->mBoolean ? 1 : 0));
                 else if (entry->isNumber())
                     state.mValues.push_back(Tag::ofInt(entry->integer(0)));
                 else if (entry->isString())
                     state.mValues.push_back(Tag::ofString(entry->string()));
+                else
+                    return refuse("Block State invalid values");
+            }
+            for (size_t i = 0; i < state.mValues.size(); ++i) {
+                for (size_t j = i + 1; j < state.mValues.size(); ++j) {
+                    if (state.mValues[i] == state.mValues[j])
+                        return refuse(type == json::Value::Type::Boolean
+                                              ? "Block State enum array of bools cannot both be the same value"
+                                              : "Duplicate values not allowed in property enum");
+                }
             }
         } else if (value.isObject() && value.get("values") != nullptr && value.get("values")->isObject()) {
             const json::Value &range = *value.get("values");
-            const int32_t min = range.get("min") != nullptr ? range.get("min")->integer(0) : 0;
-            const int32_t max = range.get("max") != nullptr ? range.get("max")->integer(0) : 0;
-            // "Max must be greater than min"
-            for (int32_t entry = min; max > min && entry <= max; ++entry)
-                state.mValues.push_back(Tag::ofInt(entry));
+            const int64_t min = range.get("min") != nullptr ? range.get("min")->integer(0) : 0;
+            const int64_t max = range.get("max") != nullptr ? range.get("max")->integer(0) : 0;
+            if (max <= min)
+                return refuse("Block State enum range values error. Max must be greater than min");
+            if (max - min > 15)
+                return refuse("Block State enum range cannot be greater than 16");
+            for (int64_t entry = min; entry <= max; ++entry)
+                state.mValues.push_back(Tag::ofInt((int32_t) entry));
         }
         if (!state.mValues.empty())
             out.push_back(std::move(state));
+    }
+
+    int32_t bitsFor(size_t values) {
+        int32_t bits = 0;
+        while (((size_t) 1 << bits) < values)
+            ++bits;
+        return bits;
+    }
+
+    // a block's states share 16 bits (2^16 permutations, sub_1435A6E10): a state past them is not applied
+    void fitStateBits(const std::string &block, std::vector<CustomBlockStateValues> &states) {
+        int32_t total = 0;
+        for (const CustomBlockStateValues &state: states)
+            total += bitsFor(state.mValues.size());
+        if (total <= 16)
+            return;
+        LOG_WARN(LogAreaID::Script,
+                 "Block %s has %u states that use %u bits. The maximum supported number of bits is 16 (2^16 "
+                 "permutations). Some specified states may not be applied to this block.",
+                 block.c_str(), (unsigned) states.size(), (unsigned) total);
+        int32_t used = 0;
+        std::vector<CustomBlockStateValues> kept;
+        for (CustomBlockStateValues &state: states) {
+            const int32_t bits = bitsFor(state.mValues.size());
+            if (used + bits > 16)
+                continue;
+            used += bits;
+            kept.push_back(std::move(state));
+        }
+        states = std::move(kept);
     }
 
     // 1.x lists names under minecraft:custom_components; 2.x declares each one as a key holding its params
@@ -985,7 +1040,8 @@ void CustomContentRegistry::_loadPackBlocks(const std::string &packPath, ItemDef
             const json::Value *states = description2->get("states");
             if (states != nullptr && states->isObject()) {
                 for (const std::string &name: states->mKeys)
-                    readStateValues(name, *states->get(name), definition.mStates);
+                    readStateValues(definition.mIdentifier, name, *states->get(name), definition.mStates);
+                fitStateBits(definition.mIdentifier, definition.mStates);
             }
         }
 
