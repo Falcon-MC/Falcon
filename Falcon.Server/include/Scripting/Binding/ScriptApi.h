@@ -687,6 +687,8 @@ private:
 
     void _bindDimensionSurface();
 
+    void _bindPoi();
+
     void _bindStructures();
 
     void _bindItemStack();

@@ -118,6 +118,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mNeighborChanges = std::move(other.mNeighborChanges);
     mExperiments = std::move(other.mExperiments);
     mVillageManager = std::move(other.mVillageManager);
+    mPoiManager = std::move(other.mPoiManager);
     mGameRules = std::move(other.mGameRules);
     mRulesOwner = other.mRulesOwner;
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);

@@ -1204,4 +1204,5 @@ void ScriptApi::_bindDimension() {
     method(dimension, "Dimension", "playSound", dimensionPlaySound, 3);
     method(dimension, "Dimension", "getEntities", dimensionGetEntities, 1);
     _bindDimensionSurface();
+    _bindPoi();
 }
