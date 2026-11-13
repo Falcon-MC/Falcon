@@ -70,7 +70,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
             + BlockRecipeCraftingComponent.componentId;
         r.stoneCrafting = String(at(6, 6).getComponent("recipe_crafting"));
         r.listed = at(5, 5).getComponents().some((c) => c.typeId === "minecraft:recipe_crafting");
-        r.closedPlayers = crafting.players.length;
+        r.closedPlayers = String(crafting.players.length);
         r.closedContext = String(crafting.getCraftingContext(player));
     } else if (event.id === "crafting:open") {
         const context = crafting.getCraftingContext(player);
@@ -95,7 +95,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         context.setInputItem(0, new ItemStack("minecraft:andesite", 5));
     } else if (event.id === "crafting:gone") {
         r.gone = kept.isValid + ":" + fail(() => kept.validRecipes) + ":" + fail(() => kept.getOutputItem());
-        r.gonePlayers = crafting.players.length;
+        r.gonePlayers = String(crafting.players.length);
     }
     save();
 });
