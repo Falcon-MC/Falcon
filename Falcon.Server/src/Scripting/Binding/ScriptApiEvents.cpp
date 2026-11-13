@@ -9,10 +9,12 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Block/BlockTags.h"
 #include "World/Item/CraftingRecipeTable.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <iterator>
 #include <memory>
 
@@ -898,12 +900,69 @@ namespace {
         JS_FreeValue(ctx, filter);
         return accepted;
     }
+
 }
 
 bool ScriptApi::_readsEventOptions(const std::string &key) {
     return entityFilterSubject(key) != nullptr || key == "after.entityRemove" || key == "after.playerBreakBlock"
            || key == "before.playerBreakBlock" || key == "after.playerPlaceBlock" || key == "after.playerButtonInput"
-           || key == "after.playerHotbarSelectedSlotChange" || key == "after.playerSwingStart";
+           || key == "after.playerHotbarSelectedSlotChange" || key == "after.playerSwingStart"
+           || key == "after.playerCraftRecipe";
+}
+
+bool ScriptApi::_acceptsBlockFilter(JSValueConst filter, const BlockState *state) {
+    if (state == nullptr)
+        return false;
+    JSContext *ctx = mContext;
+    bool present = false;
+
+    const std::vector<std::string> includeTypes = optionStrings(ctx, filter, "includeTypes", present);
+    if (present && !namedIn(includeTypes, state->mName))
+        return false;
+    const std::vector<std::string> excludeTypes = optionStrings(ctx, filter, "excludeTypes", present);
+    if (present && namedIn(excludeTypes, state->mName))
+        return false;
+
+    const std::vector<std::string> includeTags = optionStrings(ctx, filter, "includeTags", present);
+    if (present) {
+        bool any = false;
+        for (const std::string &tag: includeTags)
+            any = any || BlockTags::has(*state, tag);
+        if (!any)
+            return false;
+    }
+    const std::vector<std::string> excludeTags = optionStrings(ctx, filter, "excludeTags", present);
+    if (present) {
+        for (const std::string &tag: excludeTags)
+            if (BlockTags::has(*state, tag))
+                return false;
+    }
+
+    for (const char *key: {"includePermutations", "excludePermutations"}) {
+        JSValue list = JS_GetPropertyStr(ctx, filter, key);
+        const bool include = std::strcmp(key, "includePermutations") == 0;
+        if (JS_IsArray(list)) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, list, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            bool matched = false;
+            for (uint32_t index = 0; index < length && !matched; ++index) {
+                JSValue candidate = JS_GetPropertyUint32(ctx, list, index);
+                BlockState wanted;
+                matched = readPermutation(candidate, wanted) && wanted == *state;
+                JS_FreeValue(ctx, candidate);
+            }
+            JS_FreeValue(ctx, list);
+            if (include && length > 0 && !matched)
+                return false;
+            if (!include && matched)
+                return false;
+        } else {
+            JS_FreeValue(ctx, list);
+        }
+    }
+    return true;
 }
 
 bool ScriptApi::_acceptsEventOptions(const std::string &key, JSValueConst options, JSValueConst event) {
@@ -982,6 +1041,40 @@ bool ScriptApi::_acceptsEventOptions(const std::string &key, JSValueConst option
             }
         }
         JS_FreeValue(ctx, permutations);
+        return accepted;
+    }
+
+    if (key == "after.playerCraftRecipe") {
+        // PlayerCraftRecipeEventOptions: filters on the player, the crafted item and the crafting block
+        JSValue player = JS_GetPropertyStr(ctx, event, "player");
+        const bool playerAccepted = acceptsEntityFilter(ctx, options, "playerFilter", player);
+        JS_FreeValue(ctx, player);
+        if (!playerAccepted)
+            return false;
+
+        JSValue itemFilter = JS_GetPropertyStr(ctx, options, "itemFilter");
+        if (JS_IsObject(itemFilter)) {
+            const std::vector<std::string> includeItems = optionStrings(ctx, itemFilter, "includeTypes", present);
+            if (present && !namedIn(includeItems, nestedStringField(ctx, event, "itemStack", "typeId"))) {
+                JS_FreeValue(ctx, itemFilter);
+                return false;
+            }
+        }
+        JS_FreeValue(ctx, itemFilter);
+
+        // the block is absent for the 2x2 inventory grid: a blockFilter is only applied when one is present
+        JSValue blockFilter = JS_GetPropertyStr(ctx, options, "blockFilter");
+        bool accepted = true;
+        JSValue block = JS_GetPropertyStr(ctx, event, "block");
+        if (JS_IsObject(blockFilter) && JS_IsObject(block)) {
+            JSValue permutation = JS_GetPropertyStr(ctx, block, "permutation");
+            BlockState state;
+            const bool known = readPermutation(permutation, state);
+            JS_FreeValue(ctx, permutation);
+            accepted = _acceptsBlockFilter(blockFilter, known ? &state : nullptr);
+        }
+        JS_FreeValue(ctx, block);
+        JS_FreeValue(ctx, blockFilter);
         return accepted;
     }
 

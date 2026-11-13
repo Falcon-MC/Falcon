@@ -555,13 +555,14 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             continue;
         }
 
+        ItemStack craftedRecipeItem = ItemStack::air();
         ItemStackResponseEntry entry = ItemStackRequestHandler::execute(
                 inventory, request, owner.getCreativeItems(), owner.getRecipeOutputs(), owner.getRecipeSourceIndices(),
                 player.getInventoryManager().isCraftingTableOpen(), player.getInventoryManager().isFurnaceOpen(),
                 player.getInventoryManager().getContainer(), &droppedItems, &owner.getCodecContext(), &bundles,
                 player.getExperience().getXpLevel(), creativeMode, &enchantLevelsConsumed, anvilOpen,
                 &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
-                stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr);
+                stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem);
 
         // the copy waits for the request to hold: a rejected one would leave an orphan map behind
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK
@@ -591,6 +592,13 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             playBundleSounds(owner, player, request, false);
         } else {
             playBundleSounds(owner, player, request, true);
+            if (!craftedRecipeItem.isAir()) {
+                const InventoryManager &invManager = player.getInventoryManager();
+                const Vector3i tablePosition = invManager.getCraftingTablePosition();
+                owner.getScriptEngine().onPlayerCraftRecipe(
+                        player, craftedRecipeItem,
+                        invManager.isCraftingTableOpen() ? &tablePosition : nullptr);
+            }
         }
 
         response.mEntries.push_back(std::move(entry));

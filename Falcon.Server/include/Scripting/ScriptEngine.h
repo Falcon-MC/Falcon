@@ -245,6 +245,9 @@ public:
 
     void onPlayerInteractWithEntity(ServerPlayer &player, Actor &target, const ItemStack &before);
 
+    // after a grid recipe was crafted; blockPosition is the crafting table, nullptr for the inventory grid
+    void onPlayerCraftRecipe(ServerPlayer &player, const ItemStack &crafted, const Vector3i *blockPosition);
+
     void onEntitySneak(Actor &entity, bool started);
 
     bool beforeEntityTamed(Actor &entity, Actor &tamer);

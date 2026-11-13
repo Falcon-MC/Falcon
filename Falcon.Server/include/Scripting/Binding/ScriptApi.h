@@ -743,6 +743,9 @@ private:
 
     bool _acceptsEventOptions(const std::string &key, JSValueConst options, JSValueConst event);
 
+    // BlockFilter against a block state; null state never satisfies an include constraint
+    bool _acceptsBlockFilter(JSValueConst filter, const BlockState *state);
+
     void _bindClocks();
 
     void _bindScoreboard();

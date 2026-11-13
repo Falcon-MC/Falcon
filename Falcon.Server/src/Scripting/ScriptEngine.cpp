@@ -1617,6 +1617,18 @@ void ScriptEngine::onPlayerInteractWithEntity(ServerPlayer &player, Actor &targe
           });
 }
 
+void ScriptEngine::onPlayerCraftRecipe(ServerPlayer &player, const ItemStack &crafted, const Vector3i *blockPosition) {
+    Level &level = mHost->getLevelFor(player);
+    _emit("after.playerCraftRecipe", "WorldAfterEvents.playerCraftRecipe", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(crafted));
+        if (blockPosition != nullptr)
+            JS_SetPropertyStr(ctx, event, "block",
+                              api.makeBlock(level, blockPosition->x, blockPosition->y, blockPosition->z));
+    });
+}
+
 void ScriptEngine::onEntitySneak(Actor &entity, bool started) {
     const char *key = started ? "after.entityStartSneaking" : "after.entityStopSneaking";
     const char *signal = started ? "WorldAfterEvents.entityStartSneaking" : "WorldAfterEvents.entityStopSneaking";
