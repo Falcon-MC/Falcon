@@ -16,6 +16,7 @@
 
 namespace {
     const int32_t WIDTH = 12;
+    const int32_t HEIGHT = 10;
     const int32_t DEPTH = 15;
     // the vine_direction_bits the game keeps at 0x1529B2B68: all four sides
     const int32_t VINE_SIDES = 15;
@@ -243,7 +244,8 @@ void JungleTempleStructure::place(const ChunkGenerator &generator, Level &level,
     if (biome != BiomeIds::JUNGLE && biome != BiomeIds::JUNGLE_HILLS)
         return;
 
-    ScatteredPiece piece(level, chunk, cornerX, ScatteredPiece::averageGround(chunk, 0, 0, WIDTH, DEPTH), cornerZ);
+    const int32_t floorY = ScatteredPiece::averageGround(chunk, 0, 0, WIDTH, DEPTH);
+    ScatteredPiece piece(level, chunk, cornerX, floorY, cornerZ);
     std::mt19937 random = StructureFeature::createPostProcessRandom(generator.getSeed(), chunk.getX(), chunk.getZ());
     const Blocks blocks;
     placeShell(piece, blocks, random);
@@ -251,4 +253,6 @@ void JungleTempleStructure::place(const ChunkGenerator &generator, Level &level,
     placeLowerFloor(piece, blocks, random);
     placeTraps(piece, blocks, random);
     placeLeverRoom(piece, blocks, random);
+    ScatteredPiece::addBounds(level, chunk, "minecraft:jungle_pyramid", 0, cornerX, floorY, cornerZ, WIDTH, HEIGHT,
+                              DEPTH);
 }

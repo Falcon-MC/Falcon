@@ -8,6 +8,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
+#include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
 
 #include <algorithm>
@@ -31,6 +32,24 @@ namespace {
 
 ScatteredPiece::ScatteredPiece(Level &level, LevelChunk &chunk, int32_t minX, int32_t minY, int32_t minZ)
         : mLevel(level), mChunk(chunk), mMinX(minX), mMinY(minY), mMinZ(minZ) {}
+
+void ScatteredPiece::addBounds(const Level &level, LevelChunk &chunk, const char *name, int32_t startValue,
+                               int32_t minX, int32_t pieceMinY, int32_t minZ, int32_t sizeX, int32_t sizeY,
+                               int32_t sizeZ) {
+    ChunkStructureBounds::Box start;
+    start.minX = minX;
+    start.minY = OverworldGeneratorConstants::SEA_LEVEL + 1;
+    start.minZ = minZ;
+    start.maxX = minX + sizeX - 1;
+    start.maxY = start.minY + sizeY - 1;
+    start.maxZ = minZ + sizeZ - 1;
+    ChunkStructureBounds::Box piece = start;
+    piece.minY = pieceMinY;
+    piece.maxY = pieceMinY + sizeY - 1;
+    chunk.getStructureBounds().addStart(
+            name, startValue, start, {piece},
+            ChunkStructureBounds::chunkBox(chunk.getX(), chunk.getZ(), level.getMinY(), level.getMaxY()));
+}
 
 int32_t ScatteredPiece::aboveTopSolid(const LevelChunk &chunk, int32_t x, int32_t z) {
     for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; y--) {

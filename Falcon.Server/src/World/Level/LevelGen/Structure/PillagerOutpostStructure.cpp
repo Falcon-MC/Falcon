@@ -38,6 +38,8 @@ namespace {
     const int32_t MAX_ALLAYS = 3;
 
     const char *const LOOT_TABLE = "loot_tables/chests/pillager_outpost.json";
+    // the outpost start's vfunc +24 (sub_1473C53C0)
+    const int32_t START_VALUE = -3;
 
     // sub_1473C3C20, table 0x14F2F8820
     const std::array<const char *, 7> FEATURES = {"pillageroutpost/feature_cage1",
@@ -91,10 +93,16 @@ namespace {
                     StructureTerrain &terrain)
                 : mLevel(level), mChunk(chunk), mSeed(seed), mChunkRandom(chunkRandom), mTerrain(terrain) {}
 
-        // PillagerOutpostPiece::postProcess (sub_1473C5940) then the template piece post process (sub_14699DA70)
-        void place(const PillagerOutpostStructure::Piece &piece, const PieceKey &key) {
+        // PillagerOutpostPiece::postProcess (sub_1473C5940) then the template piece post process (sub_14699DA70);
+        // `box`: the box the piece is left with
+        void place(const PillagerOutpostStructure::Piece &piece, const PieceKey &key, ChunkStructureBounds::Box &box) {
             const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(piece.mTemplate + ".nbt");
             if (shape == nullptr)
+                return;
+
+            box = PillagerOutpostStructure::startBox(piece, *shape, mLevel.getMaxY() + 1);
+            if (!box.intersects(ChunkStructureBounds::chunkBox(mChunk.getX(), mChunk.getZ(), mLevel.getMinY(),
+                                                               mLevel.getMaxY())))
                 return;
 
             int32_t farX = shape->getSizeX() - 1;
@@ -104,12 +112,15 @@ namespace {
             const int32_t maxX = std::max(piece.x, piece.x + farX);
             const int32_t minZ = std::min(piece.z, piece.z + farZ);
             const int32_t maxZ = std::max(piece.z, piece.z + farZ);
-            if (maxX < mChunk.getX() * 16 || minX > mChunk.getX() * 16 + 15 || maxZ < mChunk.getZ() * 16
-                || minZ > mChunk.getZ() * 16 + 15)
-                return;
-
+            // a prop given up keeps the box it was made with
             int32_t originY = 0;
             if (!_ground(piece, minX, maxX, minZ, maxZ, originY))
+                return;
+            // the top is the template height over the ground, one more than the box it was made with
+            box.minY = originY;
+            box.maxY = originY + shape->getSizeY();
+            if (maxX < mChunk.getX() * 16 || minX > mChunk.getX() * 16 + 15 || maxZ < mChunk.getZ() * 16
+                || minZ > mChunk.getZ() * 16 + 15)
                 return;
 
             // no ignored block: the air of the templates clears the ground
@@ -347,6 +358,74 @@ void PillagerOutpostStructure::place(const ChunkGenerator &generator, Level &lev
     std::mt19937 chunkRandom(seed);
     StructureTerrain terrain(generator);
     PiecePlacer placer(level, chunk, seed, chunkRandom, terrain);
-    for (const std::pair<PieceKey, Piece> &piece: pieces)
-        placer.place(piece.second, piece.first);
+    std::vector<ChunkStructureBounds::Box> boxes;
+    for (const std::pair<PieceKey, Piece> &piece: pieces) {
+        ChunkStructureBounds::Box box;
+        placer.place(piece.second, piece.first, box);
+        boxes.push_back(box);
+    }
+
+    // registered once the chunk's pieces are done (sub_14CDACCA0), one start at a time
+    const int32_t top = level.getMaxY() + 1;
+    const ChunkStructureBounds::Box chunkBox = ChunkStructureBounds::chunkBox(chunk.getX(), chunk.getZ(),
+                                                                              level.getMinY(), level.getMaxY());
+    for (size_t first = 0; first < pieces.size();) {
+        size_t last = first;
+        ChunkStructureBounds::Box start;
+        bool any = false;
+        std::vector<ChunkStructureBounds::Box> pieceBoxes;
+        for (; last < pieces.size() && std::get<1>(pieces[last].first) == std::get<1>(pieces[first].first)
+               && std::get<2>(pieces[last].first) == std::get<2>(pieces[first].first);
+             ++last) {
+            const std::shared_ptr<const StructureTemplate> shape = StructureTemplate::load(pieces[last].second.mTemplate
+                                                                                           + ".nbt");
+            if (shape == nullptr)
+                continue;
+            // StructureStart::calculateBoundingBox over the boxes the pieces were made with
+            const ChunkStructureBounds::Box made = startBox(pieces[last].second, *shape, top);
+            start = any ? ChunkStructureBounds::Box{std::min(start.minX, made.minX), std::min(start.minY, made.minY),
+                                                    std::min(start.minZ, made.minZ), std::max(start.maxX, made.maxX),
+                                                    std::max(start.maxY, made.maxY), std::max(start.maxZ, made.maxZ)}
+                        : made;
+            any = true;
+            pieceBoxes.push_back(boxes[last]);
+        }
+        if (any)
+            chunk.getStructureBounds().addStart("minecraft:pillager_outpost", START_VALUE, start, pieceBoxes, chunkBox);
+        first = last;
+    }
+}
+
+// TemplateStructurePiece::calculateBoundingBox (sub_14699D910, 26.60): the far sides reach one block past the
+// template; the outpost piece then spans from the sea to the top of the dimension (ctor sub_1473C53F0)
+ChunkStructureBounds::Box PillagerOutpostStructure::startBox(const Piece &piece, const StructureTemplate &shape,
+                                                             int32_t top) {
+    const int32_t sizeX = shape.getSizeX();
+    const int32_t sizeZ = shape.getSizeZ();
+    ChunkStructureBounds::Box box;
+    box.minX = piece.x;
+    box.maxX = piece.x;
+    box.minZ = piece.z;
+    box.maxZ = piece.z;
+    switch (piece.mQuarterTurns & 3) {
+        case 1:
+            box.minX -= sizeZ;
+            box.maxZ += sizeX;
+            break;
+        case 2:
+            box.minX -= sizeX;
+            box.minZ -= sizeZ;
+            break;
+        case 3:
+            box.maxX += sizeZ;
+            box.minZ -= sizeX;
+            break;
+        default:
+            box.maxX += sizeX;
+            box.maxZ += sizeZ;
+            break;
+    }
+    box.minY = SEA_LEVEL;
+    box.maxY = top;
+    return box;
 }

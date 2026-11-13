@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Level/Chunk/ChunkStructureBounds.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -7,6 +9,7 @@
 class ChunkGenerator;
 class Level;
 class LevelChunk;
+class StructureTemplate;
 
 // a watchtower, its overgrown copy and up to four props around it, all drawn in the start chunk
 class PillagerOutpostStructure {
@@ -24,4 +27,7 @@ public:
     static std::vector<Piece> plan(const ChunkGenerator &generator, int32_t startX, int32_t startZ);
 
     static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
+
+    // the box a piece is made with, before its post process sets it on the ground; `top`: the dimension's height
+    static ChunkStructureBounds::Box startBox(const Piece &piece, const StructureTemplate &shape, int32_t top);
 };

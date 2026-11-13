@@ -6,6 +6,7 @@
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockMaterial.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Chunk/ChunkStructureBounds.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
@@ -25,10 +26,13 @@
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 
+#include <initializer_list>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     void require(bool condition, const char *message) {
@@ -462,6 +466,71 @@ namespace {
     }
 }
 
+namespace {
+    void appendInt(std::string &out, int32_t value) {
+        for (int shift = 0; shift < 32; shift += 8)
+            out.push_back((char) (((uint32_t) value >> shift) & 0xff));
+    }
+
+    void checkStructureBounds() {
+        using Box = ChunkStructureBounds::Box;
+        const Box chunk = ChunkStructureBounds::chunkBox(0, 0, -64, 319);
+        require(chunk.minX == 0 && chunk.maxX == 15 && chunk.minY == -64 && chunk.maxY == 319 && chunk.maxZ == 15,
+                "The chunk box differs");
+
+        ChunkStructureBounds bounds;
+        bounds.addStart("minecraft:igloo", 0, {40, 64, 0, 46, 68, 7}, {{40, 60, 0, 46, 64, 7}}, chunk);
+        require(bounds.empty(), "A start missing the chunk was registered");
+
+        // a start reaching past the chunk is clipped to it, its piece too
+        bounds.addStart("minecraft:desert_pyramid", 0, {8, 64, 8, 28, 78, 28}, {{8, 70, 8, 28, 84, 28}}, chunk);
+        bounds.addStart("minecraft:desert_pyramid", 0, {0, 64, 0, 20, 78, 20}, {{0, 60, 0, 20, 74, 20}}, chunk);
+        require(bounds.getNames().size() == 1 && bounds.getEntries().size() == 2,
+                "A second start of the same name was registered");
+        const ChunkStructureBounds::Entry &whole = bounds.getEntries()[0];
+        require(whole.mWhole && whole.mEntity == 1 && whole.mName == 0 && whole.mBox.maxX == 15
+                        && whole.mBox.maxY == 78,
+                "The whole start is not the first clipped entry");
+
+        require(bounds.namesAt(10, 72, 10) == std::vector<std::string>{"minecraft:desert_pyramid"},
+                "The piece box does not hold its block");
+        require(bounds.namesAt(10, 66, 10).empty(), "The whole start box answered a query");
+        require(bounds.namesAt(4, 72, 4).empty(), "A block outside the piece answered a query");
+
+        std::string expected;
+        appendInt(expected, 1);
+        appendInt(expected, 1);
+        appendInt(expected, 0);
+        expected += std::string("\x18\x00", 2) + "minecraft:desert_pyramid";
+        appendInt(expected, 2);
+        for (const int32_t value: {2, 8, 70, 8, 15, 84, 15, 1, 8, 64, 8, 15, 78, 15})
+            appendInt(expected, value);
+        appendInt(expected, 0);
+        appendInt(expected, 2);
+        for (const int32_t value: {2, 0, 0, 0, 1, 0, 0, 1})
+            appendInt(expected, value);
+        require(bounds.save() == expected, "The structure record differs from the game's layout");
+
+        ChunkStructureBounds loaded;
+        require(loaded.load(expected) && loaded.save() == expected, "The structure record does not load back");
+        require(loaded.namesAt(10, 72, 10) == bounds.namesAt(10, 72, 10), "A loaded record answers differently");
+        require(!loaded.load(expected.substr(0, expected.size() - 2)) && loaded.empty(), "A cut record was accepted");
+        require(ChunkStructureBounds().save().empty(), "An empty registry writes a record");
+
+        const std::shared_ptr<const StructureTemplate> tower = StructureTemplate::load(
+                "pillageroutpost/watchtower.nbt");
+        require(tower != nullptr, "No watchtower template");
+        PillagerOutpostStructure::Piece piece;
+        piece.x = 100;
+        piece.z = 200;
+        piece.mQuarterTurns = 1;
+        const Box turned = PillagerOutpostStructure::startBox(piece, *tower, 320);
+        require(turned.minX == 100 - tower->getSizeZ() && turned.maxX == 100 && turned.minZ == 200
+                        && turned.maxZ == 200 + tower->getSizeX() && turned.minY == 63 && turned.maxY == 320,
+                "The turned outpost piece box differs");
+    }
+}
+
 int main() {
     try {
         BlockPaletteRegistry::getInstance().initialize();
@@ -476,6 +545,7 @@ int main() {
         checkOceanRuins();
         checkPillagerOutposts();
         checkScatteredPieces();
+        checkStructureBounds();
     } catch (const std::exception &error) {
         std::clog << "Structure regression failed: " << error.what() << '\n';
         return 1;

@@ -14,6 +14,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureConnections.h"
+#include "World/Level/LevelGen/Structure/ScatteredPiece.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
@@ -32,6 +33,10 @@ namespace {
     const int32_t SHAFT_MIN_PIECES = 4;
     const int32_t SHAFT_PIECE_RANGE = 8;
     const int8_t RED_BED_COLOR = 14;
+    // the temple piece the start makes for an igloo (sub_1473C7400)
+    const int32_t BOX_X = 7;
+    const int32_t BOX_Y = 5;
+    const int32_t BOX_Z = 8;
     const char *IGLOO_LOOT_TABLE = "loot_tables/chests/igloo_chest.json";
 
     struct IglooChoice {
@@ -179,6 +184,10 @@ void IglooStructure::place(const ChunkGenerator &generator, Level &level, LevelC
                 continue;
 
             const int32_t floorY = generator.getGeneratedSolidHeight(cornerX, cornerZ) - 1;
+            // IglooPiece::postProcess (sub_1473DCD60) first sets its box one under the mean ground (sub_1473CE840):
+            // the box only covers the start chunk
+            const bool inStart = startX == chunk.getX() && startZ == chunk.getZ();
+            const int32_t boxY = inStart ? ScatteredPiece::averageGround(chunk, 0, 0, BOX_X, BOX_Z) - 1 : 0;
             const IglooChoice choice = drawChoice(generator.getSeed(), startX, startZ);
             StructureTerrain terrain(generator);
             for (const PlacedBlock &block:
@@ -192,6 +201,9 @@ void IglooStructure::place(const ChunkGenerator &generator, Level &level, LevelC
                 chunk.setBlock(x & 15, y, z & 15, block.mState);
                 placeData(level, block, Vector3i(x, y, z), choice.mLootSeed);
             }
+            if (inStart)
+                ScatteredPiece::addBounds(level, chunk, "minecraft:igloo", 0, cornerX, boxY, cornerZ, BOX_X, BOX_Y,
+                                          BOX_Z);
         }
     }
 }

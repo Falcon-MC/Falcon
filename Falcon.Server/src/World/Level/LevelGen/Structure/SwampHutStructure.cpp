@@ -20,7 +20,10 @@
 
 namespace {
     const int32_t SIZE_X = 7;
+    const int32_t SIZE_Y = 7;
     const int32_t SIZE_Z = 9;
+    // the temple start's vfunc +24 (sub_1473C6CC0): -3 for a swamp hut, 0 for the other temples
+    const int32_t START_VALUE = -3;
 
     // the potion ids the game draws for the hut's cauldron: water breathing, fire resistance, swiftness,
     // slowness, poison, weakness, healing
@@ -127,4 +130,7 @@ void SwampHutStructure::place(const ChunkGenerator &generator, Level &level, Lev
     Tag cat = generatedMob(CatActor::IDENTIFIER, mobX, (float) (floorY + 2), mobZ);
     cat.putString(MobActor::TAG_SPAWN_EVENT, "minecraft:spawn_midnight_cat");
     level.addGeneratedEntity(cat);
+
+    ScatteredPiece::addBounds(level, chunk, "minecraft:swamp_hut", START_VALUE, cornerX, floorY, cornerZ, SIZE_X,
+                              SIZE_Y, SIZE_Z);
 }
