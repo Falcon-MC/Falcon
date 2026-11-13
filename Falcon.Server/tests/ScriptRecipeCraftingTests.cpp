@@ -160,6 +160,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         player.setPosition(Vector3f(5.5f, 101.0f, 5.5f));
         InventoryManager &inventory = player.getInventoryManager();
         inventory.attach(&player, &owner);
+        // the server does not listen here: its own tick() would return at once
         engine.tick(0);
 
         require(owner.isTransportReady(), "the test server has no network handler to observe");
@@ -172,7 +173,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         });
 
         engine.emitScriptEvent("crafting:closed", "");
-        owner.tick(false);
+        engine.tick(1);
 
         require(inventory.onClientOpenStonecutter(cutterAt), "the stonecutter window did not open");
         player.getInventory().setStonecutterInput(makeItem(owner, "minecraft:andesite", 5));
@@ -187,7 +188,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         sent.clear();
 
         engine.emitScriptEvent("crafting:open", "");
-        owner.tick(false);
+        engine.tick(2);
 
         const std::vector<ClientboundStonecutterSetRecipePacket> picks = selections(owner, sent);
         require(picks.size() == 1, "the script pick did not reach the client alone");
@@ -200,7 +201,7 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         inventory.onClientRemoveWindow(inventory.getStonecutterWindowId());
         require(player.getInventory().getStonecutterInput().isAir(), "closing the stonecutter kept its input");
         engine.emitScriptEvent("crafting:gone", "");
-        owner.tick(false);
+        engine.tick(3);
 
         const auto it = owner.getWorldDynamicProperties().find("crafting");
         require(it != owner.getWorldDynamicProperties().end(), "the recipe crafting pack wrote nothing");
