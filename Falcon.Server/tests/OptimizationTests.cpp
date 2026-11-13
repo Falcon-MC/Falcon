@@ -698,6 +698,31 @@ int main() {
             require(LevelPersistenceProbe::savedBlock(level, 15, 147, 15, "minecraft:diamond_block"),
                     "Save completed before generation backlog reached storage");
         });
+        check("an actor outside the loaded columns is saved where it stands", [&]() {
+            const int64_t column = ((int64_t) 40 << 32) | (uint32_t) 40;
+            require(handler.getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(column) == 0,
+                    "The fixture column already has its actors loaded");
+            Tag stored = Tag::ofCompound();
+            stored.putString("identifier", "minecraft:sheep");
+            stored.putLong("UniqueID", 0x7fff00000001);
+            level.saveEntities(40, 40, {stored});
+
+            ServerActor *pig = handler.spawnActor(level, "minecraft:pig", Vector3f(648.5f, 100.0f, 648.5f));
+            require(pig != nullptr, "Could not spawn the stray pig");
+            const int64_t pigId = pig->getUniqueId();
+            handler.saveAllActors();
+            handler.saveAllActors();
+
+            size_t pigs = 0;
+            bool sheep = false;
+            for (const Tag &entity: level.loadEntities(40, 40)) {
+                pigs += entity.getLong("UniqueID", 0) == pigId ? 1 : 0;
+                sheep = sheep || entity.getLong("UniqueID", 0) == 0x7fff00000001;
+            }
+            handler.removeActor(pigId);
+            require(pigs == 1, "An actor outside the loaded columns was not saved once in its column");
+            require(sheep, "Saving a stray actor dropped the actors stored in its column");
+        });
         check("explicit save reports disk errors", [&]() {
             const auto metadata = root / "worlds" / "World" / "level.dat";
             std::filesystem::remove(metadata);

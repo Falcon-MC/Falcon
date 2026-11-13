@@ -94,6 +94,7 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
             saveBlockActorsForChunk(*level, chunkX, chunkZ, true);
         }
         loadedChunks.clear();
+        saveStrayActors(*level, loadedChunks);
     }
 
     std::vector<int64_t> stranded;

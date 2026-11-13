@@ -227,7 +227,33 @@ void ServerNetworkHandler::saveAllActors() {
             level->saveEntities(chunkX, chunkZ, entities);
             saveBlockActorsForChunk(*level, chunkX, chunkZ, false);
         }
+
+        saveStrayActors(*level, columns);
     }
+}
+
+// one walked out of the loaded columns keeps ticking: the column it left is written without it
+void ServerNetworkHandler::saveStrayActors(Level &level, const std::unordered_set<int64_t> &loadedColumns) {
+    std::unordered_map<int64_t, std::vector<Tag>> byChunk;
+    for (auto &entry: mActors) {
+        int64_t column = 0;
+        if (savedActorColumn(*entry.second, level, column) && loadedColumns.count(column) == 0)
+            byChunk[column].push_back(entry.second->saveNbt());
+    }
+
+    for (const std::unique_ptr<ItemActor> &item: mItemEntities) {
+        if (item->isRemoved() || !item->isIn(level))
+            continue;
+
+        const Vector3f &position = item->getPosition();
+        const int64_t column = ((int64_t) ((int32_t) std::floor(position.x) >> 4) << 32)
+                               | (uint32_t) ((int32_t) std::floor(position.z) >> 4);
+        if (loadedColumns.count(column) == 0)
+            byChunk[column].push_back(item->saveNbt());
+    }
+
+    for (const auto &entry: byChunk)
+        level.appendEntities((int32_t) (entry.first >> 32), (int32_t) (entry.first & 0xffffffff), entry.second);
 }
 
 void ServerNetworkHandler::autoSave(bool wait) {
@@ -301,6 +327,8 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
         saveBlockActorsForChunk(level, chunkX, chunkZ, true);
         loadedChunks.erase(column);
     }
+    if (!unloaded.empty())
+        saveStrayActors(level, loadedChunks);
 
     return deferred;
 }
