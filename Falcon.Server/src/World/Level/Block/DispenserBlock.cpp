@@ -10,6 +10,7 @@ FALCON_REGISTER_BLOCK(DispenserBlock, 60);
 #include "World/Level/Block/Actor/HopperBlockActor.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Item/VanillaItems.h"
 #include "Network/Handler/ItemActorHandler.h"
@@ -110,9 +111,10 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     Container &inventory = actor->getInventory();
     const int slot = pickSlot(inventory);
     if (slot < 0) {
-        // at the block corner, not its center
+        // the sound at the block corner, the vibration at its center (BlockSource::postGameEvent, sub_1432CD050)
         owner.playLevelSound(level, SOUND_DISPENSE_FAIL,
                              Vector3f((float) position.x, (float) position.y, (float) position.z));
+        level.postGameEvent(GameEvents::DISPENSE_FAIL, centerOf(position));
         return;
     }
 

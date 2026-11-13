@@ -11,6 +11,7 @@ FALCON_REGISTER_BLOCK(TntBlock, 410);
 #include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
 #include "World/Level/Block/DispenseSource.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
@@ -69,6 +70,7 @@ bool TntBlock::dispense(const DispenseSource &source) const {
 
     source.playClick();
     source.mOwner.broadcastLevelEvent(source.mLevel, LEVEL_EVENT_FUSE, source.mPosition, 0);
+    source.mLevel.postGameEvent(GameEvents::ENTITY_PLACE, source.mPosition);
     source.removeOne();
     return true;
 }

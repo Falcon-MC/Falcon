@@ -8,6 +8,8 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
+#include "World/Level/Vibration/GameEventListener.h"
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 
@@ -15,8 +17,10 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     const Vector3i AT(8, 100, 8);
@@ -26,6 +30,51 @@ namespace {
         if (!condition)
             throw std::runtime_error(message);
     }
+
+    // every game event within its range, where it was posted
+    class RecordingBlockActor final : public BlockActor, public GameEventListener {
+    public:
+        explicit RecordingBlockActor(const Vector3i &position) {
+            setPosition(position);
+        }
+
+        const char *getBlockActorId() const override {
+            return "DispenserProbe";
+        }
+
+        Tag saveNbt() const override {
+            return Tag::ofCompound();
+        }
+
+        void loadNbt(const Tag &data, const PacketCodecContext &context) override {
+            (void) data;
+            (void) context;
+        }
+
+        GameEventListener *getGameEventListener() override {
+            return this;
+        }
+
+        void handleGameEvent(Level &level, const GameEvent &event, const GameEventContext &context) override {
+            (void) level;
+            mEvents.push_back(&event);
+            mPositions.push_back(context.mPosition);
+        }
+
+        bool getPosition(Level &level, Vector3f &position) const override {
+            (void) level;
+            const Vector3i &block = BlockActor::getPosition();
+            position = Vector3f((float) block.x + 0.5f, (float) block.y + 0.5f, (float) block.z + 0.5f);
+            return true;
+        }
+
+        uint32_t getRange() const override {
+            return 8;
+        }
+
+        std::vector<const GameEvent *> mEvents;
+        std::vector<Vector3f> mPositions;
+    };
 
     struct Fixture {
         ServerNetworkHandler mOwner{"Dispenser", "", 1};
@@ -56,6 +105,13 @@ namespace {
         int32_t count() const {
             const ItemStack &item = mActor->getInventory().getContainerItem(0);
             return item.isAir() ? 0 : item.mCount;
+        }
+
+        RecordingBlockActor &listen() {
+            std::unique_ptr<RecordingBlockActor> probe(new RecordingBlockActor(Vector3i(AT.x, AT.y, AT.z + 3)));
+            RecordingBlockActor &result = *probe;
+            mLevel.getBlockActors().insert(std::move(probe));
+            return result;
         }
 
         ServerActor *find(const std::string &identifier) {
@@ -102,9 +158,12 @@ namespace {
     // primed only while tntexplodes is on, else dropped
     void tnt() {
         Fixture fixture;
+        RecordingBlockActor &probe = fixture.listen();
         fixture.load("minecraft:tnt", 2);
         fixture.fire();
         require(fixture.count() == 1 && fixture.find("minecraft:tnt") != nullptr, "the dispenser primed no TNT");
+        require(probe.mEvents.size() == 1 && probe.mEvents[0] == &GameEvents::ENTITY_PLACE,
+                "the primed TNT posted no entity_place");
 
         Fixture disabled;
         disabled.mLevel.getGameRules().setFromString("tntexplodes", "false");
@@ -140,8 +199,13 @@ namespace {
         require(fixture.find("minecraft:ender_pearl") == nullptr, "the dispenser threw an ender pearl");
 
         Fixture empty;
+        RecordingBlockActor &probe = empty.listen();
         empty.fire();
         require(empty.mOwner.getActors().empty(), "an empty dispenser spawned something");
+        require(probe.mEvents.size() == 1 && probe.mEvents[0] == &GameEvents::DISPENSE_FAIL,
+                "an empty dispenser posted no dispense_fail");
+        require(probe.mPositions[0].x == 8.5f && probe.mPositions[0].y == 100.5f,
+                "dispense_fail was not posted at the dispenser center");
     }
 }
 
