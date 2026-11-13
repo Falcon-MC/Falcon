@@ -455,9 +455,10 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
     if (filter.mKind != 'a' && filter.mKind != 'e' && filter.mKind != 'r' && filter.mKind != 'p')
         return targets;
 
-    const Level *contextLevel = sender.getLevel();
-    if (contextLevel == nullptr)
-        contextLevel = &getLevel();
+    const Level *senderLevel = sender.getLevel();
+    const Level *contextLevel = senderLevel != nullptr ? senderLevel : &getLevel();
+    // every dimension of the command's world, as the game; another world is another server's players
+    const World *contextWorld = senderLevel != nullptr ? &getWorldOf(*senderLevel) : nullptr;
 
     if (filter.mKind == 'p') {
         // nearest to where the command runs: a command block or the console is no player itself
@@ -492,6 +493,8 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
             || !matchesScores(filter, mScoreboard, player))
             continue;
         if (filter.mKind == 'e' && !player.isIn(*contextLevel))
+            continue;
+        if (contextWorld != nullptr && &getWorldFor(player) != contextWorld)
             continue;
 
         targets.push_back(&player);
