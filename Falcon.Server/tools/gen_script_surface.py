@@ -80,6 +80,8 @@ BOUND = {
         'SoundInstance', 'SoundDurationInfo', 'SoundDefinition', 'SoundDefinitionRegistry', 'BlockInstrumentComponent',
         'MolangVariableMap', 'TicksPerDay', 'TicksPerSecond', 'MoonPhaseCount', 'FluidContainer', 'HeldItemOption',
         'LiquidSettings', 'PlayerSplitScreenSlot', 'PlatformType', 'GraphicsMode', 'ControlScheme', 'AimAssistTargetMode',
+        'AimAssistRegistry', 'AimAssistPreset', 'AimAssistPresetSettings', 'AimAssistCategory',
+        'AimAssistCategorySettings', 'PlayerAimAssist',
         'Trigger', 'DimensionType',
         'DimensionTypes', 'MinecraftDimensionTypes', 'ISerializable', 'BlockCustomComponentInstance',
         'ItemCustomComponentInstance', 'ClientSystemInfo', 'Seat', 'FeedItem', 'FeedItemEffect',

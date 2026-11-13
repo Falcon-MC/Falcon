@@ -397,6 +397,21 @@ void ScriptEngine::sendWorldClocks(ServerPlayer &player) {
     mHost->getNetworkHandler().send(player.getNetworkIdentifier(), packet, mHost->getCodecContext());
 }
 
+void ScriptEngine::broadcastAimAssist(const CameraAimAssistPresetsPacket &packet) {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    for (auto &entry: mHost->getPlayers()) {
+        if (entry.second.isSpawned())
+            mHost->getNetworkHandler().send(entry.first, packet, mHost->getCodecContext());
+    }
+}
+
+void ScriptEngine::sendAimAssist(ServerPlayer &player) {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    mHost->getNetworkHandler().send(player.getNetworkIdentifier(), mAimAssist.makePacket(), mHost->getCodecContext());
+}
+
 void ScriptEngine::_arm() {
     mExecutionDeadlineMs = nowMs() + mWatchdogMs;
 }

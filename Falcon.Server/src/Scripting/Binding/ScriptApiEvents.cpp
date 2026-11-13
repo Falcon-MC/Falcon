@@ -166,6 +166,7 @@ void ScriptApi::install() {
     _bindSounds();
     _bindMolang();
     _bindFog();
+    _bindAimAssist();
     _bindCommands();
     _installBootstraps();
     _defineEnums();

@@ -1387,15 +1387,6 @@ namespace {
         return propertyValue(ctx, actor, *descriptor);
     }
 
-    // a bound as the binding prints it (sub_148552370): whole numbers bare, others with two decimals
-    std::string boundText(double value) {
-        if (std::fabs((double) (int32_t) value - value) < 0.00001)
-            return std::to_string((int32_t) value);
-        char text[64];
-        std::snprintf(text, sizeof(text), "%.2f", value);
-        return text;
-    }
-
     JSValue invalidPropertyType(ScriptApi *api, const char *expected, int argument) {
         return api->throwError("InvalidArgumentError", "Invalid type passed to argument [" + std::to_string(argument)
                                                                + "]. Expected type: " + expected);

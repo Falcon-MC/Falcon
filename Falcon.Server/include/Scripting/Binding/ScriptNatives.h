@@ -10,8 +10,10 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <quickjs.h>
@@ -263,6 +265,40 @@ struct ScriptFogRef : ScriptNative {
     ScriptEntityRef mEntity;
 };
 
+// AimAssistCategorySettings: what addCategory reads; both defaults start at 1 (sub_14C936250, 26.60)
+struct ScriptAimAssistCategorySettingsRef : ScriptNative {
+    std::string mIdentifier;
+    std::vector<std::pair<std::string, int32_t>> mEntityPriorities;
+    std::vector<std::pair<std::string, int32_t>> mBlockPriorities;
+    std::vector<std::pair<std::string, int32_t>> mBlockTagPriorities;
+    std::vector<std::pair<std::string, int32_t>> mEntityTypeFamilyPriorities;
+    int32_t mDefaultEntityPriority = 1;
+    int32_t mDefaultBlockPriority = 1;
+};
+
+// AimAssistPresetSettings: unset lists read undefined
+struct ScriptAimAssistPresetSettingsRef : ScriptNative {
+    std::string mIdentifier;
+    std::optional<std::vector<std::string>> mExcludedBlocks;
+    std::optional<std::vector<std::string>> mExcludedEntities;
+    std::optional<std::vector<std::string>> mExcludedBlockTags;
+    std::optional<std::vector<std::string>> mExcludedEntityTypeFamilies;
+    std::optional<std::vector<std::string>> mLiquidTargetingItems;
+    std::vector<std::pair<std::string, std::string>> mItemSettings;
+    std::optional<std::string> mDefaultItemSettings;
+    std::optional<std::string> mHandSettings;
+};
+
+// an AimAssistPreset or AimAssistCategory: its identifier, read from the registry on every access
+struct ScriptAimAssistRef : ScriptNative {
+    std::string mIdentifier;
+};
+
+// a player's PlayerAimAssist
+struct ScriptPlayerAimAssistRef : ScriptNative {
+    ScriptEntityRef mEntity;
+};
+
 // a CatmullRomSpline or a LinearSpline: only its control points
 struct ScriptSplineRef : ScriptNative {
     bool mLinear = false;
@@ -303,6 +339,9 @@ namespace ScriptValues {
     int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store);
 
     bool arrayContainsString(JSContext *ctx, JSValueConst array, const std::string &needle);
+
+    // a bound as the binding prints it (sub_148552370): whole numbers bare, others with two decimals
+    std::string boundText(double value);
 
     // block states: bytes are booleans, as the palette stores them
     JSValue statesToJs(JSContext *ctx, const Tag &states);

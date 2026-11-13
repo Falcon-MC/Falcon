@@ -754,6 +754,8 @@ private:
 
     void _bindFog();
 
+    void _bindAimAssist();
+
     void _runQueuedCommands();
 
     void _freeQueuedCommand(QueuedCommand &command);

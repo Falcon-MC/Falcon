@@ -1,5 +1,8 @@
 #include "Scripting/Binding/ScriptNatives.h"
 
+#include <cmath>
+#include <cstdio>
+
 namespace ScriptValues {
     std::string toString(JSContext *ctx, JSValueConst value) {
         const char *chars = JS_ToCString(ctx, value);
@@ -236,5 +239,13 @@ namespace ScriptValues {
             }
         }
         return total;
+    }
+
+    std::string boundText(double value) {
+        if (std::fabs((double) (int32_t) value - value) < 0.00001)
+            return std::to_string((int32_t) value);
+        char text[64];
+        std::snprintf(text, sizeof(text), "%.2f", value);
+        return text;
     }
 }
