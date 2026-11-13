@@ -1530,9 +1530,15 @@ namespace {
 }
 
 void ServerNetworkHandler::loadWorldDynamicProperties() {
+    mWorldDynamicPropertiesUnreadable = false;
     Level &overworld = mWorlds.getDefault().getOverworld();
     Tag data;
     if (!overworld.loadSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false)) {
+        if (overworld.hasSavedData(WORLD_DYNAMIC_PROPERTIES_KEY)) {
+            mWorldDynamicPropertiesUnreadable = true;
+            LOG_WARN(LogAreaID::Server, "The stored world dynamic properties are unreadable: kept as is, not saved");
+            return;
+        }
         // a player save in its place holds more than this one key: not ours, left to that player
         Tag legacy;
         if (!mPlayerData.loadData(LEGACY_WORLD_DYNAMIC_PROPERTIES, legacy) || !legacy.isCompound()
@@ -1551,7 +1557,7 @@ void ServerNetworkHandler::loadWorldDynamicProperties() {
 
 void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
     Level &overworld = mWorlds.getDefault().getOverworld();
-    if (!overworld.isStorageOpen())
+    if (!overworld.isStorageOpen() || mWorldDynamicPropertiesUnreadable)
         return;
     Tag data = Tag::ofCompound();
     data.put("DynamicProperties", serializeDynamicProperties(mWorldDynamicProperties));
