@@ -961,6 +961,10 @@ void ScriptEngine::onCustomBlockFallOn(Actor &actor, Level &level, const std::st
                    });
 }
 
+void ScriptEngine::forgetLevel(const Level &level) {
+    mRedstonePower.erase(&level);
+}
+
 void ScriptEngine::onCustomBlockRedstone(Level &level, const std::string &blockId, const Vector3i &position,
                                          int32_t power) {
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
@@ -1043,6 +1047,10 @@ bool ScriptEngine::beforePlayerPlaceBlock(ServerPlayer &player, Level &level, co
 
 void ScriptEngine::onCustomBlockPlaced(Level &level, const Vector3i &position, const BlockState &placed,
                                        const BlockState &previous) {
+    // a new block starts without the power the one it replaced last saw
+    const auto powers = mRedstonePower.find(&level);
+    if (powers != mRedstonePower.end())
+        powers->second.erase(RedstoneSystem::packPosition(position));
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(placed.mName);
     if (block == nullptr)
         return;
