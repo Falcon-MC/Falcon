@@ -5,6 +5,7 @@
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/Level.h"
@@ -160,6 +161,26 @@ namespace {
         level.closeStorage();
     }
 
+    void checkBlockActorChunks() {
+        Level level("ChunkIndex", 4, 12345);
+        BlockActorStore &store = level.getBlockActors();
+        const Vector3i negative(-17, 70, -1);
+        const Vector3i positive(33, -40, 47);
+        store.getOrCreate<ChestBlockActor>(negative);
+        store.getOrCreate<ChestBlockActor>(positive);
+        require(store.saveChunk(-2, -1).size() == 1 && store.saveChunk(2, 2).size() == 1,
+                "A block actor was not found in its chunk");
+        require(store.saveChunk(-1, -1).empty() && store.saveChunk(0, 0).empty(),
+                "A block actor was found in another chunk");
+        require(!store.encodeSubChunkNetwork(2, -3, 2).empty() && store.encodeSubChunkNetwork(2, 4, 2).empty(),
+                "A block actor was sent with the wrong sub-chunk");
+        require(store.take(negative) != nullptr && store.saveChunk(-2, -1).empty(),
+                "A taken block actor stayed in its chunk");
+        store.unloadChunk(2, 2);
+        require(store.find(positive) == nullptr && store.saveChunk(2, 2).empty(),
+                "Unloading a chunk kept its block actors");
+    }
+
     void checkDimensions(const std::filesystem::path &directory, int64_t seed) {
         World world(7, "World", 4, seed);
         require(world.open(directory.string(), 1, Level::PacketBroadcaster(), nullptr), "Could not open world");
@@ -219,6 +240,7 @@ int main() {
         checkDimensions(directory, 67890);
         checkPreopenedStorage(directory);
         checkUnknownBlockActors(directory);
+        checkBlockActorChunks();
         {
             LevelStorage legacy;
             require(legacy.open(directory.string(), "Legacy"), "Could not create legacy world");

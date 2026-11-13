@@ -92,6 +92,13 @@ public:
     }
 
 private:
+    void _index(int64_t key);
+
+    // once neither kind is left at the position
+    void _unindex(int64_t key);
+
+    const std::unordered_set<int64_t> *_positionsIn(int32_t chunkX, int32_t chunkZ) const;
+
     // kept as read and written back untouched: dropping it would wipe it from the world
     struct UnknownBlockActor {
         Tag mData;
@@ -101,5 +108,7 @@ private:
     Level *mLevel;
     std::unordered_map<int64_t, std::unique_ptr<BlockActor>> mBlockActors;
     std::unordered_map<int64_t, UnknownBlockActor> mUnknownBlockActors;
+    // packed chunk -> packed positions holding either kind: per chunk work never walks the whole level
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> mChunkIndex;
     std::unordered_set<int64_t> mLoadedChunks;
 };
