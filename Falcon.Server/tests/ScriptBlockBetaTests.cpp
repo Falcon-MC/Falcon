@@ -210,6 +210,8 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
 
         World &world = owner.getWorlds().getDefault();
         Level &level = world.getOverworld();
+        // World::open hands the levels their owner; without it no neighbor change or named tick runs
+        level.setOwner(&owner);
         level.insertChunk(LevelChunk(0, 0));
         ServerPlayer &player = addPlayer(owner, level, "Alex", Vector3f(0.5f, 100.0f, 0.5f));
         level.setBlock(Vector3i(1, 100, 1), BlockState("test:timer"), false);
