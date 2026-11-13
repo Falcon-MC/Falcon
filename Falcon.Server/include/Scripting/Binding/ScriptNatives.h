@@ -73,6 +73,12 @@ struct ScriptItemRef : ScriptNative {
     std::shared_ptr<ScriptItemData> mItem;
     // set on an item component, empty on the ItemStack itself
     std::string mComponentId;
+    // book and block dynamic properties keep only a weak handle: they die with the script's ItemStack
+    // mItem then holds an empty stack, swapped for the live one for the length of a call
+    bool mWeak = false;
+    std::weak_ptr<ScriptItemData> mStack;
+    // the type the stack had when the component was taken: InvalidItemStackError.itemType
+    std::string mStackTypeId;
 };
 
 // an entity's container, one of its slots, or the storage of an item; read on every access

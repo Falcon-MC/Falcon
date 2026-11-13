@@ -26,6 +26,7 @@
 #include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 
 using namespace ScriptValues;
@@ -1146,8 +1147,16 @@ namespace {
         if (className == nullptr)
             return JS_UNDEFINED;
         ScriptItemRef *component = new ScriptItemRef();
-        component->mItem = item->mItem;
         component->mComponentId = id;
+        if (std::strcmp(className, "ItemBookComponent") == 0
+            || std::strcmp(className, "ItemBlockDynamicPropertiesComponent") == 0) {
+            component->mWeak = true;
+            component->mItem = std::make_shared<ScriptItemData>();
+            component->mStack = item->mItem;
+            component->mStackTypeId = item->mItem->mTypeId;
+        } else {
+            component->mItem = item->mItem;
+        }
         return api->makeInstance(className, component);
     }
 

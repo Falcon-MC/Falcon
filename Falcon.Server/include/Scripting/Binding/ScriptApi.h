@@ -188,6 +188,9 @@ public:
 
     JSValue throwInvalidEntity(const char *action, const std::string &member, const ScriptEntityRef &entity);
 
+    // typeId: the stack's type when the component was taken
+    JSValue throwInvalidItemStack(const char *action, const std::string &member, const std::string &typeId);
+
     JSValue makePlayer(ServerPlayer &player);
 
     // the gametest SimulatedPlayer prototype: a simulated player's handle is made from it
