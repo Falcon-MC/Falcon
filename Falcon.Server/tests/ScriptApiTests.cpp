@@ -527,6 +527,17 @@ system.runTimeout(() => {
         + manager.getTickingArea("test:area").chunkCount + ":" + manager.chunkCount;
     r.tickingDuplicate = (() => { try { manager.createTickingArea("test:area", { dimension: overworld,
         from: { x: 0, y: 0, z: 0 }, to: { x: 0, y: 0, z: 0 } }); return "ok"; } catch (e) { return e.name + ":" + e.reason; } })();
+    const areaError = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ":" + e.reason; } };
+    r.tickingLimits = manager.maxChunkCount + ":"
+        + areaError(() => manager.createTickingArea("test:wide", { dimension: overworld,
+            from: { x: 0, y: 0, z: 0 }, to: { x: 256 * 16, y: 0, z: 0 } })) + ":"
+        + areaError(() => manager.createTickingArea("test:many", { dimension: overworld,
+            from: { x: 0, y: 0, z: 0 }, to: { x: 40 * 16, y: 0, z: 40 * 16 } })) + ":"
+        + manager.hasCapacity({ dimension: overworld, from: { x: 0, y: 0, z: 0 },
+            to: { x: 40 * 16, y: 0, z: 40 * 16 } })
+        + ":" + manager.hasCapacity({ dimension: overworld, from: { x: 0, y: 0, z: 0 }, to: { x: 16, y: 0, z: 16 } })
+        + ":" + areaError(() => manager.createTickingArea("test:far", { dimension: overworld,
+            from: { x: 0, y: 0, z: 0 }, to: { x: 1e300, y: 0, z: 0 } })) + ":" + manager.hasTickingArea("test:wide");
     manager.removeTickingArea("test:area");
     r.tickingRemoved = manager.hasTickingArea("test:area");
     const propertyError = (run) => { try { run(); return "ok"; } catch (e) { return e.name + ": " + e.message; } };
@@ -2762,6 +2773,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "tickingClass", "true");
         expect(e, "ticking", "true:1:2:2");
         expect(e, "tickingDuplicate", "TickingAreaError:IdentifierAlreadyExists");
+        expect(e, "tickingLimits",
+               "1000:TickingAreaError:SideLengthExceeded:TickingAreaError:OverChunkLimit:false:true:"
+               "TypeError:undefined:false");
         expect(e, "tickingRemoved", "false");
         expect(e, "killed", "true");
         expect(e, "events",

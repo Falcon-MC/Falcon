@@ -34,6 +34,12 @@ struct TickingArea {
 
     std::vector<int64_t> getColumns() const;
 
+    // without listing them
+    int64_t getChunkCount() const;
+
+    // chunk columns along the longer side
+    int64_t getSideChunks() const;
+
     Tag toNbt() const;
 
     static TickingArea fromNbt(const std::string &id, const Tag &data);
@@ -50,6 +56,13 @@ public:
     static constexpr int32_t MAX_CHUNKS = 100;
 
     static constexpr int32_t MAX_RADIUS = 4;
+
+    // TickingAreaErrorReason.SideLengthExceeded: 255 chunks of length or width
+    static constexpr int64_t MAX_SIDE_CHUNKS = 255;
+
+    // the game leaves the script limit to the level (maxChunkCount -1 when unset): falcon gives scripts the
+    // command's caps, ten areas of a hundred chunks
+    static constexpr int64_t MAX_SCRIPT_CHUNKS = (int64_t) MAX_AREAS * MAX_CHUNKS;
 
     void load(World &world);
 
