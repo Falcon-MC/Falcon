@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/OverworldFeatureBuilder.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
 #include "World/Level/LevelGen/Structure/ShipwreckStructure.h"
+#include "World/Level/LevelGen/Structure/SwampHutStructure.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
 #include "World/Level/LevelGen/Overworld/Surface/OverworldSurfaceBuilder.h"
@@ -124,6 +125,7 @@ int32_t OverworldGenerator::getPreliminarySurfaceLevel(int32_t quartX, int32_t q
 void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
     // structures go first: the game post processes them before any feature runs
     IglooStructure::place(*this, level, chunk);
+    SwampHutStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);
     VillageStructure::place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
