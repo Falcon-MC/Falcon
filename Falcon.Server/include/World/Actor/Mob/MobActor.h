@@ -280,6 +280,15 @@ public:
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
+    // a mob's sleeping state lives only in its flags
+    void setSleepingFlag(ServerNetworkHandler &owner, bool sleeping) {
+        _setFlag(owner, ActorFlag::Sleeping, sleeping);
+    }
+
+    void setWantsToWake(ServerNetworkHandler &owner, bool wants) {
+        _setFlag(owner, ActorFlag::WantsToWake, wants);
+    }
+
     bool isInLove() const {
         return mLoveTicks > 0;
     }
