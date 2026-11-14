@@ -40,6 +40,7 @@
 #include "Protocol/Types/ContainerSlotType.h"
 #include "Protocol/Types/InventoryActionData.h"
 #include "Protocol/Types/InventorySource.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <string>
@@ -469,6 +470,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                               ServerPlayer &player, const ItemStackRequestPacket &packet) {
     PlayerInventory &inventory = player.getInventory();
     const ItemStack offhandBefore = inventory.getOffhand();
+    const ItemStack armorBefore[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
+                                                                inventory.getArmor(2), inventory.getArmor(3)};
 
     ItemStackResponsePacket response;
     bool needsResync = false;
@@ -613,6 +616,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     }
 
     player.getInventoryManager().storeFurnaceView(owner);
+    PluginEvents::armorChanged(player, armorBefore);
 
     for (const BundleSyncData &bundle: bundles) {
         const ItemStack *owned = inventory.resolveSlot(bundle.mOwnerContainer, bundle.mOwnerSlot);

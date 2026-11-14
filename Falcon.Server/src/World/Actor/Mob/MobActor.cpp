@@ -1847,6 +1847,17 @@ bool MobActor::tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *com
     const json::Value *settings = getComponent(component);
     if (settings == nullptr || isTamed() || owner.getScriptEngine().beforeEntityTamed(*this, tamer))
         return false;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TAME)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_TAME;
+        event.mCancellable = true;
+        event.mEntity = this;
+        event.mTarget = &tamer;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&tamer);
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return false;
+    }
 
     mOwnerId = tamer.getUniqueId();
     mLegacyOwnerName.clear();

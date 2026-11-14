@@ -2033,6 +2033,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket
         || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
         return;
 
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EMOTE)) {
+        std::string emoteId = packet.mEmoteId;
+        PluginEvent emoteEvent;
+        emoteEvent.mType = FALCON_EVENT_PLAYER_EMOTE;
+        emoteEvent.mCancellable = true;
+        emoteEvent.mPlayer = player;
+        emoteEvent.mMessage = &emoteId;
+        plugins->dispatch(emoteEvent);
+        if (emoteEvent.mCancelled)
+            return;
+    }
+
     mScriptEngine.onPlayerEmote(*player, packet.mEmoteId);
 
     EmotePacket emote = packet;

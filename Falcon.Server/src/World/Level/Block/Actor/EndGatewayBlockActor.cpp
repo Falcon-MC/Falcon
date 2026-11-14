@@ -13,6 +13,7 @@
 #include "World/Level/Dimension/EndGatewayExit.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cstdlib>
 #include <memory>
@@ -240,7 +241,9 @@ void EndGatewayBlockActor::_teleportEntities(ServerNetworkHandler &owner, Level 
 }
 
 void EndGatewayBlockActor::_teleport(ServerNetworkHandler &owner, Level &level, Actor &actor) {
-    const Vector3f target = getTeleportTarget(mExit);
+    Vector3f target = getTeleportTarget(mExit);
+    if (!PluginEvents::teleport(actor, target, "end_gateway"))
+        return;
 
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
         player->teleport(owner, target);

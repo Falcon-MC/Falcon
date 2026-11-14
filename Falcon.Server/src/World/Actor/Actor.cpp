@@ -523,6 +523,20 @@ float Actor::heal(float amount, HealCause cause) {
         return getHealth();
     if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
         return getHealth();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_HEAL)) {
+        static const char *const CAUSES[] = {"heal", "regeneration", "self_heal", "totem"};
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_HEAL;
+        event.mCancellable = true;
+        event.mEntity = this;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
+        event.mAmount = (double) amount;
+        event.mCause = CAUSES[(size_t) cause];
+        plugins->dispatch(event);
+        amount = (float) event.mAmount;
+        if (event.mCancelled || !(amount > 0.0f))
+            return getHealth();
+    }
     const float previous = getHealth();
     mAttributes.setClamped(ATTRIBUTE_HEALTH, previous + amount);
     _healthChanged(previous);

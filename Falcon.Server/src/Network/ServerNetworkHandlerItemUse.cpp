@@ -18,6 +18,7 @@
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -258,6 +259,8 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
         || ItemProperties::getLockMode(worn) == ItemLockMode::LockInSlot)
         return false;
 
+    const ItemStack before[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
+                                                           inventory.getArmor(2), inventory.getArmor(3)};
     inventory.setArmor(armorSlot, held);
     inventory.setItemInHand(std::move(worn));
 
@@ -267,6 +270,7 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
     InventoryHandler::sendHeldItem(*this, player);
 
     playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(), "minecraft:player");
+    PluginEvents::armorChanged(player, before);
     return true;
 }
 
@@ -278,6 +282,20 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
     }
 
     const ItemStack &heldItem = player.getInventory().getItemInHand();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_USE)) {
+        ItemStack used = heldItem;
+        PluginEvent useEvent;
+        useEvent.mType = FALCON_EVENT_PLAYER_ITEM_USE;
+        useEvent.mCancellable = true;
+        useEvent.mPlayer = &player;
+        useEvent.mItem = &used;
+        plugins->dispatch(useEvent);
+        if (useEvent.mCancelled) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                                  player.getInventory().getSelectedSlot());
+            return;
+        }
+    }
 
     emitItemUse(player);
 

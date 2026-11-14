@@ -52,6 +52,9 @@ private:
 
     void _startLuring(ServerNetworkHandler &owner, const ServerPlayer &angler);
 
+    // FALCON_EVENT_PLAYER_FISH: false when a plugin keeps the catch in the water
+    bool _allowReel(ServerPlayer &angler, Actor *hooked);
+
     void _catch(ServerNetworkHandler &owner, ServerPlayer &angler);
 
     void _pullTowards(ServerNetworkHandler &owner, Actor &target, const ServerPlayer &angler) const;

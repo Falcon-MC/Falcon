@@ -23,6 +23,7 @@
 #include "Protocol/Types/ItemUseTransaction.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Level/Block/BlockNames.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <string>
 #include <vector>
@@ -195,6 +196,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
             const Content cauldronContent = cauldron.getLiquid() == CauldronBlock::Liquid::Lava ? Content::Lava
                                                                                                 : Content::Water;
             const char *filledIdentifier = getFilledIdentifier(cauldronContent);
+            if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+                sendBlockState(owner, level, clickedPosition);
+                return false;
+            }
             sendArmSwing(owner, player, clickedPosition);
             level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z,
                                 cauldron.withFillLevel(cauldron.getLiquid(), 0));
@@ -207,6 +212,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         }
 
         if (clickedState.mName == "minecraft:powder_snow") {
+            if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+                sendBlockState(owner, level, clickedPosition);
+                return false;
+            }
             sendArmSwing(owner, player, clickedPosition);
             level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState(BlockNames::AIR));
             sendBlockState(owner, level, clickedPosition);
@@ -219,6 +228,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                                                                      clickedPosition.z, 1);
         const LiquidBlock overlayLiquid(clickedOverlay);
         if (!clickedLiquid.isLiquid() && overlayLiquid.isWater() && overlayLiquid.isSource()) {
+            if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+                sendBlockState(owner, level, clickedPosition);
+                return false;
+            }
             sendArmSwing(owner, player, clickedPosition);
             level.setBlockStateAtLayer(clickedPosition.x, clickedPosition.y, clickedPosition.z, 1, BlockState());
             sendBlockUpdate(owner, level, clickedPosition, BlockState(), 1);
@@ -237,6 +250,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         if (filledIdentifier == nullptr)
             return false;
 
+        if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+            sendBlockState(owner, level, clickedPosition);
+            return false;
+        }
         sendArmSwing(owner, player, clickedPosition);
         level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, BlockState(BlockNames::AIR));
         sendBlockState(owner, level, clickedPosition);
@@ -261,6 +278,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
             return false;
         }
 
+        if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
+            sendBlockState(owner, level, clickedPosition);
+            return false;
+        }
         sendArmSwing(owner, player, clickedPosition);
         const BlockState filledCauldron = cauldron.withFillLevel(liquid, 6);
         level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, filledCauldron);
@@ -286,6 +307,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                 return false;
             }
 
+            if (!PluginEvents::bucket(player, level, waterlogged, content == Content::Empty, heldItem)) {
+                sendBlockState(owner, level, waterlogged);
+                return false;
+            }
             sendArmSwing(owner, player, clickedPosition);
             const BlockState water = makeLiquidState(content);
             level.setBlockStateAtLayer(waterlogged.x, waterlogged.y, waterlogged.z, 1, water);
@@ -319,6 +344,10 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
         return false;
     }
 
+    if (!PluginEvents::bucket(player, level, target, content == Content::Empty, heldItem)) {
+        sendBlockState(owner, level, target);
+        return false;
+    }
     sendArmSwing(owner, player, clickedPosition);
 
     if (targetLiquid.isLiquid()) {
