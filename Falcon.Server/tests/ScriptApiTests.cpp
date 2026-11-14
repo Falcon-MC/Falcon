@@ -20,6 +20,7 @@
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/PackShooter.h"
 #include "World/Item/StringToItemParser.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/BlockSolidity.h"
@@ -62,6 +63,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -1491,6 +1493,64 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    const char *const LONGBOW_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:longbow" },
+    "components": {
+      "minecraft:shooter": {
+        "ammunition": [
+          { "item": "minecraft:arrow", "use_offhand": true, "search_inventory": true },
+          { "item": { "name": "test:pellet" }, "use_in_creative": true }
+        ],
+        "max_draw_duration": 1,
+        "scale_power_by_draw_duration": true
+      },
+      "minecraft:use_modifiers": { "use_duration": 3600 },
+      "minecraft:durability": { "max_durability": 50 }
+    }
+  }
+})JSON";
+
+    const char *const PELLET_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:pellet" },
+    "components": { "minecraft:projectile": { "projectile_entity": "snowball", "minimum_critical_power": 0.5 } }
+  }
+})JSON";
+
+    const char *const SLING_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:sling" },
+    "components": {
+      "minecraft:shooter": {
+        "ammunition": [{ "item": "test:pellet", "search_inventory": true }],
+        "max_draw_duration": 1,
+        "charge_on_draw": true
+      },
+      "minecraft:use_modifiers": { "use_duration": 1.25 }
+    }
+  }
+})JSON";
+
+    const char *const JAVELIN_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:javelin" },
+    "components": {
+      "minecraft:throwable": {
+        "min_draw_duration": 0.25,
+        "max_draw_duration": 1,
+        "scale_power_by_draw_duration": true
+      },
+      "minecraft:projectile": { "projectile_entity": "minecraft:snowball" },
+      "minecraft:use_modifiers": { "use_duration": 10 }
+    }
+  }
+})JSON";
+
     const char *const HELMET_ITEM = R"JSON({
   "format_version": "1.21.90",
   "minecraft:item": {
@@ -1961,6 +2021,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "helm.json", HELMET_ITEM);
         writeFile(packs / "components" / "items" / "ration.json", RATION_ITEM);
         writeFile(packs / "components" / "items" / "dart.json", DART_ITEM);
+        writeFile(packs / "components" / "items" / "longbow.json", LONGBOW_ITEM);
+        writeFile(packs / "components" / "items" / "pellet.json", PELLET_ITEM);
+        writeFile(packs / "components" / "items" / "sling.json", SLING_ITEM);
+        writeFile(packs / "components" / "items" / "javelin.json", JAVELIN_ITEM);
         writeFile(packs / "components" / "items" / "boots.json", BOOTS_ITEM);
         writeFile(packs / "components" / "items" / "cloak.json", CLOAK_ITEM);
         writeFile(packs / "components" / "items" / "sash.json", SASH_ITEM);
@@ -2189,6 +2253,28 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             && wandComponents->get("minecraft:throwable") == nullptr
                             && wandComponents->get("minecraft:projectile") == nullptr,
                     "the throwable and projectile components were not sent");
+            const Tag *longbow =
+                    owner.getItemDefinitions().getDefinition("test:longbow")->getComponentData().get("components");
+            const Tag *shooter = longbow->get("minecraft:shooter");
+            const Tag *ammunition = shooter == nullptr ? nullptr : shooter->get("ammunition");
+            require(ammunition != nullptr && ammunition->getList().size() == 2
+                            && ammunition->getList()[0].get("item")->getString("name") == "minecraft:arrow"
+                            && ammunition->getList()[0].getByte("use_offhand") == 1
+                            && ammunition->getList()[0].getByte("search_inventory") == 1
+                            && ammunition->getList()[0].getByte("use_in_creative") == 0
+                            && ammunition->getList()[1].get("item")->getString("name") == "test:pellet"
+                            && ammunition->getList()[1].getByte("use_offhand") == 0
+                            && ammunition->getList()[1].getByte("use_in_creative") == 1
+                            && shooter->get("max_draw_duration")->asFloat() == 1.0f
+                            && shooter->getByte("scale_power_by_draw_duration") == 1
+                            && shooter->getByte("charge_on_draw") == 0
+                            && wandComponents->get("minecraft:shooter") == nullptr,
+                    "the shooter component was not sent as the game writes it");
+            const CustomItemDefinition *sling = CustomContentRegistry::getInstance().findItem("test:sling");
+            require(sling != nullptr && sling->mHasShooter && sling->mChargeOnDraw && !sling->mShooterScalePowerByDraw
+                            && sling->mAmmunition.size() == 1 && sling->mAmmunition[0].mItem == "test:pellet"
+                            && sling->mAmmunition[0].mSearchInventory && !sling->mAmmunition[0].mUseOffhand,
+                    "the charge_on_draw shooter was not read");
             const CustomItemDefinition *dartItem = CustomContentRegistry::getInstance().findItem("test:dart");
             require(dartItem != nullptr && dartItem->mHasEntityPlacer && dartItem->mPlacerEntity == "minecraft:pig"
                             && dartItem->mEntityPlacerUseOn
@@ -2276,6 +2362,104 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             level.setBlock(plain, BlockState(), false);
             level.getBlockActors().remove(dyed);
             level.getBlockActors().remove(plain);
+        }
+        {
+            // pack shooters: drawn only with ammunition, power from the draw, one ammunition a shot
+            PlayerInventory &inventory = player.getInventory();
+            const ItemStack previous = inventory.getItemInHand();
+            std::vector<int64_t> existing;
+            for (const auto &entry: owner.getActors())
+                existing.push_back(entry.second->getUniqueId());
+            const auto shot = [&](const char *identifier, bool critical) {
+                int32_t count = 0;
+                for (const auto &entry: owner.getActors()) {
+                    ServerActor &actor = *entry.second;
+                    if (std::string(actor.getIdentifier()) == identifier
+                        && actor.getOwnerUniqueId() == (int64_t) player.getRuntimeId()
+                        && std::find(existing.begin(), existing.end(), actor.getUniqueId()) == existing.end()
+                        && actor.getProjectileData().mCritical == critical)
+                        ++count;
+                }
+                return count;
+            };
+            const CustomItemDefinition &longbow = *CustomContentRegistry::getInstance().findItem("test:longbow");
+            const CustomItemDefinition &sling = *CustomContentRegistry::getInstance().findItem("test:sling");
+            const CustomItemDefinition &javelin = *CustomContentRegistry::getInstance().findItem("test:javelin");
+            int32_t duration = 0;
+            const auto charged = [&inventory]() {
+                const Tag &tag = inventory.getItemInHand().mTag;
+                return tag.getType() == Tag::Type::Compound && tag.contains("chargedItem");
+            };
+
+            inventory.setItemInHand(owner.createItemStack("test:longbow", 1));
+            require(PackShooter::use(owner, player, longbow, duration) == PackShooter::Use::None,
+                    "the shooter drew without ammunition in survival");
+            inventory.setItem(20, owner.createItemStack("minecraft:arrow", 3));
+            require(PackShooter::use(owner, player, longbow, duration) == PackShooter::Use::Drawing
+                            && duration == 72000,
+                    "the shooter did not draw for its use duration");
+            require(PackShooter::release(owner, player, longbow, 1) && shot("minecraft:arrow", false) == 0
+                            && inventory.getItem(20).mCount == 3,
+                    "a one tick draw shot under the minimum power");
+            PackShooter::release(owner, player, longbow, 20);
+            require(shot("minecraft:arrow", true) == 1 && inventory.getItem(20).mCount == 2
+                            && inventory.getItemInHand().mDamage == 1,
+                    "a full draw did not shoot a critical arrow, pay one and wear the shooter");
+            PackShooter::release(owner, player, longbow, 10);
+            require(shot("minecraft:arrow", false) == 1 && inventory.getItem(20).mCount == 1,
+                    "a half draw did not shoot a plain arrow");
+            inventory.setOffhand(owner.createItemStack("minecraft:arrow", 1));
+            PackShooter::release(owner, player, longbow, 20);
+            require(inventory.getOffhand().isAir() && inventory.getItem(20).mCount == 1,
+                    "the offhand ammunition was not used first");
+
+            inventory.setItem(20, ItemStack::air());
+            player.setGameType((int32_t) GameType::Creative);
+            require(PackShooter::use(owner, player, longbow, duration) == PackShooter::Use::Drawing,
+                    "creative did not draw without ammunition");
+            PackShooter::release(owner, player, longbow, 20);
+            require(shot("minecraft:snowball", true) == 1 && inventory.getItemInHand().mDamage == 3,
+                    "creative did not shoot the use_in_creative ammunition");
+            player.setGameType((int32_t) GameType::Survival);
+
+            inventory.setItemInHand(owner.createItemStack("test:sling", 1));
+            inventory.setItem(21, owner.createItemStack("test:pellet", 2));
+            require(PackShooter::use(owner, player, sling, duration) == PackShooter::Use::Drawing && duration == 25,
+                    "the charge_on_draw shooter did not draw");
+            PackShooter::release(owner, player, sling, 10);
+            require(!charged() && inventory.getItem(21).mCount == 2,
+                    "a short draw charged the shooter");
+            PackShooter::release(owner, player, sling, 20);
+            const Tag *chargedItem = charged() ? inventory.getItemInHand().mTag.get("chargedItem") : nullptr;
+            require(chargedItem != nullptr && chargedItem->getString("Name") == "test:pellet"
+                            && inventory.getItem(21).mCount == 1 && shot("minecraft:snowball", true) == 1,
+                    "a full draw did not charge the shooter with one pellet");
+            require(PackShooter::use(owner, player, sling, duration) == PackShooter::Use::Done
+                            && shot("minecraft:snowball", true) == 2
+                            && !charged()
+                            && inventory.getItem(21).mCount == 1,
+                    "the charged shooter did not fire its charge");
+            inventory.setItem(21, ItemStack::air());
+
+            inventory.setItemInHand(owner.createItemStack("test:javelin", 2));
+            require(PackShooter::use(owner, player, javelin, duration) == PackShooter::Use::Drawing && duration == 200,
+                    "the drawn throwable did not draw");
+            PackShooter::release(owner, player, javelin, 3);
+            require(inventory.getItemInHand().mCount == 2, "a draw under min_draw_duration threw");
+            PackShooter::release(owner, player, javelin, 20);
+            require(inventory.getItemInHand().mCount == 1 && shot("minecraft:snowball", true) == 3,
+                    "a full draw did not throw the item");
+
+            std::vector<int64_t> added;
+            for (const auto &entry: owner.getActors()) {
+                if (std::find(existing.begin(), existing.end(), entry.second->getUniqueId()) == existing.end())
+                    added.push_back(entry.second->getUniqueId());
+            }
+            // in spawn order: the script events log the removals
+            std::sort(added.begin(), added.end());
+            for (const int64_t id: added)
+                owner.removeActor(id);
+            inventory.setItemInHand(previous);
         }
         player.setHealth(10.0f);
         engine.tick(0);
@@ -3191,7 +3375,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "killed", "true");
         expect(e, "events",
                "spawn:minecraft:cow:Spawned;spawn:minecraft:cow:Born;spawn:minecraft:wolf:Spawned;"
-               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;health:20>10;"
+               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;"
+               // the pack shooter shots, removed once checked
+               "spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;"
+               "spawn:minecraft:snowball:Spawned;spawn:minecraft:snowball:Spawned;spawn:minecraft:snowball:Spawned;"
+               "beforeRemove:minecraft:arrow;remove:minecraft:arrow;beforeRemove:minecraft:arrow;"
+               "remove:minecraft:arrow;beforeRemove:minecraft:arrow;remove:minecraft:arrow;"
+               "beforeRemove:minecraft:snowball;remove:minecraft:snowball;beforeRemove:minecraft:snowball;"
+               "remove:minecraft:snowball;beforeRemove:minecraft:snowball;remove:minecraft:snowball;health:20>10;"
                "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
                "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
                "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"

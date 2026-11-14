@@ -957,6 +957,41 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                             (float) projectile->get("minimum_critical_power")->number(0.0);
             }
 
+            // each ammunition item is an item name or an object holding one
+            const json::Value *shooter = components->get("minecraft:shooter");
+            if (shooter != nullptr && shooter->isObject()) {
+                definition.mHasShooter = true;
+                const json::Value *ammunition = shooter->get("ammunition");
+                if (ammunition != nullptr && ammunition->isArray()) {
+                    for (const std::unique_ptr<json::Value> &entry: ammunition->mArray) {
+                        if (!entry->isObject())
+                            continue;
+                        const json::Value *item = entry->get("item");
+                        if (item != nullptr && item->isObject())
+                            item = item->get("name");
+                        if (item == nullptr || !item->isString())
+                            continue;
+
+                        CustomAmmunition ammo;
+                        ammo.mItem = qualify(item->string());
+                        const auto flag = [&entry](const char *key) {
+                            const json::Value *value = entry->get(key);
+                            return value != nullptr && value->boolean(false);
+                        };
+                        ammo.mUseOffhand = flag("use_offhand");
+                        ammo.mSearchInventory = flag("search_inventory");
+                        ammo.mUseInCreative = flag("use_in_creative");
+                        definition.mAmmunition.push_back(std::move(ammo));
+                    }
+                }
+                if (shooter->get("max_draw_duration") != nullptr)
+                    definition.mShooterMaxDrawDuration = (float) shooter->get("max_draw_duration")->number(0.0);
+                if (shooter->get("scale_power_by_draw_duration") != nullptr)
+                    definition.mShooterScalePowerByDraw = shooter->get("scale_power_by_draw_duration")->boolean(false);
+                if (shooter->get("charge_on_draw") != nullptr)
+                    definition.mChargeOnDraw = shooter->get("charge_on_draw")->boolean(false);
+            }
+
             const json::Value *fuel = components->get("minecraft:fuel");
             if (fuel != nullptr && fuel->isObject() && fuel->get("duration") != nullptr) {
                 definition.mHasFuel = true;
@@ -1242,6 +1277,29 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
                                                           ? item.mProjectileEntity + "<>"
                                                           : item.mProjectileEntity);
         components.put("minecraft:projectile", projectile);
+    }
+
+    // each ammunition item goes out as an item descriptor: a compound holding its name
+    if (item.mHasShooter) {
+        Tag ammunition = Tag::ofList(Tag::Type::Compound);
+        for (const CustomAmmunition &ammo: item.mAmmunition) {
+            Tag descriptor = Tag::ofCompound();
+            descriptor.putString("name", ammo.mItem);
+
+            Tag entry = Tag::ofCompound();
+            entry.put("item", descriptor);
+            entry.putBool("use_offhand", ammo.mUseOffhand);
+            entry.putBool("search_inventory", ammo.mSearchInventory);
+            entry.putBool("use_in_creative", ammo.mUseInCreative);
+            ammunition.addToList(entry);
+        }
+
+        Tag shooter = Tag::ofCompound();
+        shooter.put("ammunition", ammunition);
+        shooter.putFloat("max_draw_duration", item.mShooterMaxDrawDuration);
+        shooter.putBool("scale_power_by_draw_duration", item.mShooterScalePowerByDraw);
+        shooter.putBool("charge_on_draw", item.mChargeOnDraw);
+        components.put("minecraft:shooter", shooter);
     }
 
     if (item.mHasFuel) {
