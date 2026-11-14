@@ -887,6 +887,30 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                 }
             }
 
+            // block and each use_on entry are a block name or an object holding one
+            const json::Value *blockPlacer = components->get("minecraft:block_placer");
+            if (blockPlacer != nullptr && blockPlacer->isObject() && blockPlacer->get("block") != nullptr) {
+                const auto blockName = [](const json::Value *value) {
+                    if (value != nullptr && value->isObject())
+                        value = value->get("name");
+                    return value != nullptr && value->isString() ? qualify(value->string()) : std::string();
+                };
+                definition.mPlacerBlock = blockName(blockPlacer->get("block"));
+                definition.mHasBlockPlacer = !definition.mPlacerBlock.empty();
+                const json::Value *useOn = blockPlacer->get("use_on");
+                if (useOn != nullptr && useOn->isArray()) {
+                    for (const std::unique_ptr<json::Value> &entry: useOn->mArray) {
+                        const std::string name = blockName(entry.get());
+                        if (!name.empty())
+                            definition.mPlacerUseOn.push_back(name);
+                    }
+                }
+                if (blockPlacer->get("replace_block_item") != nullptr)
+                    definition.mPlacerReplacesBlockItem = blockPlacer->get("replace_block_item")->boolean(false);
+                if (blockPlacer->get("aligned_placement") != nullptr)
+                    definition.mPlacerAligned = blockPlacer->get("aligned_placement")->boolean(false);
+            }
+
             const json::Value *fuel = components->get("minecraft:fuel");
             if (fuel != nullptr && fuel->isObject() && fuel->get("duration") != nullptr) {
                 definition.mHasFuel = true;
@@ -1140,6 +1164,17 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         Tag fireResistant = Tag::ofCompound();
         fireResistant.putBool("value", true);
         components.put("minecraft:fire_resistant", fireResistant);
+    }
+
+    // use_on goes out empty: the game's own items only show the empty list, the server enforces the names
+    if (item.mHasBlockPlacer) {
+        Tag blockPlacer = Tag::ofCompound();
+        blockPlacer.putBool("alignedPlacement", item.mPlacerAligned);
+        blockPlacer.putString("block", item.mPlacerBlock);
+        blockPlacer.putBool("canUseBlockAsIcon", item.mIcon.empty());
+        blockPlacer.putBool("replaceBlockItem", item.mPlacerReplacesBlockItem);
+        blockPlacer.put("use_on", Tag::ofList(Tag::Type::End));
+        components.put("minecraft:block_placer", blockPlacer);
     }
 
     if (item.mHasFuel) {

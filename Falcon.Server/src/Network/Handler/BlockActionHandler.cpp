@@ -1194,9 +1194,21 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const ItemStack &heldItem = inventory.getItemInHand();
 
+    // a pack item with minecraft:block_placer places that block, on the blocks it lists when it lists any
+    std::shared_ptr<BlockDefinition> placerDefinition;
+    if (!heldItem.isAir() && heldItem.mDefinition != nullptr && heldItem.mBlockDefinition == nullptr) {
+        const CustomItemDefinition *placer =
+                CustomContentRegistry::getInstance().findItem(heldItem.mDefinition->getIdentifier());
+        if (placer != nullptr && placer->mHasBlockPlacer
+            && (placer->mPlacerUseOn.empty()
+                || std::find(placer->mPlacerUseOn.begin(), placer->mPlacerUseOn.end(), clickedState.mName)
+                           != placer->mPlacerUseOn.end()))
+            placerDefinition = owner.getBlockDefinitions().getDefinition(placer->mPlacerBlock);
+    }
+
     const bool bucket = BucketItem::isBucket(heldItem);
     if (heldItem.isAir() || heldItem.mCount <= 0 || heldItem.mDefinition == nullptr
-        || (!bucket && heldItem.mBlockDefinition == nullptr)) {
+        || (!bucket && heldItem.mBlockDefinition == nullptr && placerDefinition == nullptr)) {
         if (!bucket && !heldItem.isAir() && heldItem.mDefinition != nullptr)
             owner.emitItemUse(player);
         return false;
@@ -1226,7 +1238,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (!isBlockChangeAllowed(level, target, player) || PistonSystem::isMovingInto(level, target))
         return false;
 
-    const BlockDefinition &definition = *heldItem.mBlockDefinition;
+    const BlockDefinition &definition = heldItem.mBlockDefinition != nullptr ? *heldItem.mBlockDefinition
+                                                                             : *placerDefinition;
 
     BlockState mergedState(definition.getIdentifier(), definition.getState());
     PlacementMergeResult mergeResult = PlacementMergeResult::None;

@@ -1471,6 +1471,7 @@ system.beforeEvents.startup.subscribe((event) => {
     "description": { "identifier": "test:ration" },
     "components": {
       "minecraft:fuel": { "duration": 10 },
+      "minecraft:block_placer": { "block": "minecraft:dirt", "use_on": ["minecraft:stone", { "name": "grass_block" }] },
       "minecraft:compostable": { "composting_chance": 65 },
       "minecraft:use_modifiers": { "use_duration": 1.6, "movement_modifier": 0.35 },
       "minecraft:use_animation": "eat"
@@ -2151,6 +2152,16 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             && rationProperties->getInt("use_animation") == 1
                             && ration->get("minecraft:use_animation")->getString("value") == "eat",
                     "the use modifiers and animation were not sent");
+            const Tag *blockPlacer = ration->get("minecraft:block_placer");
+            const CustomItemDefinition *rationItem = CustomContentRegistry::getInstance().findItem("test:ration");
+            require(blockPlacer != nullptr && blockPlacer->getString("block") == "minecraft:dirt"
+                            && blockPlacer->getByte("replaceBlockItem") == 0 && blockPlacer->getByte("alignedPlacement") == 0
+                            && blockPlacer->get("use_on") != nullptr && blockPlacer->get("use_on")->getList().empty()
+                            && rationItem != nullptr
+                            && rationItem->mPlacerUseOn
+                                       == std::vector<std::string>{"minecraft:stone", "minecraft:grass_block"}
+                            && wandComponents->get("minecraft:block_placer") == nullptr,
+                    "the block placer was not read or sent");
             require(wandComponents->get("minecraft:fuel") == nullptr
                             && wandComponents->get("minecraft:use_modifiers") == nullptr
                             && wandComponents->get("item_properties")->getInt("use_duration") == 0,
