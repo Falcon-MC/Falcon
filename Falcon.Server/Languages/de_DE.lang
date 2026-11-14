@@ -4,6 +4,8 @@ falcon.commands.about.version=Dieser Server läuft mit Falcon Version %1$s (%2$s
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (Protokoll %2$s)
 falcon.commands.about.build=Build %1$s, Konfiguration %2$s
 
+falcon.commands.plugins.list=Plugins (%1$s): %2$s
+
 falcon.commands.world.list=Geladene Welten (%1$s): %2$s
 falcon.commands.world.available=Welten auf dem Datenträger: %1$s
 falcon.commands.world.created=Welt %1$s wurde erstellt

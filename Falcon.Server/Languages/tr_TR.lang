@@ -4,6 +4,8 @@ falcon.commands.about.version=Bu sunucu Falcon %1$s sürümünü çalıştırıy
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Derleme %1$s, %2$s yapılandırması
 
+falcon.commands.plugins.list=Eklentiler (%1$s): %2$s
+
 falcon.commands.world.list=Yüklenen dünyalar (%1$s): %2$s
 falcon.commands.world.available=Diskteki dünyalar: %1$s
 falcon.commands.world.created=%1$s dünyası oluşturuldu

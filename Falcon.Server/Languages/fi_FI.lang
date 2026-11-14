@@ -4,6 +4,8 @@ falcon.commands.about.version=Tällä palvelimella on käytössä Falcon-versio 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokolla %2$s)
 falcon.commands.about.build=Koontiversio %1$s, %2$s-määritys
 
+falcon.commands.plugins.list=Liitännäiset (%1$s): %2$s
+
 falcon.commands.world.list=Ladatut maailmat (%1$s): %2$s
 falcon.commands.world.available=Maailmat levyllä: %1$s
 falcon.commands.world.created=Maailma %1$s luotiin

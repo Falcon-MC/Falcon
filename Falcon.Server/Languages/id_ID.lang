@@ -4,6 +4,8 @@ falcon.commands.about.version=Server ini menjalankan Falcon versi %1$s (%2$s di 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Build %1$s, konfigurasi %2$s
 
+falcon.commands.plugins.list=Plugin (%1$s): %2$s
+
 falcon.commands.world.list=Dunia yang dimuat (%1$s): %2$s
 falcon.commands.world.available=Dunia di disk: %1$s
 falcon.commands.world.created=Dunia %1$s telah dibuat

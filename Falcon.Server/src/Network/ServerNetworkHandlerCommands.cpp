@@ -32,6 +32,7 @@
 #include "Server/Commands/PardonIpCommand.h"
 #include "Server/Commands/ParticleCommand.h"
 #include "Server/Commands/PlaySoundCommand.h"
+#include "Server/Commands/PluginsCommand.h"
 #include "Server/Commands/ProfilerCommand.h"
 #include "Server/Commands/SaveCommand.h"
 #include "Server/Commands/ScoreboardCommand.h"
@@ -347,6 +348,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<ClearCommand>(*this));
     mCommands.registerCommand(std::make_shared<LocateCommand>(*this));
     mCommands.registerCommand(std::make_shared<AboutCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PluginsCommand>(*this));
     mCommands.registerCommand(std::make_shared<AllowListCommand>(*this));
     mCommands.registerCommand(std::make_shared<TeleportCommand>(*this));
     mCommands.registerCommand(std::make_shared<KickCommand>(*this));
