@@ -280,6 +280,7 @@ namespace {
         api.itemDestroy(sword);
 
         require(api.entityNbt(body, &length) != nullptr && length > 0, "the player has no saved state");
+        require(api.entitySetNbt(body, garbage, 3) == 0, "a player was loaded from a tag");
     }
 
     struct CommandProbe {
@@ -449,6 +450,18 @@ namespace {
         FalconEntity *zombie = api.levelSpawnEntity(level, "minecraft:zombie", FalconVec3{6.5, 100.0, 6.5});
         require(zombie != nullptr, "no zombie spawned");
 
+        api.entitySetNameTag(zombie, "Bob");
+        uint32_t savedLength = 0;
+        const uint8_t *saved = api.entityNbt(zombie, &savedLength);
+        require(saved != nullptr && savedLength > 0, "the zombie has no saved state");
+        const std::vector<uint8_t> savedBytes(saved, saved + savedLength);
+        api.entitySetNameTag(zombie, "");
+        const uint8_t noTag[3] = {0xff, 0x01, 0x02};
+        require(api.entitySetNbt(zombie, noTag, 3) == 0, "garbage was loaded into the zombie");
+        require(api.entitySetNbt(zombie, savedBytes.data(), (uint32_t) savedBytes.size()) == 1
+                        && std::string(api.entityNameTag(zombie)) == "Bob" && api.entityIsAlive(zombie) == 1,
+                "the zombie was not loaded back from its saved state");
+
         FalconItem *helmet = api.itemCreate("minecraft:diamond_helmet", 1);
         require(api.entitySetEquipment(zombie, FALCON_EQUIPMENT_HEAD, helmet) == 1, "the zombie took no helmet");
         FalconItem *worn = api.entityEquipment(zombie, FALCON_EQUIPMENT_HEAD);
@@ -494,6 +507,18 @@ namespace {
         uint32_t length = 1;
         api.playerSkinImage(fixture.playerHandle(), &width, &height, &length);
         require(length == width * height * 4 || length == 0, "the skin size does not match its pixels");
+
+        const std::vector<uint8_t> pixels(64 * 64 * 4, 0x7f);
+        require(api.playerSetSkin(fixture.playerHandle(), "plugin.skin", pixels.data(), (uint32_t) pixels.size(), 64, 32)
+                        == 0,
+                "a skin that lies about its size was taken");
+        require(api.playerSetSkin(fixture.playerHandle(), "plugin.skin", pixels.data(), (uint32_t) pixels.size(), 64, 64)
+                        == 1,
+                "the skin was not set");
+        api.playerSkinImage(fixture.playerHandle(), &width, &height, &length);
+        require(std::string(api.playerSkinId(fixture.playerHandle())) == "plugin.skin" && width == 64 && height == 64
+                        && length == pixels.size(),
+                "the new skin is not the player's");
 
         const FalconVec3 at{0.0, 110.0, 0.0};
         const FalconVec3 turn{30.0, 90.0, 0.0};

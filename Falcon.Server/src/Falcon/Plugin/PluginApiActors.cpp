@@ -1,8 +1,10 @@
 #include "Falcon/Plugin/PluginServerApi.h"
 
 #include "Falcon/Plugin/PluginApiHelpers.h"
+#include "Network/Handler/LoginHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/CameraInstructionPacket.h"
+#include "Protocol/Packets/PlayerSkinPacket.h"
 #include "Protocol/Types/CameraPresets.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Mob/MobEquipment.h"
@@ -162,6 +164,43 @@ namespace {
         return image.mData.empty() ? nullptr : reinterpret_cast<const uint8_t *>(hold(image.mData));
     }
 
+    const uint32_t MAX_SKIN_SIDE = 128;
+    const char *const CLASSIC_SKIN_PATCH = "{\"geometry\":{\"default\":\"geometry.humanoid.custom\"}}";
+
+    // a classic skin on the default model, told to everyone the way a client's own skin change is
+    int playerSetSkin(FalconPlayer *target, const char *skinId, const uint8_t *rgba, uint32_t length, uint32_t width,
+                      uint32_t height) {
+        if (skinId == nullptr || skinId[0] == '\0' || rgba == nullptr || width == 0 || height == 0
+            || width > MAX_SKIN_SIDE || height > MAX_SKIN_SIDE || length != width * height * 4)
+            return 0;
+
+        ServerPlayer *value = player(target);
+        SerializedSkin skin = value->getSkin();
+        skin.mSkinId = skinId;
+        skin.mFullSkinId = skinId;
+        skin.mSkinResourcePatch = CLASSIC_SKIN_PATCH;
+        skin.mGeometryData = "{}";
+        skin.mPersona = false;
+        skin.mPersonaPieces.clear();
+        skin.mSkinData.mWidth = (int32_t) width;
+        skin.mSkinData.mHeight = (int32_t) height;
+        skin.mSkinData.mData.assign(reinterpret_cast<const char *>(rgba), length);
+        value->setSkin(skin);
+
+        PlayerSkinPacket packet;
+        packet.mUuid = LoginHandler::playerListUuid(*value);
+        packet.mSkin = value->getSkin();
+        packet.mNewSkinName = packet.mSkin.mSkinId;
+        packet.mTrustedSkin = packet.mSkin.mTrusted;
+        ServerNetworkHandler &host = owner();
+        for (auto &entry: host.getPlayers()) {
+            if (entry.second.isSpawned() && !entry.second.isSimulated())
+                host.getNetworkHandler().send(entry.second.getNetworkIdentifier(), packet,
+                                              host.getCodecContext(entry.second.getNetworkIdentifier()));
+        }
+        return 1;
+    }
+
     void sendCamera(ServerPlayer &target, const CameraInstructionPacket &packet) {
         owner().getNetworkHandler().send(target.getNetworkIdentifier(), packet, owner().getCodecContext());
         target.recordCamera(packet);
@@ -268,6 +307,7 @@ void PluginServerApi::fillActors(FalconServerApi &api) {
     api.playerDeviceOs = &playerDeviceOs;
     api.playerSkinId = &playerSkinId;
     api.playerSkinImage = &playerSkinImage;
+    api.playerSetSkin = &playerSetSkin;
     api.playerSetCamera = &playerSetCamera;
     api.playerFadeCamera = &playerFadeCamera;
     api.playerClearCamera = &playerClearCamera;
