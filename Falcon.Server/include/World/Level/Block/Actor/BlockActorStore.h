@@ -75,6 +75,9 @@ public:
     // stored block actors joining a chunk already loaded
     void addLoaded(const std::vector<Tag> &blockActors, const PacketCodecContext &context);
 
+    // a save written by generation, kept as is: the chunk's first load reads it into its class when there is one
+    void keepGenerated(const Tag &data);
+
     static std::unique_ptr<BlockActor> create(const std::string &blockActorId);
 
     // a block actor of no registered class lives as long as the block it was loaded with
