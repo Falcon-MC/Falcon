@@ -1,4 +1,9 @@
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/Nether/NetherGenerator.h"
 #include "World/Level/LevelGen/Structure/NetherFortressFeature.h"
@@ -113,6 +118,153 @@ namespace {
         require(pieces.size() > 1, label + ": the start opened no bridge");
     }
 
+
+    std::string nameAt(LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
+        return chunk.getBlock(x & 15, y, z & 15).mName;
+    }
+
+    void checkPieceBlocks() {
+        Level level("fortress-blocks-test", 2, 0, DimensionType::Nether);
+        std::mt19937 random(11);
+
+        // a throne opening south from (2, 60, 2): box (0, 60, 2) to (6, 67, 10)
+        {
+            LevelChunk chunk(0, 0);
+            Piece throne(Type::MonsterThrone, Box::orient(2, 60, 2, -2, 0, 0, 7, 8, 9, StructurePiece::SOUTH),
+                         StructurePiece::SOUTH, 1);
+            require(throne.getBox() == Box{0, 60, 2, 6, 67, 10}, "the throne box differs");
+            NetherFortressStructure::build(throne, level, chunk, random);
+            require(nameAt(chunk, 3, 65, 7) == "minecraft:mob_spawner", "no spawner on the throne");
+            const MobSpawnerBlockActor *spawner =
+                    level.getBlockActors().find<MobSpawnerBlockActor>(Vector3i(3, 65, 7));
+            require(spawner != nullptr && spawner->getEntityIdentifier() == "minecraft:blaze",
+                    "the throne spawner does not spawn blazes");
+            require(nameAt(chunk, 1, 60, 2) == "minecraft:nether_brick", "the throne floor differs");
+            require(nameAt(chunk, 1, 66, 5) == "minecraft:nether_brick_fence", "the throne fence differs");
+            require(nameAt(chunk, 0, 62, 2) == "minecraft:air", "the throne is not cleared");
+            // the floor columns reach down through the empty chunk to y 2
+            require(nameAt(chunk, 3, 2, 5) == "minecraft:nether_brick" && nameAt(chunk, 3, 1, 5) == "minecraft:air",
+                    "the throne pillars do not reach the floor of the dimension");
+        }
+
+        // a stairs room turned east: local (5, 2, 5) lands at (minX + 5, y + 2, minZ + 5)
+        {
+            LevelChunk chunk(0, 0);
+            Piece room(Type::StairsRoom, Box::orient(1, 70, 4, -2, 0, 0, 7, 11, 7, StructurePiece::EAST),
+                       StructurePiece::EAST, 1);
+            NetherFortressStructure::build(room, level, chunk, random);
+            const Box &box = room.getBox();
+            require(nameAt(chunk, box.mMinX + 5, 72, box.mMinZ + 5) == "minecraft:nether_brick",
+                    "the turned room's step is misplaced");
+            require(nameAt(chunk, box.mMinX + 4, 73, box.mMinZ + 6) == "minecraft:nether_brick_fence",
+                    "the turned room's fence is misplaced");
+        }
+
+        // the stalk room: soul sand under the warts, its stairs turned with it
+        for (int32_t orientation = 0; orientation < 4; ++orientation) {
+            LevelChunk chunk(0, 0);
+            Piece stalk(Type::CastleStalkRoom, Box{1, 40, 1, 13, 53, 13}, orientation, 3);
+            NetherFortressStructure::build(stalk, level, chunk, random);
+            const int32_t x = stalk.worldX(3, 4);
+            const int32_t z = stalk.worldZ(3, 4);
+            require(nameAt(chunk, x, 44, z) == "minecraft:soul_sand", "no soul sand in the stalk room");
+            require(nameAt(chunk, x, 45, z) == "minecraft:nether_wart", "no nether wart in the stalk room");
+            const BlockState &stairs = chunk.getBlock(stalk.worldX(6, 4), 45, stalk.worldZ(6, 4));
+            require(stairs.mName == "minecraft:nether_brick_stairs"
+                            && stairs.mStates.getInt("weirdo_direction", -1) == stalk.stairsDirection(3),
+                    "the stalk room stairs are not turned with the room");
+            require(nameAt(chunk, stalk.worldX(6, 6), 47, stalk.worldZ(6, 6)) == "minecraft:nether_brick_stairs",
+                    "the stalk room stairs do not climb");
+        }
+
+        // a right turn that rolled its chest: data 4 faces west on every turn
+        {
+            LevelChunk chunk(0, 0);
+            Piece turn(Type::CastleSmallCorridorRightTurn, Box{4, 50, 4, 8, 56, 8}, StructurePiece::NORTH, 4);
+            turn.mNeedsChest = true;
+            NetherFortressStructure::build(turn, level, chunk, random);
+            const Vector3i at(turn.worldX(1, 3), 52, turn.worldZ(1, 3));
+            const BlockState &chest = chunk.getBlock(at.x, at.y, at.z);
+            require(chest.mName == "minecraft:chest"
+                            && chest.mStates.getString("minecraft:cardinal_direction", "") == "west",
+                    "the turn chest is missing or turned");
+            ChestBlockActor *actor = level.getBlockActors().find<ChestBlockActor>(at);
+            require(actor != nullptr
+                            && actor->saveWithPosition().getString("LootTable") == NetherFortressStructure::LOOT_TABLE,
+                    "the turn chest has no nether bridge loot");
+
+            LevelChunk empty(0, 0);
+            Piece plain = turn;
+            plain.mNeedsChest = false;
+            NetherFortressStructure::build(plain, level, empty, random);
+            require(nameAt(empty, at.x, at.y, at.z) == "minecraft:air", "a turn without its roll got a chest");
+        }
+
+        // the entrance well: lava over a brick, in the middle of the hall
+        {
+            LevelChunk chunk(0, 0);
+            Piece entrance(Type::CastleEntrance, Box{1, 40, 1, 13, 53, 13}, StructurePiece::SOUTH, 2);
+            NetherFortressStructure::build(entrance, level, chunk, random);
+            require(nameAt(chunk, 7, 45, 7) == "minecraft:lava", "no lava in the entrance well");
+            require(nameAt(chunk, 7, 44, 7) == "minecraft:air" && nameAt(chunk, 7, 40, 7) == "minecraft:nether_brick",
+                    "the entrance well shaft differs");
+        }
+
+        // an end filler crumbles the same in every chunk it reaches
+        {
+            Piece filler(Type::BridgeEndFiller, Box{14, 60, 2, 18, 69, 9}, StructurePiece::SOUTH, 5);
+            filler.mSelfSeed = 424242;
+            LevelChunk west(0, 0);
+            LevelChunk east(1, 0);
+            LevelChunk again(1, 0);
+            NetherFortressStructure::build(filler, level, west, random);
+            NetherFortressStructure::build(filler, level, east, random);
+            NetherFortressStructure::build(filler, level, again, random);
+            for (int32_t y = 60; y <= 65; ++y) {
+                for (int32_t z = 2; z <= 9; ++z) {
+                    for (int32_t x = 16; x <= 18; ++x)
+                        require(nameAt(east, x, y, z) == nameAt(again, x, y, z), "the end filler is not stable");
+                }
+            }
+            std::mt19937 own((uint32_t) filler.mSelfSeed);
+            const int32_t first = (int32_t) (own() % 8u);
+            for (int32_t z = 2; z <= 9; ++z)
+                require((nameAt(west, 14, 63, z) == "minecraft:nether_brick") == (z - 2 <= first),
+                        "the end filler's first row does not follow its own random");
+        }
+    }
+
+    void checkChunkPlacement() {
+        const int64_t seed = SEEDS[2];
+        const NetherGenerator generator(seed);
+        std::shared_ptr<const NetherFortressStructure::Plan> plan;
+        for (int32_t regionX = -3; regionX <= 3 && plan == nullptr; ++regionX) {
+            for (int32_t regionZ = -3; regionZ <= 3 && plan == nullptr; ++regionZ) {
+                const StructureChunkPos candidate =
+                        StructureFeature::get("fortress")->getCandidate(seed, regionX, regionZ);
+                plan = NetherFortressStructure::plan(generator, candidate.x, candidate.z);
+            }
+        }
+        require(plan != nullptr, "no fortress around the origin of the test seed");
+
+        Level level("fortress-chunk-test", 2, seed, DimensionType::Nether);
+        LevelChunk chunk(plan->mStartX, plan->mStartZ);
+        NetherFortressStructure::place(generator, level, chunk);
+
+        const Box &start = plan->mPieces.front().getBox();
+        const StructurePiece &frame = plan->mPieces.front();
+        require(nameAt(chunk, frame.worldX(9, 9), start.mMinY + 3, frame.worldZ(9, 9)) == "minecraft:nether_brick",
+                "the start crossing has no deck");
+        require(nameAt(chunk, frame.worldX(9, 9), start.mMinY + 6, frame.worldZ(9, 9)) == "minecraft:air",
+                "the start crossing is not cleared");
+
+        const std::vector<std::string> names =
+                chunk.getStructureBounds().namesAt(frame.worldX(9, 9), start.mMinY + 3, frame.worldZ(9, 9));
+        require(names.size() == 1 && names[0] == "minecraft:fortress", "the chunk does not record the fortress");
+        require(chunk.getStructureBounds().namesAt(frame.worldX(9, 9), 2, frame.worldZ(9, 9)).empty(),
+                "a block under the fortress is recorded inside it");
+    }
+
     void checkPlacement() {
         const StructureFeature *fortress = StructureFeature::get("fortress");
         require(fortress != nullptr && fortress->getSpacing() == 30, "no fortress grid of 30 chunks");
@@ -177,6 +329,8 @@ int main() {
         BiomeChunkGenDataRegistry::initialize();
         checkPieceFrame();
         checkPlacement();
+        checkPieceBlocks();
+        checkChunkPlacement();
     } catch (const std::exception &error) {
         std::clog << "Nether fortress regression failed: " << error.what() << '\n';
         return 1;
