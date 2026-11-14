@@ -19,4 +19,7 @@ public:
     int getExperienceDrop() const override {
         return 0;
     }
+
+    // a sleeping villager is only woken up
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 };

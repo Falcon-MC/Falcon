@@ -16,6 +16,7 @@
 
 class Level;
 class MobActor;
+class Tag;
 class ServerNetworkHandler;
 
 // holds the only strong reference to each poi; main thread only
@@ -23,6 +24,12 @@ class VillageManager {
 public:
     // ignored when already queued or 64 are waiting
     void requestScan(int64_t dwellerId);
+
+    // every village's records in the level's database; the game keys them by dimension name
+    void save(Level &level) const;
+
+    // the villages the level's database holds, once its storage is open
+    void load(Level &level, int64_t currentTick);
 
     // removes dead villages, advances the dweller scan, files its findings
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
@@ -56,7 +63,9 @@ private:
 
     using PoiMap = std::unordered_map<Vector3i, std::shared_ptr<PoiInstance>, PositionHash>;
 
-    void _removeVillages();
+    void _removeVillages(Level &level);
+
+    static std::string _keyPrefix(const Level &level);
 
     void _scanNextDweller(ServerNetworkHandler &owner, Level &level);
 
@@ -65,6 +74,9 @@ private:
     bool _isKnownPoi(const Vector3i &position) const;
 
     void _registerPoi(const std::shared_ptr<PoiInstance> &poi);
+
+    // the instance at the saved position, shared with the villagers that also hold it
+    std::shared_ptr<PoiInstance> _restorePoi(const Tag &instance);
 
     void _fileBed(const std::shared_ptr<PoiInstance> &poi);
 

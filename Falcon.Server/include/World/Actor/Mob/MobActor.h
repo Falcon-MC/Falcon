@@ -280,6 +280,15 @@ public:
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
+    // a mob's sleeping state lives only in its flags
+    void setSleepingFlag(ServerNetworkHandler &owner, bool sleeping) {
+        _setFlag(owner, ActorFlag::Sleeping, sleeping);
+    }
+
+    void setWantsToWake(ServerNetworkHandler &owner, bool wants) {
+        _setFlag(owner, ActorFlag::WantsToWake, wants);
+    }
+
     bool isInLove() const {
         return mLoveTicks > 0;
     }
@@ -584,6 +593,8 @@ private:
 
     void _tickTimer(ServerNetworkHandler &owner);
 
+    void _tickScheduler(ServerNetworkHandler &owner);
+
     void _tickAttackCooldown(ServerNetworkHandler &owner);
 
     int _experienceReward(const char *key, const ServerPlayer *player) const;
@@ -694,6 +705,9 @@ private:
     const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;
     int32_t mTimerTicks = 0;
+    const json::Value *mSchedulerComponent = nullptr;
+    // the scheduled event whose filters held last; -1 for none
+    int32_t mScheduledEvent = -1;
     const json::Value *mTransformationComponent = nullptr;
     int32_t mTransformationTicks = 0;
     bool mTransformed = false;
