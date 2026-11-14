@@ -226,6 +226,10 @@ namespace {
 
         const bool multishot = ItemEnchantments::getLevel(weapon, EnchantmentIds::MULTISHOT) > 0;
         const int32_t shots = multishot ? 3 : 1;
+        // an arrow nobody paid for is not picked up again: infinity's, and multishot's two side arrows
+        const bool infinity = ItemEnchantments::getLevel(weapon, EnchantmentIds::INFINITY_ENCHANTMENT) > 0;
+        const bool unpaid = infinity && !ammo.mOffhand
+                            && !(identifierOf(ammo.mStack) == ARROW_IDENTIFIER && ammo.mStack.mDamage > 0);
         for (int32_t index = 0; index < shots; ++index) {
             ServerActor *projectile = launch(owner, player, source.mEntity, power, source.mMinimumCriticalPower, 0.0f);
             if (projectile == nullptr)
@@ -241,15 +245,14 @@ namespace {
                 data.mBaseDamage = ARROW_BASE_DAMAGE;
                 data.mPotionId = pickup.mDamage - 1;
                 data.mPickupItem = pickup;
-                data.mPickupCreativeOnly = player.isCreative();
+                data.mPickupCreativeOnly = player.isCreative() || unpaid || (multishot && index != 1);
             }
             applyEnchantments(weapon, data);
         }
 
         owner.damagePlayerHeldItem(player, 1);
         if (!item.mChargeOnDraw)
-            consumeAmmunition(owner, player, ammo,
-                              ItemEnchantments::getLevel(weapon, EnchantmentIds::INFINITY_ENCHANTMENT) > 0);
+            consumeAmmunition(owner, player, ammo, infinity);
     }
 
     const Tag *chargedItemOf(const ItemStack &stack) {
