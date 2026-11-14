@@ -393,6 +393,15 @@ namespace {
         village.recordWork(villager.getUniqueId(), 90040);
         village.changeStanding(777, -12);
 
+        village.tryStartRaid(arena.mOwner);
+        require(village.getRaid() != nullptr, "the raid did not start");
+        village.getRaid()->addRecruit(9001, 24.0f);
+        for (int64_t tick = 90046; tick < 90056; ++tick)
+            village.tickRaid(arena.mOwner, *arena.mLevel, tick);
+        const int64_t raidTicks = village.getRaid()->getTicksInState();
+        require(raidTicks == 10 && village.getRaid()->getState() == Raid::State::Cooldown,
+                "the raid did not wait out its first ticks");
+
         {
             Level storage("Villages", 4, 1234);
             require(storage.openStorage(directory.string()), "could not open the village storage");
@@ -411,6 +420,14 @@ namespace {
                         && loaded->hasDweller(DwellerRole::Defender, 4242),
                 "the dwellers were forgotten");
         require(loaded->getStanding(777) == -12, "the player's standing was forgotten");
+        const Raid *raid = loaded->getRaid();
+        require(raid != nullptr, "the raid was forgotten");
+        require(raid->getState() == Raid::State::Cooldown && raid->getResult() == Raid::Result::None
+                        && raid->getTicksInState() == raidTicks,
+                "the raid came back in another state");
+        require(raid->hasRaider(9001) && raid->getRaiders().size() == 1, "the raiders were forgotten");
+        // normal difficulty: five waves, none cleared; the recruit's health carries the bar
+        require(raid->getProgress(arena.mOwner) == (float) raidTicks / 300.0f, "the raid bar restarted");
         require(loaded->countRecentWorkers(0) == 1, "the work of the last day was forgotten");
         require(!loaded->contains(0.0f, Vector3f(0.0f, 64.0f, 0.0f))
                         && loaded->contains(0.0f, Vector3f(102.0f, 64.0f, 102.0f)),

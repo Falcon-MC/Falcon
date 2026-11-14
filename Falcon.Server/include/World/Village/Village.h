@@ -37,13 +37,14 @@ public:
         return mId;
     }
 
-    // its records under prefix + id: _INFO, _PLAYERS, _DWELLERS and _POI; no raid is kept, so _RAID is erased
+    // its records under prefix + id: _INFO, _PLAYERS, _DWELLERS, _POI, and _RAID while a raid runs
     void save(Level &level, const std::string &prefix) const;
 
     static void erase(Level &level, const std::string &prefix, const std::string &id);
 
     // delta moves the saved ticks onto this server's clock, which restarts at 0
-    void restore(const std::string &id, const Tag *info, const Tag *players, const Tag *dwellers, int64_t delta);
+    void restore(const std::string &id, const Tag *info, const Tag *players, const Tag *dwellers, const Tag *raid,
+                 int64_t delta);
 
     // a point an inhabitant held when saved; the manager shares one instance per position
     void restoreClaim(int64_t id, const std::shared_ptr<PoiInstance> &poi);

@@ -222,6 +222,7 @@ void VillageManager::load(Level &level, int64_t currentTick) {
         const Tag *mPlayers = nullptr;
         const Tag *mDwellers = nullptr;
         const Tag *mPoi = nullptr;
+        const Tag *mRaid = nullptr;
     };
 
     mVillages.clear();
@@ -245,6 +246,8 @@ void VillageManager::load(Level &level, int64_t currentTick) {
             records.mDwellers = &entry.second;
         else if (part == "_POI")
             records.mPoi = &entry.second;
+        else if (part == "_RAID")
+            records.mRaid = &entry.second;
     }
 
     for (const auto &entry: villages) {
@@ -253,7 +256,7 @@ void VillageManager::load(Level &level, int64_t currentTick) {
             continue;
 
         const std::shared_ptr<Village> village = std::make_shared<Village>();
-        village->restore(entry.first, records.mInfo, records.mPlayers, records.mDwellers,
+        village->restore(entry.first, records.mInfo, records.mPlayers, records.mDwellers, records.mRaid,
                          currentTick - records.mInfo->getLong("Tick"));
 
         const Tag *pois = records.mPoi == nullptr ? nullptr : records.mPoi->get("POI");

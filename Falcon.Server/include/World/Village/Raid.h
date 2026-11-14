@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 class Level;
+class Tag;
 class ServerNetworkHandler;
 class Village;
 
@@ -63,6 +64,12 @@ public:
     // 0 to 1
     float getProgress(ServerNetworkHandler &owner) const;
 
+    // the game's raid record
+    Tag save() const;
+
+    // delta moves the saved tick onto this server's clock; the timers restart from their defaults
+    void restore(const Tag &raid, int64_t delta);
+
 private:
     void _resetStateTimers();
 
@@ -98,7 +105,11 @@ private:
     int32_t mCelebrationTicks = 600;
     Vector3f mSpawnPosition;
     std::unordered_set<int64_t> mRaiders;
+    // raiders of the wave when it spawned
+    uint8_t mWaveRaiders = 0;
     float mTotalHealth = 0.0f;
+    // false for a raid saved without a health total: its progress counts the raiders left
+    bool mHealthProgress = true;
     uint8_t mMaxSpawnFailures = 5;
     uint8_t mSpawnFailures = 0;
     std::unordered_set<int64_t> mHeroes;

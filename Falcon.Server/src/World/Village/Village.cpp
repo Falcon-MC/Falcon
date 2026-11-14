@@ -239,7 +239,13 @@ void Village::save(Level &level, const std::string &prefix) const {
     poiRoot.put("POI", std::move(pois));
     level.saveSavedData(key + POI_KEY, poiRoot, false);
 
-    level.eraseSavedData(key + RAID_KEY);
+    if (mRaid != nullptr) {
+        Tag raidRoot = Tag::ofCompound();
+        raidRoot.put("Raid", mRaid->save());
+        level.saveSavedData(key + RAID_KEY, raidRoot, false);
+    } else {
+        level.eraseSavedData(key + RAID_KEY);
+    }
 
     // the keys of older versions, without the dimension, go once the village is written anew
     for (const char *suffix: {INFO_KEY, PLAYERS_KEY, DWELLERS_KEY, POI_KEY, RAID_KEY})
@@ -251,8 +257,15 @@ void Village::erase(Level &level, const std::string &prefix, const std::string &
         level.eraseSavedData(prefix + id + suffix);
 }
 
-void Village::restore(const std::string &id, const Tag *info, const Tag *players, const Tag *dwellers, int64_t delta) {
+void Village::restore(const std::string &id, const Tag *info, const Tag *players, const Tag *dwellers, const Tag *raid,
+                      int64_t delta) {
     mId = id;
+    const Tag *savedRaid = raid == nullptr ? nullptr : raid->get("Raid");
+    if (savedRaid != nullptr && savedRaid->isCompound()) {
+        mRaid = std::make_unique<Raid>(0);
+        mRaid->restore(*savedRaid, delta);
+    }
+
     if (info != nullptr && info->isCompound()) {
         mLastTick = info->getLong("Tick") + delta;
         mMTick = info->getLong("MTick") + delta;
