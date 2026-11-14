@@ -65,6 +65,12 @@ struct CustomItemDefinition {
     // minecraft:interact_button: true or false keeps the game's default text
     bool mHasInteractButton = false;
     std::string mInteractButtonText = "action.interact.use";
+    // minecraft:block_placer: the block the item places, and the blocks it may be used on (any when empty)
+    bool mHasBlockPlacer = false;
+    std::string mPlacerBlock;
+    std::vector<std::string> mPlacerUseOn;
+    bool mPlacerReplacesBlockItem = false;
+    bool mPlacerAligned = false;
     // minecraft:fuel: seconds of burning
     bool mHasFuel = false;
     float mFuelDuration = 0.0f;
