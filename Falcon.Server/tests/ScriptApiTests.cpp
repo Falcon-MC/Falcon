@@ -2455,6 +2455,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 if (std::find(existing.begin(), existing.end(), entry.second->getUniqueId()) == existing.end())
                     added.push_back(entry.second->getUniqueId());
             }
+            // in spawn order: the script events log the removals
+            std::sort(added.begin(), added.end());
             for (const int64_t id: added)
                 owner.removeActor(id);
             inventory.setItemInHand(previous);
@@ -3373,7 +3375,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(e, "killed", "true");
         expect(e, "events",
                "spawn:minecraft:cow:Spawned;spawn:minecraft:cow:Born;spawn:minecraft:wolf:Spawned;"
-               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;health:20>10;"
+               "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;"
+               // the pack shooter shots, removed once checked
+               "spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;"
+               "spawn:minecraft:snowball:Spawned;spawn:minecraft:snowball:Spawned;spawn:minecraft:snowball:Spawned;"
+               "beforeRemove:minecraft:arrow;remove:minecraft:arrow;beforeRemove:minecraft:arrow;"
+               "remove:minecraft:arrow;beforeRemove:minecraft:arrow;remove:minecraft:arrow;"
+               "beforeRemove:minecraft:snowball;remove:minecraft:snowball;beforeRemove:minecraft:snowball;"
+               "remove:minecraft:snowball;beforeRemove:minecraft:snowball;remove:minecraft:snowball;health:20>10;"
                "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
                "mode:KeyboardAndMouse>Touch;swing:Attack;sneak:minecraft:player;unsneak:minecraft:player;"
                "interact:minecraft:cow;dimension:minecraft:overworld>minecraft:nether;effect:speed:40:true;"
