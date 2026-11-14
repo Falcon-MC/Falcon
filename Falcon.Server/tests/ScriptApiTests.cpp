@@ -1461,6 +1461,14 @@ system.beforeEvents.startup.subscribe((event) => {
     "description": { "identifier": "test:club" },
     "components": {
       "minecraft:hand_equipped": { "value": true },
+      "minecraft:allow_off_hand": true,
+      "minecraft:can_destroy_in_creative": { "value": false },
+      "minecraft:glint": true,
+      "minecraft:liquid_clipped": { "value": true },
+      "minecraft:should_despawn": false,
+      "minecraft:stacked_by_data": true,
+      "minecraft:fire_resistant": { "value": true },
+      "minecraft:hover_text_color": "light_purple",
       "minecraft:damage": 3,
       "minecraft:tags": ["test:blunt"]
     }
@@ -1966,11 +1974,36 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *clubProperties = club->getComponentData().get("components")->get("item_properties");
             require(clubProperties->getByte("hand_equipped") == 1 && clubProperties->getInt("damage") == 3,
                     "the short forms were not read");
+            const Tag *clubComponents = club->getComponentData().get("components");
+            require(clubProperties->getByte("allow_off_hand") == 1
+                            && clubProperties->getByte("can_destroy_in_creative") == 0
+                            && clubProperties->getByte("foil") == 1 && clubProperties->getByte("liquid_clipped") == 1
+                            && clubProperties->getByte("should_despawn") == 0
+                            && clubProperties->getByte("stacked_by_data") == 1
+                            && clubComponents->get("minecraft:fire_resistant") != nullptr
+                            && clubComponents->get("minecraft:fire_resistant")->getByte("value") == 1,
+                    "the pack item flags were not sent");
+            const Tag *wandProperties =
+                    owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components")->get(
+                            "item_properties");
+            require(wandProperties->getByte("hidden_in_commands") == 2
+                            && wandProperties->get("is_hidden_in_commands") == nullptr,
+                    "the command visibility is not under the game's key");
+            require(wandProperties->getByte("allow_off_hand") == 0
+                            && wandProperties->getByte("can_destroy_in_creative") == 1
+                            && wandProperties->getByte("foil") == 0 && wandProperties->getByte("liquid_clipped") == 0
+                            && wandProperties->getByte("should_despawn") == 1
+                            && wandProperties->getByte("stacked_by_data") == 0,
+                    "an item without the flags lost the game's defaults");
+            require(clubProperties->getString("hover_text_color") == "light_purple"
+                            && wandProperties->get("hover_text_color") == nullptr,
+                    "the hover text color is sent wrong");
             const Tag *wandComponents =
                     owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components");
             require(wandComponents->get("item_tags") != nullptr && wandComponents->get("item_tags")->getList().empty()
                             && wandComponents->get("minecraft:tags") == nullptr
                             && wandComponents->get("minecraft:hand_equipped") == nullptr
+                            && wandComponents->get("minecraft:fire_resistant") == nullptr
                             && wandComponents->get("minecraft:damage") == nullptr,
                     "an item without the components got them");
         }

@@ -19,6 +19,7 @@
 #include <fstream>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 namespace {
     // NoteBlockInstrument, in the game's order (26.60 strings)
@@ -785,6 +786,29 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
             if (handEquipped != nullptr)
                 definition.mHandEquipped = handEquipped->boolean(false);
 
+            const std::pair<const char *, bool *> flags[] = {
+                    {"minecraft:allow_off_hand", &definition.mAllowOffHand},
+                    {"minecraft:can_destroy_in_creative", &definition.mCanDestroyInCreative},
+                    {"minecraft:glint", &definition.mGlint},
+                    {"minecraft:liquid_clipped", &definition.mLiquidClipped},
+                    {"minecraft:should_despawn", &definition.mShouldDespawn},
+                    {"minecraft:stacked_by_data", &definition.mStackedByData},
+                    {"minecraft:fire_resistant", &definition.mFireResistant},
+            };
+            for (const auto &flag: flags) {
+                const json::Value *value = components->get(flag.first);
+                if (value != nullptr && value->isObject())
+                    value = value->get("value");
+                if (value != nullptr)
+                    *flag.second = value->boolean(*flag.second);
+            }
+
+            const json::Value *hoverTextColor = components->get("minecraft:hover_text_color");
+            if (hoverTextColor != nullptr && hoverTextColor->isObject())
+                hoverTextColor = hoverTextColor->get("value");
+            if (hoverTextColor != nullptr && hoverTextColor->isString())
+                definition.mHoverTextColor = hoverTextColor->string();
+
             const json::Value *damage = components->get("minecraft:damage");
             if (damage != nullptr && damage->isObject())
                 damage = damage->get("value");
@@ -926,6 +950,7 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
 namespace {
     // LeafSupportingInFirstSolidBlockBelow, one below NumValidVersions
     const int16_t MOLANG_VERSION_LATEST = 12;
+    const int8_t HIDDEN_IN_COMMANDS_DEFAULT = 2;
 }
 
 Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &item, ItemDefinitionRegistry &items) {
@@ -947,22 +972,31 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     Tag itemProperties = Tag::ofCompound();
     itemProperties.putInt("creative_category", creativeCategoryId);
     itemProperties.putString("creative_group", item.mCreativeGroup);
-    itemProperties.putByte("is_hidden_in_commands", 0);
+    // the value every data-driven item of the game carries
+    itemProperties.putByte("hidden_in_commands", HIDDEN_IN_COMMANDS_DEFAULT);
     itemProperties.putString("enchantable_slot", item.mEnchantableSlot);
     itemProperties.putInt("enchantable_value", item.mEnchantableValue);
+    itemProperties.putBool("allow_off_hand", item.mAllowOffHand);
+    itemProperties.putBool("can_destroy_in_creative", item.mCanDestroyInCreative);
+    itemProperties.putInt("damage", item.mDamage);
+    itemProperties.putBool("foil", item.mGlint);
     itemProperties.putBool("allow_off_hand", true);
     itemProperties.putBool("can_destroy_in_creative", true);
     itemProperties.putInt("damage", item.mDamage);
     itemProperties.putBool("foil", false);
     itemProperties.putInt("frame_count", 1);
     itemProperties.putBool("hand_equipped", item.mHandEquipped);
-    itemProperties.putBool("liquid_clipped", false);
+    itemProperties.putBool("liquid_clipped", item.mLiquidClipped);
     itemProperties.putInt("max_stack_size", item.mMaxStackSize);
     itemProperties.putFloat("mining_speed", 1.0f);
-    itemProperties.putBool("should_despawn", true);
-    itemProperties.putBool("stacked_by_data", false);
+    itemProperties.putBool("should_despawn", item.mShouldDespawn);
+    itemProperties.putBool("stacked_by_data", item.mStackedByData);
     itemProperties.putInt("use_duration", 0);
     itemProperties.put("minecraft:icon", icon);
+
+    // the game leaves the key out for an item without a color
+    if (!item.mHoverTextColor.empty())
+        itemProperties.putString("hover_text_color", item.mHoverTextColor);
 
     if (item.mMaxDurability > 0)
         itemProperties.putInt("max_damage", item.mMaxDurability);
@@ -986,6 +1020,13 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         Tag handEquipped = Tag::ofCompound();
         handEquipped.putBool("value", true);
         components.put("minecraft:hand_equipped", handEquipped);
+    }
+
+    // the one flag the game keeps as a component rather than an item property
+    if (item.mFireResistant) {
+        Tag fireResistant = Tag::ofCompound();
+        fireResistant.putBool("value", true);
+        components.put("minecraft:fire_resistant", fireResistant);
     }
 
     if (item.mDamage != 0) {
@@ -1277,7 +1318,7 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     Tag blockItemProperties = Tag::ofCompound();
     blockItemProperties.putInt("creative_category", blockCategoryId);
     blockItemProperties.putString("creative_group", stored.mCreativeGroup);
-    blockItemProperties.putByte("is_hidden_in_commands", 0);
+    blockItemProperties.putByte("hidden_in_commands", HIDDEN_IN_COMMANDS_DEFAULT);
     blockItemProperties.putBool("allow_off_hand", false);
     blockItemProperties.putBool("can_destroy_in_creative", true);
     blockItemProperties.putInt("frame_count", 1);
