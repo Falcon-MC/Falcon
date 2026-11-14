@@ -1,5 +1,6 @@
 #include "World/Item/EnchantmentHelper.h"
 
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemTypes.h"
@@ -230,6 +231,9 @@ namespace {
 }
 
 int32_t EnchantmentHelper::getEnchantability(const std::string &identifier) {
+    if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+        return custom->mEnchantableValue;
+
     if (identifier == BOOK || identifier == "minecraft:bow" || identifier == "minecraft:crossbow"
         || identifier == "minecraft:fishing_rod")
         return 1;

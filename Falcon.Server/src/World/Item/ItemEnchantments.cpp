@@ -1,7 +1,10 @@
 #include "World/Item/ItemEnchantments.h"
 
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Item/ItemData.h"
 #include "World/Level/Block/BlockIdentifier.h"
+
+#include <unordered_map>
 
 const char *ItemEnchantments::TAG_ENCHANTMENTS = "ench";
 const char *ItemEnchantments::TAG_ENCHANTMENT_ID = "id";
@@ -45,7 +48,46 @@ namespace {
     }
 }
 
+uint32_t ItemEnchantments::getSlotTargets(const std::string &slot) {
+    // the game's slot names; spear is the trident slot, melee_spear the spear items'
+    static const std::unordered_map<std::string, uint32_t> slots = {
+            {"none", EnchantmentTargets::NONE},
+            {"all", EnchantmentTargets::ALL},
+            {"g_armor", EnchantmentTargets::ARMOR},
+            {"armor_head", EnchantmentTargets::HELMET},
+            {"armor_torso", EnchantmentTargets::CHESTPLATE},
+            {"armor_feet", EnchantmentTargets::BOOTS},
+            {"armor_legs", EnchantmentTargets::LEGGINGS},
+            {"sword", EnchantmentTargets::SWORD},
+            {"bow", EnchantmentTargets::BOW},
+            {"spear", EnchantmentTargets::TRIDENT},
+            {"crossbow", EnchantmentTargets::CROSSBOW},
+            {"melee_spear", EnchantmentTargets::SPEAR},
+            {"g_tool", EnchantmentTargets::HOE | EnchantmentTargets::SHEARS | EnchantmentTargets::FLINT_AND_STEEL
+                               | EnchantmentTargets::SHIELD},
+            {"hoe", EnchantmentTargets::HOE},
+            {"shears", EnchantmentTargets::SHEARS},
+            {"flintsteel", EnchantmentTargets::FLINT_AND_STEEL},
+            {"shield", EnchantmentTargets::SHIELD},
+            {"g_digging", EnchantmentTargets::BLOCK_TOOLS},
+            {"axe", EnchantmentTargets::AXE},
+            {"pickaxe", EnchantmentTargets::PICKAXE},
+            {"shovel", EnchantmentTargets::SHOVEL},
+            {"fishing_rod", EnchantmentTargets::FISHING_ROD},
+            {"carrot_stick", EnchantmentTargets::CARROT_ON_STICK},
+            {"elytra", EnchantmentTargets::ELYTRA},
+            {"cosmetic_head", EnchantmentTargets::MASK},
+    };
+
+    // an unknown name reads as none
+    const auto found = slots.find(slot);
+    return found == slots.end() ? EnchantmentTargets::NONE : found->second;
+}
+
 uint32_t ItemEnchantments::getItemTargets(const std::string &identifier) {
+    if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+        return getSlotTargets(custom->mEnchantableSlot);
+
     if (identifier == "minecraft:trident") {
         return EnchantmentTargets::TRIDENT;
     }

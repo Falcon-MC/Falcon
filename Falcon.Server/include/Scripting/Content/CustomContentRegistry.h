@@ -41,6 +41,10 @@ struct CustomItemDefinition {
     bool mCanAlwaysEat = false;
     int32_t mMaxDurability = 0;
     bool mHandEquipped = false;
+    // minecraft:enchantable: slot lowercased as the game looks it up
+    bool mHasEnchantable = false;
+    std::string mEnchantableSlot = "none";
+    int32_t mEnchantableValue = 0;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;

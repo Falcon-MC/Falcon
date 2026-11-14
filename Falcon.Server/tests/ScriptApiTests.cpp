@@ -16,6 +16,9 @@
 #include "Protocol/Packets/CommandOutputPacket.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
+#include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Item/EnchantmentHelper.h"
+#include "World/Item/ItemEnchantments.h"
 #include "World/Level/Block/BlockSolidity.h"
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
@@ -1428,6 +1431,15 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    // the slot is looked up lowercased like the game does
+    const char *const ENCHANTABLE_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:pick" },
+    "components": { "minecraft:enchantable": { "slot": "Pickaxe", "value": 14 } }
+  }
+})JSON";
+
     const char *const STATEFUL_BLOCK = R"JSON({
   "format_version": "1.21.90",
   "minecraft:block": {
@@ -1824,6 +1836,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "blocks" / "block.json", COMPONENT_BLOCK);
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
         writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
+        writeFile(packs / "components" / "items" / "pick.json", ENCHANTABLE_ITEM);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
         writeFile(packs / "components" / "blocks" / "bounded.json", BOUNDED_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
@@ -1863,6 +1876,30 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                     "the permutation changed the base material");
             const Tag *states = property.mProperties.get("properties");
             require(states != nullptr && states->getList().size() == 2, "states not sent");
+        }
+        {
+            const std::shared_ptr<ItemDefinition> pick = owner.getItemDefinitions().getDefinition("test:pick");
+            require(pick != nullptr, "the enchantable item was not registered");
+            const Tag *components = pick->getComponentData().get("components");
+            const Tag *properties = components == nullptr ? nullptr : components->get("item_properties");
+            require(properties != nullptr && properties->getString("enchantable_slot") == "pickaxe"
+                            && properties->getInt("enchantable_value") == 14,
+                    "the enchantable item properties were not sent");
+            const Tag *enchantable = components->get("minecraft:enchantable");
+            require(enchantable != nullptr && enchantable->getString("slot") == "pickaxe"
+                            && enchantable->getByte("value") == 14,
+                    "the enchantable component was not sent");
+            require(ItemEnchantments::getItemTargets("test:pick") == EnchantmentTargets::PICKAXE
+                            && EnchantmentHelper::getEnchantability("test:pick") == 14,
+                    "the enchantable item has no enchantment slot on the server");
+            const EnchantmentData &efficiency = *EnchantmentTable::findById(EnchantmentIds::EFFICIENCY);
+            const EnchantmentData &sharpness = *EnchantmentTable::findById(EnchantmentIds::SHARPNESS);
+            require(!EnchantmentHelper::enchantWithLevels("test:pick", 30, false, 1).empty()
+                            && ItemEnchantments::canApply("test:pick", efficiency)
+                            && !ItemEnchantments::canApply("test:pick", sharpness),
+                    "the enchanting table offers the wrong enchantments for the enchantable item");
+            require(ItemEnchantments::getItemTargets("test:wand") == EnchantmentTargets::NONE,
+                    "an item without minecraft:enchantable became enchantable");
         }
         require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 
