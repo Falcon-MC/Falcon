@@ -40,6 +40,7 @@
 #include "Protocol/Packets/InventorySlotPacket.h"
 #include "Protocol/Packets/MobEquipmentPacket.h"
 #include "Protocol/Types/ContainerSlotType.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -428,6 +429,8 @@ namespace {
             return 0;
         }
         const std::string id = item.mDefinition->getIdentifier();
+        if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(id))
+            return custom->mHasFuel ? (int) std::lround(custom->mFuelDuration * 20.0f) : 0;
         if (id == "minecraft:lava_bucket")
             return 20000;
         if (id == "minecraft:coal_block")
