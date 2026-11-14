@@ -3,14 +3,14 @@
 #include <unordered_map>
 
 namespace {
-    const char *BECOME_UNSKILLED = "minecraft:become_unskilled";
 
     const float JOB_SITE_RADIUS = 2.0f;
     const float BED_RADIUS = 0.75f;
     const float BELL_RADIUS = 7.0f;
 
     PoiBlueprint jobSite(const char *name, const char *initEvent, uint64_t weight, const char *sound) {
-        return {name, initEvent, BECOME_UNSKILLED, PoiType::JobSite, 1, weight, JOB_SITE_RADIUS, false, sound};
+        return {name,  initEvent, PoiBlueprints::BECOME_UNSKILLED, PoiType::JobSite, 1, weight, JOB_SITE_RADIUS,
+                false, sound};
     }
 
     // the game's hard-coded table from the village manager constructor, keyed by block type
