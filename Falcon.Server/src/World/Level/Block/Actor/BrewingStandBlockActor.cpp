@@ -12,6 +12,7 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Core/Math/VectorMath.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <memory>
 #include <string>
@@ -97,6 +98,21 @@ bool BrewingStandBlockActor::tick(ServerNetworkHandler &owner) {
         if (mBrewTime % BREW_TIME_SYNC_INTERVAL == 0)
             _sendProperty(owner, PROPERTY_BREW_TIME, mBrewTime);
         return true;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREW)) {
+        ItemStack ingredient = mInventory.getContainerItem(SLOT_INGREDIENT);
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BREW;
+        event.mCancellable = true;
+        event.mLevel = mLevel;
+        event.mBlockPosition = mPosition;
+        event.mItem = &ingredient;
+        plugins->dispatch(event);
+        if (event.mCancelled) {
+            _stopBrewing(owner);
+            return true;
+        }
     }
 
     _brew(owner);
