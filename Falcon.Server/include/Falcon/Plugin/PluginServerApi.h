@@ -35,4 +35,6 @@ public:
     static void fillContainers(FalconServerApi &api);
 
     static void fillData(FalconServerApi &api);
+
+    static void fillCommands(FalconServerApi &api);
 };

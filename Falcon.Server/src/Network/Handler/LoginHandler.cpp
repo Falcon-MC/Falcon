@@ -72,6 +72,7 @@
 #include <functional>
 #include <iterator>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -932,8 +933,11 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
     std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputsMutable();
     std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndicesMutable();
 
+    const std::unordered_set<std::string> &disabled = CustomContentRegistry::getInstance().getDisabledRecipes();
     for (size_t index = 0; index < CraftingRecipeTable::getRecipeCount(); ++index) {
         const CraftingRecipeData &source = recipes[index];
+        if (!disabled.empty() && disabled.count(source.mRecipeId) != 0)
+            continue;
 
         CraftingRecipeEntry entry;
         entry.mWidth = source.mWidth;
