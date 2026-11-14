@@ -59,6 +59,8 @@ public:
 
     bool canStandOnPowderSnow() const override;
 
+    float getArmorKnockbackResistance() const override;
+
     virtual ActorCategory getCategory() const = 0;
 
     virtual bool preventsSleep() const {

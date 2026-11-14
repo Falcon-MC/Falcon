@@ -28,6 +28,7 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Item/ItemProperties.h"
 
 #include <algorithm>
 #include <cmath>
@@ -274,6 +275,13 @@ namespace {
         static std::mt19937 generator(std::random_device{}());
         return generator;
     }
+}
+
+float MobActor::getArmorKnockbackResistance() const {
+    float resistance = 0.0f;
+    for (int slot = MobEquipment::HEAD; slot <= MobEquipment::FEET; ++slot)
+        resistance += ItemProperties::getArmorKnockbackResistance(getEquipment().getSlot(slot));
+    return resistance;
 }
 
 bool MobActor::canStandOnPowderSnow() const {

@@ -40,6 +40,11 @@ public:
         return false;
     }
 
+    // added to the knockback resistance attribute by the armor worn
+    virtual float getArmorKnockbackResistance() const {
+        return 0.0f;
+    }
+
     // item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
     virtual bool collidesAtSnowLayerLook() const {
         return false;

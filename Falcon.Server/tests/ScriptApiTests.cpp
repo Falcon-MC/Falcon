@@ -23,6 +23,7 @@
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "World/Item/ItemProperties.h"
 #include "Scripting/WorldClockSystem.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/Handler/LoginHandler.h"
@@ -3237,6 +3238,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                         && !BlockSolidity::isSolid("minecraft:oak_slab") && !BlockSolidity::isSolid("minecraft:glass")
                         && !BlockSolidity::isSolid("minecraft:air"),
                 "the block solidity table disagrees with the game dump");
+        require(ItemProperties::getArmorKnockbackResistance("minecraft:netherite_helmet") == 0.1f
+                        && ItemProperties::getArmorKnockbackResistance("minecraft:netherite_boots") == 0.1f
+                        && ItemProperties::getArmorKnockbackResistance("minecraft:diamond_chestplate") == 0.0f
+                        && ItemProperties::getArmorKnockbackResistance("minecraft:netherite_sword") == 0.0f,
+                "only netherite armor resists knockback");
         expect(*beta, "form", "true");
 
         const std::unique_ptr<json::Value> custom = result(owner, "commands");
