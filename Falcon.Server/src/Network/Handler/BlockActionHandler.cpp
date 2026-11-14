@@ -1188,6 +1188,26 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
                                   transaction.mClickPosition))
         return true;
 
+    // a pack item with minecraft:entity_placer puts its entity against the clicked face, like a spawn egg
+    if (itemType == nullptr && !onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr) {
+        const CustomItemDefinition *placer =
+                CustomContentRegistry::getInstance().findItem(interactItem.mDefinition->getIdentifier());
+        if (placer != nullptr && placer->mHasEntityPlacer
+            && (placer->mEntityPlacerUseOn.empty()
+                || std::find(placer->mEntityPlacerUseOn.begin(), placer->mEntityPlacerUseOn.end(), clickedState.mName)
+                           != placer->mEntityPlacerUseOn.end())) {
+            static const int OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+            const int side = transaction.mBlockFace >= 0 && transaction.mBlockFace < 6 ? transaction.mBlockFace : 1;
+            const Vector3f spawnPosition((float) (transaction.mBlockPosition.x + OFFSETS[side][0]) + 0.5f,
+                                         (float) (transaction.mBlockPosition.y + OFFSETS[side][1]),
+                                         (float) (transaction.mBlockPosition.z + OFFSETS[side][2]) + 0.5f);
+            if (owner.spawnActor(owner.getLevelFor(player), placer->mPlacerEntity, spawnPosition) != nullptr) {
+                player.consumeOneHeldItem();
+                return true;
+            }
+        }
+    }
+
     if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success) {
         return true;
     }

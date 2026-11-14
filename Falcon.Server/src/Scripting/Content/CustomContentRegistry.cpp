@@ -911,6 +911,25 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                     definition.mPlacerAligned = blockPlacer->get("aligned_placement")->boolean(false);
             }
 
+            const json::Value *entityPlacer = components->get("minecraft:entity_placer");
+            if (entityPlacer != nullptr && entityPlacer->isObject() && entityPlacer->get("entity") != nullptr
+                && entityPlacer->get("entity")->isString()) {
+                definition.mHasEntityPlacer = true;
+                definition.mPlacerEntity = qualify(entityPlacer->get("entity")->string());
+                const auto blockNames = [entityPlacer](const char *key, std::vector<std::string> &out) {
+                    const json::Value *list = entityPlacer->get(key);
+                    if (list == nullptr || !list->isArray())
+                        return;
+                    for (const std::unique_ptr<json::Value> &entry: list->mArray) {
+                        const json::Value *name = entry->isObject() ? entry->get("name") : entry.get();
+                        if (name != nullptr && name->isString())
+                            out.push_back(qualify(name->string()));
+                    }
+                };
+                blockNames("use_on", definition.mEntityPlacerUseOn);
+                blockNames("dispense_on", definition.mEntityPlacerDispenseOn);
+            }
+
             const json::Value *throwable = components->get("minecraft:throwable");
             if (throwable != nullptr && throwable->isObject()) {
                 definition.mHasThrowable = true;
