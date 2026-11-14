@@ -18,4 +18,9 @@ struct PoiInstance {
     uint64_t mOwnerCount;
     uint64_t mCapacity;
     uint64_t mWeight;
+    float mRadius;
+    bool mUseBoundingBox;
+    std::string mSound;
+    // trips that gave up on the way, reset by one that arrives
+    int16_t mFailedTrips = 0;
 };
