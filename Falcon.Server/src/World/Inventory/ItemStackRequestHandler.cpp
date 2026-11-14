@@ -176,8 +176,10 @@ namespace {
         if (container == ContainerSlotType::CreatedOutput) {
             return (slot == 0 || slot == 50) ? &context.mCreatedOutput : nullptr;
         }
-        if (container == ContainerSlotType::LevelEntity || container == ContainerSlotType::Barrel
-            || container == ContainerSlotType::ShulkerBox || container == ContainerSlotType::CrafterBlockContainer) {
+        // the mount window names its saddle and armor slots horse_equip, numbered as the equippable slots
+        if (container == ContainerSlotType::LevelEntity || container == ContainerSlotType::HorseEquip
+            || container == ContainerSlotType::Barrel || container == ContainerSlotType::ShulkerBox
+            || container == ContainerSlotType::CrafterBlockContainer) {
             if (context.mOpenContainer == nullptr || slot < 0 || (size_t) slot >= context.mContainerSlots.size()) {
                 return nullptr;
             }
@@ -348,7 +350,8 @@ namespace {
         if (slot < first || slot >= last)
             return true;
 
-        return context.mOpenContainer->canHold(item) && !context.mOpenContainer->isSlotDisabled((int) (slot - first));
+        const int index = (int) (slot - first);
+        return context.mOpenContainer->canHoldInSlot(index, item) && !context.mOpenContainer->isSlotDisabled(index);
     }
 
     // armor slots take only the matching piece, the head slot also head-worn blocks, as vanilla does;
@@ -1157,6 +1160,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         }
 
         if (slot.mContainerName.mContainer == ContainerSlotType::LevelEntity
+            || slot.mContainerName.mContainer == ContainerSlotType::HorseEquip
             || slot.mContainerName.mContainer == ContainerSlotType::Barrel
             || slot.mContainerName.mContainer == ContainerSlotType::ShulkerBox
             || slot.mContainerName.mContainer == ContainerSlotType::CrafterBlockContainer) {

@@ -515,6 +515,12 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     const bool leftContainer = hasLeftOpenContainer(owner, player);
 
+    // the mount window fills the saddle and armor slots without an interaction: their events run after
+    const int64_t containerActorId = manager.getContainerActorId();
+    MobActor *mount = dynamic_cast<MobActor *>(containerActorId == -1 ? nullptr : owner.getActor(containerActorId));
+    const std::vector<ItemStack> mountEquipment = mount == nullptr ? std::vector<ItemStack>()
+                                                                   : mount->getEquippableItems();
+
     for (const ItemStackRequest &request: packet.mRequests) {
         const bool anvilOpen = manager.isAnvilOpen()
                                && AnvilBlock::matches(
@@ -657,6 +663,9 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     if (offhandAfter.mDefinition != offhandBefore.mDefinition || offhandAfter.mCount != offhandBefore.mCount
         || offhandAfter.mDamage != offhandBefore.mDamage || !(offhandAfter.mTag == offhandBefore.mTag))
         sendOffhandContent(owner, player);
+
+    if (mount != nullptr)
+        mount->onEquippableItemsChanged(owner, mountEquipment, &player);
 
     if (player.getInventoryManager().getContainerActorId() != -1)
         owner.refreshEntityContainerViewers(player.getInventoryManager().getContainerActorId(), &player);

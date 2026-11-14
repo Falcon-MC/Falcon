@@ -432,10 +432,20 @@ public:
         return mAnger;
     }
 
+    // 0 without minecraft:inventory
     int getInventoryCapacity() const;
 
     // a tamed mount with a horse container_type: its saddle, armor and chest slots
     Container *getEntityContainer() override;
+
+    // the minecraft:inventory slots, the equippable body slot read from the worn body armor
+    Container &getInventoryContainer();
+
+    // the items of the equippable slots, by slot number, to compare after a window change
+    std::vector<ItemStack> getEquippableItems() const;
+
+    // runs on_equip and on_unequip of the slots that were filled or emptied since before
+    void onEquippableItemsChanged(ServerNetworkHandler &owner, const std::vector<ItemStack> &before, Actor *changer);
 
     std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
 
@@ -501,11 +511,15 @@ private:
         }
 
         const ItemStack &getContainerItem(int slot) const override {
-            return mMob.mEquipment.getInventoryItem(slot);
+            return mMob._equippableItem(slot);
         }
 
         void setContainerItem(int slot, ItemStack item) override {
-            mMob.mEquipment.setInventoryItem(slot, std::move(item));
+            mMob._setEquippableItem(slot, std::move(item));
+        }
+
+        bool canHoldInSlot(int slot, const ItemStack &item) const override {
+            return mMob._acceptsInEquippableSlot(slot, item);
         }
 
     private:
@@ -628,9 +642,12 @@ private:
 
     const json::Value *_equippableSlot(int32_t index) const;
 
+    // the body slot when the equippable slot is the body one, else the minecraft:inventory slot
     const ItemStack &_equippableItem(int32_t index) const;
 
     void _setEquippableItem(int32_t index, ItemStack item);
+
+    bool _acceptsInEquippableSlot(int32_t index, const ItemStack &item) const;
 
     bool _equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName);
 

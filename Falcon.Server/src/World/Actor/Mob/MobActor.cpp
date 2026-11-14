@@ -137,6 +137,9 @@ namespace {
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
     const int32_t EQUIPPABLE_BODY_SLOT = 1;
+    // bounds a pack's slot number before it sizes a vector
+    const int32_t MAX_EQUIPPABLE_SLOTS = 64;
+    const int32_t DEFAULT_INVENTORY_SIZE = 5;
     const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
     const char *const TARGET_NEARBY_SENSOR_COMPONENT = "minecraft:target_nearby_sensor";
     const char *const HURT_ON_CONDITION_COMPONENT = "minecraft:hurt_on_condition";
@@ -1089,7 +1092,62 @@ Container *MobActor::getEntityContainer() {
 }
 
 int MobActor::getInventoryCapacity() const {
-    return (int) numberIn(getComponent(INVENTORY_COMPONENT), "inventory_size", 0.0f);
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    if (inventory == nullptr)
+        return 0;
+    // the game reads an inventory without inventory_size as 5 slots: the nautilus and the camel have one
+    return (int) numberIn(inventory, "inventory_size", (float) DEFAULT_INVENTORY_SIZE);
+}
+
+Container &MobActor::getInventoryContainer() {
+    mEquipment.ensureInventorySize(getInventoryCapacity());
+    return mInventoryView;
+}
+
+std::vector<ItemStack> MobActor::getEquippableItems() const {
+    std::vector<ItemStack> items;
+    const json::Value *equippable = getComponent(EQUIPPABLE_COMPONENT);
+    const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
+    if (slots == nullptr || !slots->isArray())
+        return items;
+
+    for (const std::unique_ptr<json::Value> &slot: slots->mArray) {
+        const json::Value *number = slot->get("slot");
+        const int32_t index = number == nullptr ? -1 : (int32_t) number->integer(-1);
+        if (index < 0 || index >= MAX_EQUIPPABLE_SLOTS)
+            continue;
+        if ((size_t) index >= items.size())
+            items.resize((size_t) index + 1, ItemStack::air());
+        items[(size_t) index] = _equippableItem(index);
+    }
+    return items;
+}
+
+void MobActor::onEquippableItemsChanged(ServerNetworkHandler &owner, const std::vector<ItemStack> &before,
+                                        Actor *changer) {
+    const std::vector<ItemStack> after = getEquippableItems();
+    bool changed = false;
+    for (size_t index = 0; index < after.size(); ++index) {
+        const ItemStack &previous = index < before.size() ? before[index] : PlayerInventory::getEmptyItem();
+        const ItemStack &current = after[index];
+        const bool same = previous.isAir() ? current.isAir()
+                                           : !current.isAir()
+                                                     && previous.mDefinition->getIdentifier()
+                                                                == current.mDefinition->getIdentifier()
+                                                     && previous.mDamage == current.mDamage
+                                                     && previous.mTag == current.mTag;
+        if (same)
+            continue;
+
+        changed = true;
+        const json::Value *slot = _equippableSlot((int32_t) index);
+        if (slot == nullptr || previous.isAir() == current.isAir())
+            continue;
+        EntityEvents::fireTrigger(owner, *this, slot->get(current.isAir() ? "on_unequip" : "on_equip"), changer);
+    }
+
+    if (changed)
+        mEquipment.broadcast(owner, *this);
 }
 
 void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
@@ -1642,16 +1700,22 @@ bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player,
 }
 
 const ItemStack &MobActor::_equippableItem(int32_t index) const {
-    if (index == EQUIPPABLE_BODY_SLOT)
+    if (index == EQUIPPABLE_BODY_SLOT && _equippableSlot(index) != nullptr)
         return mEquipment.getSlot(MobEquipment::BODY);
     return mEquipment.getInventoryItem(index);
 }
 
 void MobActor::_setEquippableItem(int32_t index, ItemStack item) {
-    if (index == EQUIPPABLE_BODY_SLOT)
+    if (index == EQUIPPABLE_BODY_SLOT && _equippableSlot(index) != nullptr)
         mEquipment.setSlot(MobEquipment::BODY, std::move(item));
     else
         mEquipment.setInventoryItem(index, std::move(item));
+}
+
+bool MobActor::_acceptsInEquippableSlot(int32_t index, const ItemStack &item) const {
+    const json::Value *slot = _equippableSlot(index);
+    const json::Value *accepted = slot == nullptr ? nullptr : slot->get("accepted_items");
+    return accepted == nullptr || BehaviorItems(accepted).contains(item);
 }
 
 void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset) {
