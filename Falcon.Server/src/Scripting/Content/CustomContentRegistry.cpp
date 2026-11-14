@@ -2,6 +2,7 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Json/Json.h"
+#include "Core/Text/StringUtil.h"
 #include "World/Item/Item.h"
 #include "World/Item/StringToItemParser.h"
 #include "Protocol/BlockStateHasher.h"
@@ -781,6 +782,15 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
             if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
                 definition.mMaxDurability = durability->get("max_durability")->integer(0);
 
+            const json::Value *enchantable = components->get("minecraft:enchantable");
+            if (enchantable != nullptr && enchantable->isObject()) {
+                definition.mHasEnchantable = true;
+                if (enchantable->get("value") != nullptr)
+                    definition.mEnchantableValue = enchantable->get("value")->integer(0);
+                if (enchantable->get("slot") != nullptr)
+                    definition.mEnchantableSlot = StringUtil::toLowerCase(enchantable->get("slot")->string("none"));
+            }
+
             // minecraft:repairable: each repair_items entry lists items (names or {"name": ...})
             // and a repair_amount: number or Molang expression
             const json::Value *repairable = components->get("minecraft:repairable");
@@ -910,8 +920,8 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     itemProperties.putInt("creative_category", creativeCategoryId);
     itemProperties.putString("creative_group", item.mCreativeGroup);
     itemProperties.putByte("is_hidden_in_commands", 0);
-    itemProperties.putString("enchantable_slot", "none");
-    itemProperties.putInt("enchantable_value", 0);
+    itemProperties.putString("enchantable_slot", item.mEnchantableSlot);
+    itemProperties.putInt("enchantable_value", item.mEnchantableValue);
     itemProperties.putBool("allow_off_hand", true);
     itemProperties.putBool("can_destroy_in_creative", true);
     itemProperties.putInt("damage", 0);
@@ -958,6 +968,14 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         durability.put("damage_chance", damageChance);
 
         components.put("minecraft:durability", durability);
+    }
+
+    // the game writes value as a byte here, an int in item_properties
+    if (item.mHasEnchantable) {
+        Tag enchantable = Tag::ofCompound();
+        enchantable.putString("slot", item.mEnchantableSlot);
+        enchantable.putByte("value", (int8_t) item.mEnchantableValue);
+        components.put("minecraft:enchantable", enchantable);
     }
 
     // the client previews anvil repairs from this: sent as the game writes it, each repair_amount an ExpressionNode

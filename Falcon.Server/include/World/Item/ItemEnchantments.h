@@ -25,6 +25,9 @@ public:
     static const char *TAG_ENCHANTMENT_ID;
     static const char *TAG_ENCHANTMENT_LEVEL;
 
+    // a minecraft:enchantable slot name, lowercase
+    static uint32_t getSlotTargets(const std::string &slot);
+
     static uint32_t getItemTargets(const std::string &identifier);
 
     static bool canApply(const std::string &identifier, const EnchantmentData &enchantment);
