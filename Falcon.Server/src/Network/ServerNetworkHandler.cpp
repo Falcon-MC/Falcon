@@ -2480,6 +2480,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
 
 ItemActor *ServerNetworkHandler::dropItem(Level &level, const Vector3f &position, const ItemStack &item,
                                           const Vector3f &motion, int pickupDelay) {
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_SPAWN)) {
+        ItemStack spawned = item;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ITEM_SPAWN;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mItem = &spawned;
+        event.mPosition = position;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return nullptr;
+    }
     return ItemActorHandler::dropItem(*this, level, position, item, motion, pickupDelay);
 }
 

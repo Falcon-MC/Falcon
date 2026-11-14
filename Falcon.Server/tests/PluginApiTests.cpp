@@ -14,6 +14,7 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/ObsidianBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -641,6 +642,49 @@ namespace {
         api.unsubscribe(bucketId);
     }
 
+    void buildPortalFrame(Level &level, int32_t z) {
+        // the inside stays the fresh chunk's air
+        const BlockState obsidian = VanillaBlocks::fromIdentifier("minecraft:obsidian")->toBlockState();
+        for (int32_t x = 10; x <= 13; ++x) {
+            for (int32_t y = 100; y <= 104; ++y) {
+                if (x == 10 || x == 13 || y == 100 || y == 104)
+                    level.setBlock(Vector3i(x, y, z), obsidian, false);
+            }
+        }
+    }
+
+    void worldEvents(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin listener;
+        listener.mDescription.mName = "WorldListener";
+        listener.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(listener);
+
+        Probe portal;
+        portal.cancel = true;
+        const uint64_t portalId = api.subscribe(handle, FALCON_EVENT_PORTAL_CREATE, FALCON_PRIORITY_NORMAL, 0,
+                                                &probeHandler, &portal);
+        buildPortalFrame(*fixture.level, 12);
+        require(!ObsidianBlock::tryLightPortal(*fixture.level, Vector3i(11, 101, 12), &fixture.owner),
+                "a refused portal lit");
+        require(portal.calls == 1, "the portal event did not fire");
+        require(fixture.level->getBlockState(11, 102, 12).mName != "minecraft:portal", "portal blocks appeared");
+        portal.cancel = false;
+        require(ObsidianBlock::tryLightPortal(*fixture.level, Vector3i(11, 101, 12), &fixture.owner),
+                "an allowed portal did not light");
+        require(fixture.level->getBlockState(11, 102, 12).mName == "minecraft:portal", "no portal block");
+        api.unsubscribe(portalId);
+
+        Probe spawn;
+        spawn.cancel = true;
+        const uint64_t spawnId = api.subscribe(handle, FALCON_EVENT_ITEM_SPAWN, FALCON_PRIORITY_NORMAL, 0,
+                                               &probeHandler, &spawn);
+        const ItemStack stone = fixture.owner.createItemStack("minecraft:stone", 1);
+        require(fixture.owner.dropItem(*fixture.level, Vector3f(2.5f, 101.0f, 2.5f), stone, Vector3f(), 10) == nullptr,
+                "a refused item appeared");
+        require(spawn.calls == 1, "the item spawn event did not fire");
+        api.unsubscribe(spawnId);
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -657,6 +701,7 @@ namespace {
         entitiesAndPlayers(api, fixture);
         administration(api, fixture);
         playerAndEntityEvents(api, fixture);
+        worldEvents(api, fixture);
     }
 }
 

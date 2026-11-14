@@ -596,6 +596,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 owner._sendAttributes(player);
             }
             AnvilBlock::onUsed(owner, level, anvilPosition, gameType == (int32_t) GameType::Creative);
+            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ANVIL_USE)) {
+                PluginEvent anvilEvent;
+                anvilEvent.mType = FALCON_EVENT_ANVIL_USE;
+                anvilEvent.mPlayer = &player;
+                anvilEvent.mLevel = &level;
+                anvilEvent.mBlockPosition = anvilPosition;
+                anvilEvent.mAmount = (double) anvilLevelsConsumed;
+                plugins->dispatch(anvilEvent);
+            }
         }
 
         if (entry.mResult != ItemStackRequestHandler::RESULT_OK) {

@@ -10,6 +10,7 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <chrono>
@@ -282,6 +283,16 @@ void ServerNetworkHandler::saveStrayActors(Level &level, const std::unordered_se
 void ServerNetworkHandler::autoSave(bool wait) {
     if (!getLevel().isStorageOpen())
         return;
+
+    // before anything is written: a plugin can store its own state in the same save
+    if (mPluginManager->hasSubscribers(FALCON_EVENT_WORLD_SAVE)) {
+        for (World *world: mWorlds.getWorlds()) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_WORLD_SAVE;
+            event.mWorldName = world->getName();
+            mPluginManager->dispatch(event);
+        }
+    }
 
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     std::vector<std::pair<Level *, uint64_t>> failures;
