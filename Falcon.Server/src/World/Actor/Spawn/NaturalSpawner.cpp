@@ -3,6 +3,7 @@
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Spawn/StructureSpawnOverrides.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/LiquidView.h"
@@ -26,6 +27,8 @@ namespace {
     // written by the 26.60 Dimension constructor, read by the spawner;
     // row 0 underground, row 1 surface
     const int32_t POOL_CAPS[2][NaturalSpawner::POOL_COUNT] = {{4, 16, 36, 0, 2, 0, 8}, {4, 8, 36, 0, 0, 4, 8}};
+
+    const int32_t MONSTER_POOL = 1;
 
     const int32_t CHUNK_SPAWN_ROLL = 2000;
     const int32_t CHUNK_SPAWN_THRESHOLD = 10;
@@ -236,20 +239,13 @@ void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t c
     }
 }
 
-void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
-                                   int32_t mobCount, Counts &counts) {
-    struct Candidate {
-        const SpawnRule *mRule;
-        const SpawnCondition *mCondition;
-    };
-
-    std::vector<Candidate> candidates;
-    int32_t totalWeight = 0;
-    for (const SpawnRule &rule: SpawnRules::getRules()) {
+void NaturalSpawner::_collectCandidates(Level &level, const SpawnSite &site, int32_t difficulty,
+                                        std::vector<Candidate> &candidates, int32_t &totalWeight) {
+    const auto consider = [&](const SpawnRule &rule) {
         const MobActor *prototype = ActorClassRegistry::getMobPrototype(rule.mIdentifier);
         if (prototype == nullptr
             || !prototype->canSpawnNaturally(level, site.mPosition, site.mBiome, site.mLight, mRandom))
-            continue;
+            return;
 
         for (const SpawnCondition &condition: rule.mConditions) {
             if (!_matches(level, site, condition, difficulty))
@@ -258,7 +254,41 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
             candidates.push_back(Candidate{&rule, &condition});
             totalWeight += condition.mWeight;
         }
+    };
+
+    // a structure piece can replace the monsters of the spot with its own list
+    const std::vector<SpawnRule> *monsters =
+            StructureSpawnOverrides::find(level, site.mPosition, POOLS[MONSTER_POOL]);
+    for (const SpawnRule &rule: SpawnRules::getRules()) {
+        if (monsters == nullptr || rule.mPopulation != POOLS[MONSTER_POOL])
+            consider(rule);
     }
+    if (monsters != nullptr) {
+        for (const SpawnRule &rule: *monsters)
+            consider(rule);
+    }
+}
+
+std::vector<std::string> NaturalSpawner::candidatesAt(Level &level, const Vector3i &position, bool surface,
+                                                      int32_t difficulty, const std::vector<Vector3f> &players) {
+    std::vector<std::string> identifiers;
+    SpawnSite site;
+    if (!_makeSite(level, position, players, surface, site))
+        return identifiers;
+
+    std::vector<Candidate> candidates;
+    int32_t totalWeight = 0;
+    _collectCandidates(level, site, difficulty, candidates, totalWeight);
+    for (const Candidate &candidate: candidates)
+        identifiers.push_back(candidate.mRule->mIdentifier);
+    return identifiers;
+}
+
+void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
+                                   int32_t mobCount, Counts &counts) {
+    std::vector<Candidate> candidates;
+    int32_t totalWeight = 0;
+    _collectCandidates(level, site, difficulty, candidates, totalWeight);
     if (totalWeight <= 0)
         return;
 
