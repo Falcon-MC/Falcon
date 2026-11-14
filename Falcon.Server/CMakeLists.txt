@@ -16,6 +16,8 @@ falcon_bedrock_data_file(block_collision_shapes.json FALCON_BLOCK_COLLISION_SHAP
 falcon_bedrock_data_file(creative_items.json FALCON_CREATIVE_ITEMS_JSON)
 falcon_bedrock_data_embed_text(FILE block_tags.json NAMESPACE FalconBlockTagsData SYMBOL kBlockTagsJson
         DELIMITER falcontags OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockTagsJson.h")
+falcon_bedrock_data_embed_text(FILE block_solid.json NAMESPACE FalconBlockSolidData SYMBOL kBlockSolidJson
+        DELIMITER falconsolid OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/BlockSolidJson.h")
 falcon_bedrock_data_embed_text(FILE aim_assist.json NAMESPACE FalconAimAssistData SYMBOL kAimAssistJson
         DELIMITER falconaim OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/AimAssistJson.h")
 falcon_bedrock_data_embed_text(FILE command_hidden_items.json NAMESPACE FalconCommandData SYMBOL kCommandHiddenItemsJson
