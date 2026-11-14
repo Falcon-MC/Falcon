@@ -65,6 +65,21 @@ struct CustomItemDefinition {
     // minecraft:interact_button: true or false keeps the game's default text
     bool mHasInteractButton = false;
     std::string mInteractButtonText = "action.interact.use";
+    // minecraft:fuel: seconds of burning
+    bool mHasFuel = false;
+    float mFuelDuration = 0.0f;
+    // minecraft:compostable: chance out of 100
+    bool mHasCompostable = false;
+    int32_t mCompostingChance = 0;
+    // minecraft:use_modifiers: use_duration in seconds
+    bool mHasUseModifiers = false;
+    float mUseDuration = 0.0f;
+    float mMovementModifier = 1.0f;
+    bool mEmitVibrations = true;
+    std::string mUseStartSound;
+    std::string mStartUsing = "always";
+    // minecraft:use_animation: empty when the item declares none
+    std::string mUseAnimation;
     // minecraft:wearable: the slot name as declared, and its armor slot when it is one of the four
     bool mHasWearable = false;
     std::string mWearableSlotName;

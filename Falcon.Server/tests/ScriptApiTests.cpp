@@ -1465,6 +1465,19 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    const char *const RATION_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:ration" },
+    "components": {
+      "minecraft:fuel": { "duration": 10 },
+      "minecraft:compostable": { "composting_chance": 65 },
+      "minecraft:use_modifiers": { "use_duration": 1.6, "movement_modifier": 0.35 },
+      "minecraft:use_animation": "eat"
+    }
+  }
+})JSON";
+
     const char *const HELMET_ITEM = R"JSON({
   "format_version": "1.21.90",
   "minecraft:item": {
@@ -1933,6 +1946,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "blade.json", WEAPON_ITEM);
         writeFile(packs / "components" / "items" / "club.json", CLUB_ITEM);
         writeFile(packs / "components" / "items" / "helm.json", HELMET_ITEM);
+        writeFile(packs / "components" / "items" / "ration.json", RATION_ITEM);
         writeFile(packs / "components" / "items" / "boots.json", BOOTS_ITEM);
         writeFile(packs / "components" / "items" / "cloak.json", CLOAK_ITEM);
         writeFile(packs / "components" / "items" / "sash.json", SASH_ITEM);
@@ -2118,6 +2132,29 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             && bootsItem.getArmorSlot() == ArmorSlot::Feet && bootsItem.getArmorPoints() == 2,
                     "the pack armor did not reach the server item");
             require(wandComponents->get("minecraft:wearable") == nullptr, "an item without wearable got it");
+
+            const Tag *ration =
+                    owner.getItemDefinitions().getDefinition("test:ration")->getComponentData().get("components");
+            const Tag *rationProperties = ration->get("item_properties");
+            const Tag *useModifiers = ration->get("minecraft:use_modifiers");
+            require(ration->get("minecraft:fuel") != nullptr
+                            && ration->get("minecraft:fuel")->get("duration")->asFloat() == 10.0f
+                            && ration->get("minecraft:compostable") != nullptr
+                            && ration->get("minecraft:compostable")->getByte("composting_chance") == 65,
+                    "the fuel and compostable components were not sent");
+            require(useModifiers != nullptr && useModifiers->get("use_duration")->asFloat() == 1.6f
+                            && useModifiers->get("movement_modifier")->asFloat() == 0.35f
+                            && useModifiers->getByte("emit_vibrations") == 1
+                            && useModifiers->getString("start_using") == "always"
+                            && useModifiers->get("start_sound") == nullptr
+                            && rationProperties->getInt("use_duration") == 32
+                            && rationProperties->getInt("use_animation") == 1
+                            && ration->get("minecraft:use_animation")->getString("value") == "eat",
+                    "the use modifiers and animation were not sent");
+            require(wandComponents->get("minecraft:fuel") == nullptr
+                            && wandComponents->get("minecraft:use_modifiers") == nullptr
+                            && wandComponents->get("item_properties")->getInt("use_duration") == 0,
+                    "an item without the use components got them");
         }
         require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 

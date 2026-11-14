@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -886,6 +887,38 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                 }
             }
 
+            const json::Value *fuel = components->get("minecraft:fuel");
+            if (fuel != nullptr && fuel->isObject() && fuel->get("duration") != nullptr) {
+                definition.mHasFuel = true;
+                definition.mFuelDuration = (float) fuel->get("duration")->number(0.0);
+            }
+
+            const json::Value *compostable = components->get("minecraft:compostable");
+            if (compostable != nullptr && compostable->isObject() && compostable->get("composting_chance") != nullptr) {
+                definition.mHasCompostable = true;
+                definition.mCompostingChance = std::clamp(compostable->get("composting_chance")->integer(0), 0, 100);
+            }
+
+            const json::Value *useModifiers = components->get("minecraft:use_modifiers");
+            if (useModifiers != nullptr && useModifiers->isObject() && useModifiers->get("use_duration") != nullptr) {
+                definition.mHasUseModifiers = true;
+                definition.mUseDuration = (float) useModifiers->get("use_duration")->number(0.0);
+                if (useModifiers->get("movement_modifier") != nullptr)
+                    definition.mMovementModifier = (float) useModifiers->get("movement_modifier")->number(1.0);
+                if (useModifiers->get("emit_vibrations") != nullptr)
+                    definition.mEmitVibrations = useModifiers->get("emit_vibrations")->boolean(true);
+                if (useModifiers->get("start_sound") != nullptr && useModifiers->get("start_sound")->isString())
+                    definition.mUseStartSound = useModifiers->get("start_sound")->string();
+                if (useModifiers->get("start_using") != nullptr && useModifiers->get("start_using")->isString())
+                    definition.mStartUsing = useModifiers->get("start_using")->string();
+            }
+
+            const json::Value *useAnimation = components->get("minecraft:use_animation");
+            if (useAnimation != nullptr && useAnimation->isObject())
+                useAnimation = useAnimation->get("value");
+            if (useAnimation != nullptr && useAnimation->isString())
+                definition.mUseAnimation = useAnimation->string();
+
             const json::Value *wearable = components->get("minecraft:wearable");
             if (wearable != nullptr && wearable->isObject() && wearable->get("slot") != nullptr
                 && wearable->get("slot")->isString()) {
@@ -1069,7 +1102,9 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     itemProperties.putFloat("mining_speed", 1.0f);
     itemProperties.putBool("should_despawn", item.mShouldDespawn);
     itemProperties.putBool("stacked_by_data", item.mStackedByData);
-    itemProperties.putInt("use_duration", 0);
+    // eat is the one animation whose number the game's own items show
+    itemProperties.putInt("use_animation", item.mUseAnimation == "eat" ? 1 : 0);
+    itemProperties.putInt("use_duration", item.mHasUseModifiers ? (int32_t) std::lround(item.mUseDuration * 20.0f) : 0);
     itemProperties.put("minecraft:icon", icon);
 
     // the game leaves the key out for an item without a color
@@ -1105,6 +1140,35 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         Tag fireResistant = Tag::ofCompound();
         fireResistant.putBool("value", true);
         components.put("minecraft:fire_resistant", fireResistant);
+    }
+
+    if (item.mHasFuel) {
+        Tag fuel = Tag::ofCompound();
+        fuel.putFloat("duration", item.mFuelDuration);
+        components.put("minecraft:fuel", fuel);
+    }
+
+    if (item.mHasCompostable) {
+        Tag compostable = Tag::ofCompound();
+        compostable.putByte("composting_chance", (int8_t) item.mCompostingChance);
+        components.put("minecraft:compostable", compostable);
+    }
+
+    if (item.mHasUseModifiers) {
+        Tag useModifiers = Tag::ofCompound();
+        useModifiers.putBool("emit_vibrations", item.mEmitVibrations);
+        useModifiers.putFloat("movement_modifier", item.mMovementModifier);
+        if (!item.mUseStartSound.empty())
+            useModifiers.putString("start_sound", item.mUseStartSound);
+        useModifiers.putString("start_using", item.mStartUsing);
+        useModifiers.putFloat("use_duration", item.mUseDuration);
+        components.put("minecraft:use_modifiers", useModifiers);
+    }
+
+    if (!item.mUseAnimation.empty()) {
+        Tag useAnimation = Tag::ofCompound();
+        useAnimation.putString("value", item.mUseAnimation);
+        components.put("minecraft:use_animation", useAnimation);
     }
 
     if (item.mHasWearable) {

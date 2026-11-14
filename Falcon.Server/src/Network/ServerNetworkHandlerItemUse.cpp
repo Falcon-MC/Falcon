@@ -16,7 +16,9 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
+#include <cmath>
 #include <string>
 
 namespace {
@@ -40,6 +42,13 @@ namespace {
     }
 
     int64_t useDurationTicksFor(const ItemStack &item) {
+        if (!item.isAir() && item.mDefinition != nullptr) {
+            const CustomItemDefinition *custom =
+                    CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+            if (custom != nullptr && custom->mHasUseModifiers && custom->mUseDuration > 0.0f)
+                return std::llround(custom->mUseDuration * 20.0f);
+        }
+
         const Tag *components = vanillaComponents(item);
         const Tag *duration = components == nullptr ? nullptr : components->get("minecraft:use_duration");
         if (duration != nullptr && duration->asInt() > 0)
