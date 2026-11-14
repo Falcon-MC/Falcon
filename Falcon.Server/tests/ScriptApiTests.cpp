@@ -2047,6 +2047,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             require(wandComponents->get("item_tags") != nullptr && wandComponents->get("item_tags")->getList().empty()
                             && wandComponents->get("minecraft:tags") == nullptr
                             && wandComponents->get("minecraft:hand_equipped") == nullptr
+                            && wandComponents->get("minecraft:fire_resistant") == nullptr
                             && wandComponents->get("minecraft:damage") == nullptr,
                     "an item without the components got them");
         }
@@ -2084,10 +2085,6 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             require(wandComponents->get("minecraft:dyeable") == nullptr
                             && wandComponents->get("minecraft:interact_button") == nullptr,
                     "an item without dyeable or interact_button got them");
-        }
-                            && wandComponents->get("minecraft:fire_resistant") == nullptr
-                            && wandComponents->get("minecraft:damage") == nullptr,
-                    "an item without the components got them");
         }
         require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 
