@@ -1484,6 +1484,7 @@ system.beforeEvents.startup.subscribe((event) => {
   "minecraft:item": {
     "description": { "identifier": "test:dart" },
     "components": {
+      "minecraft:entity_placer": { "entity": "minecraft:pig", "use_on": ["grass_block", { "name": "minecraft:dirt" }] },
       "minecraft:throwable": { "do_swing_animation": true, "launch_power_scale": 1.5, "max_launch_power": 1.5 },
       "minecraft:projectile": { "projectile_entity": "minecraft:snowball" }
     }
@@ -2188,6 +2189,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             && wandComponents->get("minecraft:throwable") == nullptr
                             && wandComponents->get("minecraft:projectile") == nullptr,
                     "the throwable and projectile components were not sent");
+            const CustomItemDefinition *dartItem = CustomContentRegistry::getInstance().findItem("test:dart");
+            require(dartItem != nullptr && dartItem->mHasEntityPlacer && dartItem->mPlacerEntity == "minecraft:pig"
+                            && dartItem->mEntityPlacerUseOn
+                                       == std::vector<std::string>{"minecraft:grass_block", "minecraft:dirt"},
+                    "the entity placer was not read");
             require(wandComponents->get("minecraft:fuel") == nullptr
                             && wandComponents->get("minecraft:use_modifiers") == nullptr
                             && wandComponents->get("item_properties")->getInt("use_duration") == 0,

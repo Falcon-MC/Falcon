@@ -65,6 +65,11 @@ struct CustomItemDefinition {
     // minecraft:interact_button: true or false keeps the game's default text
     bool mHasInteractButton = false;
     std::string mInteractButtonText = "action.interact.use";
+    // minecraft:entity_placer: the entity the item places, and the blocks it may be used on (any when empty)
+    bool mHasEntityPlacer = false;
+    std::string mPlacerEntity;
+    std::vector<std::string> mEntityPlacerUseOn;
+    std::vector<std::string> mEntityPlacerDispenseOn;
     // minecraft:throwable and minecraft:projectile: using the item throws the entity
     bool mHasThrowable = false;
     bool mThrowSwings = false;
