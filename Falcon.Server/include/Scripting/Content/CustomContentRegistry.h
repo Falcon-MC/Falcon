@@ -45,6 +45,9 @@ struct CustomItemDefinition {
     bool mHasEnchantable = false;
     std::string mEnchantableSlot = "none";
     int32_t mEnchantableValue = 0;
+    // minecraft:damage: attack damage on top of the empty hand's
+    int32_t mDamage = 0;
+    std::vector<std::string> mTags;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;

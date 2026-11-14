@@ -17,8 +17,10 @@
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/StringToItemParser.h"
 #include "World/Level/Block/BlockSolidity.h"
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
@@ -1440,6 +1442,31 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    // both forms the game accepts: the value itself, or wrapped in an object
+    const char *const WEAPON_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:blade" },
+    "components": {
+      "minecraft:hand_equipped": true,
+      "minecraft:damage": { "value": 6 },
+      "minecraft:tags": { "tags": ["minecraft:is_sword", "test:sharp"] }
+    }
+  }
+})JSON";
+
+    const char *const CLUB_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:club" },
+    "components": {
+      "minecraft:hand_equipped": { "value": true },
+      "minecraft:damage": 3,
+      "minecraft:tags": ["test:blunt"]
+    }
+  }
+})JSON";
+
     const char *const STATEFUL_BLOCK = R"JSON({
   "format_version": "1.21.90",
   "minecraft:block": {
@@ -1837,6 +1864,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
         writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
         writeFile(packs / "components" / "items" / "pick.json", ENCHANTABLE_ITEM);
+        writeFile(packs / "components" / "items" / "blade.json", WEAPON_ITEM);
+        writeFile(packs / "components" / "items" / "club.json", CLUB_ITEM);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
         writeFile(packs / "components" / "blocks" / "bounded.json", BOUNDED_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
@@ -1900,6 +1929,50 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                     "the enchanting table offers the wrong enchantments for the enchantable item");
             require(ItemEnchantments::getItemTargets("test:wand") == EnchantmentTargets::NONE,
                     "an item without minecraft:enchantable became enchantable");
+        }
+        {
+            const std::shared_ptr<ItemDefinition> blade = owner.getItemDefinitions().getDefinition("test:blade");
+            require(blade != nullptr, "the weapon item was not registered");
+            const Tag *components = blade->getComponentData().get("components");
+            const Tag *properties = components == nullptr ? nullptr : components->get("item_properties");
+            require(properties != nullptr && properties->getByte("hand_equipped") == 1
+                            && properties->getInt("damage") == 6,
+                    "the weapon item properties were not sent");
+            const Tag *handEquipped = components->get("minecraft:hand_equipped");
+            const Tag *damage = components->get("minecraft:damage");
+            require(handEquipped != nullptr && handEquipped->getByte("value") == 1 && damage != nullptr
+                            && damage->get("value") != nullptr && damage->get("value")->asShort() == 6,
+                    "the weapon components were not sent");
+            const Tag *itemTags = components->get("item_tags");
+            const Tag *tagsComponent = components->get("minecraft:tags");
+            require(itemTags != nullptr && itemTags->getList().size() == 2
+                            && itemTags->getList().front().asString() == "minecraft:is_sword"
+                            && tagsComponent != nullptr && tagsComponent->get("tags") != nullptr
+                            && tagsComponent->get("tags")->getList().size() == 2,
+                    "the weapon tags were not sent");
+
+            const std::vector<std::string> &bladeTags = CraftingRecipeTable::getItemTags("test:blade");
+            require(bladeTags == std::vector<std::string>{"minecraft:is_sword", "test:sharp"}
+                            && CraftingRecipeTable::getItemTags("test:club") == std::vector<std::string>{"test:blunt"},
+                    "the server does not know the pack item tags");
+            Item bladeItem;
+            Item clubItem;
+            require(StringToItemParser::getInstance().parse("test:blade", bladeItem) && bladeItem.getAttackDamage() == 6
+                            && StringToItemParser::getInstance().parse("test:club", clubItem)
+                            && clubItem.getAttackDamage() == 3,
+                    "the pack item attack damage did not reach the server item");
+
+            const std::shared_ptr<ItemDefinition> club = owner.getItemDefinitions().getDefinition("test:club");
+            const Tag *clubProperties = club->getComponentData().get("components")->get("item_properties");
+            require(clubProperties->getByte("hand_equipped") == 1 && clubProperties->getInt("damage") == 3,
+                    "the short forms were not read");
+            const Tag *wandComponents =
+                    owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components");
+            require(wandComponents->get("item_tags") != nullptr && wandComponents->get("item_tags")->getList().empty()
+                            && wandComponents->get("minecraft:tags") == nullptr
+                            && wandComponents->get("minecraft:hand_equipped") == nullptr
+                            && wandComponents->get("minecraft:damage") == nullptr,
+                    "an item without the components got them");
         }
         require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 
