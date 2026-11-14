@@ -1,4 +1,5 @@
 #include "Core/NBT/Tag.h"
+#include "Network/Handler/LoginHandler.h"
 #include "Server/BanList.h"
 #include "Server/OpList.h"
 #include "World/Level/Storage/PlayerDataProvider.h"
@@ -123,6 +124,10 @@ int main() {
         operatorsFollowTheAccount(directory);
         bansFollowTheAccount(directory);
         playerNamesNeverLeaveTheDirectory(directory);
+        // a signed login is encrypted even with network-encryption off; an unsigned one follows the setting
+        require(LoginHandler::requiresEncryption(false, true) && LoginHandler::requiresEncryption(true, false)
+                        && LoginHandler::requiresEncryption(true, true) && !LoginHandler::requiresEncryption(false, false),
+                "a signed login could skip the encryption handshake");
         std::filesystem::remove_all(directory);
     } catch (const std::exception &error) {
         std::cerr << error.what() << std::endl;

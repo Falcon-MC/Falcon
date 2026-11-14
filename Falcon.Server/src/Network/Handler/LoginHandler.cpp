@@ -435,7 +435,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
     player.readSyncedClientOptions(request.getClientData());
 
-    if (owner.getProperties().getNetworkEncryption()) {
+    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
         startEncryption(owner, id, player, verifier.getIdentityPublicKey());
         return;
     }

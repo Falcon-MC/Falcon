@@ -24,6 +24,12 @@ public:
     static void handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                               ServerPlayer &player);
 
+    // a signed login proves its account only through the handshake: without it, whoever once received the
+    // same login could present it again
+    static bool requiresEncryption(bool configured, bool signedLogin) {
+        return configured || signedLogin;
+    }
+
     static void startEncryption(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                 const std::string &clientPublicKey);
 
