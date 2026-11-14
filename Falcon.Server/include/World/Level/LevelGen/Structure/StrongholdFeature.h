@@ -30,6 +30,10 @@ public:
     bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ,
                      StructureChunkPos &out) const override;
 
+    int32_t getBlockOffset() const override {
+        return 2;
+    }
+
 protected:
     bool _isValidStart(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const override;
 };

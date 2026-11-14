@@ -1,3 +1,6 @@
+#include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Misc/EyeOfEnderActor.h"
+#include "World/Item/EnderEyeItem.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
@@ -14,6 +17,7 @@
 
 #include <array>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <random>
 #include <iostream>
@@ -362,6 +366,63 @@ namespace {
         require(chunk.getStructureBounds().hasName("minecraft:stronghold"),
                 "The start chunk does not know its stronghold");
     }
+
+    void checkEyeOfEnder() {
+        const int64_t seed = 42;
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, seed);
+        const StructureFeature *stronghold = StructureFeature::get("stronghold");
+        require(stronghold->getBlockOffset() == 2, "A stronghold is not reported two blocks into its chunk");
+
+        const Vector3f player(100.5f, 80.0f, -40.5f);
+        StructureChunkPos nearest;
+        require(stronghold->findNearest(*generator, 100, -41, nearest), "No stronghold near the player");
+        Vector3i target;
+        require(EnderEyeItem::findTarget(*generator, player, target), "The eye found no stronghold");
+        require(target.x == nearest.x * 16 + 2 && target.z == nearest.z * 16 + 2 && target.y == 32,
+                "The eye does not aim at the located stronghold");
+        const auto nether = DimensionFactory::createGenerator(DimensionType::Nether, seed);
+        require(!EnderEyeItem::findTarget(*nether, player, target), "An eye found a stronghold in the nether");
+
+        std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(7, EyeOfEnderActor::IDENTIFIER);
+        EyeOfEnderActor *eye = dynamic_cast<EyeOfEnderActor *>(actor.get());
+        require(eye != nullptr, "The eye of ender signal is not an eye");
+        eye->setPosition(player);
+        std::mt19937 random(5);
+        std::mt19937 copy = random;
+        eye->signalTo(target, random);
+        require(eye->survivesDeath() == ((copy() % 5U) > 0), "The eye's survival is not one roll of five");
+
+        // a far stronghold: the eye heads 12 blocks its way and 8 up
+        const float dx = (float) target.x - player.x;
+        const float dz = (float) target.z - player.z;
+        const float distance = std::sqrt(dx * dx + dz * dz);
+        require(distance > 12.0f, "The stronghold is too close for the test");
+        const Vector3f &aim = eye->getTarget();
+        require(std::fabs(aim.x - (player.x + dx / distance * 12.0f)) < 1e-3f
+                        && std::fabs(aim.z - (player.z + dz / distance * 12.0f)) < 1e-3f
+                        && std::fabs(aim.y - (player.y + 8.0f)) < 1e-3f,
+                "The eye does not aim 12 blocks along the way, 8 up");
+
+        Vector3f position = player;
+        Vector3f motion(0.0f, 0.0f, 0.0f);
+        for (int32_t tick = 0; tick <= EyeOfEnderActor::LIFETIME; ++tick)
+            EyeOfEnderActor::step(position, motion, aim);
+        const float movedX = position.x - player.x;
+        const float movedZ = position.z - player.z;
+        const float moved = std::sqrt(movedX * movedX + movedZ * movedZ);
+        require(moved > 0.5f && (movedX * dx + movedZ * dz) / (moved * distance) > 0.999f,
+                "The eye did not fly towards the stronghold");
+        require(position.y > player.y, "The eye did not climb");
+
+        // close enough, the eye aims at the stronghold block itself
+        std::unique_ptr<ServerActor> nearActor = ActorClassRegistry::create(8, EyeOfEnderActor::IDENTIFIER);
+        EyeOfEnderActor *close = dynamic_cast<EyeOfEnderActor *>(nearActor.get());
+        close->setPosition(Vector3f((float) target.x + 3.0f, 70.0f, (float) target.z - 4.0f));
+        close->signalTo(target, random);
+        require(close->getTarget().x == (float) target.x && close->getTarget().y == (float) target.y
+                        && close->getTarget().z == (float) target.z,
+                "A close eye does not aim at the stronghold block");
+    }
 }
 
 int main() {
@@ -375,6 +436,7 @@ int main() {
         checkPortalRooms();
         checkRooms();
         checkPlacement();
+        checkEyeOfEnder();
     } catch (const std::exception &error) {
         std::clog << "Stronghold regression failed: " << error.what() << '\n';
         return 1;
