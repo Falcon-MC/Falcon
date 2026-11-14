@@ -2,8 +2,12 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
+#include "World/Level/Level.h"
 
 #include "World/Item/ItemClassRegistry.h"
 
@@ -12,6 +16,7 @@
 
 namespace {
     const std::string SPAWN_EGG_SUFFIX = "_spawn_egg";
+    const char *const MOB_SPAWNER = "minecraft:mob_spawner";
     const char *const DISPLAY_TAG = "display";
     const char *const NAME_TAG = "Name";
     const float PLAYER_HALF_WIDTH = 0.3f;
@@ -79,6 +84,17 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
 
     const std::string entityIdentifier = resolveSpawnedActor(
             identifier.substr(0, identifier.size() - SPAWN_EGG_SUFFIX.size()));
+
+    // an egg used on a spawner sets its mob instead of spawning one
+    Level &level = owner.getLevelFor(player);
+    const BlockState *clicked = level.peekBlockPtr(blockPosition.x, blockPosition.y, blockPosition.z);
+    if (clicked != nullptr && clicked->mName == MOB_SPAWNER) {
+        MobSpawnerBlockActor &spawner = level.getBlockActors().getOrCreate<MobSpawnerBlockActor>(blockPosition);
+        spawner.setEntityIdentifier(entityIdentifier);
+        BlockActionHandler::broadcastBlockActorData(owner, level, spawner);
+        player.consumeOneHeldItem();
+        return true;
+    }
 
     Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y, (float) blockPosition.z + 0.5f);
     switch (face) {
