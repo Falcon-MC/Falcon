@@ -857,6 +857,9 @@ namespace {
             return false;
 
         const std::string &identifier = item->mDefinition->getIdentifier();
+        if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+            return !custom->mAllowOffHand;
+
         if (ItemDataTable::find(identifier) == nullptr)
             return false;
 
