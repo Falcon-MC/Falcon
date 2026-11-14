@@ -492,6 +492,9 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         player.getInventoryManager().syncBundles();
     }
 
+    // the client named its bundles by the ids it knew: its requests wait for the new ones
+    const bool renumberedBundles = BundleInventory::separateBundleIds(inventory, openContainer);
+
     player.getInventoryManager().loadFurnaceView();
 
     InventoryManager &manager = player.getInventoryManager();
@@ -556,7 +559,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 strayEnchanting = strayEnchanting || usesEnchantingTable(action);
         }
 
-        if (leftContainer || strayEnchanting || (creativeCraft && gameType != (int32_t) GameType::Creative)
+        if (leftContainer || renumberedBundles || strayEnchanting
+            || (creativeCraft && gameType != (int32_t) GameType::Creative)
             || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
             rejected.mRequestId = request.mRequestId;
@@ -694,6 +698,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     if (needsResync)
         owner._sendInventory(player);
+    if (renumberedBundles) {
+        manager.refreshOpenContainer(manager.getContainerPosition());
+        manager.refreshEntityContainer(manager.getContainerActorId());
+        manager.syncBundles();
+    }
 }
 
 void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, ServerPlayer &player) {

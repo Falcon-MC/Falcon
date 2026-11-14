@@ -5,6 +5,7 @@
 #include "World/Item/BundleItem.h"
 
 #include <atomic>
+#include <unordered_set>
 #include <utility>
 
 const char *BundleInventory::TAG_BUNDLE_ID = "bundle_id";
@@ -178,6 +179,61 @@ bool BundleInventory::prepareBundleIds(Container &container) {
         }
     }
 
+    return changed;
+}
+
+bool BundleInventory::separateBundleIds(PlayerInventory &inventory, Container *container) {
+    // every id is read first: reading moves the counter past it, so a fresh id cannot land on one of them
+    const int containerSize = container == nullptr ? 0 : container->getContainerSize();
+    for (int slot = 0; slot < containerSize; ++slot)
+        getBundleId(container->getContainerItem(slot));
+    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
+        getBundleId(inventory.getItem(slot));
+    getBundleId(inventory.getOffhand());
+    getBundleId(inventory.getCursor());
+
+    std::unordered_set<int32_t> seen;
+    const auto renumber = [&seen](ItemStack &item) {
+        if (!isBundle(item))
+            return false;
+
+        const int32_t id = getBundleId(item);
+        if (id < 0 || seen.insert(id).second)
+            return false;
+
+        const int32_t fresh = nextBundleId();
+        item.mTag.putInt(TAG_BUNDLE_ID, fresh);
+        seen.insert(fresh);
+        return true;
+    };
+
+    bool changed = false;
+    for (int slot = 0; slot < containerSize; ++slot) {
+        ItemStack item = container->getContainerItem(slot);
+        if (renumber(item)) {
+            container->setContainerItem(slot, std::move(item));
+            changed = true;
+        }
+    }
+    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot) {
+        ItemStack item = inventory.getItem(slot);
+        if (renumber(item)) {
+            inventory.setItem(slot, std::move(item));
+            changed = true;
+        }
+    }
+
+    ItemStack offhand = inventory.getOffhand();
+    if (renumber(offhand)) {
+        inventory.setOffhand(std::move(offhand));
+        changed = true;
+    }
+
+    ItemStack cursor = inventory.getCursor();
+    if (renumber(cursor)) {
+        inventory.setCursor(std::move(cursor));
+        changed = true;
+    }
     return changed;
 }
 

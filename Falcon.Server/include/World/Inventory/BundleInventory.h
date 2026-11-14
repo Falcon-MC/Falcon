@@ -37,6 +37,10 @@ public:
 
     static bool prepareBundleIds(Container &container);
 
+    // ids restart with the server, so an older bundle can meet a new one under the same id: every bundle a
+    // request can name gets its own, or one could be written with the other's contents
+    static bool separateBundleIds(PlayerInventory &inventory, Container *container);
+
     BundleInventory(ItemStack &bundle, const PacketCodecContext &context);
 
     int getContainerSize() const override;
