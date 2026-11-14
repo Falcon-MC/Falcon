@@ -1479,6 +1479,17 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    const char *const DART_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:dart" },
+    "components": {
+      "minecraft:throwable": { "do_swing_animation": true, "launch_power_scale": 1.5, "max_launch_power": 1.5 },
+      "minecraft:projectile": { "projectile_entity": "minecraft:snowball" }
+    }
+  }
+})JSON";
+
     const char *const HELMET_ITEM = R"JSON({
   "format_version": "1.21.90",
   "minecraft:item": {
@@ -1948,6 +1959,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "club.json", CLUB_ITEM);
         writeFile(packs / "components" / "items" / "helm.json", HELMET_ITEM);
         writeFile(packs / "components" / "items" / "ration.json", RATION_ITEM);
+        writeFile(packs / "components" / "items" / "dart.json", DART_ITEM);
         writeFile(packs / "components" / "items" / "boots.json", BOOTS_ITEM);
         writeFile(packs / "components" / "items" / "cloak.json", CLOAK_ITEM);
         writeFile(packs / "components" / "items" / "sash.json", SASH_ITEM);
@@ -2162,6 +2174,20 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                                        == std::vector<std::string>{"minecraft:stone", "minecraft:grass_block"}
                             && wandComponents->get("minecraft:block_placer") == nullptr,
                     "the block placer was not read or sent");
+            const Tag *dart = owner.getItemDefinitions().getDefinition("test:dart")->getComponentData().get("components");
+            const Tag *throwable = dart->get("minecraft:throwable");
+            const Tag *projectile = dart->get("minecraft:projectile");
+            require(throwable != nullptr && throwable->getByte("do_swing_animation") == 1
+                            && throwable->get("launch_power_scale")->asFloat() == 1.5f
+                            && throwable->get("max_launch_power")->asFloat() == 1.5f
+                            && throwable->get("min_draw_duration")->asFloat() == 0.0f
+                            && throwable->get("max_draw_duration")->asFloat() == 0.0f
+                            && throwable->getByte("scale_power_by_draw_duration") == 0 && projectile != nullptr
+                            && projectile->getString("projectile_entity") == "minecraft:snowball<>"
+                            && projectile->get("minimum_critical_power")->asFloat() == 0.0f
+                            && wandComponents->get("minecraft:throwable") == nullptr
+                            && wandComponents->get("minecraft:projectile") == nullptr,
+                    "the throwable and projectile components were not sent");
             require(wandComponents->get("minecraft:fuel") == nullptr
                             && wandComponents->get("minecraft:use_modifiers") == nullptr
                             && wandComponents->get("item_properties")->getInt("use_duration") == 0,

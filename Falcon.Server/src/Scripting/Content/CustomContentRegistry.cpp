@@ -911,6 +911,33 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                     definition.mPlacerAligned = blockPlacer->get("aligned_placement")->boolean(false);
             }
 
+            const json::Value *throwable = components->get("minecraft:throwable");
+            if (throwable != nullptr && throwable->isObject()) {
+                definition.mHasThrowable = true;
+                const auto number = [throwable](const char *key, float fallback) {
+                    const json::Value *value = throwable->get(key);
+                    return value == nullptr ? fallback : (float) value->number(fallback);
+                };
+                definition.mLaunchPowerScale = number("launch_power_scale", 1.0f);
+                definition.mMaxLaunchPower = number("max_launch_power", 1.0f);
+                definition.mMinDrawDuration = number("min_draw_duration", 0.0f);
+                definition.mMaxDrawDuration = number("max_draw_duration", 0.0f);
+                if (throwable->get("do_swing_animation") != nullptr)
+                    definition.mThrowSwings = throwable->get("do_swing_animation")->boolean(false);
+                if (throwable->get("scale_power_by_draw_duration") != nullptr)
+                    definition.mScalePowerByDraw = throwable->get("scale_power_by_draw_duration")->boolean(false);
+            }
+
+            const json::Value *projectile = components->get("minecraft:projectile");
+            if (projectile != nullptr && projectile->isObject() && projectile->get("projectile_entity") != nullptr
+                && projectile->get("projectile_entity")->isString()) {
+                definition.mHasProjectile = true;
+                definition.mProjectileEntity = qualify(projectile->get("projectile_entity")->string());
+                if (projectile->get("minimum_critical_power") != nullptr)
+                    definition.mMinimumCriticalPower =
+                            (float) projectile->get("minimum_critical_power")->number(0.0);
+            }
+
             const json::Value *fuel = components->get("minecraft:fuel");
             if (fuel != nullptr && fuel->isObject() && fuel->get("duration") != nullptr) {
                 definition.mHasFuel = true;
@@ -1175,6 +1202,27 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         blockPlacer.putBool("replaceBlockItem", item.mPlacerReplacesBlockItem);
         blockPlacer.put("use_on", Tag::ofList(Tag::Type::End));
         components.put("minecraft:block_placer", blockPlacer);
+    }
+
+    if (item.mHasThrowable) {
+        Tag throwable = Tag::ofCompound();
+        throwable.putBool("do_swing_animation", item.mThrowSwings);
+        throwable.putFloat("launch_power_scale", item.mLaunchPowerScale);
+        throwable.putFloat("max_draw_duration", item.mMaxDrawDuration);
+        throwable.putFloat("max_launch_power", item.mMaxLaunchPower);
+        throwable.putFloat("min_draw_duration", item.mMinDrawDuration);
+        throwable.putBool("scale_power_by_draw_duration", item.mScalePowerByDraw);
+        components.put("minecraft:throwable", throwable);
+    }
+
+    // the game writes the entity with its spawn event in angle brackets, empty when there is none
+    if (item.mHasProjectile) {
+        Tag projectile = Tag::ofCompound();
+        projectile.putFloat("minimum_critical_power", item.mMinimumCriticalPower);
+        projectile.putString("projectile_entity", item.mProjectileEntity.find('<') == std::string::npos
+                                                          ? item.mProjectileEntity + "<>"
+                                                          : item.mProjectileEntity);
+        components.put("minecraft:projectile", projectile);
     }
 
     if (item.mHasFuel) {
