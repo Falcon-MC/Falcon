@@ -512,6 +512,43 @@ namespace {
         api.entityRemove(zombie);
     }
 
+    void administration(const FalconServerApi &api, Fixture &fixture) {
+        require(api.serverBan("Griefer", "Breaking things", "Test") == 1, "the ban was refused");
+        require(api.serverIsBanned("Griefer") == 1 && api.serverIsBanned("Friend") == 0, "the ban list is wrong");
+        bool listed = false;
+        for (uint32_t index = 0; index < api.serverBanCount(); ++index)
+            listed = listed || std::string(api.serverBannedName(index)) == "griefer";
+        // the list keeps names in lower case, as the game does
+        require(listed, "the banned name is not listed");
+        require(api.serverPardon("Griefer") == 1 && api.serverIsBanned("Griefer") == 0, "the pardon was lost");
+        require(api.serverPardon("Griefer") == 0, "a name was pardoned twice");
+
+        require(api.serverBanIp("203.0.113.9", "", "Test") == 1 && api.serverIsIpBanned("203.0.113.9") == 1,
+                "the address was not banned");
+        require(api.serverPardonIp("203.0.113.9") == 1 && api.serverIsIpBanned("203.0.113.9") == 0,
+                "the address stayed banned");
+
+        require(api.serverAllowListAdd("Friend") == 1, "the allow list took nothing");
+        require(api.serverAllowListCount() >= 1, "the allow list is empty");
+        require(api.serverAllowListRemove("Friend") == 1 && api.serverAllowListRemove("Friend") == 0,
+                "the allow list kept the name");
+        api.serverSetAllowListEnabled(1);
+        require(api.serverAllowListEnabled() == 1, "the allow list did not turn on");
+        api.serverSetAllowListEnabled(0);
+        require(api.serverAllowListEnabled() == 0, "the allow list did not turn off");
+
+        api.serverSetMotd("Falcon event");
+        require(std::string(api.serverMotd()) == "Falcon event", "the server list entry did not change");
+        require(api.serverSetMaxPlayers(40) == 1 && api.serverMaxPlayers() == 40, "the player limit did not change");
+        require(api.serverSetMaxPlayers(0) == 0, "a limit of 0 was accepted");
+        require(api.serverTps() > 0.0 && api.serverTps() <= 20.0, "the tick rate is out of range");
+
+        require(api.serverPluginVersion("Listed") == nullptr, "a plugin outside the manager has a version");
+        require(api.serverPluginEnabled("Missing") == 0, "a missing plugin is enabled");
+        require(api.serverPluginCount() == fixture.owner.getPluginManager().getPlugins().size(),
+                "the plugin count differs");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -526,6 +563,7 @@ namespace {
         recipes(api, fixture);
         world(api, fixture);
         entitiesAndPlayers(api, fixture);
+        administration(api, fixture);
     }
 }
 
