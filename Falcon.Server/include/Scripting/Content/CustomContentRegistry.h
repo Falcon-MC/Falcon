@@ -5,6 +5,7 @@
 #include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Item/ItemTypes.h"
 
 #include <string>
 #include <unordered_map>
@@ -64,6 +65,12 @@ struct CustomItemDefinition {
     // minecraft:interact_button: true or false keeps the game's default text
     bool mHasInteractButton = false;
     std::string mInteractButtonText = "action.interact.use";
+    // minecraft:wearable: the slot name as declared, and its armor slot when it is one of the four
+    bool mHasWearable = false;
+    std::string mWearableSlotName;
+    ArmorSlot mWearableSlot = ArmorSlot::None;
+    int32_t mProtection = 0;
+    bool mHidesPlayerLocation = false;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;

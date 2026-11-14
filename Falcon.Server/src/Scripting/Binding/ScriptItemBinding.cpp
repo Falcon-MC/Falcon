@@ -2352,7 +2352,11 @@ namespace {
             const ArmorItemComponent *armor =
                     ItemDataTable::getComponents(item.mDefinition->getIdentifier()).get<ArmorItemComponent>();
             const BodyArmorData *body = BodyArmor::find(item);
-            if (armor != nullptr)
+            const CustomItemDefinition *custom =
+                    CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+            if (custom != nullptr && custom->mWearableSlot != ArmorSlot::None)
+                total += toughness ? 0 : custom->mProtection;
+            else if (armor != nullptr)
                 total += toughness ? armor->getToughness() : armor->getPoints();
             else if (body != nullptr)
                 total += toughness ? body->mToughness : body->mPoints;

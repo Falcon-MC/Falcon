@@ -220,6 +220,19 @@ public:
         return component == nullptr ? mAttackDamage : component->getDamage();
     }
 
+    // for an item whose armor comes from a pack rather than the item table
+    void setArmor(ArmorSlot slot, int32_t points) {
+        mArmorSlot = slot;
+        mArmorPoints = points;
+
+        auto &armor = mComponents.emplace<ArmorItemComponent>();
+        armor.mSlot = slot;
+        armor.mPoints = points;
+
+        auto &wearable = mComponents.emplace<WearableItemComponent>();
+        wearable.mSlot = slot;
+    }
+
     ArmorSlot getArmorSlot() const {
         return mArmorSlot;
     }
