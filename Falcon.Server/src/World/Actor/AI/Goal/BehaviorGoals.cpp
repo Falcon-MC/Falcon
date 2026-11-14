@@ -56,6 +56,7 @@
 #include "World/Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "World/Actor/AI/Goal/SilverfishGoals.h"
 #include "World/Actor/AI/Goal/SitGoal.h"
+#include "World/Actor/AI/Goal/SleepGoal.h"
 #include "World/Actor/AI/Goal/SlimeGoals.h"
 #include "World/Actor/AI/Goal/SquidMovementGoal.h"
 #include "World/Actor/AI/Goal/StompAttackGoal.h"
@@ -115,6 +116,7 @@ namespace {
     const float FOLLOW_OWNER_STOP = 2.0f;
 
     const float WORK_DEFAULT_SPEED = 0.5f;
+    const float SLEEP_DEFAULT_Y_OFFSET = 1.0f;
 
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
@@ -1037,6 +1039,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
         settings.mOnArrival = cloneOf(component.get("on_arrival"));
         return std::make_unique<WorkGoal>(std::move(settings));
+    }
+
+    if (behavior == "sleep") {
+        SleepGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mYOffset = numberOf(component, "sleep_y_offset", SLEEP_DEFAULT_Y_OFFSET);
+        settings.mCanSleepWhileRiding = isFlagSet(component, "can_sleep_while_riding");
+        settings.mTimeoutTicks = (int32_t) numberOf(component, "timeout_cooldown", 0.0f);
+        return std::make_unique<SleepGoal>(settings);
     }
 
     if (behavior == "move_towards_home_restriction")

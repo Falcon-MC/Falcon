@@ -2,9 +2,12 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
+#include "World/Actor/AI/Goal/SleepGoal.h"
 #include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -73,6 +76,16 @@ namespace {
                 for (int32_t z = minZ; z <= maxZ; ++z)
                     mLevel->setBlockState(x, y, z, BlockState("minecraft:stone"));
             }
+        }
+
+        ServerPlayer &player(uint64_t runtimeId, const Vector3f &position) {
+            const NetworkIdentifier id(std::to_string(runtimeId), runtimeId);
+            ServerPlayer &player = mOwner.getPlayers().try_emplace(id, id, runtimeId).first->second;
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            player.moveToLevel(*mLevel);
+            player.setPosition(position);
+            player.setLoginState(ServerPlayer::LoginState::Spawned);
+            return player;
         }
 
         // an adult without a job: its own groups decide the schedule, not the spawn rolls
@@ -157,7 +170,7 @@ namespace {
     }
 
     // the goal looks for its point once every 60 to 119 calls, then on the next call
-    bool waitForStart(Arena &arena, WorkGoal &goal, MobActor &mob) {
+    bool waitForStart(Arena &arena, Goal &goal, MobActor &mob) {
         for (int32_t call = 0; call < 125; ++call) {
             if (goal.canUse(arena.mOwner, mob))
                 return true;
@@ -249,6 +262,112 @@ namespace {
         require(work.mVillage->countRecentWorkers(arena.mOwner.getCurrentTick()) == 0,
                 "a villager that never arrived counted as working");
     }
+
+    BlockState bedPart(bool head) {
+        BlockState state(BlockNames::BED);
+        state.mStates.putInt("direction", 0);
+        state.mStates.putByte("head_piece_bit", head ? 1 : 0);
+        state.mStates.putByte("occupied_bit", 0);
+        return state;
+    }
+
+    struct Bedroom {
+        std::shared_ptr<Village> mVillage;
+        // the village keeps weak references only
+        std::shared_ptr<PoiInstance> mBed;
+        MobActor *mVillager = nullptr;
+    };
+
+    // a bed facing south, its head at head; the villager beside it owns it
+    Bedroom bedroom(Arena &arena, const Vector3i &head) {
+        arena.floor(head.x - 5, head.x + 5, head.y - 1, head.z - 5, head.z + 5);
+        arena.mLevel->setBlockState(head.x, head.y, head.z - 1, bedPart(false));
+        arena.mLevel->setBlockState(head.x, head.y, head.z, bedPart(true));
+
+        Bedroom result;
+        result.mVillage = std::make_shared<Village>();
+        const PoiBlueprint *blueprint = PoiBlueprints::find(BlockNames::BED);
+        require(blueprint != nullptr, "the bed has no blueprint");
+        result.mBed = std::make_shared<PoiInstance>(head, *blueprint);
+        require(result.mVillage->addPoi(result.mBed), "the bed was refused");
+
+        MobActor &villager = arena.adult(Vector3f((float) head.x + 2.5f, (float) head.y, (float) head.z + 0.5f));
+        villager.getDweller().joinVillage(arena.mOwner, villager, *result.mVillage);
+        require(result.mVillage->getClaimedPoi(villager.getUniqueId(), PoiType::Bed) != nullptr,
+                "joining the village did not give the bed");
+        result.mVillager = &villager;
+        return result;
+    }
+
+    SleepGoal::Settings sleepSettings() {
+        SleepGoal::Settings settings;
+        settings.mSpeed = 0.3f;
+        settings.mYOffset = 0.6f;
+        settings.mTimeoutTicks = 10;
+        return settings;
+    }
+
+    void sleepThroughTheNight(Arena &arena) {
+        const Vector3i head(10, 64, 60);
+        Bedroom room = bedroom(arena, head);
+        MobActor &villager = *room.mVillager;
+
+        SleepGoal goal(sleepSettings());
+        require(waitForStart(arena, goal, villager), "a villager with a bed did not go to sleep");
+        goal.start(arena.mOwner, villager);
+        goal.tick(arena.mOwner, villager);
+        require(!villager.getFlags().get(ActorFlag::Sleeping), "the villager slept away from its bed");
+
+        // touching the bed's box grown by 0.75 is enough
+        villager.setPosition(Vector3f(11.2f, 64.0f, 60.5f));
+        villager.setHealth(8.0f);
+        goal.tick(arena.mOwner, villager);
+        require(villager.getFlags().get(ActorFlag::Sleeping), "reaching the bed did not lay the villager down");
+        const Vector3f &lying = villager.getPosition();
+        require(lying.x == 10.5f && lying.y == 64.6f && lying.z == 59.875f,
+                "a south facing bed did not put the villager across both halves");
+        require(villager.getRotation().y == 180.0f, "the sleeper did not face the bed's foot");
+
+        // the stay limit of the walk does not wake a sleeper
+        for (int32_t tick = 0; tick < 1300; ++tick) {
+            require(goal.canContinueToUse(arena.mOwner, villager), "the villager woke up in the night");
+            goal.tick(arena.mOwner, villager);
+        }
+
+        goal.stop(arena.mOwner, villager);
+        require(!villager.getFlags().get(ActorFlag::Sleeping), "the villager stayed asleep after the goal");
+        require(villager.getHealth() == villager.getMaxHealth(), "a night in bed did not heal the villager");
+        const Vector3f &standing = villager.getPosition();
+        require(!(standing.x == lying.x && standing.z == lying.z), "the villager got up inside its bed");
+
+        // the bed is not tried again for ten calls after the interval
+        int32_t refusals = 0;
+        for (int32_t call = 0; call < 300 && !goal.canUse(arena.mOwner, villager); ++call)
+            ++refusals;
+        require(refusals > 10, "the bed was tried again at once");
+    }
+
+    void wakeUpOnInteraction(Arena &arena) {
+        const Vector3i head(-10, 64, 60);
+        Bedroom room = bedroom(arena, head);
+        MobActor &villager = *room.mVillager;
+        ServerPlayer &player = arena.player(9501, Vector3f(-8.5f, 64.0f, 60.5f));
+
+        SleepGoal goal(sleepSettings());
+        require(waitForStart(arena, goal, villager), "the villager did not go to bed");
+        goal.start(arena.mOwner, villager);
+        villager.setPosition(Vector3f(-9.5f, 64.0f, 60.5f));
+        goal.tick(arena.mOwner, villager);
+        require(villager.getFlags().get(ActorFlag::Sleeping), "the villager did not fall asleep");
+
+        villager.setHealth(8.0f);
+        require(villager.onInteract(arena.mOwner, player), "interacting with a sleeper did nothing");
+        require(villager.getFlags().get(ActorFlag::WantsToWake), "the interaction did not ask the villager to wake");
+        require(!goal.canContinueToUse(arena.mOwner, villager), "a villager asked to wake kept sleeping");
+        goal.stop(arena.mOwner, villager);
+        require(villager.getHealth() == 8.0f, "a villager woken up was healed");
+        require(!villager.getFlags().get(ActorFlag::WantsToWake), "waking up kept the request");
+    }
 }
 
 int main() {
@@ -266,6 +385,8 @@ int main() {
         workCountsForTheVillage(arena);
         workStopsInTheRain(arena);
         unreachableSiteGivesUp(arena);
+        sleepThroughTheNight(arena);
+        wakeUpOnInteraction(arena);
         std::cout << "villager checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';
