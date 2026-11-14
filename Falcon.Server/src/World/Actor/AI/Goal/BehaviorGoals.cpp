@@ -34,9 +34,13 @@
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
+#include "World/Actor/AI/Goal/MoveThroughVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveToWaterGoal.h"
+#include "World/Actor/AI/Goal/MoveTowardsDwellingRestrictionGoal.h"
 #include "World/Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
+#include "World/Actor/AI/Goal/MoveTowardsTargetGoal.h"
 #include "World/Actor/AI/Goal/NearestAttackableTargetGoal.h"
+#include "World/Actor/AI/Goal/OfferFlowerGoal.h"
 #include "World/Actor/AI/Goal/OpenDoorGoal.h"
 #include "World/Actor/AI/Goal/OwnerTargetGoal.h"
 #include "World/Actor/AI/Goal/PanicGoal.h"
@@ -172,6 +176,10 @@ namespace {
     const float CELEBRATE_DEFAULT_JUMP_MIN = 1.0f;
     const float CELEBRATE_DEFAULT_JUMP_MAX = 3.5f;
     const float CELEBRATE_DEFAULT_DURATION = 30.0f;
+    // the offer flower definition defaults
+    const float OFFER_FLOWER_DEFAULT_CHANCE = 0.000125f;
+    const float OFFER_FLOWER_DEFAULT_SECONDS = 20.0f;
+    const Vector3f OFFER_FLOWER_DEFAULT_AREA(6.0f, 2.0f, 6.0f);
     const float STOMP_DEFAULT_RANGE_MULTIPLIER = 2.0f;
     const float STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER = 2.0f;
 
@@ -980,6 +988,29 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "random_hover" || behavior == "random_fly")
         return std::make_unique<RandomHoverGoal>(hoverSettings(mob, component, speed));
+
+    if (behavior == "move_towards_target")
+        return std::make_unique<MoveTowardsTargetGoal>(speed, numberOf(component, "within_radius", 0.0f));
+
+    if (behavior == "move_through_village")
+        return std::make_unique<MoveThroughVillageGoal>(speed, isFlagSet(component, "only_at_night"));
+
+    if (behavior == "move_towards_dwelling_restriction")
+        return std::make_unique<MoveTowardsDwellingRestrictionGoal>(speed);
+
+    if (behavior == "offer_flower") {
+        OfferFlowerGoal::Settings settings;
+        settings.mChanceToStart = numberOf(component, "chance_to_start", OFFER_FLOWER_DEFAULT_CHANCE);
+        settings.mDurationTicks = (int32_t) (numberOf(component, "max_offer_flower_duration",
+                                                      OFFER_FLOWER_DEFAULT_SECONDS)
+                                             * TICKS_PER_SECOND);
+        const json::Value *area = component.get("search_area");
+        settings.mSearchArea = area != nullptr && area->isArray() && area->mArray.size() >= 3
+                                       ? vectorOf(component, "search_area")
+                                       : OFFER_FLOWER_DEFAULT_AREA;
+        settings.mFilters = cloneOf(component.get("filters"));
+        return std::make_unique<OfferFlowerGoal>(std::move(settings));
+    }
 
     if (behavior == "move_towards_home_restriction")
         return std::make_unique<MoveTowardsHomeRestrictionGoal>(speed, homeRadius(mob));
