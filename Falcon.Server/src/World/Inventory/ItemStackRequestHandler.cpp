@@ -360,6 +360,11 @@ namespace {
         if (name.mContainer != ContainerSlotType::Armor || item.isAir())
             return true;
 
+        const CustomItemDefinition *custom =
+                CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+        if (custom != nullptr && custom->mWearableSlot != ArmorSlot::None)
+            return (int) custom->mWearableSlot - (int) ArmorSlot::Head == slot;
+
         const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
         if (data != nullptr && data->mArmorSlot != ArmorSlot::None)
             return (int) data->mArmorSlot - (int) ArmorSlot::Head == slot;

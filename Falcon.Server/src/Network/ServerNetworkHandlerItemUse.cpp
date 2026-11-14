@@ -9,6 +9,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Item/StringToItemParser.h"
 #include "World/Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
@@ -275,6 +276,12 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
     if (!heldItem.isAir() && heldItem.mDefinition != nullptr) {
         const Item *itemType = VanillaItems::fromIdentifier(heldItem.mDefinition->getIdentifier());
         if (itemType != nullptr && _equipHeldArmor(player, *itemType))
+            return;
+
+        // a pack item is not in the item table: its wearable slot rides on the parsed item
+        Item packItem;
+        if (itemType == nullptr && StringToItemParser::getInstance().parse(heldItem.mDefinition->getIdentifier(), packItem)
+            && _equipHeldArmor(player, packItem))
             return;
 
         if (itemType != nullptr && itemType->onUse(*this, player, heldItem))

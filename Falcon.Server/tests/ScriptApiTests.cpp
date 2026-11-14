@@ -1465,6 +1465,23 @@ system.beforeEvents.startup.subscribe((event) => {
   }
 })JSON";
 
+    const char *const HELMET_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:helm" },
+    "components": { "minecraft:wearable": { "slot": "slot.armor.head", "protection": 4 } }
+  }
+})JSON";
+
+    // an older item: the protection sits in minecraft:armor
+    const char *const BOOTS_ITEM = R"JSON({
+  "format_version": "1.20.10",
+  "minecraft:item": {
+    "description": { "identifier": "test:boots" },
+    "components": { "minecraft:wearable": { "slot": "slot.armor.feet" }, "minecraft:armor": { "protection": 2 } }
+  }
+})JSON";
+
     const char *const CLUB_ITEM = R"JSON({
   "format_version": "1.21.90",
   "minecraft:item": {
@@ -1915,6 +1932,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "pick.json", ENCHANTABLE_ITEM);
         writeFile(packs / "components" / "items" / "blade.json", WEAPON_ITEM);
         writeFile(packs / "components" / "items" / "club.json", CLUB_ITEM);
+        writeFile(packs / "components" / "items" / "helm.json", HELMET_ITEM);
+        writeFile(packs / "components" / "items" / "boots.json", BOOTS_ITEM);
         writeFile(packs / "components" / "items" / "cloak.json", CLOAK_ITEM);
         writeFile(packs / "components" / "items" / "sash.json", SASH_ITEM);
         writeFile(packs / "components" / "items" / "ribbon.json", RIBBON_ITEM);
@@ -2085,6 +2104,20 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             require(wandComponents->get("minecraft:dyeable") == nullptr
                             && wandComponents->get("minecraft:interact_button") == nullptr,
                     "an item without dyeable or interact_button got them");
+
+            const Tag *helm = owner.getItemDefinitions().getDefinition("test:helm")->getComponentData().get(
+                    "components")->get("minecraft:wearable");
+            require(helm != nullptr && helm->getString("slot") == "slot.armor.head" && helm->getInt("protection") == 4
+                            && helm->getByte("hides_player_location") == 0,
+                    "the wearable component was not sent");
+            Item helmItem;
+            Item bootsItem;
+            require(StringToItemParser::getInstance().parse("test:helm", helmItem)
+                            && helmItem.getArmorSlot() == ArmorSlot::Head && helmItem.getArmorPoints() == 4
+                            && StringToItemParser::getInstance().parse("test:boots", bootsItem)
+                            && bootsItem.getArmorSlot() == ArmorSlot::Feet && bootsItem.getArmorPoints() == 2,
+                    "the pack armor did not reach the server item");
+            require(wandComponents->get("minecraft:wearable") == nullptr, "an item without wearable got it");
         }
         require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 

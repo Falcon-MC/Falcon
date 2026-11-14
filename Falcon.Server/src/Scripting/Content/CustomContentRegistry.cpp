@@ -113,6 +113,18 @@ namespace {
         return true;
     }
 
+    ArmorSlot armorSlotOf(const std::string &slotName) {
+        if (slotName == "slot.armor.head")
+            return ArmorSlot::Head;
+        if (slotName == "slot.armor.chest")
+            return ArmorSlot::Chest;
+        if (slotName == "slot.armor.legs")
+            return ArmorSlot::Legs;
+        if (slotName == "slot.armor.feet")
+            return ArmorSlot::Feet;
+        return ArmorSlot::None;
+    }
+
     void parseBox(const json::Value *value, CustomBlockBox &box) {
         if (value == nullptr)
             return;
@@ -874,6 +886,24 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                 }
             }
 
+            const json::Value *wearable = components->get("minecraft:wearable");
+            if (wearable != nullptr && wearable->isObject() && wearable->get("slot") != nullptr
+                && wearable->get("slot")->isString()) {
+                definition.mHasWearable = true;
+                definition.mWearableSlotName = wearable->get("slot")->string();
+                definition.mWearableSlot = armorSlotOf(definition.mWearableSlotName);
+                if (wearable->get("protection") != nullptr)
+                    definition.mProtection = wearable->get("protection")->integer(0);
+                if (wearable->get("hides_player_location") != nullptr)
+                    definition.mHidesPlayerLocation = wearable->get("hides_player_location")->boolean(false);
+
+                // older items keep their protection in minecraft:armor; the game moves it into the wearable
+                const json::Value *armor = components->get("minecraft:armor");
+                if (wearable->get("protection") == nullptr && armor != nullptr && armor->isObject()
+                    && armor->get("protection") != nullptr)
+                    definition.mProtection = armor->get("protection")->integer(0);
+            }
+
             const json::Value *durability = components->get("minecraft:durability");
             if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
                 definition.mMaxDurability = durability->get("max_durability")->integer(0);
@@ -983,11 +1013,16 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
     const int32_t networkId = stored.mNetworkId;
     const int32_t maxStackSize = stored.mMaxStackSize;
     const int32_t damage = stored.mDamage;
-    StringToItemParser::getInstance().registerItem(identifier, [networkId, identifier, name, maxStackSize, damage]() {
-        Item item(networkId, identifier, name, maxStackSize);
-        item.getComponent<DamageItemComponent>()->mDamage = damage;
-        return item;
-    });
+    const ArmorSlot wearableSlot = stored.mWearableSlot;
+    const int32_t protection = stored.mProtection;
+    StringToItemParser::getInstance().registerItem(
+            identifier, [networkId, identifier, name, maxStackSize, damage, wearableSlot, protection]() {
+                Item item(networkId, identifier, name, maxStackSize);
+                item.getComponent<DamageItemComponent>()->mDamage = damage;
+                if (wearableSlot != ArmorSlot::None)
+                    item.setArmor(wearableSlot, protection);
+                return item;
+            });
 
     mItems.push_back(stored);
     LOG_TRACE(LogAreaID::Script, "Custom item %s registered (network id %d)", stored.mIdentifier.c_str(),
@@ -1070,6 +1105,14 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         Tag fireResistant = Tag::ofCompound();
         fireResistant.putBool("value", true);
         components.put("minecraft:fire_resistant", fireResistant);
+    }
+
+    if (item.mHasWearable) {
+        Tag wearable = Tag::ofCompound();
+        wearable.putString("slot", item.mWearableSlotName);
+        wearable.putInt("protection", item.mProtection);
+        wearable.putBool("hides_player_location", item.mHidesPlayerLocation);
+        components.put("minecraft:wearable", wearable);
     }
 
     if (item.mDamage != 0) {

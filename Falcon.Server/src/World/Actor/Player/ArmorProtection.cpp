@@ -1,5 +1,6 @@
 #include "World/Actor/Player/ArmorProtection.h"
 
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Item/BodyArmor.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
@@ -70,6 +71,10 @@ int ArmorProtection::getPoints(const ItemStack &item) {
 
     if (const BodyArmorData *body = BodyArmor::find(item))
         return body->mPoints;
+
+    if (const CustomItemDefinition *custom =
+                CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier()))
+        return custom->mWearableSlot == ArmorSlot::None ? 0 : custom->mProtection;
 
     const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
     return data == nullptr ? 0 : data->mArmorPoints;
