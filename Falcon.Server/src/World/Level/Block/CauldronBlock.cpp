@@ -3,6 +3,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
@@ -22,10 +23,13 @@ namespace {
     const int32_t EVENT_ADD_DYE = 3508;
     const char *const TAG_CUSTOM_COLOR = "customColor";
 
-    // dyeable is the leather tier armor; the horse armor tag and wolf armor also take a color
+    // dyeable is the leather tier armor; the horse armor tag, wolf armor and pack items with minecraft:dyeable also
+    // take a color
     bool takesColor(const std::string &identifier) {
         if (identifier == "minecraft:wolf_armor")
             return true;
+        if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+            return custom->mHasDyeable;
         for (const std::string &tag: CraftingRecipeTable::getItemTags(identifier)) {
             if (tag == "minecraft:leather_tier" || tag == "minecraft:horse_armor")
                 return true;
