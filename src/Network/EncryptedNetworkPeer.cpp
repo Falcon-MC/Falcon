@@ -36,7 +36,8 @@ namespace {
 
 }
 
-EncryptedNetworkPeer::EncryptedNetworkPeer(std::shared_ptr<NetworkPeer> peer) : mPeer(std::move(peer)) {
+EncryptedNetworkPeer::EncryptedNetworkPeer(std::shared_ptr<NetworkPeer> peer, bool plainTextGrace)
+        : mPeer(std::move(peer)), mPlainTextGrace(plainTextGrace) {
 }
 
 EncryptedNetworkPeer::~EncryptedNetworkPeer() {
@@ -111,7 +112,7 @@ NetworkPeer::DataStatus EncryptedNetworkPeer::receivePacket(std::string &outData
         return DataStatus::NoData;
     }
 
-    if (mReceiveCounter == 0)
+    if (mReceiveCounter == 0 && mPlainTextGrace)
         return _receiveFirst(outData, offset);
 
     if (!applyKeyStream(mDecryptCipher, &outData[offset], outData.size() - offset)) {

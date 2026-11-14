@@ -12,7 +12,9 @@ struct evp_md_ctx_st;
 
 class EncryptedNetworkPeer : public NetworkPeer {
 public:
-    explicit EncryptedNetworkPeer(std::shared_ptr<NetworkPeer> peer);
+    // plainTextGrace: a client keeps reading clear packets until the first encrypted one verifies, as some
+    // servers flush one after the handshake. never on a server: a login could then go on without its key
+    explicit EncryptedNetworkPeer(std::shared_ptr<NetworkPeer> peer, bool plainTextGrace = false);
 
     ~EncryptedNetworkPeer() override;
 
@@ -57,4 +59,5 @@ private:
     uint64_t mSendCounter = 0;
     uint64_t mReceiveCounter = 0;
     bool mFailed = false;
+    bool mPlainTextGrace = false;
 };

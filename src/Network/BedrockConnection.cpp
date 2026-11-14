@@ -47,7 +47,7 @@ BedrockConnection::BedrockConnection(Side side, std::shared_ptr<NetworkPeer> tra
           mClientDriver(mClientTransport),
           mDefaultCodecContext(mDefaultBlockDefinitions, mDefaultItemDefinitions),
           mCodecContext(&mDefaultCodecContext), mChunkRadius(0), mClosed(false) {
-    mEncryptedPeer = std::make_shared<EncryptedNetworkPeer>(mTransport);
+    mEncryptedPeer = std::make_shared<EncryptedNetworkPeer>(mTransport, side == Side::Client);
     mCompressedPeer = std::make_shared<CompressedNetworkPeer>(mEncryptedPeer);
     mBatchedPeer = std::make_shared<BatchedNetworkPeer>(mCompressedPeer);
 }
@@ -57,7 +57,7 @@ BedrockConnection::BedrockConnection(Side side, std::shared_ptr<NetworkPeer> tra
         : mSide(side), mTransport(std::move(transport)), mClientDriver(std::move(clientDriver)),
           mDefaultCodecContext(mDefaultBlockDefinitions, mDefaultItemDefinitions),
           mCodecContext(&mDefaultCodecContext), mChunkRadius(0), mClosed(false) {
-    mEncryptedPeer = std::make_shared<EncryptedNetworkPeer>(mTransport);
+    mEncryptedPeer = std::make_shared<EncryptedNetworkPeer>(mTransport, side == Side::Client);
     mCompressedPeer = std::make_shared<CompressedNetworkPeer>(mEncryptedPeer);
     mBatchedPeer = std::make_shared<BatchedNetworkPeer>(mCompressedPeer);
 }
