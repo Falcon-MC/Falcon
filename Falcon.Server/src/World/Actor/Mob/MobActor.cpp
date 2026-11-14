@@ -561,11 +561,11 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     if (playersOnly)
         return count;
 
-    for (auto &entry: owner.getActors()) {
-        if (inRange(*entry.second) && dynamic_cast<MobActor *>(entry.second.get()) != nullptr
-            && passesFilters(*entry.second))
+    // the index holds every actor around: the exact range is checked on each
+    owner.forEachActorNear(center, horizontal, [&](ServerActor &actor) {
+        if (inRange(actor) && dynamic_cast<MobActor *>(&actor) != nullptr && passesFilters(actor))
             count++;
-    }
+    });
     return count;
 }
 
@@ -2201,6 +2201,7 @@ const json::Value *MobActor::getDefinition() const {
 
 void MobActor::_rebuildComponents() const {
     mComponents.clear();
+    mRecentComponents.clear();
     mComponentsDirty = false;
     mSensorComponentsStale = true;
     mDefinitionPhysicsStale = true;
@@ -2254,9 +2255,22 @@ const json::Value *MobActor::getComponent(const std::string &name) const {
     return found == components.end() ? nullptr : found->second;
 }
 
+// the tick asks for the same few names from the same literals: their address finds the answer again, and the
+// text is still compared, since a caller may pass a buffer it reuses
 const json::Value *MobActor::getComponent(const char *name) const {
+    if (mComponentsDirty)
+        _rebuildComponents();
+
+    for (const RecentComponent &recent: mRecentComponents) {
+        if (recent.mAddress == name && recent.mName == name)
+            return recent.mValue;
+    }
+
     mComponentKey.assign(name);
-    return getComponent(mComponentKey);
+    const json::Value *value = getComponent(mComponentKey);
+    if (mRecentComponents.size() < MAX_RECENT_COMPONENTS)
+        mRecentComponents.push_back({name, mComponentKey, value});
+    return value;
 }
 
 bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
