@@ -440,6 +440,78 @@ namespace {
         require(api.levelTickingAreaCount(level) == 0, "a ticking area appeared");
     }
 
+    void entitiesAndPlayers(const FalconServerApi &api, Fixture &fixture) {
+        FalconLevel *level = fixture.levelHandle();
+        FalconEntity *body = api.playerEntity(fixture.playerHandle());
+        FalconEntity *zombie = api.levelSpawnEntity(level, "minecraft:zombie", FalconVec3{6.5, 100.0, 6.5});
+        require(zombie != nullptr, "no zombie spawned");
+
+        FalconItem *helmet = api.itemCreate("minecraft:diamond_helmet", 1);
+        require(api.entitySetEquipment(zombie, FALCON_EQUIPMENT_HEAD, helmet) == 1, "the zombie took no helmet");
+        FalconItem *worn = api.entityEquipment(zombie, FALCON_EQUIPMENT_HEAD);
+        require(worn != nullptr && std::string(api.itemIdentifier(worn)) == "minecraft:diamond_helmet",
+                "the zombie does not wear the helmet");
+        api.itemDestroy(worn);
+        require(api.entitySetEquipment(zombie, 7, helmet) == 0, "slot 7 took an item");
+        require(api.entitySetEquipment(body, FALCON_EQUIPMENT_HEAD, helmet) == 0, "a player took mob equipment");
+        api.itemDestroy(helmet);
+
+        require(api.entityAddTag(zombie, "boss") == 1 && api.entityHasTag(zombie, "boss") == 1, "the tag was lost");
+        require(api.entityAddTag(zombie, "boss") == 0, "a tag was added twice");
+        require(api.entityTagCount(zombie) == 1 && std::string(api.entityTag(zombie, 0)) == "boss",
+                "the tag is not listed");
+        require(api.entityRemoveTag(zombie, "boss") == 1 && api.entityTagCount(zombie) == 0, "the tag stayed");
+
+        require(api.entitySetAttackTarget(zombie, body) == 1, "the zombie refused the player as target");
+        require(api.entityAttackTarget(zombie) == body, "the zombie does not target the player");
+        require(api.entitySetAttackTarget(zombie, zombie) == 0, "the zombie targeted itself");
+        require(api.entitySetAttackTarget(zombie, nullptr) == 1 && api.entityAttackTarget(zombie) == nullptr,
+                "the target was not cleared");
+        require(api.entitySetAttackTarget(body, zombie) == 0, "a player took an attack target");
+
+        require(api.entityVehicle(body) == nullptr && api.entityPassengerCount(zombie) == 0, "something rides");
+        require(api.entityMount(body, body) == 0, "the player mounted itself");
+
+        FalconBlockPos spawn{};
+        FalconDimension dimension = 9;
+        api.playerClearSpawnPoint(fixture.playerHandle());
+        require(api.playerSpawnPoint(fixture.playerHandle(), &spawn, &dimension) == 0, "a cleared spawn point is set");
+        require(api.playerSetSpawnPoint(fixture.playerHandle(), level, FalconBlockPos{3, 90, -4}) == 1,
+                "the spawn point was refused");
+        require(api.playerSpawnPoint(fixture.playerHandle(), &spawn, &dimension) == 1 && spawn.x == 3 && spawn.y == 90
+                        && spawn.z == -4 && dimension == FALCON_DIMENSION_OVERWORLD,
+                "the spawn point did not stick");
+        require(api.playerSetSpawnPoint(fixture.playerHandle(), level, FalconBlockPos{3, 100000, -4}) == 0,
+                "a spawn point above the world was taken");
+
+        require(api.playerLanguage(fixture.playerHandle()) != nullptr, "the player has no language");
+        require(api.playerSkinId(fixture.playerHandle()) != nullptr, "the player has no skin id");
+        uint32_t width = 1;
+        uint32_t height = 1;
+        uint32_t length = 1;
+        api.playerSkinImage(fixture.playerHandle(), &width, &height, &length);
+        require(length == width * height * 4 || length == 0, "the skin size does not match its pixels");
+
+        const FalconVec3 at{0.0, 110.0, 0.0};
+        const FalconVec3 turn{30.0, 90.0, 0.0};
+        require(api.playerSetCamera(fixture.playerHandle(), "minecraft:free", &at, &turn, 1.0f,
+                                    FALCON_CAMERA_EASE_IN_OUT_SINE) == 1,
+                "the free camera was refused");
+        require(api.playerSetCamera(fixture.playerHandle(), "minecraft:nothing", nullptr, nullptr, 0.0f, 0) == 0,
+                "an unknown preset was accepted");
+        require(api.playerFadeCamera(fixture.playerHandle(), 0.5f, 1.0f, 0.5f, 0xff0000) == 1, "the fade was refused");
+        require(api.playerFadeCamera(fixture.playerHandle(), -1.0f, 1.0f, 0.5f, 0) == 0, "a negative fade was taken");
+        api.playerClearCamera(fixture.playerHandle());
+
+        FalconItem *pearl = api.itemCreate("minecraft:ender_pearl", 1);
+        require(api.playerItemCooldown(fixture.playerHandle(), pearl) == 0, "a fresh pearl is cooling down");
+        require(api.playerStartItemCooldown(fixture.playerHandle(), pearl, 20) == 1, "the cooldown was refused");
+        require(api.playerItemCooldown(fixture.playerHandle(), pearl) == 20,
+                "the pearl cools down for " + std::to_string(api.playerItemCooldown(fixture.playerHandle(), pearl)));
+        api.itemDestroy(pearl);
+        api.entityRemove(zombie);
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -453,6 +525,7 @@ namespace {
         commands(api, fixture);
         recipes(api, fixture);
         world(api, fixture);
+        entitiesAndPlayers(api, fixture);
     }
 }
 
