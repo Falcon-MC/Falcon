@@ -660,6 +660,40 @@ namespace {
                     const bool found = target != nullptr && api().entityAttribute(target, name.c_str(), &value) != 0;
                     returnOptionalAttribute(call, 3, found, value);
                 }},
+                {"entities", "entity-data", "Iiii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string key;
+                    if (!call.string(1, key))
+                        return;
+                    const char *value = target == nullptr ? nullptr : api().entityData(self(call), target, key.c_str());
+                    call.returnOptionalString(3, value);
+                }},
+                {"entities", "entity-set-data", "Iiiiii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string key;
+                    std::string value;
+                    bool hasValue = false;
+                    const bool read = call.string(1, key) && optionalString(call, 3, hasValue, value);
+                    call.resultS32(read && target != nullptr
+                                   && api().entitySetData(self(call), target, key.c_str(),
+                                                          hasValue ? value.c_str() : nullptr) != 0);
+                }},
+                {"entities", "entity-data-count", "I:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().entityDataCount(self(call), target));
+                }},
+                {"entities", "entity-data-key", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    const uint32_t index = call.u32(1);
+                    const char *key = target == nullptr ? nullptr : api().entityDataKey(self(call), target, index);
+                    call.returnOptionalString(2, key);
+                }},
+                {"entities", "entity-nbt", "Ii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    uint32_t length = 0;
+                    const uint8_t *data = target == nullptr ? nullptr : api().entityNbt(target, &length);
+                    call.returnBytes(1, data, data == nullptr ? 0 : length);
+                }},
                 {"entities", "entity-set-attribute", "Iiif:i", [](Call &call) {
                     FalconEntity *target = entity(call.u64(0));
                     std::string name;
@@ -1020,6 +1054,46 @@ namespace {
                 }},
                 {"items", "item-set-enchantment-level", "iii:", [](Call &call) {
                     api().itemSetEnchantmentLevel(item(call, 0), call.u32(1), call.s32(2));
+                }},
+                {"items", "item-data", "iiii:", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    std::string key;
+                    if (!call.string(1, key))
+                        return;
+                    const char *value = target == nullptr ? nullptr : api().itemData(self(call), target, key.c_str());
+                    call.returnOptionalString(3, value);
+                }},
+                {"items", "item-set-data", "iiiiii:i", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    std::string key;
+                    std::string value;
+                    bool hasValue = false;
+                    const bool read = call.string(1, key) && optionalString(call, 3, hasValue, value);
+                    call.resultS32(read && target != nullptr
+                                   && api().itemSetData(self(call), target, key.c_str(),
+                                                        hasValue ? value.c_str() : nullptr) != 0);
+                }},
+                {"items", "item-data-count", "i:i", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().itemDataCount(self(call), target));
+                }},
+                {"items", "item-data-key", "iii:", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    const char *key = target == nullptr ? nullptr : api().itemDataKey(self(call), target, call.u32(1));
+                    call.returnOptionalString(2, key);
+                }},
+                {"items", "item-nbt", "ii:", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    uint32_t length = 0;
+                    const uint8_t *data = target == nullptr ? nullptr : api().itemNbt(target, &length);
+                    call.returnBytes(1, data, data == nullptr ? 0 : length);
+                }},
+                {"items", "item-set-nbt", "iii:i", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    std::vector<uint8_t> data;
+                    const bool read = bytes(call, call.u32(1), call.u32(2), data);
+                    call.resultS32(read && target != nullptr
+                                   && api().itemSetNbt(target, data.data(), (uint32_t) data.size()) != 0);
                 }},
                 {"items", "player-inventory-size", "I:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
