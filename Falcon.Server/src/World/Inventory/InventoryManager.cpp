@@ -524,17 +524,27 @@ namespace {
             return nullptr;
         }
 
-        const FurnaceRecipeData *recipes = CraftingRecipeTable::getFurnaceRecipes();
-        const size_t recipeCount = CraftingRecipeTable::getFurnaceRecipeCount();
-        for (size_t index = 0; index < recipeCount; ++index) {
-            const FurnaceRecipeData &candidate = recipes[index];
-            if (candidate.mInputItemId == nullptr
-                || std::string(input.mDefinition->getIdentifier()) != candidate.mInputItemId
-                || (candidate.mInputAuxValue >= 0 && input.mDamage != candidate.mInputAuxValue)
-                || input.mCount < candidate.mInputCount) {
-                continue;
+        // by input item, in table order: a furnace asks every tick, and the table holds every smelting recipe
+        static const std::unordered_map<std::string, std::vector<const FurnaceRecipeData *>> byInput = [] {
+            std::unordered_map<std::string, std::vector<const FurnaceRecipeData *>> index;
+            const FurnaceRecipeData *recipes = CraftingRecipeTable::getFurnaceRecipes();
+            const size_t recipeCount = CraftingRecipeTable::getFurnaceRecipeCount();
+            for (size_t position = 0; position < recipeCount; ++position) {
+                if (recipes[position].mInputItemId != nullptr)
+                    index[recipes[position].mInputItemId].push_back(&recipes[position]);
             }
-            return &candidate;
+            return index;
+        }();
+
+        const auto found = byInput.find(input.mDefinition->getIdentifier());
+        if (found == byInput.end())
+            return nullptr;
+
+        for (const FurnaceRecipeData *candidate: found->second) {
+            if ((candidate->mInputAuxValue >= 0 && input.mDamage != candidate->mInputAuxValue)
+                || input.mCount < candidate->mInputCount)
+                continue;
+            return candidate;
         }
         return nullptr;
     }

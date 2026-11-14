@@ -7,7 +7,9 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Inventory/InventoryManager.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/Inventory/FurnaceInventory.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
 
@@ -102,6 +104,24 @@ namespace {
         actors.getOrCreate<FurnaceBlockActor>(furnace);
         level.setBlockState(furnace.x, furnace.y, furnace.z, BlockState("minecraft:lit_furnace"));
         require(actors.find<FurnaceBlockActor>(furnace) != nullptr, "a furnace lost its block actor when it lit");
+
+        // the recipe is found by its input item: raw iron and coal smelt one ingot, a stick as input smelts nothing
+        FurnaceBlockActor &smelter = *actors.find<FurnaceBlockActor>(furnace);
+        smelter.mInventory.mItems[FurnaceInventory::SLOT_INPUT] = fixture.mOwner.createItemStack("minecraft:raw_iron", 2);
+        smelter.mInventory.mItems[FurnaceInventory::SLOT_FUEL] = fixture.mOwner.createItemStack("minecraft:coal", 1);
+        for (int tick = 0; tick <= FurnaceInventory::cookDuration(smelter.mKind); ++tick)
+            InventoryManager::tickStoredFurnace(fixture.mOwner, smelter);
+        const ItemStack &ingot = smelter.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT];
+        require(!ingot.isAir() && ingot.mDefinition->getIdentifier() == "minecraft:iron_ingot" && ingot.mCount == 1
+                        && smelter.mInventory.mItems[FurnaceInventory::SLOT_INPUT].mCount == 1,
+                "raw iron did not smelt into one iron ingot");
+        smelter.mInventory.mItems[FurnaceInventory::SLOT_INPUT] = fixture.mOwner.createItemStack("minecraft:stick", 4);
+        smelter.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT] = ItemStack::air();
+        for (int tick = 0; tick <= FurnaceInventory::cookDuration(smelter.mKind); ++tick)
+            InventoryManager::tickStoredFurnace(fixture.mOwner, smelter);
+        require(smelter.mInventory.mItems[FurnaceInventory::SLOT_OUTPUT].isAir(), "a stick smelted into something");
+        for (ItemStack &item: smelter.mInventory.mItems)
+            item = ItemStack::air();
 
         level.setBlockState(sign.x, sign.y, sign.z, BlockState("minecraft:standing_sign"));
         actors.getOrCreate<SignBlockActor>(sign);

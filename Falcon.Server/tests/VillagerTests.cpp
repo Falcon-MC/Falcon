@@ -19,6 +19,7 @@
 #include "World/Village/VillageManager.h"
 
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -105,7 +106,18 @@ namespace {
 
     void scheduleFollowsTheClock(Arena &arena) {
         MobActor &villager = arena.adult(Vector3f(0.5f, 100.0f, 0.5f));
+
+        // a name asked through one buffer twice is read again, and a group change is seen at once
+        char name[64];
+        std::snprintf(name, sizeof(name), "minecraft:type_family");
+        require(villager.getComponent(name) != nullptr && villager.getComponent(name) != nullptr,
+                "the villager has no type family");
+        std::snprintf(name, sizeof(name), "minecraft:no_such_component");
+        require(villager.getComponent(name) == nullptr, "a reused buffer found the name it held before");
+        const char *const scheduler = "minecraft:scheduler";
+        require(villager.getComponent(scheduler) == nullptr, "a villager without a schedule group has a scheduler");
         villager.addComponentGroup("basic_schedule");
+        require(villager.getComponent(scheduler) != nullptr, "a new group was hidden by an earlier lookup");
 
         arena.mLevel->setTime(9000);
         villager.tick(arena.mOwner);

@@ -741,6 +741,14 @@ private:
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
     mutable std::string mComponentKey;
+    struct RecentComponent {
+        const char *mAddress;
+        std::string mName;
+        const json::Value *mValue;
+    };
+    static constexpr size_t MAX_RECENT_COMPONENTS = 64;
+    // emptied with the components: a group added or removed changes what a name finds
+    mutable std::vector<RecentComponent> mRecentComponents;
     mutable SensorComponents mSensorComponents;
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
