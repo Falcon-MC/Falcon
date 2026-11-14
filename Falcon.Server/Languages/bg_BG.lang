@@ -4,6 +4,8 @@ falcon.commands.about.version=Този сървър използва Falcon ве
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Компилация %1$s, конфигурация %2$s
 
+falcon.commands.plugins.list=Плъгини (%1$s): %2$s
+
 falcon.commands.world.list=Заредени светове (%1$s): %2$s
 falcon.commands.world.available=Светове на диска: %1$s
 falcon.commands.world.created=Светът %1$s е създаден

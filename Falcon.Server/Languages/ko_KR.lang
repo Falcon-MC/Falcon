@@ -4,6 +4,8 @@ falcon.commands.about.version=이 서버는 Falcon 버전 %1$s(%2$s, %3$s)으로
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s(프로토콜 %2$s)
 falcon.commands.about.build=빌드 %1$s, %2$s 구성
 
+falcon.commands.plugins.list=플러그인 (%1$s): %2$s
+
 falcon.commands.world.list=불러온 월드 (%1$s): %2$s
 falcon.commands.world.available=디스크에 있는 월드: %1$s
 falcon.commands.world.created=월드 %1$s을(를) 만들었습니다

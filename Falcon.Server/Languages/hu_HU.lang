@@ -4,6 +4,8 @@ falcon.commands.about.version=Ez a szerver a Falcon %1$s verzióját futtatja (%
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokoll: %2$s)
 falcon.commands.about.build=%1$s build, %2$s konfiguráció
 
+falcon.commands.plugins.list=Bővítmények (%1$s): %2$s
+
 falcon.commands.world.list=Betöltött világok (%1$s): %2$s
 falcon.commands.world.available=Világok a lemezen: %1$s
 falcon.commands.world.created=A(z) %1$s világ létrejött

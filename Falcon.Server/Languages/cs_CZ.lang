@@ -4,6 +4,8 @@ falcon.commands.about.version=Tento server používá Falcon verze %1$s (%2$s na
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Sestavení %1$s, konfigurace %2$s
 
+falcon.commands.plugins.list=Pluginy (%1$s): %2$s
+
 falcon.commands.world.list=Načtené světy (%1$s): %2$s
 falcon.commands.world.available=Světy na disku: %1$s
 falcon.commands.world.created=Svět %1$s byl vytvořen

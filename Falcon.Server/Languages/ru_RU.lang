@@ -4,6 +4,8 @@ falcon.commands.about.version=На этом сервере работает Falc
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (протокол %2$s)
 falcon.commands.about.build=Сборка %1$s, конфигурация %2$s
 
+falcon.commands.plugins.list=Плагины (%1$s): %2$s
+
 falcon.commands.world.list=Загруженные миры (%1$s): %2$s
 falcon.commands.world.available=Миры на диске: %1$s
 falcon.commands.world.created=Мир %1$s создан

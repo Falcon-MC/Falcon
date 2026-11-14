@@ -4,6 +4,8 @@ falcon.commands.about.version=Denne server kører Falcon version %1$s (%2$s på 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (protokol %2$s)
 falcon.commands.about.build=Build %1$s, %2$s-konfiguration
 
+falcon.commands.plugins.list=Plugins (%1$s): %2$s
+
 falcon.commands.world.list=Indlæste verdener (%1$s): %2$s
 falcon.commands.world.available=Verdener på disken: %1$s
 falcon.commands.world.created=Verdenen %1$s er oprettet

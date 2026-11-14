@@ -4,6 +4,8 @@ falcon.commands.about.version=此伺服器正在執行 Falcon 版本 %1$s（%3$s
 falcon.commands.about.game=Minecraft：基岩版 %1$s（通訊協定 %2$s）
 falcon.commands.about.build=組建 %1$s，%2$s 組態
 
+falcon.commands.plugins.list=外掛（%1$s）：%2$s
+
 falcon.commands.world.list=已載入的世界（%1$s）：%2$s
 falcon.commands.world.available=磁碟上的世界：%1$s
 falcon.commands.world.created=已建立世界 %1$s
