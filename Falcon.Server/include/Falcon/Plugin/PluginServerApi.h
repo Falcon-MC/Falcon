@@ -31,4 +31,6 @@ public:
     static void fillEffects(FalconServerApi &api);
 
     static void fillScoreboard(FalconServerApi &api);
+
+    static void fillContainers(FalconServerApi &api);
 };

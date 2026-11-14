@@ -91,6 +91,15 @@ namespace {
         call.returnOptionalHandle(index, call.plugin().addItem(value, owned, !owned));
     }
 
+    // an empty slot is none: the plugin never sees an air stack it would have to drop
+    void returnFilledItem(Call &call, size_t index, FalconItem *value) {
+        if (value != nullptr && api().itemIsEmpty(value) != 0) {
+            api().itemDestroy(value);
+            value = nullptr;
+        }
+        returnItem(call, index, value, true);
+    }
+
     // nan or inf from the guest would reach chunk lookups and physics: the c api passes values straight through
     bool finite(Call &call, double value) {
         if (std::isfinite(value))
@@ -803,6 +812,37 @@ namespace {
                         && finite(call, call.f32(7)) && target != nullptr)
                         api().levelPlaySound(target, sound.c_str(), position, call.f32(6), call.f32(7));
                 }},
+                {"levels", "level-container-size", "iiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const FalconBlockPos position = blockPos(call, 1);
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().levelContainerSize(target, position));
+                }},
+                {"levels", "level-container-item", "iiiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    returnFilledItem(call, 5, target == nullptr ? nullptr
+                                                                : api().levelContainerItem(target, blockPos(call, 1),
+                                                                                           call.u32(4)));
+                }},
+                {"levels", "level-set-container-item", "iiiiiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    FalconItem *value = nullptr;
+                    call.resultS32(optionalItem(call, 5, value) && target != nullptr
+                                   && api().levelSetContainerItem(target, blockPos(call, 1), call.u32(4), value) != 0);
+                }},
+                {"levels", "level-sign-text", "iiiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    call.returnOptionalString(5, target == nullptr ? nullptr
+                                                                   : api().levelSignText(target, blockPos(call, 1),
+                                                                                         call.u32(4)));
+                }},
+                {"levels", "level-set-sign-text", "iiiiiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string text;
+                    const bool read = call.string(5, text);
+                    const FalconBlockPos position = blockPos(call, 1);
+                    call.resultS32(read && target != nullptr
+                                   && api().levelSetSignText(target, position, call.u32(4), text.c_str()) != 0);
+                }},
                 {"levels", "level-spawn-particle", "iiiFFF:", [](Call &call) {
                     FalconLevel *target = level(call, 0);
                     std::string particle;
@@ -1037,6 +1077,21 @@ namespace {
                     FalconPlayer *target = player(call.u64(0));
                     if (target != nullptr)
                         api().playerClearInventory(target);
+                }},
+                {"items", "player-ender-chest-size", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().playerEnderChestSize(target));
+                }},
+                {"items", "player-ender-chest-item", "Iii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconItem *found = target == nullptr ? nullptr : api().playerEnderChestItem(target, call.u32(1));
+                    returnFilledItem(call, 2, found);
+                }},
+                {"items", "player-set-ender-chest-item", "Iiii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconItem *value = nullptr;
+                    call.resultS32(optionalItem(call, 2, value) && target != nullptr
+                                   && api().playerSetEnderChestItem(target, call.u32(1), value) != 0);
                 }},
 
                 {"events", "subscribe", "iii:I", [](Call &call) {

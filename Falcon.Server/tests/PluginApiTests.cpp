@@ -3,6 +3,10 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -157,6 +161,58 @@ namespace {
                 "the objective was not removed");
     }
 
+    void containers(const FalconServerApi &api, Fixture &fixture) {
+        const Vector3i chestAt(4, 100, 4);
+        fixture.level->setBlock(chestAt, VanillaBlocks::fromIdentifier("minecraft:chest")->toBlockState(), false);
+        fixture.level->getBlockActors().getOrCreate<ChestBlockActor>(chestAt);
+        const FalconBlockPos chest{4, 100, 4};
+        const FalconBlockPos nothing{6, 100, 6};
+
+        require(api.levelContainerSize(fixture.levelHandle(), chest) == 27, "a chest does not have 27 slots");
+        require(api.levelContainerSize(fixture.levelHandle(), nothing) == 0, "an empty spot has slots");
+        FalconItem *diamonds = api.itemCreate("minecraft:diamond", 3);
+        require(diamonds != nullptr, "no diamond item");
+        require(api.levelSetContainerItem(fixture.levelHandle(), chest, 5, diamonds) == 1, "the chest took nothing");
+        require(api.levelSetContainerItem(fixture.levelHandle(), chest, 27, diamonds) == 0, "slot 27 was written");
+        require(api.levelSetContainerItem(fixture.levelHandle(), nothing, 0, diamonds) == 0, "air took an item");
+
+        FalconItem *stored = api.levelContainerItem(fixture.levelHandle(), chest, 5);
+        require(stored != nullptr && std::string(api.itemIdentifier(stored)) == "minecraft:diamond"
+                        && api.itemCount(stored) == 3,
+                "the chest does not hold the diamonds");
+        api.itemDestroy(stored);
+        FalconItem *empty = api.levelContainerItem(fixture.levelHandle(), chest, 6);
+        require(empty != nullptr && api.itemIsEmpty(empty) != 0, "an untouched slot is not empty");
+        api.itemDestroy(empty);
+        require(api.levelSetContainerItem(fixture.levelHandle(), chest, 5, nullptr) == 1, "the slot was not cleared");
+        stored = api.levelContainerItem(fixture.levelHandle(), chest, 5);
+        require(api.itemIsEmpty(stored) != 0, "a cleared slot kept its item");
+        api.itemDestroy(stored);
+
+        require(api.playerEnderChestSize(fixture.playerHandle()) == 27, "the ender chest does not have 27 slots");
+        require(api.playerSetEnderChestItem(fixture.playerHandle(), 0, diamonds) == 1, "the ender chest took nothing");
+        stored = api.playerEnderChestItem(fixture.playerHandle(), 0);
+        require(api.itemCount(stored) == 3, "the ender chest does not hold the diamonds");
+        api.itemDestroy(stored);
+        require(api.playerEnderChestItem(fixture.playerHandle(), 27) == nullptr, "ender chest slot 27 exists");
+        api.itemDestroy(diamonds);
+
+        const Vector3i signAt(8, 100, 8);
+        fixture.level->setBlock(signAt, VanillaBlocks::fromIdentifier("minecraft:standing_sign")->toBlockState(), false);
+        fixture.level->getBlockActors().getOrCreate<SignBlockActor>(signAt);
+        const FalconBlockPos sign{8, 100, 8};
+        require(api.levelSignText(fixture.levelHandle(), nothing, FALCON_SIGN_FRONT) == nullptr, "air has text");
+        require(std::string(api.levelSignText(fixture.levelHandle(), sign, FALCON_SIGN_FRONT)).empty(),
+                "a new sign has text");
+        require(api.levelSetSignText(fixture.levelHandle(), sign, FALCON_SIGN_BACK, "Hello") == 1,
+                "the sign was not written");
+        require(std::string(api.levelSignText(fixture.levelHandle(), sign, FALCON_SIGN_BACK)) == "Hello",
+                "the back of the sign does not read Hello");
+        require(std::string(api.levelSignText(fixture.levelHandle(), sign, FALCON_SIGN_FRONT)).empty(),
+                "writing the back changed the front");
+        require(api.levelSetSignText(fixture.levelHandle(), sign, 2, "Hello") == 0, "an unknown side was written");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -165,6 +221,7 @@ namespace {
         effects(api, fixture);
         soundsAndParticles(api, fixture);
         scoreboard(api, fixture);
+        containers(api, fixture);
     }
 }
 
