@@ -530,6 +530,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                                                    : mount->getEquippableItems();
 
     for (const ItemStackRequest &request: packet.mRequests) {
+        // nothing to run: the same answer as a request run on a copy of the inventory, without the copy
+        if (request.mActions.empty() && !renumberedBundles && !leftContainer) {
+            ItemStackResponseEntry done;
+            done.mRequestId = request.mRequestId;
+            done.mResult = ItemStackRequestHandler::RESULT_OK;
+            response.mEntries.push_back(std::move(done));
+            continue;
+        }
+
         const bool anvilOpen = manager.isAnvilOpen()
                                && AnvilBlock::matches(
                                        level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z));
