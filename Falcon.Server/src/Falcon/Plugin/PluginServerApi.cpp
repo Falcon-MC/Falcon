@@ -229,6 +229,7 @@ namespace {
         PluginServerApi::fillMaps(api);
         PluginServerApi::fillEffects(api);
         PluginServerApi::fillScoreboard(api);
+        PluginServerApi::fillContainers(api);
         return api;
     }
 }
