@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Level/Dimension/Dimension.h"
+
 #include <cstdint>
 #include <functional>
 #include <random>
@@ -35,6 +37,11 @@ public:
     virtual ~StructureFeature() = default;
 
     const std::string &getName() const;
+
+    // the dimension the structure generates in, the one /locate searches
+    virtual DimensionType getDimension() const {
+        return DimensionType::Overworld;
+    }
 
     // the side of the square regions, in chunks, each holding one candidate start
     int32_t getSpacing() const {
