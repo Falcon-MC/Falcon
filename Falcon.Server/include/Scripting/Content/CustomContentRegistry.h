@@ -48,6 +48,14 @@ struct CustomItemDefinition {
     // minecraft:damage: attack damage on top of the empty hand's
     int32_t mDamage = 0;
     std::vector<std::string> mTags;
+    // the defaults of an item that declares none of these
+    bool mAllowOffHand = false;
+    bool mCanDestroyInCreative = true;
+    bool mGlint = false;
+    bool mLiquidClipped = false;
+    bool mShouldDespawn = true;
+    bool mStackedByData = false;
+    bool mFireResistant = false;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;
