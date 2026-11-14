@@ -199,8 +199,7 @@ bool ExecuteCommand::testBlock(CommandOrigin &sender, const Context &context, co
         return false;
     }
 
-    // the game finds no command area for an unloaded chunk and answers outOfWorld (sub_14BE21B90): no column is
-    // generated for a test
+    // the game finds no command area for an unloaded chunk and answers out of world: no column is generated
     if (position.y < level.getMinY() || position.y > level.getMaxY()
         || level.peekChunkPtr(position.x >> 4, position.z >> 4) == nullptr) {
         sender.sendTranslation("commands.testforblock.outOfWorld", {});
