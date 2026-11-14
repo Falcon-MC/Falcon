@@ -1,4 +1,6 @@
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/InventoryHandler.h"
+#include "Protocol/Packets/ItemStackRequestPacket.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemUseTransaction.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -123,6 +125,50 @@ namespace {
                             && !allowed.getOffhand().isAir()
                             && allowed.getOffhand().mDefinition->getIdentifier() == "test:club",
                     "a pack item with allow_off_hand was kept out of the off hand");
+        }
+
+        // requests behind a refused one, and empty ones, are refused without being run
+        {
+            PlayerInventory &inventory = player.getInventory();
+            inventory.setItem(10, owner.createItemStack("minecraft:dirt", 4));
+
+            ItemStackRequestAction move;
+            move.mType = ItemStackRequestActionType::Take;
+            move.mCount = 1;
+            move.mSource = slotOf(ContainerSlotType::Inventory, 10);
+            move.mDestination = slotOf(ContainerSlotType::Inventory, 11);
+            ItemStackRequest valid;
+            valid.mRequestId = -5;
+            valid.mActions.push_back(move);
+
+            ItemStackRequestAction fromNothing = move;
+            fromNothing.mSource = slotOf(ContainerSlotType::Inventory, 20);
+            ItemStackRequest invalid;
+            invalid.mRequestId = -3;
+            invalid.mActions.push_back(fromNothing);
+
+            ItemStackRequest empty;
+            empty.mRequestId = -1;
+
+            ItemStackRequestPacket afterRefusal;
+            afterRefusal.mRequests = {invalid, valid};
+            InventoryHandler::handleItemStackRequest(owner, id, player, afterRefusal);
+            require(inventory.getItem(10).mCount == 4 && inventory.getItem(11).isAir(),
+                    "a request behind a refused one was still run");
+
+            ItemStackRequestPacket afterEmpty;
+            afterEmpty.mRequests = {empty, valid};
+            InventoryHandler::handleItemStackRequest(owner, id, player, afterEmpty);
+            require(inventory.getItem(10).mCount == 4 && inventory.getItem(11).isAir(),
+                    "a request behind an empty one was still run");
+
+            ItemStackRequestPacket alone;
+            alone.mRequests = {valid, valid};
+            InventoryHandler::handleItemStackRequest(owner, id, player, alone);
+            require(inventory.getItem(10).mCount == 2 && inventory.getItem(11).mCount == 2,
+                    "valid requests of one packet were not all run");
+            inventory.setItem(10, ItemStack::air());
+            inventory.setItem(11, ItemStack::air());
         }
 
         // a creative player breaks a block at once, except while holding an item that refuses to

@@ -529,7 +529,20 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     const std::vector<ItemStack> mountEquipment = mount == nullptr ? std::vector<ItemStack>()
                                                                    : mount->getEquippableItems();
 
+    // a request runs on a copy of the inventory: one that cannot hold must not cost that copy, and neither must
+    // those behind a refusal, which the client predicted on a state the server did not accept
+    bool refused = false;
     for (const ItemStackRequest &request: packet.mRequests) {
+        if (refused || request.mActions.empty()) {
+            ItemStackResponseEntry rejected;
+            rejected.mRequestId = request.mRequestId;
+            rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
+            needsResync = true;
+            refused = true;
+            response.mEntries.push_back(std::move(rejected));
+            continue;
+        }
+
         const bool anvilOpen = manager.isAnvilOpen()
                                && AnvilBlock::matches(
                                        level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z));
@@ -566,6 +579,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             rejected.mRequestId = request.mRequestId;
             rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
             needsResync = true;
+            refused = true;
             response.mEntries.push_back(std::move(rejected));
             continue;
         }
@@ -613,6 +627,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
         if (entry.mResult != ItemStackRequestHandler::RESULT_OK) {
             needsResync = true;
+            refused = true;
             playBundleSounds(owner, player, request, false);
         } else {
             playBundleSounds(owner, player, request, true);
