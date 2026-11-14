@@ -9,11 +9,14 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
+class Actor;
 class Level;
 class MobActor;
 class ServerNetworkHandler;
+class ServerPlayer;
 
 // order of the dweller_role names of minecraft:dweller
 enum class DwellerRole : int32_t { Inhabitant = 0, Defender = 1, Hostile = 2, Passive = 3, None = 4 };
@@ -88,6 +91,20 @@ public:
     // edges included: the village box grown by 32 when the raid started; players inside follow the raid
     bool isInRaidBounds(const Vector3f &position) const;
 
+    // remembered for 300 ticks after its last hit on an inhabitant or a defender
+    void addAggressor(uint64_t runtimeId, int64_t tick);
+
+    // clamped to -30..10
+    void changeStanding(int64_t playerId, int32_t delta);
+
+    int32_t getStanding(int64_t playerId) const;
+
+    // the closest remembered aggressor or hostile dweller, any distance
+    Actor *findClosestAggressor(ServerNetworkHandler &owner, const Actor &from) const;
+
+    // the closest player whose standing fell to -15 or lower, any distance
+    ServerPlayer *findClosestHostilePlayer(ServerNetworkHandler &owner, const Actor &from) const;
+
     // no-op while a raid runs or on peaceful
     void tryStartRaid(ServerNetworkHandler &owner);
 
@@ -128,12 +145,22 @@ private:
 
     void _recalculateBounds();
 
+    void _tickAggressors(ServerNetworkHandler &owner);
+
+    void _decayStandings(int64_t currentTick);
+
     std::array<PoiQueue, POI_TYPE_COUNT> mUnclaimed;
     std::vector<Inhabitant> mInhabitants;
     std::array<std::vector<DwellerEntry>, ROLE_COUNT> mRoles;
     AxisAlignedBB mBounds;
     AxisAlignedBB mRaidBounds;
     std::unique_ptr<Raid> mRaid;
+    // runtime id of the aggressor, tick of its last hit
+    std::unordered_map<uint64_t, int64_t> mAggressors;
+    // by player unique id
+    std::unordered_map<int64_t, int32_t> mStandings;
+    int64_t mNextNegativeDecayTick = 0;
+    int64_t mNextPositiveDecayTick = 0;
     int64_t mLastTick = 0;
     int32_t mTickCount = 0;
     bool mInitialized = false;

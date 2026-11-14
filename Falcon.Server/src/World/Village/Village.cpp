@@ -32,6 +32,21 @@ namespace {
     // a wave not cleared within this many ticks expires the raid
     const int64_t RAID_EXPIRY_TICKS = 48001;
     const char *const RAID_EXPIRY_MESSAGE = R"({"rawtext":[{"text":"\u00a77"},{"translate":"raid.expiry"}]})";
+    const int64_t AGGRESSOR_MEMORY_TICKS = 300;
+    const int32_t MIN_STANDING = -30;
+    const int32_t MAX_STANDING = 10;
+    const int32_t HOSTILE_STANDING = -15;
+    // standings move back towards 0 on the ticks where tick % 30 == 0
+    const int64_t STANDING_INTERVAL = 30;
+    const int64_t NEGATIVE_STANDING_PERIOD = 12000;
+    const int64_t POSITIVE_STANDING_PERIOD = 120000;
+
+    float distanceSquared(const Vector3f &first, const Vector3f &second) {
+        const float dx = first.x - second.x;
+        const float dy = first.y - second.y;
+        const float dz = first.z - second.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
 
     std::mt19937 &villageRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -201,6 +216,10 @@ void Village::tick(ServerNetworkHandler &owner, Level &level, int64_t currentTic
     if (!mInitialized)
         ++mTickCount;
     mLastTick = currentTick;
+
+    _tickAggressors(owner);
+    if (currentTick % STANDING_INTERVAL == 0)
+        _decayStandings(currentTick);
 
     _tickPoiValidity(owner, level);
 
@@ -456,6 +475,91 @@ void Village::_recalculateBounds() {
             mBounds = AxisAlignedBB(std::min(mBounds.mMinX, x), std::min(mBounds.mMinY, y), std::min(mBounds.mMinZ, z),
                                     std::max(mBounds.mMaxX, x), std::max(mBounds.mMaxY, y), std::max(mBounds.mMaxZ, z));
         }
+    }
+}
+
+void Village::addAggressor(uint64_t runtimeId, int64_t tick) {
+    if (runtimeId != 0)
+        mAggressors[runtimeId] = tick;
+}
+
+void Village::changeStanding(int64_t playerId, int32_t delta) {
+    const auto existing = mStandings.find(playerId);
+    const int32_t current = existing == mStandings.end() ? 0 : existing->second;
+    mStandings[playerId] = std::min(std::max(current + delta, MIN_STANDING), MAX_STANDING);
+}
+
+int32_t Village::getStanding(int64_t playerId) const {
+    const auto existing = mStandings.find(playerId);
+    return existing == mStandings.end() ? 0 : existing->second;
+}
+
+Actor *Village::findClosestAggressor(ServerNetworkHandler &owner, const Actor &from) const {
+    Actor *closest = nullptr;
+    float best = std::numeric_limits<float>::max();
+    const auto consider = [&](Actor *candidate) {
+        if (candidate == nullptr)
+            return;
+        const float distance = distanceSquared(candidate->getPosition(), from.getPosition());
+        if (distance < best) {
+            best = distance;
+            closest = candidate;
+        }
+    };
+
+    for (const auto &entry: mAggressors)
+        consider(MobActor::findActor(owner, entry.first));
+    for (const DwellerEntry &entry: mRoles[(size_t) DwellerRole::Hostile])
+        consider(VillageManager::findMob(owner, entry.mId));
+    return closest;
+}
+
+ServerPlayer *Village::findClosestHostilePlayer(ServerNetworkHandler &owner, const Actor &from) const {
+    ServerPlayer *closest = nullptr;
+    float best = std::numeric_limits<float>::max();
+    for (auto &entry: owner.getPlayers()) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || !player.sharesLevelWith(from)
+            || getStanding(player.getUniqueId()) > HOSTILE_STANDING)
+            continue;
+
+        const float distance = distanceSquared(player.getPosition(), from.getPosition());
+        if (distance <= best) {
+            best = distance;
+            closest = &player;
+        }
+    }
+    return closest;
+}
+
+void Village::_tickAggressors(ServerNetworkHandler &owner) {
+    for (auto it = mAggressors.begin(); it != mAggressors.end();) {
+        const Actor *aggressor = MobActor::findActor(owner, it->first);
+        if (aggressor != nullptr && aggressor->isAlive() && it->second + AGGRESSOR_MEMORY_TICKS >= mLastTick) {
+            ++it;
+            continue;
+        }
+        it = mAggressors.erase(it);
+    }
+}
+
+void Village::_decayStandings(int64_t currentTick) {
+    if (currentTick >= mNextPositiveDecayTick) {
+        const int64_t periods = (currentTick - mNextPositiveDecayTick) / (POSITIVE_STANDING_PERIOD + 1);
+        for (auto &entry: mStandings) {
+            if (entry.second > 0)
+                entry.second -= (int32_t) std::min<int64_t>(periods, entry.second - 1) + 1;
+        }
+        mNextPositiveDecayTick = currentTick + POSITIVE_STANDING_PERIOD;
+    }
+
+    if (currentTick >= mNextNegativeDecayTick) {
+        const int64_t periods = (currentTick - mNextNegativeDecayTick) / (NEGATIVE_STANDING_PERIOD + 1) + 1;
+        for (auto &entry: mStandings) {
+            if (entry.second < 0)
+                entry.second += (int32_t) std::min<int64_t>(periods, -entry.second);
+        }
+        mNextNegativeDecayTick = currentTick + NEGATIVE_STANDING_PERIOD;
     }
 }
 

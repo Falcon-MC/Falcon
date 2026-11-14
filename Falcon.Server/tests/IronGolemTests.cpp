@@ -11,6 +11,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "World/Village/Village.h"
 
 #include <chrono>
 #include <filesystem>
@@ -143,6 +144,48 @@ namespace {
         child.setPosition(Vector3f(12.5f, 100.0f, 30.5f));
         require(!goal.canUse(arena.mOwner, golem), "a child beyond the search area was offered a flower");
     }
+
+    void villageAggression(Arena &arena) {
+        Village village;
+        MobActor &golem = arena.spawn("minecraft:iron_golem", Vector3f(0.5f, 100.0f, -30.5f));
+        MobActor &skeleton = arena.spawn("minecraft:skeleton", Vector3f(10.5f, 100.0f, -30.5f));
+        ServerPlayer &player = arena.player(9401, Vector3f(4.5f, 100.0f, -30.5f));
+
+        require(village.findClosestAggressor(arena.mOwner, golem) == nullptr, "a quiet village had an aggressor");
+        village.addAggressor(skeleton.getRuntimeId(), 1000);
+        require(village.findClosestAggressor(arena.mOwner, golem) == &skeleton, "the aggressor was forgotten");
+        village.addAggressor(player.getRuntimeId(), 1000);
+        require(village.findClosestAggressor(arena.mOwner, golem) == &player, "the closer aggressor lost");
+
+        // hitting a villager costs 1 standing: the golem only turns on a player at -15
+        for (int32_t hit = 0; hit < 14; ++hit)
+            village.changeStanding(player.getUniqueId(), -1);
+        require(village.findClosestHostilePlayer(arena.mOwner, golem) == nullptr,
+                "-14 standing made the village hostile");
+        village.changeStanding(player.getUniqueId(), -1);
+        require(village.findClosestHostilePlayer(arena.mOwner, golem) == &player,
+                "-15 standing left the village calm");
+
+        village.changeStanding(player.getUniqueId(), -100);
+        require(village.getStanding(player.getUniqueId()) == -30, "standing went below -30");
+        village.changeStanding(player.getUniqueId(), 100);
+        require(village.getStanding(player.getUniqueId()) == 10, "standing went above 10");
+
+        // remembered for 300 ticks after the hit
+        village.tick(arena.mOwner, *arena.mLevel, 1300);
+        require(village.findClosestAggressor(arena.mOwner, golem) == &player, "the aggressor left before 300 ticks");
+        village.tick(arena.mOwner, *arena.mLevel, 1301);
+        require(village.findClosestAggressor(arena.mOwner, golem) == nullptr, "the aggressor stayed past 300 ticks");
+
+        // a negative standing climbs back by 1 every 12000 ticks
+        village.changeStanding(player.getUniqueId(), -25);
+        village.tick(arena.mOwner, *arena.mLevel, 1320);
+        require(village.getStanding(player.getUniqueId()) == -14, "the first decay pass did not raise the standing");
+        village.tick(arena.mOwner, *arena.mLevel, 1350);
+        require(village.getStanding(player.getUniqueId()) == -14, "the standing rose before 12000 ticks");
+        village.tick(arena.mOwner, *arena.mLevel, 13320);
+        require(village.getStanding(player.getUniqueId()) == -13, "the standing did not rise after 12000 ticks");
+    }
 }
 
 int main() {
@@ -161,6 +204,7 @@ int main() {
         groundSnap(arena);
         moveTowardsTarget(arena);
         offerFlower(arena);
+        villageAggression(arena);
         std::cout << "iron golem checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';
