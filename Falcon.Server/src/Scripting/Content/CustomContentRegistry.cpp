@@ -980,6 +980,10 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     itemProperties.putBool("can_destroy_in_creative", item.mCanDestroyInCreative);
     itemProperties.putInt("damage", item.mDamage);
     itemProperties.putBool("foil", item.mGlint);
+    itemProperties.putBool("allow_off_hand", true);
+    itemProperties.putBool("can_destroy_in_creative", true);
+    itemProperties.putInt("damage", item.mDamage);
+    itemProperties.putBool("foil", false);
     itemProperties.putInt("frame_count", 1);
     itemProperties.putBool("hand_equipped", item.mHandEquipped);
     itemProperties.putBool("liquid_clipped", item.mLiquidClipped);
