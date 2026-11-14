@@ -8,6 +8,7 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Core/Math/VectorMath.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -122,7 +123,10 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
         if ((int64_t) shooter.getRuntimeId() != ownerId)
             continue;
 
-        shooter.teleport(owner, hitPosition, MovePlayerTeleportationCause::Behavior);
+        Vector3f destination = hitPosition;
+        if (!PluginEvents::teleport(shooter, destination, "ender_pearl"))
+            break;
+        shooter.teleport(owner, destination, MovePlayerTeleportationCause::Behavior);
         owner.hurt(shooter, ENDER_PEARL_DAMAGE,
                    ActorDamageSource::environment(ENDER_PEARL_DEATH_MESSAGE, shooter.getName())
                            .withoutArmor()

@@ -1,5 +1,6 @@
 #include "Falcon/Plugin/LoadedPlugin.h"
 #include "Falcon/Plugin/PluginCommand.h"
+#include "Falcon/Plugin/PluginEvents.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/ServerNetworkHandler.h"
@@ -7,6 +8,7 @@
 #include "Server/Commands/CommandMap.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -549,6 +551,96 @@ namespace {
                 "the plugin count differs");
     }
 
+    // records what a handler saw; a set destination or amount is written back, a refusal cancels
+    struct Probe {
+        int calls = 0;
+        bool cancel = false;
+        bool moveTo = false;
+        FalconVec3 to{};
+        double amount = -1.0;
+        std::string cause;
+        FalconEffect effect{};
+    };
+
+    void probeHandler(FalconEvent *event, void *userData) {
+        const FalconServerApi &api = PluginServerApi::get();
+        auto &probe = *static_cast<Probe *>(userData);
+        probe.calls++;
+        probe.cause = api.eventCause(event);
+        api.eventEffect(event, &probe.effect);
+        if (probe.moveTo)
+            api.eventSetTo(event, probe.to);
+        if (probe.amount >= 0.0)
+            api.eventSetAmount(event, probe.amount);
+        if (probe.cancel)
+            api.eventSetCancelled(event, 1);
+    }
+
+    void playerAndEntityEvents(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Listener";
+        listener.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(listener);
+        FalconEntity *body = api.playerEntity(fixture.playerHandle());
+
+        Probe teleport;
+        const uint64_t teleportId = api.subscribe(handle, FALCON_EVENT_PLAYER_TELEPORT, FALCON_PRIORITY_NORMAL, 0,
+                                                  &probeHandler, &teleport);
+        teleport.moveTo = true;
+        teleport.to = FalconVec3{3.5, 101.0, 3.5};
+        Vector3f destination(1.5f, 100.0f, 1.5f);
+        require(PluginEvents::teleport(*fixture.player, destination, "command"), "an allowed teleport was refused");
+        require(teleport.calls == 1 && teleport.cause == "command", "the teleport event did not fire");
+        require(std::fabs(destination.x - 3.5f) < 1e-4f, "the new destination was ignored");
+        teleport.moveTo = false;
+        teleport.cancel = true;
+        require(!PluginEvents::teleport(*fixture.player, destination, "command"), "a cancelled teleport went through");
+        api.unsubscribe(teleportId);
+
+        Probe effect;
+        effect.cancel = true;
+        const uint64_t effectId = api.subscribe(handle, FALCON_EVENT_ENTITY_EFFECT_ADD, FALCON_PRIORITY_NORMAL, 0,
+                                                &probeHandler, &effect);
+        require(api.entityAddEffect(body, FALCON_EFFECT_HASTE, 100, 2, 1) == 0, "a refused effect was added");
+        require(effect.calls == 1 && effect.effect.type == FALCON_EFFECT_HASTE && effect.effect.amplifier == 2
+                        && effect.effect.duration == 100,
+                "the effect event carried the wrong effect");
+        api.unsubscribe(effectId);
+
+        Probe heal;
+        heal.amount = 1.0;
+        const uint64_t healId = api.subscribe(handle, FALCON_EVENT_ENTITY_HEAL, FALCON_PRIORITY_NORMAL, 0,
+                                              &probeHandler, &heal);
+        fixture.player->setHealth(10.0f);
+        fixture.player->heal(4.0f, HealCause::Regeneration);
+        require(heal.calls == 1 && heal.cause == "regeneration", "the heal event did not fire");
+        require(std::fabs(fixture.player->getHealth() - 11.0f) < 1e-4f, "the changed heal amount was ignored");
+        api.unsubscribe(healId);
+
+        Probe armor;
+        const uint64_t armorId = api.subscribe(handle, FALCON_EVENT_PLAYER_ARMOR_CHANGE, FALCON_PRIORITY_NORMAL, 0,
+                                               &probeHandler, &armor);
+        PlayerInventory &inventory = fixture.player->getInventory();
+        const ItemStack before[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
+                                                               inventory.getArmor(2), inventory.getArmor(3)};
+        inventory.setArmor(PlayerInventory::ARMOR_HEAD, fixture.owner.createItemStack("minecraft:iron_helmet", 1));
+        PluginEvents::armorChanged(*fixture.player, before);
+        require(armor.calls == 1, "one changed slot gave " + std::to_string(armor.calls) + " events");
+        api.unsubscribe(armorId);
+
+        Probe bucket;
+        bucket.cancel = true;
+        const uint64_t bucketId = api.subscribe(handle, FALCON_EVENT_PLAYER_BUCKET_FILL, FALCON_PRIORITY_NORMAL, 0,
+                                                &probeHandler, &bucket);
+        require(!PluginEvents::bucket(*fixture.player, *fixture.level, Vector3i(2, 100, 2), true,
+                                      fixture.owner.createItemStack("minecraft:bucket", 1)),
+                "a cancelled bucket fill went through");
+        require(PluginEvents::bucket(*fixture.player, *fixture.level, Vector3i(2, 100, 2), false,
+                                     fixture.owner.createItemStack("minecraft:water_bucket", 1)),
+                "emptying fired the fill listener");
+        api.unsubscribe(bucketId);
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -564,6 +656,7 @@ namespace {
         world(api, fixture);
         entitiesAndPlayers(api, fixture);
         administration(api, fixture);
+        playerAndEntityEvents(api, fixture);
     }
 }
 

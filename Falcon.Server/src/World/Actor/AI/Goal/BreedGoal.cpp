@@ -3,6 +3,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <cmath>
 #include <cstring>
@@ -127,6 +128,19 @@ void BreedGoal::_breed(ServerNetworkHandler &owner, MobActor &mob, MobActor &par
 
     mob.finishBreeding(owner);
     partner.finishBreeding(owner);
+
+    // a refused baby still ends the love mode: otherwise the pair asks again every tick
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_BREED)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_BREED;
+        event.mCancellable = true;
+        event.mEntity = &mob;
+        event.mTarget = &partner;
+        event.mCause = babyType;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+    }
 
     Level &level = owner.getLevelFor(mob);
     ServerActor *child = owner.spawnBabyActor(level, babyType, mob.getPosition(), BABY_SCALE);

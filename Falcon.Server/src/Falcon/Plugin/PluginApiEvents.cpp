@@ -278,6 +278,14 @@ namespace {
         return event(target)->mFormId;
     }
 
+    int eventEffect(FalconEvent *target, FalconEffect *out) {
+        const PluginEvent *source = event(target);
+        if (!source->mHasEffect || out == nullptr)
+            return 0;
+        *out = source->mEffect;
+        return 1;
+    }
+
     const char *eventFormResponse(FalconEvent *target) {
         return hold(event(target)->mFormResponse);
     }
@@ -364,4 +372,5 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventClientDataField = &eventClientDataField;
     api.eventFormId = &eventFormId;
     api.eventFormResponse = &eventFormResponse;
+    api.eventEffect = &eventEffect;
 }
