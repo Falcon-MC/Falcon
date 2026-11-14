@@ -108,6 +108,30 @@ namespace {
                 "the crafted item reported to scripts is not the recipe output");
         require(crafted.mCount == outputCount, "the crafted item count is not the recipe output count");
 
+        // the ingredients a craft was matched on cannot be swapped away before they are consumed
+        PlayerInventory swapped;
+        swapped.setCraftingItem(0, makeItem(owner, ingredient, 1));
+        swapped.setItem(5, makeItem(owner, "minecraft:dirt", 1));
+        ItemStackRequest forged;
+        forged.mRequestId = -3;
+        forged.mActions.push_back(craft);
+        ItemStackRequestAction swap;
+        swap.mType = ItemStackRequestActionType::Swap;
+        swap.mSource = slotOf(ContainerSlotType::CraftingInput, PlayerInventory::CRAFTING_NETWORK_SLOT_FIRST);
+        swap.mDestination = slotOf(ContainerSlotType::Inventory, 5);
+        forged.mActions.push_back(swap);
+        forged.mActions.push_back(consume);
+        forged.mActions.push_back(take);
+        const ItemStackResponseEntry refused = ItemStackRequestHandler::execute(
+                swapped, forged, creative, owner.getRecipeOutputs(), owner.getRecipeSourceIndices(), false, false,
+                nullptr, nullptr, &owner.getCodecContext(), nullptr, 0, false, nullptr, false, nullptr, nullptr,
+                nullptr, nullptr, nullptr, nullptr);
+        require(refused.mResult != ItemStackRequestHandler::RESULT_OK,
+                "a craft paid with another item than its ingredient was accepted");
+        require(swapped.getItem(0).isAir() && !swapped.getItem(5).isAir()
+                        && swapped.getItem(5).mDefinition->getIdentifier() == "minecraft:dirt",
+                "a refused craft still changed the inventory");
+
         // a request that crafts nothing leaves the crafted item untouched
         ItemStackRequest empty;
         empty.mRequestId = -2;

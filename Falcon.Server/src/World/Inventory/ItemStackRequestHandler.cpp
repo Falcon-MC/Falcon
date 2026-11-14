@@ -875,8 +875,44 @@ namespace {
         return ItemDataTable::getComponents(identifier).get<AllowOffHandItemComponent>() == nullptr;
     }
 
+    bool isCraftInput(ContainerSlotType container) {
+        return container == ContainerSlotType::CraftingInput || container == ContainerSlotType::EnchantingInput
+               || container == ContainerSlotType::EnchantingMaterial || container == ContainerSlotType::AnvilInput
+               || container == ContainerSlotType::AnvilMaterial || container == ContainerSlotType::CartographyInput
+               || container == ContainerSlotType::CartographyAdditional
+               || container == ContainerSlotType::StonecutterInput;
+    }
+
+    // the result was made from what the input slots held: until it is paid, they only give to a consume, or
+    // another item would pay for it and the real ingredients would stay
+    bool rejectedByPendingCraft(const RequestContext &context, const ItemStackRequestAction &action) {
+        if (!context.mCraftingActive && !context.mEnchantActive && !context.mAnvilActive && !context.mCartographyActive
+            && !context.mStonecutterActive)
+            return false;
+
+        switch (action.mType) {
+            // the enchanting table puts its result back in the input slot
+            case ItemStackRequestActionType::Take:
+            case ItemStackRequestActionType::Place:
+                return isCraftInput(action.mSource.mContainerName.mContainer)
+                       || (isCraftInput(action.mDestination.mContainerName.mContainer)
+                           && action.mSource.mContainerName.mContainer != ContainerSlotType::CreatedOutput);
+            case ItemStackRequestActionType::Swap:
+                return isCraftInput(action.mSource.mContainerName.mContainer)
+                       || isCraftInput(action.mDestination.mContainerName.mContainer);
+            case ItemStackRequestActionType::Drop:
+            case ItemStackRequestActionType::Destroy:
+                return isCraftInput(action.mSource.mContainerName.mContainer);
+            default:
+                return false;
+        }
+    }
+
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
+        if (rejectedByPendingCraft(context, action))
+            return false;
+
         switch (action.mType) {
             case ItemStackRequestActionType::Take:
             case ItemStackRequestActionType::Place:
