@@ -6,6 +6,7 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Item/BodyArmor.h"
 #include "World/Item/Components/ItemComponents.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/EnchantmentData.h"
@@ -2340,8 +2341,11 @@ namespace {
                 continue;
             const ArmorItemComponent *armor =
                     ItemDataTable::getComponents(item.mDefinition->getIdentifier()).get<ArmorItemComponent>();
+            const BodyArmorData *body = BodyArmor::find(item);
             if (armor != nullptr)
                 total += toughness ? armor->getToughness() : armor->getPoints();
+            else if (body != nullptr)
+                total += toughness ? body->mToughness : body->mPoints;
         }
         return JS_NewInt32(ctx, total);
     }

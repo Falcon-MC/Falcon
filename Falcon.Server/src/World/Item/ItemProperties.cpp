@@ -1,12 +1,13 @@
 #include "World/Item/ItemProperties.h"
 
+#include "World/Item/BodyArmor.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemTypes.h"
 
 #include <algorithm>
 
 namespace {
-    // netherite is the only armor tier that carries one
+    // netherite is the only armor tier that carries one, body armor included
     const float NETHERITE_KNOCKBACK_RESISTANCE = 0.1f;
 }
 
@@ -34,6 +35,9 @@ bool ItemProperties::keepsOnDeath(const ItemStack &item) {
 }
 
 float ItemProperties::getArmorKnockbackResistance(const std::string &identifier) {
+    if (const BodyArmorData *body = BodyArmor::find(identifier))
+        return body->mKnockbackResistance;
+
     const ItemData *data = ItemDataTable::find(identifier);
     if (data == nullptr || data->mArmorSlot == ArmorSlot::None)
         return 0.0f;

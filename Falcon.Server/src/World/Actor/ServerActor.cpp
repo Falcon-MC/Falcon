@@ -240,8 +240,10 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
         source->recordAttacked(getRuntimeId(), owner.getCurrentTick());
 
     const float rawAmount = amount;
-    if (damageSource.mApplyArmor)
+    if (damageSource.mApplyArmor) {
+        hurtArmor(owner, amount, damageSource);
         amount = absorbDamage(amount, damageSource);
+    }
 
     if (onHurt(owner, amount, source))
         return true;

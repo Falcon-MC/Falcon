@@ -6,6 +6,9 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/ItemStackNbt.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Item/BodyArmor.h"
+#include "World/Item/ItemData.h"
+#include "World/Item/ItemDurability.h"
 #include "World/Item/Item.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -15,6 +18,7 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/MobArmorEquipmentPacket.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MobEquipmentPacket.h"
 
 #include <algorithm>
@@ -337,8 +341,58 @@ bool MobEquipment::dropSlot(ServerNetworkHandler &owner, Level &level, const Vec
 }
 
 float MobEquipment::absorbDamage(float amount, const ActorDamageSource &source) const {
-    return ArmorProtection::apply(&mSlots[HEAD], FEET - HEAD + 1, amount, source.mDeathMessageKey,
+    return ArmorProtection::apply(&mSlots[HEAD], BODY - HEAD + 1, amount, source.mDeathMessageKey,
                                   source.mArmorEfficiency);
+}
+
+bool MobEquipment::_wearsOnHit(const ItemStack &item) {
+    if (item.isAir() || item.mDefinition == nullptr)
+        return false;
+
+    if (const BodyArmorData *body = BodyArmor::find(item))
+        return body->mWearsOnHit;
+
+    const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
+    return data != nullptr && data->mArmorSlot != ArmorSlot::None;
+}
+
+void MobEquipment::hurtArmor(ServerNetworkHandler &owner, const MobActor &mob, float amount,
+                             const ActorDamageSource &source) {
+    if (!ArmorProtection::isReducedByArmor(source.mDeathMessageKey))
+        return;
+
+    const int32_t wear = std::max(1, (int32_t) amount / 4);
+    bool changed = false;
+    for (int slot = HEAD; slot <= BODY; ++slot) {
+        ItemStack &item = mSlots[(size_t) slot];
+        if (!_wearsOnHit(item))
+            continue;
+
+        const BodyArmorData *body = BodyArmor::find(item);
+        const char *breakSound = body != nullptr && body->mBreakSound != nullptr ? body->mBreakSound
+                                                                                 : LevelSoundEvent::BREAK;
+        if (!ItemDurability::apply(nullptr, item, wear))
+            continue;
+
+        changed = true;
+        if (item.isAir())
+            owner.playLevelSound(owner.getLevelFor(mob), breakSound, mob.getPosition(), mob.getIdentifier());
+    }
+
+    if (changed)
+        broadcast(owner, mob);
+}
+
+bool MobEquipment::repairSlot(int slot, int32_t amount) {
+    if (slot < 0 || slot >= SLOT_COUNT || amount <= 0)
+        return false;
+
+    ItemStack &item = mSlots[(size_t) slot];
+    if (item.isAir() || item.mDamage <= 0)
+        return false;
+
+    item.mDamage = std::max(0, item.mDamage - amount);
+    return true;
 }
 
 void MobEquipment::saveNbt(Tag &data) const {
