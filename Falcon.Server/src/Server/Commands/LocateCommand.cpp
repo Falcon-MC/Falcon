@@ -166,8 +166,8 @@ bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<st
                 return;
             }
 
-            const int32_t foundX = start.x * 16 + 8;
-            const int32_t foundZ = start.z * 16 + 8;
+            const int32_t foundX = start.x * 16 + feature->getBlockOffset();
+            const int32_t foundZ = start.z * 16 + feature->getBlockOffset();
             const int64_t deltaX = foundX - originX;
             const int64_t deltaZ = foundZ - originZ;
             const int64_t distance = (int64_t) std::sqrt((double) (deltaX * deltaX + deltaZ * deltaZ));
