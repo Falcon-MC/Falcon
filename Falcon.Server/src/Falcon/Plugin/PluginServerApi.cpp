@@ -230,6 +230,7 @@ namespace {
         PluginServerApi::fillEffects(api);
         PluginServerApi::fillScoreboard(api);
         PluginServerApi::fillContainers(api);
+        PluginServerApi::fillData(api);
         return api;
     }
 }

@@ -1,3 +1,5 @@
+#include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
@@ -18,6 +20,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     void require(bool condition, const std::string &message) {
@@ -213,6 +216,63 @@ namespace {
         require(api.levelSetSignText(fixture.levelHandle(), sign, 2, "Hello") == 0, "an unknown side was written");
     }
 
+    void persistentData(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin first;
+        first.mDescription.mName = "First";
+        LoadedPlugin second;
+        second.mDescription.mName = "Second";
+        FalconPlugin *one = PluginManager::toHandle(first);
+        FalconPlugin *two = PluginManager::toHandle(second);
+
+        FalconEntity *body = api.playerEntity(fixture.playerHandle());
+        require(api.entityData(one, body, "rank") == nullptr, "a new player has data");
+        require(api.entitySetData(one, body, "rank", "builder") == 1, "the player data was not set");
+        require(api.entitySetData(two, body, "rank", "guest") == 1, "the second plugin could not set its key");
+        require(std::string(api.entityData(one, body, "rank")) == "builder", "a plugin read another's value");
+        require(std::string(api.entityData(two, body, "rank")) == "guest", "the second value was lost");
+        require(api.entitySetData(one, body, "", "x") == 0, "an empty key was accepted");
+        require(api.entityDataCount(one, body) == 1 && std::string(api.entityDataKey(one, body, 0)) == "rank",
+                "the keys are not listed per plugin");
+
+        const Tag saved = fixture.player->saveNbt("world");
+        NetworkIdentifier id;
+        ServerPlayer loaded(id, 7002);
+        loaded.loadNbt(saved, fixture.owner.getCodecContext());
+        const auto stored = loaded.getDynamicProperties().find("First:rank");
+        require(stored != loaded.getDynamicProperties().end() && stored->second.mString == "builder",
+                "the player data did not survive the save");
+
+        require(api.entitySetData(one, body, "rank", nullptr) == 1 && api.entityData(one, body, "rank") == nullptr,
+                "the player data was not removed");
+
+        FalconItem *sword = api.itemCreate("minecraft:diamond_sword", 1);
+        require(api.itemSetData(one, sword, "owner", "Tester") == 1, "the item data was not set");
+        require(std::string(api.itemData(one, sword, "owner")) == "Tester", "the item data is not readable");
+        require(api.itemData(two, sword, "owner") == nullptr, "a plugin read another's item value");
+        FalconItem *copy = api.itemCopy(sword);
+        require(std::string(api.itemData(one, copy, "owner")) == "Tester", "a copy lost the item data");
+
+        uint32_t length = 0;
+        const uint8_t *nbt = api.itemNbt(sword, &length);
+        require(nbt != nullptr && length > 0, "an item with data has no tag");
+        const std::vector<uint8_t> bytes(nbt, nbt + length);
+        FalconItem *plain = api.itemCreate("minecraft:diamond_sword", 1);
+        require(api.itemSetNbt(plain, bytes.data(), (uint32_t) bytes.size()) == 1, "the tag was not written");
+        require(std::string(api.itemData(one, plain, "owner")) == "Tester", "the written tag lost the data");
+        const uint8_t garbage[3] = {0xff, 0x01, 0x02};
+        require(api.itemSetNbt(plain, garbage, 3) == 0, "garbage was taken as a tag");
+        require(api.itemSetNbt(plain, nullptr, 0) == 1 && api.itemData(one, plain, "owner") == nullptr,
+                "an empty tag did not clear the item");
+
+        require(api.itemSetData(one, sword, "owner", nullptr) == 1 && api.itemData(one, sword, "owner") == nullptr,
+                "the item data was not removed");
+        api.itemDestroy(plain);
+        api.itemDestroy(copy);
+        api.itemDestroy(sword);
+
+        require(api.entityNbt(body, &length) != nullptr && length > 0, "the player has no saved state");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -222,6 +282,7 @@ namespace {
         soundsAndParticles(api, fixture);
         scoreboard(api, fixture);
         containers(api, fixture);
+        persistentData(api, fixture);
     }
 }
 
