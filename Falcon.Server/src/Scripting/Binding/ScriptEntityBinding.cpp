@@ -14,7 +14,6 @@
 #include "World/Actor/VanillaActorTable.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
-#include "World/Actor/Movement/MovementConstants.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockTags.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -373,19 +372,7 @@ namespace {
     }
 
     ActorSize sizeOf(const EntityTarget &target) {
-        if (target.mPlayer != nullptr) {
-            const ActorFlags &flags = target.mPlayer->getFlags();
-            float height = MovementPhysics::PLAYER_HEIGHT;
-            if (flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling))
-                height = MovementPhysics::PLAYER_CRAWLING_HEIGHT;
-            else if (flags.get(ActorFlag::Sneaking))
-                height = MovementPhysics::PLAYER_SNEAKING_HEIGHT;
-            return ActorSize{MovementPhysics::PLAYER_WIDTH, height};
-        }
-        if (target.mServerActor != nullptr)
-            return target.mServerActor->getSize();
-        // the item entity's setSize(0.25, 0.25)
-        return ActorSize{0.25f, 0.25f};
+        return ScriptRaycast::actorSize(*target.mActor);
     }
 
     // AABB: the center and the half extents of the collision box
