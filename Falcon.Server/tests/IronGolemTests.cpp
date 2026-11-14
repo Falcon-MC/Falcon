@@ -12,15 +12,18 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "World/Village/PoiInstance.h"
 #include "World/Village/Village.h"
 
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     void require(bool condition, const char *message) {
@@ -256,6 +259,45 @@ namespace {
         require(countOf(arena, "minecraft:snow_golem") == snowGolems + 1, "no snow golem appeared");
         require(level.getBlockState(snowX, y + 1, z).mName == "minecraft:air", "a snow golem block stayed");
     }
+
+    void villageGolemCondition(Arena &arena) {
+        Village village;
+        const PoiBlueprint bed{"minecraft:bed", "", "", PoiType::Bed, 1, 0};
+        std::vector<std::shared_ptr<PoiInstance>> beds;
+        for (int32_t index = 0; index < 20; ++index) {
+            beds.push_back(std::make_shared<PoiInstance>(Vector3i(index, 64, 40), bed));
+            require(village.addPoi(beds.back()), "a bed was refused");
+        }
+
+        std::vector<int64_t> villagers;
+        for (int32_t index = 0; index < 10; ++index) {
+            MobActor &villager = arena.spawn("minecraft:villager_v2", Vector3f((float) index + 0.5f, 65.0f, 40.5f));
+            villagers.push_back(villager.getUniqueId());
+            village.addDweller(arena.mOwner, DwellerRole::Inhabitant, villager.getUniqueId());
+        }
+        require(village.countBeds() == 20 && village.getInhabitantCount() == 10, "the village was not set up");
+
+        // three quarters of the ten villagers must have worked within a day
+        const int64_t now = 50000;
+        for (int32_t index = 0; index < 7; ++index)
+            village.recordWork(villagers[(size_t) index], now - 100);
+        require(!village.wantsGolem(now), "seven workers out of ten called a golem");
+        village.recordWork(villagers[7], now - 100);
+        require(village.wantsGolem(now), "eight workers out of ten did not call a golem");
+        require(!village.wantsGolem(now + 23900), "a day old work still counted");
+
+        village.recordWork(424242, now);
+        require(village.countRecentWorkers(now) == 8, "a stranger's work was recorded");
+
+        // one defender for ten inhabitants is enough
+        village.addDweller(arena.mOwner, DwellerRole::Defender, 777);
+        require(!village.wantsGolem(now), "a village with its golem called another");
+        village.removeDweller(DwellerRole::Defender, 777);
+
+        // a golem per ten inhabitants: nine never call one
+        village.removeDweller(DwellerRole::Inhabitant, villagers[9]);
+        require(!village.wantsGolem(now), "nine villagers called a golem");
+    }
 }
 
 int main() {
@@ -276,6 +318,7 @@ int main() {
         moveTowardsTarget(arena);
         offerFlower(arena);
         villageAggression(arena);
+        villageGolemCondition(arena);
         std::cout << "iron golem checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';
