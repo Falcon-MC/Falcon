@@ -21,6 +21,14 @@ struct CustomRepairEntry {
     std::string mAmount;
 };
 
+// one minecraft:shooter ammunition entry; the flags default to false as in the game
+struct CustomAmmunition {
+    std::string mItem;
+    bool mUseOffhand = false;
+    bool mSearchInventory = false;
+    bool mUseInCreative = false;
+};
+
 // a custom component bound in the JSON; params is its JSON text, empty in the 1.x list form
 struct CustomComponentUse {
     std::string mName;
@@ -81,6 +89,12 @@ struct CustomItemDefinition {
     bool mHasProjectile = false;
     std::string mProjectileEntity;
     float mMinimumCriticalPower = 0.0f;
+    // minecraft:shooter: max_draw_duration in seconds
+    bool mHasShooter = false;
+    std::vector<CustomAmmunition> mAmmunition;
+    float mShooterMaxDrawDuration = 0.0f;
+    bool mShooterScalePowerByDraw = false;
+    bool mChargeOnDraw = false;
     // minecraft:block_placer: the block the item places, and the blocks it may be used on (any when empty)
     bool mHasBlockPlacer = false;
     std::string mPlacerBlock;

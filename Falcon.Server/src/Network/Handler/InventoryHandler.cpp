@@ -14,6 +14,7 @@
 #include "World/Inventory/ItemStackRequestHandler.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/MapItem.h"
+#include "World/Item/PackShooter.h"
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/StonecutterBlock.h"
@@ -26,6 +27,7 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
 #include "Protocol/Packets/InventoryTransactionPacket.h"
@@ -806,7 +808,12 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
             const int32_t elapsedTicks = (int32_t) (owner.getCurrentTick() - player.getItemUseStartTick());
             const ItemStack released = releasedItem;
             const int32_t ticksLeft = owner.getItemUseTicksLeft(player);
-            if (itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks)) {
+            const CustomItemDefinition *pack =
+                    itemType == nullptr
+                            ? CustomContentRegistry::getInstance().findItem(releasedItem.mDefinition->getIdentifier())
+                            : nullptr;
+            if ((itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks))
+                || (pack != nullptr && PackShooter::release(owner, player, *pack, elapsedTicks))) {
                 player.getFlags().set(ActorFlag::UsingItem, false);
                 owner._sendEntityData(player);
                 owner.getScriptEngine().onItemStopUse(player, released, ticksLeft, true);

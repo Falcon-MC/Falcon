@@ -9,6 +9,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Item/PackShooter.h"
 #include "World/Item/StringToItemParser.h"
 #include "World/Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -288,19 +289,22 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (itemType != nullptr && _equipHeldArmor(player, *itemType))
             return;
 
-        // a pack item that is thrown at once: one that scales its power by how long it is drawn is not handled
-        const CustomItemDefinition *thrown =
+        const CustomItemDefinition *pack =
                 itemType == nullptr ? CustomContentRegistry::getInstance().findItem(heldItem.mDefinition->getIdentifier())
                                     : nullptr;
-        if (thrown != nullptr && thrown->mHasThrowable && thrown->mHasProjectile && !thrown->mScalePowerByDraw) {
-            const std::string entity = thrown->mProjectileEntity.substr(0, thrown->mProjectileEntity.find('<'));
-            if (spawnProjectile(player, entity, std::min(thrown->mLaunchPowerScale, thrown->mMaxLaunchPower),
-                                THROWN_PROJECTILE_DROP)
-                != nullptr) {
-                playLevelSound(getLevelFor(player), LevelSoundEvent::THROW, player.getPosition(), "minecraft:player");
-                player.consumeOneHeldItem();
-                return;
-            }
+        int32_t drawDuration = 0;
+        const PackShooter::Use packUse = pack == nullptr || player.getFlags().get(ActorFlag::UsingItem)
+                                                 ? PackShooter::Use::None
+                                                 : PackShooter::use(*this, player, *pack, drawDuration);
+        if (packUse == PackShooter::Use::Done)
+            return;
+        if (packUse == PackShooter::Use::Drawing) {
+            player.getFlags().set(ActorFlag::UsingItem, true);
+            player.setItemUseStartTick(mCurrentTick);
+            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
+            _sendEntityData(player);
+            mScriptEngine.onItemStartUse(player, heldItem, drawDuration);
+            return;
         }
 
         // a pack item is not in the item table: its wearable slot rides on the parsed item

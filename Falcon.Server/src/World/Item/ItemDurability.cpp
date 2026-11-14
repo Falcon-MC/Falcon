@@ -5,6 +5,7 @@
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <random>
 
@@ -22,8 +23,15 @@ bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount
     if (ItemProperties::isUnbreakable(item))
         return false;
 
-    const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
-    if (data == nullptr || data->mMaxDurability <= 0)
+    // a pack item keeps its minecraft:durability in the content registry
+    const std::string &identifier = item.mDefinition->getIdentifier();
+    const ItemData *data = ItemDataTable::find(identifier);
+    const CustomItemDefinition *custom = data == nullptr ? CustomContentRegistry::getInstance().findItem(identifier)
+                                                         : nullptr;
+    const int32_t maxDurability = data != nullptr     ? data->mMaxDurability
+                                  : custom != nullptr ? custom->mMaxDurability
+                                                      : 0;
+    if (maxDurability <= 0)
         return false;
 
     int32_t applied = rollUnbreaking ? _rollUnbreaking(item, amount) : amount;
@@ -47,7 +55,7 @@ bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount
     }
 
     item.mDamage += applied;
-    if (item.mDamage < data->mMaxDurability)
+    if (item.mDamage < maxDurability)
         return true;
 
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_BREAK)) {
