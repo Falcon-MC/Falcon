@@ -528,11 +528,12 @@ namespace {
         const int capacity = mob->getInventoryCapacity();
         if (capacity <= 0)
             return view;
-        mob->getEquipment().ensureInventorySize(capacity);
+        Container &inventory = mob->getInventoryContainer();
         view.mSize = capacity;
-        view.mGet = [mob](int slot) -> const ItemStack & { return mob->getEquipment().getInventoryItem(slot); };
-        view.mSet = [&host, mob](int slot, ItemStack item) {
-            mob->getEquipment().setInventoryItem(slot, std::move(item));
+        view.mGet = [&inventory](int slot) -> const ItemStack & { return inventory.getContainerItem(slot); };
+        view.mSet = [&host, mob, &inventory](int slot, ItemStack item) {
+            inventory.setContainerItem(slot, std::move(item));
+            mob->getEquipment().broadcast(host, *mob);
             host.refreshEntityContainerViewers(mob->getUniqueId());
         };
         return view;

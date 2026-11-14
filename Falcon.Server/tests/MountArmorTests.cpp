@@ -6,6 +6,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/Container.h"
 #include "World/Item/BodyArmor.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -192,6 +193,51 @@ namespace {
         require(loaded.mDefinition != nullptr && loaded.mDefinition->getIdentifier() == "minecraft:golden_horse_armor",
                 "the body armor was not loaded back");
     }
+
+    bool holds(const Container &container, int slot, const char *identifier) {
+        const ItemStack &item = container.getContainerItem(slot);
+        return item.mDefinition != nullptr && item.mDefinition->getIdentifier() == identifier;
+    }
+
+    void mountWindow(Arena &arena) {
+        MobActor &horse = arena.spawn("minecraft:horse", "minecraft:spawn_adult");
+        ServerPlayer &rider = arena.player(9003);
+        require(horse.getEntityContainer() == nullptr, "a wild horse opened its window");
+        require(horse.tameTo(arena.mOwner, rider, "minecraft:tamemount", false), "the horse was not tamed");
+        Container *window = horse.getEntityContainer();
+        require(window != nullptr && window->getContainerSize() == 2, "the tamed horse window is not two slots");
+
+        require(window->canHoldInSlot(0, stack("minecraft:saddle")), "the saddle slot refused a saddle");
+        require(!window->canHoldInSlot(0, stack("minecraft:iron_horse_armor")), "the saddle slot took armor");
+        require(window->canHoldInSlot(1, stack("minecraft:iron_horse_armor")), "the armor slot refused iron armor");
+        require(window->canHoldInSlot(1, stack("minecraft:netherite_horse_armor")),
+                "the armor slot refused netherite armor");
+        require(!window->canHoldInSlot(1, stack("minecraft:saddle")), "the armor slot took a saddle");
+        require(!window->canHoldInSlot(1, stack("minecraft:iron_nautilus_armor")), "a horse took nautilus armor");
+
+        const std::vector<ItemStack> before = horse.getEquippableItems();
+        window->setContainerItem(0, stack("minecraft:saddle"));
+        window->setContainerItem(1, stack("minecraft:diamond_horse_armor"));
+        require(holds(*window, 1, "minecraft:diamond_horse_armor"), "the armor slot does not show the armor");
+        const ItemStack &body = horse.getEquipment().getSlot(MobEquipment::BODY);
+        require(body.mDefinition != nullptr && body.mDefinition->getIdentifier() == "minecraft:diamond_horse_armor",
+                "the window armor is not worn in the body slot");
+        require(horse.getEquipment().getInventoryItem(1).isAir(), "the window armor went into the chest slots");
+
+        horse.onEquippableItemsChanged(arena.mOwner, before, &rider);
+        require(horse.getComponent("minecraft:is_saddled") != nullptr, "a window saddle did not saddle the horse");
+
+        MobActor &nautilus = arena.spawn("minecraft:nautilus", "minecraft:spawn_wild_adult");
+        require(nautilus.tameTo(arena.mOwner, rider, "minecraft:tameable", false), "the nautilus was not tamed");
+        require(nautilus.getInventoryCapacity() == 5, "an inventory without a size is not five slots");
+        Container *shell = nautilus.getEntityContainer();
+        require(shell != nullptr, "the tamed nautilus has no window");
+        require(shell->canHoldInSlot(1, stack("minecraft:copper_nautilus_armor")), "the nautilus refused its armor");
+        require(!shell->canHoldInSlot(1, stack("minecraft:copper_horse_armor")), "the nautilus took horse armor");
+
+        MobActor &wolf = arena.spawn("minecraft:wolf", "minecraft:spawn_wild_adult");
+        require(wolf.getInventoryCapacity() == 0, "a mob without an inventory got slots");
+    }
 }
 
 int main() {
@@ -210,6 +256,7 @@ int main() {
         armorWear(arena);
         wolfArmorInteractions(arena);
         bodySaved(arena);
+        mountWindow(arena);
         std::cout << "mount armor checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';
