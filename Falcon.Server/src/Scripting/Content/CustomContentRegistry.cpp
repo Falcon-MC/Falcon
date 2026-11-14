@@ -778,6 +778,31 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                     definition.mCanAlwaysEat = food->get("can_always_eat")->boolean(false);
             }
 
+            // the game takes these as the value itself or wrapped in an object
+            const json::Value *handEquipped = components->get("minecraft:hand_equipped");
+            if (handEquipped != nullptr && handEquipped->isObject())
+                handEquipped = handEquipped->get("value");
+            if (handEquipped != nullptr)
+                definition.mHandEquipped = handEquipped->boolean(false);
+
+            const json::Value *damage = components->get("minecraft:damage");
+            if (damage != nullptr && damage->isObject())
+                damage = damage->get("value");
+            if (damage != nullptr)
+                definition.mDamage = damage->integer(0);
+
+            const json::Value *tags = components->get("minecraft:tags");
+            if (tags != nullptr && tags->isObject())
+                tags = tags->get("tags");
+            if (tags != nullptr && tags->isArray()) {
+                for (const std::unique_ptr<json::Value> &tag: tags->mArray) {
+                    if (tag->isString()
+                        && std::find(definition.mTags.begin(), definition.mTags.end(), tag->string())
+                                   == definition.mTags.end())
+                        definition.mTags.push_back(tag->string());
+                }
+            }
+
             const json::Value *durability = components->get("minecraft:durability");
             if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
                 definition.mMaxDurability = durability->get("max_durability")->integer(0);
@@ -886,8 +911,11 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
     const std::string name = stored.mDisplayName;
     const int32_t networkId = stored.mNetworkId;
     const int32_t maxStackSize = stored.mMaxStackSize;
-    StringToItemParser::getInstance().registerItem(identifier, [networkId, identifier, name, maxStackSize]() {
-        return Item(networkId, identifier, name, maxStackSize);
+    const int32_t damage = stored.mDamage;
+    StringToItemParser::getInstance().registerItem(identifier, [networkId, identifier, name, maxStackSize, damage]() {
+        Item item(networkId, identifier, name, maxStackSize);
+        item.getComponent<DamageItemComponent>()->mDamage = damage;
+        return item;
     });
 
     mItems.push_back(stored);
@@ -924,7 +952,7 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     itemProperties.putInt("enchantable_value", item.mEnchantableValue);
     itemProperties.putBool("allow_off_hand", true);
     itemProperties.putBool("can_destroy_in_creative", true);
-    itemProperties.putInt("damage", 0);
+    itemProperties.putInt("damage", item.mDamage);
     itemProperties.putBool("foil", false);
     itemProperties.putInt("frame_count", 1);
     itemProperties.putBool("hand_equipped", item.mHandEquipped);
@@ -941,6 +969,30 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
 
     Tag components = Tag::ofCompound();
     components.put("item_properties", itemProperties);
+
+    // the client reads its item tags from item_tags; the game sends it even empty
+    Tag itemTags = Tag::ofList(Tag::Type::String);
+    for (const std::string &tag: item.mTags)
+        itemTags.addToList(Tag::ofString(tag));
+    components.put("item_tags", itemTags);
+
+    if (!item.mTags.empty()) {
+        Tag tagsComponent = Tag::ofCompound();
+        tagsComponent.put("tags", itemTags);
+        components.put("minecraft:tags", tagsComponent);
+    }
+
+    if (item.mHandEquipped) {
+        Tag handEquipped = Tag::ofCompound();
+        handEquipped.putBool("value", true);
+        components.put("minecraft:hand_equipped", handEquipped);
+    }
+
+    if (item.mDamage != 0) {
+        Tag damage = Tag::ofCompound();
+        damage.putShort("value", (int16_t) item.mDamage);
+        components.put("minecraft:damage", damage);
+    }
 
     Tag displayName = Tag::ofCompound();
     displayName.putString("value", item.mDisplayName);

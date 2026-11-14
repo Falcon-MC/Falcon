@@ -2,6 +2,7 @@
 #include "CraftingRecipeJson.h"
 #include "Core/Json/Json.h"
 #include "Network/ProtocolData.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
 #include <cctype>
@@ -496,6 +497,9 @@ bool CraftingRecipeTable::isKnownBy(const std::string &recipeId, int32_t protoco
 }
 
 const std::vector<std::string> &CraftingRecipeTable::getItemTags(const std::string &identifier) {
+    if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+        return custom->mTags;
+
     static const std::unordered_map<std::string, std::vector<std::string>> TAGS_BY_ITEM = [] {
         std::unordered_map<std::string, std::vector<std::string>> byItem;
         for (const auto &entry: loadTags()) {

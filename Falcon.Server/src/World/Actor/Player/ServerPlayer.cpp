@@ -31,6 +31,7 @@
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Types/CameraPresets.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
 
 #include <algorithm>
@@ -41,6 +42,17 @@
 #include <utility>
 
 namespace {
+    // the vanilla table already counts the empty hand's 1; minecraft:damage adds to it
+    float weaponBaseDamage(const ItemStack &weapon, const ItemData *data) {
+        if (data != nullptr && data->mAttackDamage > 0)
+            return (float) data->mAttackDamage;
+        const CustomItemDefinition *custom = weapon.isAir() || weapon.mDefinition == nullptr
+                                                     ? nullptr
+                                                     : CustomContentRegistry::getInstance().findItem(
+                                                               weapon.mDefinition->getIdentifier());
+        return custom == nullptr ? 1.0f : 1.0f + (float) custom->mDamage;
+    }
+
     const char *TAG_POS = "Pos";
     const char *TAG_MOTION = "Motion";
     const char *TAG_ROTATION = "Rotation";
@@ -324,14 +336,12 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const Item *weaponType = weapon.isAir() || weapon.mDefinition == nullptr
                                              ? nullptr
                                              : VanillaItems::fromIdentifier(weapon.mDefinition->getIdentifier());
-            const float weaponBaseDamage = weaponData == nullptr || weaponData->mAttackDamage <= 0
-                                                   ? 1.0f
-                                                   : (float) weaponData->mAttackDamage;
-            float attackDamage = weaponBaseDamage;
+            const float baseDamage = weaponBaseDamage(weapon, weaponData);
+            float attackDamage = baseDamage;
             if (weaponType != nullptr)
                 attackDamage = std::max(0.0f, attackDamage + weaponType->getAttackDamageBonus(weapon, *this));
 
-            attackDamage = _applyAttackerModifiers(weaponBaseDamage,
+            attackDamage = _applyAttackerModifiers(baseDamage,
                                                    attackDamage + target.getMeleeEnchantmentBonus(weapon));
             if (attackDamage <= 0.0f)
                 return false;
@@ -393,7 +403,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     const Item *heldType = held.isAir() || held.mDefinition == nullptr
                                    ? nullptr
                                    : VanillaItems::fromIdentifier(held.mDefinition->getIdentifier());
-    const float baseDamage = data == nullptr || data->mAttackDamage <= 0 ? 1.0f : (float) data->mAttackDamage;
+    const float baseDamage = weaponBaseDamage(held, data);
     float damage = baseDamage;
 
     if (heldType != nullptr)
