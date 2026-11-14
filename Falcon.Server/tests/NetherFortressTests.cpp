@@ -322,6 +322,17 @@ namespace {
         }
         require(found > 0, "no seed had a fortress near the origin");
     }
+
+    void checkLocate() {
+        const StructureFeature *fortress = StructureFeature::get("fortress");
+        for (const int64_t seed: SEEDS) {
+            const NetherGenerator generator(seed);
+            StructureChunkPos found;
+            require(fortress->findNearest(generator, 0, 0, found), "/locate found no fortress");
+            require(NetherFortressStructure::plan(generator, found.x, found.z) != nullptr,
+                    "/locate reported a chunk without a fortress");
+        }
+    }
 }
 
 int main() {
@@ -332,6 +343,7 @@ int main() {
         checkPlacement();
         checkPieceBlocks();
         checkChunkPlacement();
+        checkLocate();
     } catch (const std::exception &error) {
         std::clog << "Nether fortress regression failed: " << error.what() << '\n';
         return 1;

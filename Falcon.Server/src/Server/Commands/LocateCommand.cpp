@@ -148,7 +148,7 @@ bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<st
 
     std::thread search([&handler, generator, feature, requesterId, requestOrigin, originX, originZ]() {
         StructureChunkPos start;
-        const bool found = generator->getDimensionType() == DimensionType::Overworld
+        const bool found = generator->getDimensionType() == feature->getDimension()
                            && feature->findNearest(*generator, originX, originZ, start);
         gSearchRunning = false;
 

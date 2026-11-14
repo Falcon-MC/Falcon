@@ -22,6 +22,10 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level);
 
+    // the mobs a herd could be drawn from at the spot, in roll order; empty when no mob fits there
+    std::vector<std::string> candidatesAt(Level &level, const Vector3i &position, bool surface, int32_t difficulty,
+                                          const std::vector<Vector3f> &players);
+
 private:
     struct Counts {
         int32_t mPools[2][POOL_COUNT] = {};
@@ -43,6 +47,14 @@ private:
         int32_t mLightWithoutWeather = 0;
         float mPlayerDistance = 0.0f;
     };
+
+    struct Candidate {
+        const SpawnRule *mRule;
+        const SpawnCondition *mCondition;
+    };
+
+    void _collectCandidates(Level &level, const SpawnSite &site, int32_t difficulty,
+                            std::vector<Candidate> &candidates, int32_t &totalWeight);
 
     void _despawn(ServerNetworkHandler &owner, Level &level, const std::vector<Vector3f> &players);
 
