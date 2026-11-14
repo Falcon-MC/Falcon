@@ -132,6 +132,25 @@ namespace {
         return nullptr;
     }
 
+    // two bundles under one id: which one a request means cannot be told
+    bool isBundleIdShared(PlayerInventory &inventory, const RequestContext &context, int32_t bundleId) {
+        int owners = 0;
+        const auto count = [&owners, bundleId](const ItemStack *item) {
+            if (item != nullptr && BundleInventory::isBundle(*item) && BundleInventory::getBundleId(*item) == bundleId)
+                ++owners;
+        };
+
+        if (context.mOpenContainer != nullptr) {
+            for (const ItemStack &item: context.mContainerSlots)
+                count(&item);
+        }
+        for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
+            count(inventory.resolveSlot(ContainerSlotType::Inventory, slot));
+        count(inventory.resolveSlot(ContainerSlotType::Cursor, 0));
+        count(inventory.resolveSlot(ContainerSlotType::Offhand, 1));
+        return owners > 1;
+    }
+
     BundleView *resolveBundle(PlayerInventory &inventory, RequestContext &context, int32_t bundleId) {
         if (context.mCodecContext == nullptr) {
             return nullptr;
@@ -146,7 +165,7 @@ namespace {
         ContainerSlotType ownerContainer = ContainerSlotType::Unknown;
         int ownerSlot = 0;
         ItemStack *owner = findBundleOwner(inventory, context, bundleId, ownerContainer, ownerSlot);
-        if (owner == nullptr) {
+        if (owner == nullptr || isBundleIdShared(inventory, context, bundleId)) {
             return nullptr;
         }
 
@@ -1131,7 +1150,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
 
     for (const std::unique_ptr<BundleView> &view: context.mBundles) {
         ItemStack *owner = findBundleOwner(working, context, view->mId, view->mOwnerContainer, view->mOwnerSlot);
-        if (owner == nullptr) {
+        if (owner == nullptr || isBundleIdShared(working, context, view->mId)) {
             entry.mResult = RESULT_ERROR;
             entry.mContainers.clear();
             return entry;
