@@ -49,6 +49,11 @@ public:
     std::vector<StructureChunkPos> getCandidatesIn(int64_t seed, int32_t minChunkX, int32_t minChunkZ,
                                                    int32_t maxChunkX, int32_t maxChunkZ) const;
 
+    // the block of the start chunk a search reports, on x and z
+    virtual int32_t getBlockOffset() const {
+        return 8;
+    }
+
     // the first valid start of the region rings around the block position, which is what /locate structure reports
     virtual bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ,
                              StructureChunkPos &out) const;
