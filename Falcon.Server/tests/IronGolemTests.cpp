@@ -5,6 +5,7 @@
 #include "World/Actor/AI/Goal/OfferFlowerGoal.h"
 #include "World/Actor/AI/Goal/RandomGroundPosition.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Mob/Neutral/GolemBuilding.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockState.h"
@@ -186,6 +187,75 @@ namespace {
         village.tick(arena.mOwner, *arena.mLevel, 13320);
         require(village.getStanding(player.getUniqueId()) == -13, "the standing did not rise after 12000 ticks");
     }
+
+    size_t countOf(Arena &arena, const char *identifier) {
+        size_t found = 0;
+        for (auto &entry: arena.mOwner.getActors()) {
+            if (entry.second->getTypeId() == identifier && !entry.second->isDead())
+                ++found;
+        }
+        return found;
+    }
+
+    void buildGolems(Arena &arena) {
+        Level &level = *arena.mLevel;
+        const BlockState iron("minecraft:iron_block");
+        const BlockState pumpkin("minecraft:carved_pumpkin");
+
+        // an iron golem along x: the arms and the body, then the head on top
+        const int32_t x = -20;
+        const int32_t y = 110;
+        const int32_t z = -20;
+        level.setBlockState(x, y, z, iron);
+        level.setBlockState(x - 1, y + 1, z, iron);
+        level.setBlockState(x, y + 1, z, iron);
+        level.setBlockState(x + 1, y + 1, z, iron);
+        level.setBlockState(x, y + 2, z, pumpkin);
+        const GolemBuilding::Match match = GolemBuilding::find(level, Vector3i(x, y + 2, z));
+        require(match.mKind == GolemBuilding::Kind::Iron, "the iron golem pattern was not found");
+        require(match.mOrigin == Vector3i(x - 1, y + 2, z) && match.mForwards == 3 && match.mUp == 0,
+                "the iron golem pattern matched from the wrong corner");
+
+        const size_t golems = countOf(arena, "minecraft:iron_golem");
+        require(GolemBuilding::tryBuild(arena.mOwner, level, Vector3i(x, y + 2, z)), "the iron golem was not built");
+        require(countOf(arena, "minecraft:iron_golem") == golems + 1, "no iron golem appeared");
+        for (int32_t dx = -1; dx <= 1; ++dx) {
+            for (int32_t dy = 0; dy <= 2; ++dy)
+                require(level.getBlockState(x + dx, y + dy, z).mName == "minecraft:air", "a golem block stayed");
+        }
+
+        MobActor *built = nullptr;
+        for (auto &entry: arena.mOwner.getActors()) {
+            const Vector3f &position = entry.second->getPosition();
+            if (entry.second->getTypeId() == "minecraft:iron_golem" && position.x == (float) x
+                && position.y == (float) y && position.z == (float) (z + 1))
+                built = dynamic_cast<MobActor *>(entry.second.get());
+        }
+        require(built != nullptr, "the iron golem is not on the corner of its bottom block");
+        built->startDefinition(arena.mOwner);
+        require(built->hasComponentGroup("minecraft:player_created"), "a built golem is not player created");
+
+        // a block where an empty corner should be spoils the shape
+        level.setBlockState(x, y, z, iron);
+        level.setBlockState(x - 1, y + 1, z, iron);
+        level.setBlockState(x, y + 1, z, iron);
+        level.setBlockState(x + 1, y + 1, z, iron);
+        level.setBlockState(x - 1, y, z, BlockState("minecraft:stone"));
+        level.setBlockState(x, y + 2, z, pumpkin);
+        require(GolemBuilding::find(level, Vector3i(x, y + 2, z)).mKind == GolemBuilding::Kind::None,
+                "an iron golem matched with a filled corner");
+
+        // a snow golem: two snow blocks under a jack o'lantern
+        const int32_t snowX = -25;
+        level.setBlockState(snowX, y, z, BlockState("minecraft:snow"));
+        level.setBlockState(snowX, y + 1, z, BlockState("minecraft:snow"));
+        level.setBlockState(snowX, y + 2, z, BlockState("minecraft:lit_pumpkin"));
+        const size_t snowGolems = countOf(arena, "minecraft:snow_golem");
+        require(GolemBuilding::tryBuild(arena.mOwner, level, Vector3i(snowX, y + 2, z)),
+                "the snow golem was not built");
+        require(countOf(arena, "minecraft:snow_golem") == snowGolems + 1, "no snow golem appeared");
+        require(level.getBlockState(snowX, y + 1, z).mName == "minecraft:air", "a snow golem block stayed");
+    }
 }
 
 int main() {
@@ -202,6 +272,7 @@ int main() {
         attackDamage(arena);
         ingotRepair(arena);
         groundSnap(arena);
+        buildGolems(arena);
         moveTowardsTarget(arena);
         offerFlower(arena);
         villageAggression(arena);
