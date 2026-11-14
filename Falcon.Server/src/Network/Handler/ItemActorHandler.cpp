@@ -22,6 +22,7 @@
 #include "Protocol/Packets/RemoveActorPacket.h"
 #include "Protocol/Packets/TakeItemActorPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -81,9 +82,23 @@ namespace {
         if (item.isAir() || item.mDefinition == nullptr)
             return false;
 
+        if (const CustomItemDefinition *custom =
+                    CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier()))
+            return custom->mFireResistant;
+
         const FireResistantItemComponent *component =
                 ItemDataTable::getComponents(item.mDefinition->getIdentifier()).get<FireResistantItemComponent>();
         return component != nullptr && component->isFireResistant();
+    }
+
+    // a pack item can opt out of the five minute lifetime
+    bool despawns(const ItemStack &item) {
+        if (item.isAir() || item.mDefinition == nullptr)
+            return true;
+
+        const CustomItemDefinition *custom =
+                CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+        return custom == nullptr || custom->mShouldDespawn;
     }
 
     bool isInFire(ServerNetworkHandler &owner, const ItemActor &actor) {
@@ -489,7 +504,7 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
         if (index >= actors.size() || actors[index].get() != &actor)
             continue;
 
-        if (actor.isRemoved() || actor.isExpired()) {
+        if (actor.isRemoved() || (actor.isExpired() && despawns(actor.getItem()))) {
             broadcastItemActorRemove(owner, actor);
             owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
             actors.erase(actors.begin() + (long) index);

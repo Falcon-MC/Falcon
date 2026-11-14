@@ -54,6 +54,16 @@ struct CustomItemDefinition {
     // minecraft:interact_button: true or false keeps the game's default text
     bool mHasInteractButton = false;
     std::string mInteractButtonText = "action.interact.use";
+    // the defaults of an item that declares none of these
+    bool mAllowOffHand = false;
+    bool mCanDestroyInCreative = true;
+    bool mGlint = false;
+    bool mLiquidClipped = false;
+    bool mShouldDespawn = true;
+    bool mStackedByData = false;
+    bool mFireResistant = false;
+    // minecraft:hover_text_color: empty when the item keeps the default name color
+    std::string mHoverTextColor;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;

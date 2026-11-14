@@ -12,6 +12,7 @@
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -857,6 +858,9 @@ namespace {
             return false;
 
         const std::string &identifier = item->mDefinition->getIdentifier();
+        if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+            return !custom->mAllowOffHand;
+
         if (ItemDataTable::find(identifier) == nullptr)
             return false;
 
