@@ -7,7 +7,7 @@
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
-#include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/BlockMaterial.h"
 #include "World/Level/Level.h"
 
 #include <cmath>
@@ -53,9 +53,10 @@ namespace {
         return identifier.substr(event + 1, end - event - 1);
     }
 
-    bool isSolid(const BlockState &state) {
-        const BlockData *data = BlockDataTable::find(state.mName.c_str());
-        return data != nullptr && data->mSolid;
+    // the solid material flag on a block keeping its default full shape property
+    bool blocksSpawn(const BlockState &state) {
+        return (BlockMaterial::flagsOf(state) & BlockMaterial::FLAG_SOLID) != 0
+               && BlockMaterial::hasDefaultProperty(state);
     }
 
     bool readPotential(const Tag &entry, MobSpawnerBlockActor::SpawnPotential &out) {
@@ -264,7 +265,7 @@ bool MobSpawnerBlockActor::_trySpawn(ServerNetworkHandler &owner, Level &level, 
     const int32_t blockY = (int32_t) std::floor(y);
     const int32_t blockZ = (int32_t) std::floor(z);
     const BlockState *state = level.peekBlockPtr(blockX, blockY, blockZ);
-    if (state == nullptr || isSolid(*state))
+    if (state == nullptr || blocksSpawn(*state))
         return false;
 
     const int32_t offsetX = (int32_t) std::floor(x - (float) mPosition.x);
