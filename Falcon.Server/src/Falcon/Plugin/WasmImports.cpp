@@ -135,6 +135,30 @@ namespace {
         return call.option(call.u32(index), present) && (!present || call.string(index + 1, out));
     }
 
+    // option<effect>: discriminant byte, the record from offset 4
+    bool returnOptionalEffect(Call &call, size_t index, bool present, const FalconEffect &value) {
+        uint8_t buffer[20] = {};
+        buffer[0] = present ? 1 : 0;
+        if (present) {
+            std::memcpy(buffer + 4, &value.type, 4);
+            std::memcpy(buffer + 8, &value.duration, 4);
+            std::memcpy(buffer + 12, &value.amplifier, 4);
+            buffer[16] = value.showParticles != 0 ? 1 : 0;
+            buffer[17] = value.ambient != 0 ? 1 : 0;
+        }
+        return call.write(call.u32(index), buffer, sizeof(buffer));
+    }
+
+    bool returnOptionalAttribute(Call &call, size_t index, bool present, const FalconAttribute &value) {
+        uint8_t buffer[20] = {};
+        buffer[0] = present ? 1 : 0;
+        if (present) {
+            const float fields[4] = {value.value, value.minimum, value.maximum, value.defaultValue};
+            std::memcpy(buffer + 4, fields, sizeof(fields));
+        }
+        return call.write(call.u32(index), buffer, sizeof(buffer));
+    }
+
     void runEvent(FalconEvent *value, void *userData) {
         auto &binding = *static_cast<Binding *>(userData);
         if (binding.mActive)
@@ -430,6 +454,28 @@ namespace {
                     call.resultS32(read && target != nullptr
                                    && api().playerSendPacket(target, packetId, data.data(), (uint32_t) data.size()) != 0);
                 }},
+                {"players", "player-play-sound", "IiiFFFff:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string sound;
+                    FalconVec3 position;
+                    if (call.string(1, sound) && vec3(call, 3, position) && finite(call, call.f32(6))
+                        && finite(call, call.f32(7)) && target != nullptr)
+                        api().playerPlaySound(target, sound.c_str(), position, call.f32(6), call.f32(7));
+                }},
+                {"players", "player-stop-sound", "Iiii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    bool hasSound = false;
+                    std::string sound;
+                    if (optionalString(call, 1, hasSound, sound) && target != nullptr)
+                        api().playerStopSound(target, hasSound ? sound.c_str() : nullptr);
+                }},
+                {"players", "player-spawn-particle", "IiiFFF:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string particle;
+                    FalconVec3 position;
+                    if (call.string(1, particle) && vec3(call, 3, position) && target != nullptr)
+                        api().playerSpawnParticle(target, particle.c_str(), position);
+                }},
 
                 {"entities", "entity-type", "Ii:", [](Call &call) {
                     FalconEntity *target = entity(call.u64(0));
@@ -548,6 +594,62 @@ namespace {
                 {"entities", "level-entity", "iii:", [](Call &call) {
                     FalconLevel *target = level(call, 0);
                     returnEntity(call, 2, target == nullptr ? nullptr : api().levelEntity(target, call.u32(1)));
+                }},
+                {"entities", "entity-add-effect", "Iiiii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target != nullptr
+                                   && api().entityAddEffect(target, call.u32(1), call.s32(2), call.s32(3),
+                                                            call.flag(4) ? 1 : 0) != 0);
+                }},
+                {"entities", "entity-remove-effect", "Ii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target != nullptr && api().entityRemoveEffect(target, call.u32(1)) != 0);
+                }},
+                {"entities", "entity-effect", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    FalconEffect value{};
+                    const bool found = target != nullptr && api().entityEffect(target, call.u32(1), &value) != 0;
+                    returnOptionalEffect(call, 2, found, value);
+                }},
+                {"entities", "entity-effect-count", "I:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().entityEffectCount(target));
+                }},
+                {"entities", "entity-effect-at", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    FalconEffect value{};
+                    const bool found = target != nullptr && api().entityEffectAt(target, call.u32(1), &value) != 0;
+                    returnOptionalEffect(call, 2, found, value);
+                }},
+                {"entities", "entity-clear-effects", "I:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    if (target != nullptr)
+                        api().entityClearEffects(target);
+                }},
+                {"entities", "entity-attribute-count", "I:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().entityAttributeCount(target));
+                }},
+                {"entities", "entity-attribute-name", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.returnOptionalString(2, target == nullptr ? nullptr
+                                                                   : api().entityAttributeName(target, call.u32(1)));
+                }},
+                {"entities", "entity-attribute", "Iiii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string name;
+                    if (!call.string(1, name))
+                        return;
+                    FalconAttribute value{};
+                    const bool found = target != nullptr && api().entityAttribute(target, name.c_str(), &value) != 0;
+                    returnOptionalAttribute(call, 3, found, value);
+                }},
+                {"entities", "entity-set-attribute", "Iiif:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string name;
+                    const bool read = call.string(1, name) && finite(call, call.f32(3));
+                    call.resultS32(read && target != nullptr
+                                   && api().entitySetAttribute(target, name.c_str(), call.f32(3)) != 0);
                 }},
 
                 {"levels", "server-level", "ii:", [](Call &call) {
@@ -685,6 +787,21 @@ namespace {
                     std::string name;
                     const bool read = call.string(0, name);
                     call.resultS32(read && api().serverUnloadWorld(name.c_str()) != 0);
+                }},
+                {"levels", "level-play-sound", "iiiFFFff:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string sound;
+                    FalconVec3 position;
+                    if (call.string(1, sound) && vec3(call, 3, position) && finite(call, call.f32(6))
+                        && finite(call, call.f32(7)) && target != nullptr)
+                        api().levelPlaySound(target, sound.c_str(), position, call.f32(6), call.f32(7));
+                }},
+                {"levels", "level-spawn-particle", "iiiFFF:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string particle;
+                    FalconVec3 position;
+                    if (call.string(1, particle) && vec3(call, 3, position) && target != nullptr)
+                        api().levelSpawnParticle(target, particle.c_str(), position);
                 }},
 
                 {"items", "item-create", "iiii:", [](Call &call) {

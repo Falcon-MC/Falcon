@@ -13,7 +13,9 @@ namespace {
     const char *const MEMORY_EXPORT = "memory";
     const char *const REALLOC_EXPORT = "cabi_realloc";
     const char *const INITIALIZE_EXPORT = "_initialize";
-    const char *const SERVICE_POST_RETURN_EXPORT = "cabi_post_falcon:plugin/plugin@1.0.5#on-service";
+    const char *const EXPORT_PREFIX = "falcon:plugin/plugin@";
+    const char *const POST_RETURN_PREFIX = "cabi_post_falcon:plugin/plugin@";
+    const char *const SERVICE_EXPORT = "on-service";
 
     // bounds the host memory a plugin can pin by never dropping its handles
     constexpr size_t MAX_HANDLES = 65536;
@@ -24,19 +26,19 @@ namespace {
     };
 
     const ExportDefinition EXPORTS[(size_t) WasmPlugin::Export::Count] = {
-            {"falcon:plugin/plugin@1.0.5#on-load", ":"},
-            {"falcon:plugin/plugin@1.0.5#on-enable", ":i"},
-            {"falcon:plugin/plugin@1.0.5#on-disable", ":"},
-            {"falcon:plugin/plugin@1.0.5#on-event", "I:"},
-            {"falcon:plugin/plugin@1.0.5#on-command", "iii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-task", "I:"},
-            {"falcon:plugin/plugin@1.0.5#on-service", "iiii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-item-use", "iIi:i"},
-            {"falcon:plugin/plugin@1.0.5#on-item-use-on-block", "iIiiiii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-block-interact", "iIiiii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-block-break", "iIiii:"},
-            {"falcon:plugin/plugin@1.0.5#on-entity-tick", "iI:"},
-            {"falcon:plugin/plugin@1.0.5#on-entity-interact", "iII:i"},
+            {"on-load", ":"},
+            {"on-enable", ":i"},
+            {"on-disable", ":"},
+            {"on-event", "I:"},
+            {"on-command", "iii:i"},
+            {"on-task", "I:"},
+            {"on-service", "iiii:i"},
+            {"on-item-use", "iIi:i"},
+            {"on-item-use-on-block", "iIiiiii:i"},
+            {"on-block-interact", "iIiiii:i"},
+            {"on-block-break", "iIiii:"},
+            {"on-entity-tick", "iI:"},
+            {"on-entity-interact", "iII:i"},
     };
 
     char typeLetter(const wasm_valtype_t *type) {
@@ -190,15 +192,27 @@ bool WasmPlugin::instantiate(const wasmtime_linker_t &linker, const wasmtime_mod
     }
     mMemory = memory.of.memory;
 
+    // a module exports the callbacks of the one package version it was built against
+    auto versioned = [&](const char *prefix, const char *name, const char *signature, wasmtime_func_t &out,
+                         bool &found) {
+        for (const char *version: WasmImports::PACKAGE_VERSIONS) {
+            const std::string full = std::string(prefix) + version + "#" + name;
+            if (!_checkedExport(instance, full.c_str(), signature, out, found, error))
+                return false;
+            if (found)
+                return true;
+        }
+        return true;
+    };
+
     for (size_t index = 0; index < (size_t) Export::Count; index++) {
-        if (!_checkedExport(instance, EXPORTS[index].mName, EXPORTS[index].mSignature, mExports[index],
-                            mHasExport[index], error))
+        if (!versioned(EXPORT_PREFIX, EXPORTS[index].mName, EXPORTS[index].mSignature, mExports[index],
+                       mHasExport[index]))
             return false;
     }
 
     if (!_checkedExport(instance, REALLOC_EXPORT, "iiii:i", mRealloc, mHasRealloc, error)
-        || !_checkedExport(instance, SERVICE_POST_RETURN_EXPORT, "i:", mServicePostReturn, mHasServicePostReturn,
-                           error))
+        || !versioned(POST_RETURN_PREFIX, SERVICE_EXPORT, "i:", mServicePostReturn, mHasServicePostReturn))
         return false;
 
     wasmtime_func_t initialize;

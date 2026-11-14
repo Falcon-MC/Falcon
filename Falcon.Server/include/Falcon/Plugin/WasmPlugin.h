@@ -310,6 +310,9 @@ private:
 };
 
 namespace WasmImports {
+    // newest first; a module built for an older version only misses the functions added since
+    inline constexpr const char *PACKAGE_VERSIONS[] = {"1.0.6", "1.0.5"};
+
     struct Definition {
         const char *mInterface;
         const char *mName;

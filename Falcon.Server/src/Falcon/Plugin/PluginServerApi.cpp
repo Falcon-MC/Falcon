@@ -227,6 +227,7 @@ namespace {
         PluginServerApi::fillContent(api);
         PluginServerApi::fillServices(api);
         PluginServerApi::fillMaps(api);
+        PluginServerApi::fillEffects(api);
         return api;
     }
 }
