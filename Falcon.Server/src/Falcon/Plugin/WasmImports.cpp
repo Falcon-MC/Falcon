@@ -149,6 +149,13 @@ namespace {
         return call.write(call.u32(index), buffer, sizeof(buffer));
     }
 
+    bool returnOptionalS32(Call &call, size_t index, bool present, int32_t value) {
+        uint8_t buffer[8] = {};
+        buffer[0] = present ? 1 : 0;
+        std::memcpy(buffer + 4, &value, 4);
+        return call.write(call.u32(index), buffer, sizeof(buffer));
+    }
+
     bool returnOptionalAttribute(Call &call, size_t index, bool present, const FalconAttribute &value) {
         uint8_t buffer[20] = {};
         buffer[0] = present ? 1 : 0;
@@ -802,6 +809,117 @@ namespace {
                     FalconVec3 position;
                     if (call.string(1, particle) && vec3(call, 3, position) && target != nullptr)
                         api().levelSpawnParticle(target, particle.c_str(), position);
+                }},
+
+                {"scoreboard", "scoreboard-add-objective", "iiii:i", [](Call &call) {
+                    std::string name;
+                    std::string displayName;
+                    const bool read = call.string(0, name) && call.string(2, displayName);
+                    call.resultS32(read && api().scoreboardAddObjective(name.c_str(), displayName.c_str()) != 0);
+                }},
+                {"scoreboard", "scoreboard-remove-objective", "ii:i", [](Call &call) {
+                    std::string name;
+                    call.resultS32(call.string(0, name) && api().scoreboardRemoveObjective(name.c_str()) != 0);
+                }},
+                {"scoreboard", "scoreboard-objective-count", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().scoreboardObjectiveCount());
+                }},
+                {"scoreboard", "scoreboard-objective-name", "ii:", [](Call &call) {
+                    call.returnOptionalString(1, api().scoreboardObjectiveName(call.u32(0)));
+                }},
+                {"scoreboard", "scoreboard-objective-display-name", "iii:", [](Call &call) {
+                    std::string objective;
+                    if (call.string(0, objective))
+                        call.returnOptionalString(2, api().scoreboardObjectiveDisplayName(objective.c_str()));
+                }},
+                {"scoreboard", "scoreboard-entity-score", "iiIi:", [](Call &call) {
+                    std::string objective;
+                    if (!call.string(0, objective))
+                        return;
+                    FalconEntity *target = entity(call.u64(2));
+                    int32_t score = 0;
+                    const bool found = target != nullptr
+                                       && api().scoreboardEntityScore(objective.c_str(), target, &score) != 0;
+                    returnOptionalS32(call, 3, found, score);
+                }},
+                {"scoreboard", "scoreboard-set-entity-score", "iiIi:i", [](Call &call) {
+                    std::string objective;
+                    FalconEntity *target = entity(call.u64(2));
+                    const bool read = call.string(0, objective);
+                    call.resultS32(read && target != nullptr
+                                   && api().scoreboardSetEntityScore(objective.c_str(), target, call.s32(3)) != 0);
+                }},
+                {"scoreboard", "scoreboard-reset-entity-score", "iiI:i", [](Call &call) {
+                    std::string objective;
+                    FalconEntity *target = entity(call.u64(2));
+                    const bool read = call.string(0, objective);
+                    call.resultS32(read && target != nullptr
+                                   && api().scoreboardResetEntityScore(objective.c_str(), target) != 0);
+                }},
+                {"scoreboard", "scoreboard-fake-player-score", "iiiii:", [](Call &call) {
+                    std::string objective;
+                    std::string name;
+                    if (!call.string(0, objective) || !call.string(2, name))
+                        return;
+                    int32_t score = 0;
+                    const bool found = api().scoreboardFakePlayerScore(objective.c_str(), name.c_str(), &score) != 0;
+                    returnOptionalS32(call, 4, found, score);
+                }},
+                {"scoreboard", "scoreboard-set-fake-player-score", "iiiii:i", [](Call &call) {
+                    std::string objective;
+                    std::string name;
+                    const bool read = call.string(0, objective) && call.string(2, name);
+                    call.resultS32(read
+                                   && api().scoreboardSetFakePlayerScore(objective.c_str(), name.c_str(),
+                                                                         call.s32(4)) != 0);
+                }},
+                {"scoreboard", "scoreboard-reset-fake-player-score", "iiii:i", [](Call &call) {
+                    std::string objective;
+                    std::string name;
+                    const bool read = call.string(0, objective) && call.string(2, name);
+                    call.resultS32(read && api().scoreboardResetFakePlayerScore(objective.c_str(), name.c_str()) != 0);
+                }},
+                {"scoreboard", "scoreboard-score-count", "ii:i", [](Call &call) {
+                    std::string objective;
+                    call.resultS32(call.string(0, objective) ? (int32_t) api().scoreboardScoreCount(objective.c_str())
+                                                             : 0);
+                }},
+                // option<score-entry>: discriminant, then name pointer and length, then the value
+                {"scoreboard", "scoreboard-score-at", "iiii:", [](Call &call) {
+                    std::string objective;
+                    if (!call.string(0, objective))
+                        return;
+                    int32_t score = 0;
+                    const char *found = api().scoreboardScoreAt(objective.c_str(), call.u32(2), &score);
+                    const uint32_t result = call.u32(3);
+                    const uint8_t present = found != nullptr ? 1 : 0;
+                    if (found == nullptr) {
+                        call.write(result, &present, 1);
+                        return;
+                    }
+                    const std::string name(found);
+                    uint32_t address = 0;
+                    if (!call.lower(name.data(), name.size(), 1, address))
+                        return;
+                    const uint32_t fields[3] = {address, (uint32_t) name.size(), (uint32_t) score};
+                    if (call.write(result, &present, 1))
+                        call.write(result + 4, fields, sizeof(fields));
+                }},
+                {"scoreboard", "scoreboard-score-entity", "iiii:", [](Call &call) {
+                    std::string objective;
+                    if (call.string(0, objective))
+                        returnEntity(call, 3, api().scoreboardScoreEntity(objective.c_str(), call.u32(2)));
+                }},
+                {"scoreboard", "scoreboard-set-display", "iiiii:i", [](Call &call) {
+                    bool hasObjective = false;
+                    std::string objective;
+                    if (!optionalString(call, 1, hasObjective, objective))
+                        return;
+                    call.resultS32(api().scoreboardSetDisplay(call.u32(0), hasObjective ? objective.c_str() : nullptr,
+                                                              call.flag(4) ? 1 : 0) != 0);
+                }},
+                {"scoreboard", "scoreboard-display-objective", "ii:", [](Call &call) {
+                    call.returnOptionalString(1, api().scoreboardDisplayObjective(call.u32(0)));
                 }},
 
                 {"items", "item-create", "iiii:", [](Call &call) {

@@ -228,6 +228,7 @@ namespace {
         PluginServerApi::fillServices(api);
         PluginServerApi::fillMaps(api);
         PluginServerApi::fillEffects(api);
+        PluginServerApi::fillScoreboard(api);
         return api;
     }
 }

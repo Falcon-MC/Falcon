@@ -117,6 +117,46 @@ namespace {
         api.levelSpawnParticle(fixture.levelHandle(), "", at);
     }
 
+    void scoreboard(const FalconServerApi &api, Fixture &fixture) {
+        FalconEntity *body = api.playerEntity(fixture.playerHandle());
+        require(api.scoreboardAddObjective("kills", "Kills") == 1, "the objective was not added");
+        require(api.scoreboardAddObjective("kills", "Again") == 0, "a taken name was added twice");
+        require(api.scoreboardObjectiveCount() == 1 && std::string(api.scoreboardObjectiveName(0)) == "kills",
+                "the objective is not listed");
+        require(std::string(api.scoreboardObjectiveDisplayName("kills")) == "Kills", "the display name was lost");
+
+        int32_t score = 0;
+        require(api.scoreboardEntityScore("kills", body, &score) == 0, "a new participant has a score");
+        require(api.scoreboardSetEntityScore("kills", body, 3) == 1, "the player score was not set");
+        require(api.scoreboardSetEntityScore("missing", body, 3) == 0, "a missing objective took a score");
+        require(api.scoreboardEntityScore("kills", body, &score) == 1 && score == 3, "the player score is not 3");
+        require(api.scoreboardSetFakePlayerScore("kills", "Herobrine", 99) == 1, "the fake score was not set");
+        require(api.scoreboardFakePlayerScore("kills", "Herobrine", &score) == 1 && score == 99,
+                "the fake score is not 99");
+
+        require(api.scoreboardScoreCount("kills") == 2, "two participants have scores");
+        require(std::string(api.scoreboardScoreAt("kills", 0, &score)) == "Tester" && score == 3,
+                "the first score is not the player's");
+        require(api.scoreboardScoreEntity("kills", 0) == body, "the first score does not lead to the player");
+        require(std::string(api.scoreboardScoreAt("kills", 1, &score)) == "Herobrine" && score == 99,
+                "the second score is not the fake player's");
+        require(api.scoreboardScoreEntity("kills", 1) == nullptr, "a fake player has an entity");
+
+        require(api.scoreboardSetDisplay(FALCON_DISPLAY_SLOT_SIDEBAR, "kills", 0) == 1, "the sidebar was not set");
+        require(std::string(api.scoreboardDisplayObjective(FALCON_DISPLAY_SLOT_SIDEBAR)) == "kills",
+                "the sidebar does not show the objective");
+        require(api.scoreboardSetDisplay(7, "kills", 0) == 0, "an unknown slot was accepted");
+        require(api.scoreboardSetDisplay(FALCON_DISPLAY_SLOT_SIDEBAR, nullptr, 0) == 1
+                        && api.scoreboardDisplayObjective(FALCON_DISPLAY_SLOT_SIDEBAR) == nullptr,
+                "the sidebar was not cleared");
+
+        require(api.scoreboardResetFakePlayerScore("kills", "Herobrine") == 1, "the fake score was not reset");
+        require(api.scoreboardFakePlayerScore("kills", "Herobrine", &score) == 0, "a reset score is still there");
+        require(api.scoreboardResetEntityScore("kills", body) == 1, "the player score was not reset");
+        require(api.scoreboardRemoveObjective("kills") == 1 && api.scoreboardObjectiveCount() == 0,
+                "the objective was not removed");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -124,6 +164,7 @@ namespace {
         attributes(api, fixture);
         effects(api, fixture);
         soundsAndParticles(api, fixture);
+        scoreboard(api, fixture);
     }
 }
 

@@ -29,4 +29,6 @@ public:
     static void fillMaps(FalconServerApi &api);
 
     static void fillEffects(FalconServerApi &api);
+
+    static void fillScoreboard(FalconServerApi &api);
 };
