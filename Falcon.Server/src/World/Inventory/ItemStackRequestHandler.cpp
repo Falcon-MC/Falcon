@@ -12,6 +12,7 @@
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
 #include <cstdint>
