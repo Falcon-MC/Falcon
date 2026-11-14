@@ -20,6 +20,7 @@
 #include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Block/BlockPickItem.h"
 #include "World/Level/Block/BlockPrecipitation.h"
+#include "World/Level/Block/BlockSolidity.h"
 #include "World/Level/Block/BlockTags.h"
 #include "World/Level/Block/CauldronBlock.h"
 #include "World/Level/Block/CrafterBlock.h"
@@ -440,6 +441,10 @@ namespace {
 
     JSValue blockGetIsLiquid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         return JS_NewBool(ctx, LiquidProperties::of(blockAt(ctx, thisVal).state()).isLiquid());
+    }
+
+    JSValue blockGetIsSolid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewBool(ctx, BlockSolidity::isSolid(blockAt(ctx, thisVal).state().mName));
     }
 
     JSValue blockGetIsWaterlogged(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -2108,6 +2113,7 @@ void ScriptApi::_bindBlockSurface() {
     property(block, "Block", "type", blockGetType);
     property(block, "Block", "localizationKey", blockGetLocalizationKey);
     property(block, "Block", "isLiquid", blockGetIsLiquid);
+    property(block, "Block", "isSolid", blockGetIsSolid);
     property(block, "Block", "isWaterlogged", blockGetIsWaterlogged);
     method(block, "Block", "matches", blockMatches, 2);
     method(block, "Block", "getTags", blockGetTags, 0);

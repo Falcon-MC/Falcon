@@ -16,6 +16,7 @@
 #include "Protocol/Packets/CommandOutputPacket.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
+#include "World/Level/Block/BlockSolidity.h"
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -1470,13 +1471,14 @@ system.beforeEvents.startup.subscribe((event) => {
 })JSON";
 
     const char *const BETA = R"JS(
-import { world, system } from "@minecraft/server";
+import { world, system, Block } from "@minecraft/server";
 import { ActionFormData, MessageFormData, ModalFormData, FormResponse, ActionFormResponse, MessageFormResponse,
          ModalFormResponse, FormRejectError, FormRejectReason, FormCancelationReason, UIManager,
          uiManager, CustomForm, MessageBox, ObservableBoolean, ObservableNumber, ObservableString,
          DataDrivenScreenClosedReason } from "@minecraft/server-ui";
 
 r.chatSend = ("chatSend" in world.afterEvents) && ("chatSend" in world.beforeEvents);
+r.blockSolid = "isSolid" in Block.prototype;
 r.form = typeof ActionFormData === "function"
     && Object.getOwnPropertyNames(new ActionFormData()).length === 0;
 world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("beta", JSON.stringify(r)));
@@ -3193,6 +3195,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         const std::unique_ptr<json::Value> beta = result(owner, "beta");
         expect(*beta, "alone", "true");
         expect(*beta, "chatSend", "true");
+        expect(*beta, "blockSolid", "true");
+        require(BlockSolidity::isSolid("minecraft:stone") && BlockSolidity::isSolid("minecraft:oak_double_slab")
+                        && !BlockSolidity::isSolid("minecraft:oak_slab") && !BlockSolidity::isSolid("minecraft:glass")
+                        && !BlockSolidity::isSolid("minecraft:air"),
+                "the block solidity table disagrees with the game dump");
         expect(*beta, "form", "true");
 
         const std::unique_ptr<json::Value> custom = result(owner, "commands");
