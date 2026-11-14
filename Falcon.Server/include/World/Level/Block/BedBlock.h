@@ -32,6 +32,6 @@ public:
     static void breakOtherHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                const BlockState &state);
 
-private:
+    // the face the head piece points at
     static int headFace(const BlockState &state);
 };

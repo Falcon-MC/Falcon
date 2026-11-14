@@ -45,6 +45,8 @@ enum class ActorFlag : int {
     BlockedUsingShield = 74,
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
+    // a player asked a sleeping villager to get up
+    WantsToWake = 77,
     FacingTargetToRangeAttack = 88,
     // read by Player.isEmoting
     Emoting = 92,
