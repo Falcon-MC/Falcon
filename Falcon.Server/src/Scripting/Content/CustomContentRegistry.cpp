@@ -803,6 +803,12 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                     *flag.second = value->boolean(*flag.second);
             }
 
+            const json::Value *hoverTextColor = components->get("minecraft:hover_text_color");
+            if (hoverTextColor != nullptr && hoverTextColor->isObject())
+                hoverTextColor = hoverTextColor->get("value");
+            if (hoverTextColor != nullptr && hoverTextColor->isString())
+                definition.mHoverTextColor = hoverTextColor->string();
+
             const json::Value *damage = components->get("minecraft:damage");
             if (damage != nullptr && damage->isObject())
                 damage = damage->get("value");
@@ -983,6 +989,10 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     itemProperties.putBool("stacked_by_data", item.mStackedByData);
     itemProperties.putInt("use_duration", 0);
     itemProperties.put("minecraft:icon", icon);
+
+    // the game leaves the key out for an item without a color
+    if (!item.mHoverTextColor.empty())
+        itemProperties.putString("hover_text_color", item.mHoverTextColor);
 
     if (item.mMaxDurability > 0)
         itemProperties.putInt("max_damage", item.mMaxDurability);

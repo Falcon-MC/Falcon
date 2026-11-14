@@ -1468,6 +1468,7 @@ system.beforeEvents.startup.subscribe((event) => {
       "minecraft:should_despawn": false,
       "minecraft:stacked_by_data": true,
       "minecraft:fire_resistant": { "value": true },
+      "minecraft:hover_text_color": "light_purple",
       "minecraft:damage": 3,
       "minecraft:tags": ["test:blunt"]
     }
@@ -1994,6 +1995,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                             && wandProperties->getByte("should_despawn") == 1
                             && wandProperties->getByte("stacked_by_data") == 0,
                     "an item without the flags lost the game's defaults");
+            require(clubProperties->getString("hover_text_color") == "light_purple"
+                            && wandProperties->get("hover_text_color") == nullptr,
+                    "the hover text color is sent wrong");
             const Tag *wandComponents =
                     owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components");
             require(wandComponents->get("item_tags") != nullptr && wandComponents->get("item_tags")->getList().empty()

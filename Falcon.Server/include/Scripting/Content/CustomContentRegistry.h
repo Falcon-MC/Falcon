@@ -56,6 +56,8 @@ struct CustomItemDefinition {
     bool mShouldDespawn = true;
     bool mStackedByData = false;
     bool mFireResistant = false;
+    // minecraft:hover_text_color: empty when the item keeps the default name color
+    std::string mHoverTextColor;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;
