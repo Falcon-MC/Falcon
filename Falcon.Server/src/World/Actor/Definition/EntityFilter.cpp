@@ -259,18 +259,6 @@ namespace {
                                                            : std::string(item.mDefinition->getIdentifier());
     }
 
-    bool isRainingOn(Level &level, const Vector3i &position) {
-        if (!level.isRaining() || position.y < level.getHeightAt(position.x, position.z))
-            return false;
-
-        LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const ClimateAttributes *climate = chunk == nullptr
-                                                   ? nullptr
-                                                   : ClimateAttributes::getForBiome((int32_t) chunk->getBiomeAt(
-                                                             position.x & 15, position.y, position.z & 15));
-        return climate != nullptr && climate->mRain && !PrecipitationSystem::isCold(level, position);
-    }
-
     float temperatureAt(Level &level, const Vector3i &position) {
         LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
         const ClimateAttributes *climate = chunk == nullptr
@@ -886,7 +874,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         const LiquidContact contact = LiquidBlocksFetch::at(level, target->getPosition());
         bool result = test == "in_lava" ? contact.lava : contact.water;
         if (test != "in_lava")
-            result = result || isRainingOn(level, position);
+            result = result || PrecipitationSystem::isRainingOn(level, position);
         return applyBoolean(result, value, op);
     }
 
@@ -927,7 +915,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         if (weather == "clear")
             result = !level.isRaining() || !exposed;
         else if (weather == "rain")
-            result = isRainingOn(level, position);
+            result = PrecipitationSystem::isRainingOn(level, position);
         else if (weather == "snow")
             result = level.isRaining() && exposed && cold;
         else if (weather == "precipitation")

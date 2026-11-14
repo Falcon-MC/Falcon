@@ -74,6 +74,9 @@ public:
 
     std::vector<std::shared_ptr<PoiInstance>> getPois() const;
 
+    // nullptr when the inhabitant holds none of that type
+    std::shared_ptr<PoiInstance> getClaimedPoi(int64_t id, PoiType type) const;
+
     void tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick);
 
     Raid *getRaid() {
