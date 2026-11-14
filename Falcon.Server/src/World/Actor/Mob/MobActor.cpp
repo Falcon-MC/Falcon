@@ -71,6 +71,7 @@ namespace {
     const char *const LOOT_TABLE_PREFIX = "loot_tables/";
     const int64_t OWNER_SYNC_INTERVAL = 20;
     const char *const TIMER_COMPONENT = "minecraft:timer";
+    const char *const SCHEDULER_COMPONENT = "minecraft:scheduler";
     const char *const ATTACK_COOLDOWN_COMPONENT = "minecraft:attack_cooldown";
     const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
@@ -343,6 +344,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
         return;
     _tickSpellEffects();
     _tickTimer(owner);
+    _tickScheduler(owner);
     _tickAttackCooldown(owner);
     _tickBreathing(owner);
     _tickFlopping(owner);
@@ -838,6 +840,39 @@ void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     mTimerTicks = looping == nullptr || looping->boolean(true) ? timerTicks(*timer) : -1;
 
     EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
+}
+
+void MobActor::_tickScheduler(ServerNetworkHandler &owner) {
+    const json::Value *scheduler = getComponent(SCHEDULER_COMPONENT);
+    if (scheduler != mSchedulerComponent) {
+        mSchedulerComponent = scheduler;
+        mScheduledEvent = -1;
+    }
+
+    const json::Value *events = scheduler == nullptr ? nullptr : scheduler->get("scheduled_events");
+    if (events == nullptr || !events->isArray())
+        return;
+
+    const auto holds = [this, &owner](const json::Value &entry) {
+        const json::Value *filters = entry.get("filters");
+        return filters == nullptr || EntityFilter::test(*filters, owner, *this);
+    };
+
+    // nothing fires while the last event's filters still hold: it runs once per change of slot
+    const int32_t count = (int32_t) events->mArray.size();
+    if (mScheduledEvent >= 0 && mScheduledEvent < count && holds(*events->mArray[(size_t) mScheduledEvent]))
+        return;
+
+    mScheduledEvent = -1;
+    for (int32_t index = 0; index < count; ++index) {
+        const json::Value &entry = *events->mArray[(size_t) index];
+        if (!holds(entry))
+            continue;
+
+        mScheduledEvent = index;
+        EntityEvents::fireTrigger(owner, *this, &entry);
+        return;
+    }
 }
 
 void MobActor::_tickAttackCooldown(ServerNetworkHandler &owner) {

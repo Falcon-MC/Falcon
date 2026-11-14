@@ -225,6 +225,14 @@ std::vector<std::shared_ptr<PoiInstance>> Village::getPois() const {
     return pois;
 }
 
+std::shared_ptr<PoiInstance> Village::getClaimedPoi(int64_t id, PoiType type) const {
+    for (const Inhabitant &inhabitant: mInhabitants) {
+        if (inhabitant.mId == id)
+            return inhabitant.mPois[(size_t) type].lock();
+    }
+    return nullptr;
+}
+
 void Village::tick(ServerNetworkHandler &owner, Level &level, int64_t currentTick) {
     if (mLastTick == currentTick)
         return;
