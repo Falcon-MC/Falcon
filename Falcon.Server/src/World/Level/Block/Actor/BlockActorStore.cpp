@@ -292,6 +292,17 @@ void BlockActorStore::addLoaded(const std::vector<Tag> &blockActors, const Packe
     }
 }
 
+void BlockActorStore::keepGenerated(const Tag &data) {
+    const Vector3i position = positionOf(data);
+    const int64_t key = packPosition(position);
+    if (mBlockActors.count(key) != 0)
+        return;
+
+    const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
+    mUnknownBlockActors[key] = UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
+    _index(key);
+}
+
 FALCON_REGISTER_BLOCK_ACTOR(ChestBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FurnaceBlockActor);
 

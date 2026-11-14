@@ -2,11 +2,15 @@
 
 #include "World/Level/LevelGen/Structure/StructurePiece.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <vector>
 
 class ChunkGenerator;
+class Level;
+class LevelChunk;
 
 /**
  * The pieces of a stronghold, laid from a staircase in its start chunk: each piece opens doors its children are
@@ -59,4 +63,13 @@ public:
     static std::shared_ptr<const Layout> cachedPlan(int64_t seed, int32_t chunkX, int32_t chunkZ);
 
     static const char *nameOf(Type type);
+
+    // every stronghold piece reaching the chunk, built with the chunk's post process random
+    static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
+
+    // the part of the piece inside the chunk; the random is drawn for the whole piece
+    static void postProcess(const Piece &piece, Level &level, LevelChunk &chunk, std::mt19937 &random);
+
+    // the twelve frames of a portal room, an eye in those flagged, and the portal when all have one
+    static void placePortal(const Piece &room, Level &level, LevelChunk &chunk, const std::array<bool, 12> &eyes);
 };

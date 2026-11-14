@@ -12,6 +12,7 @@
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
 #include "World/Level/LevelGen/Structure/RuinedPortalStructure.h"
 #include "World/Level/LevelGen/Structure/ShipwreckStructure.h"
+#include "World/Level/LevelGen/Structure/StrongholdStructure.h"
 #include "World/Level/LevelGen/Structure/SwampHutStructure.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 #include "World/Level/LevelGen/Feature/FeatureNoiseHolder.h"
@@ -141,6 +142,8 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     // created after the outpost and the ocean ruins in createGenerator
     RuinedPortalStructure::place(*this, level, chunk);
     VillageStructure::place(*this, level, chunk, overflow);
+    // created right after the village in createGenerator
+    StrongholdStructure::place(*this, level, chunk);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 

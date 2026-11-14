@@ -1,4 +1,9 @@
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
+#include "World/Level/Block/EndPortalFrameBlock.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
@@ -7,8 +12,10 @@
 #include "World/Level/LevelGen/Structure/StrongholdStructure.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 
+#include <array>
 #include <climits>
 #include <cstdint>
+#include <random>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -192,6 +199,169 @@ namespace {
         require(nearest.x == expected.x && nearest.z == expected.z,
                 where + " located " + std::to_string(nearest.x) + ", " + std::to_string(nearest.z));
     }
+
+    using Piece = StrongholdStructure::Piece;
+    using Type = StrongholdStructure::Type;
+
+    // a portal room filling chunk 0, 0 for each orientation: its door on the chunk's edge
+    Piece portalRoom(int32_t orientation) {
+        const int32_t doors[4][2] = {{4, 0}, {15, 4}, {4, 15}, {0, 4}};
+        const StructurePiece::Box box = StructurePiece::Box::orient(doors[orientation][0], 21, doors[orientation][1],
+                                                                    -4, -1, 0, 11, 8, 16, orientation);
+        return Piece(Type::PortalRoom, box, orientation, 7);
+    }
+
+    Vector3i worldOf(const Piece &piece, int32_t x, int32_t y, int32_t z) {
+        return Vector3i(piece.worldX(x, z), piece.worldY(y), piece.worldZ(x, z));
+    }
+
+    // the twelve frames, the near row first, as the room lays them
+    const int32_t FRAMES[12][3] = {{4, 3, 8},  {5, 3, 8},  {6, 3, 8},  {4, 3, 12}, {5, 3, 12}, {6, 3, 12},
+                                   {3, 3, 9},  {3, 3, 10}, {3, 3, 11}, {7, 3, 9},  {7, 3, 10}, {7, 3, 11}};
+
+    void checkPortalRooms() {
+        for (int32_t orientation = 0; orientation < 4; ++orientation) {
+            const std::string where = "orientation " + std::to_string(orientation);
+            Level level("stronghold-portal-test", 2, 1);
+            LevelChunk &chunk = level.insertChunk(LevelChunk(0, 0));
+            const Piece room = portalRoom(orientation);
+            require(room.getBox().mMinX >= 0 && room.getBox().mMaxX <= 15 && room.getBox().mMinZ >= 0
+                            && room.getBox().mMaxZ <= 15,
+                    "The room of " + where + " leaves its chunk");
+
+            std::mt19937 random(1234U + (uint32_t) orientation);
+            StrongholdStructure::postProcess(room, level, chunk, random);
+
+            // every frame faces the portal's middle, the way the frames the eyes complete must
+            const Vector3i middle = worldOf(room, 5, 3, 10);
+            int32_t eyes = 0;
+            for (const auto &frame: FRAMES) {
+                const Vector3i at = worldOf(room, frame[0], frame[1], frame[2]);
+                const BlockState state = level.getBlockState(at.x, at.y, at.z);
+                require(state.mName == "minecraft:end_portal_frame", where + " misses a frame");
+                const int32_t dx = at.x - middle.x;
+                const int32_t dz = at.z - middle.z;
+                const std::string expected = dx == -2 ? "east" : dx == 2 ? "west" : dz == -2 ? "south" : "north";
+                require(state.mStates.getString("minecraft:cardinal_direction", "") == expected,
+                        where + " has a frame facing " + state.mStates.getString("minecraft:cardinal_direction", ""));
+                eyes += state.mStates.getByte("end_portal_eye_bit", 0) != 0 ? 1 : 0;
+            }
+            require(eyes < 12, where + " drew twelve eyes");
+            const Vector3i inside = worldOf(room, 5, 3, 10);
+            require(level.getBlockState(inside.x, inside.y, inside.z).mName == "minecraft:air",
+                    where + " opened its portal without every eye");
+
+            const Vector3i spawner = worldOf(room, 5, 3, 6);
+            require(level.getBlockState(spawner.x, spawner.y, spawner.z).mName == "minecraft:mob_spawner",
+                    where + " has no spawner");
+            bool silverfish = false;
+            for (const Tag &data: level.getBlockActors().saveChunk(0, 0)) {
+                if (data.getString("id") == "MobSpawner" && data.getInt("x") == spawner.x
+                    && data.getInt("y") == spawner.y && data.getInt("z") == spawner.z)
+                    silverfish = data.getString("EntityIdentifier") == "minecraft:silverfish"
+                                 && data.getShort("SpawnCount") == 4 && data.getShort("RequiredPlayerRange") == 16;
+            }
+            require(silverfish, where + " has no silverfish spawner data");
+
+            const Vector3i lava = worldOf(room, 5, 1, 10);
+            require(level.getBlockState(lava.x, lava.y, lava.z).mName == "minecraft:lava", where + " has no lava");
+            require(!chunk.getPendingTicks().empty(), where + " left its liquids without a tick");
+
+            // the missing eyes go in one by one: the portal opens with the last
+            Vector3i last;
+            for (const auto &frame: FRAMES) {
+                const Vector3i at = worldOf(room, frame[0], frame[1], frame[2]);
+                BlockState state = level.getBlockState(at.x, at.y, at.z);
+                if (state.mStates.getByte("end_portal_eye_bit", 0) != 0)
+                    continue;
+                state.mStates.putByte("end_portal_eye_bit", 1);
+                level.setBlockState(at.x, at.y, at.z, BlockState(state.mName, state.mStates));
+                last = at;
+            }
+            require(EndPortalFrameBlock::tryCompletePortal(level, last, nullptr), where + " did not open its portal");
+            for (int32_t z = 9; z <= 11; ++z) {
+                for (int32_t x = 4; x <= 6; ++x) {
+                    const Vector3i at = worldOf(room, x, 3, z);
+                    require(level.getBlockState(at.x, at.y, at.z).mName == "minecraft:end_portal",
+                            where + " has a hole in its portal");
+                }
+            }
+        }
+
+        // a room drawn with all twelve eyes opens at once
+        Level level("stronghold-portal-test", 2, 1);
+        LevelChunk &chunk = level.insertChunk(LevelChunk(0, 0));
+        const Piece room = portalRoom(StructurePiece::SOUTH);
+        std::array<bool, 12> all{};
+        all.fill(true);
+        StrongholdStructure::placePortal(room, level, chunk, all);
+        const Vector3i inside = worldOf(room, 6, 3, 11);
+        require(level.getBlockState(inside.x, inside.y, inside.z).mName == "minecraft:end_portal",
+                "A room with every eye did not open");
+        std::array<bool, 12> one = all;
+        one[5] = false;
+        Level other("stronghold-portal-test", 2, 1);
+        LevelChunk &empty = other.insertChunk(LevelChunk(0, 0));
+        StrongholdStructure::placePortal(room, other, empty, one);
+        require(other.getBlockState(inside.x, inside.y, inside.z).mName == "minecraft:air",
+                "A room missing an eye opened");
+    }
+
+    void checkRooms() {
+        Level level("stronghold-room-test", 2, 1);
+        LevelChunk &chunk = level.insertChunk(LevelChunk(0, 0));
+        const StructurePiece::Box box =
+                StructurePiece::Box::orient(4, 21, 0, -4, -1, 0, 14, 11, 15, StructurePiece::SOUTH);
+        Piece library(Type::Library, box, StructurePiece::SOUTH, 6);
+        library.mFlags[0] = true;
+        std::mt19937 random(99);
+        StrongholdStructure::postProcess(library, level, chunk, random);
+
+        const Vector3i low = worldOf(library, 3, 3, 5);
+        const Vector3i high = worldOf(library, 12, 8, 1);
+        const BlockState lowChest = level.getBlockState(low.x, low.y, low.z);
+        require(lowChest.mName == "minecraft:chest"
+                        && lowChest.mStates.getString("minecraft:cardinal_direction", "") == "west",
+                "The library's floor chest is not a chest facing west");
+        require(level.getBlockState(high.x, high.y, high.z).mStates.getString("minecraft:cardinal_direction", "")
+                        == "north",
+                "The library's gallery chest does not face north");
+        const ChestBlockActor *chest = level.getBlockActors().find<ChestBlockActor>(low);
+        require(chest != nullptr, "The library chest has no actor");
+        bool loot = false;
+        for (const Tag &data: level.getBlockActors().saveChunk(0, 0))
+            loot = loot || (data.getInt("x") == low.x && data.getInt("y") == low.y && data.getInt("z") == low.z
+                            && data.getString("LootTable") == "loot_tables/chests/stronghold_library.json");
+        require(loot, "The library chest has no stronghold loot");
+
+        // the walls are bricks of the four kinds, the inside air
+        const BlockState wall = level.getBlockState(library.worldX(0, 7), library.worldY(2), library.worldZ(0, 7));
+        require(wall.mName == "minecraft:stone_bricks" || wall.mName == "minecraft:mossy_stone_bricks"
+                        || wall.mName == "minecraft:cracked_stone_bricks"
+                        || wall.mName == "minecraft:infested_stone_bricks",
+                "A library wall is " + wall.mName);
+        const BlockState ladder = level.getBlockState(library.worldX(10, 13), library.worldY(3),
+                                                      library.worldZ(10, 13));
+        require(ladder.mName == "minecraft:ladder" && ladder.mStates.getInt("facing_direction", -1) == 2,
+                "The library ladder does not face north");
+    }
+
+    void checkPlacement() {
+        const int64_t seed = 42;
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, seed);
+        const StructureChunkPos start = StrongholdFeature::villageStrongholds(*generator)->front();
+        const StrongholdStructure::Layout layout = StrongholdStructure::plan(seed, start.x, start.z);
+        const Piece &stairs = layout.mPieces.front();
+
+        Level level("stronghold-place-test", 2, seed);
+        LevelChunk &chunk = level.insertChunk(LevelChunk(start.x, start.z));
+        StrongholdStructure::place(*generator, level, chunk);
+        const Vector3i landing = worldOf(stairs, 1, 1, 1);
+        require(level.getBlockState(landing.x, landing.y, landing.z).mName == "minecraft:stone_bricks",
+                "The staircase was not built in its start chunk");
+        require(chunk.getStructureBounds().hasName("minecraft:stronghold"),
+                "The start chunk does not know its stronghold");
+    }
 }
 
 int main() {
@@ -202,6 +372,9 @@ int main() {
         checkLayouts();
         checkVillageAnchors(42);
         checkVillageAnchors(123456789);
+        checkPortalRooms();
+        checkRooms();
+        checkPlacement();
     } catch (const std::exception &error) {
         std::clog << "Stronghold regression failed: " << error.what() << '\n';
         return 1;
