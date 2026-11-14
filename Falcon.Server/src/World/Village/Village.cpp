@@ -1,9 +1,13 @@
 #include "World/Village/Village.h"
 
 #include "World/Actor/Definition/EntityFilter.h"
+#include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Movement/MovementPhysics.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
 #include "World/Village/PoiScanner.h"
 #include "World/Village/VillageManager.h"
@@ -40,6 +44,18 @@ namespace {
     const int64_t STANDING_INTERVAL = 30;
     const int64_t NEGATIVE_STANDING_PERIOD = 12000;
     const int64_t POSITIVE_STANDING_PERIOD = 120000;
+
+    const char *const IRON_GOLEM = "minecraft:iron_golem";
+    const char *const FROM_VILLAGE_EVENT = "minecraft:from_village";
+    const size_t GOLEM_MIN_BEDS = 20;
+    const float GOLEM_WORKER_SHARE = 0.75f;
+    const size_t INHABITANTS_PER_DEFENDER = 10;
+    const uint32_t GOLEM_SPAWN_ODDS = 700;
+    const int64_t WORK_MEMORY_TICKS = 24000;
+    // ten columns within 8 blocks of the centre, each scanned from 6 above to 6 below it
+    const int32_t GOLEM_SPAWN_ATTEMPTS = 10;
+    const int32_t GOLEM_SPAWN_RANGE = 8;
+    const int32_t GOLEM_SPAWN_HEIGHT = 6;
 
     float distanceSquared(const Vector3f &first, const Vector3f &second) {
         const float dx = first.x - second.x;
@@ -218,8 +234,15 @@ void Village::tick(ServerNetworkHandler &owner, Level &level, int64_t currentTic
     mLastTick = currentTick;
 
     _tickAggressors(owner);
-    if (currentTick % STANDING_INTERVAL == 0)
+    if (currentTick % STANDING_INTERVAL == 0) {
         _decayStandings(currentTick);
+        mWorkers.erase(std::remove_if(mWorkers.begin(), mWorkers.end(),
+                                      [this](const std::pair<int64_t, int64_t> &worker) {
+                                          return !hasDweller(DwellerRole::Inhabitant, worker.first);
+                                      }),
+                       mWorkers.end());
+    }
+    _trySpawnGolem(owner, level);
 
     _tickPoiValidity(owner, level);
 
@@ -494,6 +517,35 @@ int32_t Village::getStanding(int64_t playerId) const {
     return existing == mStandings.end() ? 0 : existing->second;
 }
 
+void Village::recordWork(int64_t id, int64_t tick) {
+    if (!hasDweller(DwellerRole::Inhabitant, id))
+        return;
+
+    for (std::pair<int64_t, int64_t> &worker: mWorkers) {
+        if (worker.first == id) {
+            worker.second = tick;
+            return;
+        }
+    }
+    mWorkers.emplace_back(id, tick);
+}
+
+size_t Village::countRecentWorkers(int64_t currentTick) const {
+    return (size_t) std::count_if(mWorkers.begin(), mWorkers.end(),
+                                  [currentTick](const std::pair<int64_t, int64_t> &worker) {
+                                      return worker.second > currentTick - WORK_MEMORY_TICKS;
+                                  });
+}
+
+bool Village::wantsGolem(int64_t currentTick) const {
+    const size_t inhabitants = getInhabitantCount();
+    if (countBeds() < std::max(GOLEM_MIN_BEDS, inhabitants))
+        return false;
+    if ((float) countRecentWorkers(currentTick) < (float) inhabitants * GOLEM_WORKER_SHARE)
+        return false;
+    return mRoles[(size_t) DwellerRole::Defender].size() < inhabitants / INHABITANTS_PER_DEFENDER;
+}
+
 Actor *Village::findClosestAggressor(ServerNetworkHandler &owner, const Actor &from) const {
     Actor *closest = nullptr;
     float best = std::numeric_limits<float>::max();
@@ -530,6 +582,49 @@ ServerPlayer *Village::findClosestHostilePlayer(ServerNetworkHandler &owner, con
         }
     }
     return closest;
+}
+
+void Village::_trySpawnGolem(ServerNetworkHandler &owner, Level &level) {
+    if (!level.getGameRules().getBool("domobspawning") || !wantsGolem(mLastTick) || nextInt(GOLEM_SPAWN_ODDS) != 0)
+        return;
+
+    const Vector3i center = floored(getCenter());
+    for (int32_t attempt = 0; attempt < GOLEM_SPAWN_ATTEMPTS; ++attempt) {
+        // x is drawn first, then z
+        const int32_t x = center.x + (int32_t) nextInt(2 * GOLEM_SPAWN_RANGE + 1) - GOLEM_SPAWN_RANGE;
+        const int32_t z = center.z + (int32_t) nextInt(2 * GOLEM_SPAWN_RANGE + 1) - GOLEM_SPAWN_RANGE;
+        const int32_t top = center.y + GOLEM_SPAWN_HEIGHT;
+        if (!contains(0.0f, Vector3f((float) x, (float) top, (float) z)))
+            continue;
+
+        // air or liquid standing on a solid block
+        for (int32_t y = top; y >= center.y - GOLEM_SPAWN_HEIGHT; --y) {
+            const BlockState *body = level.peekBlockPtr(x, y, z);
+            const BlockState *ground = level.peekBlockPtr(x, y - 1, z);
+            if (body == nullptr || ground == nullptr
+                || !(DecorationSupport::isAir(*body) || DecorationSupport::isLiquid(*body))
+                || !BlockSupport::isSolid(*ground))
+                continue;
+
+            const Vector3f position((float) x + 0.5f, (float) y, (float) z + 0.5f);
+            const ActorSize size = ActorClassRegistry::getSize(IRON_GOLEM);
+            const AxisAlignedBB box(position.x - size.mWidth * 0.5f, position.y, position.z - size.mWidth * 0.5f,
+                                    position.x + size.mWidth * 0.5f, position.y + size.mHeight,
+                                    position.z + size.mWidth * 0.5f);
+            if (MovementPhysics::collides(level, box))
+                break;
+
+            ServerActor *golem = owner.spawnActor(level, IRON_GOLEM, position, [](ServerActor &actor) {
+                if (MobActor *mob = dynamic_cast<MobActor *>(&actor))
+                    mob->setSpawnEvent(FROM_VILLAGE_EVENT);
+            });
+            if (golem == nullptr)
+                break;
+
+            addDweller(owner, DwellerRole::Defender, golem->getUniqueId());
+            return;
+        }
+    }
 }
 
 void Village::_tickAggressors(ServerNetworkHandler &owner) {

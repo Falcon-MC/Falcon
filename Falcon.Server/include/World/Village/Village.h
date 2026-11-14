@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 class Actor;
@@ -99,6 +100,16 @@ public:
 
     int32_t getStanding(int64_t playerId) const;
 
+    // an inhabitant at its job site; only inhabitants are recorded
+    void recordWork(int64_t id, int64_t tick);
+
+    // inhabitants that worked within the last day
+    size_t countRecentWorkers(int64_t currentTick) const;
+
+    // the game's condition: 20 beds and at least one per inhabitant, three quarters of them at work within a day,
+    // fewer defenders than a tenth of the inhabitants
+    bool wantsGolem(int64_t currentTick) const;
+
     // the closest remembered aggressor or hostile dweller, any distance
     Actor *findClosestAggressor(ServerNetworkHandler &owner, const Actor &from) const;
 
@@ -147,6 +158,8 @@ private:
 
     void _tickAggressors(ServerNetworkHandler &owner);
 
+    void _trySpawnGolem(ServerNetworkHandler &owner, Level &level);
+
     void _decayStandings(int64_t currentTick);
 
     std::array<PoiQueue, POI_TYPE_COUNT> mUnclaimed;
@@ -159,6 +172,8 @@ private:
     std::unordered_map<uint64_t, int64_t> mAggressors;
     // by player unique id
     std::unordered_map<int64_t, int32_t> mStandings;
+    // inhabitant unique id, tick it last worked
+    std::vector<std::pair<int64_t, int64_t>> mWorkers;
     int64_t mNextNegativeDecayTick = 0;
     int64_t mNextPositiveDecayTick = 0;
     int64_t mLastTick = 0;
