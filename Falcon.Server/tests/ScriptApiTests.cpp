@@ -1985,6 +1985,9 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const Tag *wandProperties =
                     owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components")->get(
                             "item_properties");
+            require(wandProperties->getByte("hidden_in_commands") == 2
+                            && wandProperties->get("is_hidden_in_commands") == nullptr,
+                    "the command visibility is not under the game's key");
             require(wandProperties->getByte("allow_off_hand") == 0
                             && wandProperties->getByte("can_destroy_in_creative") == 1
                             && wandProperties->getByte("foil") == 0 && wandProperties->getByte("liquid_clipped") == 0

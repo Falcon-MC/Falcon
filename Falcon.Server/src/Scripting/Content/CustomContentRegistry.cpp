@@ -944,6 +944,7 @@ void CustomContentRegistry::_registerItem(const CustomItemDefinition &item, Item
 namespace {
     // LeafSupportingInFirstSolidBlockBelow, one below NumValidVersions
     const int16_t MOLANG_VERSION_LATEST = 12;
+    const int8_t HIDDEN_IN_COMMANDS_DEFAULT = 2;
 }
 
 Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &item, ItemDefinitionRegistry &items) {
@@ -965,7 +966,8 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
     Tag itemProperties = Tag::ofCompound();
     itemProperties.putInt("creative_category", creativeCategoryId);
     itemProperties.putString("creative_group", item.mCreativeGroup);
-    itemProperties.putByte("is_hidden_in_commands", 0);
+    // the value every data-driven item of the game carries
+    itemProperties.putByte("hidden_in_commands", HIDDEN_IN_COMMANDS_DEFAULT);
     itemProperties.putString("enchantable_slot", item.mEnchantableSlot);
     itemProperties.putInt("enchantable_value", item.mEnchantableValue);
     itemProperties.putBool("allow_off_hand", item.mAllowOffHand);
@@ -1302,7 +1304,7 @@ void CustomContentRegistry::_registerBlock(const CustomBlockDefinition &block, I
     Tag blockItemProperties = Tag::ofCompound();
     blockItemProperties.putInt("creative_category", blockCategoryId);
     blockItemProperties.putString("creative_group", stored.mCreativeGroup);
-    blockItemProperties.putByte("is_hidden_in_commands", 0);
+    blockItemProperties.putByte("hidden_in_commands", HIDDEN_IN_COMMANDS_DEFAULT);
     blockItemProperties.putBool("allow_off_hand", false);
     blockItemProperties.putBool("can_destroy_in_creative", true);
     blockItemProperties.putInt("frame_count", 1);
