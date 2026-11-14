@@ -12,9 +12,12 @@
 #include "World/Village/PoiScanner.h"
 #include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/NBT/Tag.h"
 
 #include <algorithm>
+#include <cinttypes>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <random>
 
@@ -57,6 +60,62 @@ namespace {
     const int32_t GOLEM_SPAWN_RANGE = 8;
     const int32_t GOLEM_SPAWN_HEIGHT = 6;
 
+    const char *const INFO_KEY = "_INFO";
+    const char *const PLAYERS_KEY = "_PLAYERS";
+    const char *const DWELLERS_KEY = "_DWELLERS";
+    const char *const POI_KEY = "_POI";
+    const char *const RAID_KEY = "_RAID";
+    const int8_t SAVE_VERSION = 1;
+    const std::string LEGACY_PREFIX = "VILLAGE_";
+
+    std::string randomId() {
+        static std::mt19937_64 generator(std::random_device{}());
+        uint64_t high = generator();
+        uint64_t low = generator();
+        // a version 4 uuid
+        high = (high & 0xFFFFFFFFFFFF0FFFull) | 0x4000ull;
+        low = (low & 0x3FFFFFFFFFFFFFFFull) | 0x8000000000000000ull;
+        char text[37];
+        std::snprintf(text, sizeof(text), "%08x-%04x-%04x-%04x-%08x%04x", (uint32_t) (high >> 32),
+                      (uint32_t) (high >> 16) & 0xFFFF, (uint32_t) high & 0xFFFF, (uint32_t) (low >> 48),
+                      (uint32_t) (low >> 16), (uint32_t) low & 0xFFFF);
+        return text;
+    }
+
+    Tag positionList(const Vector3i &position) {
+        Tag list = Tag::ofList(Tag::Type::Int);
+        list.addToList(Tag::ofInt(position.x));
+        list.addToList(Tag::ofInt(position.y));
+        list.addToList(Tag::ofInt(position.z));
+        return list;
+    }
+
+    int32_t savedCoordinate(float value) {
+        return std::isnan(value) ? 0 : (int32_t) value;
+    }
+
+    void putBox(Tag &tag, const char *prefix, const AxisAlignedBB &box) {
+        const std::string name = prefix;
+        tag.putInt(name + "X0", savedCoordinate(box.mMinX));
+        tag.putInt(name + "Y0", savedCoordinate(box.mMinY));
+        tag.putInt(name + "Z0", savedCoordinate(box.mMinZ));
+        tag.putInt(name + "X1", savedCoordinate(box.mMaxX));
+        tag.putInt(name + "Y1", savedCoordinate(box.mMaxY));
+        tag.putInt(name + "Z1", savedCoordinate(box.mMaxZ));
+    }
+
+    AxisAlignedBB readBox(const Tag &tag, const char *prefix) {
+        const std::string name = prefix;
+        const float x0 = (float) tag.getInt(name + "X0");
+        const float y0 = (float) tag.getInt(name + "Y0");
+        const float z0 = (float) tag.getInt(name + "Z0");
+        const float x1 = (float) tag.getInt(name + "X1");
+        const float y1 = (float) tag.getInt(name + "Y1");
+        const float z1 = (float) tag.getInt(name + "Z1");
+        return AxisAlignedBB(std::min(x0, x1), std::min(y0, y1), std::min(z0, z1), std::max(x0, x1), std::max(y0, y1),
+                             std::max(z0, z1));
+    }
+
     float distanceSquared(const Vector3f &first, const Vector3f &second) {
         const float dx = first.x - second.x;
         const float dy = first.y - second.y;
@@ -92,6 +151,159 @@ Village::Village() {
     // vanilla fills the box with all-ones bits: it contains nothing until the first bed or claim sets it
     const float unset = std::numeric_limits<float>::quiet_NaN();
     mBounds = AxisAlignedBB(unset, unset, unset, unset, unset, unset);
+    mId = randomId();
+}
+
+void Village::save(Level &level, const std::string &prefix) const {
+    const std::string key = prefix + mId;
+
+    Tag info = Tag::ofCompound();
+    info.putLong("Tick", mLastTick);
+    info.putLong("MTick", mMTick);
+    info.putLong("PDTick", mPDTick);
+    info.putLong("BDTime", mNextNegativeDecayTick);
+    info.putLong("GDTime", mNextPositiveDecayTick);
+    info.putBool("Initialized", mInitialized);
+    putBox(info, "", mBounds);
+    putBox(info, "R", mRaidBounds);
+    info.putByte("Version", SAVE_VERSION);
+    level.saveSavedData(key + INFO_KEY, info, false);
+
+    Tag players = Tag::ofList(Tag::Type::Compound);
+    for (const auto &standing: mStandings) {
+        Tag player = Tag::ofCompound();
+        player.putLong("ID", standing.first);
+        player.putInt("S", standing.second);
+        players.addToList(std::move(player));
+    }
+    Tag playersRoot = Tag::ofCompound();
+    playersRoot.put("Players", std::move(players));
+    level.saveSavedData(key + PLAYERS_KEY, playersRoot, false);
+
+    Tag roles = Tag::ofList(Tag::Type::Compound);
+    for (const std::vector<DwellerEntry> &entries: mRoles) {
+        Tag actors = Tag::ofList(Tag::Type::Compound);
+        for (const DwellerEntry &entry: entries) {
+            Tag actor = Tag::ofCompound();
+            actor.putLong("ID", entry.mId);
+            actor.putLong("TS", entry.mLastSeenTick);
+            actor.put("last_saved_pos", positionList(entry.mPosition));
+            const auto worked = std::find_if(
+                    mWorkers.begin(), mWorkers.end(),
+                    [&entry](const std::pair<int64_t, int64_t> &worker) { return worker.first == entry.mId; });
+            if (worked != mWorkers.end())
+                actor.putLong("last_worked", worked->second);
+            actors.addToList(std::move(actor));
+        }
+        Tag role = Tag::ofCompound();
+        role.put("actors", std::move(actors));
+        roles.addToList(std::move(role));
+    }
+    Tag dwellersRoot = Tag::ofCompound();
+    dwellersRoot.put("Dwellers", std::move(roles));
+    level.saveSavedData(key + DWELLERS_KEY, dwellersRoot, false);
+
+    Tag pois = Tag::ofList(Tag::Type::Compound);
+    for (const Inhabitant &inhabitant: mInhabitants) {
+        Tag instances = Tag::ofList(Tag::Type::Compound);
+        for (const std::weak_ptr<PoiInstance> &claimed: inhabitant.mPois) {
+            Tag instance = Tag::ofCompound();
+            const std::shared_ptr<PoiInstance> poi = claimed.lock();
+            if (poi == nullptr) {
+                instance.putBool("Skip", true);
+                instances.addToList(std::move(instance));
+                continue;
+            }
+
+            instance.putInt("X", poi->mPosition.x);
+            instance.putInt("Y", poi->mPosition.y);
+            instance.putInt("Z", poi->mPosition.z);
+            instance.putString("Name", poi->mName);
+            instance.putString("InitEvent", poi->mInitEvent);
+            instance.putInt("Type", (int32_t) poi->mType);
+            instance.putBool("UseAABB", poi->mUseBoundingBox);
+            instance.putFloat("Radius", poi->mRadius);
+            instance.putLong("OwnerCount", (int64_t) poi->mOwnerCount);
+            instance.putLong("Capacity", (int64_t) poi->mCapacity);
+            instance.putLong("Weight", (int64_t) poi->mWeight);
+            instance.putString("SoundEvent", poi->mSound);
+            instance.putBool("Skip", false);
+            instances.addToList(std::move(instance));
+        }
+        Tag entry = Tag::ofCompound();
+        entry.putLong("VillagerID", inhabitant.mId);
+        entry.put("instances", std::move(instances));
+        pois.addToList(std::move(entry));
+    }
+    Tag poiRoot = Tag::ofCompound();
+    poiRoot.put("POI", std::move(pois));
+    level.saveSavedData(key + POI_KEY, poiRoot, false);
+
+    level.eraseSavedData(key + RAID_KEY);
+
+    // the keys of older versions, without the dimension, go once the village is written anew
+    for (const char *suffix: {INFO_KEY, PLAYERS_KEY, DWELLERS_KEY, POI_KEY, RAID_KEY})
+        level.eraseSavedData(LEGACY_PREFIX + mId + suffix);
+}
+
+void Village::erase(Level &level, const std::string &prefix, const std::string &id) {
+    for (const char *suffix: {INFO_KEY, PLAYERS_KEY, DWELLERS_KEY, POI_KEY, RAID_KEY})
+        level.eraseSavedData(prefix + id + suffix);
+}
+
+void Village::restore(const std::string &id, const Tag *info, const Tag *players, const Tag *dwellers, int64_t delta) {
+    mId = id;
+    if (info != nullptr && info->isCompound()) {
+        mLastTick = info->getLong("Tick") + delta;
+        mMTick = info->getLong("MTick") + delta;
+        mPDTick = info->getLong("PDTick") + delta;
+        mNextNegativeDecayTick = info->getLong("BDTime") + delta;
+        mNextPositiveDecayTick = info->getLong("GDTime") + delta;
+        mInitialized = info->getBool("Initialized");
+        mBounds = readBox(*info, "");
+        mRaidBounds = readBox(*info, "R");
+    }
+
+    const Tag *playerList = players == nullptr ? nullptr : players->get("Players");
+    if (playerList != nullptr && playerList->isList()) {
+        for (const Tag &player: playerList->getList()) {
+            if (player.isCompound())
+                mStandings[player.getLong("ID")] = player.getInt("S");
+        }
+    }
+
+    const Tag *roleList = dwellers == nullptr ? nullptr : dwellers->get("Dwellers");
+    if (roleList == nullptr || !roleList->isList())
+        return;
+
+    for (size_t role = 0; role < ROLE_COUNT && role < roleList->getList().size(); ++role) {
+        const Tag *actors = roleList->getList()[role].get("actors");
+        if (actors == nullptr || !actors->isList())
+            continue;
+
+        for (const Tag &actor: actors->getList()) {
+            if (!actor.isCompound())
+                continue;
+
+            const int64_t dweller = actor.getLong("ID");
+            Vector3i position;
+            const Tag *saved = actor.get("last_saved_pos");
+            if (saved != nullptr && saved->isList() && saved->getList().size() >= 3)
+                position = Vector3i(saved->getList()[0].asInt(), saved->getList()[1].asInt(),
+                                    saved->getList()[2].asInt());
+            mRoles[role].push_back({dweller, actor.getLong("TS") + delta, position});
+            if (role == (size_t) DwellerRole::Inhabitant) {
+                _findOrAddInhabitant(dweller);
+                if (actor.contains("last_worked"))
+                    mWorkers.emplace_back(dweller, actor.getLong("last_worked") + delta);
+            }
+        }
+    }
+}
+
+void Village::restoreClaim(int64_t id, const std::shared_ptr<PoiInstance> &poi) {
+    if (poi != nullptr && hasDweller(DwellerRole::Inhabitant, id))
+        _findOrAddInhabitant(id).mPois[(size_t) poi->mType] = poi;
 }
 
 Vector3f Village::getCenter() const {
