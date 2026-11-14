@@ -2413,6 +2413,35 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             require(inventory.getOffhand().isAir() && inventory.getItem(20).mCount == 1,
                     "the offhand ammunition was not used first");
 
+            // only an arrow the player paid for can be picked up again
+            const auto pickable = [&]() {
+                int32_t count = 0;
+                for (const auto &entry: owner.getActors()) {
+                    ServerActor &actor = *entry.second;
+                    if (std::string(actor.getIdentifier()) == "minecraft:arrow"
+                        && actor.getOwnerUniqueId() == (int64_t) player.getRuntimeId()
+                        && std::find(existing.begin(), existing.end(), actor.getUniqueId()) == existing.end()
+                        && !actor.getProjectileData().mPickupCreativeOnly)
+                        ++count;
+                }
+                return count;
+            };
+            const ItemStack plainLongbow = inventory.getItemInHand();
+            const int32_t pickableBefore = pickable();
+            ItemStack infinityLongbow = owner.createItemStack("test:longbow", 1);
+            ItemEnchantments::write(infinityLongbow, {EnchantmentInstance{EnchantmentIds::INFINITY_ENCHANTMENT, 1}});
+            inventory.setItemInHand(infinityLongbow);
+            PackShooter::release(owner, player, longbow, 20);
+            require(inventory.getItem(20).mCount == 1 && pickable() == pickableBefore,
+                    "an infinity arrow of a pack shooter could be picked up");
+            ItemStack multishotLongbow = owner.createItemStack("test:longbow", 1);
+            ItemEnchantments::write(multishotLongbow, {EnchantmentInstance{EnchantmentIds::MULTISHOT, 1}});
+            inventory.setItemInHand(multishotLongbow);
+            PackShooter::release(owner, player, longbow, 20);
+            require(inventory.getItem(20).isAir() && pickable() == pickableBefore + 1,
+                    "multishot gave back more arrows than the one it took");
+            inventory.setItemInHand(plainLongbow);
+
             inventory.setItem(20, ItemStack::air());
             player.setGameType((int32_t) GameType::Creative);
             require(PackShooter::use(owner, player, longbow, duration) == PackShooter::Use::Drawing,
@@ -3378,9 +3407,14 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                "beforeTame:minecraft:wolf;tamed:minecraft:wolf:true;spawn:minecraft:horse:Spawned;spawn:minecraft:piglin:Spawned;spawn:minecraft:chest_minecart:Spawned;"
                // the pack shooter shots, removed once checked
                "spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;"
+               "spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;spawn:minecraft:arrow:Spawned;"
+               "spawn:minecraft:arrow:Spawned;"
                "spawn:minecraft:snowball:Spawned;spawn:minecraft:snowball:Spawned;spawn:minecraft:snowball:Spawned;"
                "beforeRemove:minecraft:arrow;remove:minecraft:arrow;beforeRemove:minecraft:arrow;"
                "remove:minecraft:arrow;beforeRemove:minecraft:arrow;remove:minecraft:arrow;"
+               "beforeRemove:minecraft:arrow;remove:minecraft:arrow;beforeRemove:minecraft:arrow;"
+               "remove:minecraft:arrow;beforeRemove:minecraft:arrow;remove:minecraft:arrow;"
+               "beforeRemove:minecraft:arrow;remove:minecraft:arrow;"
                "beforeRemove:minecraft:snowball;remove:minecraft:snowball;beforeRemove:minecraft:snowball;"
                "remove:minecraft:snowball;beforeRemove:minecraft:snowball;remove:minecraft:snowball;health:20>10;"
                "health:10>12;heal:2:Regeneration;health:12>11;hurt:minecraft:player:1:magic:false;emote:emote:wave;button:Jump:Pressed;"
