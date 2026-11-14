@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -80,6 +81,35 @@ namespace {
             return;
         for (size_t i = 0; i < 3 && i < array->mArray.size(); ++i)
             out[i] = (float) array->mArray[i]->number(out[i]);
+    }
+
+    // a color the game reads as [r, g, b] in 0-255 or a hex string: it skips the first character and parses the
+    // rest as hex, alpha dropped
+    bool readColor255(const json::Value *value, uint32_t &rgb) {
+        if (value == nullptr)
+            return false;
+
+        if (value->isString()) {
+            const std::string &text = value->mString;
+            if (text.empty()) {
+                rgb = 0;
+                return true;
+            }
+            const unsigned long parsed = std::strtoul(text.c_str() + 1, nullptr, 16);
+            rgb = (uint32_t) std::min<unsigned long>(parsed, 0xFFFFFFFFul) & 0xFFFFFFu;
+            return true;
+        }
+
+        if (!value->isArray() || value->mArray.size() != 3)
+            return false;
+        uint32_t channels = 0;
+        for (const std::unique_ptr<json::Value> &channel: value->mArray) {
+            if (!channel->isNumber())
+                return false;
+            channels = (channels << 8) | (uint32_t) std::clamp(channel->integer(0), 0, 255);
+        }
+        rgb = channels;
+        return true;
     }
 
     void parseBox(const json::Value *value, CustomBlockBox &box) {
@@ -803,6 +833,23 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                 }
             }
 
+            const json::Value *dyeable = components->get("minecraft:dyeable");
+            if (dyeable != nullptr && dyeable->isObject()) {
+                definition.mHasDyeable = true;
+                readColor255(dyeable->get("default_color"), definition.mDyeableDefaultColor);
+            }
+
+            // a string is the button text; a bool keeps the default text
+            const json::Value *interactButton = components->get("minecraft:interact_button");
+            if (interactButton != nullptr) {
+                if (interactButton->isString()) {
+                    definition.mHasInteractButton = true;
+                    definition.mInteractButtonText = interactButton->string();
+                } else if (interactButton->mType == json::Value::Type::Boolean) {
+                    definition.mHasInteractButton = true;
+                }
+            }
+
             const json::Value *durability = components->get("minecraft:durability");
             if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
                 definition.mMaxDurability = durability->get("max_durability")->integer(0);
@@ -993,6 +1040,20 @@ Tag CustomContentRegistry::_buildItemComponentData(const CustomItemDefinition &i
         damage.putShort("value", (int16_t) item.mDamage);
         components.put("minecraft:damage", damage);
     }
+
+    // default_color goes out as [r, g, b] ints, white included
+    if (item.mHasDyeable) {
+        Tag dyeable = Tag::ofCompound();
+        dyeable.put("default_color",
+                    Tag::ofList(Tag::Type::Int, {Tag::ofInt((int32_t) ((item.mDyeableDefaultColor >> 16) & 0xFF)),
+                                                 Tag::ofInt((int32_t) ((item.mDyeableDefaultColor >> 8) & 0xFF)),
+                                                 Tag::ofInt((int32_t) (item.mDyeableDefaultColor & 0xFF))}));
+        components.put("minecraft:dyeable", dyeable);
+    }
+
+    // the game writes this component as its bare text
+    if (item.mHasInteractButton)
+        components.putString("minecraft:interact_button", item.mInteractButtonText);
 
     Tag displayName = Tag::ofCompound();
     displayName.putString("value", item.mDisplayName);

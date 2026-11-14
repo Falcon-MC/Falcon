@@ -188,6 +188,8 @@ namespace {
 
     // only an item json declares minecraft:dyeable; no vanilla item does, leather armor included
     bool isDyeable(const ScriptItemData &data) {
+        if (const CustomItemDefinition *custom = customOf(data))
+            return custom->mHasDyeable;
         const DyeableItemComponent *dyeable = gameComponents(data).get<DyeableItemComponent>();
         return dyeable != nullptr && dyeable->isDyeable();
     }
@@ -1337,16 +1339,19 @@ namespace {
         return JS_NewInt32(ctx, (int32_t) numberIn(compostable, "composting_chance", 0.0));
     }
 
+    JSValue rgbObject(JSContext *ctx, uint32_t rgb) {
+        JSValue object = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, object, "red", JS_NewFloat64(ctx, ((rgb >> 16) & 0xFF) / 255.0));
+        JS_SetPropertyStr(ctx, object, "green", JS_NewFloat64(ctx, ((rgb >> 8) & 0xFF) / 255.0));
+        JS_SetPropertyStr(ctx, object, "blue", JS_NewFloat64(ctx, (rgb & 0xFF) / 255.0));
+        return object;
+    }
+
     JSValue dyeableGetColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const Tag *color = componentData(ctx, thisVal).mTag.get(TAG_CUSTOM_COLOR);
         if (color == nullptr)
             return JS_UNDEFINED;
-        const uint32_t argb = (uint32_t) color->asInt();
-        JSValue rgb = JS_NewObject(ctx);
-        JS_SetPropertyStr(ctx, rgb, "red", JS_NewFloat64(ctx, ((argb >> 16) & 0xFF) / 255.0));
-        JS_SetPropertyStr(ctx, rgb, "green", JS_NewFloat64(ctx, ((argb >> 8) & 0xFF) / 255.0));
-        JS_SetPropertyStr(ctx, rgb, "blue", JS_NewFloat64(ctx, (argb & 0xFF) / 255.0));
-        return rgb;
+        return rgbObject(ctx, (uint32_t) color->asInt());
     }
 
     int32_t colorChannel(JSContext *ctx, JSValueConst rgb, const char *name) {
@@ -1372,9 +1377,13 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // the component's default_color once the stack has customColor; no vanilla item has the component
-    JSValue dyeableGetDefaultColor(JSContext *, JSValueConst, int, JSValueConst *) {
-        return JS_UNDEFINED;
+    // the component's default_color, only once the stack has customColor; no vanilla item has the component
+    JSValue dyeableGetDefaultColor(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ScriptItemData &data = componentData(ctx, thisVal);
+        const CustomItemDefinition *custom = customOf(data);
+        if (custom == nullptr || !custom->mHasDyeable || data.mTag.get(TAG_CUSTOM_COLOR) == nullptr)
+            return JS_UNDEFINED;
+        return rgbObject(ctx, custom->mDyeableDefaultColor);
     }
 
     JSValue makeNamed(ScriptApi &api, const char *className, const std::string &name) {
