@@ -179,6 +179,7 @@ bool Level::openStorage(const std::string &worldsDirectory) {
         saveLevelDat();
     }
 
+    mVillageManager.load(*this, mOwner != nullptr ? mOwner->getCurrentTick() : 0);
     return true;
 }
 
@@ -192,7 +193,11 @@ void Level::saveLevelDat() {
 
 bool Level::attachStorage(Level &overworld) {
     mSavedChunkCache.clear();
-    return mStorage.attach(overworld.mStorage, getDimensionId());
+    if (!mStorage.attach(overworld.mStorage, getDimensionId()))
+        return false;
+
+    mVillageManager.load(*this, mOwner != nullptr ? mOwner->getCurrentTick() : 0);
+    return true;
 }
 
 void Level::saveAll(bool wait) {
@@ -207,6 +212,7 @@ void Level::saveAll(bool wait) {
         }
     }
 
+    mVillageManager.save(*this);
     if (mDimension == DimensionType::Overworld) {
         saveWeather();
         saveGameRules();

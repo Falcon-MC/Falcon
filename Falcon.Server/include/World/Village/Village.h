@@ -7,6 +7,7 @@
 #include "World/Village/Raid.h"
 
 #include <array>
+#include <string>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -15,6 +16,7 @@
 
 class Actor;
 class Level;
+class Tag;
 class MobActor;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -29,6 +31,22 @@ public:
     static const size_t ROLE_COUNT = 4;
 
     Village();
+
+    // the game's id: a uuid naming the village's records in the world database
+    const std::string &getId() const {
+        return mId;
+    }
+
+    // its records under prefix + id: _INFO, _PLAYERS, _DWELLERS and _POI; no raid is kept, so _RAID is erased
+    void save(Level &level, const std::string &prefix) const;
+
+    static void erase(Level &level, const std::string &prefix, const std::string &id);
+
+    // delta moves the saved ticks onto this server's clock, which restarts at 0
+    void restore(const std::string &id, const Tag *info, const Tag *players, const Tag *dwellers, int64_t delta);
+
+    // a point an inhabitant held when saved; the manager shares one instance per position
+    void restoreClaim(int64_t id, const std::shared_ptr<PoiInstance> &poi);
 
     const AxisAlignedBB &getBounds() const {
         return mBounds;
@@ -177,6 +195,10 @@ private:
     std::unordered_map<int64_t, int32_t> mStandings;
     // inhabitant unique id, tick it last worked
     std::vector<std::pair<int64_t, int64_t>> mWorkers;
+    std::string mId;
+    // saved and restored for the game: no rule of the server reads them
+    int64_t mMTick = 0;
+    int64_t mPDTick = 0;
     int64_t mNextNegativeDecayTick = 0;
     int64_t mNextPositiveDecayTick = 0;
     int64_t mLastTick = 0;

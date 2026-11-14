@@ -16,6 +16,7 @@
 #include "World/Village/PoiBlueprint.h"
 #include "World/Village/PoiInstance.h"
 #include "World/Village/Village.h"
+#include "World/Village/VillageManager.h"
 
 #include <chrono>
 #include <filesystem>
@@ -368,6 +369,60 @@ namespace {
         require(villager.getHealth() == 8.0f, "a villager woken up was healed");
         require(!villager.getFlags().get(ActorFlag::WantsToWake), "waking up kept the request");
     }
+
+    void villageSurvivesARestart(Arena &arena, const std::filesystem::path &directory) {
+        Village village;
+        const PoiBlueprint *bed = PoiBlueprints::find(BlockNames::BED);
+        const PoiBlueprint *bell = PoiBlueprints::find("minecraft:bell");
+        const PoiBlueprint *lectern = PoiBlueprints::find("minecraft:lectern");
+        require(bed != nullptr && bell != nullptr && lectern != nullptr, "a village blueprint is missing");
+        require(village.addPoi(std::make_shared<PoiInstance>(Vector3i(100, 64, 100), *bed)), "the bed was refused");
+        const std::shared_ptr<PoiInstance> meeting = std::make_shared<PoiInstance>(Vector3i(104, 64, 100), *bell);
+        const std::shared_ptr<PoiInstance> job = std::make_shared<PoiInstance>(Vector3i(102, 64, 104), *lectern);
+        require(village.addPoi(meeting) && village.addPoi(job), "the bell or the lectern was refused");
+
+        MobActor &villager = arena.adult(Vector3f(101.5f, 64.0f, 101.5f));
+        village.addDweller(arena.mOwner, DwellerRole::Inhabitant, villager.getUniqueId());
+        village.addDweller(arena.mOwner, DwellerRole::Defender, 4242);
+        // the claims run on the ticks where tick % 30 == 15: the bell first, the lectern on the next pass
+        village.tick(arena.mOwner, *arena.mLevel, 90015);
+        village.tick(arena.mOwner, *arena.mLevel, 90045);
+        require(village.getClaimedPoi(villager.getUniqueId(), PoiType::JobSite) == job, "the lectern was not claimed");
+        village.recordWork(villager.getUniqueId(), 90040);
+        village.changeStanding(777, -12);
+
+        {
+            Level storage("Villages", 4, 1234);
+            require(storage.openStorage(directory.string()), "could not open the village storage");
+            village.save(storage, "VILLAGE_Overworld_");
+            storage.closeStorage();
+        }
+
+        Level reopened("Villages", 4, 1234);
+        require(reopened.openStorage(directory.string()), "could not reopen the village storage");
+        // saved at tick 90045, loaded at tick 0: every saved time moves back by as much
+        const std::shared_ptr<Village> loaded = reopened.getVillageManager().getClosestVillage(Vector3i(101, 64, 101),
+                                                                                               0);
+        require(loaded != nullptr, "the village did not come back");
+        require(loaded->getId() == village.getId(), "the village came back under another id");
+        require(loaded->hasDweller(DwellerRole::Inhabitant, villager.getUniqueId())
+                        && loaded->hasDweller(DwellerRole::Defender, 4242),
+                "the dwellers were forgotten");
+        require(loaded->getStanding(777) == -12, "the player's standing was forgotten");
+        require(loaded->countRecentWorkers(0) == 1, "the work of the last day was forgotten");
+        require(!loaded->contains(0.0f, Vector3f(0.0f, 64.0f, 0.0f))
+                        && loaded->contains(0.0f, Vector3f(102.0f, 64.0f, 102.0f)),
+                "the village box changed");
+        const std::shared_ptr<PoiInstance> claimed = loaded->getClaimedPoi(villager.getUniqueId(), PoiType::JobSite);
+        require(claimed != nullptr && claimed->mPosition == Vector3i(102, 64, 104) && claimed->mName == "librarian"
+                        && claimed->mSound == "item.book.put" && claimed->mRadius == 2.0f
+                        && claimed->mEndEvent == PoiBlueprints::BECOME_UNSKILLED,
+                "the job site came back wrong");
+        require(loaded->getClaimedPoi(villager.getUniqueId(), PoiType::Bed) != nullptr, "the bed claim was lost");
+        require(reopened.getVillageManager().isRegistered(PoiType::JobSite, Vector3i(102, 64, 104), "librarian"),
+                "the loaded job site is not a known point");
+        reopened.closeStorage();
+    }
 }
 
 int main() {
@@ -387,6 +442,7 @@ int main() {
         unreachableSiteGivesUp(arena);
         sleepThroughTheNight(arena);
         wakeUpOnInteraction(arena);
+        villageSurvivesARestart(arena, directory);
         std::cout << "villager checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';

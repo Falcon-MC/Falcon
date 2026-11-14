@@ -23,5 +23,8 @@ struct PoiBlueprint {
 
 class PoiBlueprints {
 public:
+    // the event a lost job site fires
+    static constexpr const char *BECOME_UNSKILLED = "minecraft:become_unskilled";
+
     static const PoiBlueprint *find(const std::string &identifier);
 };
