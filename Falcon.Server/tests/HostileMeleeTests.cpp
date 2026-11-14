@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
+#include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
 #include "World/Actor/AI/Goal/MobAttack.h"
 #include "World/Actor/AI/Goal/NearestAttackableTargetGoal.h"
 #include "World/Actor/ActorClassRegistry.h"
@@ -218,6 +219,40 @@ namespace {
         require(zombie.getTarget(arena.mOwner) == &hidden, "reselect_targets kept the farther target");
     }
 
+    void meleeBoxReach(const std::filesystem::path &directory) {
+        Arena arena(directory, "hard");
+        MobActor &golem = arena.spawn("minecraft:iron_golem", Vector3f(0.5f, 100.0f, 0.5f));
+        MobActor &skeleton = arena.spawn("minecraft:skeleton", Vector3f(0.5f, 100.0f, 10.5f));
+        const float reach = 0.8f;
+        // a player on a pillar next to the mob: the box grows sideways only, the mob's height decides
+        const struct {
+            float mHeight;
+            bool mGolem;
+            bool mSkeleton;
+        } towers[] = {{0.0f, true, true}, {1.0f, true, true}, {2.0f, true, false}, {3.0f, false, false},
+                      {4.0f, false, false}};
+        uint64_t id = 9201;
+        for (const auto &tower: towers) {
+            ServerPlayer &nearGolem = arena.player(id++, Vector3f(1.5f, 100.0f + tower.mHeight, 0.5f));
+            require(MeleeBoxAttackGoal::isInReach(golem, nearGolem, reach) == tower.mGolem,
+                    "iron golem reach against a pillar is wrong");
+            ServerPlayer &nearSkeleton = arena.player(id++, Vector3f(1.5f, 100.0f + tower.mHeight, 10.5f));
+            require(MeleeBoxAttackGoal::isInReach(skeleton, nearSkeleton, reach) == tower.mSkeleton,
+                    "skeleton reach against a pillar is wrong");
+        }
+
+        // 0.7 half width + 0.8 reach + 0.3 player half width: 1.8 blocks between centres, exclusive
+        ServerPlayer &edge = arena.player(id++, Vector3f(2.3f, 100.0f, 0.5f));
+        require(!MeleeBoxAttackGoal::isInReach(golem, edge, reach), "touching boxes counted as a hit");
+        edge.setPosition(Vector3f(2.29f, 100.0f, 0.5f));
+        require(MeleeBoxAttackGoal::isInReach(golem, edge, reach), "overlapping boxes missed");
+
+        golem.setRotation(Vector3f(0.0f, 270.0f, 270.0f));
+        require(MeleeBoxAttackGoal::angleTo(golem, edge) < 90.0f, "a target in front is outside the field of view");
+        golem.setRotation(Vector3f(0.0f, 90.0f, 90.0f));
+        require(MeleeBoxAttackGoal::angleTo(golem, edge) > 90.0f, "a target behind is inside the field of view");
+    }
+
     void cobwebImmunity() {
         for (const char *name: {"minecraft:spider", "minecraft:cave_spider"}) {
             auto spider = create(name);
@@ -246,6 +281,7 @@ int main() {
         caveSpiderDifficulty(directory);
         villagerConversion(directory);
         targetSight(directory);
+        meleeBoxReach(directory);
         std::cout << "hostile melee mob checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';

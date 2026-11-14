@@ -30,6 +30,7 @@
 #include "World/Actor/AI/Goal/LookAtEntityGoal.h"
 #include "World/Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
+#include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
@@ -90,6 +91,9 @@ namespace {
     const int32_t TICKS_PER_SECOND = 20;
     const float MELEE_ATTACK_RANGE_SQUARED = 2.5f;
     const float MELEE_NO_ATTACK = -1.0f;
+    // the melee box attack definition defaults
+    const float MELEE_BOX_DEFAULT_HORIZONTAL_REACH = 0.8f;
+    const float MELEE_BOX_DEFAULT_FOV = 90.0f;
 
     const float TEMPT_DEFAULT_RANGE = 10.0f;
     const float TEMPT_DEFAULT_STOP_DISTANCE = 2.5f;
@@ -621,9 +625,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "owner_hurt_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurt);
 
-    if (behavior == "melee_attack" || behavior == "melee_box_attack")
+    if (behavior == "melee_attack")
         return std::make_unique<MeleeAttackGoal>(speed, followRange(mob), meleeCoolDown(component),
                                                  attackReachSquared(mob));
+
+    if (behavior == "melee_box_attack")
+        return std::make_unique<MeleeBoxAttackGoal>(
+                speed, followRange(mob), meleeCoolDown(component),
+                numberOf(component, "horizontal_reach", MELEE_BOX_DEFAULT_HORIZONTAL_REACH),
+                numberOf(component, "melee_fov", MELEE_BOX_DEFAULT_FOV));
 
     if (behavior == "stomp_attack") {
         const float stompMultiplier = numberOf(component, "stomp_range_multiplier", STOMP_DEFAULT_RANGE_MULTIPLIER);
