@@ -279,6 +279,15 @@ namespace {
     }
 
     bool isBreakableInCreative(const ServerPlayer &player, const std::string &identifier) {
+        // a pack item can refuse to break blocks in creative, like a sword
+        const ItemStack &held = player.getInventory().getItemInHand();
+        if (!held.isAir() && held.mDefinition != nullptr) {
+            const CustomItemDefinition *custom =
+                    CustomContentRegistry::getInstance().findItem(held.mDefinition->getIdentifier());
+            if (custom != nullptr && !custom->mCanDestroyInCreative)
+                return false;
+        }
+
         if (BlockIdentifier::equalsAny(identifier,
                                        {"minecraft:end_gateway", "minecraft:fire", "minecraft:soul_fire",
                                         "minecraft:invisible_bedrock", "minecraft:jigsaw", "minecraft:moving_block",

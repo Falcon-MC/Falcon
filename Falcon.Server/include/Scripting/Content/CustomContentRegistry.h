@@ -45,6 +45,25 @@ struct CustomItemDefinition {
     bool mHasEnchantable = false;
     std::string mEnchantableSlot = "none";
     int32_t mEnchantableValue = 0;
+    // minecraft:damage: attack damage on top of the empty hand's
+    int32_t mDamage = 0;
+    std::vector<std::string> mTags;
+    // minecraft:dyeable: default_color as 0xRRGGBB, white when the JSON leaves it out
+    bool mHasDyeable = false;
+    uint32_t mDyeableDefaultColor = 0xFFFFFF;
+    // minecraft:interact_button: true or false keeps the game's default text
+    bool mHasInteractButton = false;
+    std::string mInteractButtonText = "action.interact.use";
+    // the defaults of an item that declares none of these
+    bool mAllowOffHand = false;
+    bool mCanDestroyInCreative = true;
+    bool mGlint = false;
+    bool mLiquidClipped = false;
+    bool mShouldDespawn = true;
+    bool mStackedByData = false;
+    bool mFireResistant = false;
+    // minecraft:hover_text_color: empty when the item keeps the default name color
+    std::string mHoverTextColor;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;

@@ -17,9 +17,13 @@
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/StringToItemParser.h"
+#include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/BlockSolidity.h"
+#include "World/Level/Block/CauldronBlock.h"
 #include "World/Level/GameRules.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -1042,6 +1046,13 @@ system.runTimeout(() => {
         + ":" + block.getComponents().some((component) => component.typeId === "test:hooks") + ":"
         + (wand instanceof ItemCustomComponentInstance) + ":" + JSON.stringify(wand.customComponentParameters.params)
         + ":" + (new ItemStack("minecraft:apple").getComponent("test:wand") === undefined);
+    // the default color only shows once the stack has a color of its own
+    const cloakDye = new ItemStack("test:cloak").getComponent("dyeable");
+    const undyed = (cloakDye.color === undefined) + ":" + (cloakDye.defaultColor === undefined);
+    cloakDye.color = { red: 1, green: 0, blue: 0 };
+    const channels = (rgb) => [rgb.red, rgb.green, rgb.blue].map((c) => Math.round(c * 255)).join(",");
+    r.packDye = undyed + ":" + channels(cloakDye.color) + ":" + channels(cloakDye.defaultColor) + ":"
+        + (new ItemStack("test:wand").getComponent("dyeable") === undefined);
     world.setDynamicProperty("betaEntities", JSON.stringify(r));
 }, 3);
 )JS";
@@ -1438,6 +1449,70 @@ system.beforeEvents.startup.subscribe((event) => {
   "minecraft:item": {
     "description": { "identifier": "test:pick" },
     "components": { "minecraft:enchantable": { "slot": "Pickaxe", "value": 14 } }
+  }
+})JSON";
+
+    // both forms the game accepts: the value itself, or wrapped in an object
+    const char *const WEAPON_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:blade" },
+    "components": {
+      "minecraft:hand_equipped": true,
+      "minecraft:damage": { "value": 6 },
+      "minecraft:tags": { "tags": ["minecraft:is_sword", "test:sharp"] }
+    }
+  }
+})JSON";
+
+    const char *const CLUB_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:club" },
+    "components": {
+      "minecraft:hand_equipped": { "value": true },
+      "minecraft:allow_off_hand": true,
+      "minecraft:can_destroy_in_creative": { "value": false },
+      "minecraft:glint": true,
+      "minecraft:liquid_clipped": { "value": true },
+      "minecraft:should_despawn": false,
+      "minecraft:stacked_by_data": true,
+      "minecraft:fire_resistant": { "value": true },
+      "minecraft:hover_text_color": "light_purple",
+      "minecraft:damage": 3,
+      "minecraft:tags": ["test:blunt"]
+    }
+  }
+})JSON";
+
+    // every form the game reads: hex or 0-255 channels (clamped), button text or a bool for the default one
+    const char *const CLOAK_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:cloak" },
+    "components": {
+      "minecraft:dyeable": { "default_color": "#175882" },
+      "minecraft:interact_button": "action.test.wave"
+    }
+  }
+})JSON";
+
+    const char *const SASH_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:sash" },
+    "components": {
+      "minecraft:dyeable": { "default_color": [300, 64, -5] },
+      "minecraft:interact_button": true
+    }
+  }
+})JSON";
+
+    const char *const RIBBON_ITEM = R"JSON({
+  "format_version": "1.21.90",
+  "minecraft:item": {
+    "description": { "identifier": "test:ribbon" },
+    "components": { "minecraft:dyeable": {}, "minecraft:interact_button": false }
   }
 })JSON";
 
@@ -1838,6 +1913,11 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         writeFile(packs / "components" / "items" / "wand.json", COMPONENT_ITEM);
         writeFile(packs / "components" / "items" / "snack.json", COMPONENT_FOOD);
         writeFile(packs / "components" / "items" / "pick.json", ENCHANTABLE_ITEM);
+        writeFile(packs / "components" / "items" / "blade.json", WEAPON_ITEM);
+        writeFile(packs / "components" / "items" / "club.json", CLUB_ITEM);
+        writeFile(packs / "components" / "items" / "cloak.json", CLOAK_ITEM);
+        writeFile(packs / "components" / "items" / "sash.json", SASH_ITEM);
+        writeFile(packs / "components" / "items" / "ribbon.json", RIBBON_ITEM);
         writeFile(packs / "components" / "blocks" / "stateful.json", STATEFUL_BLOCK);
         writeFile(packs / "components" / "blocks" / "bounded.json", BOUNDED_BLOCK);
         writeFile(packs / "stable1" / "blocks" / "legacy.json", LEGACY_BLOCK);
@@ -1902,6 +1982,113 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             require(ItemEnchantments::getItemTargets("test:wand") == EnchantmentTargets::NONE,
                     "an item without minecraft:enchantable became enchantable");
         }
+        {
+            const std::shared_ptr<ItemDefinition> blade = owner.getItemDefinitions().getDefinition("test:blade");
+            require(blade != nullptr, "the weapon item was not registered");
+            const Tag *components = blade->getComponentData().get("components");
+            const Tag *properties = components == nullptr ? nullptr : components->get("item_properties");
+            require(properties != nullptr && properties->getByte("hand_equipped") == 1
+                            && properties->getInt("damage") == 6,
+                    "the weapon item properties were not sent");
+            const Tag *handEquipped = components->get("minecraft:hand_equipped");
+            const Tag *damage = components->get("minecraft:damage");
+            require(handEquipped != nullptr && handEquipped->getByte("value") == 1 && damage != nullptr
+                            && damage->get("value") != nullptr && damage->get("value")->asShort() == 6,
+                    "the weapon components were not sent");
+            const Tag *itemTags = components->get("item_tags");
+            const Tag *tagsComponent = components->get("minecraft:tags");
+            require(itemTags != nullptr && itemTags->getList().size() == 2
+                            && itemTags->getList().front().asString() == "minecraft:is_sword"
+                            && tagsComponent != nullptr && tagsComponent->get("tags") != nullptr
+                            && tagsComponent->get("tags")->getList().size() == 2,
+                    "the weapon tags were not sent");
+
+            const std::vector<std::string> &bladeTags = CraftingRecipeTable::getItemTags("test:blade");
+            require(bladeTags == std::vector<std::string>{"minecraft:is_sword", "test:sharp"}
+                            && CraftingRecipeTable::getItemTags("test:club") == std::vector<std::string>{"test:blunt"},
+                    "the server does not know the pack item tags");
+            Item bladeItem;
+            Item clubItem;
+            require(StringToItemParser::getInstance().parse("test:blade", bladeItem) && bladeItem.getAttackDamage() == 6
+                            && StringToItemParser::getInstance().parse("test:club", clubItem)
+                            && clubItem.getAttackDamage() == 3,
+                    "the pack item attack damage did not reach the server item");
+
+            const std::shared_ptr<ItemDefinition> club = owner.getItemDefinitions().getDefinition("test:club");
+            const Tag *clubProperties = club->getComponentData().get("components")->get("item_properties");
+            require(clubProperties->getByte("hand_equipped") == 1 && clubProperties->getInt("damage") == 3,
+                    "the short forms were not read");
+            const Tag *clubComponents = club->getComponentData().get("components");
+            require(clubProperties->getByte("allow_off_hand") == 1
+                            && clubProperties->getByte("can_destroy_in_creative") == 0
+                            && clubProperties->getByte("foil") == 1 && clubProperties->getByte("liquid_clipped") == 1
+                            && clubProperties->getByte("should_despawn") == 0
+                            && clubProperties->getByte("stacked_by_data") == 1
+                            && clubComponents->get("minecraft:fire_resistant") != nullptr
+                            && clubComponents->get("minecraft:fire_resistant")->getByte("value") == 1,
+                    "the pack item flags were not sent");
+            const Tag *wandProperties =
+                    owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components")->get(
+                            "item_properties");
+            require(wandProperties->getByte("hidden_in_commands") == 2
+                            && wandProperties->get("is_hidden_in_commands") == nullptr,
+                    "the command visibility is not under the game's key");
+            require(wandProperties->getByte("allow_off_hand") == 0
+                            && wandProperties->getByte("can_destroy_in_creative") == 1
+                            && wandProperties->getByte("foil") == 0 && wandProperties->getByte("liquid_clipped") == 0
+                            && wandProperties->getByte("should_despawn") == 1
+                            && wandProperties->getByte("stacked_by_data") == 0,
+                    "an item without the flags lost the game's defaults");
+            require(clubProperties->getString("hover_text_color") == "light_purple"
+                            && wandProperties->get("hover_text_color") == nullptr,
+                    "the hover text color is sent wrong");
+            const Tag *wandComponents =
+                    owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components");
+            require(wandComponents->get("item_tags") != nullptr && wandComponents->get("item_tags")->getList().empty()
+                            && wandComponents->get("minecraft:tags") == nullptr
+                            && wandComponents->get("minecraft:hand_equipped") == nullptr
+                            && wandComponents->get("minecraft:damage") == nullptr,
+                    "an item without the components got them");
+        }
+        {
+            const auto componentsOf = [&owner](const char *identifier) {
+                const std::shared_ptr<ItemDefinition> definition = owner.getItemDefinitions().getDefinition(identifier);
+                require(definition != nullptr, std::string(identifier) + " was not registered");
+                return definition->getComponentData().get("components");
+            };
+            const auto defaultColor = [](const Tag *components) {
+                const Tag *dyeable = components->get("minecraft:dyeable");
+                const Tag *color = dyeable == nullptr ? nullptr : dyeable->get("default_color");
+                std::string channels;
+                if (color == nullptr)
+                    return channels;
+                for (const Tag &channel: color->getList())
+                    channels += channel.getType() == Tag::Type::Int ? std::to_string(channel.asInt()) + "," : "?";
+                return channels;
+            };
+            const Tag *cloak = componentsOf("test:cloak");
+            const Tag *sash = componentsOf("test:sash");
+            const Tag *ribbon = componentsOf("test:ribbon");
+            require(defaultColor(cloak) == "23,88,130," && defaultColor(sash) == "255,64,0,"
+                            && defaultColor(ribbon) == "255,255,255,",
+                    "the dyeable default colors were not sent as the game writes them");
+            const auto buttonText = [](const Tag *components) {
+                const Tag *button = components->get("minecraft:interact_button");
+                return button != nullptr && button->getType() == Tag::Type::String ? button->asString() : std::string();
+            };
+            require(buttonText(cloak) == "action.test.wave" && buttonText(sash) == "action.interact.use"
+                            && buttonText(ribbon) == "action.interact.use",
+                    "the interact button text was not sent");
+            const Tag *wandComponents =
+                    owner.getItemDefinitions().getDefinition("test:wand")->getComponentData().get("components");
+            require(wandComponents->get("minecraft:dyeable") == nullptr
+                            && wandComponents->get("minecraft:interact_button") == nullptr,
+                    "an item without dyeable or interact_button got them");
+        }
+                            && wandComponents->get("minecraft:fire_resistant") == nullptr
+                            && wandComponents->get("minecraft:damage") == nullptr,
+                    "an item without the components got them");
+        }
         require(engine.loadPacks(manager.getPacks()) == 16, "only the sixteen valid packs start");
 
         NetworkIdentifier id;
@@ -1947,6 +2134,39 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         ServerActor *minecart = owner.spawnActor(world.getOverworld(), "minecraft:chest_minecart",
                                                  Vector3f(-14.5f, 100.0f, -14.5f));
         require(minecart != nullptr && minecart->getEntityContainer() != nullptr, "no fixture chest minecart");
+        {
+            // a pack item with minecraft:dyeable takes the water color and washes off like leather armor
+            Level &level = world.getOverworld();
+            const Vector3i dyed(12, 110, 12);
+            const Vector3i plain(13, 110, 12);
+            level.setBlock(dyed, CauldronBlock::makeState(CauldronBlock::Liquid::Water, 3), false);
+            level.setBlock(plain, CauldronBlock::makeState(CauldronBlock::Liquid::Water, 3), false);
+            CauldronBlockActor &cauldron = level.getBlockActors().getOrCreate<CauldronBlockActor>(dyed);
+            cauldron.addDye(CauldronBlockActor::dyeColorOf("minecraft:red_dye"));
+            const int32_t color = (int32_t) (0xFF000000u | ((uint32_t) cauldron.getColor() & 0xFFFFFFu));
+            const auto use = [&](const Vector3i &at, const char *identifier) {
+                player.getInventory().setItemInHand(owner.createItemStack(identifier, 1));
+                const BlockState state = level.getBlockState(at.x, at.y, at.z);
+                return VanillaBlocks::fromIdentifier(state.mName)->onInteract(owner, player, at, state);
+            };
+            const ItemStack previous = player.getInventory().getItemInHand();
+            require(use(dyed, "test:cloak")
+                            && player.getInventory().getItemInHand().mTag.getInt("customColor", 0) == color
+                            && CauldronBlock(level.getBlockState(dyed.x, dyed.y, dyed.z)).getFillLevel() == 2,
+                    "the cauldron did not dye the dyeable pack item");
+            ItemStack worn = player.getInventory().getItemInHand();
+            require(!use(dyed, "test:wand"), "the cauldron dyed a pack item without minecraft:dyeable");
+            player.getInventory().setItemInHand(worn);
+            const BlockState water = level.getBlockState(plain.x, plain.y, plain.z);
+            require(VanillaBlocks::fromIdentifier(water.mName)->onInteract(owner, player, plain, water)
+                            && !player.getInventory().getItemInHand().mTag.contains("customColor"),
+                    "plain water did not wash the dyeable pack item");
+            player.getInventory().setItemInHand(previous);
+            level.setBlock(dyed, BlockState(), false);
+            level.setBlock(plain, BlockState(), false);
+            level.getBlockActors().remove(dyed);
+            level.getBlockActors().remove(plain);
+        }
         player.setHealth(10.0f);
         engine.tick(0);
         player.heal(5.0f, HealCause::Regeneration);
@@ -2965,6 +3185,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(*betaEntities, "eatStone", "Error");
         expect(*betaEntities, "ping", "EngineError");
         expect(*betaEntities, "customInstance", "true:{\"value\":42,\"list\":[\"a\",true]}:true:true:true:{}:true");
+        expect(*betaEntities, "packDye", "true:true:255,0,0:23,88,130:true");
 
         const std::unique_ptr<json::Value> gaps = result(owner, "gaps");
         expect(*gaps, "molangEarly",
