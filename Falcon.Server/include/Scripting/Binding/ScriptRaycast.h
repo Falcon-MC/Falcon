@@ -2,11 +2,13 @@
 
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "World/Actor/ActorSize.h"
 
 #include <cstdint>
 #include <functional>
 #include <string>
 
+class Actor;
 class BlockState;
 class Level;
 
@@ -39,6 +41,9 @@ namespace ScriptRaycast {
     // the first block on the ray; unloaded chunks stop it without a hit
     bool castBlocks(Level &level, const Vector3f &origin, const Vector3f &direction, const BlockOptions &options,
                     BlockHit &hit);
+
+    // the collision box size: a player's follows its pose, an item entity is a quarter block
+    ActorSize actorSize(const Actor &actor);
 
     // where the ray enters an axis aligned box, -1 when it misses; enteredAxis: the entered face's axis, 0 x, 1 y, 2 z
     float intersectBox(const Vector3f &origin, const Vector3f &direction, const Vector3f &low, const Vector3f &high,

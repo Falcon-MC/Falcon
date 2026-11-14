@@ -232,6 +232,7 @@ namespace {
         PluginServerApi::fillContainers(api);
         PluginServerApi::fillData(api);
         PluginServerApi::fillCommands(api);
+        PluginServerApi::fillWorldQueries(api);
         return api;
     }
 }

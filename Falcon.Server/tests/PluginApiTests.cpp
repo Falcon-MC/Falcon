@@ -374,6 +374,72 @@ namespace {
         CustomContentRegistry::getInstance().getDisabledRecipes().clear();
     }
 
+    void world(const FalconServerApi &api, Fixture &fixture) {
+        FalconLevel *level = fixture.levelHandle();
+        require(api.levelGameRuleCount(level) > 0, "the level has no game rules");
+        require(std::string(api.levelGameRule(level, "keepinventory")) == "false", "keepinventory starts on");
+        require(api.levelSetGameRule(level, "keepinventory", "true") == 1, "keepinventory was not set");
+        require(std::string(api.levelGameRule(level, "keepinventory")) == "true", "keepinventory stayed off");
+        require(api.levelSetGameRule(level, "keepinventory", "maybe") == 0, "a bad value was accepted");
+        require(api.levelGameRule(level, "nothing") == nullptr, "an unknown rule has a value");
+
+        require(api.serverSetDifficulty(FALCON_DIFFICULTY_HARD) == 1, "the difficulty was refused");
+        require(api.serverDifficulty() == FALCON_DIFFICULTY_HARD, "the difficulty did not change");
+        require(api.serverSetDifficulty(4) == 0, "difficulty 4 was accepted");
+
+        const char *biome = api.levelBiome(level, FalconBlockPos{2, 64, 2});
+        require(biome == nullptr || std::string(biome).rfind("minecraft:", 0) == 0, "the biome has no namespace");
+        require(api.levelBiome(level, FalconBlockPos{2, 100000, 2}) == nullptr, "a biome above the world exists");
+
+        fixture.level->setBlock(Vector3i(2, 95, 2), VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState(),
+                                false);
+        FalconBlockHit hit{};
+        require(api.levelRaycastBlock(level, FalconVec3{2.5, 99.0, 2.5}, FalconVec3{0.0, -2.0, 0.0}, 10.0, 0, 0, &hit)
+                        == 1,
+                "the ray missed the stone");
+        require(hit.block.x == 2 && hit.block.y == 95 && hit.block.z == 2 && hit.face == FALCON_FACE_UP,
+                "the ray hit " + std::to_string(hit.block.y) + " face " + std::to_string(hit.face));
+        require(std::fabs(hit.distance - 3.0) < 1e-4 && std::fabs(hit.position.y - 96.0) < 1e-4,
+                "the ray stopped at " + std::to_string(hit.distance));
+        require(api.levelRaycastBlock(level, FalconVec3{2.5, 99.0, 2.5}, FalconVec3{0.0, -1.0, 0.0}, 2.0, 0, 0, &hit)
+                        == 0,
+                "a short ray reached the stone");
+        require(api.levelRaycastBlock(level, FalconVec3{2.5, 99.0, 2.5}, FalconVec3{}, 10.0, 0, 0, &hit) == 0,
+                "a ray without a direction hit");
+
+        FalconEntity *body = api.playerEntity(fixture.playerHandle());
+        double distance = 0.0;
+        require(api.levelRaycastEntity(level, FalconVec3{2.5, 103.0, 2.5}, FalconVec3{0.0, -1.0, 0.0}, 10.0, nullptr,
+                                       &distance)
+                        == body,
+                "the ray missed the player");
+        require(std::fabs(distance - 1.2) < 1e-3, "the player was hit at " + std::to_string(distance));
+        require(api.levelRaycastEntity(level, FalconVec3{2.5, 103.0, 2.5}, FalconVec3{0.0, -1.0, 0.0}, 10.0, body,
+                                       &distance)
+                        == nullptr,
+                "the excluded player was hit");
+
+        FalconEntity *found[4] = {};
+        require(api.levelEntitiesInBox(level, FalconVec3{0.0, 99.0, 0.0}, FalconVec3{4.0, 101.0, 4.0}, found, 4) == 1
+                        && found[0] == body,
+                "the box does not hold the player");
+        require(api.levelEntitiesInBox(level, FalconVec3{10.0, 99.0, 10.0}, FalconVec3{12.0, 101.0, 12.0}, found, 4)
+                        == 0,
+                "an empty box holds entities");
+
+        require(api.levelPlaceStructure(level, "mystructure:missing", FalconBlockPos{0, 100, 0}, 0, 0, 1, 1.0f) == 0,
+                "a missing structure was placed");
+        require(api.levelPlaceStructure(level, "mystructure:missing", FalconBlockPos{0, 100, 0}, 4, 0, 1, 1.0f) == 0,
+                "rotation 4 was accepted");
+
+        require(api.levelAddTickingArea(level, "", FalconBlockPos{0, 0, 0}, FalconBlockPos{15, 0, 15}, 0) == 0,
+                "an unnamed ticking area was added");
+        require(api.levelAddTickingArea(level, "huge", FalconBlockPos{0, 0, 0}, FalconBlockPos{400, 0, 400}, 0) == 0,
+                "a ticking area past the chunk limit was added");
+        require(api.levelRemoveTickingArea(level, "missing") == 0, "a missing ticking area was removed");
+        require(api.levelTickingAreaCount(level) == 0, "a ticking area appeared");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -386,6 +452,7 @@ namespace {
         persistentData(api, fixture);
         commands(api, fixture);
         recipes(api, fixture);
+        world(api, fixture);
     }
 }
 

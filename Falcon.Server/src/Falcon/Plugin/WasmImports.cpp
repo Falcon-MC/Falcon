@@ -7,6 +7,7 @@
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -338,6 +339,12 @@ namespace {
                     std::string message;
                     if (call.string(0, message))
                         api().broadcastMessage(message.c_str());
+                }},
+                {"server", "server-difficulty", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().serverDifficulty());
+                }},
+                {"server", "server-set-difficulty", "i:i", [](Call &call) {
+                    call.resultS32(api().serverSetDifficulty(call.u32(0)) != 0);
                 }},
 
                 {"players", "player-name", "Ii:", [](Call &call) {
@@ -882,6 +889,140 @@ namespace {
                     const FalconBlockPos position = blockPos(call, 1);
                     call.resultS32(read && target != nullptr
                                    && api().levelSetSignText(target, position, call.u32(4), text.c_str()) != 0);
+                }},
+                {"levels", "level-game-rule-count", "i:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().levelGameRuleCount(target));
+                }},
+                {"levels", "level-game-rule-name", "iii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const uint32_t index = call.u32(1);
+                    call.returnOptionalString(2, target == nullptr ? nullptr : api().levelGameRuleName(target, index));
+                }},
+                {"levels", "level-game-rule", "iiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string name;
+                    if (!call.string(1, name))
+                        return;
+                    const char *value = target == nullptr ? nullptr : api().levelGameRule(target, name.c_str());
+                    call.returnOptionalString(3, value);
+                }},
+                {"levels", "level-set-game-rule", "iiiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string name;
+                    std::string value;
+                    const bool read = call.string(1, name) && call.string(3, value);
+                    call.resultS32(read && target != nullptr
+                                   && api().levelSetGameRule(target, name.c_str(), value.c_str()) != 0);
+                }},
+                {"levels", "level-biome", "iiiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    call.returnString(4, target == nullptr ? nullptr : api().levelBiome(target, blockPos(call, 1)));
+                }},
+                // option<block-hit>: discriminant, block and face from 8, position from 24, distance at 48
+                {"levels", "level-raycast-block", "iFFFFFFFiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    FalconVec3 origin;
+                    FalconVec3 direction;
+                    if (!vec3(call, 1, origin) || !vec3(call, 4, direction) || !finite(call, call.f64(7)))
+                        return;
+                    FalconBlockHit hit{};
+                    const int liquids = call.flag(8) ? 1 : 0;
+                    const int passable = call.flag(9) ? 1 : 0;
+                    const bool found = target != nullptr
+                                       && api().levelRaycastBlock(target, origin, direction, call.f64(7), liquids,
+                                                                  passable, &hit) != 0;
+                    uint8_t buffer[56] = {};
+                    buffer[0] = found ? 1 : 0;
+                    if (found) {
+                        const int32_t block[4] = {hit.block.x, hit.block.y, hit.block.z, (int32_t) hit.face};
+                        const double rest[4] = {hit.position.x, hit.position.y, hit.position.z, hit.distance};
+                        std::memcpy(buffer + 8, block, sizeof(block));
+                        std::memcpy(buffer + 24, rest, sizeof(rest));
+                    }
+                    call.write(call.u32(10), buffer, sizeof(buffer));
+                }},
+                // option<entity-hit>: discriminant, the entity at 8, the distance at 16
+                {"levels", "level-raycast-entity", "iFFFFFFFiIi:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    FalconVec3 origin;
+                    FalconVec3 direction;
+                    bool hasExcept = false;
+                    if (!vec3(call, 1, origin) || !vec3(call, 4, direction) || !finite(call, call.f64(7))
+                        || !call.option(call.u32(8), hasExcept))
+                        return;
+                    FalconEntity *except = hasExcept ? entity(call.u64(9)) : nullptr;
+                    double distance = 0.0;
+                    FalconEntity *hit = target == nullptr ? nullptr
+                                                          : api().levelRaycastEntity(target, origin, direction,
+                                                                                     call.f64(7), except, &distance);
+                    uint8_t buffer[24] = {};
+                    buffer[0] = hit != nullptr ? 1 : 0;
+                    if (hit != nullptr) {
+                        const uint64_t id = idOf(hit);
+                        std::memcpy(buffer + 8, &id, 8);
+                        std::memcpy(buffer + 16, &distance, 8);
+                    }
+                    call.write(call.u32(10), buffer, sizeof(buffer));
+                }},
+                {"levels", "level-entities-in-box", "iFFFFFFi:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    FalconVec3 low;
+                    FalconVec3 high;
+                    if (!vec3(call, 1, low) || !vec3(call, 4, high))
+                        return;
+                    std::vector<FalconEntity *> found;
+                    if (target != nullptr) {
+                        found.resize(api().levelEntitiesInBox(target, low, high, nullptr, 0));
+                        const uint32_t capacity = (uint32_t) found.size();
+                        const uint32_t count = api().levelEntitiesInBox(target, low, high, found.data(), capacity);
+                        found.resize(std::min(count, capacity));
+                    }
+                    std::vector<uint64_t> ids;
+                    for (FalconEntity *value: found)
+                        ids.push_back(idOf(value));
+                    uint32_t address = 0;
+                    if (!call.lower(ids.data(), ids.size() * sizeof(uint64_t), 8, address))
+                        return;
+                    const uint32_t pair[2] = {address, (uint32_t) ids.size()};
+                    call.write(call.u32(7), pair, sizeof(pair));
+                }},
+                {"levels", "level-place-structure", "iiiiiiiiif:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string structure;
+                    if (!call.string(1, structure) || !finite(call, call.f32(9)))
+                        return;
+                    const FalconBlockPos position = blockPos(call, 3);
+                    call.resultS32(target != nullptr
+                                   && api().levelPlaceStructure(target, structure.c_str(), position, call.u32(6),
+                                                                call.u32(7), call.flag(8) ? 1 : 0, call.f32(9)) != 0);
+                }},
+                {"levels", "level-add-ticking-area", "iiiiiiiiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string name;
+                    if (!call.string(1, name))
+                        return;
+                    const FalconBlockPos low = blockPos(call, 3);
+                    const FalconBlockPos high = blockPos(call, 6);
+                    call.resultS32(target != nullptr
+                                   && api().levelAddTickingArea(target, name.c_str(), low, high, call.flag(9) ? 1 : 0)
+                                              != 0);
+                }},
+                {"levels", "level-remove-ticking-area", "iii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    std::string name;
+                    const bool read = call.string(1, name);
+                    call.resultS32(read && target != nullptr
+                                   && api().levelRemoveTickingArea(target, name.c_str()) != 0);
+                }},
+                {"levels", "level-ticking-area-count", "i:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().levelTickingAreaCount(target));
+                }},
+                {"levels", "level-ticking-area-name", "iii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    call.returnOptionalString(2, target == nullptr ? nullptr
+                                                                   : api().levelTickingAreaName(target, call.u32(1)));
                 }},
                 {"levels", "level-spawn-particle", "iiiFFF:", [](Call &call) {
                     FalconLevel *target = level(call, 0);
