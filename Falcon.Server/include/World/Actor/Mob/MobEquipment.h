@@ -66,7 +66,14 @@ public:
 
     bool dropSlot(ServerNetworkHandler &owner, Level &level, const Vector3f &position, const std::string &slotName);
 
+    // the body slot included
     float absorbDamage(float amount, const ActorDamageSource &source) const;
+
+    // a quarter of the hit, at least one point, off every worn armor piece
+    void hurtArmor(ServerNetworkHandler &owner, const MobActor &mob, float amount, const ActorDamageSource &source);
+
+    // the durability one item of a slot gets back; false when the slot holds nothing damaged
+    bool repairSlot(int slot, int32_t amount);
 
     void saveNbt(Tag &data) const;
 
@@ -78,6 +85,8 @@ private:
     int _slotFor(const ItemStack &item) const;
 
     static float _dropChance(const MobActor &mob, int slot);
+
+    static bool _wearsOnHit(const ItemStack &item);
 
     static void _damageForDrop(ItemStack &item);
 

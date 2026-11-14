@@ -193,6 +193,13 @@ public:
         return amount;
     }
 
+    // amount before armor reduces it
+    virtual void hurtArmor(ServerNetworkHandler &owner, float amount, const ActorDamageSource &source) {
+        (void) owner;
+        (void) amount;
+        (void) source;
+    }
+
     virtual void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0);
 
     void tickFire(ServerNetworkHandler &owner);

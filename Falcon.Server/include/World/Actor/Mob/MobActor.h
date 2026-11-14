@@ -177,6 +177,10 @@ public:
         return mEquipment.absorbDamage(amount, source);
     }
 
+    void hurtArmor(ServerNetworkHandler &owner, float amount, const ActorDamageSource &source) override {
+        mEquipment.hurtArmor(owner, *this, amount, source);
+    }
+
     bool ignoresMovementSlowdown(const std::string &blockName) const override;
 
     bool burnsInDaylight() const override;
