@@ -58,6 +58,17 @@ void PrecipitationSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
+bool PrecipitationSystem::isRainingOn(Level &level, const Vector3i &position) {
+    if (!level.isRaining() || position.y < level.getHeightAt(position.x, position.z))
+        return false;
+
+    LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
+    const ClimateAttributes *climate = chunk == nullptr ? nullptr
+                                                        : ClimateAttributes::getForBiome((int32_t) chunk->getBiomeAt(
+                                                                  position.x & 15, position.y, position.z & 15));
+    return climate != nullptr && climate->mRain && !isCold(level, position);
+}
+
 bool PrecipitationSystem::isCold(Level &level, const Vector3i &position) {
     LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
     if (chunk == nullptr)

@@ -56,6 +56,7 @@
 #include "World/Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "World/Actor/AI/Goal/SilverfishGoals.h"
 #include "World/Actor/AI/Goal/SitGoal.h"
+#include "World/Actor/AI/Goal/SleepGoal.h"
 #include "World/Actor/AI/Goal/SlimeGoals.h"
 #include "World/Actor/AI/Goal/SquidMovementGoal.h"
 #include "World/Actor/AI/Goal/StompAttackGoal.h"
@@ -68,6 +69,7 @@
 #include "World/Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "World/Actor/AI/Goal/TimerFlagGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
+#include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 
@@ -112,6 +114,9 @@ namespace {
     const float EAT_DEFAULT_SECONDS = 1.8f;
     const float FOLLOW_OWNER_START = 10.0f;
     const float FOLLOW_OWNER_STOP = 2.0f;
+
+    const float WORK_DEFAULT_SPEED = 0.5f;
+    const float SLEEP_DEFAULT_Y_OFFSET = 1.0f;
 
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
@@ -1021,6 +1026,28 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                        : OFFER_FLOWER_DEFAULT_AREA;
         settings.mFilters = cloneOf(component.get("filters"));
         return std::make_unique<OfferFlowerGoal>(std::move(settings));
+    }
+
+    if (behavior == "work") {
+        WorkGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", WORK_DEFAULT_SPEED);
+        settings.mActiveTicks = (int32_t) numberOf(component, "active_time", 0.0f);
+        settings.mCanWorkInRain = isFlagSet(component, "can_work_in_rain");
+        settings.mRainToleranceTicks = (int32_t) numberOf(component, "work_in_rain_tolerance", -1.0f);
+        settings.mCooldownTicks = (int32_t) numberOf(component, "goal_cooldown", 0.0f);
+        settings.mSoundDelayMin = (int32_t) numberOf(component, "sound_delay_min", 0.0f);
+        settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
+        settings.mOnArrival = cloneOf(component.get("on_arrival"));
+        return std::make_unique<WorkGoal>(std::move(settings));
+    }
+
+    if (behavior == "sleep") {
+        SleepGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mYOffset = numberOf(component, "sleep_y_offset", SLEEP_DEFAULT_Y_OFFSET);
+        settings.mCanSleepWhileRiding = isFlagSet(component, "can_sleep_while_riding");
+        settings.mTimeoutTicks = (int32_t) numberOf(component, "timeout_cooldown", 0.0f);
+        return std::make_unique<SleepGoal>(settings);
     }
 
     if (behavior == "move_towards_home_restriction")
