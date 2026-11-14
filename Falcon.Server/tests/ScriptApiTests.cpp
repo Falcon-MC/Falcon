@@ -2386,6 +2386,10 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             const CustomItemDefinition &sling = *CustomContentRegistry::getInstance().findItem("test:sling");
             const CustomItemDefinition &javelin = *CustomContentRegistry::getInstance().findItem("test:javelin");
             int32_t duration = 0;
+            const auto charged = [&inventory]() {
+                const Tag &tag = inventory.getItemInHand().mTag;
+                return tag.getType() == Tag::Type::Compound && tag.contains("chargedItem");
+            };
 
             inventory.setItemInHand(owner.createItemStack("test:longbow", 1));
             require(PackShooter::use(owner, player, longbow, duration) == PackShooter::Use::None,
@@ -2423,16 +2427,16 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
             require(PackShooter::use(owner, player, sling, duration) == PackShooter::Use::Drawing && duration == 25,
                     "the charge_on_draw shooter did not draw");
             PackShooter::release(owner, player, sling, 10);
-            require(!inventory.getItemInHand().mTag.contains("chargedItem") && inventory.getItem(21).mCount == 2,
+            require(!charged() && inventory.getItem(21).mCount == 2,
                     "a short draw charged the shooter");
             PackShooter::release(owner, player, sling, 20);
-            const Tag *chargedItem = inventory.getItemInHand().mTag.get("chargedItem");
+            const Tag *chargedItem = charged() ? inventory.getItemInHand().mTag.get("chargedItem") : nullptr;
             require(chargedItem != nullptr && chargedItem->getString("Name") == "test:pellet"
                             && inventory.getItem(21).mCount == 1 && shot("minecraft:snowball", true) == 1,
                     "a full draw did not charge the shooter with one pellet");
             require(PackShooter::use(owner, player, sling, duration) == PackShooter::Use::Done
                             && shot("minecraft:snowball", true) == 2
-                            && !inventory.getItemInHand().mTag.contains("chargedItem")
+                            && !charged()
                             && inventory.getItem(21).mCount == 1,
                     "the charged shooter did not fire its charge");
             inventory.setItem(21, ItemStack::air());
