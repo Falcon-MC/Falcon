@@ -33,6 +33,7 @@
 #include "Protocol/Types/StartGameTypes.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
+#include "World/Item/ItemProperties.h"
 
 #include <algorithm>
 #include <chrono>
@@ -191,6 +192,13 @@ namespace {
 bool ServerPlayer::canStandOnPowderSnow() const {
     const ItemStack &boots = getInventory().getArmor(PlayerInventory::ARMOR_FEET);
     return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
+}
+
+float ServerPlayer::getArmorKnockbackResistance() const {
+    float resistance = 0.0f;
+    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
+        resistance += ItemProperties::getArmorKnockbackResistance(getInventory().getArmor(slot));
+    return resistance;
 }
 
 ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, PacketSender *sender)

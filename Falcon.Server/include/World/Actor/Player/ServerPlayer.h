@@ -51,6 +51,8 @@ public:
 
     bool canStandOnPowderSnow() const override;
 
+    float getArmorKnockbackResistance() const override;
+
     // world the player was saved in; one player data file is shared by every world
     static constexpr const char *TAG_LEVEL = "Level";
 

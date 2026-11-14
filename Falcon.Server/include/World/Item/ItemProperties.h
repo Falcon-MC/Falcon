@@ -13,4 +13,8 @@ public:
     static bool isUnbreakable(const ItemStack &item);
     static ItemLockMode getLockMode(const ItemStack &item);
     static bool keepsOnDeath(const ItemStack &item);
+
+    // what a worn armor piece adds to its wearer's knockback resistance
+    static float getArmorKnockbackResistance(const std::string &identifier);
+    static float getArmorKnockbackResistance(const ItemStack &item);
 };
