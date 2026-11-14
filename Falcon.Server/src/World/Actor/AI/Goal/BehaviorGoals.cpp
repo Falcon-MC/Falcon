@@ -8,6 +8,7 @@
 #include "World/Actor/AI/Goal/BehaviorItems.h"
 #include "World/Actor/AI/Goal/BreakDoorGoal.h"
 #include "World/Actor/AI/Goal/BreedGoal.h"
+#include "World/Actor/AI/Goal/DefendVillageTargetGoal.h"
 #include "World/Actor/AI/Goal/DragonGoals.h"
 #include "World/Actor/AI/Goal/CelebrateGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
@@ -176,6 +177,7 @@ namespace {
     const float CELEBRATE_DEFAULT_JUMP_MIN = 1.0f;
     const float CELEBRATE_DEFAULT_JUMP_MAX = 3.5f;
     const float CELEBRATE_DEFAULT_DURATION = 30.0f;
+    const float DEFEND_VILLAGE_DEFAULT_CHANCE = 0.05f;
     // the offer flower definition defaults
     const float OFFER_FLOWER_DEFAULT_CHANCE = 0.000125f;
     const float OFFER_FLOWER_DEFAULT_SECONDS = 20.0f;
@@ -626,6 +628,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         return std::make_unique<NearestAttackableTargetGoal>(
                 targetRange(mob, component), targetEntries(component),
                 (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL), targetSight(component));
+
+    if (behavior == "defend_village_target") {
+        std::vector<std::shared_ptr<json::Value>> filters;
+        for (NearestAttackableTargetGoal::Entry &entry: targetEntries(component))
+            filters.push_back(std::move(entry.mFilters));
+        return std::make_unique<DefendVillageTargetGoal>(
+                numberOf(component, "attack_chance", DEFEND_VILLAGE_DEFAULT_CHANCE), followRange(mob),
+                std::move(filters));
+    }
 
     if (behavior == "owner_hurt_by_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurtBy);

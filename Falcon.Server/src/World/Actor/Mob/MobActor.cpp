@@ -2480,6 +2480,7 @@ void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mHurtCount++;
     mAdmiration.abort(owner, *this);
     mAnger.onHurt(owner, *this, attacker != this ? attacker : nullptr);
+    mDweller.onHurt(owner, *this, attacker != this ? attacker : nullptr);
 }
 
 bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
