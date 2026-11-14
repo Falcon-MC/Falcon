@@ -1615,6 +1615,12 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (equipSlot == nullptr && useItem != nullptr && useItem->boolean(false))
             player.consumeOneHeldItem();
 
+        const float healthAmount = numberIn(interaction, "health_amount", 0.0f);
+        if (healthAmount > 0.0f) {
+            heal(healthAmount);
+            owner.syncActorAttributes(*this);
+        }
+
         const json::Value *transform = interaction->get("transform_to_item");
         if (transform != nullptr && transform->isString()) {
             LootDrop drop;
@@ -2341,8 +2347,16 @@ float MobActor::getAttackDamage(Difficulty difficulty) const {
     if (damage == nullptr)
         return 0.0f;
 
-    if (damage->isArray() && damage->mArray.size() == 2)
-        return (float) randomRange(damage->mArray[0]->integer(0), damage->mArray[1]->integer(0));
+    if (damage->isArray() && damage->mArray.size() == 2) {
+        // the game swaps a reversed array, never a reversed object
+        const int minimum = damage->mArray[0]->integer(0);
+        const int maximum = damage->mArray[1]->integer(0);
+        return (float) randomRange(std::min(minimum, maximum), std::max(minimum, maximum));
+    }
+
+    if (damage->isObject())
+        return (float) randomRange((int) numberIn(damage, "range_min", 0.0f),
+                                   (int) numberIn(damage, "range_max", 0.0f));
 
     return (float) damage->number(0.0);
 }
