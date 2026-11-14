@@ -657,6 +657,17 @@ namespace {
                     const uint32_t fields[4] = {width, height, address, data == nullptr ? 0 : length};
                     call.write(call.u32(1), fields, sizeof(fields));
                 }},
+                // skin-id as pointer and length, then skin-image: width, height, the rgba list as pointer and length
+                {"players", "player-set-skin", "Iiiiiii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string skinId;
+                    std::vector<uint8_t> rgba;
+                    const bool read = call.string(1, skinId) && bytes(call, call.u32(5), call.u32(6), rgba);
+                    call.resultS32(read && target != nullptr
+                                   && api().playerSetSkin(target, skinId.c_str(), rgba.data(), (uint32_t) rgba.size(),
+                                                          call.u32(3), call.u32(4))
+                                              != 0);
+                }},
                 {"players", "player-set-camera", "IiiiFFFiFFFfi:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     std::string preset;
@@ -905,6 +916,13 @@ namespace {
                     uint32_t length = 0;
                     const uint8_t *data = target == nullptr ? nullptr : api().entityNbt(target, &length);
                     call.returnBytes(1, data, data == nullptr ? 0 : length);
+                }},
+                {"entities", "entity-set-nbt", "Iii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::vector<uint8_t> data;
+                    const bool read = bytes(call, call.u32(1), call.u32(2), data);
+                    call.resultS32(read && target != nullptr
+                                   && api().entitySetNbt(target, data.data(), (uint32_t) data.size()) != 0);
                 }},
                 {"entities", "entity-equipment", "Iii:", [](Call &call) {
                     FalconEntity *target = entity(call.u64(0));

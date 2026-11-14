@@ -6,6 +6,8 @@
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/DynamicPropertyStore.h"
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Mob/MobEquipment.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/World.h"
@@ -205,6 +207,36 @@ namespace {
             return encode(actorValue->saveNbt(), length);
         return nullptr;
     }
+
+    // loaded the way a saved actor is, then shown again from scratch: a load can change anything the client drew
+    int entitySetNbt(FalconEntity *target, const uint8_t *data, uint32_t length) {
+        ServerActor *actor = dynamic_cast<ServerActor *>(entity(target));
+        if (actor == nullptr || data == nullptr || length == 0)
+            return 0;
+
+        Tag parsed;
+        try {
+            ReadOnlyBinaryStream stream(std::string(reinterpret_cast<const char *>(data), length));
+            parsed = NbtIo::readTag(stream, NbtVariant::LittleEndian);
+        } catch (const std::exception &) {
+            return 0;
+        }
+        if (!parsed.isCompound() || parsed.isEmpty())
+            return 0;
+
+        ServerNetworkHandler &host = owner();
+        // the server tracks the actor under its unique id: the data cannot move it to another
+        const int64_t uniqueId = actor->getUniqueId();
+        host.broadcastActorRemove(*actor);
+        actor->loadNbt(parsed);
+        actor->setUniqueId(uniqueId);
+        if (MobActor *mob = dynamic_cast<MobActor *>(actor))
+            mob->getEquipment().loadNbt(parsed, host.getCodecContext());
+        else
+            actor->loadEquipment(parsed, host.getCodecContext());
+        host.broadcastActorSpawn(*actor);
+        return 1;
+    }
 }
 
 void PluginServerApi::fillData(FalconServerApi &api) {
@@ -219,4 +251,5 @@ void PluginServerApi::fillData(FalconServerApi &api) {
     api.itemNbt = &itemNbt;
     api.itemSetNbt = &itemSetNbt;
     api.entityNbt = &entityNbt;
+    api.entitySetNbt = &entitySetNbt;
 }
