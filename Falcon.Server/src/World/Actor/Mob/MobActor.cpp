@@ -279,7 +279,8 @@ namespace {
 
 float MobActor::getArmorKnockbackResistance() const {
     float resistance = 0.0f;
-    for (int slot = MobEquipment::HEAD; slot <= MobEquipment::FEET; ++slot)
+    // the body slot counts: netherite horse and nautilus armor resist like a netherite piece
+    for (int slot = MobEquipment::HEAD; slot <= MobEquipment::BODY; ++slot)
         resistance += ItemProperties::getArmorKnockbackResistance(getEquipment().getSlot(slot));
     return resistance;
 }
@@ -1544,6 +1545,13 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         const int32_t hurtItem = (int32_t) numberIn(interaction, "hurt_item", 0.0f);
         if (hurtItem > 0)
             owner.damagePlayerHeldItem(player, hurtItem);
+
+        const json::Value *repair = interaction->get("repair_entity_item");
+        const json::Value *repairSlot = repair == nullptr ? nullptr : repair->get("slot");
+        if (repairSlot != nullptr
+            && mEquipment.repairSlot(MobEquipment::slotIndexOf(repairSlot->string()),
+                                     (int32_t) numberIn(repair, "amount", 0.0f)))
+            mEquipment.broadcast(owner, *this);
 
         const json::Value *useItem = interaction->get("use_item");
         if (equipSlot == nullptr && useItem != nullptr && useItem->boolean(false))
