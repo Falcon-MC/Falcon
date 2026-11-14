@@ -8,6 +8,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/LevelGen/Structure/NetherFortressStructure.h"
 
 #include <algorithm>
 #include <cmath>
@@ -62,6 +63,8 @@ int32_t NetherGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
 }
 
 void NetherGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
+    // structures go first: the game post processes them before any feature runs
+    NetherFortressStructure::place(*this, level, chunk);
     NetherFeatureBuilder::apply(level, chunk, overflow);
 }
 

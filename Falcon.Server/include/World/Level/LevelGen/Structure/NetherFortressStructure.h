@@ -7,6 +7,8 @@
 #include <vector>
 
 class ChunkGenerator;
+class Level;
+class LevelChunk;
 
 // the fortresses reaching a chunk: planned once in their start chunk, then laid a chunk at a time
 class NetherFortressStructure {
@@ -31,4 +33,13 @@ public:
     // the fortresses whose box meets the chunk, by start x then z
     static std::vector<std::shared_ptr<const Plan>> plansNear(const ChunkGenerator &generator, int32_t chunkX,
                                                               int32_t chunkZ);
+
+    // lays the pieces of every fortress reaching the chunk and records them in its structure bounds
+    static void place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk);
+
+    // one piece's share of the chunk; the random is the chunk's post process random
+    static void build(const NetherFortressPieces::Piece &piece, Level &level, LevelChunk &chunk,
+                      std::mt19937 &random);
+
+    static const char *const LOOT_TABLE;
 };
