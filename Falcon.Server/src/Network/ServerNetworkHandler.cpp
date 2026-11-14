@@ -534,11 +534,19 @@ ServerNetworkHandler::~ServerNetworkHandler() {
 }
 
 void ServerNetworkHandler::setMotd(const std::string &serverName, const std::string &subName) {
-    mAnnouncement.mServerName = serverName;
-    mAnnouncement.mSubName = subName;
+    {
+        std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+        mAnnouncement.mServerName = serverName;
+        mAnnouncement.mSubName = subName;
+    }
 
     if (mIsListening)
         _updateServerAnnouncement();
+}
+
+std::string ServerNetworkHandler::getMotd() const {
+    std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+    return mAnnouncement.mServerName;
 }
 
 void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::string &gameVersion) {
@@ -572,13 +580,16 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
                 [](const nethernet::Connection &connection) { ClientAttestation::getInstance().inspect(connection); });
         mNetherNetInstance->setServerDataProvider([this]() {
             nethernet::ServerData data;
-            data.mServerName = mProperties.getServerName();
+            {
+                std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+                data.mServerName = mAnnouncement.mServerName;
+                data.mMaxPlayerCount = mAnnouncement.mMaxPlayers;
+            }
             data.mProtocol = mAnnouncement.mProtocolVersion;
             data.mGameVersion = mAnnouncement.mGameVersion;
             data.mLevelName = mProperties.getLevelName();
             data.mGameType = (int32_t) mProperties.getGameType();
             data.mPlayerCount = getActivePlayerCount();
-            data.mMaxPlayerCount = mProperties.getMaxPlayers();
             data.mAcceptsOnlineAuth = mProperties.getOnlineMode();
             data.mAcceptsSelfSignedAuth = !mProperties.getOnlineMode();
             return data;
@@ -694,7 +705,10 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
     }
 
     mMaxPlayers = definition.mMaxNumPlayers;
-    mAnnouncement.mMaxPlayers = mMaxPlayers;
+    {
+        std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+        mAnnouncement.mMaxPlayers = mMaxPlayers;
+    }
     mIsListening = true;
 
     _updateServerAnnouncement();
@@ -1317,6 +1331,7 @@ void ServerNetworkHandler::closeAllForms(ServerPlayer &player) {
 
 void ServerNetworkHandler::setMaxPlayers(int maxPlayers) {
     mMaxPlayers = maxPlayers;
+    std::lock_guard<std::mutex> lock(mAnnouncementMutex);
     mAnnouncement.mMaxPlayers = maxPlayers;
 }
 

@@ -346,6 +346,113 @@ namespace {
                 {"server", "server-set-difficulty", "i:i", [](Call &call) {
                     call.resultS32(api().serverSetDifficulty(call.u32(0)) != 0);
                 }},
+                {"server", "server-ban", "iiiiii:i", [](Call &call) {
+                    std::string target;
+                    std::string reason;
+                    std::string source;
+                    const bool read = call.string(0, target) && call.string(2, reason) && call.string(4, source);
+                    call.resultS32(read && api().serverBan(target.c_str(), reason.c_str(), source.c_str()) != 0);
+                }},
+                {"server", "server-pardon", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverPardon(text0.c_str()) != 0);
+                }},
+                {"server", "server-is-banned", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverIsBanned(text0.c_str()) != 0);
+                }},
+                {"server", "server-ban-count", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().serverBanCount());
+                }},
+                {"server", "server-banned-name", "ii:", [](Call &call) {
+                    call.returnOptionalString(1, api().serverBannedName(call.u32(0)));
+                }},
+                {"server", "server-ban-ip", "iiiiii:i", [](Call &call) {
+                    std::string target;
+                    std::string reason;
+                    std::string source;
+                    const bool read = call.string(0, target) && call.string(2, reason) && call.string(4, source);
+                    call.resultS32(read && api().serverBanIp(target.c_str(), reason.c_str(), source.c_str()) != 0);
+                }},
+                {"server", "server-pardon-ip", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverPardonIp(text0.c_str()) != 0);
+                }},
+                {"server", "server-is-ip-banned", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverIsIpBanned(text0.c_str()) != 0);
+                }},
+                {"server", "server-ip-ban-count", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().serverIpBanCount());
+                }},
+                {"server", "server-banned-ip", "ii:", [](Call &call) {
+                    call.returnOptionalString(1, api().serverBannedIp(call.u32(0)));
+                }},
+                {"server", "server-allow-list-add", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverAllowListAdd(text0.c_str()) != 0);
+                }},
+                {"server", "server-allow-list-remove", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverAllowListRemove(text0.c_str()) != 0);
+                }},
+                {"server", "server-allow-list-count", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().serverAllowListCount());
+                }},
+                {"server", "server-allow-list-name", "ii:", [](Call &call) {
+                    call.returnOptionalString(1, api().serverAllowListName(call.u32(0)));
+                }},
+                {"server", "server-allow-list-enabled", ":i", [](Call &call) {
+                    call.resultS32(api().serverAllowListEnabled() != 0);
+                }},
+                {"server", "server-set-allow-list-enabled", "i:", [](Call &call) {
+                    api().serverSetAllowListEnabled(call.flag(0) ? 1 : 0);
+                }},
+                {"server", "server-motd", "i:", [](Call &call) {
+                    call.returnString(0, api().serverMotd());
+                }},
+                {"server", "server-set-motd", "ii:", [](Call &call) {
+                    std::string motd;
+                    if (call.string(0, motd))
+                        api().serverSetMotd(motd.c_str());
+                }},
+                {"server", "server-max-players", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().serverMaxPlayers());
+                }},
+                {"server", "server-set-max-players", "i:i", [](Call &call) {
+                    call.resultS32(api().serverSetMaxPlayers(call.u32(0)) != 0);
+                }},
+                {"server", "server-tps", ":F", [](Call &call) {
+                    call.resultF64(api().serverTps());
+                }},
+                {"server", "server-milliseconds-per-tick", ":F", [](Call &call) {
+                    call.resultF64(api().serverMillisecondsPerTick());
+                }},
+                {"server", "server-shutdown", ":", [](Call &) {
+                    api().serverShutdown();
+                }},
+                {"server", "server-plugin-count", ":i", [](Call &call) {
+                    call.resultS32((int32_t) api().serverPluginCount());
+                }},
+                {"server", "server-plugin-name", "ii:", [](Call &call) {
+                    call.returnOptionalString(1, api().serverPluginName(call.u32(0)));
+                }},
+                {"server", "server-plugin-version", "iii:", [](Call &call) {
+                    std::string name;
+                    if (call.string(0, name))
+                        call.returnOptionalString(2, api().serverPluginVersion(name.c_str()));
+                }},
+                {"server", "server-plugin-enabled", "ii:i", [](Call &call) {
+                    std::string text0;
+                    const bool read = call.string(0, text0);
+                    call.resultS32(read && api().serverPluginEnabled(text0.c_str()) != 0);
+                }},
 
                 {"players", "player-name", "Ii:", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));

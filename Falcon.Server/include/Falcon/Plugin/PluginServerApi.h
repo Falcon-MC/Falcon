@@ -41,4 +41,6 @@ public:
     static void fillWorldQueries(FalconServerApi &api);
 
     static void fillActors(FalconServerApi &api);
+
+    static void fillAdmin(FalconServerApi &api);
 };

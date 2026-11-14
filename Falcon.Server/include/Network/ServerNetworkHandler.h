@@ -132,6 +132,8 @@ public:
 
     void setMotd(const std::string &serverName, const std::string &subName);
 
+    std::string getMotd() const;
+
     void setProtocolVersion(int protocolVersion, const std::string &gameVersion);
 
     void setProperties(const PropertiesSettings &properties);
@@ -1162,6 +1164,8 @@ private:
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;
+    // the name and player limit are read by the transport threads answering status queries
+    mutable std::mutex mAnnouncementMutex;
     int mMaxPlayers;
     bool mIsListening;
     bool mSimulationPaused = false;

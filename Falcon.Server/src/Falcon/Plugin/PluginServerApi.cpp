@@ -234,6 +234,7 @@ namespace {
         PluginServerApi::fillCommands(api);
         PluginServerApi::fillWorldQueries(api);
         PluginServerApi::fillActors(api);
+        PluginServerApi::fillAdmin(api);
         return api;
     }
 }
