@@ -4,7 +4,6 @@
 
 #include <vector>
 
-class Actor;
 class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -19,7 +18,7 @@ public:
 
 private:
     struct Context {
-        Actor *mExecutor;
+        ServerPlayer *mExecutor;
         Vector3f mPosition;
         Vector3f mRotation;
         Level *mLevel;
@@ -33,9 +32,6 @@ private:
 
     std::vector<ServerPlayer *> resolveTargets(CommandOrigin &sender, const Context &context,
                                                const std::string &selector);
-
-    // players then the other entities, the way @e lists them
-    std::vector<Actor *> resolveEntities(CommandOrigin &sender, const Context &context, const std::string &selector);
 
     bool run(CommandOrigin &sender, Context context, const std::vector<std::string> &arguments, size_t index,
              int32_t &successes);

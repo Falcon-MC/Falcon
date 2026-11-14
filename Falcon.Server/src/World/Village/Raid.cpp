@@ -10,6 +10,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/OnScreenTextureAnimationPacket.h"
 #include "Core/Math/VectorMath.h"
+#include "Core/NBT/Tag.h"
 
 #include <algorithm>
 #include <cmath>
@@ -400,7 +401,9 @@ void Raid::tick(ServerNetworkHandler &owner, Level &level, Village &village, int
                 break;
 
             if (!mRaiders.empty()) {
-                mTotalHealth = _sumRaiderHealth(owner);
+                mWaveRaiders = (uint8_t) mRaiders.size();
+                if (mHealthProgress)
+                    mTotalHealth = _sumRaiderHealth(owner);
                 mSpawnFailures = 0;
                 _onWaveSpawned(owner, level);
                 mState = State::Ongoing;
@@ -483,11 +486,65 @@ float Raid::getProgress(ServerNetworkHandler &owner) const {
         case State::Victory:
         case State::Ended:
         case State::Removed:
+            if (!mHealthProgress) {
+                if (mWaveRaiders == 0)
+                    return 0.0f;
+                return std::min(1.0f, std::max(0.0f, (float) mRaiders.size() / (float) mWaveRaiders));
+            }
             if (mTotalHealth <= 0.0f)
                 return 0.0f;
             return std::min(1.0f, std::max(0.0f, _sumRaiderHealth(owner) / mTotalHealth));
     }
     return 0.0f;
+}
+
+Tag Raid::save() const {
+    Tag raid = Tag::ofCompound();
+    raid.putInt("State", (int32_t) mState);
+    raid.putInt("Status", (int32_t) mResult);
+    raid.putByte("GroupNum", (int8_t) mCurrentWave);
+    raid.putByte("NumGroups", (int8_t) mWaveCount);
+    raid.putLong("GameTick", mLastTick);
+    raid.putLong("Ticks", mTicksInState);
+    raid.putFloat("SpawnX", mSpawnPosition.x);
+    raid.putFloat("SpawnY", mSpawnPosition.y);
+    raid.putFloat("SpawnZ", mSpawnPosition.z);
+
+    Tag raiders = Tag::ofList(Tag::Type::Long);
+    for (int64_t id: mRaiders)
+        raiders.addToList(Tag::ofLong(id));
+    raid.put("Raiders", std::move(raiders));
+
+    raid.putByte("NumRaiders", (int8_t) mWaveRaiders);
+    raid.putFloat("TotalMaxHealth", mTotalHealth);
+    raid.putByte("SpawnFails", (int8_t) mSpawnFailures);
+    return raid;
+}
+
+void Raid::restore(const Tag &raid, int64_t delta) {
+    const int32_t state = raid.getInt("State");
+    const int32_t result = raid.getInt("Status");
+    mState = state >= (int32_t) State::Cooldown && state <= (int32_t) State::Removed ? (State) state : State::Removed;
+    mResult = result >= (int32_t) Result::None && result <= (int32_t) Result::Defeat ? (Result) result : Result::None;
+    mCurrentWave = (uint8_t) raid.getByte("GroupNum");
+    mWaveCount = (uint8_t) raid.getByte("NumGroups");
+    mLastTick = raid.getLong("GameTick") + delta;
+    mTicksInState = raid.getLong("Ticks");
+    mSpawnPosition = Vector3f(raid.getFloat("SpawnX"), raid.getFloat("SpawnY"), raid.getFloat("SpawnZ"));
+
+    mRaiders.clear();
+    const Tag *raiders = raid.get("Raiders");
+    if (raiders != nullptr && raiders->isList()) {
+        for (const Tag &raider: raiders->getList()) {
+            if (raider.getType() == Tag::Type::Long)
+                mRaiders.insert(raider.asLong());
+        }
+    }
+
+    mWaveRaiders = (uint8_t) raid.getByte("NumRaiders");
+    mTotalHealth = raid.getFloat("TotalMaxHealth");
+    mHealthProgress = mTotalHealth > 0.0f;
+    mSpawnFailures = (uint8_t) raid.getByte("SpawnFails");
 }
 
 void Raid::_resetStateTimers() {
