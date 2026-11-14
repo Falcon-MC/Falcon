@@ -231,6 +231,7 @@ namespace {
         PluginServerApi::fillScoreboard(api);
         PluginServerApi::fillContainers(api);
         PluginServerApi::fillData(api);
+        PluginServerApi::fillCommands(api);
         return api;
     }
 }

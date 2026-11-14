@@ -16,8 +16,17 @@ public:
 
     CommandPermission getRequiredPermission() const override;
 
+    std::vector<CommandOverloadData> getOverloads() const override;
+
+    void addOverload(CommandOverloadData overload);
+
+    LoadedPlugin &getPlugin() const {
+        return mPlugin;
+    }
+
 private:
     LoadedPlugin &mPlugin;
+    std::vector<CommandOverloadData> mOverloads;
     FalconCommandHandler mHandler;
     void *mUserData;
     CommandPermission mPermission;

@@ -485,6 +485,12 @@ namespace {
                     if (optionalString(call, 1, hasSound, sound) && target != nullptr)
                         api().playerStopSound(target, hasSound ? sound.c_str() : nullptr);
                 }},
+                {"players", "player-execute-command", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string line;
+                    const bool read = call.string(1, line);
+                    call.resultS32(read && target != nullptr && api().playerExecuteCommand(target, line.c_str()) != 0);
+                }},
                 {"players", "player-spawn-particle", "IiiFFF:", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     std::string particle;
@@ -1506,6 +1512,47 @@ namespace {
                                                              permission, &runCommand, &binding};
                     call.resultS32(api().registerCommand(self(call), &descriptor) != 0);
                 }},
+                // list<command-parameter>: 24 bytes each, name, kind at 8, optional at 12, values at 16
+                {"commands", "command-add-overload", "iiii:i", [](Call &call) {
+                    constexpr uint32_t ENTRY = 24;
+                    constexpr uint32_t MAX_PARAMETERS = 64;
+                    std::string command;
+                    const uint32_t count = call.u32(3);
+                    if (!call.string(0, command))
+                        return;
+                    if (count > MAX_PARAMETERS) {
+                        call.resultS32(0);
+                        return;
+                    }
+
+                    std::vector<uint8_t> records;
+                    if (!bytes(call, call.u32(2), count * ENTRY, records))
+                        return;
+
+                    std::vector<std::string> names(count);
+                    std::vector<std::vector<std::string>> values(count);
+                    std::vector<std::vector<const char *>> pointers(count);
+                    std::vector<FalconCommandParameter> parameters(count);
+                    for (uint32_t index = 0; index < count; ++index) {
+                        const uint8_t *record = records.data() + (size_t) index * ENTRY;
+                        uint32_t fields[6] = {};
+                        std::memcpy(fields, record, sizeof(fields));
+                        if (!call.readString(fields[0], fields[1], names[index])
+                            || !call.stringList(fields[4], fields[5], values[index]))
+                            return;
+                        for (const std::string &value: values[index])
+                            pointers[index].push_back(value.c_str());
+                        parameters[index] = FalconCommandParameter{names[index].c_str(), fields[2],
+                                                                   record[12] != 0 ? 1 : 0, pointers[index].data(),
+                                                                   (uint32_t) pointers[index].size()};
+                    }
+                    const int added = api().commandAddOverload(self(call), command.c_str(), parameters.data(), count);
+                    call.resultS32(added != 0 ? 1 : 0);
+                }},
+                {"commands", "execute-command", "ii:i", [](Call &call) {
+                    std::string line;
+                    call.resultS32(call.string(0, line) && api().serverExecuteCommand(line.c_str()) != 0);
+                }},
                 {"commands", "sender-name", "i:", [](Call &call) {
                     FalconCommandSender *sender = call.plugin().getSender();
                     call.returnString(0, sender == nullptr ? "" : api().senderName(sender));
@@ -1671,6 +1718,26 @@ namespace {
                             binding->mHasFirst ? &runBlockInteract : nullptr,
                             binding->mHasSecond ? &runBlockBreak : nullptr, binding};
                     call.resultS32(api().registerCustomBlock(self(call), &descriptor) != 0);
+                }},
+                {"recipes", "register-recipe", "iiiiiiiiii:i", [](Call &call) {
+                    std::string identifier;
+                    std::string output;
+                    std::vector<std::string> ingredients;
+                    if (!call.string(0, identifier) || !call.stringList(call.u32(5), call.u32(6), ingredients)
+                        || !call.string(7, output))
+                        return;
+
+                    std::vector<const char *> items;
+                    for (const std::string &ingredient: ingredients)
+                        items.push_back(ingredient.c_str());
+                    const FalconRecipeDescriptor descriptor{identifier.c_str(), call.flag(2) ? 1 : 0, call.u32(3),
+                                                            call.u32(4), items.data(), (uint32_t) items.size(),
+                                                            output.c_str(), call.u32(9)};
+                    call.resultS32(api().registerRecipe(self(call), &descriptor) != 0);
+                }},
+                {"recipes", "remove-recipe", "ii:i", [](Call &call) {
+                    std::string identifier;
+                    call.resultS32(call.string(0, identifier) && api().removeRecipe(identifier.c_str()) != 0);
                 }},
                 {"content", "register-custom-entity", "iifffiiiii:i", [](Call &call) {
                     std::string identifier;

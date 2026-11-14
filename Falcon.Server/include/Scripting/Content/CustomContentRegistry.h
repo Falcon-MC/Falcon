@@ -9,6 +9,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class BehaviorPackManager;
@@ -252,6 +253,16 @@ public:
         return mRecipes;
     }
 
+    // plugins add and remove recipes while the server runs
+    std::vector<CustomRecipe> &getRecipesMutable() {
+        return mRecipes;
+    }
+
+    // vanilla crafting recipes left out of the recipe book, by recipe id
+    std::unordered_set<std::string> &getDisabledRecipes() {
+        return mDisabledRecipes;
+    }
+
     const CustomActorDefinition *getActorDefinition(const std::string &identifier) const;
 
     int32_t getItemMaxStackSize(const std::string &identifier) const;
@@ -334,6 +345,7 @@ private:
     std::vector<CustomBlockDefinition> mBlocks;
     std::vector<CustomActorDefinition> mActors;
     std::vector<CustomRecipe> mRecipes;
+    std::unordered_set<std::string> mDisabledRecipes;
     std::vector<BlockPropertyData> mBlockProperties;
     std::unordered_map<std::string, uint8_t> mNeighborListeners;
     bool mUpcomingCreatorFeatures = false;

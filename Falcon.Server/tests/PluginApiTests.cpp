@@ -1,10 +1,14 @@
 #include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "Server/Commands/CommandMap.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
@@ -58,7 +62,8 @@ namespace {
     void effects(const FalconServerApi &api, Fixture &fixture) {
         FalconEntity *body = api.playerEntity(fixture.playerHandle());
         require(api.entityAddEffect(body, FALCON_EFFECT_SPEED, 200, 1, 1) == 1, "speed was not added");
-        require(api.entityAddEffect(body, FALCON_EFFECT_SPEED, 100, 0, 1) == 0, "a weaker speed replaced a stronger one");
+        require(api.entityAddEffect(body, FALCON_EFFECT_SPEED, 100, 0, 1) == 0,
+                "a weaker speed replaced a stronger one");
         require(api.entityAddEffect(body, 31, 100, 0, 1) == 0, "an unknown effect id was accepted");
         require(api.entityAddEffect(body, FALCON_EFFECT_HASTE, 0, 0, 1) == 0, "a zero duration was accepted");
         require(api.entityAddEffect(body, FALCON_EFFECT_HASTE, 100, 256, 1) == 0, "amplifier 256 was accepted");
@@ -201,7 +206,8 @@ namespace {
         api.itemDestroy(diamonds);
 
         const Vector3i signAt(8, 100, 8);
-        fixture.level->setBlock(signAt, VanillaBlocks::fromIdentifier("minecraft:standing_sign")->toBlockState(), false);
+        const Block *standingSign = VanillaBlocks::fromIdentifier("minecraft:standing_sign");
+        fixture.level->setBlock(signAt, standingSign->toBlockState(), false);
         fixture.level->getBlockActors().getOrCreate<SignBlockActor>(signAt);
         const FalconBlockPos sign{8, 100, 8};
         require(api.levelSignText(fixture.levelHandle(), nothing, FALCON_SIGN_FRONT) == nullptr, "air has text");
@@ -273,6 +279,101 @@ namespace {
         require(api.entityNbt(body, &length) != nullptr && length > 0, "the player has no saved state");
     }
 
+    struct CommandProbe {
+        int calls = 0;
+        std::vector<std::string> arguments;
+        bool player = false;
+    };
+
+    int probeHandler(FalconCommandSender *sender, const char *const *arguments, uint32_t count, void *userData) {
+        auto &probe = *static_cast<CommandProbe *>(userData);
+        probe.calls++;
+        probe.arguments.assign(arguments, arguments + count);
+        probe.player = PluginServerApi::get().senderPlayer(sender) != nullptr;
+        return 1;
+    }
+
+    void commands(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin owned;
+        owned.mDescription.mName = "Probe";
+        owned.mEnabled = true;
+        LoadedPlugin other;
+        other.mDescription.mName = "Other";
+        FalconPlugin *handle = PluginManager::toHandle(owned);
+        CommandProbe probe;
+        const FalconCommandDescriptor descriptor{"probe", "Probes", "/probe", FALCON_PERMISSION_ANY, &probeHandler,
+                                                 &probe};
+        require(api.registerCommand(handle, &descriptor) == 1, "the probe command was not registered");
+
+        const char *modes[2] = {"fast", "slow"};
+        const FalconCommandParameter parameters[2] = {{"mode", FALCON_COMMAND_PARAM_ENUM, 0, modes, 2},
+                                                      {"count", FALCON_COMMAND_PARAM_INT, 1, nullptr, 0}};
+        require(api.commandAddOverload(handle, "probe", parameters, 2) == 1, "the overload was refused");
+        require(api.commandAddOverload(PluginManager::toHandle(other), "probe", parameters, 2) == 0,
+                "another plugin changed the command");
+        require(api.commandAddOverload(handle, "missing", parameters, 2) == 0, "a missing command took an overload");
+        const FalconCommandParameter emptyEnum{"mode", FALCON_COMMAND_PARAM_ENUM, 0, nullptr, 0};
+        require(api.commandAddOverload(handle, "probe", &emptyEnum, 1) == 0, "an enum without values was accepted");
+
+        const Command *command = fixture.owner.getCommands().getCommand("probe");
+        require(command != nullptr, "the command is not in the map");
+        const std::vector<CommandOverloadData> overloads = command->getOverloads();
+        require(overloads.size() == 1 && overloads[0].mParameters.size() == 2, "the overload replaced nothing");
+        require(overloads[0].mParameters[0].mHasEnumData
+                        && overloads[0].mParameters[0].mEnumData.mValues == std::vector<std::string>{"fast", "slow"},
+                "the enum values were lost");
+        require(overloads[0].mParameters[1].mType == CommandParamType::Int && overloads[0].mParameters[1].mOptional,
+                "the int parameter was lost");
+
+        require(api.serverExecuteCommand("probe fast 3") == 1 && probe.calls == 1 && !probe.player,
+                "the console did not run the command");
+        require(probe.arguments == std::vector<std::string>{"fast", "3"}, "the console arguments were lost");
+        require(api.playerExecuteCommand(fixture.playerHandle(), "probe slow") == 1 && probe.calls == 2 && probe.player,
+                "the player did not run the command");
+        require(api.serverExecuteCommand("") == 0, "an empty line ran");
+        fixture.owner.getCommands().unregisterCommand("probe");
+    }
+
+    bool hasOutput(ServerNetworkHandler &owner, const std::string &identifier) {
+        for (const ItemStack &output: owner.getRecipeOutputs()) {
+            if (output.mDefinition != nullptr && output.mDefinition->getIdentifier() == identifier)
+                return true;
+        }
+        return false;
+    }
+
+    void recipes(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin owned;
+        owned.mDescription.mName = "Chef";
+        FalconPlugin *handle = PluginManager::toHandle(owned);
+        const size_t before = fixture.owner.getRecipeOutputs().size();
+
+        const char *emeralds[4] = {"minecraft:emerald", "minecraft:emerald", "minecraft:emerald", "minecraft:emerald"};
+        const FalconRecipeDescriptor shaped{"chef:emerald_block", 1, 2, 2, emeralds, 4, "minecraft:emerald_block", 1};
+        require(api.registerRecipe(handle, &shaped) == 1, "the shaped recipe was refused");
+        require(api.registerRecipe(handle, &shaped) == 0, "a taken identifier was registered twice");
+        const FalconRecipeDescriptor wrongSize{"chef:wrong", 1, 2, 2, emeralds, 3, "minecraft:emerald_block", 1};
+        require(api.registerRecipe(handle, &wrongSize) == 0, "a 2 x 2 recipe with three cells was accepted");
+        const char *unknown[1] = {"minecraft:not_an_item"};
+        const FalconRecipeDescriptor bad{"chef:bad", 0, 0, 0, unknown, 1, "minecraft:emerald", 1};
+        require(api.registerRecipe(handle, &bad) == 0, "an unknown ingredient was accepted");
+
+        require(fixture.owner.getRecipeOutputs().size() == before + 1, "the recipe book did not grow");
+        require(hasOutput(fixture.owner, "minecraft:emerald_block"), "the recipe book misses the new recipe");
+
+        require(api.removeRecipe("chef:emerald_block") == 1, "the plugin recipe was not removed");
+        require(fixture.owner.getRecipeOutputs().size() == before, "the recipe book kept the removed recipe");
+
+        // the first recipe in the book is a vanilla one: pack and plugin recipes come after
+        const uint32_t source = fixture.owner.getRecipeSourceIndices().front();
+        const std::string vanilla = CraftingRecipeTable::getRecipes()[source].mRecipeId;
+        require(api.removeRecipe(vanilla.c_str()) == 1, "a vanilla recipe was not removed");
+        require(fixture.owner.getRecipeOutputs().size() < before, "the vanilla recipe stayed in the book");
+        require(api.removeRecipe(vanilla.c_str()) == 0, "a vanilla recipe was removed twice");
+        require(api.removeRecipe("chef:never") == 0, "an unknown recipe was removed");
+        CustomContentRegistry::getInstance().getDisabledRecipes().clear();
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -283,6 +384,8 @@ namespace {
         scoreboard(api, fixture);
         containers(api, fixture);
         persistentData(api, fixture);
+        commands(api, fixture);
+        recipes(api, fixture);
     }
 }
 
