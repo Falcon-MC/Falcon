@@ -498,6 +498,98 @@ namespace {
                     const bool read = call.string(1, line);
                     call.resultS32(read && target != nullptr && api().playerExecuteCommand(target, line.c_str()) != 0);
                 }},
+                // option<spawn-point>: discriminant, the position from 4, the dimension at 16
+                {"players", "player-spawn-point", "Ii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconBlockPos position{};
+                    FalconDimension dimension = 0;
+                    const bool found = target != nullptr && api().playerSpawnPoint(target, &position, &dimension) != 0;
+                    uint8_t buffer[20] = {};
+                    buffer[0] = found ? 1 : 0;
+                    if (found) {
+                        const uint32_t fields[4] = {(uint32_t) position.x, (uint32_t) position.y, (uint32_t) position.z,
+                                                    dimension};
+                        std::memcpy(buffer + 4, fields, sizeof(fields));
+                    }
+                    call.write(call.u32(1), buffer, sizeof(buffer));
+                }},
+                {"players", "player-set-spawn-point", "Iiiii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconLevel *destination = level(call, 1);
+                    call.resultS32(target != nullptr && destination != nullptr
+                                   && api().playerSetSpawnPoint(target, destination, blockPos(call, 2)) != 0);
+                }},
+                {"players", "player-clear-spawn-point", "I:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    if (target != nullptr)
+                        api().playerClearSpawnPoint(target);
+                }},
+                {"players", "player-language", "Ii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.returnString(1, target == nullptr ? "" : api().playerLanguage(target));
+                }},
+                {"players", "player-device-os", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : api().playerDeviceOs(target));
+                }},
+                {"players", "player-skin-id", "Ii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.returnString(1, target == nullptr ? "" : api().playerSkinId(target));
+                }},
+                // skin-image: width, height, then the rgba list as pointer and length
+                {"players", "player-skin-image", "Ii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    uint32_t width = 0;
+                    uint32_t height = 0;
+                    uint32_t length = 0;
+                    const uint8_t *data = target == nullptr ? nullptr
+                                                            : api().playerSkinImage(target, &width, &height, &length);
+                    uint32_t address = 0;
+                    if (!call.lower(data, data == nullptr ? 0 : length, 1, address))
+                        return;
+                    const uint32_t fields[4] = {width, height, address, data == nullptr ? 0 : length};
+                    call.write(call.u32(1), fields, sizeof(fields));
+                }},
+                {"players", "player-set-camera", "IiiiFFFiFFFfi:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string preset;
+                    bool hasPosition = false;
+                    bool hasRotation = false;
+                    FalconVec3 position{};
+                    FalconVec3 rotation{};
+                    if (!call.string(1, preset) || !call.option(call.u32(3), hasPosition)
+                        || !call.option(call.u32(7), hasRotation) || (hasPosition && !vec3(call, 4, position))
+                        || (hasRotation && !vec3(call, 8, rotation)) || !finite(call, call.f32(11)))
+                        return;
+                    call.resultS32(target != nullptr
+                                   && api().playerSetCamera(target, preset.c_str(), hasPosition ? &position : nullptr,
+                                                            hasRotation ? &rotation : nullptr, call.f32(11),
+                                                            call.u32(12)) != 0);
+                }},
+                {"players", "player-fade-camera", "Ifffi:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    if (!finite(call, call.f32(1)) || !finite(call, call.f32(2)) || !finite(call, call.f32(3)))
+                        return;
+                    call.resultS32(target != nullptr
+                                   && api().playerFadeCamera(target, call.f32(1), call.f32(2), call.f32(3), call.u32(4))
+                                              != 0);
+                }},
+                {"players", "player-clear-camera", "I:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    if (target != nullptr)
+                        api().playerClearCamera(target);
+                }},
+                {"players", "player-item-cooldown", "Ii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconItem *stack = item(call, 1);
+                    call.resultS32(target == nullptr || stack == nullptr ? 0 : api().playerItemCooldown(target, stack));
+                }},
+                {"players", "player-start-item-cooldown", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconItem *stack = item(call, 1);
+                    call.resultS32(target != nullptr && stack != nullptr
+                                   && api().playerStartItemCooldown(target, stack, call.s32(2)) != 0);
+                }},
                 {"players", "player-spawn-particle", "IiiFFF:", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     std::string particle;
@@ -706,6 +798,82 @@ namespace {
                     uint32_t length = 0;
                     const uint8_t *data = target == nullptr ? nullptr : api().entityNbt(target, &length);
                     call.returnBytes(1, data, data == nullptr ? 0 : length);
+                }},
+                {"entities", "entity-equipment", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    returnFilledItem(call, 2, target == nullptr ? nullptr : api().entityEquipment(target, call.u32(1)));
+                }},
+                {"entities", "entity-set-equipment", "Iiii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    FalconItem *value = nullptr;
+                    call.resultS32(optionalItem(call, 2, value) && target != nullptr
+                                   && api().entitySetEquipment(target, call.u32(1), value) != 0);
+                }},
+                {"entities", "entity-vehicle", "Ii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    returnEntity(call, 1, target == nullptr ? nullptr : api().entityVehicle(target));
+                }},
+                {"entities", "entity-passenger-count", "I:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().entityPassengerCount(target));
+                }},
+                {"entities", "entity-passenger", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    returnEntity(call, 2, target == nullptr ? nullptr : api().entityPassenger(target, call.u32(1)));
+                }},
+                {"entities", "entity-mount", "II:i", [](Call &call) {
+                    FalconEntity *rider = entity(call.u64(0));
+                    FalconEntity *vehicle = entity(call.u64(1));
+                    call.resultS32(rider != nullptr && vehicle != nullptr && api().entityMount(rider, vehicle) != 0);
+                }},
+                {"entities", "entity-dismount", "I:", [](Call &call) {
+                    FalconEntity *rider = entity(call.u64(0));
+                    if (rider != nullptr)
+                        api().entityDismount(rider);
+                }},
+                {"entities", "entity-eject-passengers", "I:", [](Call &call) {
+                    FalconEntity *vehicle = entity(call.u64(0));
+                    if (vehicle != nullptr)
+                        api().entityEjectPassengers(vehicle);
+                }},
+                {"entities", "entity-tag-count", "I:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target == nullptr ? 0 : (int32_t) api().entityTagCount(target));
+                }},
+                {"entities", "entity-tag", "Iii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.returnOptionalString(2, target == nullptr ? nullptr : api().entityTag(target, call.u32(1)));
+                }},
+                {"entities", "entity-has-tag", "Iii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string tag;
+                    const bool read = call.string(1, tag);
+                    call.resultS32(read && target != nullptr && api().entityHasTag(target, tag.c_str()) != 0);
+                }},
+                {"entities", "entity-add-tag", "Iii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string tag;
+                    const bool read = call.string(1, tag);
+                    call.resultS32(read && target != nullptr && api().entityAddTag(target, tag.c_str()) != 0);
+                }},
+                {"entities", "entity-remove-tag", "Iii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    std::string tag;
+                    const bool read = call.string(1, tag);
+                    call.resultS32(read && target != nullptr && api().entityRemoveTag(target, tag.c_str()) != 0);
+                }},
+                {"entities", "entity-attack-target", "Ii:", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    returnEntity(call, 1, target == nullptr ? nullptr : api().entityAttackTarget(target));
+                }},
+                {"entities", "entity-set-attack-target", "IiI:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    bool hasVictim = false;
+                    if (!call.option(call.u32(1), hasVictim))
+                        return;
+                    FalconEntity *victim = hasVictim ? entity(call.u64(2)) : nullptr;
+                    const bool valid = target != nullptr && (!hasVictim || victim != nullptr);
+                    call.resultS32(valid && api().entitySetAttackTarget(target, victim) != 0);
                 }},
                 {"entities", "entity-set-attribute", "Iiif:i", [](Call &call) {
                     FalconEntity *target = entity(call.u64(0));
