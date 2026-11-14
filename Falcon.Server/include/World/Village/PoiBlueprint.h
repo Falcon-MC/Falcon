@@ -14,6 +14,11 @@ struct PoiBlueprint {
     PoiType mType;
     uint64_t mCapacity;
     uint64_t mWeight;
+    // a mob is at the point within this distance, or touching the block's box grown by it
+    float mRadius = 0.0f;
+    bool mUseBoundingBox = false;
+    // played by a villager working there
+    std::string mSound;
 };
 
 class PoiBlueprints {
