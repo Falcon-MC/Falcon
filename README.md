@@ -53,7 +53,7 @@ The API lives in [PluginAPI](https://github.com/Falcon-MC/PluginAPI), with a com
 
 ## Privacy
 
-To tell the game's client from unofficial ones, the server asks `api.falcon-mc.workers.dev` about each NetherNet
+To tell the game's client from unofficial ones, the server asks `api.falcon-mc.com` about each NetherNet
 connection. It sends no player name, identifier or address. `allow-unofficial-clients=true` turns this off.
 Telemetry is off unless you set `emit-server-telemetry=true`, and it names no server, world or player.
 

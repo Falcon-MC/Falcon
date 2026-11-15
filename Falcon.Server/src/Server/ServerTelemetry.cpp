@@ -4,7 +4,7 @@
 #include "Network/Http/HttpClient.h"
 
 namespace {
-    const char *const SERVICE = "https://api.falcon-mc.workers.dev/v1/telemetry";
+    const char *const SERVICE = "https://api.falcon-mc.com/v1/telemetry";
 
     const std::chrono::minutes REPORT_INTERVAL(30);
     const int REPORT_TIMEOUT_MS = 5000;

@@ -8,7 +8,7 @@
 #include <cstring>
 
 namespace {
-    const char *const SERVICE = "https://api.falcon-mc.workers.dev/v1/client";
+    const char *const SERVICE = "https://api.falcon-mc.com/v1/client";
 
     // an answer that is late says nothing: the client stays
     const int TIMEOUT_MS = 4000;
