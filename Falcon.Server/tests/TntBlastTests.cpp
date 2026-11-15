@@ -1,4 +1,7 @@
+#include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Misc/PrimedTntActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockState.h"
@@ -11,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -216,9 +220,126 @@ namespace {
             target->setMotion(Vector3f());
         PrimedTntActor *fused = owner.spawnPrimedTnt(level, Vector3f(0.5f, FLOOR, 0.5f), Vector3f(), 1);
         const int64_t fusedId = fused->getUniqueId();
+        level.setBlockState(1, (int32_t) FLOOR, 2, BlockState("minecraft:dirt"));
         owner.tickActors();
+        require(level.getBlockState(1, (int32_t) FLOOR, 2).mName == "minecraft:air",
+                "a tnt going off at the end of the pass broke no block");
         require(owner.getActors().find(fusedId) == owner.getActors().end(), "the exploded tnt is still there");
+
+        // a crowd going off on plain ground in one tick digs it out
+        for (int32_t x = 300; x <= 340; x++) {
+            for (int32_t z = -10; z <= 10; z++) {
+                for (int32_t y = 1; y <= 4; y++)
+                    level.setBlockState(x, (int32_t) FLOOR - y, z, BlockState("minecraft:dirt"));
+            }
+        }
+        for (int32_t index = 0; index < 600; index++)
+            owner.spawnPrimedTnt(level, Vector3f(305.5f + (float) (index % 30), FLOOR, -7.5f + (float) (index / 30 % 15)),
+                                 Vector3f(), 1);
+        owner.tickActors();
+        int32_t left = 0;
+        for (int32_t x = 305; x <= 334; x++) {
+            for (int32_t z = -7; z <= 7; z++)
+                left += level.getBlockState(x, (int32_t) FLOOR - 1, z).mName == "minecraft:dirt" ? 1 : 0;
+        }
+        require(left == 0, std::to_string(left) + " blocks of ground survived a crowd of tnt standing on them");
         require(targets[0]->getMotion().x > 0.0f, "the tnt next to the blast was not pushed");
+
+        // many explosions worked out apart: two on each platform, a dirt block next to the source hiding a
+        // target from the first one only. Each target gets the push of the per ray reading of the blocks
+        // as they stood for each explosion, the far platforms being left to the level
+        std::vector<Vector3f> firstPushes;
+        // the ticks above left them a little motion of their own
+        for (ServerActor *actor: pushed)
+            actor->setMotion(Vector3f());
+        for (int32_t rank = 0; rank < 20; rank++) {
+            const int32_t baseX = 80 + rank * 30;
+            level.setBlockState(baseX + 1, (int32_t) FLOOR, 0, BlockState("minecraft:dirt"));
+            for (size_t index = (size_t) rank * 5; index < (size_t) rank * 5 + 5; index++)
+                firstPushes.push_back(expectedPush(level, blasts[(size_t) rank].mSource, pushed[index]->getPosition()));
+        }
+        {
+            ExplosionBatch apartBatch(owner);
+            std::vector<std::unique_ptr<Explosion>> owned;
+            std::vector<Explosion *> apart;
+            for (int round = 0; round < 2; round++) {
+                for (const ExplosionBatch::QuietBlast &blast: blasts) {
+                    owned.push_back(std::make_unique<Explosion>(owner, level, blast.mSource, SIZE, summoned, true));
+                    owned.back()->setBatch(&apartBatch);
+                    apart.push_back(owned.back().get());
+                }
+            }
+            apartBatch.runApart(level, apart);
+        }
+        bool dirtHid = false;
+        for (int32_t rank = 0; rank < 20; rank++) {
+            const int32_t baseX = 80 + rank * 30;
+            require(level.getBlockState(baseX + 1, (int32_t) FLOOR, 0).mName == "minecraft:air",
+                    "the dirt next to an explosion worked out apart survived");
+            for (size_t index = (size_t) rank * 5; index < (size_t) rank * 5 + 5; index++) {
+                const Vector3f first = firstPushes[index];
+                const Vector3f second = expectedPush(level, blasts[(size_t) rank].mSource, pushed[index]->getPosition());
+                dirtHid = dirtHid || first.x != second.x || first.y != second.y || first.z != second.z;
+                const Vector3f both(first.x + second.x, first.y + second.y, first.z + second.z);
+                const Vector3f motion = pushed[index]->getMotion();
+                require(motion.x == both.x && motion.y == both.y && motion.z == both.z,
+                        "apart target " + std::to_string(index) + " was pushed " + std::to_string(motion.x) + " "
+                                + std::to_string(motion.y) + " " + std::to_string(motion.z) + ", expected "
+                                + std::to_string(both.x) + " " + std::to_string(both.y) + " "
+                                + std::to_string(both.z));
+            }
+        }
+        require(dirtHid, "the dirt hid no target from the first explosion");
+
+        // a plain block drops the same with no tool, the short way, as with one, the long way
+        ItemStack stick;
+        stick.mDefinition = owner.getItemDefinitions().getDefinition("minecraft:stick");
+        stick.mCount = 1;
+        for (const char *name: {"minecraft:dirt", "minecraft:cobblestone", "minecraft:oak_planks", "minecraft:obsidian",
+                                "minecraft:sand", "minecraft:glass"}) {
+            const BlockState state(name);
+            const Vector3i place(0, (int32_t) FLOOR + 20, 0);
+            for (int round = 0; round < 2; round++) {
+                const std::vector<ItemStack> bare = BlockActionHandler::blockDrops(owner, &level, place, state, ItemStack());
+                const std::vector<ItemStack> held = BlockActionHandler::blockDrops(owner, &level, place, state, stick);
+                require(bare.size() == held.size(), std::string(name) + " drops differ in number with no tool");
+                for (size_t index = 0; index < bare.size(); index++)
+                    require(bare[index].mDefinition == held[index].mDefinition
+                                    && bare[index].mBlockDefinition == held[index].mBlockDefinition
+                                    && bare[index].mCount == held[index].mCount,
+                            std::string(name) + " drops differ with no tool");
+            }
+        }
+
+        // items removed during a tick leave the list together, the others keeping their order
+        std::vector<std::unique_ptr<ItemActor>> &items = owner.getItemEntities();
+        for (const std::unique_ptr<ItemActor> &item: items)
+            item->setRemoved(true);
+        ItemActorHandler::tickItemActors(owner);
+        require(items.empty(), "removed items stayed in the list");
+        ItemStack dirt;
+        dirt.mDefinition = owner.getItemDefinitions().getDefinition("minecraft:dirt");
+        dirt.mBlockDefinition = owner.getBlockDefinitions().getDefinition("minecraft:dirt");
+        dirt.mCount = 1;
+        std::vector<int64_t> ids;
+        for (int32_t index = 0; index < 6; index++)
+            ids.push_back(owner.dropItem(level, Vector3f(0.5f + 3.0f * (float) index, FLOOR + 30.0f, 20.5f), dirt,
+                                         Vector3f(), 10)
+                                  ->getUniqueId());
+        items[1]->setRemoved(true);
+        items[4]->setRemoved(true);
+        ItemActorHandler::tickItemActors(owner);
+        require(items.size() == 4 && items[0]->getUniqueId() == ids[0] && items[1]->getUniqueId() == ids[2]
+                        && items[2]->getUniqueId() == ids[3] && items[3]->getUniqueId() == ids[5],
+                "the items left after a removal are not the ones expected, in their order");
+
+        // an item past the loaded chunks waits there: its fall makes no terrain
+        const Vector3f beyond(5000.5f, FLOOR + 30.0f, 0.5f);
+        ItemActor *waiting = owner.dropItem(level, beyond, dirt, Vector3f(0.1f, 0.0f, 0.0f), 10);
+        require(!level.isChunkResident(5000 >> 4, 0), "dropping an item loaded its chunk");
+        ItemActorHandler::tickItemActors(owner);
+        require(!level.isChunkResident(5000 >> 4, 0), "a falling item made the terrain under it");
+        require(waiting->getPosition().y == beyond.y, "an item fell where no chunk is loaded");
     }
 }
 

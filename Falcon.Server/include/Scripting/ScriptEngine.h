@@ -289,6 +289,9 @@ public:
     // explosion before event: scripts may cancel or rewrite the impacted blocks; true when cancelled
     bool beforeExplosion(Level &level, const ServerActor *source, std::vector<Vector3i> &blocks);
 
+    // whether any script listens to that event, by the name the engine emits it under
+    bool hasSubscribers(const char *event) const;
+
     void onExplosion(Level &level, const ServerActor *source, const std::vector<Vector3i> &blocks);
 
     // one destroyed block; exploded is the block before the explosion

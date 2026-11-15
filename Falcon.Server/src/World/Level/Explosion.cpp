@@ -47,8 +47,10 @@ namespace {
         return random;
     }
 
+    // one draw of the generator scaled to the range: an explosion asks for 1352 of them
     int32_t nextInt(int32_t min, int32_t max) {
-        return std::uniform_int_distribution<int32_t>(min, max)(explosionRandom());
+        const uint64_t span = (uint64_t) (max - min) + 1;
+        return min + (int32_t) (((uint64_t) explosionRandom()() * span) >> 32);
     }
 
     double nextDouble() {
@@ -175,9 +177,25 @@ namespace {
     }
 
     const size_t PARALLEL_HITS = 512;
+    // with the helpers kept awake for the tick, a smaller crowd is already worth sharing out
+    const size_t CROWDED_PARALLEL_HITS = 64;
     // explosions that break nothing: from that many on they are shared out to every core, a few at a time
     const size_t QUIET_CROWD = 16;
     const size_t QUIET_SHARE = 4;
+    // explosions that break blocks: two this many blocks apart on an axis neither read what the other
+    // breaks nor push the same actors; and how far from the middle of the lot the one read of blocks goes
+    const int32_t APART_BLOCKS = 18;
+    const int32_t APART_SPAN = 56;
+    // explosions worked out together in one round, and how far ahead a round looks for them
+    const size_t APART_ROUND = 12;
+    const size_t APART_LOOKAHEAD = 192;
+    // fewer shares of actors than this are settled by the tick thread alone
+    const size_t APART_SHARES_ALONE = 6;
+    const size_t APART_HANDFUL = 8;
+    // shares of actors settled between two makings of the table of clear boxes: at least that many, and
+    // one for that many blocks read
+    const size_t APART_SUM_SHARES = 8192;
+    const size_t APART_SUM_CELLS = 16;
     // room for the rounding of the slice bounds: a wider slice only asks about more blocks
     const double CONE_SLACK = 1.0e-4;
     // past that many candidates around, they are not counted one by one before the work
@@ -461,8 +479,6 @@ bool Explosion::_allowByScripts() {
         return false;
     mAffectedBlocks = impacted;
     mAffectedKeys.clear();
-    for (const Vector3i &position: mAffectedBlocks)
-        mAffectedKeys.insert(_key(position));
     return true;
 }
 
@@ -529,27 +545,87 @@ bool Explosion::_findAffectedBlocks() {
     if (!field.findBlocksInReach(blocksLow, blocksHigh))
         return true;
 
-    // the farthest a ray gets, in steps
-    const double farthest = std::ceil(mSize * 1.3 / (STEP_LEN * 0.75)) - 1.0;
+    field.beginRays();
+
+    // cast by the helper threads when the tick is full of explosions, then gathered in order: a block
+    // comes up once, from the first ray that reached it
+    std::vector<std::vector<Reach>> &slices = _batch().getRaySlices();
+    slices.resize(RAYS);
+    for (std::vector<Reach> &slice: slices)
+        slice.clear();
+    bool cast = false;
+    if (_batch().isCrowded()) {
+        std::atomic<bool> whole{true};
+        const BlastField &read = field;
+        BlastWorkers::get().run((size_t) RAYS, [&](size_t slice) {
+            if (!_castRays(read, (int) slice, (int) slice + 1, blocksLow, blocksHigh, true, slices[slice]))
+                whole.store(false, std::memory_order_relaxed);
+        });
+        cast = whole.load(std::memory_order_relaxed);
+        if (!cast) {
+            for (std::vector<Reach> &slice: slices)
+                slice.clear();
+        }
+    }
+    if (!cast)
+        _castRays(field, 0, RAYS, blocksLow, blocksHigh, false, slices[0]);
 
     const bool incendiary = mFireChance > 0.0;
+    for (const std::vector<Reach> &slice: slices) {
+        for (const Reach &reach: slice) {
+            if (!(reach.mIndex >= 0 ? field.markReached(reach.mIndex) : mAffectedKeys.insert(_key(reach.mBlock)).second))
+                continue;
+            mAffectedBlocks.push_back(reach.mBlock);
+            if (incendiary && nextDouble() <= mFireChance)
+                mFireIgnitions.push_back(reach.mBlock);
+        }
+    }
+
+    return true;
+}
+
+bool Explosion::_castRays(const BlastField &field, int from, int to, const Vector3i &blocksLow,
+                          const Vector3i &blocksHigh, bool helper, std::vector<Reach> &reached) const {
+    // each helper thread draws from its own generator
+    thread_local std::mt19937 helperRandom(std::random_device{}());
+    std::mt19937 &random = helper ? helperRandom : explosionRandom();
+    // the farthest a ray gets, in steps
+    const double farthest = std::ceil(mSize * 1.3 / (STEP_LEN * 0.75)) - 1.0;
     const int lastRay = RAYS - 1;
+    static const std::vector<double> strideTable = [] {
+        std::vector<double> table((size_t) (RAYS * RAYS * RAYS) * 3);
+        const int last = RAYS - 1;
+        for (int i = 0; i < RAYS; ++i) {
+            for (int j = 0; j < RAYS; ++j) {
+                for (int k = 0; k < RAYS; ++k) {
+                    double x = (double) i / (double) last * 2.0 - 1.0;
+                    double y = (double) j / (double) last * 2.0 - 1.0;
+                    double z = (double) k / (double) last * 2.0 - 1.0;
+                    const double length = std::sqrt(x * x + y * y + z * z);
+                    double *stride = table.data() + (size_t) ((i * RAYS + j) * RAYS + k) * 3;
+                    stride[0] = x / length * STEP_LEN;
+                    stride[1] = y / length * STEP_LEN;
+                    stride[2] = z / length * STEP_LEN;
+                }
+            }
+        }
+        return table;
+    }();
+    const double *strides = strideTable.data();
 
     // one ray per surface point of a 16x16x16 cube; force 0.7-1.3x the size, lost with distance and the
     // blast resistance of every block crossed
-    for (int i = 0; i < RAYS; ++i) {
+    for (int i = from; i < to; ++i) {
         for (int j = 0; j < RAYS; ++j) {
             for (int k = 0; k < RAYS; ++k) {
                 if (i != 0 && i != lastRay && j != 0 && j != lastRay && k != 0 && k != lastRay)
                     continue;
 
-                double vectorX = (double) i / (double) lastRay * 2.0 - 1.0;
-                double vectorY = (double) j / (double) lastRay * 2.0 - 1.0;
-                double vectorZ = (double) k / (double) lastRay * 2.0 - 1.0;
-                const double length = std::sqrt(vectorX * vectorX + vectorY * vectorY + vectorZ * vectorZ);
-                vectorX = vectorX / length * STEP_LEN;
-                vectorY = vectorY / length * STEP_LEN;
-                vectorZ = vectorZ / length * STEP_LEN;
+                // the step of each ray is the same for every explosion: worked out once
+                const double *stride = strides + (size_t) ((i * RAYS + j) * RAYS + k) * 3;
+                const double vectorX = stride[0];
+                const double vectorY = stride[1];
+                const double vectorZ = stride[2];
 
                 double pointerX = mSource.x;
                 double pointerY = mSource.y;
@@ -567,19 +643,41 @@ bool Explosion::_findAffectedBlocks() {
                     || std::floor(std::min(pointerZ, endZ)) - 1.0 > (double) blocksHigh.z)
                     continue;
 
-                for (double blastForce = mSize * nextInt(700, 1300) / 1000.0; blastForce > 0.0;
-                     blastForce -= STEP_LEN * 0.75) {
+                // past the box holding the blocks and heading away, a ray meets nothing more: the steps it
+                // has left inside, with one to spare for the rounding of the walk
+                double inside = farthest + 2.0;
+                const double pointers[3] = {pointerX, pointerY, pointerZ};
+                const double vectors[3] = {vectorX, vectorY, vectorZ};
+                const int32_t lows[3] = {blocksLow.x, blocksLow.y, blocksLow.z};
+                const int32_t highs[3] = {blocksHigh.x, blocksHigh.y, blocksHigh.z};
+                for (int axis = 0; axis < 3; ++axis) {
+                    if (vectors[axis] > 0.0)
+                        inside = std::min(inside,
+                                          std::ceil(((double) highs[axis] + 1.0 - pointers[axis]) / vectors[axis]) + 1.0);
+                    else if (vectors[axis] < 0.0)
+                        inside = std::min(inside,
+                                          std::floor((pointers[axis] - (double) lows[axis]) / -vectors[axis]) + 2.0);
+                }
+                if (inside <= 0.0)
+                    continue;
+
+                const uint64_t draw = (uint64_t) random() * 601;
+                double step = 0.0;
+                for (double blastForce = mSize * (double) (700 + (int32_t) (draw >> 32)) / 1000.0;
+                     blastForce > 0.0 && step < inside; blastForce -= STEP_LEN * 0.75, step += 1.0) {
                     const Vector3i block((int32_t) std::floor(pointerX), (int32_t) std::floor(pointerY),
                                          (int32_t) std::floor(pointerZ));
                     if (block.y < LevelChunk::MIN_Y || block.y > LevelChunk::MAX_Y)
                         break;
 
-                    // the stronger layer resists: waterlogged water shields like water
                     float resistance = -1.0f;
                     const int32_t index = field.indexOf(block.x, block.y, block.z);
                     if (index >= 0) {
                         if (field.stateAt(index) != nullptr)
-                            resistance = field.resistanceAt(mLevel, index, block.x, block.y, block.z);
+                            resistance = field.resistanceAt(index);
+                    } else if (helper) {
+                        // past the blocks read: the level is the tick thread's to ask
+                        return false;
                     } else {
                         const BlockState *layer0 = mLevel.peekBlockPtr(block.x, block.y, block.z);
                         if (layer0 != nullptr && !isAir(*layer0) && resistanceOf(*layer0) != -1.0f) {
@@ -591,12 +689,8 @@ bool Explosion::_findAffectedBlocks() {
 
                     if (resistance != -1.0f) {
                         blastForce -= ((double) resistance / 5.0 + 0.3) * STEP_LEN;
-
-                        if (blastForce > 0.0 && mAffectedKeys.insert(_key(block)).second) {
-                            mAffectedBlocks.push_back(block);
-                            if (incendiary && nextDouble() <= mFireChance)
-                                mFireIgnitions.push_back(block);
-                        }
+                        if (blastForce > 0.0)
+                            reached.push_back(Reach{index, block});
                     }
 
                     pointerX += vectorX;
@@ -606,8 +700,159 @@ bool Explosion::_findAffectedBlocks() {
             }
         }
     }
-
     return true;
+}
+
+namespace {
+    float quickDensityOf(const BlastField &field, const Vector3f &source, const AxisAlignedBB &boundingBox);
+
+    float walkedDensityOf(const BlastField &field, const Vector3f &source, const AxisAlignedBB &boundingBox);
+
+    // one for every explosion worked out by a helper, never handed out twice
+    std::atomic<uint32_t> gRayStamps{1};
+
+    // actors resting on one spot share one answer: the same box seen from the same source through the same blocks
+    struct DensityMemo {
+        struct Slot {
+            uint32_t mStamp = 0;
+            Vector3f mPosition;
+            float mWidth = 0.0f;
+            float mHeight = 0.0f;
+            float mDensity = 0.0f;
+        };
+        static const size_t SLOTS = 1024;
+        Slot mSlots[SLOTS];
+    };
+
+    template<typename Compute>
+    float rememberedDensity(uint32_t stamp, const ExplosionBatch::Target &target, Compute &&compute) {
+        thread_local DensityMemo memo;
+        uint32_t bits[3];
+        std::memcpy(bits, &target.mPosition, sizeof(bits));
+        const uint32_t hash = (bits[0] * 0x9E3779B1u) ^ (bits[1] * 0x85EBCA77u) ^ (bits[2] * 0xC2B2AE3Du);
+        DensityMemo::Slot &slot = memo.mSlots[(hash >> 16) % DensityMemo::SLOTS];
+        if (slot.mStamp == stamp && slot.mPosition.x == target.mPosition.x && slot.mPosition.y == target.mPosition.y
+            && slot.mPosition.z == target.mPosition.z && slot.mWidth == target.mWidth
+            && slot.mHeight == target.mHeight)
+            return slot.mDensity;
+
+        slot.mStamp = stamp;
+        slot.mPosition = target.mPosition;
+        slot.mWidth = target.mWidth;
+        slot.mHeight = target.mHeight;
+        slot.mDensity = compute();
+        return slot.mDensity;
+    }
+}
+
+namespace {
+    // the rare target that is not settled by a helper
+    std::mutex gApartHitsMutex;
+}
+
+void Explosion::_beginApart(const BlastField &field) {
+    mApartHits.clear();
+    mAffectedBlocks.clear();
+    mApartAny = false;
+    if (mSize < 0.1) {
+        mApart = Apart::Nothing;
+        return;
+    }
+
+    const Vector3i center((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
+                          (int32_t) std::floor(mSource.z));
+    // past the blocks read for the tick: the tick thread does this one whole, from the level
+    if (!field.scanBlocks(center, BlastField::rayReach(mSize), mApartLow, mApartHigh, mApartAny)) {
+        mApart = Apart::Whole;
+        return;
+    }
+    mApartStamp = gRayStamps.fetch_add(1, std::memory_order_relaxed);
+    mApart = Apart::Done;
+}
+
+void Explosion::_castApart(const BlastField &field, int slice) {
+    std::vector<Reach> &reached = mApartReached[slice];
+    reached.clear();
+    const int width = RAYS / APART_SLICES;
+    mApartMissed[slice] = !_castRays(field, slice * width, (slice + 1) * width, mApartLow, mApartHigh, true, reached);
+}
+
+void Explosion::_markApart(BlastField &field) {
+    for (const bool missed: mApartMissed) {
+        // a ray left the blocks read: the rays alone are cast again here, from the level; the actors
+        // were settled all the same
+        if (missed) {
+            mAffectedBlocks.clear();
+            mFireIgnitions.clear();
+            _findAffectedBlocks();
+            return;
+        }
+    }
+    // no other explosion of the round is close enough to mark the same blocks
+    const uint32_t stamp = gRayStamps.fetch_add(1, std::memory_order_relaxed);
+    const bool incendiary = mFireChance > 0.0;
+    for (const std::vector<Reach> &reached: mApartReached) {
+        for (const Reach &reach: reached) {
+            if (!field.markReachedWith(reach.mIndex, stamp))
+                continue;
+            mAffectedBlocks.push_back(reach.mBlock);
+            if (incendiary && nextDouble() <= mFireChance)
+                mFireIgnitions.push_back(reach.mBlock);
+        }
+    }
+}
+
+void Explosion::_settleApart(const BlastField &field, const ExplosionBatch::Span &span) {
+    const double reach = mSize * 2.0;
+    for (size_t offset = 0; offset < span.mCount; ++offset) {
+        const ExplosionBatch::Target &target = span.mFirst[offset];
+        if (target.mActor == mSourceActor || !maybeWithin(target.mPosition, mSource, reach))
+            continue;
+        const double distance = distanceBetween(target.mPosition, mSource) / reach;
+        if (distance > 1.0)
+            continue;
+        // gone at the end of the tick, and nothing hurts it: the push would move nothing
+        if (target.mInvulnerable && target.mActor->isExpired())
+            continue;
+
+        ActorSize size;
+        size.mWidth = target.mWidth;
+        size.mHeight = target.mHeight;
+        const AxisAlignedBB box = boundingBoxOf(target.mPosition, size);
+        const float density = rememberedDensity(mApartStamp, target, [&] {
+            const float quick = quickDensityOf(field, mSource, box);
+            return quick < 0.0f ? walkedDensityOf(field, mSource, box) : quick;
+        });
+
+        // an invulnerable target takes the push alone: no other explosion at work reaches it
+        if (density >= 0.0f && target.mInvulnerable) {
+            const Vector3f &position = target.mPosition;
+            const Vector3f motion = normalized(
+                    Vector3f(position.x - mSource.x, position.y - mSource.y, position.z - mSource.z));
+            const double impact = (1.0 - distance) * density;
+            const Vector3f current = target.mActor->getMotion();
+            target.mActor->setMotion(Vector3f(current.x + motion.x * (float) impact,
+                                              current.y + motion.y * (float) impact,
+                                              current.z + motion.z * (float) impact));
+            continue;
+        }
+        std::lock_guard<std::mutex> lock(gApartHitsMutex);
+        mApartHits.push_back(ExplosionBatch::Hit{&target, distance, density});
+    }
+}
+
+void Explosion::_finishApart() {
+    if (mApart == Apart::Nothing)
+        return;
+    if (mApart != Apart::Done) {
+        mApart = Apart::No;
+        explode();
+        return;
+    }
+
+    // the say of plugins and scripts, then the damage, the blocks and the effects, as any explosion ends
+    if (_allowByPlugins())
+        explodeB();
 }
 
 bool Explosion::explodeB() {
@@ -672,8 +917,10 @@ void Explosion::_damageEntities() {
     std::vector<Hit> &hits = batch.getHits();
     std::vector<ExplosionBatch::Span> &spans = batch.getSpans();
     hits.clear();
-    const bool settled = mQuietBlast.has_value() && batch.isSettled(*mQuietBlast);
-    if (settled)
+    const bool settled = mApart == Apart::Done || (mQuietBlast.has_value() && batch.isSettled(*mQuietBlast));
+    if (mApart == Apart::Done)
+        hits.swap(mApartHits);
+    else if (settled)
         hits.swap(batch.getQuietHits(*mQuietBlast));
     const bool counted = mNear.has_value();
     const size_t near = settled ? 0 : _near();
@@ -702,6 +949,7 @@ void Explosion::_damageEntities() {
     // what only reads the blocks and moves one actor runs on every core when the crowd is large: an
     // invulnerable target takes the push alone, nothing else of the world is touched
     std::mutex hitsMutex;
+    const uint32_t memoStamp = gRayStamps.fetch_add(1, std::memory_order_relaxed);
     const auto settle = [&](size_t index) {
         const ExplosionBatch::Span &span = spans[index];
         for (size_t offset = 0; offset < span.mCount; ++offset) {
@@ -721,9 +969,10 @@ void Explosion::_damageEntities() {
             size.mWidth = target.mWidth;
             size.mHeight = target.mHeight;
             const AxisAlignedBB box = boundingBoxOf(target.mPosition, size);
-            float density = _quickDensity(box);
-            if (density < 0.0f)
-                density = _walkedDensity(box);
+            const float density = rememberedDensity(memoStamp, target, [&] {
+                const float quick = _quickDensity(box);
+                return quick < 0.0f ? _walkedDensity(box) : quick;
+            });
 
             if (density >= 0.0f && target.mInvulnerable) {
                 push(target, distance, density);
@@ -733,7 +982,7 @@ void Explosion::_damageEntities() {
             hits.push_back(Hit{&target, distance, density});
         }
     };
-    if (near >= PARALLEL_HITS)
+    if (near >= (batch.isCrowded() ? CROWDED_PARALLEL_HITS : PARALLEL_HITS))
         BlastWorkers::get().run(spans.size(), settle);
     else
         for (size_t index = 0; index < spans.size(); ++index)
@@ -800,23 +1049,36 @@ void Explosion::_destroyBlocks() {
     const ItemStack noTool;
 
     for (const Vector3i &position: mAffectedBlocks) {
-        const BlockState state = mLevel.getBlockState(position.x, position.y, position.z);
-        if (isAir(state))
+        const BlockState *inPlace = mLevel.peekBlockPtr(position.x, position.y, position.z);
+        if (inPlace == nullptr || isAir(*inPlace))
             continue;
+        // the state the chunk holds lives as long as the process: no copy is made of it
+        const BlockState &state = *inPlace;
+        // what its name tells, asked once per state
+        enum : uint8_t { TNT = 1, KEEPS_CONTENTS = 2 };
+        thread_local std::unordered_map<const BlockState *, uint8_t> kinds;
+        auto kind = kinds.find(inPlace);
+        if (kind == kinds.end()) {
+            const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName);
+            const bool keeps = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
+            kind = kinds.emplace(inPlace, (uint8_t) ((TntBlock::matches(state.mName) ? TNT : 0)
+                                                     | (keeps ? KEEPS_CONTENTS : 0)))
+                           .first;
+        }
 
         if (nextInt(0, 7) == 0)
             mSmokePositions.push_back(position);
 
-        if (TntBlock::matches(state.mName)) {
+        if ((kind->second & TNT) != 0) {
             TntBlock::prime(mOwner, mLevel, position, nextInt(10, 30));
             continue;
         }
 
-        if (!isAir(mLevel.getBlockStateAtLayer(position.x, position.y, position.z, 1)))
+        const BlockState *layerOne = mLevel.peekBlockPtr(position.x, position.y, position.z, 1);
+        if (layerOne != nullptr && !isAir(*layerOne))
             mLevel.setBlockStateAtLayer(position.x, position.y, position.z, 1, BlockState());
 
-        const ContainerBlockDefinition *container = ContainerBlock::findDefinition(state.mName);
-        const bool keepsContents = container != nullptr && container->mKind == ContainerBlockKind::ShulkerBox;
+        const bool keepsContents = (kind->second & KEEPS_CONTENTS) != 0;
         BlockActionHandler::destroyBlock(mOwner, mLevel, position, state, keepsContents || nextDouble() * 100.0 < yield,
                                          noTool, mSourceActor);
         mDestroyed.push_back(position);
@@ -1087,7 +1349,23 @@ float Explosion::_walkedDensity(const AxisAlignedBB &boundingBox) const {
 }
 
 float Explosion::_density(const AxisAlignedBB &boundingBox) {
-    BlastField &field = _field(FieldUse::Anything);
+    // the blocks read for the rays or for the actors most often hold this target too
+    const Vector3i low((int32_t) std::floor(std::min(mSource.x, boundingBox.mMinX)),
+                       (int32_t) std::floor(std::min(mSource.y, boundingBox.mMinY)),
+                       (int32_t) std::floor(std::min(mSource.z, boundingBox.mMinZ)));
+    const Vector3i high((int32_t) std::floor(std::max(mSource.x, boundingBox.mMaxX)),
+                        (int32_t) std::floor(std::max(mSource.y, boundingBox.mMaxY)),
+                        (int32_t) std::floor(std::max(mSource.z, boundingBox.mMaxZ)));
+    // worked out apart: the blocks read for all of them hold the answer while they are kept true
+    const BlastField *apart = mApart == Apart::Done ? _batch().getApartField() : nullptr;
+    if (apart != nullptr && apart->contains(low, high)) {
+        const float known = quickDensityOf(*apart, mSource, boundingBox);
+        const float walked = known < 0.0f ? walkedDensityOf(*apart, mSource, boundingBox) : known;
+        if (walked >= 0.0f)
+            return walked;
+    }
+    BlastField &field = _batch().getField().holds(mLevel, low, high) ? _batch().getField()
+                                                                      : _field(FieldUse::Anything);
     const float quick = _quickDensity(boundingBox);
     if (quick >= 0.0f)
         return quick;
@@ -1327,12 +1605,12 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
     const size_t cells = (size_t) mDimX * (size_t) mDimY * (size_t) mDimZ;
     mStates.assign(cells, nullptr);
     mBlocking.assign(cells, 0);
-    if (mShapeStamps.size() < cells) {
+    if (mKeepShapes && mShapeStamps.size() < cells) {
         mShapeStamps.assign(cells, 0);
         mShapes.resize(cells);
-        mResistanceStamps.assign(cells, 0);
-        mResistances.resize(cells);
     }
+    if (mResistances.size() < cells)
+        mResistances.resize(cells);
 
     mAnyBlock = false;
     mBlocksLow = Vector3i(INT32_MAX, INT32_MAX, INT32_MAX);
@@ -1349,6 +1627,7 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
     const BlockState *air = airState();
     const BlockState *lastState = nullptr;
     uint8_t lastBlocking = 0;
+    float lastResistance = 0.0f;
     bool lastAir = false;
     const int32_t bottom = std::max(mOriginY, LevelChunk::MIN_Y);
     const int32_t top = std::min(mOriginY + mDimY - 1, LevelChunk::MAX_Y);
@@ -1388,6 +1667,7 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
                     y = sectionEnd + 1;
                     continue;
                 }
+                const bool layerOneEmpty = section.isLayerEmpty(1);
                 for (; y <= sectionEnd; ++y) {
                     const BlockState *state = &section.getBlock(x & 15, y & 15, z & 15);
                     if (state == air)
@@ -1412,12 +1692,21 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
                                                  : BlockShape::hasCollision(*state) || !shape.isEmpty() ? PARTIAL : 0;
                             mBlockingStates.emplace(state, lastBlocking);
                         }
+                        const auto resists = mResistStates.find(state);
+                        lastResistance = resists != mResistStates.end()
+                                                 ? resists->second
+                                                 : mResistStates.emplace(state, resistanceOf(*state)).first->second;
                     }
                     if (lastAir)
                         continue;
 
                     const size_t cell = column + (size_t) (y - mOriginY);
                     mStates[cell] = state;
+                    // the stronger layer resists: waterlogged water shields like water
+                    float resistance = lastResistance;
+                    if (resistance != -1.0f && !layerOneEmpty)
+                        resistance = std::max(resistance, resistanceOf(section.getBlock(x & 15, y & 15, z & 15, 1)));
+                    mResistances[cell] = resistance;
                     if (y < columnLow)
                         columnLow = y;
                     columnHigh = y;
@@ -1434,6 +1723,99 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
 
     mAnyBlocking = anyBlocking;
     mSummed = false;
+}
+
+void BlastField::readForMany(Level &level, const Vector3i &low, const Vector3i &high) {
+    mKeepShapes = false;
+    mHelperOwned = false;
+    mFailed = false;
+    _read(level, low, high);
+    resum();
+    if (mRayStamps.size() < mStates.size())
+        mRayStamps.assign(mStates.size(), 0);
+}
+
+void BlastField::resum() {
+    mBlockingPrefix.clear();
+    if (mAnyBlocking)
+        _sum(mBlocking, mBlockingPrefix);
+    mSummed = true;
+}
+
+bool BlastField::patch(Level &level, int32_t x, int32_t y, int32_t z) {
+    const int32_t index = indexOf(x, y, z);
+    if (index < 0)
+        return false;
+
+    const size_t cell = (size_t) index;
+    const BlockState *state = level.peekBlockPtr(x, y, z);
+    if (state == nullptr || state->mName == BlockNames::AIR) {
+        // gone: the sums still count it, which only makes them say less often that a way is free
+        mStates[cell] = nullptr;
+        mBlocking[cell] = 0;
+        return false;
+    }
+
+    auto known = mBlockingStates.find(state);
+    if (known == mBlockingStates.end()) {
+        const AxisAlignedBB shape = BlockShape::getShapeAt(*state, 0, 0, 0);
+        const bool whole = BlockShape::isFullCube(*state) && shape.mMinX <= 0.0f && shape.mMinY <= 0.0f
+                           && shape.mMinZ <= 0.0f && shape.mMaxX >= 1.0f && shape.mMaxY >= 1.0f && shape.mMaxZ >= 1.0f;
+        known = mBlockingStates
+                        .emplace(state, whole ? FULL_CUBE
+                                              : BlockShape::hasCollision(*state) || !shape.isEmpty() ? PARTIAL : 0)
+                        .first;
+    }
+    float resistance = resistanceOf(*state);
+    if (resistance != -1.0f) {
+        const BlockState *layerOne = level.peekBlockPtr(x, y, z, 1);
+        if (layerOne != nullptr)
+            resistance = std::max(resistance, resistanceOf(*layerOne));
+    }
+
+    const bool appeared = known->second != 0 && mBlocking[cell] == 0;
+    mStates[cell] = state;
+    mResistances[cell] = resistance;
+    mBlocking[cell] = known->second;
+    if (appeared)
+        mAnyBlocking = true;
+    return appeared;
+}
+
+bool BlastField::scanBlocks(const Vector3i &center, int32_t reach, Vector3i &low, Vector3i &high, bool &any) const {
+    const int32_t minX = center.x - reach - mOriginX;
+    const int32_t minY = center.y - reach - mOriginY;
+    const int32_t minZ = center.z - reach - mOriginZ;
+    const int32_t side = reach * 2 + 1;
+    if (!mCovers || minX < 0 || minY < 0 || minZ < 0 || minX + side > mDimX || minY + side > mDimY
+        || minZ + side > mDimZ)
+        return false;
+
+    any = false;
+    low = Vector3i(INT32_MAX, INT32_MAX, INT32_MAX);
+    high = Vector3i(INT32_MIN, INT32_MIN, INT32_MIN);
+    for (int32_t x = minX; x < minX + side; ++x) {
+        for (int32_t z = minZ; z < minZ + side; ++z) {
+            const BlockState *const *column = mStates.data() + (size_t) ((x * mDimZ + z) * mDimY);
+            int32_t first = -1;
+            int32_t last = -1;
+            for (int32_t y = minY; y < minY + side; ++y) {
+                if (column[y] == nullptr)
+                    continue;
+                if (first < 0)
+                    first = y;
+                last = y;
+            }
+            if (first < 0)
+                continue;
+
+            any = true;
+            low = Vector3i(std::min(low.x, x + mOriginX), std::min(low.y, first + mOriginY), std::min(low.z, z + mOriginZ));
+            high = Vector3i(std::max(high.x, x + mOriginX), std::max(high.y, last + mOriginY),
+                            std::max(high.z, z + mOriginZ));
+        }
+    }
+    return true;
 }
 
 void BlastField::_noteColumn(int32_t x, int32_t z, int32_t low, int32_t high) {
@@ -1468,20 +1850,6 @@ bool BlastField::isPositionInside(int32_t index, int32_t x, int32_t y, int32_t z
 
     const AxisAlignedBB &shape = mShapes[(size_t) index];
     return !shape.isEmpty() && shape.isVectorInside(pointX, pointY, pointZ);
-}
-
-float BlastField::resistanceAt(Level &level, int32_t index, int32_t x, int32_t y, int32_t z) {
-    if (mResistanceStamps[(size_t) index] != mStamp) {
-        mResistanceStamps[(size_t) index] = mStamp;
-        float resistance = resistanceOf(*mStates[(size_t) index]);
-        if (resistance != -1.0f) {
-            const BlockState *layer1 = level.peekBlockPtr(x, y, z, 1);
-            if (layer1 != nullptr)
-                resistance = std::max(resistance, resistanceOf(*layer1));
-        }
-        mResistances[(size_t) index] = resistance;
-    }
-    return mResistances[(size_t) index];
 }
 
 int64_t ExplosionBatch::_cellOf(const Vector3f &position) {
@@ -1850,5 +2218,156 @@ void ExplosionBatch::_syncItems(Level &level) {
         ItemActor *item = items[mItemsIndexed].get();
         if (item != nullptr && item->isIn(level))
             mItems[_cellOf(item->getPosition())].push_back(item);
+    }
+}
+
+void ExplosionBatch::runApart(Level &level, const std::vector<Explosion *> &explosions) {
+    if (explosions.empty())
+        return;
+
+    _syncTargets(level);
+
+    // the blocks around all of them, as far as that stays a reasonable read; an explosion past it is done
+    // whole by the tick thread, in its turn
+    Vector3i low(INT32_MAX, INT32_MAX, INT32_MAX);
+    Vector3i high(INT32_MIN, INT32_MIN, INT32_MIN);
+    std::vector<Vector3i> cells;
+    cells.reserve(explosions.size());
+    for (const Explosion *explosion: explosions) {
+        const Vector3i cell((int32_t) std::floor(explosion->mSource.x), (int32_t) std::floor(explosion->mSource.y),
+                            (int32_t) std::floor(explosion->mSource.z));
+        cells.push_back(cell);
+    }
+    std::vector<int32_t> axis[3];
+    for (const Vector3i &cell: cells) {
+        axis[0].push_back(cell.x);
+        axis[1].push_back(cell.y);
+        axis[2].push_back(cell.z);
+    }
+    Vector3i middle;
+    for (int index = 0; index < 3; ++index)
+        std::nth_element(axis[index].begin(), axis[index].begin() + (std::ptrdiff_t) (axis[index].size() / 2),
+                         axis[index].end());
+    middle = Vector3i(axis[0][axis[0].size() / 2], axis[1][axis[1].size() / 2], axis[2][axis[2].size() / 2]);
+    const int32_t margin = BlastField::targetReach(explosions.front()->mSize);
+    for (const Vector3i &cell: cells) {
+        if (std::abs(cell.x - middle.x) > APART_SPAN || std::abs(cell.z - middle.z) > APART_SPAN
+            || std::abs(cell.y - middle.y) > APART_SPAN / 2)
+            continue;
+        low = Vector3i(std::min(low.x, cell.x - margin), std::min(low.y, cell.y - margin), std::min(low.z, cell.z - margin));
+        high = Vector3i(std::max(high.x, cell.x + margin), std::max(high.y, cell.y + margin),
+                        std::max(high.z, cell.z + margin));
+    }
+    mApartField.readForMany(level, low, high);
+    const size_t cellCount = (size_t) (high.x - low.x + 1) * (size_t) (high.y - low.y + 1) * (size_t) (high.z - low.z + 1);
+
+    // kept true as the explosions break blocks; a block appearing makes the sums wrong, mended at a pause
+    mApartLive = true;
+    mApartStale = false;
+    level.setBlockWatcher([this, &level](int32_t x, int32_t y, int32_t z) {
+        if (mApartField.patch(level, x, y, z))
+            mApartStale = true;
+    });
+    struct WatcherScope {
+        Level &mLevel;
+        bool &mLive;
+        ~WatcherScope() {
+            mLevel.setBlockWatcher(nullptr);
+            mLive = false;
+        }
+    } watcherScope{level, mApartLive};
+
+    // rounds: a few explosions standing far enough from one another are worked out together, each one
+    // reading blocks and pushing actors no other of the round reaches, then ended one by one here, where
+    // everything that changes the world happens
+    BlastWorkers::get().heat(true);
+    struct HeatScope {
+        ~HeatScope() {
+            BlastWorkers::get().heat(false);
+        }
+    } heatScope;
+
+    std::vector<uint8_t> ended(explosions.size(), 0);
+    std::vector<size_t> round;
+    size_t sharesSinceSum = 0;
+    const size_t sumEvery = std::max<size_t>(APART_SUM_SHARES, cellCount / APART_SUM_CELLS);
+    std::vector<Explosion *> casting;
+    std::vector<std::pair<Explosion *, Span>> shares;
+    uint64_t seenSerial = mOwner.getActorSetSerial();
+    size_t first = 0;
+    while (first < explosions.size()) {
+        round.clear();
+        const size_t scanEnd = std::min(explosions.size(), first + APART_LOOKAHEAD);
+        for (size_t index = first; index < scanEnd && round.size() < APART_ROUND; ++index) {
+            if (ended[index] != 0)
+                continue;
+            bool apart = true;
+            for (const size_t other: round) {
+                if (std::abs(cells[index].x - cells[other].x) < APART_BLOCKS
+                    && std::abs(cells[index].y - cells[other].y) < APART_BLOCKS
+                    && std::abs(cells[index].z - cells[other].z) < APART_BLOCKS) {
+                    apart = false;
+                    break;
+                }
+            }
+            if (apart)
+                round.push_back(index);
+        }
+
+        // the rays of the round, in slices, and every share of the actors in reach, handed out together
+        casting.clear();
+        shares.clear();
+        for (const size_t index: round) {
+            Explosion &explosion = *explosions[index];
+            explosion._beginApart(mApartField);
+            if (explosion.mApart != Explosion::Apart::Done)
+                continue;
+            if (explosion.mApartAny)
+                casting.push_back(&explosion);
+            collectSpans(level, explosion.mSource, (float) (explosion.mSize * 2.0), mSpans);
+            for (const Span &span: mSpans)
+                shares.emplace_back(&explosion, span);
+        }
+        const size_t slices = (size_t) Explosion::APART_SLICES;
+        const size_t rays = casting.size() * slices;
+        // a share is a few actors, settled in a microsecond: they are taken a handful at a time
+        const size_t handfuls = (shares.size() + APART_HANDFUL - 1) / APART_HANDFUL;
+        const auto work = [&](size_t slot) {
+            if (slot < rays) {
+                casting[slot / slices]->_castApart(mApartField, (int) (slot % slices));
+                return;
+            }
+            const size_t first = (slot - rays) * APART_HANDFUL;
+            const size_t last = std::min(shares.size(), first + APART_HANDFUL);
+            for (size_t share = first; share < last; ++share)
+                shares[share].first->_settleApart(mApartField, shares[share].second);
+        };
+        if (rays + shares.size() < APART_SHARES_ALONE)
+            for (size_t slot = 0; slot < rays + handfuls; ++slot)
+                work(slot);
+        else
+            BlastWorkers::get().run(rays + handfuls, work);
+        for (Explosion *explosion: casting)
+            explosion->_markApart(mApartField);
+        for (const size_t index: round) {
+            explosions[index]->_finishApart();
+            ended[index] = 1;
+        }
+
+        // an actor came or went, or a block appeared: what the next round reads is mended first
+        // broken blocks open the view of the next explosions: the table of clear boxes is made again once
+        // enough actors were settled against the old one to pay for it
+        sharesSinceSum += shares.size();
+        if (mApartStale || sharesSinceSum >= sumEvery) {
+            mApartField.resum();
+            mApartStale = false;
+            sharesSinceSum = 0;
+        }
+        if (mOwner.getActorSetSerial() != seenSerial) {
+            _syncTargets(level);
+            seenSerial = mOwner.getActorSetSerial();
+        }
+        while (first < explosions.size() && ended[first] != 0)
+            ++first;
     }
 }

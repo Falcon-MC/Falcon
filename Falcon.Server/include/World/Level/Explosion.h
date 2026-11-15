@@ -14,6 +14,7 @@
 #include <vector>
 
 class BlockState;
+class Explosion;
 class ItemActor;
 class Level;
 class ServerActor;
@@ -31,6 +32,54 @@ public:
     // sums: whether the targets are many enough for the table behind isBoxClear to pay for itself
     void prepare(Level &level, const Vector3f &source, double size, const Vector3i &needLow,
                  const Vector3i &needHigh, bool sums, const Vector3f *upcoming, size_t upcomingCount);
+
+    // whether what was read still stands and holds that box of blocks, corners included
+    bool holds(Level &level, const Vector3i &low, const Vector3i &high) const {
+        return _stillHolds(level, low, high);
+    }
+
+    // that box lies within the blocks read, whatever happened to the level since
+    bool contains(const Vector3i &low, const Vector3i &high) const {
+        return mRead && mCovers && low.x >= mOriginX && low.y >= mOriginY && low.z >= mOriginZ
+               && high.x < mOriginX + mDimX && high.y < mOriginY + mDimY && high.z < mOriginZ + mDimZ;
+    }
+
+    // the rays of one explosion begin: no block is marked yet
+    void beginRays() {
+        ++mRayStamp;
+        if (mRayStamps.size() < mStates.size())
+            mRayStamps.assign(mStates.size(), 0);
+    }
+
+    // true the first time a ray of the explosion at hand reaches that block
+    bool markReached(int32_t index) {
+        if (mRayStamps[(size_t) index] == mRayStamp)
+            return false;
+        mRayStamps[(size_t) index] = mRayStamp;
+        return true;
+    }
+
+    // one read for a whole tick of explosions that break blocks: no shape kept, the sums made at once. It is
+    // then kept true by patch() as blocks change, and read by several threads, each around its own explosion
+    void readForMany(Level &level, const Vector3i &low, const Vector3i &high);
+
+    // the block at that place changed: read again. True when a block now stands where the sums saw none,
+    // which makes them wrong until resum()
+    bool patch(Level &level, int32_t x, int32_t y, int32_t z);
+
+    void resum();
+
+    // the box holding every block within that many blocks of a center, as findBlocksInReach; false when the
+    // field does not hold the whole reach
+    bool scanBlocks(const Vector3i &center, int32_t reach, Vector3i &low, Vector3i &high, bool &any) const;
+
+    // true the first time that block is reached under that stamp; stamps are handed out by nextRayStamp()
+    bool markReachedWith(int32_t index, uint32_t stamp) {
+        if (mRayStamps[(size_t) index] == stamp)
+            return false;
+        mRayStamps[(size_t) index] = stamp;
+        return true;
+    }
 
     static int32_t rayReach(double size);
 
@@ -94,8 +143,11 @@ public:
     // needs a shape or leaves the field
     int walk(double srcX, double srcY, double srcZ, double dstX, double dstY, double dstZ, double stepSize) const;
 
-    // -1 for a block no explosion breaks, else the stronger of the two layers
-    float resistanceAt(Level &level, int32_t index, int32_t x, int32_t y, int32_t z);
+    // -1 for a block no explosion breaks, else the stronger of the two layers; read with the blocks, so
+    // that the rays of one explosion can be cast from several threads
+    float resistanceAt(int32_t index) const {
+        return mResistances[(size_t) index];
+    }
 
 private:
     static const uint8_t PARTIAL = 1;
@@ -137,6 +189,7 @@ private:
     bool mCovers = false;
     bool mHelperOwned = false;
     bool mFailed = false;
+    bool mKeepShapes = true;
     // the sums behind isBoxClear, made only for an explosion with targets
     bool mSummed = false;
     bool mAnyBlocking = false;
@@ -163,15 +216,25 @@ private:
     int32_t mReachMaxY = 0;
     int32_t mReachMaxZ = 0;
     uint32_t mStamp = 0;
+    uint32_t mRayStamp = 0;
+    std::vector<uint32_t> mRayStamps;
     std::vector<ChunkMark> mChunks;
     std::vector<const BlockState *> mStates;
     std::vector<uint8_t> mBlocking;
     std::unordered_map<const BlockState *, uint8_t> mBlockingStates;
+    std::unordered_map<const BlockState *, float> mResistStates;
     std::vector<int32_t> mBlockingPrefix;
     std::vector<uint32_t> mShapeStamps;
     std::vector<AxisAlignedBB> mShapes;
     std::vector<uint32_t> mResistanceStamps;
     std::vector<float> mResistances;
+};
+
+// a block a ray reached with force left, by its place in the blocks read (-1 outside them); the same block
+// comes up from many rays
+struct BlastReach {
+    int32_t mIndex;
+    Vector3i mBlock;
 };
 
 // the actors and items around the explosions of one tick, bucketed once: nothing moves between them
@@ -215,6 +278,10 @@ public:
     // a tick of many explosions keeps the helper threads awake from the first to the last
     void setCrowded(bool crowded);
 
+    bool isCrowded() const {
+        return mCrowded;
+    }
+
     // the owner lists the actors joining meanwhile: they are added to the buckets, not the buckets made again
     void setFollowingJoins(bool following) {
         mFollowingJoins = following;
@@ -224,10 +291,25 @@ public:
         return mHits;
     }
 
+    // the blocks each share of the rays reached, kept between explosions
+    std::vector<std::vector<BlastReach>> &getRaySlices() {
+        return mRaySlices;
+    }
+
     // the pushes of explosions that break nothing, worked out on every core at once: they read the same
     // blocks and each moves actors nobody else is asked about. What a push cannot settle alone (a target
     // that takes damage, a shaped block in the way) is kept per explosion for the caller
     void settleQuiet(Level &level, const std::vector<QuietBlast> &blasts);
+
+    // explosions that break blocks, several worked out at a time when they stand too far apart to see one
+    // another, while the calling thread ends them one by one. Each still sees what the ones before it,
+    // within its reach, broke
+    void runApart(Level &level, const std::vector<Explosion *> &explosions);
+
+    // the blocks read for the explosions worked out apart, while they are kept true
+    const BlastField *getApartField() const {
+        return mApartLive && !mApartStale ? &mApartField : nullptr;
+    }
 
     // false for an explosion settleQuiet left whole to the caller
     bool isSettled(size_t blast) const {
@@ -316,6 +398,10 @@ private:
     const Vector3f *mUpcoming = nullptr;
     size_t mUpcomingCount = 0;
     std::vector<Hit> mHits;
+    BlastField mApartField;
+    bool mApartLive = false;
+    bool mApartStale = false;
+    std::vector<std::vector<BlastReach>> mRaySlices;
     std::vector<uint8_t> mQuietSettled;
     std::vector<std::vector<Hit>> mQuietHits;
     uint32_t mTargetCount = 0;
@@ -375,6 +461,8 @@ public:
 
     static float getBlockDensity(Level &level, const Vector3f &source, const AxisAlignedBB &boundingBox);
 
+    friend class ExplosionBatch;
+
     static bool isRayCollidingWithBlocks(Level &level, double srcX, double srcY, double srcZ, double dstX, double dstY,
                                          double dstZ, double stepSize);
 
@@ -382,6 +470,13 @@ private:
     static int64_t _key(const Vector3i &position);
 
     bool _findAffectedBlocks();
+
+    using Reach = BlastReach;
+
+    // the rays whose first cube coordinate is in [from, to); false when one left the blocks read and has to
+    // be cast again from the tick thread
+    bool _castRays(const BlastField &field, int from, int to, const Vector3i &blocksLow, const Vector3i &blocksHigh,
+                   bool helper, std::vector<Reach> &reached) const;
 
     bool _allowByPlugins();
 
@@ -433,6 +528,31 @@ private:
     std::vector<Vector3i> mFireIgnitions;
     std::vector<Vector3i> mSmokePositions;
     std::vector<Vector3i> mDestroyed;
+    // worked out ahead by a helper thread, over blocks read for the whole tick: the rays cast and the blocks
+    // they reach, the pushes given, and what is left for the tick thread
+    enum class Apart : uint8_t { No, Nothing, Whole, Done };
+
+    // worked out apart in three steps: what the rays may reach, the rays, then the actors a share at a time
+    void _beginApart(const BlastField &field);
+
+    // one slice of the rays, then what they reached put together by the tick thread
+    void _castApart(const BlastField &field, int slice);
+
+    void _markApart(BlastField &field);
+
+    void _settleApart(const BlastField &field, const ExplosionBatch::Span &span);
+
+    void _finishApart();
+
+    Apart mApart = Apart::No;
+    std::vector<ExplosionBatch::Hit> mApartHits;
+    Vector3i mApartLow;
+    Vector3i mApartHigh;
+    bool mApartAny = false;
+    static const int APART_SLICES = 4;
+    std::vector<Reach> mApartReached[APART_SLICES];
+    bool mApartMissed[APART_SLICES] = {};
+    uint32_t mApartStamp = 0;
     std::optional<size_t> mQuietBlast;
     std::optional<size_t> mNear;
     // the shares of targets collected while counting, good until an actor joins or leaves

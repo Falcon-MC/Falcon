@@ -1633,6 +1633,11 @@ void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &cent
     explosion.explode();
 }
 
+namespace {
+    const size_t CROWDED_EXPLOSIONS = 16;
+    const size_t APART_EXPLOSIONS = 32;
+}
+
 void ServerNetworkHandler::_flushExplosions() {
     if (mPendingExplosions.empty())
         return;
@@ -1673,6 +1678,21 @@ void ServerNetworkHandler::_flushExplosions() {
         }
     } joinedScope{mJoinedTracked};
 
+    // the sky light of a column an explosion digs into is worked out once, after the last explosion
+    struct SkyLightScope {
+        std::vector<Level *> mLevels;
+        ~SkyLightScope() {
+            for (Level *level: mLevels)
+                level->endSkyLightBatch();
+        }
+    } skyLight;
+    for (const PendingExplosion &pending: mPendingExplosions) {
+        if (std::find(skyLight.mLevels.begin(), skyLight.mLevels.end(), pending.mLevel) == skyLight.mLevels.end()) {
+            skyLight.mLevels.push_back(pending.mLevel);
+            pending.mLevel->beginSkyLightBatch();
+        }
+    }
+
     ExplosionBatch batch(*this);
     batch.setFollowingJoins(true);
 
@@ -1710,12 +1730,41 @@ void ServerNetworkHandler::_flushExplosions() {
         }
     }
 
+    // the ones left break blocks, one after the other; when they are many their rays and their pushes are
+    // shared out to helper threads kept awake until the last one
+    batch.setCrowded(mPendingExplosions.size() - quietCount >= CROWDED_EXPLOSIONS);
     std::vector<Vector3f> centers;
     for (const PendingExplosion &pending: mPendingExplosions)
         centers.push_back(pending.mCenter);
 
+    // when nothing can call an explosion off (no plugin, no script listening before it), the ones standing
+    // apart are worked out together on every core while this thread ends them one by one
+    size_t apartEnd = quietCount;
+    if (mPendingExplosions.size() - quietCount >= APART_EXPLOSIONS
+        && !getPluginManager().hasSubscribers(FALCON_EVENT_EXPLOSION)
+        && !mScriptEngine.hasSubscribers("before.explosion")) {
+        batch.setCrowded(false);
+        Level *apartLevel = mPendingExplosions[quietCount].mLevel;
+        std::vector<std::unique_ptr<Explosion>> apart;
+        std::vector<Explosion *> apartList;
+        const size_t pendingEnd = mPendingExplosions.size();
+        // the others first in the list, the ones of another level left for the loop below
+        std::stable_partition(mPendingExplosions.begin() + (std::ptrdiff_t) quietCount, mPendingExplosions.end(),
+                              [apartLevel](const PendingExplosion &pending) { return pending.mLevel == apartLevel; });
+        for (size_t index = quietCount; index < pendingEnd && mPendingExplosions[index].mLevel == apartLevel; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            apart.emplace_back(new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                                             source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt));
+            apart.back()->setBatch(&batch);
+            apartList.push_back(apart.back().get());
+            apartEnd = index + 1;
+        }
+        batch.runApart(*apartLevel, apartList);
+    }
+
     // by index: an explosion may queue another
-    for (size_t index = quietCount; index < mPendingExplosions.size(); ++index) {
+    for (size_t index = apartEnd; index < mPendingExplosions.size(); ++index) {
         const PendingExplosion pending = mPendingExplosions[index];
         if (index < centers.size())
             batch.setUpcoming(centers.data() + index, centers.size() - index);
@@ -2241,8 +2290,9 @@ void ServerNetworkHandler::tickActors() {
     }
 
     mTickingActors = false;
-    mNetworkHandler->uncork();
+    // the block updates and drops of the explosions leave with the moves, in one go
     _flushExplosions();
+    mNetworkHandler->uncork();
 
     for (const int64_t uniqueId: expiredClouds) {
         mLingeringClouds.erase(uniqueId);

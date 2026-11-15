@@ -442,6 +442,19 @@ public:
 
     std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor = nullptr);
 
+    // told of every block set through the level, either layer, once it is in place; one watcher at a time,
+    // an empty one to stop
+    void setBlockWatcher(std::function<void(int32_t, int32_t, int32_t)> watcher) {
+        mBlockWatcher = std::move(watcher);
+    }
+
+    // between the two, a block change only notes its column, as the liquids of a tick do: the sky light of
+    // each is worked out once at the end, however many of its blocks changed. For a burst of changes nobody
+    // reads the light during
+    void beginSkyLightBatch();
+
+    void endSkyLightBatch();
+
     // true when getCollisionBoxes would surely come back empty, asked of whole chunk sections: a long move
     // through open sky or water is known free without walking its blocks. false tells nothing
     bool isFreeOfColliders(const AxisAlignedBB &area, const Actor *actor = nullptr);
@@ -673,6 +686,8 @@ private:
     std::unordered_set<int64_t> mBatchedLightColumns;
     VillageManager mVillageManager;
     PoiManager mPoiManager;
+    int32_t mSkyLightBatches = 0;
+    std::function<void(int32_t, int32_t, int32_t)> mBlockWatcher;
     std::unordered_map<int64_t, LevelChunk> mChunks;
     // a level going away takes its chunks with it: whoever remembers one has to forget it
     struct ChunkMemoGuard {

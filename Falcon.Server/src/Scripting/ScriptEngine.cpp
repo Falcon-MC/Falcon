@@ -2024,6 +2024,14 @@ namespace {
     }
 }
 
+bool ScriptEngine::hasSubscribers(const char *event) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        if (api->hasSubscribers(event))
+            return true;
+    }
+    return false;
+}
+
 bool ScriptEngine::beforeExplosion(Level &level, const ServerActor *source, std::vector<Vector3i> &blocks) {
     bool cancelled = false;
     for (std::unique_ptr<ScriptApi> &api: mApis) {

@@ -988,7 +988,12 @@ std::vector<int64_t> Level::consumeRepopulatedChunks() {
 }
 
 bool Level::isChunkResident(int32_t chunkX, int32_t chunkZ) const {
-    return mChunks.find(_packChunk(chunkX, chunkZ)) != mChunks.end();
+    // the chunk asked about is most often the one just looked up
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    const ChunkMemo &memo = tChunkMemo;
+    if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == gChunkEpoch.load(std::memory_order_relaxed))
+        return true;
+    return mChunks.find(key) != mChunks.end();
 }
 
 void Level::registerChunkLoader(uint64_t loaderId, int32_t chunkX, int32_t chunkZ) {
@@ -1624,6 +1629,19 @@ namespace {
     }
 }
 
+void Level::beginSkyLightBatch() {
+    if (mSkyLightBatches++ == 0)
+        mBatchLight = true;
+}
+
+void Level::endSkyLightBatch() {
+    if (mSkyLightBatches == 0 || --mSkyLightBatches != 0)
+        return;
+
+    mBatchLight = false;
+    _flushLightBatch();
+}
+
 bool Level::isFreeOfColliders(const AxisAlignedBB &area, const Actor *actor) {
     const int32_t minChunkX = (int32_t) std::floor(area.mMinX) >> 4;
     const int32_t maxChunkX = (int32_t) std::floor(area.mMaxX) >> 4;
@@ -1762,6 +1780,8 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     } else {
         LightSystem::onBlockChanged(*this, x, y, z);
     }
+    if (mBlockWatcher)
+        mBlockWatcher(x, y, z);
 
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
 }
@@ -1804,6 +1824,8 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
     const BlockState &previous = chunk.getBlock(x & 15, y, z & 15, layer);
     chunk.setBlock(x & 15, y, z & 15, layer, state);
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), layer, previous);
+    if (mBlockWatcher)
+        mBlockWatcher(x, y, z);
 }
 
 void Level::setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash) {

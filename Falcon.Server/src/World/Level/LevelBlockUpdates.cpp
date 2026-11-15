@@ -1,8 +1,11 @@
+#include "World/Level/BlockUpdates.h"
 #include "World/Level/Level.h"
 
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Scripting/ScriptEngine.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/Block.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/CommandBlockSystem.h"
 #include "World/Level/Block/Systems/FallingBlockSystem.h"
@@ -12,6 +15,10 @@
 #include "World/Level/Block/CommandBlock.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
+
+#include <unordered_map>
+
+#include <typeinfo>
 
 namespace {
     bool isChunkReady(Level &level, const Vector3i &position) {
@@ -55,9 +62,47 @@ void Level::updateAround(const Vector3i &position) {
     }
 }
 
+// a block of the plain class, with none of the names handled apart below: no update does anything to
+// it. Dirt, stone and the like, which is nearly every neighbour of a block an explosion breaks
+bool BlockUpdates::ignores(const BlockState &state) {
+    const Block *block = VanillaBlocks::fromState(state);
+    if (block == nullptr || !block->isPlainClass())
+        return false;
+
+    // air and one kind of ground make nearly all of them: the last two answers come first
+    static const Block *recent[2] = {nullptr, nullptr};
+    static bool recentAnswer[2] = {false, false};
+    if (block == recent[0])
+        return recentAnswer[0];
+    if (block == recent[1])
+        return recentAnswer[1];
+
+    static std::unordered_map<const Block *, bool> known;
+    auto found = known.find(block);
+    if (found == known.end()) {
+        const std::string &identifier = state.mName;
+        found = known.emplace(block, !PistonSystem::isPiston(identifier) && !FireSystem::matches(identifier)
+                                             && !FallingBlockSystem::matches(identifier)
+                                             && !CommandBlock::matches(identifier)
+                                             && !DetectorSystem::isWire(state))
+                        .first;
+    }
+    recent[1] = recent[0];
+    recentAnswer[1] = recentAnswer[0];
+    recent[0] = block;
+    recentAnswer[0] = found->second;
+    return found->second;
+}
+
 void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vector3i *changed) {
     if (mOwner == nullptr || !isChunkReady(*this, position))
         return;
+
+    if (type != BlockUpdateType::Scheduled) {
+        const BlockState *inPlace = peekBlockPtr(position.x, position.y, position.z);
+        if (inPlace != nullptr && BlockUpdates::ignores(*inPlace))
+            return;
+    }
 
     if (mUpdateDepth >= MAX_UPDATE_DEPTH) {
         if (type != BlockUpdateType::Scheduled)
@@ -68,29 +113,49 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
     ++mUpdateDepth;
 
     ServerNetworkHandler &owner = *mOwner;
-    BlockState state = getBlockState(position.x, position.y, position.z);
-    const Block *shapedBlock = VanillaBlocks::fromIdentifier(state.mName);
+    // the state the chunk holds lives as long as the process: read in place, copied only to be reshaped
+    const BlockState *held = peekBlockPtr(position.x, position.y, position.z);
+    BlockState reshaped;
+    if (held == nullptr) {
+        reshaped = getBlockState(position.x, position.y, position.z);
+        held = &reshaped;
+    }
+    const Block *shapedBlock = VanillaBlocks::fromState(*held);
     if (shapedBlock != nullptr && shapedBlock->hasDynamicShape()) {
-        const BlockState shaped = shapedBlock->updateShape(*this, position, state);
-        if (!(shaped == state)) {
+        const BlockState shaped = shapedBlock->updateShape(*this, position, *held);
+        if (!(shaped == *held)) {
             setBlock(position, shaped, false);
-            state = shaped;
+            reshaped = shaped;
+            held = &reshaped;
         }
     }
+    const BlockState &state = *held;
     const std::string &identifier = state.mName;
 
-    if (PistonSystem::isPiston(identifier)) {
+    // which of the systems below a name belongs to, asked once per name
+    enum : uint8_t { OTHER, PISTON, FIRE, FALLING, COMMAND };
+    static std::unordered_map<std::string, uint8_t> systems;
+    auto system = systems.find(identifier);
+    if (system == systems.end())
+        system = systems.emplace(identifier, PistonSystem::isPiston(identifier)          ? PISTON
+                                             : FireSystem::matches(identifier)          ? FIRE
+                                             : FallingBlockSystem::matches(identifier)  ? FALLING
+                                             : CommandBlock::matches(identifier)        ? COMMAND
+                                                                                         : OTHER)
+                         .first;
+
+    if (system->second == PISTON) {
         if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             PistonSystem::onRedstoneUpdate(owner, *this, position, state);
-    } else if (FireSystem::matches(identifier)) {
+    } else if (system->second == FIRE) {
         if (type == BlockUpdateType::Normal)
             FireSystem::onNormalUpdate(owner, *this, position, state);
-    } else if (FallingBlockSystem::matches(identifier)) {
+    } else if (system->second == FALLING) {
         if (type == BlockUpdateType::Normal)
             FallingBlockSystem::onNormalUpdate(owner, *this, position, state, changed);
         else if (type == BlockUpdateType::Scheduled)
             FallingBlockSystem::onScheduledUpdate(owner, *this, position, state);
-    } else if (CommandBlock::matches(identifier)) {
+    } else if (system->second == COMMAND) {
         if (type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             CommandBlockSystem::setPowered(owner, *this, position,
                                            RedstoneSystem::isGettingPower(owner, *this, position));
@@ -106,8 +171,14 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
     }
 
     if (type == BlockUpdateType::Normal || type == BlockUpdateType::Scheduled) {
-        const BlockState current = getBlockState(position.x, position.y, position.z);
-        const Block *block = VanillaBlocks::fromIdentifier(current.mName);
+        const BlockState *inPlaceNow = peekBlockPtr(position.x, position.y, position.z);
+        BlockState fetched;
+        if (inPlaceNow == nullptr) {
+            fetched = getBlockState(position.x, position.y, position.z);
+            inPlaceNow = &fetched;
+        }
+        const BlockState &current = *inPlaceNow;
+        const Block *block = VanillaBlocks::fromState(current);
         if (block != nullptr && type == BlockUpdateType::Normal) {
             if (block->watchesNeighbour(position, current, changed))
                 block->onNeighbourChanged(owner, *this, position, current);
