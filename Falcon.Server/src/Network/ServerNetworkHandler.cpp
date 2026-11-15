@@ -1091,19 +1091,24 @@ void ServerNetworkHandler::tick(bool paused) {
     }
 
     if (!unofficialClientsAllowed) {
-        // a second or so: the verdict often comes back before the login that names the platform
-        static const int64_t REMOVAL_WAIT_TICKS = 40;
         // one code for every removal: the service no longer says which rule
         static const int REMOVAL_CHECK = 101;
 
-        for (const NetworkIdentifier &id: ClientAttestation::getInstance().takeRemovals())
-            mPendingRemovals.push_back({id, REMOVAL_CHECK, mCurrentTick + REMOVAL_WAIT_TICKS});
+        // a removal at once, or after a random wait and then only with the next wave, so neither the moment nor the
+        // company of a removal tells which trait gave it away
+        for (const NetworkIdentifier &id: ClientAttestation::getInstance().takeRemovals()) {
+            const int64_t delay = ClientAttestation::removalDelay(mRemovalRandom);
+            mPendingRemovals.push_back({id, REMOVAL_CHECK, mCurrentTick + delay, delay == 0});
+        }
+        const bool wave = mCurrentTick >= mNextRemovalWave;
+        if (wave)
+            mNextRemovalWave = mCurrentTick + ClientAttestation::waveInterval(mRemovalRandom);
 
         for (size_t index = 0; index < mPendingRemovals.size();) {
             const PendingRemoval removal = mPendingRemovals[index];
             const ServerPlayer *refused = _getPlayer(removal.mId);
             const bool named = refused != nullptr && refused->getLoggedInTick() != 0;
-            if (!named && mCurrentTick < removal.mDeadline) {
+            if (mCurrentTick < removal.mDeadline || (!removal.mAtOnce && !wave)) {
                 index++;
                 continue;
             }
