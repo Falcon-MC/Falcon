@@ -5,6 +5,7 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/CartographyRecipes.h"
 #include "World/Inventory/StonecutterRecipes.h"
+#include "World/Actor/Trade/MerchantOffers.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/Components/ItemComponentTypes.h"
@@ -15,6 +16,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -84,6 +86,12 @@ namespace {
         // a grid recipe produced this output: the item the player crafted, for playerCraftRecipe
         ItemStack mCraftedRecipeOutput;
         bool mCraftedRecipe = false;
+        const MerchantOffers *mTradeOffers = nullptr;
+        bool mTradeActive = false;
+        TradeCraft mTrade;
+        std::array<ItemStack, PlayerInventory::TRADE_SIZE> mTradeWanted;
+        std::array<int32_t, PlayerInventory::TRADE_SIZE> mTradeRequired{};
+        std::array<int32_t, PlayerInventory::TRADE_SIZE> mTradeConsumed{};
     };
 
     ItemStack *findBundleOwner(PlayerInventory &inventory, RequestContext &context, int32_t bundleId,
@@ -215,6 +223,10 @@ namespace {
         }
         if ((container == ContainerSlotType::CartographyInput || container == ContainerSlotType::CartographyAdditional)
             && context.mCartographyMaps == nullptr) {
+            return nullptr;
+        }
+        if ((container == ContainerSlotType::Trade2Ingredient1 || container == ContainerSlotType::Trade2Ingredient2)
+            && context.mTradeOffers == nullptr) {
             return nullptr;
         }
         if (container == ContainerSlotType::StonecutterInput && context.mStonecutterRecipes == nullptr) {
@@ -509,6 +521,8 @@ namespace {
         return true;
     }
 
+    bool consumeTradeItem(RequestContext &context, ContainerSlotType container, const ItemStack &item, int count);
+
     bool removeItems(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched, bool dropped = false) {
         ItemStack *source = resolveSlot(inventory, context, action.mSource.mContainerName, action.mSource.mSlot);
@@ -558,6 +572,10 @@ namespace {
         if (context.mStonecutterActive && action.mType == ItemStackRequestActionType::Consume
             && action.mSource.mContainerName.mContainer == ContainerSlotType::StonecutterInput)
             context.mStonecutterInputConsumed += action.mCount;
+
+        if (context.mTradeActive && action.mType == ItemStackRequestActionType::Consume
+            && !consumeTradeItem(context, action.mSource.mContainerName.mContainer, *source, action.mCount))
+            return false;
 
         if (dropped && context.mDroppedItems != nullptr) {
             ItemStack drop = *source;
@@ -726,6 +744,54 @@ namespace {
         context.mCartographyInputRequired = result.mInputCost;
         context.mCartographyAdditionalRequired = result.mAdditionalCost;
         context.mCartographyLock = result.mLock;
+        return true;
+    }
+
+    // the offer must be wanted in what is consumed; either wanted slot may hold either item
+    bool consumeTradeItem(RequestContext &context, ContainerSlotType container, const ItemStack &item, int count) {
+        if (container != ContainerSlotType::Trade2Ingredient1 && container != ContainerSlotType::Trade2Ingredient2)
+            return false;
+
+        for (size_t index = 0; index < context.mTradeWanted.size(); ++index) {
+            const ItemStack &wanted = context.mTradeWanted[index];
+            if (wanted.isAir() || wanted.mDefinition->getIdentifier() != item.mDefinition->getIdentifier()
+                || wanted.mDamage != item.mDamage || (wanted.mTag.isCompound() && !wanted.mTag.isEmpty() && !(wanted.mTag == item.mTag))
+                || context.mTradeConsumed[index] + count > context.mTradeRequired[index])
+                continue;
+            context.mTradeConsumed[index] += count;
+            return true;
+        }
+        return false;
+    }
+
+    // the client names the offer by its net id and the number of trades; the game checks only that it is in stock
+    bool craftTrade(RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mCraftRecipeSeen || action.mType != ItemStackRequestActionType::CraftRecipe)
+            return false;
+        context.mCraftRecipeSeen = true;
+
+        const int32_t index = context.mTradeOffers->indexOfNetId(action.mRecipeNetworkId);
+        if (index < 0)
+            return false;
+        const MerchantOffer &offer = context.mTradeOffers->mOffers[(size_t) index];
+        const int crafts = action.mNumberOfRequestedCrafts;
+        if (offer.isOutOfStock() || crafts <= 0 || offer.mSell.isAir() || offer.mBuyA.isAir())
+            return false;
+
+        ItemStack output = offer.mSell;
+        output.mCount *= crafts;
+        output.mUsingNetId = false;
+        output.mNetId = 0;
+        context.mCreatedOutput = std::move(output);
+        context.mCreatedOutputActive = true;
+
+        context.mTradeActive = true;
+        context.mTrade.mOfferIndex = index;
+        context.mTrade.mCrafts = crafts;
+        context.mTradeWanted[0] = offer.mBuyA;
+        context.mTradeRequired[0] = offer.mBuyA.mCount * crafts;
+        context.mTradeWanted[1] = offer.mBuyB;
+        context.mTradeRequired[1] = offer.mBuyB.isAir() ? 0 : offer.mBuyB.mCount * crafts;
         return true;
     }
 
@@ -1018,6 +1084,8 @@ namespace {
 
             case ItemStackRequestActionType::CraftRecipe:
             case ItemStackRequestActionType::CraftRecipeAuto:
+                if (context.mTradeOffers != nullptr)
+                    return craftTrade(context, action);
                 if (context.mCartographyMaps != nullptr)
                     return craftCartography(inventory, context, action);
                 if (context.mStonecutterRecipes != nullptr)
@@ -1053,7 +1121,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         const PacketCodecContext *codecContext, std::vector<BundleSyncData> *outBundles, int32_t playerXpLevel,
         bool creativeMode, int32_t *outEnchantLevelsConsumed, bool anvilOpen, int32_t *outAnvilLevelsConsumed,
         bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
-        const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem) {
+        const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
+        const MerchantOffers *tradeOffers, TradeCraft *outTrade) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1080,6 +1149,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mAnvilOpen = anvilOpen;
     context.mCartographyMaps = cartographyMaps;
     context.mStonecutterRecipes = stonecutterRecipes;
+    context.mTradeOffers = tradeOffers;
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -1142,6 +1212,12 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         return entry;
     }
 
+    if (context.mTradeActive && context.mTradeConsumed != context.mTradeRequired) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
     if (context.mCreatedOutputActive && !context.mCreatedOutput.isAir()) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
@@ -1195,6 +1271,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
 
     if (outCartographyLock != nullptr)
         *outCartographyLock = context.mCartographyLock;
+
+    if (outTrade != nullptr && context.mTradeActive)
+        *outTrade = context.mTrade;
 
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput) {

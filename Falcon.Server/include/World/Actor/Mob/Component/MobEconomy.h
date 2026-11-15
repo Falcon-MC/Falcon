@@ -11,6 +11,8 @@
 class EntityDataMap;
 class MobActor;
 class ServerNetworkHandler;
+class ServerPlayer;
+class UpdateTradePacket;
 
 // minecraft:economy_trade_table: the offers, the trader's tier and experience, saved with the mob
 class MobEconomy {
@@ -57,6 +59,21 @@ public:
         return mRiches;
     }
 
+    // one player at a time; prices follow that player's hero effect and the villager's cure discounts
+    bool canTradeWith(ServerNetworkHandler &owner, const MobActor &mob, const ServerPlayer &player) const;
+
+    // false without offers; fills the packet but its window id
+    bool startTrading(ServerNetworkHandler &owner, MobActor &mob, ServerPlayer &player, UpdateTradePacket &packet);
+
+    void stopTrading();
+
+    int64_t getTradingPlayer() const {
+        return mTradingPlayer;
+    }
+
+    // uses, the player's experience, the trader's experience and tier after a granted trade
+    void onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t offerIndex, int32_t crafts);
+
     void appendMetadata(EntityDataMap &metadata) const;
 
     void saveNbt(Tag &data) const;
@@ -67,6 +84,10 @@ public:
 
 private:
     void _generate(ServerNetworkHandler &owner, MobActor &mob, const std::string &path);
+
+    void _syncMetadata(ServerNetworkHandler &owner, MobActor &mob) const;
+
+    bool _isTrading(ServerNetworkHandler &owner, const MobActor &mob) const;
 
     std::unique_ptr<MerchantOffers> mOffers;
     Tag mSavedOffers;
@@ -82,4 +103,7 @@ private:
     int32_t mHighTierCuredDiscount = 0;
     int32_t mNearbyCuredDiscount = 0;
     int32_t mNearbyCuredDiscountTimeStamp = 0;
+    int64_t mTradingPlayer = NO_PLAYER;
+
+    static constexpr int64_t NO_PLAYER = -1;
 };

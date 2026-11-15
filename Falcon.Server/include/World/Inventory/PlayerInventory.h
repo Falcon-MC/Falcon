@@ -21,6 +21,7 @@ public:
     static const int CARTOGRAPHY_SIZE = 2;
     static const int CARTOGRAPHY_INPUT = 0;
     static const int CARTOGRAPHY_ADDITIONAL = 1;
+    static const int TRADE_SIZE = 2;
     static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
 
@@ -102,6 +103,11 @@ public:
 
     void setCartographyItem(int slot, ItemStack item);
 
+    // the two wanted items of the trade screen
+    const ItemStack &getTradeItem(int slot) const;
+
+    void setTradeItem(int slot, ItemStack item);
+
     const ItemStack &getStonecutterInput() const {
         return mStonecutterInput;
     }
@@ -162,6 +168,7 @@ private:
     std::vector<ItemStack> mFurnace;
     std::vector<ItemStack> mAnvil;
     std::vector<ItemStack> mCartography;
+    std::vector<ItemStack> mTrade;
     ItemStack mOffhand;
     ItemStack mCursor;
     ItemStack mEnchantingInput;

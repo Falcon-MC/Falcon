@@ -12,6 +12,14 @@
 #include <unordered_map>
 #include <vector>
 
+class MerchantOffers;
+
+// the offer a request traded for and how many times
+struct TradeCraft {
+    int32_t mOfferIndex = -1;
+    int32_t mCrafts = 0;
+};
+
 class BundleSyncData {
 public:
     int32_t mBundleId = 0;
@@ -36,5 +44,6 @@ public:
             bool anvilOpen = false, int32_t *outAnvilLevelsConsumed = nullptr, bool *outAnvilUsed = nullptr,
             const CartographyRecipes::Maps *cartographyMaps = nullptr, CartographyLock *outCartographyLock = nullptr,
             const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes = nullptr,
-            ItemStack *outCraftedRecipeItem = nullptr);
+            ItemStack *outCraftedRecipeItem = nullptr, const MerchantOffers *tradeOffers = nullptr,
+            TradeCraft *outTrade = nullptr);
 };

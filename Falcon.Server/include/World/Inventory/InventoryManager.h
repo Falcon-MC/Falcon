@@ -23,6 +23,7 @@ class FurnaceBlockActor;
 class Level;
 class ContainerBlockActor;
 class ServerActor;
+class UpdateTradePacket;
 enum class FurnaceKind : uint8_t;
 
 class InventoryManager {
@@ -162,6 +163,18 @@ public:
     // a ContainerOpenPacket naming the actor; false while another window is open or it has no container
     bool openEntityContainer(ServerActor &actor, ContainerType type);
 
+    // the trade screen opens from UpdateTradePacket alone, no ContainerOpenPacket
+    bool openTrade(int64_t traderId, UpdateTradePacket &packet);
+
+    bool isTradeOpen() const {
+        return mTradeWindowId != CONTAINER_ID_NONE;
+    }
+
+    // the trader of the open trade screen, -1 for none
+    int64_t getTradeActorId() const {
+        return isTradeOpen() ? mTradeActorId : -1;
+    }
+
     // the actor whose container is open, -1 for a block container or none
     int64_t getContainerActorId() const {
         return mContainerActorId;
@@ -222,6 +235,8 @@ public:
     void dispatchPluginClose();
 
     int getCurrentWindowId() const {
+        if (mTradeWindowId != CONTAINER_ID_NONE)
+            return mTradeWindowId;
         return mFurnaceWindowId != CONTAINER_ID_NONE
                        ? mFurnaceWindowId
                        : (mCraftingTableWindowId != CONTAINER_ID_NONE
@@ -255,6 +270,10 @@ private:
     void _closeBlockContainer();
 
     void _closeAnvil();
+
+    void _closeTrade();
+
+    void _returnToInventory(ItemStack item);
 
     bool _openWorkbench(ContainerType type, const Vector3i &position);
 
@@ -291,6 +310,8 @@ private:
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     int64_t mContainerActorId = -1;
+    int mTradeWindowId = CONTAINER_ID_NONE;
+    int64_t mTradeActorId = -1;
     std::vector<std::pair<const Level *, int64_t>> mTouchedColumns;
     std::string mEnchantInputId;
     int32_t mEnchantInputCount = 0;

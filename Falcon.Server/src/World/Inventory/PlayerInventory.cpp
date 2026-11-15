@@ -13,7 +13,7 @@ namespace {
 PlayerInventory::PlayerInventory()
         : mItems((size_t) CONTAINER_SIZE), mArmor((size_t) ARMOR_SIZE), mCrafting((size_t) CRAFTING_SIZE),
           mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE), mAnvil((size_t) ANVIL_SIZE),
-          mCartography((size_t) CARTOGRAPHY_SIZE), mSelectedSlot(0), mNextNetId(1) {
+          mCartography((size_t) CARTOGRAPHY_SIZE), mTrade((size_t) TRADE_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
     mCursor = ItemStack::air();
     mStonecutterInput = ItemStack::air();
@@ -43,6 +43,10 @@ PlayerInventory::PlayerInventory()
     }
 
     for (ItemStack &item: mCartography) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mTrade) {
         item = ItemStack::air();
     }
 }
@@ -164,6 +168,22 @@ void PlayerInventory::setCartographyItem(int slot, ItemStack item) {
     mCartography[(size_t) slot] = std::move(item);
 }
 
+const ItemStack &PlayerInventory::getTradeItem(int slot) const {
+    if (slot < 0 || slot >= TRADE_SIZE) {
+        return getEmptyItem();
+    }
+    return mTrade[(size_t) slot];
+}
+
+void PlayerInventory::setTradeItem(int slot, ItemStack item) {
+    if (slot < 0 || slot >= TRADE_SIZE) {
+        return;
+    }
+
+    assignNetId(item);
+    mTrade[(size_t) slot] = std::move(item);
+}
+
 void PlayerInventory::setStonecutterInput(ItemStack item) {
     assignNetId(item);
     mStonecutterInput = std::move(item);
@@ -243,6 +263,13 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
 
         case ContainerSlotType::CartographyAdditional:
             return &mCartography[(size_t) CARTOGRAPHY_ADDITIONAL];
+
+        // one slot each: the slot number does not matter
+        case ContainerSlotType::Trade2Ingredient1:
+            return &mTrade[0];
+
+        case ContainerSlotType::Trade2Ingredient2:
+            return &mTrade[1];
 
         case ContainerSlotType::StonecutterInput:
             if (slot != STONECUTTER_INPUT_NETWORK_SLOT) {
@@ -416,6 +443,10 @@ void PlayerInventory::clear() {
     }
 
     for (ItemStack &item: mCartography) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mTrade) {
         item = ItemStack::air();
     }
 }
