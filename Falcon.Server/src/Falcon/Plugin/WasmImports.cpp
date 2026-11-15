@@ -491,6 +491,24 @@ namespace {
                     if (target != nullptr)
                         api().playerSetGameMode(target, call.u32(1));
                 }},
+                {"players", "server-spawn-simulated-player", "iiiFFFfii:", [](Call &call) {
+                    std::string name;
+                    FalconVec3 position;
+                    if (!call.string(0, name) || !vec3(call, 3, position) || !finite(call, call.f32(6)))
+                        return;
+                    FalconLevel *destination = level(call, 2);
+                    returnPlayer(call, 8, destination == nullptr ? nullptr
+                                 : api().serverSpawnSimulatedPlayer(name.c_str(), destination, position, call.f32(6),
+                                                                    call.u32(7)));
+                }},
+                {"players", "player-is-simulated", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerIsSimulated(target) != 0);
+                }},
+                {"players", "player-remove-simulated", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerRemoveSimulated(target) != 0);
+                }},
                 {"players", "player-xuid", "Ii:", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     call.returnString(1, target == nullptr ? "" : api().playerXuid(target));

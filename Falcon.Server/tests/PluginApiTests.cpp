@@ -29,6 +29,13 @@
 #include <string>
 #include <vector>
 
+class ServerTickProbe {
+public:
+    static void removeSimulated(ServerNetworkHandler &owner) {
+        owner._removeSimulatedPlayers();
+    }
+};
+
 namespace {
     void require(bool condition, const std::string &message) {
         if (!condition)
@@ -710,6 +717,46 @@ namespace {
         api.unsubscribe(spawnId);
     }
 
+    void simulatedPlayers(const FalconServerApi &api, Fixture &fixture) {
+        FalconLevel *level = fixture.levelHandle();
+        const FalconVec3 at{4.5, 100.0, 4.5};
+        require(!api.playerIsSimulated(fixture.playerHandle()), "a client is called simulated");
+        require(api.playerRemoveSimulated(fixture.playerHandle()) == 0, "a client was removed as a simulated player");
+
+        FalconPlayer *bot = api.serverSpawnSimulatedPlayer("Bot_1", level, at, 90.0f, FALCON_GAME_MODE_CREATIVE);
+        require(bot != nullptr, "the simulated player was refused");
+        require(api.playerIsSimulated(bot) == 1, "the simulated player is not called simulated");
+        require(std::string(api.playerName(bot)) == "Bot_1", "the simulated player lost its name");
+        require(api.playerGameMode(bot) == FALCON_GAME_MODE_CREATIVE, "the simulated player lost its game mode");
+        require(api.findPlayer("Bot_1") == bot, "the simulated player is not online");
+
+        // a name already online, whatever its case, an empty or control name, a place outside the world
+        require(api.serverSpawnSimulatedPlayer("bot_1", level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "a second player took a name already online");
+        require(api.serverSpawnSimulatedPlayer("tester", level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "a simulated player took a client's name");
+        require(api.serverSpawnSimulatedPlayer("", level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "an empty name was taken");
+        require(api.serverSpawnSimulatedPlayer("a\nb", level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "a name with a line break was taken");
+        require(api.serverSpawnSimulatedPlayer(std::string(33, 'x').c_str(), level, at, 0.0f,
+                                               FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "a name longer than 32 was taken");
+        require(api.serverSpawnSimulatedPlayer("Bot_2", level, FalconVec3{0.0, 100000.0, 0.0}, 0.0f,
+                                               FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "a place above the world was taken");
+        require(api.serverSpawnSimulatedPlayer("Bot_2", level, at, 0.0f, 3u) == nullptr,
+                "an unknown game mode was taken");
+        require(api.serverSpawnSimulatedPlayer("Bot_2", nullptr, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
+                "a missing level was taken");
+
+        require(api.playerRemoveSimulated(bot) == 1, "the simulated player was not removed");
+        // it leaves at the end of the tick, as a disconnect
+        require(api.findPlayer("Bot_1") == bot, "the simulated player left before the end of the tick");
+        ServerTickProbe::removeSimulated(fixture.owner);
+        require(api.findPlayer("Bot_1") == nullptr, "the simulated player is still online");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -727,6 +774,7 @@ namespace {
         administration(api, fixture);
         playerAndEntityEvents(api, fixture);
         worldEvents(api, fixture);
+        simulatedPlayers(api, fixture);
     }
 }
 
