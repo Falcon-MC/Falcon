@@ -1093,16 +1093,11 @@ void ServerNetworkHandler::tick(bool paused) {
     if (!unofficialClientsAllowed) {
         // a second or so: the verdict often comes back before the login that names the platform
         static const int64_t REMOVAL_WAIT_TICKS = 40;
+        // one code for every removal: the service no longer says which rule
+        static const int REMOVAL_CHECK = 101;
 
-        for (const auto &verdict: ClientAttestation::getInstance().takeVerdicts()) {
-            if (verdict.second > 0) {
-                mPendingRemovals.push_back({verdict.first, 100 + verdict.second, mCurrentTick + REMOVAL_WAIT_TICKS});
-            } else {
-                ServerTelemetry::getInstance().countCheck(1000 - verdict.second);
-                LOG_INFO(LogAreaID::Network, "Client note %d for %s", 100 - verdict.second,
-                         verdict.first.getAddress().c_str());
-            }
-        }
+        for (const NetworkIdentifier &id: ClientAttestation::getInstance().takeRemovals())
+            mPendingRemovals.push_back({id, REMOVAL_CHECK, mCurrentTick + REMOVAL_WAIT_TICKS});
 
         for (size_t index = 0; index < mPendingRemovals.size();) {
             const PendingRemoval removal = mPendingRemovals[index];

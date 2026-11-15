@@ -17,7 +17,7 @@ namespace nethernet {
 
 // asks the attestation service what it makes of a client. The server only gathers what it observed and
 // sends it; what is looked at lives in the service, not in this repository. A client is let in at once
-// and the verdict follows: above zero it is to be removed, below zero it is worth a note
+// and the answer only says whether the client is to be removed: the service keeps its score
 class ClientAttestation {
 public:
     static ClientAttestation &getInstance();
@@ -30,8 +30,11 @@ public:
     // asks again with what was observed of the client once it was playing; never blocks
     void inspectSession(const NetworkIdentifier &id, const CompressedNetworkPeer::BatchTraits &batches);
 
-    // verdicts that came back since the last call
-    std::vector<std::pair<NetworkIdentifier, int>> takeVerdicts();
+    // the clients the service said to remove since the last call
+    std::vector<NetworkIdentifier> takeRemovals();
+
+    // whether an answer of the service says to remove the client: a positive number, anything else keeps it
+    static bool isRemoval(int status, const std::string &body);
 
 private:
     struct Question {
@@ -46,7 +49,7 @@ private:
     std::mutex mMutex;
     std::condition_variable mWake;
     std::deque<Question> mQuestions;
-    std::vector<std::pair<NetworkIdentifier, int>> mVerdicts;
+    std::vector<NetworkIdentifier> mRemovals;
     std::thread mWorker;
     bool mStopping = false;
 };

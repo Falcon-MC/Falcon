@@ -203,11 +203,20 @@ void ClientAttestation::inspectSession(const NetworkIdentifier &id,
     mWake.notify_one();
 }
 
-std::vector<std::pair<NetworkIdentifier, int>> ClientAttestation::takeVerdicts() {
+std::vector<NetworkIdentifier> ClientAttestation::takeRemovals() {
     std::lock_guard<std::mutex> lock(mMutex);
-    std::vector<std::pair<NetworkIdentifier, int>> verdicts;
-    verdicts.swap(mVerdicts);
-    return verdicts;
+    std::vector<NetworkIdentifier> removals;
+    removals.swap(mRemovals);
+    return removals;
+}
+
+// an older service answered its score: a positive one still means remove
+bool ClientAttestation::isRemoval(int status, const std::string &body) {
+    if (status != 200 || body.empty() || body.size() > 8)
+        return false;
+    char *end = nullptr;
+    const long verdict = std::strtol(body.c_str(), &end, 10);
+    return end != body.c_str() && *end == '\0' && verdict > 0 && verdict <= 1000;
 }
 
 void ClientAttestation::_run() {
@@ -227,15 +236,10 @@ void ClientAttestation::_run() {
         std::string error;
         const HttpClient::Headers headers = {{"Content-Type", "application/octet-stream"}};
         if (!HttpClient::post(SERVICE, headers, question.mEvidence, response, error, TIMEOUT_MS)
-            || response.mStatus != 200 || response.mBody.empty() || response.mBody.size() > 8)
-            continue;
-
-        char *end = nullptr;
-        const long verdict = std::strtol(response.mBody.c_str(), &end, 10);
-        if (end == response.mBody.c_str() || *end != '\0' || verdict == 0 || verdict < -1000 || verdict > 1000)
+            || !isRemoval(response.mStatus, response.mBody))
             continue;
 
         std::lock_guard<std::mutex> lock(mMutex);
-        mVerdicts.emplace_back(question.mId, (int) verdict);
+        mRemovals.push_back(question.mId);
     }
 }
