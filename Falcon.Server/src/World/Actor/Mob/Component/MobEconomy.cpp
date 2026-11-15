@@ -28,9 +28,27 @@ namespace {
     const char *TAG_NEARBY_CURED_DISCOUNT_TIME_STAMP = "NearbyCuredDiscountTimeStamp";
     const char *TAG_TRADE_TIER = "TradeTier";
     const char *TAG_TRADE_EXPERIENCE = "TradeExperience";
+    const char *TAG_PERSISTING_OFFERS = "persistingOffers";
+    const char *TAG_PERSISTING_RICHES = "persistingRiches";
+    const int32_t DEFAULT_LOW_CURED_DISCOUNT = -25;
+    const int32_t DEFAULT_HIGH_CURED_DISCOUNT = -20;
+    const int32_t DEFAULT_NEARBY_CURED_DISCOUNT = -20;
+
+    int32_t rangeValue(const json::Value *component, const char *key, size_t index, int32_t fallback) {
+        const json::Value *range = component == nullptr ? nullptr : component->get(key);
+        if (range == nullptr || !range->isArray() || range->mArray.size() <= index)
+            return fallback;
+        return range->mArray[index]->integer(fallback);
+    }
+
+    // a sum above zero is no discount; under the maximum it stops there
+    int32_t addDiscount(int32_t sum, int32_t maximum) {
+        return sum > 0 ? 0 : std::max(sum, maximum);
+    }
 
     using Trades = std::vector<std::shared_ptr<const TradeEntry>>;
 
+    const char *EMERALD = "minecraft:emerald";
     const char *SOUND_HAGGLE = "haggle";
     const char *SOUND_HAGGLE_YES = "haggle.yes";
     const char *SOUND_HAGGLE_IDLE = "haggle.idle";
@@ -329,8 +347,21 @@ bool MobEconomy::startTrading(ServerNetworkHandler &owner, MobActor &mob, Server
     return true;
 }
 
-void MobEconomy::stopTrading() {
+void MobEconomy::stopTrading(ServerNetworkHandler &owner, MobActor &mob) {
+    if (mTradingPlayer == NO_PLAYER)
+        return;
     mTradingPlayer = NO_PLAYER;
+    _syncMetadata(owner, mob);
+}
+
+ServerPlayer *MobEconomy::findTradingPlayer(ServerNetworkHandler &owner) const {
+    if (mTradingPlayer == NO_PLAYER)
+        return nullptr;
+    for (auto &entry: owner.getPlayers()) {
+        if (entry.second.getUniqueId() == mTradingPlayer)
+            return entry.second.isSpawned() ? &entry.second : nullptr;
+    }
+    return nullptr;
 }
 
 void MobEconomy::onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t offerIndex, int32_t crafts) {
@@ -359,6 +390,10 @@ void MobEconomy::onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t off
         _syncMetadata(owner, mob);
     }
 
+    // only emeralds count as riches: the first wanted item, as many as were paid
+    if (!offer.mBuyA.isAir() && offer.mBuyA.mDefinition->getIdentifier() == EMERALD)
+        mRiches += offer.mBuyA.mCount * crafts;
+
     if (offer.mRewardExp)
         owner.spawnExperienceOrbs(level, mob.getPosition(), experience);
 }
@@ -369,6 +404,71 @@ void MobEconomy::_syncMetadata(ServerNetworkHandler &owner, MobActor &mob) const
     owner.sendActorMetadata(mob, metadata);
 }
 
+void MobEconomy::inheritLevel(const MobEconomy &from) {
+    mTier = from.mTier;
+    mMaxTier = from.mMaxTier;
+    mExperience = from.mExperience;
+    mLowTierCuredDiscount = from.mLowTierCuredDiscount;
+    mHighTierCuredDiscount = from.mHighTierCuredDiscount;
+    mNearbyCuredDiscount = from.mNearbyCuredDiscount;
+    mNearbyCuredDiscountTimeStamp = from.mNearbyCuredDiscountTimeStamp;
+}
+
+void MobEconomy::_setSavedOffers(const Tag &offers) {
+    mOffers.reset();
+    mSavedOffers = offers;
+    mHasSavedOffers = true;
+}
+
+void MobEconomy::inheritOffers(ServerNetworkHandler &owner, MobActor &mob, MobEconomy &from, MobActor &fromMob) {
+    Tag offers;
+    int32_t riches = 0;
+    if (from.mHasPersistingOffers) {
+        offers = from.mPersistingOffers;
+        riches = from.mPersistingRiches;
+        from.mPersistingOffers = Tag();
+        from.mHasPersistingOffers = false;
+        from.mPersistingRiches = 0;
+    } else {
+        const json::Value *component = fromMob.getComponent(COMPONENT);
+        const json::Value *persist = component == nullptr ? nullptr : component->get("persist_trades");
+        if (persist == nullptr || !persist->boolean(false))
+            return;
+        const MerchantOffers *rolled = from.getOffers(owner, fromMob);
+        if (rolled == nullptr)
+            return;
+        offers = rolled->save(false);
+        riches = from.mRiches;
+    }
+
+    if (isTrader(mob)) {
+        _setSavedOffers(offers);
+        mRiches = riches;
+        return;
+    }
+    mPersistingOffers = std::move(offers);
+    mHasPersistingOffers = true;
+    mPersistingRiches = riches;
+}
+
+void MobEconomy::applyCure(const MobActor &mob) {
+    const json::Value *component = mob.getComponent(COMPONENT);
+    mLowTierCuredDiscount = addDiscount(mLowTierCuredDiscount + rangeValue(component, "cured_discount", 0, DEFAULT_LOW_CURED_DISCOUNT),
+                                        rangeValue(component, "max_cured_discount", 0, DEFAULT_LOW_CURED_DISCOUNT));
+    mHighTierCuredDiscount =
+            addDiscount(mHighTierCuredDiscount + rangeValue(component, "cured_discount", 1, DEFAULT_HIGH_CURED_DISCOUNT),
+                        rangeValue(component, "max_cured_discount", 1, DEFAULT_HIGH_CURED_DISCOUNT));
+}
+
+void MobEconomy::applyNearbyCure(const MobActor &mob) {
+    const json::Value *component = mob.getComponent(COMPONENT);
+    const json::Value *nearby = component == nullptr ? nullptr : component->get("nearby_cured_discount");
+    const int32_t step = nearby == nullptr ? DEFAULT_NEARBY_CURED_DISCOUNT : nearby->integer(DEFAULT_NEARBY_CURED_DISCOUNT);
+    // the game adds the step to the cure discount, not to what the villager had
+    mLowTierCuredDiscount = addDiscount(step + rangeValue(component, "cured_discount", 0, DEFAULT_LOW_CURED_DISCOUNT),
+                                        rangeValue(component, "max_cured_discount", 0, DEFAULT_LOW_CURED_DISCOUNT));
+}
+
 void MobEconomy::appendMetadata(EntityDataMap &metadata) const {
     const auto pushInt = [&metadata](int32_t id, int32_t value) {
         EntityDataEntry entry;
@@ -377,6 +477,13 @@ void MobEconomy::appendMetadata(EntityDataMap &metadata) const {
         entry.mIntValue = value;
         metadata.mEntries.push_back(entry);
     };
+
+    // the game's invalid actor id when nobody trades
+    EntityDataEntry target;
+    target.mId = TRADE_TARGET_DATA_ID;
+    target.mFormat = EntityDataFormat::Long;
+    target.mLongValue = mTradingPlayer;
+    metadata.mEntries.push_back(target);
 
     pushInt(TRADE_TIER_DATA_ID, mTier);
     pushInt(MAX_TRADE_TIER_DATA_ID, mMaxTier);
@@ -405,6 +512,18 @@ void MobEconomy::saveNbt(Tag &data) const {
     data.putInt(TAG_TRADE_EXPERIENCE, mExperience);
 }
 
+void MobEconomy::savePersistingNbt(Tag &data, bool trader) const {
+    // the tier survives a zombie villager's save; a trader already wrote it
+    if (!trader && (mTier != 0 || mExperience != 0)) {
+        data.putInt(TAG_TRADE_TIER, mTier);
+        data.putInt(TAG_TRADE_EXPERIENCE, mExperience);
+    }
+    if (!mHasPersistingOffers)
+        return;
+    data.put(TAG_PERSISTING_OFFERS, mPersistingOffers);
+    data.putInt(TAG_PERSISTING_RICHES, mPersistingRiches);
+}
+
 void MobEconomy::loadNbt(const Tag &data) {
     mRiches = data.getInt(TAG_RICHES, 0);
     const Tag *offers = data.get(TAG_OFFERS);
@@ -419,4 +538,10 @@ void MobEconomy::loadNbt(const Tag &data) {
     mNearbyCuredDiscountTimeStamp = data.getInt(TAG_NEARBY_CURED_DISCOUNT_TIME_STAMP, 0);
     mTier = data.getInt(TAG_TRADE_TIER, 0);
     mExperience = data.getInt(TAG_TRADE_EXPERIENCE, 0);
+    // both or neither, like the game reads them
+    const Tag *persisting = data.get(TAG_PERSISTING_OFFERS);
+    mHasPersistingOffers = persisting != nullptr && persisting->isCompound()
+                           && data.contains(TAG_PERSISTING_RICHES, Tag::Type::Int);
+    mPersistingOffers = mHasPersistingOffers ? *persisting : Tag();
+    mPersistingRiches = mHasPersistingOffers ? data.getInt(TAG_PERSISTING_RICHES, 0) : 0;
 }

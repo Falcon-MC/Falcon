@@ -745,6 +745,11 @@ void Village::changeStanding(int64_t playerId, int32_t delta) {
     mStandings[playerId] = std::min(std::max(current + delta, MIN_STANDING), MAX_STANDING);
 }
 
+void Village::changeAllStandings(int32_t delta) {
+    for (auto &entry: mStandings)
+        entry.second = std::min(std::max(entry.second + delta, MIN_STANDING), MAX_STANDING);
+}
+
 int32_t Village::getStanding(int64_t playerId) const {
     const auto existing = mStandings.find(playerId);
     return existing == mStandings.end() ? 0 : existing->second;

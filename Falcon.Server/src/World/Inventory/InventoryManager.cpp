@@ -1163,7 +1163,7 @@ void InventoryManager::_closeTrade() {
 
     MobActor *trader = dynamic_cast<MobActor *>(mOwner->getActor(mTradeActorId));
     if (trader != nullptr && trader->getEconomy().getTradingPlayer() == mPlayer->getUniqueId())
-        trader->getEconomy().stopTrading();
+        trader->getEconomy().stopTrading(*mOwner, *trader);
     mTradeActorId = -1;
 }
 

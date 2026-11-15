@@ -7,7 +7,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
-#include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/DyeableItems.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Level.h"
@@ -21,21 +21,7 @@ namespace {
     const int32_t EVENT_DYE_ARMOR = 3502;
     const int32_t EVENT_CLEAN_ARMOR = 3503;
     const int32_t EVENT_ADD_DYE = 3508;
-    const char *const TAG_CUSTOM_COLOR = "customColor";
-
-    // dyeable is the leather tier armor; the horse armor tag, wolf armor and pack items with minecraft:dyeable also
-    // take a color
-    bool takesColor(const std::string &identifier) {
-        if (identifier == "minecraft:wolf_armor")
-            return true;
-        if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
-            return custom->mHasDyeable;
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(identifier)) {
-            if (tag == "minecraft:leather_tier" || tag == "minecraft:horse_armor")
-                return true;
-        }
-        return false;
-    }
+    const char *const TAG_CUSTOM_COLOR = DyeableItems::TAG_CUSTOM_COLOR;
 
     // the event sits on the water surface and carries the water color
     void broadcastCauldronEvent(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -119,7 +105,7 @@ bool CauldronBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
         return false;
 
     const std::string &identifier = held.mDefinition->getIdentifier();
-    if (takesColor(identifier)) {
+    if (DyeableItems::takesColor(identifier)) {
         ItemStack colored = held;
         if (!actor.hasColor()) {
             // plain water washes the color off, and only an item that has one

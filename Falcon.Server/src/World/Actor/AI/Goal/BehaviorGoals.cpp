@@ -69,6 +69,7 @@
 #include "World/Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "World/Actor/AI/Goal/TimerFlagGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
+#include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
 #include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
@@ -83,6 +84,8 @@
 
 namespace {
     const char *const BEHAVIOR_PREFIX = "minecraft:behavior.";
+    // the goal's own starting reach
+    const float TRADE_DEFAULT_MAX_DISTANCE = 8.0f;
 
     const int32_t WATER_RETRIES = 10;
 
@@ -1026,6 +1029,13 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                        : OFFER_FLOWER_DEFAULT_AREA;
         settings.mFilters = cloneOf(component.get("filters"));
         return std::make_unique<OfferFlowerGoal>(std::move(settings));
+    }
+
+    if (behavior == "trade_with_player") {
+        const json::Value *filters = component.get("filters");
+        return std::make_unique<TradeWithPlayerGoal>(
+                filters == nullptr ? nullptr : std::shared_ptr<json::Value>(filters->clone()),
+                numberOf(component, "max_distance_from_player", TRADE_DEFAULT_MAX_DISTANCE));
     }
 
     if (behavior == "work") {

@@ -120,6 +120,9 @@ public:
     // clamped to -30..10
     void changeStanding(int64_t playerId, int32_t delta);
 
+    // every player the village already knows: a cured zombie villager raises them all
+    void changeAllStandings(int32_t delta);
+
     int32_t getStanding(int64_t playerId) const;
 
     // an inhabitant at its job site; only inhabitants are recorded
