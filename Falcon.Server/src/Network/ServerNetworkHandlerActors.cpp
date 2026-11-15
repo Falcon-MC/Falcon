@@ -1,4 +1,7 @@
+#include <cstring>
+#include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Explosion.h"
 #include "World/Level/LevelSoundEventIds.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
 
@@ -195,7 +198,11 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
-    std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
+    // a summoned tnt is primed like one lit from a block
+    std::unique_ptr<ServerActor> actor = identifier == PrimedTntActor::IDENTIFIER
+                                                 ? std::unique_ptr<ServerActor>(new PrimedTntActor(
+                                                           runtimeId, PrimedTntActor::DEFAULT_FUSE))
+                                                 : ActorClassRegistry::create(runtimeId, identifier);
     actor->setUniqueId(allocateActorUniqueId());
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->moveToLevel(level);
@@ -358,6 +365,9 @@ ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> a
     mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
     mActors[result->getUniqueId()] = std::move(actor);
     mActorIndexDirty = true;
+    ++mActorSetSerial;
+    if (mJoinedTracked)
+        mActorChanges.push_back(ActorChange{result, result->getPosition(), true});
     if (!result->getPendingPassengers().empty())
         mVehiclesWithPendingPassengers.insert(result->getUniqueId());
     return result;
@@ -368,10 +378,13 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     if (it == mActors.end())
         return;
 
+    if (mJoinedTracked)
+        mActorChanges.push_back(ActorChange{it->second.get(), it->second->getPosition(), false});
     mVehiclesWithPendingPassengers.erase(uniqueId);
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     mActors.erase(it);
     mActorIndexDirty = true;
+    ++mActorSetSerial;
 }
 
 void ServerNetworkHandler::_refreshActorIndex() {
@@ -390,13 +403,25 @@ void ServerNetworkHandler::_refreshActorIndex() {
     }
 
     mActorIndexWidestHalf = 0.0f;
+    mActorIndexWidestBox = 0.0f;
+    mCollidableActors.clear();
+    const std::string *lastType = nullptr;
+    float lastHalf = 0.0f;
     for (auto &entry: mActors) {
+        if (entry.second->getFlags().get(ActorFlag::Collidable))
+            mCollidableActors.push_back(entry.second.get());
         const Vector3f position = entry.second->getPosition();
         const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
         const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
         mActorIndex[_actorIndexKey(chunkX, chunkZ)].push_back(entry.second.get());
-        mActorIndexWidestHalf = std::max(mActorIndexWidestHalf,
-                                         ActorClassRegistry::getSize(entry.second->getTypeId()).mWidth * 0.5f);
+        // actors come in runs of one type: the size of the last type asked is kept
+        const std::string &typeId = entry.second->getTypeId();
+        if (lastType == nullptr || *lastType != typeId) {
+            lastType = &typeId;
+            lastHalf = ActorClassRegistry::getSize(typeId).mWidth * 0.5f;
+        }
+        mActorIndexWidestHalf = std::max(mActorIndexWidestHalf, lastHalf);
+        mActorIndexWidestBox = std::max(mActorIndexWidestBox, entry.second->getSize().mWidth * 0.5f);
     }
 }
 
@@ -1372,7 +1397,9 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleporte
 }
 
 void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet) {
-    std::vector<NetworkIdentifier> viewers;
+    // kept between calls: a crowd sends one packet an actor a tick
+    static std::vector<NetworkIdentifier> viewers;
+    viewers.clear();
     for (auto &entry: mPlayers) {
         if (!entry.second.isSpawned())
             continue;
@@ -1595,8 +1622,168 @@ void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
 }
 
 
+void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &center, double size,
+                                              const ServerActor &source, bool fromTnt) {
+    if (mTickingActors) {
+        mPendingExplosions.push_back(PendingExplosion{&level, center, size, source.getUniqueId(), fromTnt});
+        return;
+    }
+
+    Explosion explosion(*this, level, center, size, &source, fromTnt);
+    explosion.explode();
+}
+
+namespace {
+    const size_t CROWDED_EXPLOSIONS = 16;
+    const size_t APART_EXPLOSIONS = 32;
+}
+
+void ServerNetworkHandler::_flushExplosions() {
+    if (mPendingExplosions.empty())
+        return;
+
+    // the order within a tick is no one's to rely on: the explosions that break nothing (in water) go first,
+    // over blocks that stay as they are, and share one read of them
+    const auto quietEnd = std::stable_partition(
+            mPendingExplosions.begin(), mPendingExplosions.end(), [this](const PendingExplosion &pending) {
+                return mActors.find(pending.mSourceId) != mActors.end()
+                       && (Explosion::breaksNothingAt(*pending.mLevel, pending.mCenter)
+                           || (pending.mSize >= 0.1
+                               && Explosion::isReachEmpty(*pending.mLevel, pending.mCenter, pending.mSize)));
+            });
+    const size_t quietCount = (size_t) (quietEnd - mPendingExplosions.begin());
+    // neighbours one after the other: the read of the blocks around one serves the next
+    const auto byPlace = [](const PendingExplosion &left, const PendingExplosion &right) {
+        const int32_t leftX = (int32_t) std::floor(left.mCenter.x) >> 5;
+        const int32_t rightX = (int32_t) std::floor(right.mCenter.x) >> 5;
+        if (leftX != rightX)
+            return leftX < rightX;
+        const int32_t leftZ = (int32_t) std::floor(left.mCenter.z) >> 5;
+        const int32_t rightZ = (int32_t) std::floor(right.mCenter.z) >> 5;
+        if (leftZ != rightZ)
+            return leftZ < rightZ;
+        return ((int32_t) std::floor(left.mCenter.y) >> 4) < ((int32_t) std::floor(right.mCenter.y) >> 4);
+    };
+    // the others too: many of them go off in the air and leave the blocks as they were
+    std::stable_sort(mPendingExplosions.begin(), quietEnd, byPlace);
+    std::stable_sort(quietEnd, mPendingExplosions.end(), byPlace);
+
+    // a block falling or an orb dropping out of one explosion joins the targets of the next ones
+    mActorChanges.clear();
+    mJoinedTracked = true;
+    struct JoinedScope {
+        bool &mTracked;
+        ~JoinedScope() {
+            mTracked = false;
+        }
+    } joinedScope{mJoinedTracked};
+
+    // the sky light of a column an explosion digs into is worked out once, after the last explosion
+    struct SkyLightScope {
+        std::vector<Level *> mLevels;
+        ~SkyLightScope() {
+            for (Level *level: mLevels)
+                level->endSkyLightBatch();
+        }
+    } skyLight;
+    for (const PendingExplosion &pending: mPendingExplosions) {
+        if (std::find(skyLight.mLevels.begin(), skyLight.mLevels.end(), pending.mLevel) == skyLight.mLevels.end()) {
+            skyLight.mLevels.push_back(pending.mLevel);
+            pending.mLevel->beginSkyLightBatch();
+        }
+    }
+
+    ExplosionBatch batch(*this);
+    batch.setFollowingJoins(true);
+
+    // the ones that break nothing: plugins and scripts have their say on each, then every push is worked out
+    // at once on every core, then each explosion ends in turn (damage, items, effects)
+    {
+        Level *quietLevel = quietCount == 0 ? nullptr : mPendingExplosions[0].mLevel;
+        std::vector<std::unique_ptr<Explosion>> quiet;
+        std::vector<ExplosionBatch::QuietBlast> blasts;
+        std::vector<size_t> ranks;
+        for (size_t index = 0; index < quietCount; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            const ServerActor *sourceActor = source == mActors.end() ? nullptr : source->second.get();
+            std::unique_ptr<Explosion> explosion(
+                    new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize, sourceActor, pending.mFromTnt));
+            explosion->setBatch(&batch);
+            if (!explosion->explodeA())
+                continue;
+
+            if (pending.mLevel == quietLevel && sourceActor != nullptr) {
+                ranks.push_back(blasts.size());
+                blasts.push_back(ExplosionBatch::QuietBlast{pending.mCenter, explosion->getSize(), sourceActor});
+            } else {
+                ranks.push_back(SIZE_MAX);
+            }
+            quiet.push_back(std::move(explosion));
+        }
+        if (quietLevel != nullptr)
+            batch.settleQuiet(*quietLevel, blasts);
+        for (size_t index = 0; index < quiet.size(); ++index) {
+            if (ranks[index] != SIZE_MAX)
+                quiet[index]->setSettledAs(ranks[index]);
+            quiet[index]->explodeB();
+        }
+    }
+
+    // the ones left break blocks, one after the other; when they are many their rays and their pushes are
+    // shared out to helper threads kept awake until the last one
+    batch.setCrowded(mPendingExplosions.size() - quietCount >= CROWDED_EXPLOSIONS);
+    std::vector<Vector3f> centers;
+    for (const PendingExplosion &pending: mPendingExplosions)
+        centers.push_back(pending.mCenter);
+
+    // when nothing can call an explosion off (no plugin, no script listening before it), the ones standing
+    // apart are worked out together on every core while this thread ends them one by one
+    size_t apartEnd = quietCount;
+    if (mPendingExplosions.size() - quietCount >= APART_EXPLOSIONS
+        && !getPluginManager().hasSubscribers(FALCON_EVENT_EXPLOSION)
+        && !mScriptEngine.hasSubscribers("before.explosion")) {
+        batch.setCrowded(false);
+        Level *apartLevel = mPendingExplosions[quietCount].mLevel;
+        std::vector<std::unique_ptr<Explosion>> apart;
+        std::vector<Explosion *> apartList;
+        const size_t pendingEnd = mPendingExplosions.size();
+        // the others first in the list, the ones of another level left for the loop below
+        std::stable_partition(mPendingExplosions.begin() + (std::ptrdiff_t) quietCount, mPendingExplosions.end(),
+                              [apartLevel](const PendingExplosion &pending) { return pending.mLevel == apartLevel; });
+        for (size_t index = quietCount; index < pendingEnd && mPendingExplosions[index].mLevel == apartLevel; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            apart.emplace_back(new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                                             source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt));
+            apart.back()->setBatch(&batch);
+            apartList.push_back(apart.back().get());
+            apartEnd = index + 1;
+        }
+        batch.runApart(*apartLevel, apartList);
+    }
+
+    // by index: an explosion may queue another
+    for (size_t index = apartEnd; index < mPendingExplosions.size(); ++index) {
+        const PendingExplosion pending = mPendingExplosions[index];
+        if (index < centers.size())
+            batch.setUpcoming(centers.data() + index, centers.size() - index);
+        else
+            batch.setUpcoming(nullptr, 0);
+        const auto source = mActors.find(pending.mSourceId);
+        Explosion explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                            source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt);
+        explosion.setBatch(&batch);
+        explosion.explode();
+    }
+    mPendingExplosions.clear();
+}
+
 void ServerNetworkHandler::tickActors() {
     mActorIndexDirty = true;
+    mTickingActors = true;
+    // the moves of a crowd leave together at the end of the pass
+    mNetworkHandler->cork();
     std::vector<int64_t> expired;
 
     std::vector<int64_t> tickOrder;
@@ -1637,7 +1824,8 @@ void ServerNetworkHandler::tickActors() {
 
         if (!actor.isProjectile()) {
             const ActorSize size = actor.getSize();
-            if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
+            // nothing hurts an invulnerable actor: where its eyes are is not even looked at
+            if (!actor.isInvulnerable() && _isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
                            ActorDamageSource::environment("death.attack.inWall", actor.getName()));
 
@@ -2100,6 +2288,11 @@ void ServerNetworkHandler::tickActors() {
             }
         }
     }
+
+    mTickingActors = false;
+    // the block updates and drops of the explosions leave with the moves, in one go
+    _flushExplosions();
+    mNetworkHandler->uncork();
 
     for (const int64_t uniqueId: expiredClouds) {
         mLingeringClouds.erase(uniqueId);

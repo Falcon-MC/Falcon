@@ -108,14 +108,53 @@ namespace {
         require(closeTo(onSnow->getPosition().y, (float) groundY + 1.0f + 1.0f / 8.0f),
                 "an item lands on a single snow layer at its look, got " + std::to_string(onSnow->getPosition().y));
 
+        // an item at rest moves on one tick in four: the lift comes within four ticks
         level.setBlockState(1, groundY + 1, 1, snow(3));
-        ItemActorHandler::tickItemActors(owner);
+        for (int32_t tick = 0; tick < 4; tick++)
+            ItemActorHandler::tickItemActors(owner);
         require(closeTo(onSnow->getPosition().y, (float) groundY + 1.0f + 4.0f / 8.0f),
                 "a layer grown under a resting item lifts it, got " + std::to_string(onSnow->getPosition().y));
 
         ItemActor *onStone = settle(owner, level, Vector3f(3.5f, (float) groundY + 3.0f, 3.5f));
         require(closeTo(onStone->getPosition().y, (float) groundY + 1.0f),
                 "an item still lands on top of a full block, got " + std::to_string(onStone->getPosition().y));
+
+        // the block under a resting item goes: it stays for the ticks it does not move on, then falls
+        while ((onStone->getAge() & 3) != 0)
+            ItemActorHandler::tickItemActors(owner);
+        level.setBlockState(3, groundY, 3, BlockState("minecraft:air"));
+        for (int32_t tick = 0; tick < 3; tick++) {
+            ItemActorHandler::tickItemActors(owner);
+            require(onStone->isOnGround() && closeTo(onStone->getPosition().y, (float) groundY + 1.0f),
+                    "a resting item moved on a tick it should have skipped");
+        }
+        ItemActorHandler::tickItemActors(owner);
+        require(!onStone->isOnGround() && onStone->getPosition().y < (float) groundY + 1.0f,
+                "an item kept resting on a block that was removed");
+
+        // two stacks of the same item side by side become one within 25 ticks; another item stays apart
+        level.setBlockState(6, groundY, 6, BlockState("minecraft:stone"));
+        const size_t before = owner.getItemEntities().size();
+        owner.dropItem(level, Vector3f(6.4f, (float) groundY + 1.0f, 6.5f), owner.createItemStack("minecraft:diamond", 3),
+                       Vector3f(0.0f, 0.0f, 0.0f), 0);
+        owner.dropItem(level, Vector3f(6.6f, (float) groundY + 1.0f, 6.5f), owner.createItemStack("minecraft:diamond", 5),
+                       Vector3f(0.0f, 0.0f, 0.0f), 0);
+        owner.dropItem(level, Vector3f(6.5f, (float) groundY + 1.0f, 6.5f), owner.createItemStack("minecraft:emerald", 1),
+                       Vector3f(0.0f, 0.0f, 0.0f), 0);
+        for (int32_t tick = 0; tick < 27; tick++)
+            ItemActorHandler::tickItemActors(owner);
+        int32_t diamonds = 0, diamondStacks = 0, emeraldStacks = 0;
+        for (size_t index = before; index < owner.getItemEntities().size(); ++index) {
+            const ItemStack &stack = owner.getItemEntities()[index]->getItem();
+            if (stack.mDefinition->getIdentifier() == "minecraft:emerald") {
+                emeraldStacks++;
+            } else {
+                diamondStacks++;
+                diamonds += stack.mCount;
+            }
+        }
+        require(diamondStacks == 1 && diamonds == 8, "two diamond stacks side by side did not become one of eight");
+        require(emeraldStacks == 1, "an emerald merged with diamonds");
     }
 }
 

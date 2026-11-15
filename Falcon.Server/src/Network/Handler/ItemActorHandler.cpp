@@ -3,6 +3,7 @@
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Level/Block/FireBlock.h"
@@ -26,6 +27,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <unordered_map>
+#include <vector>
 #include <random>
 #include <string>
 
@@ -65,6 +69,13 @@ namespace {
     const float ITEM_HORIZONTAL_DRAG = 0.02f;
     const float ITEM_VERTICAL_DRAG = 0.02f;
     const float ITEM_GROUND_PROBE_DEPTH = 0.01f;
+    const int RESTING_MOVE_MASK = 3;
+    // every 25 ticks an item looks for its like half a block around its box
+    const int MERGE_INTERVAL = 25;
+    const float MERGE_REACH = 0.5f;
+    const float ITEM_HALF_WIDTH = 0.125f;
+    const float ITEM_HEIGHT = 0.25f;
+    const uint8_t ACTOR_EVENT_UPDATE_STACK_SIZE = 69;
     const float ITEM_PICKUP_RANGE_SQUARED = 2.25f;
 
     bool isCampfire(const std::string &identifier) {
@@ -107,7 +118,8 @@ namespace {
         const int y = (int) std::floor(position.y);
         const int z = (int) std::floor(position.z);
         const BlockState *state = owner.getLevelFor(actor).peekBlockPtr(x, y, z);
-        return state != nullptr && isFireBlock(state->mName);
+        // most items lie in air: nothing to look up
+        return state != nullptr && state->mName != BlockNames::AIR && isFireBlock(state->mName);
     }
 
     bool sameBlock(const Vector3f &first, const Vector3f &second) {
@@ -258,7 +270,19 @@ add.mMetadata.mEntries.push_back(flags3);
     }
 
     void moveItemActor(ServerNetworkHandler &owner, ItemActor &actor) {
+        Level &level = owner.getLevelFor(actor);
+        const Vector3f position = actor.getPosition();
+        // an item waits at the edge of the loaded chunks: neither its rest nor its fall makes the terrain beyond
+        const int32_t fromChunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t fromChunkZ = (int32_t) std::floor(position.z) >> 4;
+        if (!level.isChunkResident(fromChunkX, fromChunkZ))
+            return;
+
         if (actor.isOnGround()) {
+            // the game moves an item at rest on the ground on one tick in four
+            if ((actor.getAge() & RESTING_MOVE_MASK) != 0)
+                return;
+
             if (hasSupportBelow(owner, actor)) {
                 liftOutOfLayer(owner, actor);
                 return;
@@ -268,11 +292,15 @@ add.mMetadata.mEntries.push_back(flags3);
         }
 
         Vector3f motion = actor.getMotion();
-        const Vector3f position = actor.getPosition();
+        const int32_t toChunkX = (int32_t) std::floor(position.x + motion.x) >> 4;
+        const int32_t toChunkZ = (int32_t) std::floor(position.z + motion.z) >> 4;
+        if ((toChunkX != fromChunkX || toChunkZ != fromChunkZ)
+            && (!level.isChunkResident(toChunkX, fromChunkZ) || !level.isChunkResident(fromChunkX, toChunkZ)
+                || !level.isChunkResident(toChunkX, toChunkZ)))
+            return;
 
         motion.y -= ITEM_GRAVITY;
 
-        Level &level = owner.getLevelFor(actor);
         Vector3f next = position;
 
         const int32_t currentY = (int32_t) std::floor(position.y);
@@ -404,6 +432,114 @@ add.mMetadata.mEntries.push_back(flags3);
     }
 }
 
+namespace {
+    int64_t mergeCell(const Level *level, int32_t x, int32_t y, int32_t z) {
+        return ((int64_t) (x & 0x3FFFFF) << 42) ^ ((int64_t) (z & 0x3FFFFF) << 20) ^ ((int64_t) (y & 0xFFF) << 8)
+               ^ (int64_t) (reinterpret_cast<uintptr_t>(level) >> 4 & 0xFF);
+    }
+
+    // the smaller stack joins the larger one when both fit in one stack; the stack kept takes the longer
+    // pickup delay and the younger age
+    void mergeItemActors(ServerNetworkHandler &owner) {
+        std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
+        std::vector<ItemActor *> due;
+        for (const std::unique_ptr<ItemActor> &actor: actors) {
+            if (!actor->isRemoved() && actor->getAge() > 0 && actor->getAge() % MERGE_INTERVAL == 0)
+                due.push_back(actor.get());
+        }
+        if (due.empty())
+            return;
+
+        // the items by cell, chained in the order of the list through tables kept from one tick to the
+        // next: nothing is allocated per cell
+        struct Slot {
+            int64_t mCell;
+            int32_t mFirst;
+            int32_t mLast;
+        };
+        thread_local std::vector<Slot> slots;
+        thread_local std::vector<int32_t> nextInCell;
+        size_t capacity = 64;
+        while (capacity < actors.size() * 2)
+            capacity <<= 1;
+        slots.assign(capacity, Slot{0, -1, -1});
+        nextInCell.assign(actors.size(), -1);
+        const auto slotOf = [&](int64_t cell) -> Slot & {
+            size_t at = (size_t) ((uint64_t) cell * 0x9E3779B97F4A7C15ull >> 32) & (capacity - 1);
+            while (slots[at].mFirst >= 0 && slots[at].mCell != cell)
+                at = (at + 1) & (capacity - 1);
+            return slots[at];
+        };
+        for (size_t index = 0; index < actors.size(); ++index) {
+            const ItemActor &actor = *actors[index];
+            if (actor.isRemoved())
+                continue;
+            const Vector3f &position = actor.getPosition();
+            const int64_t cell = mergeCell(&owner.getLevelFor(actor), (int32_t) std::floor(position.x),
+                                           (int32_t) std::floor(position.y), (int32_t) std::floor(position.z));
+            Slot &slot = slotOf(cell);
+            if (slot.mFirst < 0) {
+                slot.mCell = cell;
+                slot.mFirst = (int32_t) index;
+            } else {
+                nextInCell[(size_t) slot.mLast] = (int32_t) index;
+            }
+            slot.mLast = (int32_t) index;
+        }
+
+        const float reach = MERGE_REACH + ITEM_HALF_WIDTH * 2.0f;
+        for (ItemActor *self: due) {
+            if (self->isRemoved())
+                continue;
+
+            const Level *level = &owner.getLevelFor(*self);
+            const Vector3f origin = self->getPosition();
+            const int32_t minX = (int32_t) std::floor(origin.x - reach), maxX = (int32_t) std::floor(origin.x + reach);
+            const int32_t minY = (int32_t) std::floor(origin.y - MERGE_REACH - ITEM_HEIGHT);
+            const int32_t maxY = (int32_t) std::floor(origin.y + MERGE_REACH + ITEM_HEIGHT);
+            const int32_t minZ = (int32_t) std::floor(origin.z - reach), maxZ = (int32_t) std::floor(origin.z + reach);
+            bool merged = false;
+            for (int32_t x = minX; x <= maxX && !merged; ++x) {
+                for (int32_t y = minY; y <= maxY && !merged; ++y) {
+                    for (int32_t z = minZ; z <= maxZ && !merged; ++z) {
+                        const Slot &cell = slotOf(mergeCell(level, x, y, z));
+                        for (int32_t link = cell.mFirst; link >= 0; link = nextInCell[(size_t) link]) {
+                            ItemActor *other = actors[(size_t) link].get();
+                            if (other == self || other->isRemoved() || &owner.getLevelFor(*other) != level)
+                                continue;
+
+                            const Vector3f &at = other->getPosition();
+                            if (std::fabs(at.x - origin.x) > reach || std::fabs(at.z - origin.z) > reach
+                                || at.y > origin.y + ITEM_HEIGHT + MERGE_REACH
+                                || at.y + ITEM_HEIGHT < origin.y - MERGE_REACH)
+                                continue;
+
+                            const ItemStack &mine = self->getItem();
+                            const ItemStack &theirs = other->getItem();
+                            if (mine.isAir() || theirs.isAir() || !PlayerInventory::canStack(mine, theirs)
+                                || mine.mCount + theirs.mCount > PlayerInventory::getMaxStackSize(mine))
+                                continue;
+
+                            ItemActor *kept = theirs.mCount >= mine.mCount ? other : self;
+                            ItemActor *gone = kept == other ? self : other;
+                            ItemStack stack = kept->getItem();
+                            stack.mCount += gone->getItem().mCount;
+                            kept->setItem(stack);
+                            kept->setPickupDelay(std::max(kept->getPickupDelay(), gone->getPickupDelay()));
+                            kept->setAge(std::min(kept->getAge(), gone->getAge()));
+                            gone->setRemoved(true);
+                            owner._broadcastEntityEvent(*kept, ACTOR_EVENT_UPDATE_STACK_SIZE, stack.mCount);
+                            // one merge a look, as the game: the stack kept looks again 25 ticks on
+                            merged = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                       const ItemStack &item, const Vector3f &motion, int pickupDelay) {
     if (item.isAir() || item.mCount <= 0)
@@ -480,6 +616,7 @@ void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlaye
 void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
     std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
 
+    std::vector<ItemActor *> gone;
     // by index: a pickup handler can drop an item (the vector grows) or move one out of it
     for (size_t index = 0; index < actors.size();) {
         ItemActor &actor = *actors[index];
@@ -507,12 +644,32 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
         if (actor.isRemoved() || (actor.isExpired() && despawns(actor.getItem()))) {
             broadcastItemActorRemove(owner, actor);
             owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
-            actors.erase(actors.begin() + (long) index);
-            continue;
+            // taken out of the list in one sweep below: an explosion removes thousands a tick, and each
+            // one taken out alone moves all the others
+            actor.setRemoved(true);
+            gone.push_back(&actor);
         }
 
         ++index;
     }
+
+    if (!gone.empty()) {
+        // in the order of the list, which nothing shuffles
+        size_t next = 0;
+        size_t kept = 0;
+        for (size_t index = 0; index < actors.size(); ++index) {
+            if (next < gone.size() && actors[index].get() == gone[next]) {
+                ++next;
+                continue;
+            }
+            if (kept != index)
+                actors[kept] = std::move(actors[index]);
+            ++kept;
+        }
+        actors.resize(kept);
+    }
+
+    mergeItemActors(owner);
 }
 
 ItemActor *ItemActorHandler::restoreItem(ServerNetworkHandler &owner, Level &level, const Tag &data) {

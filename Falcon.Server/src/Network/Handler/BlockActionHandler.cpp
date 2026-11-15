@@ -47,6 +47,8 @@
 #include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
+#include <typeinfo>
+#include <unordered_map>
 #include <vector>
 #include <chrono>
 #include <cmath>
@@ -583,6 +585,49 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
                                                       const Vector3i &position, const BlockState &brokenState,
                                                       const ItemStack &tool) {
     std::vector<ItemStack> drops;
+
+    // a block of the plain class broken with no tool drops itself, the same each time: an explosion asks
+    // for thousands a tick
+    if (level != nullptr && tool.isAir()) {
+        struct PlainDrop {
+            bool mPlain = false;
+            std::string mName;
+            int32_t mCount = 0;
+        };
+        thread_local std::unordered_map<int32_t, PlainDrop> plainDrops;
+        const int32_t hash = brokenState.getHash();
+        auto known = plainDrops.find(hash);
+        if (known == plainDrops.end()) {
+            PlainDrop plain;
+            const BlockData *data = BlockDataTable::find(brokenState.mName.c_str());
+            const Block *block = VanillaBlocks::fromIdentifier(brokenState.mName);
+            if (block != nullptr && block->isPlainClass() && data != nullptr
+                && data->mDropKind == BlockDropKind::Self) {
+                plain.mPlain = true;
+                Item parsedItem;
+                const int32_t count = block->getResourceCount(brokenState);
+                if (count > 0
+                    && StringToItemParser::getInstance().parse(selfDropIdentifier(block->getResourceItem(brokenState)),
+                                                               parsedItem)) {
+                    plain.mName = parsedItem.getIdentifier();
+                    plain.mCount = count;
+                }
+            }
+            known = plainDrops.emplace(hash, std::move(plain)).first;
+        }
+        // what a block actor holds goes with the item: the long way
+        if (known->second.mPlain && level->getBlockActors().find(position) == nullptr) {
+            if (known->second.mName.empty())
+                return drops;
+            ItemStack drop;
+            drop.mDefinition = owner.getItemDefinitions().getDefinition(known->second.mName);
+            drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(known->second.mName);
+            drop.mCount = known->second.mCount;
+            drops.push_back(std::move(drop));
+            return drops;
+        }
+    }
+
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
     if (brokenData == nullptr && brokenBlock == nullptr)
@@ -595,13 +640,20 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
         if (identifier.empty() || count <= 0)
             return;
 
-        Item parsedItem;
-        if (!StringToItemParser::getInstance().parse(identifier, parsedItem))
-            return;
+        // the name an identifier parses to never changes once it parsed: an explosion asks the same few
+        // thousands of times a tick
+        thread_local std::unordered_map<std::string, std::string> parsedNames;
+        auto parsed = parsedNames.find(identifier);
+        if (parsed == parsedNames.end()) {
+            Item parsedItem;
+            if (!StringToItemParser::getInstance().parse(identifier, parsedItem))
+                return;
+            parsed = parsedNames.emplace(identifier, parsedItem.getIdentifier()).first;
+        }
 
         ItemStack drop;
-        drop.mDefinition = owner.getItemDefinitions().getDefinition(parsedItem.getIdentifier());
-        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsedItem.getIdentifier());
+        drop.mDefinition = owner.getItemDefinitions().getDefinition(parsed->second);
+        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsed->second);
         drop.mCount = count;
 
         if (brokenBlock != nullptr && level != nullptr)
@@ -674,12 +726,15 @@ bool BlockActionHandler::canHarvest(const BlockData &block, const ItemStack &too
 void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                       const BlockState &brokenState, bool dropItems, const ItemStack &tool,
                                       const Actor *entitySource, const Vector3i *blockSource) {
-    const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
-    const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
+    // the hash a state keeps once asked, its class the one kept on the state: an explosion breaks
+    // thousands of blocks a tick
+    const int32_t brokenHash = brokenState.getHash();
+    const Block *brokenBlock = VanillaBlocks::fromState(brokenState);
+    static const BlockState air(BlockNames::AIR);
 
     // the drops and onBroken still read the actor: it leaves with the block once they ran
     std::unique_ptr<BlockActor> heldActor = level.getBlockActors().take(position);
-    level.setBlockState(position.x, position.y, position.z, BlockState(BlockNames::AIR));
+    level.setBlockState(position.x, position.y, position.z, air);
     if (heldActor != nullptr)
         level.getBlockActors().insert(std::move(heldActor));
 
@@ -693,8 +748,8 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
         }
     }
 
-    const BlockState replacement = level.getBlockState(position.x, position.y, position.z);
-    const int32_t replacementHash = BlockStateHasher::hash(replacement.mName, replacement.mStates);
+    const BlockState *replacement = level.peekBlockPtr(position.x, position.y, position.z);
+    const int32_t replacementHash = replacement == nullptr ? air.getHash() : replacement->getHash();
 
     if (dropItems && level.getGameRules().getBool("dotiledrops"))
         spawnBlockDrops(owner, level, position, brokenState, tool);
@@ -715,7 +770,8 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
     level.onBlockBroken(position, brokenState);
     if (brokenBlock == nullptr)
         owner.getScriptEngine().onCustomBlockBreak(level, position, brokenState, entitySource, blockSource);
-    level.removeForeignBlockActor(position, level.getBlockState(position.x, position.y, position.z));
+    const BlockState *left = level.peekBlockPtr(position.x, position.y, position.z);
+    level.removeForeignBlockActor(position, left == nullptr ? air : *left);
 }
 
 void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

@@ -305,6 +305,43 @@ public:
         }
     }
 
+    // the few actors others stand on, from the index of the tick
+    template <typename Visitor>
+    void forEachCollidableActor(Visitor &&visit) {
+        if (mActorIndexWalks == 0)
+            _refreshActorIndex();
+        for (size_t index = 0; index < mCollidableActors.size(); ++index)
+            visit(*mCollidableActors[index]);
+    }
+
+    // half the width of the widest actor, as each reports it, from the index of the tick
+    float getWidestActorHalfWidth() {
+        if (mActorIndexWalks == 0)
+            _refreshActorIndex();
+        return mActorIndexWidestBox;
+    }
+
+    // changes whenever an actor joins or leaves: a cached list of actors is stale past it
+    uint64_t getActorSetSerial() const {
+        return mActorSetSerial;
+    }
+
+    // an actor joining or leaving while the explosions of the tick run; a leaver is only an address by then
+    struct ActorChange {
+        ServerActor *mActor;
+        Vector3f mPosition;
+        bool mJoined;
+    };
+
+    // the changes since the explosions of the tick began, in order; null when they are not being listed
+    const std::vector<ActorChange> *getActorChanges() const {
+        return mJoinedTracked ? &mActorChanges : nullptr;
+    }
+
+    // during the actor pass the explosion waits for its end, where the explosions of the tick share their lookups
+    void explodeAfterActors(Level &level, const Vector3f &center, double size, const ServerActor &source,
+                            bool fromTnt);
+
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
 
@@ -803,6 +840,8 @@ public:
 
     void _refreshActorIndex();
 
+    void _flushExplosions();
+
     // only players the actor was spawned for; others get the state with the spawn
     void _sendToViewers(const ServerActor &actor, const Packet &packet);
 
@@ -1180,6 +1219,24 @@ private:
     int32_t mActorIndexWalks = 0;
     // half width of the widest indexed actor, for queries that must reach a box and not only its position
     float mActorIndexWidestHalf = 0.0f;
+    float mActorIndexWidestBox = 0.0f;
+    std::vector<ServerActor *> mCollidableActors;
+    uint64_t mActorSetSerial = 0;
+
+    struct PendingExplosion {
+        Level *mLevel;
+        Vector3f mCenter;
+        double mSize;
+        int64_t mSourceId;
+        bool mFromTnt;
+    };
+    std::vector<PendingExplosion> mPendingExplosions;
+    std::chrono::steady_clock::time_point mTickStarted;
+    bool mLastTickLate = false;
+    int32_t mPackHoldTicks = 0;
+    bool mJoinedTracked = false;
+    std::vector<ActorChange> mActorChanges;
+    bool mTickingActors = false;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
     uint32_t mActorUniqueIdCounter = 0;

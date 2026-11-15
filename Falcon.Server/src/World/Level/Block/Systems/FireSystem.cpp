@@ -254,14 +254,13 @@ namespace {
     // every player and actor each tick: peek, no state copy
     bool isFireAt(Level &level, const Vector3i &position) {
         const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
-        return state != nullptr && FireSystem::matches(state->mName);
+        // nearly every actor stands in air: no name to look up
+        return state != nullptr && state->mName != BlockNames::AIR && FireSystem::matches(state->mName);
     }
 
     void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
-        if (actor.isDead() || actor.isProjectile() || !actor.isIn(level))
-            return;
-
-        if (actor.hasEffect(MobEffectId::FireResistance))
+        // the block first: it rules out nearly every actor before anything is asked of the actor
+        if (!actor.isIn(level))
             return;
 
         const Vector3f position = actor.getPosition();
@@ -269,6 +268,9 @@ namespace {
                              (int32_t) std::floor(position.z));
 
         if (!isFireAt(level, block))
+            return;
+
+        if (actor.isDead() || actor.isProjectile() || actor.hasEffect(MobEffectId::FireResistance))
             return;
 
         actor.hurt(owner, FireSystem::CONTACT_DAMAGE,

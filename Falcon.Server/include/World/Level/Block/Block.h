@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 struct BlockData;
@@ -259,6 +260,20 @@ public:
         (void) level;
         (void) position;
         (void) state;
+    }
+
+    // of this very class, none derived from it: nothing overrides what a block does. Asked for every
+    // neighbour of every block an explosion breaks, so the answer is kept
+    bool isPlainClass() const {
+        if (mPlainClass == 0)
+            mPlainClass = typeid(*this) == typeid(Block) ? 1 : 2;
+        return mPlainClass == 1;
+    }
+
+    // true for a block that does something in onActorInside: the others are not even told, and a crowd
+    // standing in water or grass costs nothing. A block overriding one overrides the other
+    virtual bool hearsActorsInside() const {
+        return false;
     }
 
     virtual void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
@@ -539,4 +554,5 @@ private:
     std::string mIdentifier;
     std::string mName;
     Tag mStates;
+    mutable uint8_t mPlainClass = 0;
 };

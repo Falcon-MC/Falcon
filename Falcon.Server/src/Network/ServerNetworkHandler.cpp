@@ -1,3 +1,4 @@
+#include <chrono>
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/SignEditing.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
@@ -818,7 +819,15 @@ void ServerNetworkHandler::stopServerListening() {
         std::rethrow_exception(error);
 }
 
+namespace {
+    const std::chrono::milliseconds LATE_TICK_SPACING{55};
+}
+
 void ServerNetworkHandler::tick(bool paused) {
+    // past its slot: the housekeeping of the next tick gives way
+    const std::chrono::steady_clock::time_point tickStarted = std::chrono::steady_clock::now();
+    mLastTickLate = tickStarted - mTickStarted > LATE_TICK_SPACING;
+    mTickStarted = tickStarted;
     mSimulationPaused = paused;
     if (!mIsListening)
         return;

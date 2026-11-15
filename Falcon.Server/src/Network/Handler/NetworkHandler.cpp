@@ -167,7 +167,31 @@ NetworkHandler::Shard &NetworkHandler::_shardFor(const NetworkIdentifier &id) {
 }
 
 void NetworkHandler::_pushOutbound(OutboundCommand command) {
+    if (mCorked.load(std::memory_order_relaxed) && std::this_thread::get_id() == mCorkThread) {
+        mCorkedCommands[NetworkIdentifier::Hasher()(command.mId) % mShards.size()].push_back(std::move(command));
+        return;
+    }
     _shardFor(command.mId).mOutbound.push(std::move(command));
+}
+
+void NetworkHandler::cork() {
+    if (mCorked.load(std::memory_order_relaxed))
+        return;
+    mCorkedCommands.resize(mShards.size());
+    mCorkThread = std::this_thread::get_id();
+    mCorked.store(true, std::memory_order_relaxed);
+}
+
+void NetworkHandler::uncork() {
+    if (!mCorked.load(std::memory_order_relaxed) || std::this_thread::get_id() != mCorkThread)
+        return;
+    mCorked.store(false, std::memory_order_relaxed);
+    for (size_t index = 0; index < mShards.size(); ++index) {
+        if (mCorkedCommands[index].empty())
+            continue;
+        mShards[index]->mOutbound.pushAll(std::move(mCorkedCommands[index]));
+        mCorkedCommands[index].clear();
+    }
 }
 
 size_t NetworkHandler::getPendingOutboundBytes(const NetworkIdentifier &id) const {
@@ -296,9 +320,12 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
                                 const PacketCodecContext &context) {
     // same-protocol sessions share a codec context: most recipients reuse one encoding
     std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
-    std::vector<std::vector<OutboundCommand>> commands(mShards.size());
     if (mSendHook && !ids.empty() && !mSendHook(ids, packet.getId()))
         return;
+    // corked, the commands go straight where they wait
+    const bool corked = mCorked.load(std::memory_order_relaxed) && std::this_thread::get_id() == mCorkThread;
+    std::vector<std::vector<OutboundCommand>> uncorked(corked ? 0 : mShards.size());
+    std::vector<std::vector<OutboundCommand>> &commands = corked ? mCorkedCommands : uncorked;
 
     for (const NetworkIdentifier &id: ids) {
         if (isLocalSession(id))
@@ -334,6 +361,9 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
         _trackPending(command);
         commands[NetworkIdentifier::Hasher()(id) % mShards.size()].push_back(std::move(command));
     }
+
+    if (corked)
+        return;
 
     for (size_t index = 0; index < mShards.size(); ++index)
         mShards[index]->mOutbound.pushAll(std::move(commands[index]));

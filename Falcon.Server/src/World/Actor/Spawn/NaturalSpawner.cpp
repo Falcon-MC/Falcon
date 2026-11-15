@@ -14,6 +14,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -156,10 +157,17 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     if (!level.getGameRules().getBool("domobspawning"))
         return;
 
+    // actors come in runs of one type: what the rules say of the last identifier asked is kept
     int32_t mobCount = 0;
+    const char *lastIdentifier = nullptr;
+    bool lastPopulated = false;
     for (auto &entry: owner.getActors()) {
         const ServerActor &actor = *entry.second;
-        if (actor.isAlive() && !SpawnRules::getPopulation(actor.getIdentifier()).empty())
+        const char *identifier = actor.getIdentifier();
+        if (lastIdentifier == nullptr || (identifier != lastIdentifier && std::strcmp(identifier, lastIdentifier) != 0))
+            lastPopulated = !SpawnRules::getPopulation(identifier).empty();
+        lastIdentifier = identifier;
+        if (lastPopulated && actor.isAlive())
             ++mobCount;
     }
 
@@ -206,36 +214,46 @@ void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32
     }
 }
 
-void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts) {
-    std::unordered_set<int64_t> alive;
+void NaturalSpawner::_census(ServerNetworkHandler &owner, Level &level) {
+    if (mCensusLevel == &level && mCensusSerial == owner.getActorSetSerial() && mCensusTick == owner.getCurrentTick())
+        return;
+
+    mCensusLevel = &level;
+    mCensusSerial = owner.getActorSetSerial();
+    mCensusTick = owner.getCurrentTick();
+    mCensus.clear();
     for (auto &entry: owner.getActors()) {
         const ServerActor &actor = *entry.second;
-        if (!actor.isAlive())
-            continue;
-        alive.insert(entry.first);
-
-        if (!actor.isIn(level))
+        if (!actor.isAlive() || !actor.isIn(level))
             continue;
 
         const Vector3f &position = actor.getPosition();
-        const int32_t actorChunkX = (int32_t) std::floor(position.x) >> 4;
-        const int32_t actorChunkZ = (int32_t) std::floor(position.z) >> 4;
-        if (std::abs(actorChunkX - chunkX) > COUNT_CHUNK_RADIUS || std::abs(actorChunkZ - chunkZ) > COUNT_CHUNK_RADIUS)
-            continue;
-
-        // a mob not spawned on the surface counts as underground, like a missing "Surface" tag
-        const int32_t row = mSurfaceMobs.count(entry.first) != 0 ? 1 : 0;
-        const int32_t pool = poolIndex(SpawnRules::getPopulation(actor.getIdentifier()));
-        if (pool >= 0)
-            ++counts.mPools[row][pool];
-        ++counts.mTypes[row][actor.getIdentifier()];
+        mCensus.push_back(Counted{entry.first, (int32_t) std::floor(position.x) >> 4,
+                                  (int32_t) std::floor(position.z) >> 4,
+                                  poolIndex(SpawnRules::getPopulation(actor.getIdentifier())), actor.getIdentifier()});
     }
 
     for (auto iterator = mSurfaceMobs.begin(); iterator != mSurfaceMobs.end();) {
-        if (alive.count(*iterator) == 0)
+        const auto found = owner.getActors().find(*iterator);
+        if (found == owner.getActors().end() || !found->second->isAlive())
             iterator = mSurfaceMobs.erase(iterator);
         else
             ++iterator;
+    }
+}
+
+void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts) {
+    _census(owner, level);
+    for (const Counted &counted: mCensus) {
+        if (std::abs(counted.mChunkX - chunkX) > COUNT_CHUNK_RADIUS
+            || std::abs(counted.mChunkZ - chunkZ) > COUNT_CHUNK_RADIUS)
+            continue;
+
+        // a mob not spawned on the surface counts as underground, like a missing "Surface" tag
+        const int32_t row = mSurfaceMobs.count(counted.mId) != 0 ? 1 : 0;
+        if (counted.mPool >= 0)
+            ++counts.mPools[row][counted.mPool];
+        ++counts.mTypes[row][counted.mIdentifier];
     }
 }
 
@@ -357,13 +375,19 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
 void NaturalSpawner::_despawn(ServerNetworkHandler &owner, Level &level, const std::vector<Vector3f> &players) {
     std::vector<int64_t> removed;
 
+    // actors come in runs of one type: the rule of the last identifier asked is kept
+    const char *lastIdentifier = nullptr;
+    const DespawnRule *rule = nullptr;
     for (auto &entry: owner.getActors()) {
         ServerActor &actor = *entry.second;
-        if (!actor.isAlive() || actor.isPersistent() || !actor.isIn(level))
+        const char *identifier = actor.getIdentifier();
+        if (lastIdentifier == nullptr || (identifier != lastIdentifier && std::strcmp(identifier, lastIdentifier) != 0))
+            rule = SpawnRules::getDespawnRule(identifier);
+        lastIdentifier = identifier;
+        if (rule == nullptr || !rule->mFromDistance)
             continue;
 
-        const DespawnRule *rule = SpawnRules::getDespawnRule(actor.getIdentifier());
-        if (rule == nullptr || !rule->mFromDistance)
+        if (!actor.isAlive() || actor.isPersistent() || !actor.isIn(level))
             continue;
 
         float nearest = std::numeric_limits<float>::max();

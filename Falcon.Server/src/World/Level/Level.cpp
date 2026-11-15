@@ -21,7 +21,10 @@
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Block/LiquidView.h"
 
+#include <atomic>
 #include <algorithm>
 #include <bitset>
 #include <cmath>
@@ -36,6 +39,21 @@
 #include <malloc.h>
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
+
+namespace {
+    // rises whenever a chunk leaves a level: a remembered chunk is good only for the epoch it was found in
+    std::atomic<uint64_t> gChunkEpoch{1};
+
+    // the last chunk a thread looked up: an actor asks about the same one many times in a row
+    struct ChunkMemo {
+        const Level *mLevel = nullptr;
+        int64_t mKey = 0;
+        LevelChunk *mChunk = nullptr;
+        uint64_t mEpoch = 0;
+    };
+    thread_local ChunkMemo tChunkMemo;
+}
+
 #endif
 
 namespace {
@@ -95,6 +113,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mTerrainCache = other.mTerrainCache;
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
     mActiveColumnOrder = std::move(other.mActiveColumnOrder);
@@ -686,12 +705,14 @@ LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
 
     LevelChunk chunk = std::move(it->second);
     mChunks.erase(it);
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
     _dropPendingTicks(chunkX, chunkZ);
     return chunk;
 }
 
 void Level::dropChunk(int32_t chunkX, int32_t chunkZ) {
     mChunks.erase(_packChunk(chunkX, chunkZ));
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
     _dropPendingTicks(chunkX, chunkZ);
 }
 
@@ -967,7 +988,12 @@ std::vector<int64_t> Level::consumeRepopulatedChunks() {
 }
 
 bool Level::isChunkResident(int32_t chunkX, int32_t chunkZ) const {
-    return mChunks.find(_packChunk(chunkX, chunkZ)) != mChunks.end();
+    // the chunk asked about is most often the one just looked up
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    const ChunkMemo &memo = tChunkMemo;
+    if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == gChunkEpoch.load(std::memory_order_relaxed))
+        return true;
+    return mChunks.find(key) != mChunks.end();
 }
 
 void Level::registerChunkLoader(uint64_t loaderId, int32_t chunkX, int32_t chunkZ) {
@@ -1184,6 +1210,7 @@ size_t Level::processChunkUnloads() {
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
+        gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
         _dropPendingTicks(chunkX, chunkZ);
         mRepopulatedChunks.erase(key);
         mOrphanCandidates.erase(key);
@@ -1257,9 +1284,27 @@ bool Level::isNearStructure(const std::vector<const StructureFeature *> &feature
     return mStructureGuard.isNearStart(*mGenerator, features, chunkX, chunkZ);
 }
 
+Level::ChunkMemoGuard::~ChunkMemoGuard() {
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
+}
+
 LevelChunk *Level::peekChunkPtr(int32_t chunkX, int32_t chunkZ) {
-    auto it = mChunks.find(_packChunk(chunkX, chunkZ));
-    return it == mChunks.end() ? nullptr : &it->second;
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    ChunkMemo &memo = tChunkMemo;
+    const uint64_t epoch = gChunkEpoch.load(std::memory_order_relaxed);
+    if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == epoch)
+        return memo.mChunk;
+
+    auto it = mChunks.find(key);
+    if (it == mChunks.end())
+        return nullptr;
+
+    // only a chunk found is remembered: one that is missing may load at any time
+    memo.mLevel = this;
+    memo.mKey = key;
+    memo.mChunk = &it->second;
+    memo.mEpoch = epoch;
+    return memo.mChunk;
 }
 
 int Level::getSkyLightAt(int32_t x, int32_t y, int32_t z) {
@@ -1538,11 +1583,11 @@ const BlockState *Level::peekBlockPtr(int32_t x, int32_t y, int32_t z, int layer
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
         return nullptr;
 
-    auto it = mChunks.find(_packChunk(x >> 4, z >> 4));
-    if (it == mChunks.end())
+    const LevelChunk *chunk = peekChunkPtr(x >> 4, z >> 4);
+    if (chunk == nullptr)
         return nullptr;
 
-    return &it->second.getBlock(x & 15, y, z & 15, layer);
+    return &chunk->getBlock(x & 15, y, z & 15, layer);
 }
 
 bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
@@ -1560,8 +1605,82 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
     return data->mSolid;
 }
 
+namespace {
+    // a liquid has no block class shaping it per actor or place: what the table says of the state holds everywhere
+    bool isShapelessLiquid(const BlockState *state) {
+        static std::unordered_map<const BlockState *, bool> known;
+        auto found = known.find(state);
+        if (found == known.end())
+            found = known.emplace(state, !BlockShape::hasCollision(*state)
+                                                 && BlockShape::getRelativeShape(*state).isEmpty())
+                            .first;
+        return found->second;
+    }
+}
+
+namespace {
+    const int32_t FREE_CHECK_CHUNKS = 12;
+
+    bool mayHaveShape(const BlockState &state) {
+        if (state.mName == BlockNames::AIR)
+            return false;
+        return !(LiquidView(state).isLiquid() && !BlockShape::hasCollision(state)
+                 && BlockShape::getRelativeShape(state).isEmpty());
+    }
+}
+
+void Level::beginSkyLightBatch() {
+    if (mSkyLightBatches++ == 0)
+        mBatchLight = true;
+}
+
+void Level::endSkyLightBatch() {
+    if (mSkyLightBatches == 0 || --mSkyLightBatches != 0)
+        return;
+
+    mBatchLight = false;
+    _flushLightBatch();
+}
+
+bool Level::isFreeOfColliders(const AxisAlignedBB &area, const Actor *actor) {
+    const int32_t minChunkX = (int32_t) std::floor(area.mMinX) >> 4;
+    const int32_t maxChunkX = (int32_t) std::floor(area.mMaxX) >> 4;
+    const int32_t minChunkZ = (int32_t) std::floor(area.mMinZ) >> 4;
+    const int32_t maxChunkZ = (int32_t) std::floor(area.mMaxZ) >> 4;
+    // a move across many chunks is cheaper to walk than to ask about section by section
+    if ((maxChunkX - minChunkX + 1) * (maxChunkZ - minChunkZ + 1) > FREE_CHECK_CHUNKS)
+        return false;
+
+    const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
+    const int32_t maxY = std::min((int32_t) std::floor(area.mMaxY), LevelChunk::MAX_Y);
+    if (minY <= maxY) {
+        for (int32_t chunkX = minChunkX; chunkX <= maxChunkX; ++chunkX) {
+            for (int32_t chunkZ = minChunkZ; chunkZ <= maxChunkZ; ++chunkZ) {
+                const LevelChunk *chunk = peekChunkPtr(chunkX, chunkZ);
+                if (chunk == nullptr)
+                    continue;
+                for (int section = LevelChunk::subChunkIndexFor(minY); section <= LevelChunk::subChunkIndexFor(maxY);
+                     ++section) {
+                    if (chunk->getSubChunk(section).paletteMatches(SubChunk::PaletteQuery::Shaped, mayHaveShape))
+                        return false;
+                }
+            }
+        }
+    }
+
+    bool free = true;
+    if (mOwner != nullptr) {
+        mOwner->forEachCollidableActor([&](ServerActor &other) {
+            if (&other != actor && other.isIn(*this))
+                free = false;
+        });
+    }
+    return free;
+}
+
 std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor) {
     std::vector<AxisAlignedBB> boxes;
+    const BlockState *passable = nullptr;
     const BlockShape::Neighbours neighbours = [this](int32_t x, int32_t y, int32_t z) { return peekBlockPtr(x, y, z); };
     const int32_t minX = (int32_t) std::floor(area.mMinX);
     const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
@@ -1570,12 +1689,43 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, c
     const int32_t maxY = std::min((int32_t) std::floor(area.mMaxY), LevelChunk::MAX_Y);
     const int32_t maxZ = (int32_t) std::floor(area.mMaxZ);
 
+    static const BlockState *const air = SubChunk::intern(BlockState());
+    // a long move crosses few chunks: each is looked up once, not once a block
+    const LevelChunk *chunk = nullptr;
+    int32_t chunkX = 0;
+    int32_t chunkZ = 0;
+    bool haveChunk = false;
     for (int32_t x = minX; x <= maxX; ++x) {
         for (int32_t z = minZ; z <= maxZ; ++z) {
+            if (!haveChunk || chunkX != (x >> 4) || chunkZ != (z >> 4)) {
+                chunkX = x >> 4;
+                chunkZ = z >> 4;
+                chunk = peekChunkPtr(chunkX, chunkZ);
+                haveChunk = true;
+            }
+            if (chunk == nullptr)
+                continue;
+
             for (int32_t y = minY; y <= maxY; ++y) {
-                const BlockState *state = peekBlockPtr(x, y, z);
-                if (state == nullptr)
+                // a long move through the sky or the sea: sections holding nothing with a shape are stepped over
+                if (((y - LevelChunk::MIN_Y) & 15) == 0 || y == minY) {
+                    while (y <= maxY
+                           && !chunk->getSubChunk(LevelChunk::subChunkIndexFor(y))
+                                       .paletteMatches(SubChunk::PaletteQuery::Shaped, mayHaveShape))
+                        y = (y | 15) + 1;
+                    if (y > maxY)
+                        break;
+                }
+
+                const BlockState *state = &chunk->getBlock(x & 15, y, z & 15);
+                if (state == air || state == passable || state->mName == BlockNames::AIR)
                     continue;
+
+                // a move through water crosses the same shapeless state block after block: asked once
+                if (LiquidView(*state).isLiquid() && isShapelessLiquid(state)) {
+                    passable = state;
+                    continue;
+                }
 
                 const size_t first = boxes.size();
                 BlockShape::appendShapesAt(*state, x, y, z, actor, neighbours, boxes);
@@ -1595,10 +1745,7 @@ void Level::appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *a
                                        std::vector<AxisAlignedBB> &out) {
     // a mob with minecraft:is_collidable carries actor flag 121: others stand on it like a block
     if (mOwner != nullptr) {
-        const Vector3f center((area.mMinX + area.mMaxX) * 0.5f, (area.mMinY + area.mMaxY) * 0.5f,
-                              (area.mMinZ + area.mMaxZ) * 0.5f);
-        const float radius = std::max(area.mMaxX - area.mMinX, area.mMaxZ - area.mMinZ) * 0.5f;
-        mOwner->forEachActorNear(center, radius, [&](ServerActor &other) {
+        mOwner->forEachCollidableActor([&](ServerActor &other) {
             if (&other == actor || !other.isIn(*this) || !other.getFlags().get(ActorFlag::Collidable))
                 return;
             if (actor != nullptr && actor->getVehicleId() == other.getUniqueId())
@@ -1633,6 +1780,8 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     } else {
         LightSystem::onBlockChanged(*this, x, y, z);
     }
+    if (mBlockWatcher)
+        mBlockWatcher(x, y, z);
 
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
 }
@@ -1675,6 +1824,8 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
     const BlockState &previous = chunk.getBlock(x & 15, y, z & 15, layer);
     chunk.setBlock(x & 15, y, z & 15, layer, state);
     mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), layer, previous);
+    if (mBlockWatcher)
+        mBlockWatcher(x, y, z);
 }
 
 void Level::setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash) {

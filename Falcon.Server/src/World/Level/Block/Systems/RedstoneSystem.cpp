@@ -46,7 +46,9 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Core/Math/VectorMath.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/BlockUpdates.h"
 
+#include <typeinfo>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -226,6 +228,12 @@ namespace {
             return BlockState(BlockNames::AIR);
 
         return level.getBlockState(position.x, position.y, position.z);
+    }
+
+    // of the plain block class: no redstone part, no observer
+    bool isPlain(const BlockState &state) {
+        const Block *block = VanillaBlocks::fromState(state);
+        return block != nullptr && block->isPlainClass();
     }
 
     int stateInt(const BlockState &state, const std::string &key, int fallback) {
@@ -785,11 +793,20 @@ bool RedstoneSystem::canConnectWireTo(Level &level, const Vector3i &position, in
 }
 
 bool RedstoneSystem::isNormalBlock(const BlockState &state) {
+    // told by the state alone, and asked around every block an explosion breaks: kept per state
+    thread_local std::unordered_map<int32_t, bool> known;
+    const int32_t hash = state.getHash();
+    const auto found = known.find(hash);
+    if (found != known.end())
+        return found->second;
+
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
     if (data == nullptr)
         return false;
 
-    return !data->mTransparent && data->mSolid && !isPowerSource(state);
+    const bool normal = !data->mTransparent && data->mSolid && !isPowerSource(state);
+    known.emplace(hash, normal);
+    return normal;
 }
 
 bool RedstoneSystem::isPowerSource(const BlockState &state) {
@@ -1047,6 +1064,19 @@ void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Le
         if (!isChunkReady(level, side))
             continue;
 
+        // two plain blocks in a row, the usual case under an explosion: neither is an observer or a diode
+        const BlockState *sidePeek = level.peekBlockPtr(side.x, side.y, side.z);
+        if (sidePeek != nullptr && isPlain(*sidePeek)) {
+            if (!isNormalBlock(*sidePeek))
+                continue;
+            const Vector3i beyondPlain = RedstoneFace::relative(side, face);
+            const BlockState *beyondPeek = isChunkReady(level, beyondPlain)
+                                                   ? level.peekBlockPtr(beyondPlain.x, beyondPlain.y, beyondPlain.z)
+                                                   : nullptr;
+            if (beyondPeek != nullptr && isPlain(*beyondPeek))
+                continue;
+        }
+
         const BlockState sideState = stateAt(level, side);
 
         if (isA<ObserverBlock>(sideState)) {
@@ -1074,6 +1104,9 @@ void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Le
 
     for (int face = RedstoneFace::DOWN; face <= RedstoneFace::UP; ++face) {
         const Vector3i side = RedstoneFace::relative(position, face);
+        const BlockState *sidePeek = isChunkReady(level, side) ? level.peekBlockPtr(side.x, side.y, side.z) : nullptr;
+        if (sidePeek != nullptr && isPlain(*sidePeek))
+            continue;
         if (isA<ObserverBlock>(stateAt(level, side)))
             observerOnNeighborChange(level, side, RedstoneFace::opposite(face));
     }
@@ -1261,11 +1294,29 @@ void RedstoneSystem::onRedstonePlaced(ServerNetworkHandler &owner, Level &level,
 
 void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                       const BlockState &previous) {
-    const Block *block = VanillaBlocks::fromIdentifier(previous.mName);
+    const Block *block = VanillaBlocks::fromState(previous);
 
     RedstoneState &redstone = stateOf(level);
     redstone.mComparatorOutputs.erase(packPosition(position));
     OpenableBlock::setManualOverride(level, position, false);
+
+    // a plain block is none of the parts below
+    if (block != nullptr && block->isPlainClass()) {
+        // six neighbours no update does anything to, the usual case under an explosion: none is run, so
+        // nothing can change in between
+        bool quiet = true;
+        for (int face = 0; face < RedstoneFace::COUNT && quiet; ++face) {
+            const Vector3i side = RedstoneFace::relative(position, face);
+            const BlockState *neighbour = level.peekBlockPtr(side.x, side.y, side.z);
+            quiet = neighbour != nullptr && BlockUpdates::ignores(*neighbour);
+        }
+        if (!quiet) {
+            level.updateAround(position);
+            updateAroundRedstone(owner, level, position);
+        }
+        updateComparatorOutputLevel(owner, level, position, true);
+        return;
+    }
 
     if (dynamic_cast<const RedStoneWireBlock *>(block) != nullptr) {
         for (int face = 0; face < RedstoneFace::COUNT; ++face) {
@@ -1434,15 +1485,37 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
         _touchPressurePlate(owner, level, player, visited);
     }
 
+    // nearly no actor stands in a plate: the block is asked by address first, its answer kept per state
+    static std::unordered_map<const BlockState *, bool> plates;
+    bool actorInWire = false;
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
-        if (actor == nullptr || actor->isDead() || !actor->isIn(level))
+        if (actor == nullptr)
+            continue;
+
+        const Vector3f &feet = actor->getPosition();
+        const BlockState *under = level.peekBlockPtr((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y),
+                                                     (int32_t) std::floor(feet.z));
+        // nearly every actor stands in air, neither wire nor plate
+        if (under != nullptr && under->mName == BlockNames::AIR)
+            continue;
+        if (under != nullptr) {
+            if (DetectorSystem::isWire(*under))
+                actorInWire = true;
+            auto known = plates.find(under);
+            if (known == plates.end())
+                known = plates.emplace(under, isA<PressurePlateBlock>(*under)).first;
+            if (!known->second)
+                continue;
+        }
+
+        if (actor->isDead() || !actor->isIn(level))
             continue;
 
         _touchPressurePlate(owner, level, *actor, visited);
     }
 
-    DetectorSystem::tick(owner, level);
+    DetectorSystem::tick(owner, level, actorInWire);
 }
 
 void RedstoneSystem::_touchPressurePlate(ServerNetworkHandler &owner, Level &level, Actor &actor,

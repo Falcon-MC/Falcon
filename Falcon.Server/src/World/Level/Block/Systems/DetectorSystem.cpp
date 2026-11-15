@@ -215,7 +215,7 @@ namespace {
     }
 }
 
-void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
+void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level, bool actorInWire) {
     DetectorState &detectors = stateOf(level);
     const int64_t now = ++detectors.mTick;
 
@@ -223,6 +223,10 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
     const auto visit = [&](Actor &actor) {
         const Vector3f &feet = actor.getPosition();
         const Vector3i cell((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y), (int32_t) std::floor(feet.z));
+        // looked at in place first: nearly no actor stands in a wire
+        const BlockState *inPlace = level.peekBlockPtr(cell.x, cell.y, cell.z);
+        if (inPlace != nullptr && !isWire(*inPlace))
+            return;
         const BlockState state = stateAt(level, cell);
         if (isWire(state) && !state.mStates.getBool("powered_bit", false))
             checkPressed(owner, level, cell, state);
@@ -233,8 +237,17 @@ void DetectorSystem::tick(ServerNetworkHandler &owner, Level &level) {
             visit(player);
     }
     for (auto &entry: owner.getActors()) {
+        if (!actorInWire)
+            break;
         ServerActor *actor = entry.second.get();
-        if (actor != nullptr && !actor->isDead() && actor->isIn(level))
+        if (actor == nullptr)
+            continue;
+        const Vector3f &feet = actor->getPosition();
+        const BlockState *inPlace = level.peekBlockPtr((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y),
+                                                       (int32_t) std::floor(feet.z));
+        if (inPlace != nullptr && !isWire(*inPlace))
+            continue;
+        if (!actor->isDead() && actor->isIn(level))
             visit(*actor);
     }
 

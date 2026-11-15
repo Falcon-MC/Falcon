@@ -36,7 +36,8 @@ public:
     static int strongPower(Level &level, const Vector3i &position, const BlockState &state, int face);
 
     // entities stepping on wires and target expiry; from RedstoneSystem::tick
-    static void tick(ServerNetworkHandler &owner, Level &level);
+    // actorInWire: false when the caller already saw that no actor stands in a wire this tick
+    static void tick(ServerNetworkHandler &owner, Level &level, bool actorInWire = true);
 
     // a wire's scheduled recheck
     static void onWireScheduled(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

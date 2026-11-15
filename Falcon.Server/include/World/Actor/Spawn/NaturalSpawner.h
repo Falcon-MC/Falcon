@@ -77,6 +77,21 @@ private:
 
     float _nextFloat();
 
+    // the living actors of the level being ticked, listed once and again only when an actor joins or leaves
+    struct Counted {
+        int64_t mId;
+        int32_t mChunkX;
+        int32_t mChunkZ;
+        int32_t mPool;
+        const char *mIdentifier;
+    };
+
+    void _census(ServerNetworkHandler &owner, Level &level);
+
+    std::vector<Counted> mCensus;
+    const Level *mCensusLevel = nullptr;
+    uint64_t mCensusSerial = 0;
+    int64_t mCensusTick = -1;
     std::unordered_set<int64_t> mSurfaceMobs;
     std::mt19937 mRandom{std::random_device{}()};
 };

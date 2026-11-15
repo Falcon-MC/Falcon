@@ -50,6 +50,10 @@ public:
         return mAge;
     }
 
+    void setAge(int age) {
+        mAge = age;
+    }
+
     bool isExpired() const {
         return mAge >= LIFETIME_TICKS;
     }

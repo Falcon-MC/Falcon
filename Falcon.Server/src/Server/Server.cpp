@@ -9,6 +9,10 @@
 #include "Server/ServerTelemetry.h"
 #include "Server/SetupWizard.h"
 
+#ifdef __APPLE__
+#include <pthread/qos.h>
+#endif
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -148,6 +152,12 @@ void startServer(const ServerSettings &settings) {
     std::chrono::steady_clock::time_point nextTick = std::chrono::steady_clock::now();
 
     // an error out of a tick still ends with the shutdown save: players and the containers they used stay together
+#ifdef __APPLE__
+    // the tick thread ranks with the threads a user is waiting on: background work on the machine does not
+    // push it off its core in the middle of a tick
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
+
     bool failed = false;
     while (gRunning.load() && !host.isStopRequested()) {
         try {
