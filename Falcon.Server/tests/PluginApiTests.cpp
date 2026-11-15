@@ -757,6 +757,16 @@ namespace {
         require(api.serverSpawnSimulatedPlayer("Bot_2", nullptr, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
                 "a missing level was taken");
 
+        // no cap: as many as a load test wants
+        std::vector<FalconPlayer *> crowd;
+        for (int index = 0; index < 250; index++) {
+            FalconPlayer *extra = api.serverSpawnSimulatedPlayer(("Crowd_" + std::to_string(index)).c_str(), level, at,
+                                                                0.0f, FALCON_GAME_MODE_SURVIVAL);
+            require(extra != nullptr, "a simulated player past 200 was refused");
+            crowd.push_back(extra);
+        }
+        for (FalconPlayer *extra: crowd)
+            api.playerRemoveSimulated(extra);
         require(api.playerRemoveSimulated(bot) == 1, "the simulated player was not removed");
         // it leaves at the end of the tick, as a disconnect
         require(api.findPlayer("Bot_1") == bot, "the simulated player left before the end of the tick");
