@@ -372,6 +372,20 @@ namespace {
         require(inventory.getTradeItem(0).mCount == 10 && inventory.getItem(0).isAir(),
                 "a refused trade changed the inventory");
 
+        // paid in full, but for more trades than the stock of two holds
+        require(runTrade(arena, inventory, tradeRequest(netId, 3, ContainerSlotType::Trade2Ingredient1, 9, 6), &offers,
+                         trade) != ok,
+                "more trades than the offer has in stock were granted");
+        // an offer of a tier the trader has not reached is in the packet, with its net id
+        offers.mOffers.front().mTier = 1;
+        offers.mUnlockedTier = 0;
+        require(runTrade(arena, inventory, tradeRequest(netId, 1, ContainerSlotType::Trade2Ingredient1, 3, 2), &offers,
+                         trade) != ok,
+                "an offer of a locked tier was traded");
+        require(inventory.getTradeItem(0).mCount == 10 && inventory.getItem(0).isAir(),
+                "a refused trade changed the inventory");
+        offers.mUnlockedTier = 1;
+
         require(runTrade(arena, inventory, tradeRequest(netId, 2, ContainerSlotType::Trade2Ingredient1, 6, 4), &offers,
                          trade) == ok,
                 "a valid double trade was refused");

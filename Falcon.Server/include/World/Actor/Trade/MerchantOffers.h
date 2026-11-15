@@ -41,6 +41,8 @@ public:
     std::vector<MerchantOffer> mOffers;
     // the trader experience each tier starts at
     std::vector<int32_t> mTierExpRequirements;
+    // the highest tier the trader sells now: the trade packet lists every tier, locked ones included. not saved
+    int32_t mUnlockedTier = INT32_MAX;
 
     // missing net ids are drawn from the same counter as generated offers
     static MerchantOffers load(const Tag &data, const PacketCodecContext &context);
