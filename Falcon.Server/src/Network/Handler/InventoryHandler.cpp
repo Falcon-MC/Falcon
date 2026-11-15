@@ -586,8 +586,9 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
         ItemStack craftedRecipeItem = ItemStack::air();
         TradeCraft trade;
-        const MerchantOffers *tradeOffers =
-                trader == nullptr ? nullptr : trader->getEconomy().getOffers(owner, *trader);
+        MerchantOffers *tradeOffers = trader == nullptr ? nullptr : trader->getEconomy().getOffers(owner, *trader);
+        if (tradeOffers != nullptr)
+            tradeOffers->mUnlockedTier = trader->getEconomy().getTier();
         ItemStackResponseEntry entry = ItemStackRequestHandler::execute(
                 inventory, request, owner.getCreativeItems(), owner.getRecipeOutputs(), owner.getRecipeSourceIndices(),
                 player.getInventoryManager().isCraftingTableOpen(), player.getInventoryManager().isFurnaceOpen(),

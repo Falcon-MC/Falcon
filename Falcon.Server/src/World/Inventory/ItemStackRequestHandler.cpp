@@ -777,6 +777,11 @@ namespace {
         const int crafts = action.mNumberOfRequestedCrafts;
         if (offer.isOutOfStock() || crafts <= 0 || offer.mSell.isAir() || offer.mBuyA.isAir())
             return false;
+        // the client knows the net id of every offer and names its own number of trades: neither a tier the
+        // trader has not reached nor more trades than the stock holds
+        if (offer.mTier > context.mTradeOffers->mUnlockedTier
+            || (offer.mMaxUses >= 0 && crafts > offer.mMaxUses - offer.mUses))
+            return false;
 
         ItemStack output = offer.mSell;
         output.mCount *= crafts;
