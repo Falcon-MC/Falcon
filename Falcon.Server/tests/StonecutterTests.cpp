@@ -35,7 +35,10 @@ namespace {
                 "the andesite slab recipe reads the wrong input");
         require(std::string(slab->mOutputItemId) == "minecraft:andesite_slab" && slab->mOutputCount == 2,
                 "the andesite slab recipe reads the wrong output");
-        require(std::string(slab->mUuid) == "82f4e0ca-2e60-46ac-84e8-0dc309bfdb07",
+        // the uuid is drawn anew each time the data is generated: only its shape is known
+        const std::string uuid = slab->mUuid;
+        require(uuid.size() == 36 && uuid[8] == '-' && uuid[13] == '-' && uuid[18] == '-' && uuid[23] == '-'
+                        && uuid.find_first_not_of("0123456789abcdef-") == std::string::npos,
                 "the andesite slab recipe reads the wrong uuid");
     }
 
