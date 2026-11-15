@@ -39,6 +39,7 @@
 #include <malloc.h>
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
+#endif
 
 namespace {
     // rises whenever a chunk leaves a level: a remembered chunk is good only for the epoch it was found in
@@ -53,8 +54,6 @@ namespace {
     };
     thread_local ChunkMemo tChunkMemo;
 }
-
-#endif
 
 namespace {
     // level.dat "experiments": a byte per toggle name beside two bookkeeping flags
