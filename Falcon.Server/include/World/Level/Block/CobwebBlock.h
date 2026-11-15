@@ -10,6 +10,10 @@ public:
 
     bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const override;
 
+    bool hearsActorsInside() const override {
+        return true;
+    }
+
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 

@@ -1434,15 +1434,34 @@ void RedstoneSystem::tick(ServerNetworkHandler &owner, Level &level) {
         _touchPressurePlate(owner, level, player, visited);
     }
 
+    // nearly no actor stands in a plate: the block is asked by address first, its answer kept per state
+    static std::unordered_map<const BlockState *, bool> plates;
+    bool actorInWire = false;
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
-        if (actor == nullptr || actor->isDead() || !actor->isIn(level))
+        if (actor == nullptr)
+            continue;
+
+        const Vector3f &feet = actor->getPosition();
+        const BlockState *under = level.peekBlockPtr((int32_t) std::floor(feet.x), (int32_t) std::floor(feet.y),
+                                                     (int32_t) std::floor(feet.z));
+        if (under != nullptr) {
+            if (DetectorSystem::isWire(*under))
+                actorInWire = true;
+            auto known = plates.find(under);
+            if (known == plates.end())
+                known = plates.emplace(under, isA<PressurePlateBlock>(*under)).first;
+            if (!known->second)
+                continue;
+        }
+
+        if (actor->isDead() || !actor->isIn(level))
             continue;
 
         _touchPressurePlate(owner, level, *actor, visited);
     }
 
-    DetectorSystem::tick(owner, level);
+    DetectorSystem::tick(owner, level, actorInWire);
 }
 
 void RedstoneSystem::_touchPressurePlate(ServerNetworkHandler &owner, Level &level, Actor &actor,

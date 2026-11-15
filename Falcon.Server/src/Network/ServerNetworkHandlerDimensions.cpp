@@ -1,3 +1,4 @@
+#include <chrono>
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
@@ -195,6 +196,11 @@ void ServerNetworkHandler::_tickDimension(World &world, Level &level) {
     _processChunkUnloads(level);
 }
 
+namespace {
+    const std::chrono::milliseconds LATE_TICK{40};
+    const int32_t PACK_HOLD_TICKS = 100;
+}
+
 // actors leave only with their column: one walking out alone keeps ticking there, its chunk resident
 void ServerNetworkHandler::_processChunkUnloads(Level &level) {
     std::unordered_set<int64_t> occupied;
@@ -216,7 +222,14 @@ void ServerNetworkHandler::_processChunkUnloads(Level &level) {
     level.setOccupiedColumns(std::move(occupied));
     level.processDeferredSaves();
     level.processChunkUnloads();
-    level.packIdleChunks();
+    // housekeeping waits for a tick that is not already late
+    if (mLastTickLate)
+        mPackHoldTicks = PACK_HOLD_TICKS;
+    else if (mPackHoldTicks > 0)
+        --mPackHoldTicks;
+    // a busy stretch reads the same chunks again and again: packed, they would be unpacked the next tick
+    if (mPackHoldTicks == 0 && std::chrono::steady_clock::now() - mTickStarted < LATE_TICK)
+        level.packIdleChunks();
 }
 
 void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, DimensionType dimension,

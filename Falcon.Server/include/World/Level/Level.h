@@ -442,6 +442,10 @@ public:
 
     std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor = nullptr);
 
+    // true when getCollisionBoxes would surely come back empty, asked of whole chunk sections: a long move
+    // through open sky or water is known free without walking its blocks. false tells nothing
+    bool isFreeOfColliders(const AxisAlignedBB &area, const Actor *actor = nullptr);
+
     // actors others stand on like a block, the mover and its vehicle left out
     void appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *actor, std::vector<AxisAlignedBB> &out);
 
@@ -670,6 +674,10 @@ private:
     VillageManager mVillageManager;
     PoiManager mPoiManager;
     std::unordered_map<int64_t, LevelChunk> mChunks;
+    // a level going away takes its chunks with it: whoever remembers one has to forget it
+    struct ChunkMemoGuard {
+        ~ChunkMemoGuard();
+    } mChunkMemoGuard;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
     // drained results awaiting insertion; new requests wait at this many
     static const size_t MAX_COMPLETED_BACKLOG = 64;

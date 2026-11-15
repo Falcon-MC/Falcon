@@ -261,6 +261,12 @@ public:
         (void) state;
     }
 
+    // true for a block that does something in onActorInside: the others are not even told, and a crowd
+    // standing in water or grass costs nothing. A block overriding one overrides the other
+    virtual bool hearsActorsInside() const {
+        return false;
+    }
+
     virtual void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                                const BlockState &state) const {
         (void) owner;

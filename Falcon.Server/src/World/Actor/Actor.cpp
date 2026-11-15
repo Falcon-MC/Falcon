@@ -46,7 +46,8 @@ namespace {
         return false;
     }
 
-    const char *ATTRIBUTE_HEALTH = "minecraft:health";
+    // a string once, not one built at every question about the health
+    const std::string ATTRIBUTE_HEALTH = "minecraft:health";
     const char *ATTRIBUTE_HUNGER = "minecraft:player.hunger";
     const char *ATTRIBUTE_SATURATION = "minecraft:player.saturation";
     const char *ATTRIBUTE_EXHAUSTION = "minecraft:player.exhaustion";
@@ -308,6 +309,9 @@ void Actor::loadTags(const Tag &data) {
 }
 
 int64_t Actor::getVisibleEffectsData() const {
+    if (mEffects.getAll().empty())
+        return 0;
+
     std::map<int32_t, bool> visible;
     for (const auto &entry: mEffects.getAll()) {
         const MobEffectInstance &effect = entry.second;

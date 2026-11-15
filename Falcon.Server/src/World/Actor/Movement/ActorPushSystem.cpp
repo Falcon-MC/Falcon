@@ -16,6 +16,7 @@ namespace {
     const float PUSH_STRENGTH = 0.2f * 0.32f;
     // wide enough for the widest box (ender dragon) to reach the pushed actor
     const float PUSH_SEARCH_RADIUS = 16.0f;
+    const float PUSH_SEARCH_MARGIN = 0.5f;
     const float UNSET = -std::numeric_limits<float>::infinity();
 
     AxisAlignedBB boxAround(const Vector3f &position, float width, float height) {
@@ -96,7 +97,13 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
     // box test before the virtual checks: getPhysics() on a mob resolves several definition components,
     // keep it out of the pair loop
-    owner.forEachActorNear(actor.getPosition(), PUSH_SEARCH_RADIUS, [&](const ServerActor &other) {
+    // no farther than a pusher can touch from: its own half width past this box, or the ball reach
+    const float selfReach = std::max(std::max(self.mMaxX - self.mMinX, self.mMaxZ - self.mMinZ) * 0.5f
+                                             + std::max(std::fabs(motion.x), std::fabs(motion.z)),
+                                     reach);
+    const float searchRadius = std::min(PUSH_SEARCH_RADIUS,
+                                        selfReach + owner.getWidestActorHalfWidth() + PUSH_SEARCH_MARGIN);
+    owner.forEachActorNear(actor.getPosition(), searchRadius, [&](const ServerActor &other) {
         if (&other == &actor || other.isProjectile() || !other.sharesLevelWith(actor))
             return;
 

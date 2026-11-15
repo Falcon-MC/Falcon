@@ -187,6 +187,12 @@ public:
     // needed before the connection settings change
     void flush(const NetworkIdentifier &id);
 
+    // between the two, what the calling thread sends waits, in order, and reaches the io threads in one go:
+    // thousands of small packets of one pass then take the queue lock once
+    void cork();
+
+    void uncork();
+
     void enableCompression(const NetworkIdentifier &id, CompressedNetworkPeer::CompressionAlgorithm algorithm,
                            unsigned short threshold);
 
@@ -291,6 +297,9 @@ private:
     Profiler *mProfiler = nullptr;
     std::vector<std::unique_ptr<Connector>> mConnectors;
     std::vector<std::unique_ptr<Shard>> mShards;
+    std::atomic<bool> mCorked{false};
+    std::thread::id mCorkThread;
+    std::vector<std::vector<OutboundCommand>> mCorkedCommands;
     // only the control pump touches it
     std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mLive;
     // dropped by a shard on server request; the control pump closes them in their connector
