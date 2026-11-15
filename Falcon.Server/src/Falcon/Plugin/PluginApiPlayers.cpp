@@ -20,7 +20,6 @@ namespace {
     }
 
     constexpr size_t MAX_SIMULATED_NAME = 32;
-    constexpr uint32_t MAX_SIMULATED_PLAYERS = 200;
 
     bool sameName(const std::string &a, const std::string &b) {
         if (a.size() != b.size())
@@ -32,8 +31,8 @@ namespace {
         return true;
     }
 
-    // a printable name no one online uses, a loaded level, a place inside its height, and a cap so a plugin
-    // cannot flood the player list
+    // a printable name no one online uses, a loaded level and a place inside its height; as many as the plugin
+    // wants, for load tests
     FalconPlayer *serverSpawnSimulatedPlayer(const char *name, FalconLevel *destination, FalconVec3 position,
                                              float yaw, FalconGameMode gameMode) {
         if (name == nullptr || destination == nullptr || !isValidGameMode(gameMode) || !std::isfinite(yaw)
@@ -51,15 +50,10 @@ namespace {
             return nullptr;
 
         ServerNetworkHandler &host = owner();
-        uint32_t simulated = 0;
         for (auto &entry: host.getPlayers()) {
-            if (entry.second.isSimulated())
-                simulated++;
             if (sameName(entry.second.getName(), playerName))
                 return nullptr;
         }
-        if (simulated >= MAX_SIMULATED_PLAYERS)
-            return nullptr;
         return toHandle(&host.spawnSimulatedPlayer(playerName, target,
                                                    Vector3f((float) position.x, (float) position.y, (float) position.z),
                                                    yaw, (int32_t) gameMode));
