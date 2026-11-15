@@ -57,19 +57,18 @@ ServerPlayer *BehaviorItems::findNearestHolder(ServerNetworkHandler &owner, cons
     ServerPlayer *nearest = nullptr;
     float nearestDistance = range * range;
 
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(mob.getPosition(), range, [&](ServerPlayer &player) {
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(mob)
             || player.isSpectator())
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(player);
         if (distance > nearestDistance || !contains(player.getInventory().getItemInHand()))
-            continue;
+            return;
 
         nearest = &player;
         nearestDistance = distance;
-    }
+    });
     return nearest;
 }
 

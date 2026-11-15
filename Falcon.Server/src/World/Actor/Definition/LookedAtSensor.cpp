@@ -119,34 +119,33 @@ ServerPlayer *LookedAtSensor::_findLooker(ServerNetworkHandler &owner, MobActor 
     std::unordered_map<uint64_t, int32_t> lookTicks;
     ServerPlayer *nearest = nullptr;
     float nearestDistance = radiusSquared;
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(mob.getPosition(), radius, [&](ServerPlayer &player) {
         if (!mob.canTarget(player))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(player);
         if (distance > radiusSquared)
-            continue;
+            return;
 
         if (filters != nullptr && !EntityFilter::test(*filters, owner, mob, &player))
-            continue;
+            return;
 
         if (!_isLookingAt(level, mob, player, component))
-            continue;
+            return;
 
         if (minimumTicks > 0) {
             const auto previous = mLookTicks.find(player.getRuntimeId());
             const int32_t ticks = (previous == mLookTicks.end() ? 0 : previous->second) + interval;
             lookTicks[player.getRuntimeId()] = ticks;
             if (ticks < minimumTicks)
-                continue;
+                return;
         }
 
         if (nearest == nullptr || distance < nearestDistance) {
             nearest = &player;
             nearestDistance = distance;
         }
-    }
+    });
 
     mLookTicks.swap(lookTicks);
     return nearest;

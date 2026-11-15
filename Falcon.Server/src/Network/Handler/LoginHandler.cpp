@@ -1409,39 +1409,38 @@ void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &pla
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {
-    PlayerListPacket::Entry newEntry(listUuidFor(player));
-    newEntry.mActorId = player.getUniqueId();
-    newEntry.mName = player.getName();
-    newEntry.mXuid = player.getXuid();
-    newEntry.mPlayFabId = player.getPlayFabId();
-    newEntry.mSkin = player.getSkin();
-    newEntry.mBuildPlatform = player.getBuildPlatform();
+    // an entry carries a skin: encoded once a player, not once a pair of players
+    const auto entryOf = [&owner](ServerPlayer &listed, const NetworkIdentifier &recipient) {
+        const PacketCodecContext &context = owner.getCodecContext(recipient);
+        std::shared_ptr<const SharedPacket> &cached =
+                listed.getListEntryPacket(context.getCodec().getProtocolVersion());
+        if (cached == nullptr) {
+            PlayerListPacket::Entry entry(listUuidFor(listed));
+            entry.mActorId = listed.getUniqueId();
+            entry.mName = listed.getName();
+            entry.mXuid = listed.getXuid();
+            entry.mPlayFabId = listed.getPlayFabId();
+            entry.mSkin = listed.getSkin();
+            entry.mBuildPlatform = listed.getBuildPlatform();
 
-    PlayerListPacket announce;
-    announce.mEntries.push_back(newEntry);
+            PlayerListPacket packet;
+            packet.mEntries.push_back(std::move(entry));
+            cached = std::make_shared<const SharedPacket>(encodePacket(packet, context));
+        }
+        return cached;
+    };
 
-    PlayerListPacket existing;
-
+    // name, platform and identifiers are final by now: what an earlier login of this session cached is stale
+    player.clearListEntryPackets();
     for (auto &entry: owner.getPlayers()) {
-        if (!entry.second.isSpawned() && &entry.second != &player)
+        ServerPlayer &other = entry.second;
+        if (!other.isSpawned() && &other != &player)
             continue;
 
-        owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), announce, owner.getCodecContext());
-
-        if (&entry.second != &player) {
-            PlayerListPacket::Entry existingEntry(listUuidFor(entry.second));
-            existingEntry.mActorId = entry.second.getUniqueId();
-            existingEntry.mName = entry.second.getName();
-            existingEntry.mXuid = entry.second.getXuid();
-            existingEntry.mPlayFabId = entry.second.getPlayFabId();
-            existingEntry.mSkin = entry.second.getSkin();
-            existingEntry.mBuildPlatform = entry.second.getBuildPlatform();
-            existing.mEntries.push_back(existingEntry);
-        }
+        owner.getNetworkHandler().sendShared(other.getNetworkIdentifier(), entryOf(player, other.getNetworkIdentifier()));
+        if (&other != &player)
+            owner.getNetworkHandler().sendShared(player.getNetworkIdentifier(), entryOf(other, player.getNetworkIdentifier()));
     }
-
-    if (!existing.mEntries.empty())
-        owner.getNetworkHandler().send(player.getNetworkIdentifier(), existing, owner.getCodecContext());
 }
 
 void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {

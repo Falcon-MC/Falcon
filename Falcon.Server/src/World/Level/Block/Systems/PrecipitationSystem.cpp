@@ -12,6 +12,8 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Block/BlockNames.h"
 
+#include <random>
+
 namespace {
     const int PRECIPITATION_CHANCE = 16;
     const int MAX_FREEZE_LIGHT = 10;
@@ -45,10 +47,13 @@ void PrecipitationSystem::tick(ServerNetworkHandler &owner, Level &level) {
     if (!level.hasSkyLight())
         return;
 
-    for (const int64_t column: level.getActiveColumns()) {
-        if (RandomTickSystem::nextInt(PRECIPITATION_CHANCE) != 0)
-            continue;
-
+    // one column in PRECIPITATION_CHANCE: the gap to the next one is drawn at once, the same odds
+    // without a roll a column
+    static std::mt19937 random(std::random_device{}());
+    std::geometric_distribution<size_t> gap(1.0 / (double) PRECIPITATION_CHANCE);
+    const std::vector<int64_t> &columns = level.getActiveColumnOrder();
+    for (size_t index = gap(random); index < columns.size(); index += 1 + gap(random)) {
+        const int64_t column = columns[index];
         const int32_t chunkX = (int32_t) (column >> 32);
         const int32_t chunkZ = (int32_t) (column & 0xffffffff);
         if (level.peekChunkPtr(chunkX, chunkZ) == nullptr)

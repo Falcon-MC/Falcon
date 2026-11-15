@@ -238,6 +238,7 @@ void TickingAreaManager::_attach(World &world, const TickingArea &area) {
     }
 
     world.mActorPersistencePending = true;
+    world.mActiveColumnsStale = true;
 }
 
 void TickingAreaManager::_detach(World &world, const TickingArea &area) {
@@ -248,4 +249,5 @@ void TickingAreaManager::_detach(World &world, const TickingArea &area) {
         level.unregisterChunkLoader(loader, (int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
 
     world.mActorPersistencePending = true;
+    world.mActiveColumnsStale = true;
 }

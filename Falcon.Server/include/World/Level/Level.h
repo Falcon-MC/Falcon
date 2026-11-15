@@ -526,6 +526,11 @@ public:
 
     bool isColumnActive(int32_t chunkX, int32_t chunkZ) const;
 
+    // the same columns in rows of x, as a view source walks them
+    const std::vector<int64_t> &getActiveColumnOrder() const {
+        return mActiveColumnOrder;
+    }
+
     const std::unordered_set<int64_t> &getActiveColumns() const {
         return mActiveColumns;
     }

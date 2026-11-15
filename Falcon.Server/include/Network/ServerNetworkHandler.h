@@ -305,6 +305,26 @@ public:
         }
     }
 
+    // every player by chunk, rebuilt at most once per tick and when one joins: positions can lag one tick;
+    // callers check exact distances, levels and spawn state
+    template <typename Visitor>
+    void forEachPlayerNear(const Vector3f &position, float radius, Visitor &&visit) {
+        const float reach = radius + ACTOR_INDEX_MARGIN;
+        _forEachPlayerInChunks((int32_t) std::floor(position.x - reach) >> 4, (int32_t) std::floor(position.x + reach) >> 4,
+                               (int32_t) std::floor(position.z - reach) >> 4, (int32_t) std::floor(position.z + reach) >> 4,
+                               visit);
+    }
+
+    template <typename Visitor>
+    void forEachPlayerAroundChunk(int32_t chunkX, int32_t chunkZ, int32_t radius, Visitor &&visit) {
+        _forEachPlayerInChunks(chunkX - radius, chunkX + radius, chunkZ - radius, chunkZ + radius, visit);
+    }
+
+    ServerPlayer *getPlayerByRuntimeId(uint64_t runtimeId);
+
+    // to the players who have this one on screen: what a player wears or holds means nothing to the others
+    void sendToPlayerViewers(const ServerPlayer &player, const Packet &packet, bool includeSelf);
+
     // the few actors others stand on, from the index of the tick
     template <typename Visitor>
     void forEachCollidableActor(Visitor &&visit) {
@@ -838,6 +858,28 @@ public:
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
 
+    void _refreshPlayerIndex();
+
+    template <typename Visitor>
+    void _forEachPlayerInChunks(int32_t minX, int32_t maxX, int32_t minZ, int32_t maxZ, Visitor &&visit) {
+        // a walk nested in a visitor keeps the index: a refresh clears the outer walk's buckets
+        if (mPlayerIndexWalks == 0)
+            _refreshPlayerIndex();
+        ++mPlayerIndexWalks;
+        for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
+                const auto bucket = mPlayerIndex.find(_actorIndexKey(chunkX, chunkZ));
+                if (bucket == mPlayerIndex.end())
+                    continue;
+
+                // by position: a visitor may make a player leave, which takes it out of its bucket
+                for (size_t index = 0; index < bucket->second.size(); ++index)
+                    visit(*bucket->second[index]);
+            }
+        }
+        --mPlayerIndexWalks;
+    }
+
     void _refreshActorIndex();
 
     void _flushExplosions();
@@ -1221,6 +1263,10 @@ private:
     float mActorIndexWidestHalf = 0.0f;
     float mActorIndexWidestBox = 0.0f;
     std::vector<ServerActor *> mCollidableActors;
+    std::unordered_map<int64_t, std::vector<ServerPlayer *>> mPlayerIndex;
+    std::unordered_map<uint64_t, ServerPlayer *> mPlayersByRuntimeId;
+    bool mPlayerIndexDirty = true;
+    int32_t mPlayerIndexWalks = 0;
     uint64_t mActorSetSerial = 0;
 
     struct PendingExplosion {

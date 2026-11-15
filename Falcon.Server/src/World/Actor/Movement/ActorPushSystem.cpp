@@ -115,18 +115,18 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
         pushBy(other, box, width, other.getMotion());
     });
 
-    for (auto &entry: owner.getPlayers()) {
-        const ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(actor.getPosition(), selfReach + PLAYER_WIDTH + PUSH_SEARCH_MARGIN,
+                            [&](const ServerPlayer &player) {
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(actor)
             || player.isSpectator())
-            continue;
+            return;
 
         const AxisAlignedBB box = boxAround(player.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
         if (!inContact(player, box, PLAYER_WIDTH))
-            continue;
+            return;
 
         pushBy(player, box, PLAYER_WIDTH, player.getMotion());
-    }
+    });
 
     if (!touched)
         return kick;

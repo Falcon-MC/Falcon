@@ -353,10 +353,7 @@ void InventoryHandler::sendArmorContent(ServerNetworkHandler &owner, ServerPlaye
     equipment.mBoots = inventory.getArmor(PlayerInventory::ARMOR_FEET);
     equipment.mBody = ItemStack::air();
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && &entry.second != &player)
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, false);
 }
 
 void InventoryHandler::sendOffhandContent(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -369,10 +366,7 @@ void InventoryHandler::sendOffhandContent(ServerNetworkHandler &owner, ServerPla
     equipment.mHotbarSlot = PlayerInventory::OFFHAND_NETWORK_SLOT;
     equipment.mContainerId = PlayerInventory::CONTAINER_ID_OFFHAND;
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned())
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, true);
 }
 
 void InventoryHandler::sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -388,10 +382,7 @@ void InventoryHandler::sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &p
     equipment.mHotbarSlot = selected;
     equipment.mContainerId = PlayerInventory::CONTAINER_ID_INVENTORY;
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && &entry.second != &player)
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, false);
 }
 
 void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -440,10 +431,7 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
     equipment.mHotbarSlot = inventory.getSelectedSlot();
     equipment.mContainerId = PlayerInventory::CONTAINER_ID_INVENTORY;
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && &entry.second != &player)
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, false);
 }
 
 void InventoryHandler::handlePlayerHotbar(ServerNetworkHandler &owner, ServerPlayer &player,

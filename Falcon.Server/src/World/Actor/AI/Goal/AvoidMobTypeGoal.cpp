@@ -95,13 +95,13 @@ const Actor *AvoidMobTypeGoal::_findThreat(ServerNetworkHandler &owner, MobActor
         }
     };
 
-    for (auto &player: owner.getPlayers()) {
-        if (isAvoidablePlayer(player.second))
-            consider(player.second);
-    }
     float searchRadius = 0.0f;
     for (const Entry &option: mEntries)
         searchRadius = std::max(searchRadius, option.mMaxDistance);
+    owner.forEachPlayerNear(mob.getPosition(), searchRadius, [&](const ServerPlayer &player) {
+        if (isAvoidablePlayer(player))
+            consider(player);
+    });
     owner.forEachActorNear(mob.getPosition(), searchRadius, consider);
 
     return nearest;

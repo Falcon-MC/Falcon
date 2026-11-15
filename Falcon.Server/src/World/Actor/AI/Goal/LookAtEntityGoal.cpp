@@ -57,10 +57,10 @@ Actor *LookAtEntityGoal::_findNearest(ServerNetworkHandler &owner, const MobActo
         }
     };
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && !entry.second.isDead())
-            consider(entry.second);
-    }
+    owner.forEachPlayerNear(mob.getPosition(), mSettings.mRange, [&](ServerPlayer &player) {
+        if (player.isSpawned() && !player.isDead())
+            consider(player);
+    });
     owner.forEachActorNear(mob.getPosition(), mSettings.mRange, consider);
     return nearest;
 }

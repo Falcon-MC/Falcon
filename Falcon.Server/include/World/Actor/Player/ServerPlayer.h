@@ -41,6 +41,7 @@
 #include <unordered_map>
 
 class CameraInstructionPacket;
+class SharedPacket;
 class ServerNetworkHandler;
 
 class ServerPlayer : public Actor {
@@ -182,6 +183,21 @@ public:
 
     void setSkin(const SerializedSkin &skin) {
         mSkin = skin;
+        mListEntryPackets.clear();
+    }
+
+    // this player's list entry as a packet, one per protocol version: encoded once, sent to every joiner
+    std::shared_ptr<const SharedPacket> &getListEntryPacket(int protocolVersion) {
+        for (auto &entry: mListEntryPackets) {
+            if (entry.first == protocolVersion)
+                return entry.second;
+        }
+        mListEntryPackets.emplace_back(protocolVersion, nullptr);
+        return mListEntryPackets.back().second;
+    }
+
+    void clearListEntryPackets() {
+        mListEntryPackets.clear();
     }
 
     int getBuildPlatform() const {
@@ -1286,6 +1302,7 @@ private:
     int32_t mLastChunkZ = 0;
     bool mHasChunkPosition = false;
     SerializedSkin mSkin;
+    std::vector<std::pair<int, std::shared_ptr<const SharedPacket>>> mListEntryPackets;
     int32_t mGameType = 0;
     int64_t mLastActiveTick = 0;
     int64_t mLoggedInTick = 0;

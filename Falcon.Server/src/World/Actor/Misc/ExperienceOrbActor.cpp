@@ -41,14 +41,13 @@ void ExperienceOrbActor::tick(ServerNetworkHandler &owner) {
 
     ServerPlayer *closest = nullptr;
     float closestDistanceSquared = ATTRACT_RANGE_SQUARED;
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(position, std::sqrt(ATTRACT_RANGE_SQUARED), [&](ServerPlayer &player) {
         if (!player.isSpawned() || player.isDead())
-            continue;
+            return;
         if (player.isSpectator())
-            continue;
+            return;
         if (!player.sharesLevelWith(*this))
-            continue;
+            return;
 
         const Vector3f playerPosition = player.getPosition();
         const float dx = playerPosition.x - position.x;
@@ -59,7 +58,7 @@ void ExperienceOrbActor::tick(ServerNetworkHandler &owner) {
             closest = &player;
             closestDistanceSquared = distanceSquared;
         }
-    }
+    });
 
     if (closest != nullptr && getPickupDelay() <= 0 && _tryPickup(owner, *closest)) {
         mExpired = true;
