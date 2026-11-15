@@ -1,5 +1,6 @@
 #include "World/Level/Storage/Loot/LootFunction.h"
 
+#include "World/Item/ArrowItem.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ExplorationMaps.h"
 #include "World/Item/MapItem.h"
@@ -220,8 +221,10 @@ SetPotionFunction::SetPotionFunction(const json::Value &definition)
 
 void SetPotionFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;
-    if (mPotionId >= 0)
-        drop.mData = mPotionId;
+    if (mPotionId < 0)
+        return;
+    // a tipped arrow keeps the potion one past its id: 0 is the plain arrow
+    drop.mData = ArrowItem::matches(drop.mIdentifier) ? mPotionId + 1 : mPotionId;
 }
 
 ExplorationMapFunction::ExplorationMapFunction(const json::Value &definition)

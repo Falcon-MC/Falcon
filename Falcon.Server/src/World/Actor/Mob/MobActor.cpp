@@ -161,6 +161,7 @@ namespace {
     const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
     const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
     const char *const ADD_RIDER_COMPONENT = "minecraft:addrider";
+    const char *const TRADE_RESUPPLY_COMPONENT = "minecraft:trade_resupply";
     const char *const TAMEMOUNT_COMPONENT = "minecraft:tamemount";
     const char *const JUMP_STRENGTH_COMPONENT = "minecraft:horse.jump_strength";
     const char *const DISMOUNT_ON_TOP_CENTER = "on_top_center";
@@ -2130,6 +2131,9 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         metadata.mEntries.push_back(entry);
     }
 
+    if (MobEconomy::isTrader(*this))
+        mEconomy.appendMetadata(metadata);
+
     if (mOwnerId != NO_OWNER) {
         EntityDataEntry entry;
         entry.mId = ActorFlags::OWNER_DATA_ID;
@@ -2353,6 +2357,9 @@ void MobActor::addComponentGroup(const std::string &group) {
     const json::Value *added = groups == nullptr ? nullptr : groups->get(group);
     if (added != nullptr)
         mAddRider.queue(added->get(ADD_RIDER_COMPONENT));
+    // the game restocks once per added minecraft:trade_resupply; the schedule removes the group again
+    if (added != nullptr && added->get(TRADE_RESUPPLY_COMPONENT) != nullptr)
+        mEconomy.resupply();
 }
 
 void MobActor::removeComponentGroup(const std::string &group) {
@@ -2465,6 +2472,8 @@ Tag MobActor::saveNbt() const {
     }
     if (mHasCarriedBlock)
         data.put(TAG_CARRIED_BLOCK, mCarriedBlock.toNbt());
+    if (MobEconomy::isTrader(*this))
+        mEconomy.saveNbt(data);
     mEquipment.saveNbt(data);
     mEntitySpawner.saveNbt(data);
     mLeash.saveNbt(data);
@@ -2487,6 +2496,7 @@ void MobActor::loadNbt(const Tag &data) {
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
+    mEconomy.loadNbt(data);
     if (data.contains(TAG_AIR))
         mAirSupply = data.getShort(TAG_AIR, 0);
     mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, attributeIn(data, "minecraft:movement", -1.0f));

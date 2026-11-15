@@ -20,6 +20,7 @@
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
+#include "World/Actor/Mob/Component/MobEconomy.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
 #include "World/Actor/Movement/PushableByEntity.h"
@@ -437,6 +438,14 @@ public:
         return mDweller;
     }
 
+    MobEconomy &getEconomy() {
+        return mEconomy;
+    }
+
+    const MobEconomy &getEconomy() const {
+        return mEconomy;
+    }
+
     MobAnger &getAnger() {
         return mAnger;
     }
@@ -763,6 +772,7 @@ private:
     JumpControl mJumpControl;
     BodyControl mBodyControl;
     MobEquipment mEquipment;
+    MobEconomy mEconomy;
     InventoryView mInventoryView{*this};
     MobEntitySpawner mEntitySpawner;
     std::vector<int32_t> mEntitySensorCooldowns;
