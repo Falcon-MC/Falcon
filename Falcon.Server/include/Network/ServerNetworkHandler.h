@@ -54,6 +54,7 @@
 #include <mutex>
 #include <cstdint>
 #include <cstddef>
+#include <random>
 #include <vector>
 #include <queue>
 #include <unordered_map>
@@ -1296,8 +1297,11 @@ private:
         NetworkIdentifier mId;
         int mCheck;
         int64_t mDeadline;
+        bool mAtOnce;
     };
     std::vector<PendingRemoval> mPendingRemovals;
+    std::mt19937 mRemovalRandom{std::random_device{}()};
+    int64_t mNextRemovalWave = 0;
 
     void _tickSimulatedPlayer(ServerPlayer &player);
     void _removeSimulatedPlayers();
