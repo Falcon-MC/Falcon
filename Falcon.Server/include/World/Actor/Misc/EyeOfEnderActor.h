@@ -40,6 +40,11 @@ public:
         return false;
     }
 
+    // no minecraft:health in its definition: it flies through blocks and nothing hurts it
+    bool isInvulnerable() const override {
+        return true;
+    }
+
     // its target is not part of the save: a reloaded eye would lose its way
     bool shouldSave() const override {
         return false;
