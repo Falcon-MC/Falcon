@@ -388,7 +388,7 @@ namespace {
         int mStalls = 0;
         bool mStalled = false;
         std::chrono::nanoseconds mWaited{0};
-        long long mJobs = 0;
+        std::chrono::nanoseconds::rep mJobs = 0;
         std::atomic<uint64_t> mRound{0};
         bool mStop = false;
     };
