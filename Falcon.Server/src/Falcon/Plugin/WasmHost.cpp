@@ -144,6 +144,13 @@ namespace {
             }
 
             mLinker = wasmtime_linker_new(mEngine);
+            // WASI for files in the plugin's own data folder; each store says which folder, nothing else
+            if (wasmtime_error_t *failure = wasmtime_linker_define_wasi(mLinker)) {
+                mFailure = error = "WASI could not be defined: " + errorText(failure);
+                wasmtime_linker_delete(mLinker);
+                mLinker = nullptr;
+                return false;
+            }
             for (const WasmImports::Definition &definition: WasmImports::all()) {
                 if (!_define(definition, error))
                     return false;
@@ -250,7 +257,8 @@ bool WasmHost::load(LoadedPlugin &plugin) {
     wasmtime_store_limiter(store, (int64_t) properties.getWasmPluginMemoryMb() * 1024 * 1024, MAX_TABLE_ELEMENTS, 1,
                            MAX_TABLES, 1);
 
-    auto instance = std::make_shared<WasmPlugin>(plugin, store, (uint64_t) properties.getWasmPluginFuel());
+    auto instance = std::make_shared<WasmPlugin>(plugin, store, (uint64_t) properties.getWasmPluginFuel(),
+                                                 (uint64_t) properties.getWasmPluginDiskMb() * 1024 * 1024);
     const bool instantiated = instance->instantiate(runtime.getLinker(), *module, error);
     wasmtime_module_delete(module);
     if (!instantiated) {

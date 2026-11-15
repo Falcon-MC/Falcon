@@ -7,7 +7,9 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 
+#include <chrono>
 #include <cstring>
+#include <filesystem>
 
 namespace {
     const char *const MEMORY_EXPORT = "memory";
@@ -123,9 +125,97 @@ namespace {
     }
 }
 
-WasmPlugin::WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel)
-        : mPlugin(plugin), mStore(store), mContext(wasmtime_store_context(store)), mFuel(fuel) {
+WasmPlugin::WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel, uint64_t diskLimit)
+        : mPlugin(plugin), mStore(store), mContext(wasmtime_store_context(store)), mFuel(fuel), mDiskLimit(diskLimit) {
     wasmtime_context_set_data(mContext, this);
+}
+
+namespace {
+    constexpr size_t MAX_OUTPUT_LINE = 1024;
+    constexpr int64_t DISK_CHECK_SECONDS = 5;
+    // a folder of very many files is not walked to the end on every check
+    constexpr size_t MAX_DISK_ENTRIES = 100000;
+
+    int64_t nowSeconds() {
+        return std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+}
+
+// a line at a time, so one printf does not make several log lines
+ptrdiff_t WasmPlugin::_output(void *data, const unsigned char *bytes, size_t length) {
+    auto *self = static_cast<WasmPlugin *>(data);
+    for (size_t index = 0; index < length; index++) {
+        const char c = (char) bytes[index];
+        if (c != '\n' && self->mOutput.size() < MAX_OUTPUT_LINE) {
+            if (c != '\r')
+                self->mOutput.push_back(c >= 0x20 || c == '\t' ? c : '?');
+            continue;
+        }
+        if (c != '\n')
+            continue;
+        LOG_INFO(LogAreaID::Server, "[%s] %s", self->mPlugin.mDescription.mName.c_str(), self->mOutput.c_str());
+        self->mOutput.clear();
+    }
+    return (ptrdiff_t) length;
+}
+
+bool WasmPlugin::_configureFiles(bool writable, std::string &error) {
+    wasi_config_t *config = wasi_config_new();
+    // no arguments, environment, network or standard input: only the data folder, at the root of the guest
+    if (!wasi_config_preopen_dir(config, mPlugin.mDataFolder.c_str(), "/", writable)) {
+        wasi_config_delete(config);
+        error = "its data folder " + mPlugin.mDataFolder + " cannot be opened";
+        return false;
+    }
+    wasi_config_set_stdout_custom(config, &_output, this, nullptr);
+    wasi_config_set_stderr_custom(config, &_output, this, nullptr);
+    wasmtime_error_t *failure = wasmtime_context_set_wasi(mContext, config);
+    if (failure != nullptr) {
+        error = messageOf(failure, nullptr);
+        return false;
+    }
+    mFilesWritable = writable;
+    return true;
+}
+
+void WasmPlugin::checkDisk(bool now) {
+    if (mDiskLimit == 0 || mPlugin.mDataFolder.empty())
+        return;
+    const int64_t seconds = nowSeconds();
+    if (!now && seconds - mLastDiskCheck < DISK_CHECK_SECONDS)
+        return;
+    mLastDiskCheck = seconds;
+
+    uint64_t used = 0;
+    size_t entries = 0;
+    std::error_code ignored;
+    for (auto it = std::filesystem::recursive_directory_iterator(mPlugin.mDataFolder,
+                                                                 std::filesystem::directory_options::none, ignored);
+         it != std::filesystem::recursive_directory_iterator() && entries < MAX_DISK_ENTRIES; it.increment(ignored)) {
+        entries++;
+        if (it->is_regular_file(ignored))
+            used += it->file_size(ignored);
+        if (ignored)
+            break;
+    }
+    const bool over = used > mDiskLimit || entries >= MAX_DISK_ENTRIES;
+    if (over == !mFilesWritable)
+        return;
+
+    std::string error;
+    if (!_configureFiles(!over, error)) {
+        LOG_ERROR(LogAreaID::Server, "[%s] Could not change access to the data folder: %s",
+                  mPlugin.mDescription.mName.c_str(), error.c_str());
+        return;
+    }
+    if (over)
+        LOG_WARN(LogAreaID::Server, "[%s] The data folder holds %llu MB, over the limit of %llu MB: the plugin can "
+                 "read its files but no longer write them", mPlugin.mDescription.mName.c_str(),
+                 (unsigned long long) (used >> 20), (unsigned long long) (mDiskLimit >> 20));
+    else
+        LOG_INFO(LogAreaID::Server, "[%s] The data folder is back under its limit: the plugin can write again",
+                 mPlugin.mDescription.mName.c_str());
 }
 
 WasmPlugin::~WasmPlugin() {
@@ -169,6 +259,9 @@ bool WasmPlugin::_checkedExport(const wasmtime_instance_t &instance, const char 
 }
 
 bool WasmPlugin::instantiate(const wasmtime_linker_t &linker, const wasmtime_module_t &module, std::string &error) {
+    if (!_configureFiles(true, error))
+        return false;
+
     // instantiation already consumes fuel; _initialize shares the budget
     wasmtime_error_t *failure = wasmtime_context_set_fuel(mContext, mFuel);
     if (failure != nullptr) {
@@ -273,6 +366,8 @@ bool WasmPlugin::call(Export which, wasmtime_val_raw_t *values, size_t count) {
     if (mFaulted || !hasExport(which))
         return false;
 
+    if (mDepth == 0)
+        checkDisk();
     FuelScope scope(*this);
     mDepth++;
     wasm_trap_t *trap = nullptr;

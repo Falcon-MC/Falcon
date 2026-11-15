@@ -301,6 +301,10 @@ public:
         return getInt("wasm-plugin-fuel");
     }
 
+    int getWasmPluginDiskMb() const {
+        return getInt("wasm-plugin-disk-mb");
+    }
+
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold");
     }
