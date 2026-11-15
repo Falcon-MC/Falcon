@@ -661,6 +661,9 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "in_nether")
         return applyBoolean(target->getDimension() == DimensionType::Nether, value, op);
 
+    if (test == "in_overworld")
+        return applyBoolean(target->getDimension() == DimensionType::Overworld, value, op);
+
     if (test == "has_container_open") {
         const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
         return applyBoolean(player != nullptr && player->getInventoryManager().isContainerOpen(), value, op);
