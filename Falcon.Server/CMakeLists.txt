@@ -28,6 +28,8 @@ falcon_bedrock_data_embed_text(FILE loot_tables.json NAMESPACE FalconLootData SY
         DELIMITER falconloot OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/LootTablesJson.h")
 falcon_bedrock_data_embed_text(FILE trade_tables.json NAMESPACE FalconTradeData SYMBOL kTradeTablesJson
         DELIMITER falcontrade OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/TradeTablesJson.h")
+falcon_bedrock_data_embed_text(FILE worldgen.json NAMESPACE FalconWorldgenData SYMBOL kWorldgenJson
+        DELIMITER falconworldgen OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/WorldgenJson.h")
 falcon_bedrock_data_embed_text(FILE item_palette.json NAMESPACE FalconItemData SYMBOL kItemPaletteJson
         DELIMITER falconitems OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ItemPaletteJson.h")
 falcon_bedrock_data_embed_binary(FILE item_components.nbt NAMESPACE FalconItemData SYMBOL kItemComponentsNbt
@@ -689,6 +691,13 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     endif()
     add_test(NAME tnt-blast COMMAND FalconTntBlastTests)
     set_tests_properties(tnt-blast PROPERTIES TIMEOUT 60)
+    add_executable(FalconJigsawStructureTests tests/JigsawStructureTests.cpp)
+    target_link_libraries(FalconJigsawStructureTests PRIVATE FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_link_options(FalconJigsawStructureTests PRIVATE -static -fuse-ld=lld)
+    endif()
+    add_test(NAME jigsaw-structures COMMAND FalconJigsawStructureTests)
+    set_tests_properties(jigsaw-structures PROPERTIES TIMEOUT 120)
     add_executable(FalconReplaceItemCommandTests tests/ReplaceItemCommandTests.cpp)
     target_link_libraries(FalconReplaceItemCommandTests PRIVATE FalconCore)
     if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

@@ -575,7 +575,8 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         return true;
     }
 
-    if (name == "minecraft:cauldron") {
+    // an empty cauldron has no level: its default states
+    if (name == "minecraft:cauldron" && !property(entry, "level").empty()) {
         // the two-thirds level of the file is four sixths here
         states.putString("cauldron_liquid", "water");
         states.putInt("fill_level", std::stoi(property(entry, "level")) * 2);

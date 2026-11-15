@@ -7,6 +7,7 @@
 #include "World/Level/LevelGen/Structure/BuriedTreasureStructure.h"
 #include "World/Level/LevelGen/Structure/DesertPyramidStructure.h"
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
+#include "World/Level/LevelGen/Structure/JigsawStructures.h"
 #include "World/Level/LevelGen/Structure/JungleTempleStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
@@ -60,6 +61,8 @@ OverworldGenerator::OverworldGenerator(int64_t seed) : mSeed(seed), mAirHash(Blo
     mSurfaceBuilder = std::make_unique<OverworldSurfaceBuilder>(mNoiseHolder->getNoiseFactory(), *mClimate, seed);
     mBiomeParameters = &OverworldBiomeParameters::shared();
     mCarvers = std::make_unique<OverworldCarvers>(seed);
+    // the structure sets register their features for /locate as they load
+    JigsawStructures::get();
 }
 
 OverworldGenerator::~OverworldGenerator() = default;
@@ -144,6 +147,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     VillageStructure::place(*this, level, chunk, overflow);
     // created right after the village in createGenerator
     StrongholdStructure::place(*this, level, chunk);
+    JigsawStructures::get().place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
 
@@ -170,6 +174,7 @@ void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap,
     // jigsaw pieces near the chunk; the preliminary heights leave it out
     TerrainBeard beard;
     VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
+    JigsawStructures::get().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed

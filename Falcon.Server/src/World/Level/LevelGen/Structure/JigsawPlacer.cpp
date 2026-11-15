@@ -142,6 +142,20 @@ std::shared_ptr<const JigsawPlacer::Template> JigsawPlacer::templateOf(const Str
     return out;
 }
 
+std::shared_ptr<const JigsawPlacer::Template> JigsawPlacer::featureTemplate() {
+    static const std::shared_ptr<const Template> FEATURE = [] {
+        auto out = std::make_shared<Template>();
+        Jigsaw bottom;
+        bottom.mFront = 0;
+        bottom.mName = "minecraft:bottom";
+        bottom.mTarget = "minecraft:empty";
+        bottom.mPool = "minecraft:empty";
+        out->mJigsaws.push_back(bottom);
+        return out;
+    }();
+    return FEATURE;
+}
+
 template <typename T>
 void JigsawPlacer::_shuffle(std::vector<T> &values) {
     for (size_t size = values.size(); size > 1; --size) {
@@ -227,6 +241,8 @@ bool JigsawPlacer::place(const Settings &settings, Result &result) {
 
     const int32_t centreX = start.mBox.mMinX + (start.mBox.mMaxX - start.mBox.mMinX + 1) / 2;
     const int32_t centreZ = start.mBox.mMinZ + (start.mBox.mMaxZ - start.mBox.mMinZ + 1) / 2;
+    if (settings.mColumnFilter && !settings.mColumnFilter(centreX, centreZ))
+        return false;
     const int32_t groundY = settings.mProjection == Projection::None
                                     ? start.y
                                     : settings.mStartY + mHeight(centreX, centreZ, settings.mProjection);
@@ -329,7 +345,7 @@ void JigsawPlacer::_expand(const Queued &entry) {
         const int32_t relativeY = jigsawY - parent.mBox.mMinY;
         int32_t surface = INT32_MAX;
         for (const Element *candidate: candidates) {
-            if (candidate == nullptr || candidate->mLocation.empty())
+            if (candidate == nullptr || (candidate->mLocation.empty() && candidate->mFeature.empty()))
                 break;
 
             const std::shared_ptr<const Template> other = mTemplates(*candidate);
