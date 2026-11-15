@@ -37,6 +37,11 @@ public:
 
     bool isEmpty() const;
 
+    // what isEmpty() and paletteMatches() read, asked for ahead of a walk over many sections
+    void prefetchQueries() const {
+        __builtin_prefetch(&mEmptyCache);
+    }
+
     bool isLayerEmpty(int layer) const;
 
     bool hasLightEmitter() const;

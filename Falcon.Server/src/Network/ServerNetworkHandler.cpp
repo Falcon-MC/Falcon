@@ -477,8 +477,46 @@ void ServerNetworkHandler::erasePlayer(const NetworkIdentifier &id) {
     const auto player = mPlayers.find(id);
     if (player != mPlayers.end()) {
         mPlayerMovementRegistry->remove(player->second.getRuntimeId());
+        // out of the index now: a walk in progress would visit a freed player
+        mPlayersByRuntimeId.erase(player->second.getRuntimeId());
+        for (auto &bucket: mPlayerIndex) {
+            std::vector<ServerPlayer *> &players = bucket.second;
+            players.erase(std::remove(players.begin(), players.end(), &player->second), players.end());
+        }
         mPlayers.erase(player);
     }
+}
+
+void ServerNetworkHandler::_refreshPlayerIndex() {
+    // a join between two ticks shows as one player more than the index holds
+    if (!mPlayerIndexDirty && mPlayersByRuntimeId.size() == mPlayers.size())
+        return;
+
+    mPlayerIndexDirty = false;
+    for (auto it = mPlayerIndex.begin(); it != mPlayerIndex.end();) {
+        if (it->second.empty()) {
+            it = mPlayerIndex.erase(it);
+            continue;
+        }
+        it->second.clear();
+        ++it;
+    }
+
+    mPlayersByRuntimeId.clear();
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        const Vector3f position = player.getPosition();
+        mPlayerIndex[_actorIndexKey((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4)]
+                .push_back(&player);
+        mPlayersByRuntimeId[player.getRuntimeId()] = &player;
+    }
+}
+
+ServerPlayer *ServerNetworkHandler::getPlayerByRuntimeId(uint64_t runtimeId) {
+    if (mPlayerIndexWalks == 0)
+        _refreshPlayerIndex();
+    const auto found = mPlayersByRuntimeId.find(runtimeId);
+    return found == mPlayersByRuntimeId.end() ? nullptr : found->second;
 }
 
 unsigned short ServerNetworkHandler::getBoundPort() const {
@@ -798,6 +836,8 @@ void ServerNetworkHandler::stopServerListening() {
         }
 
         mPlayers.clear();
+        mPlayerIndex.clear();
+        mPlayersByRuntimeId.clear();
         finish([this]() { mNetworkHandler->runEvents(); });
     }
 
@@ -948,6 +988,7 @@ void ServerNetworkHandler::tick(bool paused) {
 
     mNetworkHandler->runEvents();
     _removeSimulatedPlayers();
+    mPlayerIndexDirty = true;
 
     for (World *world: mWorlds.getWorlds())
         _tickOverworld(*world);
@@ -2540,10 +2581,20 @@ void ServerNetworkHandler::broadcastSystemMessage(const std::string &message) {
 }
 
 void ServerNetworkHandler::broadcastTranslation(const std::string &key, const std::vector<std::string> &parameters) {
+    TextPacket text;
+    text.mType = TextPacket::Type::Translation;
+    text.mMessage = key;
+    text.mParameters = parameters;
+    text.mNeedsTranslation = true;
+
+    // one encoding for the crowd, not one a player
+    std::vector<NetworkIdentifier> recipients;
+    recipients.reserve(mPlayers.size());
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
-            entry.second.sendTranslation(key, parameters);
+            recipients.push_back(entry.first);
     }
+    mNetworkHandler->sendToMany(recipients, text, mCodecContext);
 }
 
 void ServerNetworkHandler::broadcastWorldTime(World &world) {

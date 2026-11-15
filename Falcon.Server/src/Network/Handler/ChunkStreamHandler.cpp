@@ -20,6 +20,8 @@
 
 namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
+    // a Falcon choice: generation takes longer than this many ticks
+    const int64_t LOAD_RETRY_TICKS = 4;
     const double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
 
     int32_t streamRadius(const ChunkStreamState &state, const Level &level) {
@@ -226,6 +228,7 @@ namespace {
         const std::unordered_set<int64_t> &sent = player.getSentChunks();
 
         state.mSendQueue.clear();
+        state.mLoadRetryTick = 0;
         for (const int64_t hash: state.mInRadius) {
             if (sent.find(hash) == sent.end())
                 state.mSendQueue.push_back(hash);
@@ -277,7 +280,7 @@ namespace {
 
     void loadQueuedChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player,
                           int32_t attempts) {
-        if (state.mSendQueue.empty())
+        if (state.mSendQueue.empty() || owner.getCurrentTick() < state.mLoadRetryTick)
             return;
 
         Level &level = owner.getLevelFor(player);
@@ -285,6 +288,7 @@ namespace {
         BuildDecision decision(owner, player, level, streamRadius(state, level));
         std::vector<int64_t> requeue;
         int32_t tried = 0;
+        bool progressed = false;
 
         while (!state.mSendQueue.empty() && tried < attempts) {
             ++tried;
@@ -297,6 +301,7 @@ namespace {
             // The view leaves the chunk to the client: nothing is loaded for it.
             if (clientSideGeneration && !decision.isServerBuilt(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
+                progressed = true;
                 if (isBuiltWithNeighbours(level, chunkX, chunkZ))
                     pushQueue(state, state.mReadyToSend, hash);
                 else
@@ -306,10 +311,12 @@ namespace {
 
             if (level.isChunkPopulated(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
-                if (neighboursPopulated(level, chunkX, chunkZ))
+                if (neighboursPopulated(level, chunkX, chunkZ)) {
                     pushQueue(state, state.mReadyToSend, hash);
-                else
+                    progressed = true;
+                } else {
                     requeue.push_back(hash);
+                }
                 continue;
             }
 
@@ -329,6 +336,10 @@ namespace {
 
         for (const int64_t hash: requeue)
             pushQueue(state, state.mSendQueue, hash);
+
+        // every chunk tried is still generating: sorting the same ones again each tick buys nothing
+        if (!progressed)
+            state.mLoadRetryTick = owner.getCurrentTick() + LOAD_RETRY_TICKS;
     }
 
     LevelChunkPacket makeChunkPacket(Level &level, int32_t chunkX, int32_t chunkZ, const PacketCodecContext &context,
@@ -544,6 +555,7 @@ bool ChunkStreamHandler::isPublisherUpdateDue(const ChunkStreamState &state, con
 
 void ChunkStreamHandler::dropPendingChunks(ChunkStreamState &state) {
     state.mSendQueue.clear();
+    state.mLoadRetryTick = 0;
     state.mLoading.clear();
     state.mReadyToSend.clear();
     state.mClientBuilt.clear();

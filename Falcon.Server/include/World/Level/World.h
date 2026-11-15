@@ -79,6 +79,8 @@ public:
     std::vector<int64_t> mActiveCenters;
     int mActiveTickDistance = -1;
     bool mActorPersistencePending = true;
+    // a ticking area came or went: the columns are built again even with every player where it was
+    bool mActiveColumnsStale = true;
     bool mEnoughPlayersSleeping = false;
 
 private:

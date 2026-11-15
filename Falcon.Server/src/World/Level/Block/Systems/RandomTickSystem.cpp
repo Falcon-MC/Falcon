@@ -110,13 +110,30 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     static std::vector<Candidate> candidates;
     candidates.clear();
 
-    for (const int64_t column: level.getActiveColumns()) {
-        const int32_t chunkX = (int32_t) (column >> 32);
-        const int32_t chunkZ = (int32_t) (column & 0xffffffff);
+    // the sections of a crowd's columns miss the cache one after the other: the chunks are looked up first,
+    // and the sections of the one after next asked for while this one is walked
+    static std::vector<LevelChunk *> chunks;
+    const std::vector<int64_t> &columns = level.getActiveColumnOrder();
+    chunks.clear();
+    chunks.reserve(columns.size());
+    for (const int64_t column: columns)
+        chunks.push_back(level.peekChunkPtr((int32_t) (column >> 32), (int32_t) (column & 0xffffffff)));
 
-        LevelChunk *chunk = level.peekChunkPtr(chunkX, chunkZ);
+    static const size_t PREFETCH_AHEAD = 2;
+    for (size_t position = 0; position < columns.size(); position++) {
+        if (position + PREFETCH_AHEAD < chunks.size() && chunks[position + PREFETCH_AHEAD] != nullptr) {
+            const LevelChunk &ahead = *chunks[position + PREFETCH_AHEAD];
+            for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; index++)
+                ahead.getSubChunk(index).prefetchQueries();
+        }
+
+        LevelChunk *chunk = chunks[position];
         if (chunk == nullptr)
             continue;
+
+        const int64_t column = columns[position];
+        const int32_t chunkX = (int32_t) (column >> 32);
+        const int32_t chunkZ = (int32_t) (column & 0xffffffff);
 
         for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; index++) {
             const SubChunk &subChunk = chunk->getSubChunk(index);

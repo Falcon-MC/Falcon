@@ -150,8 +150,7 @@ Actor *NearestAttackableTargetGoal::_findNearest(ServerNetworkHandler &owner, Mo
         }
     };
 
-    for (auto &entry: owner.getPlayers())
-        consider(entry.second);
+    owner.forEachPlayerNear(mob.getPosition(), std::sqrt(mMaxRangeSquared), consider);
     if (!mEntries.empty())
         owner.forEachActorNear(mob.getPosition(), std::sqrt(mMaxRangeSquared), consider);
 

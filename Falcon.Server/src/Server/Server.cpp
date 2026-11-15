@@ -10,7 +10,9 @@
 #include "Server/SetupWizard.h"
 
 #ifdef __APPLE__
+#include <pthread.h>
 #include <pthread/qos.h>
+#include <sched.h>
 #endif
 
 #include <atomic>
@@ -156,6 +158,14 @@ void startServer(const ServerSettings &settings) {
     // the tick thread ranks with the threads a user is waiting on: background work on the machine does not
     // push it off its core in the middle of a tick
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    // a server started from a shell or a service is no application: the class alone leaves the thread at the
+    // default priority, where its own workers and every other process outrank it once it has run for a while
+    sched_param tickPriority;
+    int tickPolicy = 0;
+    if (pthread_getschedparam(pthread_self(), &tickPolicy, &tickPriority) == 0) {
+        tickPriority.sched_priority = sched_get_priority_max(tickPolicy);
+        pthread_setschedparam(pthread_self(), tickPolicy, &tickPriority);
+    }
 #endif
 
     bool failed = false;

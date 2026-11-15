@@ -331,10 +331,11 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
         return false;
 
     std::unordered_set<int64_t> &loadedChunks = getWorldOf(level).getActorLoadedChunks(level.getDimensionType());
-    const std::unordered_set<int64_t> active(activeColumns.begin(), activeColumns.end());
+    // the level holds the same columns as a set by now: no second copy to probe
+    const std::unordered_set<int64_t> &active = level.getActiveColumns();
     bool deferred = false;
 
-    for (const int64_t column: active) {
+    for (const int64_t column: activeColumns) {
         if (loadedChunks.count(column) != 0)
             continue;
 

@@ -10,11 +10,19 @@
 #include <utility>
 
 #include <pthread.h>
+#ifdef __APPLE__
+#include <pthread/qos.h>
+#endif
 #include <sched.h>
 
 namespace {
     // lower quarter of the scheduling range: generation and storage never starve the tick thread
     void lowerCurrentThreadPriority() {
+#ifdef __APPLE__
+        // the scheduler picks cores by class there: this one leaves the fast cores to the tick and the network
+        if (pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0) == 0)
+            return;
+#endif
         sched_param parameters;
         int policy = 0;
 

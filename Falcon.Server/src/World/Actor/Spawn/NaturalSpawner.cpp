@@ -172,11 +172,12 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     }
 
     const int32_t difficulty = (int32_t) owner.getProperties().getDifficulty();
-    const std::vector<int64_t> columns(level.getActiveColumns().begin(), level.getActiveColumns().end());
-    for (const int64_t column: columns) {
-        // a ticking chunk goes on only when nextInt(2000) <= 10
-        if (_nextInt(CHUNK_SPAWN_ROLL) > CHUNK_SPAWN_THRESHOLD)
-            continue;
+    // a ticking chunk goes on only when nextInt(2000) <= 10: the gap to the next one that does is drawn
+    // at once, the same odds without a roll a chunk
+    const std::vector<int64_t> columns = level.getActiveColumnOrder();
+    std::geometric_distribution<size_t> gap((double) (CHUNK_SPAWN_THRESHOLD + 1) / (double) CHUNK_SPAWN_ROLL);
+    for (size_t index = gap(mRandom); index < columns.size(); index += 1 + gap(mRandom)) {
+        const int64_t column = columns[index];
         _tickChunk(owner, level, (int32_t) (column >> 32), (int32_t) (column & 0xffffffff), difficulty, mobCount,
                    players);
     }

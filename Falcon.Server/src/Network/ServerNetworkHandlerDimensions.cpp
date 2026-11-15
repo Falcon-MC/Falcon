@@ -88,8 +88,10 @@ void ServerNetworkHandler::_tickOverworld(World &world) {
     std::sort(centers.begin(), centers.end());
     centers.erase(std::unique(centers.begin(), centers.end()), centers.end());
 
-    if (world.mActorPersistencePending || tickDistance != world.mActiveTickDistance
-        || centers != world.mActiveCenters) {
+    const bool viewMoved = world.mActiveColumnsStale || tickDistance != world.mActiveTickDistance
+                           || centers != world.mActiveCenters;
+    if (viewMoved) {
+        world.mActiveColumnsStale = false;
         world.mActiveCenters = centers;
         world.mActiveTickDistance = tickDistance;
 
@@ -109,9 +111,12 @@ void ServerNetworkHandler::_tickOverworld(World &world) {
 
         world.getTickingAreas().appendColumns(DimensionType::Overworld, activeColumns);
         level.setActiveColumns(activeColumns);
+    }
 
+    // chunks still on their way keep the actors pending: the columns themselves have not moved
+    if (viewMoved || world.mActorPersistencePending) {
         mProfiler.beginSection(ProfilerSection::ActorPersistence);
-        world.mActorPersistencePending = syncActorPersistence(level, activeColumns);
+        world.mActorPersistencePending = syncActorPersistence(level, level.getActiveColumnOrder());
         mProfiler.endSection(ProfilerSection::ActorPersistence);
     }
 

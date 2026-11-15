@@ -565,10 +565,10 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     };
 
     int32_t count = 0;
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && inRange(entry.second) && passesFilters(entry.second))
+    owner.forEachPlayerNear(center, horizontal, [&](ServerPlayer &player) {
+        if (player.isSpawned() && inRange(player) && passesFilters(player))
             count++;
-    }
+    });
 
     if (playersOnly)
         return count;
@@ -648,19 +648,20 @@ void MobActor::_tickInactivity(ServerNetworkHandler &owner) {
     }
 
     const Vector3f position = getPosition();
-    for (auto &entry: owner.getPlayers()) {
-        const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || !player.sharesLevelWith(*this))
-            continue;
+    bool watched = false;
+    owner.forEachPlayerNear(position, std::sqrt(INACTIVITY_PLAYER_RANGE_SQUARED), [&](const ServerPlayer &player) {
+        if (watched || !player.isSpawned() || !player.sharesLevelWith(*this))
+            return;
 
         const Vector3f other = player.getPosition();
         const float dx = other.x - position.x;
         const float dy = other.y - position.y;
         const float dz = other.z - position.z;
-        if (dx * dx + dy * dy + dz * dz <= INACTIVITY_PLAYER_RANGE_SQUARED) {
-            mInactivityTicks = 0;
-            return;
-        }
+        watched = dx * dx + dy * dy + dz * dz <= INACTIVITY_PLAYER_RANGE_SQUARED;
+    });
+    if (watched) {
+        mInactivityTicks = 0;
+        return;
     }
     mInactivityTicks++;
 }
@@ -2713,11 +2714,7 @@ float MobActor::distanceSquaredTo(const Actor &other) const {
 }
 
 ServerPlayer *MobActor::findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId) {
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.getRuntimeId() == runtimeId)
-            return &entry.second;
-    }
-    return nullptr;
+    return owner.getPlayerByRuntimeId(runtimeId);
 }
 
 void MobActor::tickControls(ServerNetworkHandler &owner) {
