@@ -26,6 +26,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <unordered_map>
+#include <vector>
 #include <random>
 #include <string>
 
@@ -65,6 +68,13 @@ namespace {
     const float ITEM_HORIZONTAL_DRAG = 0.02f;
     const float ITEM_VERTICAL_DRAG = 0.02f;
     const float ITEM_GROUND_PROBE_DEPTH = 0.01f;
+    const int RESTING_MOVE_MASK = 3;
+    // every 25 ticks an item looks for its like half a block around its box
+    const int MERGE_INTERVAL = 25;
+    const float MERGE_REACH = 0.5f;
+    const float ITEM_HALF_WIDTH = 0.125f;
+    const float ITEM_HEIGHT = 0.25f;
+    const uint8_t ACTOR_EVENT_UPDATE_STACK_SIZE = 69;
     const float ITEM_PICKUP_RANGE_SQUARED = 2.25f;
 
     bool isCampfire(const std::string &identifier) {
@@ -259,6 +269,10 @@ add.mMetadata.mEntries.push_back(flags3);
 
     void moveItemActor(ServerNetworkHandler &owner, ItemActor &actor) {
         if (actor.isOnGround()) {
+            // the game moves an item at rest on the ground on one tick in four
+            if ((actor.getAge() & RESTING_MOVE_MASK) != 0)
+                return;
+
             if (hasSupportBelow(owner, actor)) {
                 liftOutOfLayer(owner, actor);
                 return;
@@ -404,6 +418,90 @@ add.mMetadata.mEntries.push_back(flags3);
     }
 }
 
+namespace {
+    int64_t mergeCell(const Level *level, int32_t x, int32_t y, int32_t z) {
+        return ((int64_t) (x & 0x3FFFFF) << 42) ^ ((int64_t) (z & 0x3FFFFF) << 20) ^ ((int64_t) (y & 0xFFF) << 8)
+               ^ (int64_t) (reinterpret_cast<uintptr_t>(level) >> 4 & 0xFF);
+    }
+
+    // the smaller stack joins the larger one when both fit in one stack; the stack kept takes the longer
+    // pickup delay and the younger age
+    void mergeItemActors(ServerNetworkHandler &owner) {
+        std::vector<std::unique_ptr<ItemActor>> &actors = owner.getItemEntities();
+        std::vector<ItemActor *> due;
+        for (const std::unique_ptr<ItemActor> &actor: actors) {
+            if (!actor->isRemoved() && actor->getAge() > 0 && actor->getAge() % MERGE_INTERVAL == 0)
+                due.push_back(actor.get());
+        }
+        if (due.empty())
+            return;
+
+        std::unordered_map<int64_t, std::vector<ItemActor *>> cells;
+        cells.reserve(actors.size());
+        for (const std::unique_ptr<ItemActor> &actor: actors) {
+            if (actor->isRemoved())
+                continue;
+            const Vector3f &position = actor->getPosition();
+            cells[mergeCell(&owner.getLevelFor(*actor), (int32_t) std::floor(position.x),
+                            (int32_t) std::floor(position.y), (int32_t) std::floor(position.z))]
+                    .push_back(actor.get());
+        }
+
+        const float reach = MERGE_REACH + ITEM_HALF_WIDTH * 2.0f;
+        for (ItemActor *self: due) {
+            if (self->isRemoved())
+                continue;
+
+            const Level *level = &owner.getLevelFor(*self);
+            const Vector3f origin = self->getPosition();
+            const int32_t minX = (int32_t) std::floor(origin.x - reach), maxX = (int32_t) std::floor(origin.x + reach);
+            const int32_t minY = (int32_t) std::floor(origin.y - MERGE_REACH - ITEM_HEIGHT);
+            const int32_t maxY = (int32_t) std::floor(origin.y + MERGE_REACH + ITEM_HEIGHT);
+            const int32_t minZ = (int32_t) std::floor(origin.z - reach), maxZ = (int32_t) std::floor(origin.z + reach);
+            bool merged = false;
+            for (int32_t x = minX; x <= maxX && !merged; ++x) {
+                for (int32_t y = minY; y <= maxY && !merged; ++y) {
+                    for (int32_t z = minZ; z <= maxZ && !merged; ++z) {
+                        const auto cell = cells.find(mergeCell(level, x, y, z));
+                        if (cell == cells.end())
+                            continue;
+
+                        for (ItemActor *other: cell->second) {
+                            if (other == self || other->isRemoved() || &owner.getLevelFor(*other) != level)
+                                continue;
+
+                            const Vector3f &at = other->getPosition();
+                            if (std::fabs(at.x - origin.x) > reach || std::fabs(at.z - origin.z) > reach
+                                || at.y > origin.y + ITEM_HEIGHT + MERGE_REACH
+                                || at.y + ITEM_HEIGHT < origin.y - MERGE_REACH)
+                                continue;
+
+                            const ItemStack &mine = self->getItem();
+                            const ItemStack &theirs = other->getItem();
+                            if (mine.isAir() || theirs.isAir() || !PlayerInventory::canStack(mine, theirs)
+                                || mine.mCount + theirs.mCount > PlayerInventory::getMaxStackSize(mine))
+                                continue;
+
+                            ItemActor *kept = theirs.mCount >= mine.mCount ? other : self;
+                            ItemActor *gone = kept == other ? self : other;
+                            ItemStack stack = kept->getItem();
+                            stack.mCount += gone->getItem().mCount;
+                            kept->setItem(stack);
+                            kept->setPickupDelay(std::max(kept->getPickupDelay(), gone->getPickupDelay()));
+                            kept->setAge(std::min(kept->getAge(), gone->getAge()));
+                            gone->setRemoved(true);
+                            owner._broadcastEntityEvent(*kept, ACTOR_EVENT_UPDATE_STACK_SIZE, stack.mCount);
+                            // one merge a look, as the game: the stack kept looks again 25 ticks on
+                            merged = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 ItemActor *ItemActorHandler::dropItem(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
                                       const ItemStack &item, const Vector3f &motion, int pickupDelay) {
     if (item.isAir() || item.mCount <= 0)
@@ -513,6 +611,8 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
 
         ++index;
     }
+
+    mergeItemActors(owner);
 }
 
 ItemActor *ItemActorHandler::restoreItem(ServerNetworkHandler &owner, Level &level, const Tag &data) {
