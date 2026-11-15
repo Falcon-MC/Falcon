@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-	<a href="https://falcon-mc.github.io"><img src="https://img.shields.io/badge/website-falcon--mc.github.io-2ea44f" alt="Website"></a>
+	<a href="https://falcon-mc.com"><img src="https://img.shields.io/badge/website-falcon--mc.com-2ea44f" alt="Website"></a>
 	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 	<img src="https://img.shields.io/badge/minecraft-v1.26.60%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2225-blue" alt="Protocol">
@@ -33,7 +33,7 @@ inventories, movement and gameplay are reimplemented by hand, with vanilla behav
 Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases), check it
 against its `.sha256` file and run it. On the first start, a setup wizard writes `server.properties`.
 
-Every setting is described on the [website](https://falcon-mc.github.io).
+Every setting is described on the [website](https://falcon-mc.com).
 
 ## Supported versions
 
