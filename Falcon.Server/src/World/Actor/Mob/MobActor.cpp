@@ -1,4 +1,5 @@
 #include "World/Actor/Mob/MobActor.h"
+#include "Protocol/Packets/UpdateTradePacket.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/AI/Goal/BehaviorGoals.h"
@@ -1336,10 +1337,29 @@ bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryNameTag(owner, player, held) || _tryLeash(owner, player, held) || _tryInteract(owner, player)
         || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
-        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player))
+        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player)
+        || _tryTrade(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
+}
+
+bool MobActor::_tryTrade(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const json::Value *component = getComponent(MobEconomy::COMPONENT);
+    if (component == nullptr)
+        return false;
+    const json::Value *showScreen = component->get("show_trade_screen");
+    if ((showScreen != nullptr && !showScreen->boolean(true)) || !mEconomy.canTradeWith(owner, *this, player))
+        return false;
+
+    UpdateTradePacket packet;
+    if (!mEconomy.startTrading(owner, *this, player, packet))
+        return false;
+    if (!player.getInventoryManager().openTrade(getUniqueId(), packet)) {
+        mEconomy.stopTrading();
+        return false;
+    }
+    return true;
 }
 
 bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {

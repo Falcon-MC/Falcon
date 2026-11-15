@@ -656,6 +656,8 @@ private:
 
     bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    bool _tryTrade(ServerNetworkHandler &owner, ServerPlayer &player);
+
     const json::Value *_seatFor(size_t index, size_t passengerCount) const;
 
     float _rolledValue(const json::Value *component, float &rolled, float fallback) const;

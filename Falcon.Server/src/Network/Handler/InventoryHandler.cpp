@@ -529,6 +529,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     const std::vector<ItemStack> mountEquipment = mount == nullptr ? std::vector<ItemStack>()
                                                                    : mount->getEquippableItems();
 
+    MobActor *trader = manager.isTradeOpen() ? dynamic_cast<MobActor *>(owner.getActor(manager.getTradeActorId()))
+                                             : nullptr;
+    if (trader != nullptr && trader->getEconomy().getTradingPlayer() != player.getUniqueId())
+        trader = nullptr;
+
     for (const ItemStackRequest &request: packet.mRequests) {
         // nothing to run: the same answer as a request run on a copy of the inventory, without the copy
         if (request.mActions.empty() && !renumberedBundles && !leftContainer) {
@@ -580,13 +585,20 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         }
 
         ItemStack craftedRecipeItem = ItemStack::air();
+        TradeCraft trade;
+        const MerchantOffers *tradeOffers =
+                trader == nullptr ? nullptr : trader->getEconomy().getOffers(owner, *trader);
         ItemStackResponseEntry entry = ItemStackRequestHandler::execute(
                 inventory, request, owner.getCreativeItems(), owner.getRecipeOutputs(), owner.getRecipeSourceIndices(),
                 player.getInventoryManager().isCraftingTableOpen(), player.getInventoryManager().isFurnaceOpen(),
                 player.getInventoryManager().getContainer(), &droppedItems, &owner.getCodecContext(), &bundles,
                 player.getExperience().getXpLevel(), creativeMode, &enchantLevelsConsumed, anvilOpen,
                 &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
-                stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem);
+                stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem, tradeOffers,
+                &trade);
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && trader != nullptr && trade.mOfferIndex >= 0)
+            trader->getEconomy().onTrade(owner, *trader, trade.mOfferIndex, trade.mCrafts);
 
         // the copy waits for the request to hold: a rejected one would leave an orphan map behind
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK

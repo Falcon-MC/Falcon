@@ -34,6 +34,8 @@
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/ClientboundStonecutterSetRecipePacket.h"
 #include "Protocol/Packets/ContainerOpenPacket.h"
+#include "Protocol/Packets/UpdateTradePacket.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "Protocol/Packets/ContainerSetDataPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 #include "Protocol/Packets/InventoryContentPacket.h"
@@ -870,7 +872,8 @@ void InventoryManager::onCurrentWindowRemove() {
         return;
     }
 
-    const int currentWindowId = mFurnaceWindowId != CONTAINER_ID_NONE
+    const int currentWindowId = mTradeWindowId != CONTAINER_ID_NONE ? mTradeWindowId
+                                : mFurnaceWindowId != CONTAINER_ID_NONE
                                         ? mFurnaceWindowId
                                         : (mCraftingTableWindowId != CONTAINER_ID_NONE
                                                    ? mCraftingTableWindowId
@@ -891,7 +894,10 @@ void InventoryManager::onCurrentWindowRemove() {
 
     mPendingCloseWindowId = currentWindowId;
     mHasPendingCloseWindow = true;
-    if (mCraftingTableWindowId == currentWindowId) {
+    if (mTradeWindowId == currentWindowId) {
+        _closeTrade();
+        mTradeWindowId = CONTAINER_ID_NONE;
+    } else if (mCraftingTableWindowId == currentWindowId) {
         mCraftingTableWindowId = CONTAINER_ID_NONE;
     } else if (mAnvilWindowId == currentWindowId) {
         _closeAnvil();
@@ -946,7 +952,8 @@ void InventoryManager::closeAllWindows() {
     mHasPendingCloseWindow = false;
     mPendingCloseWindowId = CONTAINER_ID_NONE;
     for (const int windowId:
-         {mFurnaceWindowId, mCraftingTableWindowId, mAnvilWindowId, mContainerWindowId, mMainInventoryWindowId}) {
+         {mTradeWindowId, mFurnaceWindowId, mCraftingTableWindowId, mAnvilWindowId, mContainerWindowId,
+          mMainInventoryWindowId}) {
         if (windowId != CONTAINER_ID_NONE)
             onClientRemoveWindow(windowId);
     }
@@ -1121,6 +1128,53 @@ void InventoryManager::_closeAnvil() {
         if (item.mCount > 0)
             mOwner->_throwItem(*mPlayer, item);
     }
+}
+
+bool InventoryManager::openTrade(int64_t traderId, UpdateTradePacket &packet) {
+    if (mPlayer == nullptr || mSender == nullptr)
+        return false;
+
+    if (mTradeWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE
+        || mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mContainerWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        return false;
+
+    mTradeWindowId = _getNewWindowId();
+    mTradeActorId = traderId;
+    mCurrentWindowType = ContainerType::Trade;
+    packet.mContainerId = (int8_t) mTradeWindowId;
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+    return true;
+}
+
+// the wanted items go back to the player; the trader is free for the next one
+void InventoryManager::_closeTrade() {
+    if (mPlayer == nullptr || mOwner == nullptr)
+        return;
+
+    PlayerInventory &inventory = mPlayer->getInventory();
+    for (int slot = 0; slot < PlayerInventory::TRADE_SIZE; ++slot) {
+        ItemStack item = inventory.getTradeItem(slot);
+        if (item.isAir())
+            continue;
+        inventory.setTradeItem(slot, ItemStack::air());
+        _returnToInventory(std::move(item));
+    }
+
+    MobActor *trader = dynamic_cast<MobActor *>(mOwner->getActor(mTradeActorId));
+    if (trader != nullptr && trader->getEconomy().getTradingPlayer() == mPlayer->getUniqueId())
+        trader->getEconomy().stopTrading();
+    mTradeActorId = -1;
+}
+
+void InventoryManager::_returnToInventory(ItemStack item) {
+    std::vector<int> touched;
+    item.mCount = mPlayer->getInventory().addItemPartial(item, touched);
+    for (int touchedSlot: touched)
+        syncSlot(InventoryId::Inventory, touchedSlot);
+
+    if (item.mCount > 0)
+        mOwner->_throwItem(*mPlayer, item);
 }
 
 bool InventoryManager::openContainer(ContainerType type, const Vector3i &position) {
@@ -1572,6 +1626,11 @@ void InventoryManager::onClientRemoveWindow(int windowId) {
     if (windowId == mAnvilWindowId) {
         _closeAnvil();
         mAnvilWindowId = CONTAINER_ID_NONE;
+    }
+
+    if (windowId == mTradeWindowId) {
+        _closeTrade();
+        mTradeWindowId = CONTAINER_ID_NONE;
     }
 
     if (windowId == mContainerWindowId) {

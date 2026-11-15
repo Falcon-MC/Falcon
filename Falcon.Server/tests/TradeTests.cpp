@@ -5,7 +5,11 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Definition/EntityEvents.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/ItemStackRequestHandler.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "World/Actor/Trade/MerchantOffers.h"
+#include "Protocol/Packets/UpdateTradePacket.h"
 #include "World/Actor/Trade/TradeTable.h"
 #include "World/Actor/Trade/TradeTableRegistry.h"
 #include "World/Item/EnchantmentData.h"
@@ -60,6 +64,17 @@ namespace {
                     chunk.setBiome(BiomeIds::PLAINS);
                 }
             }
+        }
+
+        ServerPlayer &player(uint64_t runtimeId) {
+            const NetworkIdentifier id(std::to_string(runtimeId), runtimeId);
+            ServerPlayer &player = mOwner.getPlayers().try_emplace(id, id, runtimeId).first->second;
+            player.getAttributes() = ActorAttributes::createPlayerDefaults();
+            player.moveToLevel(*mLevel);
+            player.setPosition(Vector3f(0.5f, 100.0f, 1.5f));
+            player.setLoginState(ServerPlayer::LoginState::Spawned);
+            player.getInventoryManager().attach(&player, &mOwner);
+            return player;
         }
 
         MobActor &villager(const char *profession) {
@@ -273,6 +288,142 @@ namespace {
         require(offer.mDemand == std::max(0, offer.mMaxUses), "the full uses did not become demand");
     }
 
+    ItemStackRequestSlotData slotOf(ContainerSlotType container, int32_t slot) {
+        ItemStackRequestSlotData data;
+        data.mContainer = container;
+        data.mContainerName.mContainer = container;
+        data.mSlot = slot;
+        return data;
+    }
+
+    ItemStackRequest tradeRequest(int32_t netId, int32_t crafts, ContainerSlotType from, int32_t consumed,
+                                  int32_t taken) {
+        ItemStackRequest request;
+        request.mRequestId = -1;
+
+        ItemStackRequestAction craft;
+        craft.mType = ItemStackRequestActionType::CraftRecipe;
+        craft.mRecipeNetworkId = netId;
+        craft.mNumberOfRequestedCrafts = crafts;
+        request.mActions.push_back(craft);
+
+        ItemStackRequestAction consume;
+        consume.mType = ItemStackRequestActionType::Consume;
+        consume.mCount = consumed;
+        consume.mSource = slotOf(from, 4);
+        request.mActions.push_back(consume);
+
+        ItemStackRequestAction take;
+        take.mType = ItemStackRequestActionType::Take;
+        take.mCount = taken;
+        take.mSource = slotOf(ContainerSlotType::CreatedOutput, 50);
+        take.mDestination = slotOf(ContainerSlotType::Inventory, 0);
+        request.mActions.push_back(take);
+        return request;
+    }
+
+    int runTrade(Arena &arena, PlayerInventory &inventory, const ItemStackRequest &request,
+                 const MerchantOffers *offers, TradeCraft &trade) {
+        const std::vector<CreativeItemData> creative;
+        return ItemStackRequestHandler::execute(inventory, request, creative, arena.mOwner.getRecipeOutputs(),
+                                                arena.mOwner.getRecipeSourceIndices(), false, false, nullptr, nullptr,
+                                                &arena.mOwner.getCodecContext(), nullptr, 0, false, nullptr, false,
+                                                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, offers, &trade)
+                .mResult;
+    }
+
+    void tradeRequestsAreChecked(Arena &arena) {
+        MerchantOffers offers;
+        MerchantOffer offer;
+        offer.mBuyA = arena.mOwner.createItemStack("minecraft:emerald", 3);
+        offer.mBuyCountA = 3;
+        offer.mSell = arena.mOwner.createItemStack("minecraft:bread", 2);
+        offer.mMaxUses = 2;
+        offer.mNetId = MerchantOffers::nextNetId();
+        offers.mOffers.push_back(offer);
+        const int32_t netId = offer.mNetId;
+
+        PlayerInventory inventory;
+        inventory.setTradeItem(0, arena.mOwner.createItemStack("minecraft:emerald", 10));
+        TradeCraft trade;
+        const int ok = ItemStackRequestHandler::RESULT_OK;
+
+        require(runTrade(arena, inventory, tradeRequest(netId, 1, ContainerSlotType::Trade2Ingredient1, 3, 2), nullptr,
+                         trade) != ok,
+                "a trade went through with no trader");
+        require(runTrade(arena, inventory, tradeRequest(netId + 1, 1, ContainerSlotType::Trade2Ingredient1, 3, 2),
+                         &offers, trade) != ok,
+                "an unknown offer was traded");
+        require(runTrade(arena, inventory, tradeRequest(netId, 1, ContainerSlotType::Trade2Ingredient1, 2, 2), &offers,
+                         trade) != ok,
+                "a trade paid less than the price");
+        require(runTrade(arena, inventory, tradeRequest(netId, 1, ContainerSlotType::Trade2Ingredient1, 4, 2), &offers,
+                         trade) != ok,
+                "a trade paid more than the price");
+        require(runTrade(arena, inventory, tradeRequest(netId, 0, ContainerSlotType::Trade2Ingredient1, 0, 0), &offers,
+                         trade) != ok,
+                "a trade of nothing was granted");
+        require(runTrade(arena, inventory, tradeRequest(netId, 2, ContainerSlotType::Trade2Ingredient1, 6, 2), &offers,
+                         trade) != ok,
+                "the output was not fully taken");
+        require(runTrade(arena, inventory, tradeRequest(netId, 1, ContainerSlotType::Inventory, 3, 2), &offers,
+                         trade) != ok,
+                "a trade paid from outside the wanted slots");
+        require(inventory.getTradeItem(0).mCount == 10 && inventory.getItem(0).isAir(),
+                "a refused trade changed the inventory");
+
+        require(runTrade(arena, inventory, tradeRequest(netId, 2, ContainerSlotType::Trade2Ingredient1, 6, 4), &offers,
+                         trade) == ok,
+                "a valid double trade was refused");
+        require(trade.mOfferIndex == 0 && trade.mCrafts == 2, "the trade did not report its offer");
+        require(inventory.getTradeItem(0).mCount == 4 && inventory.getItem(0).mCount == 4,
+                "the trade moved the wrong counts");
+
+        offers.mOffers.front().mUses = 2;
+        TradeCraft spent;
+        require(runTrade(arena, inventory, tradeRequest(netId, 1, ContainerSlotType::Trade2Ingredient1, 3, 2), &offers,
+                         spent) != ok,
+                "an offer out of stock was traded");
+    }
+
+    void tradingTeachesTheTrader(Arena &arena) {
+        MobActor &armorer = arena.villager("armorer");
+        MerchantOffers *offers = armorer.getEconomy().getOffers(arena.mOwner, armorer);
+        require(offers != nullptr && !offers->mOffers.empty(), "the armorer rolled no offers");
+        MerchantOffer &offer = offers->mOffers.front();
+        const int32_t needed = offers->mTierExpRequirements.size() > 1 ? offers->mTierExpRequirements[1] : 0;
+        require(needed > 0 && offer.mTraderExp > 0, "the first tier needs no experience");
+
+        const int32_t trades = (needed + offer.mTraderExp - 1) / offer.mTraderExp;
+        armorer.getEconomy().onTrade(arena.mOwner, armorer, 0, trades);
+        require(offer.mUses == trades, "the trade did not count its uses");
+        require(armorer.getEconomy().getExperience() == trades * offer.mTraderExp, "the trader gained no experience");
+        require(armorer.getEconomy().getTier() == 1, "enough experience did not raise the tier");
+
+        ServerPlayer &player = arena.player(7);
+        require(armorer.onInteract(arena.mOwner, player), "interacting did not open the trade");
+        require(player.getInventoryManager().getTradeActorId() == armorer.getUniqueId(),
+                "the trade screen is not the armorer's");
+        UpdateTradePacket packet;
+        require(armorer.getEconomy().startTrading(arena.mOwner, armorer, player, packet), "the trade did not start");
+        require(packet.mTradeTier == 1 && packet.mUsingEconomyTrade && packet.mNewTradingUi,
+                "the trade packet lost the tier or the screen");
+        const Tag *recipes = packet.mOffers.get("Recipes");
+        require(recipes != nullptr && recipes->getList().size() == offers->mOffers.size()
+                        && recipes->getList().front().contains("netId", Tag::Type::Int),
+                "the packet offers lack their net ids");
+        ServerPlayer &other = arena.player(8);
+        require(!armorer.getEconomy().canTradeWith(arena.mOwner, armorer, other), "a second player traded at once");
+        require(!armorer.onInteract(arena.mOwner, other), "a second player opened the busy trader");
+
+        // closing gives the wanted items back and frees the trader
+        player.getInventory().setTradeItem(0, arena.mOwner.createItemStack("minecraft:emerald", 5));
+        player.getInventoryManager().onClientRemoveWindow(player.getInventoryManager().getCurrentWindowId());
+        require(!player.getInventoryManager().isTradeOpen(), "the trade screen stayed open");
+        require(player.getInventory().getTradeItem(0).isAir(), "the wanted slot kept its items");
+        require(armorer.getEconomy().canTradeWith(arena.mOwner, armorer, other), "closing did not free the trader");
+    }
+
     void tippedArrowsKeepThePotionOffset() {
         const std::unique_ptr<json::Value> definition =
                 json::parse(R"({"function": "set_potion", "id": "nightvision"})");
@@ -312,6 +463,8 @@ int main() {
         tiersFollowExperience();
         resupplyEventRestocks(arena);
         tippedArrowsKeepThePotionOffset();
+        tradeRequestsAreChecked(arena);
+        tradingTeachesTheTrader(arena);
         std::cout << "trade checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';

@@ -6,7 +6,11 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Level/Storage/Loot/LootItems.h"
+#include "World/Actor/MobEffect.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/UpdateTradePacket.h"
+#include "Protocol/Types/ContainerType.h"
 #include "Protocol/Types/EntityDataMap.h"
 
 #include <algorithm>
@@ -26,6 +30,28 @@ namespace {
     const char *TAG_TRADE_EXPERIENCE = "TradeExperience";
 
     using Trades = std::vector<std::shared_ptr<const TradeEntry>>;
+
+    const char *SOUND_HAGGLE = "haggle";
+    const char *SOUND_HAGGLE_YES = "haggle.yes";
+    const char *SOUND_HAGGLE_IDLE = "haggle.idle";
+    // a trade pays 3 to 6 experience points, 5 more when it raises the trader's tier
+    const int32_t TRADE_EXPERIENCE_BASE = 3;
+    const int32_t TRADE_EXPERIENCE_SPREAD = 4;
+    const int32_t TIER_UP_EXPERIENCE = 5;
+    const int32_t DEFAULT_MAX_LOW_CURED_DISCOUNT = -25;
+    const int32_t DEFAULT_MAX_HIGH_CURED_DISCOUNT = -20;
+
+    // a positive discount is none; a negative one stops at the component's maximum
+    int32_t clampCureDiscount(int32_t discount, int32_t maximum) {
+        return discount > 0 ? 0 : std::max(discount, maximum);
+    }
+
+    int32_t maxCuredDiscount(const json::Value *component, size_t index, int32_t fallback) {
+        const json::Value *range = component == nullptr ? nullptr : component->get("max_cured_discount");
+        if (range == nullptr || !range->isArray() || range->mArray.size() <= index)
+            return fallback;
+        return range->mArray[index]->integer(fallback);
+    }
 
     std::vector<const TradeItemChoice *> passingChoices(ServerNetworkHandler &owner, const MobActor &mob,
                                                        const TradeItemEntry &entry) {
@@ -250,6 +276,97 @@ void MobEconomy::syncTier() {
         return;
     }
     mTier = mOffers == nullptr ? 0 : mOffers->tierForExperience(mExperience);
+}
+
+bool MobEconomy::canTradeWith(ServerNetworkHandler &owner, const MobActor &mob, const ServerPlayer &player) const {
+    return mTradingPlayer == NO_PLAYER || mTradingPlayer == player.getUniqueId() || !_isTrading(owner, mob);
+}
+
+// the player must still be here with this trader's screen open
+bool MobEconomy::_isTrading(ServerNetworkHandler &owner, const MobActor &mob) const {
+    if (mTradingPlayer == NO_PLAYER)
+        return false;
+    for (auto &entry: owner.getPlayers()) {
+        const ServerPlayer &player = entry.second;
+        if (player.getUniqueId() == mTradingPlayer)
+            return player.isSpawned() && player.getInventoryManager().getTradeActorId() == mob.getUniqueId();
+    }
+    return false;
+}
+
+bool MobEconomy::startTrading(ServerNetworkHandler &owner, MobActor &mob, ServerPlayer &player,
+                              UpdateTradePacket &packet) {
+    MerchantOffers *offers = getOffers(owner, mob);
+    if (offers == nullptr)
+        return false;
+
+    const json::Value *component = mob.getComponent(COMPONENT);
+    const int32_t lowCure = clampCureDiscount(
+            mLowTierCuredDiscount, maxCuredDiscount(component, 0, DEFAULT_MAX_LOW_CURED_DISCOUNT));
+    const int32_t highCure = clampCureDiscount(
+            mHighTierCuredDiscount, maxCuredDiscount(component, 1, DEFAULT_MAX_HIGH_CURED_DISCOUNT));
+    const MobEffectInstance *hero = player.getEffect(MobEffectId::VillageHero);
+    for (MerchantOffer &offer: offers->mOffers)
+        offer.updatePrice(lowCure, highCure, hero != nullptr, hero == nullptr ? 0 : hero->mAmplifier);
+    syncTier();
+
+    mTradingPlayer = player.getUniqueId();
+    _syncMetadata(owner, mob);
+
+    const json::Value *name = component == nullptr ? nullptr : component->get("display_name");
+    const json::Value *newScreen = component == nullptr ? nullptr : component->get("new_screen");
+    packet.mContainerType = (int8_t) containerTypeToId(ContainerType::Trade);
+    packet.mSize = 0;
+    packet.mTradeTier = mTier;
+    packet.mTraderUniqueActorId = mob.getUniqueId();
+    packet.mPlayerUniqueActorId = player.getUniqueId();
+    packet.mDisplayName = name == nullptr ? std::string() : name->string();
+    packet.mNewTradingUi = newScreen != nullptr && newScreen->boolean(false);
+    packet.mUsingEconomyTrade = true;
+    packet.mOffers = offers->save(true);
+
+    owner.playLevelSound(owner.getLevelFor(mob), SOUND_HAGGLE, mob.getPosition(), mob.getIdentifier());
+    return true;
+}
+
+void MobEconomy::stopTrading() {
+    mTradingPlayer = NO_PLAYER;
+}
+
+void MobEconomy::onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t offerIndex, int32_t crafts) {
+    if (mOffers == nullptr || offerIndex < 0 || (size_t) offerIndex >= mOffers->mOffers.size() || crafts <= 0)
+        return;
+
+    MerchantOffer &offer = mOffers->mOffers[(size_t) offerIndex];
+    offer.mUses += crafts;
+
+    Level &level = owner.getLevelFor(mob);
+    const bool withPlayer = _isTrading(owner, mob);
+    owner.playLevelSound(level, withPlayer ? SOUND_HAGGLE_YES : SOUND_HAGGLE_IDLE, mob.getPosition(),
+                         mob.getIdentifier());
+
+    int32_t experience = 0;
+    for (int32_t trade = 0; trade < crafts; ++trade)
+        experience += GameRandom::nextInt(random(), TRADE_EXPERIENCE_SPREAD) + TRADE_EXPERIENCE_BASE;
+
+    // the trader learns only below its top tier
+    if (mTier < mMaxTier) {
+        mExperience += crafts * offer.mTraderExp;
+        const int32_t tier = mOffers->tierForExperience(mExperience);
+        if (mTier < tier)
+            experience += TIER_UP_EXPERIENCE;
+        mTier = tier;
+        _syncMetadata(owner, mob);
+    }
+
+    if (offer.mRewardExp)
+        owner.spawnExperienceOrbs(level, mob.getPosition(), experience);
+}
+
+void MobEconomy::_syncMetadata(ServerNetworkHandler &owner, MobActor &mob) const {
+    EntityDataMap metadata;
+    appendMetadata(metadata);
+    owner.sendActorMetadata(mob, metadata);
 }
 
 void MobEconomy::appendMetadata(EntityDataMap &metadata) const {
