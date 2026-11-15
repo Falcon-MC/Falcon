@@ -1,3 +1,5 @@
+#include "Core/Debug/BedrockLog.h"
+#include "Core/Debug/ContentLogEndPoint.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -13,7 +15,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -344,13 +345,17 @@ namespace {
 }
 
 int main() {
+    BedrockLog::addEndPoint(std::make_shared<ContentLogEndPoint>(false));
+
+    int result = 0;
     try {
         run();
+        LOG_INFO(LogAreaID::Server, "PASS: tnt blast");
     } catch (const std::exception &error) {
-        std::cerr << "tnt blast test failed: " << error.what() << std::endl;
-        return 1;
+        LOG_ERROR(LogAreaID::Server, "FAIL: tnt blast: %s", error.what());
+        result = 1;
     }
 
-    std::cout << "tnt blast tests passed" << std::endl;
-    return 0;
+    BedrockLog::flush();
+    return result;
 }
