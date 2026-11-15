@@ -1,4 +1,6 @@
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/InventoryHandler.h"
+#include "Protocol/Packets/ItemStackRequestPacket.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemUseTransaction.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -123,6 +125,38 @@ namespace {
                             && !allowed.getOffhand().isAir()
                             && allowed.getOffhand().mDefinition->getIdentifier() == "test:club",
                     "a pack item with allow_off_hand was kept out of the off hand");
+        }
+
+        // each request of a packet stands alone: one that fails or holds nothing does not stop the next
+        {
+            PlayerInventory &inventory = player.getInventory();
+            inventory.setItem(10, owner.createItemStack("minecraft:dirt", 4));
+
+            ItemStackRequestAction move;
+            move.mType = ItemStackRequestActionType::Take;
+            move.mCount = 1;
+            move.mSource = slotOf(ContainerSlotType::Inventory, 10);
+            move.mDestination = slotOf(ContainerSlotType::Inventory, 11);
+            ItemStackRequest valid;
+            valid.mRequestId = -5;
+            valid.mActions.push_back(move);
+
+            ItemStackRequestAction fromNothing = move;
+            fromNothing.mSource = slotOf(ContainerSlotType::Inventory, 20);
+            ItemStackRequest invalid;
+            invalid.mRequestId = -3;
+            invalid.mActions.push_back(fromNothing);
+
+            ItemStackRequest empty;
+            empty.mRequestId = -1;
+
+            ItemStackRequestPacket mixed;
+            mixed.mRequests = {invalid, empty, valid, empty, valid};
+            InventoryHandler::handleItemStackRequest(owner, id, player, mixed);
+            require(inventory.getItem(10).mCount == 2 && inventory.getItem(11).mCount == 2,
+                    "a failed or empty request stopped the valid ones of its packet");
+            inventory.setItem(10, ItemStack::air());
+            inventory.setItem(11, ItemStack::air());
         }
 
         // a creative player breaks a block at once, except while holding an item that refuses to
