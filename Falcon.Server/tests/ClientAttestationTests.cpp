@@ -1,8 +1,6 @@
 #include "Network/ClientAttestation.h"
 
 #include <iostream>
-#include <random>
-#include <set>
 #include <stdexcept>
 #include <string>
 
@@ -25,23 +23,6 @@ namespace {
         require(!ClientAttestation::isRemoval(200, "1x"), "a broken answer removed the client");
         require(!ClientAttestation::isRemoval(200, "1001"), "a number out of range removed the client");
         require(!ClientAttestation::isRemoval(200, "123456789"), "a long answer removed the client");
-
-        // removals: sometimes at once, otherwise spread over three seconds, and waves at irregular times
-        std::mt19937 random(7);
-        int atOnce = 0;
-        std::set<int64_t> delays, waves;
-        for (int draw = 0; draw < 10000; draw++) {
-            const int64_t delay = ClientAttestation::removalDelay(random);
-            require(delay >= 0 && delay <= 60, "a removal waits longer than three seconds");
-            atOnce += delay == 0;
-            delays.insert(delay);
-            const int64_t wave = ClientAttestation::waveInterval(random);
-            require(wave >= 5 && wave <= 30, "a wave interval is out of range");
-            waves.insert(wave);
-        }
-        require(atOnce > 2000 && atOnce < 3000, "about a quarter of removals are not at once");
-        require(delays.size() == 61, "the delays do not cover zero to three seconds");
-        require(waves.size() == 26, "the wave intervals are not spread");
     }
 }
 

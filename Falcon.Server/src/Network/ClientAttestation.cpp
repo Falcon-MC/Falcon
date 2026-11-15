@@ -210,18 +210,6 @@ std::vector<NetworkIdentifier> ClientAttestation::takeRemovals() {
     return removals;
 }
 
-int64_t ClientAttestation::removalDelay(std::mt19937 &random) {
-    // three seconds at twenty ticks a second
-    static constexpr int64_t MAX_DELAY_TICKS = 60;
-    if (std::uniform_int_distribution<int>(0, 3)(random) == 0)
-        return 0;
-    return std::uniform_int_distribution<int64_t>(1, MAX_DELAY_TICKS)(random);
-}
-
-int64_t ClientAttestation::waveInterval(std::mt19937 &random) {
-    return std::uniform_int_distribution<int64_t>(5, 30)(random);
-}
-
 // an older service answered its score: a positive one still means remove
 bool ClientAttestation::isRemoval(int status, const std::string &body) {
     if (status != 200 || body.empty() || body.size() > 8)
