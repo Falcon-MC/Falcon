@@ -372,6 +372,10 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     const bool keepOffhand = ItemProperties::keepsOnDeath(offhand);
     if (!keepOffhand)
         dropOnDeath(offhand);
+    const ItemStack bodyArmor = inventory.getBodyArmor();
+    const bool keepBodyArmor = ItemProperties::keepsOnDeath(bodyArmor);
+    if (!keepBodyArmor)
+        dropOnDeath(bodyArmor);
     dropOnDeath(inventory.getCursor());
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot)
@@ -412,6 +416,8 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
         inventory.setArmor(slot, std::move(item));
     if (keepOffhand)
         inventory.setOffhand(offhand);
+    if (keepBodyArmor)
+        inventory.setBodyArmor(bodyArmor);
 
     _sendInventory(player);
 }

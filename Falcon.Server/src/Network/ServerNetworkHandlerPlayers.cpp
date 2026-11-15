@@ -55,7 +55,7 @@ void ServerNetworkHandler::_sendPlayerSpawn(ServerPlayer &viewer, ServerPlayer &
     armor.mChestplate = inventory.getArmor(PlayerInventory::ARMOR_TORSO);
     armor.mLeggings = inventory.getArmor(PlayerInventory::ARMOR_LEGS);
     armor.mBoots = inventory.getArmor(PlayerInventory::ARMOR_FEET);
-    armor.mBody = ItemStack::air();
+    armor.mBody = inventory.getBodyArmor();
     mNetworkHandler->send(viewer.getNetworkIdentifier(), armor, mCodecContext);
 
     MobEquipmentPacket offhand;

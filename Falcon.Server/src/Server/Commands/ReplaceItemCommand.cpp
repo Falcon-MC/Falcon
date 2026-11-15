@@ -4,6 +4,7 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/Commands/CommandEnums.h"
+#include "Server/Commands/CommandItems.h"
 #include "Server/Commands/CommandMap.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -23,8 +24,9 @@ namespace {
     const int MAX_DATA_VALUE = 32767;
     const int LAST_HOTBAR_SLOT = PlayerInventory::HOTBAR_SIZE - 1;
     const int SADDLE_SLOT = 0;
-    // the body armor of a mount: the equippable slot the definitions give it
-    const int MOUNT_ARMOR_SLOT = 1;
+    // where a mount keeps its armor: behind the saddle on a horse, first on a llama
+    const int HORSE_ARMOR_SLOT = 1;
+    const int LLAMA_ARMOR_SLOT = 0;
 
     const char *const BLOCK_SLOT = "slot.container";
     const char *const AIR_NAME = "%item.air.name";
@@ -152,21 +154,6 @@ namespace {
         return slots == nullptr || !slots->isArray() ? 0 : (int) slots->mArray.size();
     }
 
-    int firstChestSlot(const MobActor &mob) {
-        const json::Value *equippable = mob.getComponent("minecraft:equippable");
-        const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
-        int first = 0;
-        if (slots == nullptr || !slots->isArray())
-            return first;
-
-        for (const std::unique_ptr<json::Value> &slot: slots->mArray) {
-            const json::Value *number = slot->get("slot");
-            if (number != nullptr)
-                first = std::max(first, number->integer(-1) + 1);
-        }
-        return first;
-    }
-
     // a mount without its chest has none; a strength gives its own count, as the llama's
     int chestSlotCount(const MobActor &mob, int capacity, int equippable) {
         if (mob.getComponent("minecraft:is_chested") == nullptr)
@@ -226,12 +213,17 @@ namespace {
     Outcome replaceArmor(ServerNetworkHandler &owner, ServerPlayer *player, MobActor *mob, int type,
                          const Request &request) {
         if (player != nullptr) {
-            // players hold no body armor slot here: refused, not answered as done
-            if (type == ARMOR_BODY)
-                return Outcome::of(Result::Occupied);
+            PlayerInventory &inventory = player->getInventory();
+            if (type == ARMOR_BODY) {
+                if (isOccupied(request, inventory.getBodyArmor()))
+                    return Outcome::of(Result::Occupied);
+
+                inventory.setBodyArmor(request.mItem);
+                InventoryHandler::sendArmorContent(owner, *player);
+                return Outcome();
+            }
 
             const int slot = type - ARMOR_HEAD;
-            PlayerInventory &inventory = player->getInventory();
             if (isOccupied(request, inventory.getArmor(slot)))
                 return Outcome::of(Result::Occupied);
 
@@ -335,15 +327,16 @@ namespace {
         if ((!horse && std::string(mob->getIdentifier()) != LLAMA) || capacity <= 0)
             return Outcome::of(Result::Unsupported);
 
-        const bool fits = MOUNT_ARMOR_SLOT < capacity;
-        if (fits && isOccupied(request, mob->getInventoryContainer().getContainerItem(MOUNT_ARMOR_SLOT)))
+        const int slot = horse ? HORSE_ARMOR_SLOT : LLAMA_ARMOR_SLOT;
+        const bool fits = slot < capacity;
+        if (fits && isOccupied(request, mob->getInventoryContainer().getContainerItem(slot)))
             return Outcome::of(Result::Occupied);
 
         // a horse takes a carpet here too: the game checks the horse armor first, then the carpets for both
         const std::string &identifier = identifierOf(request.mItem);
         const bool accepted = (horse && contains(HORSE_ARMORS, identifier)) || contains(CARPETS, identifier);
         if (accepted && fits)
-            setMobInventoryItem(owner, *mob, MOUNT_ARMOR_SLOT, request.mItem);
+            setMobInventoryItem(owner, *mob, slot, request.mItem);
         return Outcome();
     }
 
@@ -356,13 +349,9 @@ namespace {
         const int slots = std::min(capacity - equippable, chestSlotCount(*mob, capacity, equippable));
         // the game compares the slot behind the equippable ones with the count of chest slots: the last
         // chest slots are refused
-        const int shifted = request.mSlotId + equippable;
-        if (shifted < 0 || shifted >= slots)
+        const int slot = request.mSlotId + equippable;
+        if (slot < 0 || slot >= slots)
             return Outcome::of(Result::BadSlot, slots);
-
-        const int slot = request.mSlotId + firstChestSlot(*mob);
-        if (slot >= capacity)
-            return Outcome();
         if (isOccupied(request, mob->getInventoryContainer().getContainerItem(slot)))
             return Outcome::of(Result::Occupied);
 
@@ -620,6 +609,7 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
         // a data value out of the short range is read as none
         request.mItem.mDamage = data < 0 || data > MAX_DATA_VALUE ? 0 : data;
         request.mItemName = item.getName();
+        CommandItems::applyData(request.mItem, data);
     }
 
     if (hasComponents) {
@@ -662,7 +652,15 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
     std::string replaced;
     int count = 0;
     for (Actor *target: targets) {
-        const Outcome outcome = replaceOnEntity(mHandler, *target, slotType, request);
+        // a map of its own for each target; the game stops at the first one it cannot make
+        Request own = request;
+        std::string error;
+        if (!CommandItems::prepareFor(mHandler, *target, own.mItem, error)) {
+            sender.sendTranslation(error, {});
+            break;
+        }
+
+        const Outcome outcome = replaceOnEntity(mHandler, *target, slotType, own);
         if (outcome.mResult != Result::Done) {
             reportFailure(sender, outcome, slotName, request);
             continue;

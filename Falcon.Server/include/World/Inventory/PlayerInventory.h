@@ -24,6 +24,8 @@ public:
     static const int TRADE_SIZE = 2;
     static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
+    // the body armor is saved right behind the four worn pieces
+    static const int SAVED_BODY_SLOT = SAVED_SIZE;
 
     static const int CONTAINER_ID_INVENTORY = 0;
     static const int CONTAINER_ID_OFFHAND = 119;
@@ -120,6 +122,13 @@ public:
 
     void setOffhand(ItemStack item);
 
+    // no screen shows it: commands and scripts fill it, as on any mob
+    const ItemStack &getBodyArmor() const {
+        return mBodyArmor;
+    }
+
+    void setBodyArmor(ItemStack item);
+
     const ItemStack &getCursor() const {
         return mCursor;
     }
@@ -170,6 +179,7 @@ private:
     std::vector<ItemStack> mCartography;
     std::vector<ItemStack> mTrade;
     ItemStack mOffhand;
+    ItemStack mBodyArmor;
     ItemStack mCursor;
     ItemStack mEnchantingInput;
     ItemStack mEnchantingMaterial;

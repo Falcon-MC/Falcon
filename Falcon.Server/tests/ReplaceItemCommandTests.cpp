@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/GiveCommand.h"
 #include "Server/Commands/ReplaceItemCommand.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/PropertiesSettings.h"
@@ -7,6 +8,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Item/MapItem.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -253,6 +255,57 @@ namespace {
         require(holds(donkey.getInventoryContainer().getContainerItem(2), "minecraft:apple", 1),
                 "slot.inventory did not reach the donkey's inventory");
         arena.answers("entity @e[type=donkey] slot.inventory 16 apple", false, BAD_SLOT);
+
+        // a llama's only equippable slot is numbered 1 and sits first: the armor goes there, the chest behind
+        MobActor &llama = arena.spawn("minecraft:llama", "minecraft:spawn_tame_adult");
+        arena.answers("entity @e[type=llama] slot.armor 0 iron_horse_armor", true, SUCCESS_ENTITY);
+        require(llama.getInventoryContainer().getContainerItem(0).isAir(), "a llama took a horse armor");
+        arena.answers("entity @e[type=llama] slot.armor 0 red_carpet", true, SUCCESS_ENTITY);
+        require(holds(llama.getInventoryContainer().getContainerItem(0), "minecraft:red_carpet", 1),
+                "the carpet is not in the llama's first slot");
+        require(holds(llama.getEquipment().getSlot(MobEquipment::BODY), "minecraft:red_carpet", 1),
+                "the llama does not wear its carpet");
+        arena.answers("entity @e[type=llama] slot.saddle 0 saddle", false, EXCEPTION);
+
+        llama.fireEvent(arena.mOwner, "minecraft:on_chest");
+        arena.answers("entity @e[type=llama] slot.chest 0 stick 2", true, SUCCESS_ENTITY);
+        require(holds(llama.getInventoryContainer().getContainerItem(1), "minecraft:stick", 2),
+                "the llama's first chest slot is not the one behind its carpet");
+        require(holds(llama.getInventoryContainer().getContainerItem(0), "minecraft:red_carpet", 1),
+                "a chest slot replaced the carpet");
+    }
+
+    void testItemData(Arena &arena) {
+        Container *chest = arena.mLevel->getBlockActors().find(CHEST)->getContainer();
+
+        // the data value is the flight of a rocket, between 1 and 3, and the color of a star
+        arena.answers("block 2 64 2 slot.container 10 firework_rocket 1 5", true, SUCCESS);
+        const Tag *fireworks = chest->getContainerItem(10).mTag.get("Fireworks");
+        require(fireworks != nullptr && fireworks->getByte("Flight") == 3, "a rocket's flight is not capped at 3");
+        arena.answers("block 2 64 2 slot.container 10 firework_rocket", true, SUCCESS);
+        require(chest->getContainerItem(10).mTag.get("Fireworks")->getByte("Flight") == 1,
+                "a rocket without data does not fly for 1");
+
+        arena.answers("block 2 64 2 slot.container 11 firework_star 1 1", true, SUCCESS);
+        const ItemStack &star = chest->getContainerItem(11);
+        require(star.mDamage == 1 && star.mTag.getInt("customColor") == (int32_t) 0xFFB02E26,
+                "a star of data 1 is not red");
+        require(star.mTag.get("FireworksItem") != nullptr, "a star carries no firework data");
+
+        // the same through /give
+        ServerPlayer &player = arena.player(4002);
+        GiveCommand give(arena.mOwner);
+        RecordingOrigin origin(&arena.mOwner);
+        require(give.execute(origin, {"@a", "firework_rocket", "1", "2"}), "give refused a rocket");
+        const Tag *given = player.getInventory().getItem(0).mTag.get("Fireworks");
+        require(given != nullptr && given->getByte("Flight") == 2, "a given rocket does not fly for 2");
+
+        // a filled map is made for the entity that receives it
+        arena.answers("entity @a slot.hotbar 3 filled_map", true, SUCCESS_ENTITY);
+        require(MapItem::getMapId(player.getInventory().getItem(3)) != MapItemSavedData::INVALID_ID,
+                "the map was given without map data");
+        arena.answers("entity @a slot.hotbar 4 filled_map 1 99", false, "commands.give.map.invalidData");
+        require(player.getInventory().getItem(4).isAir(), "a map with a wrong data value was placed");
     }
 
     void testPlayer(Arena &arena) {
@@ -264,6 +317,9 @@ namespace {
         require(holds(inventory.getItem(2), "minecraft:diamond_sword", 1), "the held slot took no sword");
         arena.answers("entity @a slot.weapon.offhand 0 shield", true, SUCCESS_ENTITY);
         require(holds(inventory.getOffhand(), "minecraft:shield", 1), "the offhand took no shield");
+        arena.answers("entity @a slot.armor.body 0 wolf_armor", true, SUCCESS_ENTITY);
+        require(holds(inventory.getBodyArmor(), "minecraft:wolf_armor", 1), "the body slot took no armor");
+        arena.answers("entity @a slot.armor.body 0 keep wolf_armor", false, FAILED);
         arena.answers("entity @a slot.armor.feet 0 diamond_boots", true, SUCCESS_ENTITY);
         require(holds(inventory.getArmor(PlayerInventory::ARMOR_FEET), "minecraft:diamond_boots", 1),
                 "the feet took no boots");
@@ -301,6 +357,7 @@ namespace {
         testComponents(arena);
         testMob(arena);
         testMounts(arena);
+        testItemData(arena);
         testPlayer(arena);
     }
 }

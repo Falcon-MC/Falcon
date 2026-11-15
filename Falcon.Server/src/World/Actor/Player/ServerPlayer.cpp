@@ -1052,6 +1052,9 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
             inventory.addToList(ItemStackNbt::write(item, PlayerInventory::CONTAINER_SIZE + slot));
     }
 
+    if (!mInventory.getBodyArmor().isAir())
+        inventory.addToList(ItemStackNbt::write(mInventory.getBodyArmor(), PlayerInventory::SAVED_BODY_SLOT));
+
     data.put(TAG_INVENTORY, inventory);
     data.put(TAG_OFF_INVENTORY, ItemStackNbt::write(mInventory.getOffhand(), 0));
     data.putInt(TAG_SELECTED_SLOT, mInventory.getSelectedSlot());
@@ -1158,6 +1161,8 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
                 mInventory.setItem(slot, std::move(item));
             else if (slot < PlayerInventory::SAVED_SIZE)
                 mInventory.setArmor(slot - PlayerInventory::CONTAINER_SIZE, std::move(item));
+            else if (slot == PlayerInventory::SAVED_BODY_SLOT)
+                mInventory.setBodyArmor(std::move(item));
         }
     }
 
