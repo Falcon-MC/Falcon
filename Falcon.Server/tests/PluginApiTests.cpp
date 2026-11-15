@@ -729,6 +729,13 @@ namespace {
         require(std::string(api.playerName(bot)) == "Bot_1", "the simulated player lost its name");
         require(api.playerGameMode(bot) == FALCON_GAME_MODE_CREATIVE, "the simulated player lost its game mode");
         require(api.findPlayer("Bot_1") == bot, "the simulated player is not online");
+        // a classic skin with geometry: a client drops the connection over a list entry with an empty one
+        uint32_t skinWidth = 0, skinHeight = 0, skinLength = 0;
+        api.playerSkinImage(bot, &skinWidth, &skinHeight, &skinLength);
+        require(skinWidth == 64 && skinHeight == 64 && skinLength == 64 * 64 * 4, "the simulated player has no skin");
+        const SerializedSkin &skin = fixture.owner.getPlayerByName("Bot_1")->getSkin();
+        require(!skin.mSkinResourcePatch.empty() && skin.mGeometryData == "{}" && !skin.mSkinId.empty(),
+                "the simulated player's skin has no geometry");
 
         // a name already online, whatever its case, an empty or control name, a place outside the world
         require(api.serverSpawnSimulatedPlayer("bot_1", level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
