@@ -10,7 +10,6 @@ namespace nethernet {
 #include <condition_variable>
 #include <deque>
 #include <mutex>
-#include <random>
 #include <string>
 #include <thread>
 #include <utility>
@@ -36,13 +35,6 @@ public:
 
     // whether an answer of the service says to remove the client: a positive number, anything else keeps it
     static bool isRemoval(int status, const std::string &body);
-
-    // ticks before a removal: none about a quarter of the time, else anything up to three seconds, so a client cannot
-    // tell from the timing which of its traits was seen
-    static int64_t removalDelay(std::mt19937 &random);
-
-    // ticks to the next wave: the removals due go out together, at irregular times
-    static int64_t waveInterval(std::mt19937 &random);
 
 private:
     struct Question {
