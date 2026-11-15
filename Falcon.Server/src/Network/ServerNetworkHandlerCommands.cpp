@@ -34,6 +34,7 @@
 #include "Server/Commands/PlaySoundCommand.h"
 #include "Server/Commands/PluginsCommand.h"
 #include "Server/Commands/ProfilerCommand.h"
+#include "Server/Commands/ReplaceItemCommand.h"
 #include "Server/Commands/SaveCommand.h"
 #include "Server/Commands/ScoreboardCommand.h"
 #include "Server/Commands/SayCommand.h"
@@ -318,6 +319,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<OpCommand>(*this));
     mCommands.registerCommand(std::make_shared<DeopCommand>(*this));
     mCommands.registerCommand(std::make_shared<GiveCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ReplaceItemCommand>(*this));
     mCommands.registerCommand(std::make_shared<EnchantCommand>(*this));
     mCommands.registerCommand(std::make_shared<EffectCommand>(*this));
     mCommands.registerCommand(std::make_shared<KillCommand>(*this));

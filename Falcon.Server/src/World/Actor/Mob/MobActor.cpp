@@ -144,7 +144,7 @@ namespace {
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
     const int32_t EQUIPPABLE_BODY_SLOT = 1;
-    // bounds a pack's slot number before it sizes a vector
+    // bounds the slots a pack lists
     const int32_t MAX_EQUIPPABLE_SLOTS = 64;
     const int32_t DEFAULT_INVENTORY_SIZE = 5;
     const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
@@ -1159,15 +1159,9 @@ std::vector<ItemStack> MobActor::getEquippableItems() const {
     if (slots == nullptr || !slots->isArray())
         return items;
 
-    for (const std::unique_ptr<json::Value> &slot: slots->mArray) {
-        const json::Value *number = slot->get("slot");
-        const int32_t index = number == nullptr ? -1 : (int32_t) number->integer(-1);
-        if (index < 0 || index >= MAX_EQUIPPABLE_SLOTS)
-            continue;
-        if ((size_t) index >= items.size())
-            items.resize((size_t) index + 1, ItemStack::air());
-        items[(size_t) index] = _equippableItem(index);
-    }
+    const size_t count = std::min(slots->mArray.size(), (size_t) MAX_EQUIPPABLE_SLOTS);
+    for (size_t index = 0; index < count; ++index)
+        items.push_back(_equippableItem((int32_t) index));
     return items;
 }
 
@@ -1775,15 +1769,15 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
 const json::Value *MobActor::_equippableSlot(int32_t index) const {
     const json::Value *equippable = getComponent(EQUIPPABLE_COMPONENT);
     const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
-    if (slots == nullptr || !slots->isArray())
+    if (slots == nullptr || !slots->isArray() || index < 0 || (size_t) index >= slots->mArray.size())
         return nullptr;
+    return slots->mArray[(size_t) index].get();
+}
 
-    for (const std::unique_ptr<json::Value> &slot: slots->mArray) {
-        const json::Value *number = slot->get("slot");
-        if (number != nullptr && number->integer(-1) == index)
-            return slot.get();
-    }
-    return nullptr;
+bool MobActor::_isBodySlot(int32_t index) const {
+    const json::Value *slot = _equippableSlot(index);
+    const json::Value *number = slot == nullptr ? nullptr : slot->get("slot");
+    return number != nullptr && number->integer(-1) == EQUIPPABLE_BODY_SLOT;
 }
 
 bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName) {
@@ -1820,13 +1814,13 @@ bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player,
 }
 
 const ItemStack &MobActor::_equippableItem(int32_t index) const {
-    if (index == EQUIPPABLE_BODY_SLOT && _equippableSlot(index) != nullptr)
+    if (_isBodySlot(index))
         return mEquipment.getSlot(MobEquipment::BODY);
     return mEquipment.getInventoryItem(index);
 }
 
 void MobActor::_setEquippableItem(int32_t index, ItemStack item) {
-    if (index == EQUIPPABLE_BODY_SLOT && _equippableSlot(index) != nullptr)
+    if (_isBodySlot(index))
         mEquipment.setSlot(MobEquipment::BODY, std::move(item));
     else
         mEquipment.setInventoryItem(index, std::move(item));

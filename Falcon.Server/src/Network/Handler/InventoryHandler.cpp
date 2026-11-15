@@ -351,7 +351,7 @@ void InventoryHandler::sendArmorContent(ServerNetworkHandler &owner, ServerPlaye
     equipment.mChestplate = inventory.getArmor(PlayerInventory::ARMOR_TORSO);
     equipment.mLeggings = inventory.getArmor(PlayerInventory::ARMOR_LEGS);
     equipment.mBoots = inventory.getArmor(PlayerInventory::ARMOR_FEET);
-    equipment.mBody = ItemStack::air();
+    equipment.mBody = inventory.getBodyArmor();
 
     owner.sendToPlayerViewers(player, equipment, false);
 }

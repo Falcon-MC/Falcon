@@ -674,7 +674,12 @@ private:
 
     float _rolledValue(const json::Value *component, float &rolled, float fallback) const;
 
+    // by place in the definition's list: the game keeps the equippable items at the head of the inventory in
+    // that order, whatever "slot" says (the llama's only slot is numbered 1 and sits first)
     const json::Value *_equippableSlot(int32_t index) const;
+
+    // "slot" 1 is the body armor, the one worn and shown
+    bool _isBodySlot(int32_t index) const;
 
     // the body slot when the equippable slot is the body one, else the minecraft:inventory slot
     const ItemStack &_equippableItem(int32_t index) const;

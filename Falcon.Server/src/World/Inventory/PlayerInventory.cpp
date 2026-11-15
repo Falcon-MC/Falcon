@@ -15,6 +15,7 @@ PlayerInventory::PlayerInventory()
           mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE), mAnvil((size_t) ANVIL_SIZE),
           mCartography((size_t) CARTOGRAPHY_SIZE), mTrade((size_t) TRADE_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
+    mBodyArmor = ItemStack::air();
     mCursor = ItemStack::air();
     mStonecutterInput = ItemStack::air();
 
@@ -192,6 +193,11 @@ void PlayerInventory::setStonecutterInput(ItemStack item) {
 void PlayerInventory::setOffhand(ItemStack item) {
     assignNetId(item);
     mOffhand = std::move(item);
+}
+
+void PlayerInventory::setBodyArmor(ItemStack item) {
+    assignNetId(item);
+    mBodyArmor = std::move(item);
 }
 
 void PlayerInventory::setCursor(ItemStack item) {
@@ -426,6 +432,7 @@ void PlayerInventory::clear() {
     }
 
     mOffhand = ItemStack::air();
+    mBodyArmor = ItemStack::air();
     mCursor = ItemStack::air();
 
     for (ItemStack &item: mCrafting) {
