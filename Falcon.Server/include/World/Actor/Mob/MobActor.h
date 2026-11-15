@@ -68,6 +68,16 @@ public:
         return false;
     }
 
+    // a zombie villager: its cure lowers the prices of the villager it becomes and of the villagers around
+    virtual bool curesIntoTrader() const {
+        return false;
+    }
+
+    // a villager reached by a nearby cure
+    virtual bool isNearbyCureTarget() const {
+        return false;
+    }
+
     ActorSize getSize() const override = 0;
 
     // minecraft:collision_box of the active groups
@@ -634,6 +644,8 @@ private:
 
     void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
 
+    void _passTradesTo(ServerNetworkHandler &owner, MobActor &into, bool keepLevel);
+
     void _fireComponentEvent(ServerNetworkHandler &owner, const char *component);
 
     void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
@@ -712,6 +724,8 @@ private:
     bool mBorn = false;
     int32_t mActorVersion = 0;
     std::string mSpawnEvent;
+    // the mob a transformation replaces, until the new one's first event ran
+    MobActor *mTransformedFrom = nullptr;
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;

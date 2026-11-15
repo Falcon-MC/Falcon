@@ -19,6 +19,7 @@ class MobEconomy {
 public:
     static constexpr const char *COMPONENT = "minecraft:economy_trade_table";
 
+    static constexpr int32_t TRADE_TARGET_DATA_ID = 68;
     static constexpr int32_t TRADE_TIER_DATA_ID = 101;
     static constexpr int32_t MAX_TRADE_TIER_DATA_ID = 102;
     static constexpr int32_t TRADE_EXPERIENCE_DATA_ID = 103;
@@ -65,7 +66,10 @@ public:
     // false without offers; fills the packet but its window id
     bool startTrading(ServerNetworkHandler &owner, MobActor &mob, ServerPlayer &player, UpdateTradePacket &packet);
 
-    void stopTrading();
+    void stopTrading(ServerNetworkHandler &owner, MobActor &mob);
+
+    // the trading player while that player is still here
+    ServerPlayer *findTradingPlayer(ServerNetworkHandler &owner) const;
 
     int64_t getTradingPlayer() const {
         return mTradingPlayer;
@@ -74,9 +78,27 @@ public:
     // uses, the player's experience, the trader's experience and tier after a granted trade
     void onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t offerIndex, int32_t crafts);
 
+    // keep_level of a transformation: the tier, the experience and the cure discounts
+    void inheritLevel(const MobEconomy &from);
+
+    // offers carried by a transformation; a mob without the component keeps them aside until it trades again
+    void inheritOffers(ServerNetworkHandler &owner, MobActor &mob, MobEconomy &from, MobActor &fromMob);
+
+    // a cured zombie villager trades cheaper; villagers around it get the low tier discount
+    void applyCure(const MobActor &mob);
+
+    void applyNearbyCure(const MobActor &mob);
+
+    bool hasPersistingOffers() const {
+        return mHasPersistingOffers;
+    }
+
     void appendMetadata(EntityDataMap &metadata) const;
 
     void saveNbt(Tag &data) const;
+
+    // any mob: a zombie villager keeps the offers of the villager it was
+    void savePersistingNbt(Tag &data, bool trader) const;
 
     void loadNbt(const Tag &data);
 
@@ -89,7 +111,12 @@ private:
 
     bool _isTrading(ServerNetworkHandler &owner, const MobActor &mob) const;
 
+    void _setSavedOffers(const Tag &offers);
+
     std::unique_ptr<MerchantOffers> mOffers;
+    Tag mPersistingOffers;
+    bool mHasPersistingOffers = false;
+    int32_t mPersistingRiches = 0;
     Tag mSavedOffers;
     bool mHasSavedOffers = false;
     bool mResupplyPending = false;

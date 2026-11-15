@@ -25,6 +25,16 @@
 
 namespace {
 
+    bool isTradeSlot(ContainerSlotType container) {
+        return container == ContainerSlotType::Trade2Ingredient1 || container == ContainerSlotType::Trade2Ingredient2
+               || container == ContainerSlotType::TradeIngredient1 || container == ContainerSlotType::TradeIngredient2;
+    }
+
+    bool isInventorySlot(ContainerSlotType container) {
+        return container == ContainerSlotType::Inventory || container == ContainerSlotType::Hotbar
+               || container == ContainerSlotType::HotbarAndInventory;
+    }
+
     struct TouchedSlot {
         FullContainerName mContainerName;
         int mSlot = 0;
@@ -88,6 +98,8 @@ namespace {
         bool mCraftedRecipe = false;
         const MerchantOffers *mTradeOffers = nullptr;
         bool mTradeActive = false;
+        // an automatic trade may also pay from the inventory
+        bool mTradeAuto = false;
         TradeCraft mTrade;
         std::array<ItemStack, PlayerInventory::TRADE_SIZE> mTradeWanted;
         std::array<int32_t, PlayerInventory::TRADE_SIZE> mTradeRequired{};
@@ -225,8 +237,7 @@ namespace {
             && context.mCartographyMaps == nullptr) {
             return nullptr;
         }
-        if ((container == ContainerSlotType::Trade2Ingredient1 || container == ContainerSlotType::Trade2Ingredient2)
-            && context.mTradeOffers == nullptr) {
+        if (isTradeSlot(container) && context.mTradeOffers == nullptr) {
             return nullptr;
         }
         if (container == ContainerSlotType::StonecutterInput && context.mStonecutterRecipes == nullptr) {
@@ -749,7 +760,7 @@ namespace {
 
     // the offer must be wanted in what is consumed; either wanted slot may hold either item
     bool consumeTradeItem(RequestContext &context, ContainerSlotType container, const ItemStack &item, int count) {
-        if (container != ContainerSlotType::Trade2Ingredient1 && container != ContainerSlotType::Trade2Ingredient2)
+        if (!isTradeSlot(container) && !(context.mTradeAuto && isInventorySlot(container)))
             return false;
 
         for (size_t index = 0; index < context.mTradeWanted.size(); ++index) {
@@ -764,9 +775,10 @@ namespace {
         return false;
     }
 
-    // the client names the offer by its net id and the number of trades; the game checks only that it is in stock
+    // the client names the offer by its net id and the number of trades; the game checks only that it is in stock;
+    // an automatic trade is always one
     bool craftTrade(RequestContext &context, const ItemStackRequestAction &action) {
-        if (context.mCraftRecipeSeen || action.mType != ItemStackRequestActionType::CraftRecipe)
+        if (context.mCraftRecipeSeen)
             return false;
         context.mCraftRecipeSeen = true;
 
@@ -774,7 +786,8 @@ namespace {
         if (index < 0)
             return false;
         const MerchantOffer &offer = context.mTradeOffers->mOffers[(size_t) index];
-        const int crafts = action.mNumberOfRequestedCrafts;
+        const bool automatic = action.mType == ItemStackRequestActionType::CraftRecipeAuto;
+        const int crafts = automatic ? 1 : action.mNumberOfRequestedCrafts;
         if (offer.isOutOfStock() || crafts <= 0 || offer.mSell.isAir() || offer.mBuyA.isAir())
             return false;
         // the client knows the net id of every offer and names its own number of trades: neither a tier the
@@ -791,6 +804,7 @@ namespace {
         context.mCreatedOutputActive = true;
 
         context.mTradeActive = true;
+        context.mTradeAuto = automatic;
         context.mTrade.mOfferIndex = index;
         context.mTrade.mCrafts = crafts;
         context.mTradeWanted[0] = offer.mBuyA;

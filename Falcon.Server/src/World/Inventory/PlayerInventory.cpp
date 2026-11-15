@@ -264,10 +264,12 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
         case ContainerSlotType::CartographyAdditional:
             return &mCartography[(size_t) CARTOGRAPHY_ADDITIONAL];
 
-        // one slot each: the slot number does not matter
+        // one slot each, shared by the old and the new trade screen: the slot number does not matter
+        case ContainerSlotType::TradeIngredient1:
         case ContainerSlotType::Trade2Ingredient1:
             return &mTrade[0];
 
+        case ContainerSlotType::TradeIngredient2:
         case ContainerSlotType::Trade2Ingredient2:
             return &mTrade[1];
 

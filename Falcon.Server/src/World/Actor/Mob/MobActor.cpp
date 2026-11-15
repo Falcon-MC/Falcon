@@ -54,6 +54,11 @@ namespace {
 
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const char *const BORN_EVENT = "minecraft:entity_born";
+    const char *const TRANSFORMED_EVENT = "minecraft:entity_transformed";
+    // the villagers a cure reaches: a box 16 blocks out on every axis
+    const float CURE_REACH = 16.0f;
+    const int32_t CURE_VILLAGE_SEARCH = 1000;
+    const int32_t CURE_STANDING = 5;
     const char *const TAG_COMPONENT_GROUPS = "ComponentGroups";
     const char *const TAG_DEFINITIONS = "definitions";
     const std::string DEFINITION_ADDED_PREFIX = "+";
@@ -309,7 +314,12 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
         const json::Value *components = definition->get("components");
         if (components != nullptr)
             mAddRider.queue(components->get(ADD_RIDER_COMPONENT));
-        fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
+        // a transformation names the mob it came from as the other of its event
+        if (mSpawnEvent.empty() && mTransformedFrom != nullptr)
+            fireEvent(owner, TRANSFORMED_EVENT, mTransformedFrom);
+        else
+            fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
+        mTransformedFrom = nullptr;
         if (!mEquipmentInherited)
             mEquipment.equipFromTable(owner, *this);
     }
@@ -1289,6 +1299,7 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
             return;
 
         mob->mSpawnEvent = spawnEvent;
+        mob->mTransformedFrom = this;
         if (preserveEquipment) {
             mob->mEquipment = mEquipment;
             mob->mEquipmentInherited = true;
@@ -1300,6 +1311,11 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
     if (result == nullptr) {
         mTransformationTicks = transformationTicks(transformation);
         return;
+    }
+
+    if (MobActor *mob = dynamic_cast<MobActor *>(result)) {
+        mob->startDefinition(owner);
+        _passTradesTo(owner, *mob, flagIn(transformation, "keep_level"));
     }
 
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TRANSFORM)) {
@@ -1320,6 +1336,47 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
         playDefinitionSound(owner, sound->string());
 
     mTransformed = true;
+}
+
+void MobActor::_passTradesTo(ServerNetworkHandler &owner, MobActor &into, bool keepLevel) {
+    if (keepLevel) {
+        into.mEconomy.inheritLevel(mEconomy);
+        if (MobEconomy::isTrader(into))
+            into.mEconomy.syncTier();
+    }
+    into.mEconomy.inheritOffers(owner, into, mEconomy, *this);
+
+    if (!curesIntoTrader())
+        return;
+
+    // the cure is good news for the whole village: every player it knows gains standing
+    const Vector3f &curedAt = getPosition();
+    const Vector3i block((int32_t) std::floor(curedAt.x), (int32_t) std::floor(curedAt.y), (int32_t) std::floor(curedAt.z));
+    if (const std::shared_ptr<Village> village =
+                owner.getLevelFor(*this).getVillageManager().getClosestVillage(block, CURE_VILLAGE_SEARCH))
+        village->changeAllStandings(CURE_STANDING);
+
+    if (!MobEconomy::isTrader(into))
+        return;
+
+    into.mEconomy.applyCure(into);
+    const Vector3f centre = into.getPosition();
+    // the box reaches 16 blocks on every axis: the radius covers its corners
+    owner.forEachActorNear(centre, CURE_REACH * std::sqrt(3.0f), [&](ServerActor &actor) {
+        MobActor *villager = dynamic_cast<MobActor *>(&actor);
+        if (villager == nullptr || !villager->isNearbyCureTarget() || !villager->sharesLevelWith(into)
+            || !MobEconomy::isTrader(*villager))
+            return;
+        const Vector3f &position = villager->getPosition();
+        if (std::fabs(position.x - centre.x) > CURE_REACH || std::fabs(position.y - centre.y) > CURE_REACH
+            || std::fabs(position.z - centre.z) > CURE_REACH)
+            return;
+        villager->mEconomy.applyNearbyCure(*villager);
+    });
+
+    EntityDataMap metadata;
+    into.mEconomy.appendMetadata(metadata);
+    owner.sendActorMetadata(into, metadata);
 }
 
 void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound) {
@@ -1356,7 +1413,7 @@ bool MobActor::_tryTrade(ServerNetworkHandler &owner, ServerPlayer &player) {
     if (!mEconomy.startTrading(owner, *this, player, packet))
         return false;
     if (!player.getInventoryManager().openTrade(getUniqueId(), packet)) {
-        mEconomy.stopTrading();
+        mEconomy.stopTrading(owner, *this);
         return false;
     }
     return true;
@@ -2492,8 +2549,10 @@ Tag MobActor::saveNbt() const {
     }
     if (mHasCarriedBlock)
         data.put(TAG_CARRIED_BLOCK, mCarriedBlock.toNbt());
-    if (MobEconomy::isTrader(*this))
+    const bool trader = MobEconomy::isTrader(*this);
+    if (trader)
         mEconomy.saveNbt(data);
+    mEconomy.savePersistingNbt(data, trader);
     mEquipment.saveNbt(data);
     mEntitySpawner.saveNbt(data);
     mLeash.saveNbt(data);
