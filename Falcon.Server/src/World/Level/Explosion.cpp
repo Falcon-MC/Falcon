@@ -923,16 +923,16 @@ void Explosion::_damageEntities() {
     else if (settled)
         hits.swap(batch.getQuietHits(*mQuietBlast));
     const bool counted = mNear.has_value();
-    const size_t near = settled ? 0 : _near();
+    const size_t nearby = settled ? 0 : _near();
     // the shares collected for the count still stand unless the rays made or removed an actor
     const size_t crowd = settled ? 0
                          : !counted || mSpansSerial == mOwner.getActorSetSerial()
                                    ? mCrowd
                                    : batch.collectSpans(mLevel, mSource, (float) explosionSize, spans);
-    if (near == 0)
+    if (nearby == 0)
         spans.clear();
     else
-        _field(FieldUse::Targets, near > FEW_TARGETS);
+        _field(FieldUse::Targets, nearby > FEW_TARGETS);
 
     const auto push = [this](const Target &target, double distance, float density) {
         const Vector3f &position = target.mPosition;
@@ -982,7 +982,7 @@ void Explosion::_damageEntities() {
             hits.push_back(Hit{&target, distance, density});
         }
     };
-    if (near >= (batch.isCrowded() ? CROWDED_PARALLEL_HITS : PARALLEL_HITS))
+    if (nearby >= (batch.isCrowded() ? CROWDED_PARALLEL_HITS : PARALLEL_HITS))
         BlastWorkers::get().run(spans.size(), settle);
     else
         for (size_t index = 0; index < spans.size(); ++index)
@@ -1154,12 +1154,12 @@ size_t Explosion::_near() {
     const size_t crowd = batch.collectSpans(mLevel, mSource, (float) explosionSize, spans);
     mCrowd = crowd;
     mSpansSerial = mOwner.getActorSetSerial();
-    size_t near = crowd;
+    size_t nearby = crowd;
     mHullKnown = false;
     // counted before any block is read: most explosions of a scattered tick have nobody in reach, and the
     // few targets of the others stand in a box far smaller than the whole reach
     if (crowd < COUNTED_CROWD) {
-        near = 0;
+        nearby = 0;
         mHullLow = Vector3i((int32_t) std::floor(mSource.x), (int32_t) std::floor(mSource.y),
                             (int32_t) std::floor(mSource.z));
         mHullHigh = mHullLow;
@@ -1169,7 +1169,7 @@ size_t Explosion::_near() {
                 if (target.mActor == mSourceActor || !maybeWithin(target.mPosition, mSource, explosionSize)
                     || distanceBetween(target.mPosition, mSource) / explosionSize > 1.0)
                     continue;
-                ++near;
+                ++nearby;
                 ActorSize size;
                 size.mWidth = target.mWidth;
                 size.mHeight = target.mHeight;
@@ -1184,8 +1184,8 @@ size_t Explosion::_near() {
         }
         mHullKnown = true;
     }
-    mNear = near;
-    return near;
+    mNear = nearby;
+    return nearby;
 }
 
 BlastField &Explosion::_field(FieldUse use, bool sums) {
@@ -1240,8 +1240,8 @@ namespace {
         const int side2 = (axis + 2) % 3;
         const bool ahead = low[axis] > from[axis];
         // distances along the axis, from the source: the near and far faces of the target
-        const double near = ahead ? low[axis] - from[axis] : from[axis] - high[axis];
-        const double far = ahead ? high[axis] - from[axis] : from[axis] - low[axis];
+        const double nearFace = ahead ? low[axis] - from[axis] : from[axis] - high[axis];
+        const double farFace = ahead ? high[axis] - from[axis] : from[axis] - low[axis];
         const int32_t firstCell = (int32_t) std::floor(from[axis]);
         const int32_t lastCell = (int32_t) std::floor(ahead ? high[axis] : low[axis]);
         const int32_t step = ahead ? 1 : -1;
@@ -1249,11 +1249,11 @@ namespace {
         for (int32_t cell = firstCell;; cell += step) {
             // the stretch of the axis this slice covers, as distances from the source
             const double enter = std::max(0.0, ahead ? (double) cell - from[axis] : from[axis] - (double) (cell + 1));
-            const double leave = std::min(far, ahead ? (double) (cell + 1) - from[axis] : from[axis] - (double) cell);
+            const double leave = std::min(farFace, ahead ? (double) (cell + 1) - from[axis] : from[axis] - (double) cell);
             // how far along its ray a point of the slice can be: least on the rays to the far face, most on
             // the rays to the near one
-            const double least = enter / far;
-            const double most = std::min(1.0, leave / near);
+            const double least = enter / farFace;
+            const double most = std::min(1.0, leave / nearFace);
 
             int32_t corner[3][2];
             corner[axis][0] = cell;
