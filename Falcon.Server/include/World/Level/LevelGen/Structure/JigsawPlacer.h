@@ -43,10 +43,12 @@ public:
         std::vector<Jigsaw> mJigsaws;
     };
 
+    // a feature element places its feature at its one jigsaw; neither location nor feature: the empty element
     struct Element {
         std::string mLocation;
         std::string mProcessors;
         bool mTerrainMatching = false;
+        std::string mFeature;
     };
 
     // one slot per weight unit; a null slot is the empty element
@@ -103,6 +105,8 @@ public:
         int32_t mDimensionMinY = 0;
         // the game bounds the top with the dimension's height, not with its top y
         int32_t mDimensionHeight = 0;
+        // the column under the start piece's centre, before its height; empty: every column
+        std::function<bool(int32_t x, int32_t z)> mColumnFilter;
     };
 
     struct Result {
@@ -128,6 +132,9 @@ public:
 
     // the jigsaws of a game template: front, top and data of each jigsaw block
     static std::shared_ptr<const Template> templateOf(const StructureTemplate &source);
+
+    // no size and one jigsaw at its origin, facing down, that nothing attaches to
+    static std::shared_ptr<const Template> featureTemplate();
 
     static Facing turn(Facing facing, int32_t quarterTurns);
 
