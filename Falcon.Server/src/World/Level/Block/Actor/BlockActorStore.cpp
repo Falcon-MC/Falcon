@@ -109,7 +109,13 @@ void BlockActorStore::insert(std::unique_ptr<BlockActor> blockActor) {
 
 void BlockActorStore::remove(const Vector3i &position) {
     const int64_t key = packPosition(position);
-    mBlockActors.erase(key);
+    const auto found = mBlockActors.find(key);
+    if (found != mBlockActors.end()) {
+        // out of the store first: a handler reading it back sees the block gone
+        std::unique_ptr<BlockActor> removed = std::move(found->second);
+        mBlockActors.erase(found);
+        removed->onRemoved();
+    }
     mUnknownBlockActors.erase(key);
     _unindex(key);
 }

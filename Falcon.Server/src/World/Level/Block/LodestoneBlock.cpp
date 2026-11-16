@@ -16,12 +16,6 @@ bool LodestoneBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
     return LodestoneHandler::useCompassOn(owner, player, position);
 }
 
-void LodestoneBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state) const {
-    (void) state;
-    LodestoneHandler::destroy(owner, level, position);
-}
-
 const char *LodestoneBlock::getBlockActorId() const {
     return LodestoneBlockActor::BLOCK_ACTOR_ID;
 }

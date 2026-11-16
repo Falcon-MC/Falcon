@@ -15,7 +15,8 @@ public:
     // a compass becomes a lodestone compass pointing here; a lodestone compass is relinked
     static bool useCompassOn(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 
-    static void destroy(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+    // the record of a removed lodestone is destroyed and every client told
+    static void release(ServerNetworkHandler &owner, Level &level, int32_t trackingId);
 
     // the record goes to everyone, an unknown id back to the asker as NotFound
     static void handleRequest(ServerNetworkHandler &owner, ServerPlayer &player,
