@@ -1163,6 +1163,8 @@ private:
 
     void _tickSleep();
 
+    bool _isStorageWriteStalled();
+
     void _tickSleep(World &world);
 
     void _tickWeather(World &world);
@@ -1240,6 +1242,8 @@ private:
     BanList mBanList;
     BanList mIpBanList;
     bool mAutoSaveEnabled = true;
+    // tick an auto-save fell due on, -1 when none waits
+    int64_t mAutoSaveDueTick = -1;
     bool mPluginsEnabled = true;
     bool mStopRequested = false;
     ResourcePackManager mResourcePacks;

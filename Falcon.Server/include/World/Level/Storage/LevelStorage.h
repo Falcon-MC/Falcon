@@ -5,9 +5,11 @@
 #include "Core/NBT/Tag.h"
 
 #include <cstdint>
+#include <functional>
 #include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -17,6 +19,7 @@ namespace leveldb {
     class FilterPolicy;
     class DecompressAllocator;
     struct ReadOptions;
+    class WriteBatch;
 }
 
 enum class LevelDbTag : unsigned char {
@@ -62,11 +65,23 @@ public:
 
     void close();
 
-    void compact();
+    // off the main thread: the task keeps the database open until it returns, the storage can close meanwhile
+    std::function<void()> compactionTask() const;
+
+    // writes of every storage since the start
+    static uint64_t getWriteCount();
+
+    // saveEntities() and saveBlockEntities() wait for commitBatch(): a write slowdown (level-0 files piling up)
+    // sleeps once per database write
+    void beginBatch();
+    bool commitBatch();
 
     bool isOpen() const {
         return mDb != nullptr;
     }
+
+    // level-0 files past the write slowdown: the next ones stop every write until a compaction ends
+    bool isWriteStalled() const;
 
     uint64_t getWriteFailures() const {
         return mWriteFailures.load();
@@ -171,6 +186,13 @@ private:
     std::shared_ptr<const leveldb::FilterPolicy> mFilterPolicy;
     std::shared_ptr<leveldb::Cache> mBlockCache;
     std::shared_ptr<leveldb::DB> mDb;
+    bool _isBatching() const {
+        return mBatchThread.load(std::memory_order_relaxed) == std::this_thread::get_id();
+    }
+
+    // the chunk workers write block entities to the same storage: only the thread that began the batch adds to it
+    std::shared_ptr<leveldb::WriteBatch> mBatch;
+    std::atomic<std::thread::id> mBatchThread{};
     std::shared_ptr<leveldb::DecompressAllocator> mDecompressAllocator;
     std::string mPath;
     int mDimensionId;

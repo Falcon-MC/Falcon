@@ -235,8 +235,12 @@ public:
 
     void closeStorage();
 
-    void compactStorage() {
-        mStorage.compact();
+    std::function<void()> storageCompactionTask() const {
+        return mStorage.compactionTask();
+    }
+
+    bool isStorageWriteStalled() const {
+        return mStorage.isWriteStalled();
     }
 
     bool isStorageOpen() const {
@@ -244,6 +248,11 @@ public:
     }
 
     void saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
+
+    // the entity and block entity writes in between go to the database as one write (LevelStorage::beginBatch())
+    void beginStorageBatch();
+
+    bool commitStorageBatch();
 
     void appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
 

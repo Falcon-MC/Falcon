@@ -238,6 +238,8 @@ void ServerNetworkHandler::saveAllActors() {
                 byChunk[column].push_back(actor.saveNbt());
         }
 
+        // two writes per loaded column, thousands with many players: a write slowdown sleeps a millisecond on each
+        level->beginStorageBatch();
         for (const int64_t column: columns) {
             const int32_t chunkX = (int32_t) (column >> 32);
             const int32_t chunkZ = (int32_t) (column & 0xffffffff);
@@ -251,6 +253,7 @@ void ServerNetworkHandler::saveAllActors() {
             level->saveEntities(chunkX, chunkZ, entities);
             saveBlockActorsForChunk(*level, chunkX, chunkZ, false);
         }
+        level->commitStorageBatch();
 
         saveStrayActors(*level, columns);
     }
@@ -278,6 +281,14 @@ void ServerNetworkHandler::saveStrayActors(Level &level, const std::unordered_se
 
     for (const auto &entry: byChunk)
         level.appendEntities((int32_t) (entry.first >> 32), (int32_t) (entry.first & 0xffffffff), entry.second);
+}
+
+bool ServerNetworkHandler::_isStorageWriteStalled() {
+    for (Level *level: getLevels()) {
+        if (level->isStorageWriteStalled())
+            return true;
+    }
+    return false;
 }
 
 void ServerNetworkHandler::autoSave(bool wait) {

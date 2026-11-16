@@ -457,7 +457,8 @@ void ServerHost::shutdown() {
         return;
 
     LOG_INFO(LogAreaID::Server, "Shutting down...");
-    AutoCompaction::stop();
+    // a running compaction keeps its database open: the save does not wait for it
+    AutoCompaction::requestStop();
     mHandler->stopServerListening();
     mHandler->getNetworkHandler().disconnect();
     mShutDown = true;
@@ -488,6 +489,8 @@ void ServerHost::stop() {
     for (World *world: mHandler->getWorlds().getWorlds())
         AutoCompaction::untrack(world->getOverworld());
     mHandler.reset();
+    // in process: the next server opens the databases a running compaction holds locked
+    AutoCompaction::stop();
     mShutDown = false;
     mPort = 0;
     resetProcessState();

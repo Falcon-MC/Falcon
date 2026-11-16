@@ -309,6 +309,14 @@ void Level::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> 
     mStorage.saveEntities(chunkX, chunkZ, entities);
 }
 
+void Level::beginStorageBatch() {
+    mStorage.beginBatch();
+}
+
+bool Level::commitStorageBatch() {
+    return mStorage.commitBatch();
+}
+
 void Level::appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
     if (!mStorage.isOpen())
         return;

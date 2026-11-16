@@ -935,8 +935,16 @@ void ServerNetworkHandler::tick(bool paused) {
     _tickSleep();
 
     const int autoSaveInterval = mProperties.getAutoSaveInterval();
-    if (mAutoSaveEnabled && autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0)
+    if (mAutoSaveEnabled && autoSaveInterval > 0 && mCurrentTick % autoSaveInterval == 0 && mAutoSaveDueTick < 0)
+        mAutoSaveDueTick = mCurrentTick;
+    // a write in a stalled database holds the tick until a compaction ends, seconds under heavy generation: the
+    // save waits for it to catch up, a minute at most
+    static const int64_t AUTO_SAVE_STALL_WAIT_TICKS = 1200;
+    if (mAutoSaveDueTick >= 0
+        && (!_isStorageWriteStalled() || mCurrentTick - mAutoSaveDueTick >= AUTO_SAVE_STALL_WAIT_TICKS)) {
+        mAutoSaveDueTick = -1;
         autoSave();
+    }
     // chunk generation and saving copy whole chunks: freed memory piles up even without unloads
     if (mCurrentTick % HEAP_RELEASE_INTERVAL_TICKS == 0)
         Level::releaseFreedHeap();
