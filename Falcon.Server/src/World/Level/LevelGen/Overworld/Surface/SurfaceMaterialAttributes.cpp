@@ -121,6 +121,14 @@ namespace {
         components.at(biomeId).mSurfaceMaterialAdjustments.push_back(adjustment);
     }
 
+    void addMesaComponent(ComponentMap &components, int32_t biomeId, bool brycePillars, bool hasForest) {
+        addComponent(components, biomeId, redSandState(), hardenedClayState(), gravelState(), 7,
+                     SurfaceBuilderType::Mesa);
+        SurfaceBuilderComponent &component = components.at(biomeId);
+        component.mBrycePillars = brycePillars;
+        component.mHasForest = hasForest;
+    }
+
     const ComponentMap &components() {
         static const ComponentMap map = [] {
             ComponentMap result;
@@ -159,10 +167,8 @@ namespace {
             addComponent(result, BiomeIds::EXTREME_HILLS_PLUS_TREES, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::SAVANNA, grassBlockState(), dirtState(), gravelState(), 7);
             addComponent(result, BiomeIds::SAVANNA_PLATEAU, grassBlockState(), dirtState(), gravelState(), 7);
-            addComponent(result, BiomeIds::MESA, redSandState(), hardenedClayState(), gravelState(), 7,
-                         SurfaceBuilderType::Mesa);
-            addComponent(result, BiomeIds::MESA_PLATEAU_STONE, redSandState(), hardenedClayState(), gravelState(), 7,
-                         SurfaceBuilderType::Mesa);
+            addMesaComponent(result, BiomeIds::MESA, false, false);
+            addMesaComponent(result, BiomeIds::MESA_PLATEAU_STONE, false, true);
             addComponent(result, BiomeIds::WARM_OCEAN, grassBlockState(), dirtState(), sandState(), 3);
             addComponent(result, BiomeIds::LUKEWARM_OCEAN, grassBlockState(), dirtState(), sandState(), 3);
             addComponent(result, BiomeIds::DEEP_LUKEWARM_OCEAN, grassBlockState(), dirtState(), sandState(), 7);
@@ -192,8 +198,7 @@ namespace {
                           &stoneState(), nullptr);
             addAdjustment(result, BiomeIds::SAVANNA_MUTATED, 0.0625f, -0.061000000685453415f, 0.21199999749660492f,
                           &coarseDirtState(), nullptr, nullptr);
-            addComponent(result, BiomeIds::MESA_BRYCE, redSandState(), hardenedClayState(), gravelState(), 7,
-                         SurfaceBuilderType::Mesa);
+            addMesaComponent(result, BiomeIds::MESA_BRYCE, true, false);
             addComponent(result, BiomeIds::JAGGED_PEAKS, snowState(), stoneState(), stoneState(), 7);
             addComponent(result, BiomeIds::FROZEN_PEAKS, snowState(), snowState(), iceState(), 7);
             addAdjustment(result, BiomeIds::FROZEN_PEAKS, 0.0625f, -0.5f, 0.20000000298023224f, nullptr,

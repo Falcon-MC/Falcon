@@ -89,14 +89,6 @@ namespace {
     bool isAirState(const BlockState &state) {
         return state.getHash() == airState().getHash();
     }
-
-    float remap(float input, float inMin, float inMax, float outMin, float outMax) {
-        return outMin + ((input - inMin) / (inMax - inMin) * (outMax - outMin));
-    }
-
-    float remapFromNormalized(float input, float outMin, float outMax) {
-        return remap(input, -1.0f, 1.0f, outMin, outMax);
-    }
 }
 
 namespace {
@@ -110,13 +102,11 @@ namespace {
 OverworldSurfaceBuilder::OverworldSurfaceBuilder(const XoroshiroPositionalFactory &noiseFactory,
                                                  const OverworldClimate &climate, int64_t levelSeed)
         : mClimate(climate), mIcebergFactory(icebergFactory(levelSeed)),
-          mSulfurCaves(NoiseGradientSurfaceBuilder::sulfurCaves(levelSeed)) {
+          mSulfurCaves(NoiseGradientSurfaceBuilder::sulfurCaves(levelSeed)), mMesa(levelSeed) {
     XoroshiroRandom random = noiseFactory.hashOf("minecraft:surface");
     mSurfaceNoise.reserve(SURFACE_NOISE_OCTAVES);
     for (int32_t i = 0; i < SURFACE_NOISE_OCTAVES; i++)
         mSurfaceNoise.emplace_back(random);
-
-    mNoise = NormalNoise::create(noiseFactory, "minecraft:surface", -6, {1.0f, 1.0f, 1.0f});
 
     // the generator's adjustment stack: its twister has drawn for every stack before it
     std::mt19937 adjustmentRandom(static_cast<uint32_t>(levelSeed));
@@ -187,11 +177,11 @@ void OverworldSurfaceBuilder::apply(LevelChunk &chunk, std::mt19937 &random) con
             // the swamp builder floods its puddle, then builds like the overworld one
             if (component->mType == SurfaceBuilderType::Swamp)
                 _digSwampPuddle(chunk, x, z, height, component->mMaxPuddleDepth);
-            if (component->mType == SurfaceBuilderType::Overworld || component->mType == SurfaceBuilderType::FrozenOcean
-                || component->mType == SurfaceBuilderType::Swamp)
-                _buildOverworldColumn(chunk, x, z, height, *component, noise[x + 16 * z], random);
+            if (component->mType == SurfaceBuilderType::Mesa)
+                mMesa.build(chunk, x, z, _lowestSurfaceY((chunk.getX() << 4) + x, (chunk.getZ() << 4) + z),
+                            *component, noise[x + 16 * z], random);
             else
-                _buildLegacyColumn(chunk, x, z, *component);
+                _buildOverworldColumn(chunk, x, z, height, *component, noise[x + 16 * z], random);
         }
     }
 
@@ -470,59 +460,5 @@ void OverworldSurfaceBuilder::_buildIcebergColumn(LevelChunk &chunk, int32_t x, 
 
         if (y <= lowest)
             break;
-    }
-}
-
-void OverworldSurfaceBuilder::_buildLegacyColumn(LevelChunk &chunk, int32_t x, int32_t z,
-                                                 const SurfaceBuilderComponent &component) const {
-    const int32_t y = chunk.getHeight(x, z);
-    if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
-        return;
-
-    const BlockState topBlockState = chunk.getBlock(x, y, z);
-    const SurfaceMaterialAttributes &material = component.mSurfaceMaterial;
-    const BlockState *topBlock = material.mTopBlock;
-    const BlockState *midBlock = material.mMidBlock;
-    const BlockState *seaFloorBlock = material.mSeaFloorBlock;
-    _adjustMaterials(component, (chunk.getX() << 4) + x, (chunk.getZ() << 4) + z, topBlock, midBlock, seaFloorBlock);
-
-    if (!isWaterState(topBlockState)) {
-        chunk.setBlock(x, y, z, *topBlock);
-
-        const float midDepth = remapFromNormalized(mNoise->getValue(x, 0.0, z), 1.0f, 4.0f);
-        for (int32_t i = 1; i < midDepth; i++) {
-            const int32_t midY = y - i;
-            if (midY < LevelChunk::MIN_Y)
-                break;
-
-            chunk.setBlock(x, midY, z, *midBlock);
-        }
-        return;
-    }
-
-    int32_t depth = 0;
-    BlockState currentState = topBlockState;
-    while (isWaterState(currentState)) {
-        depth++;
-        if (y - depth < LevelChunk::MIN_Y)
-            break;
-
-        currentState = chunk.getBlock(x, y - depth, z);
-    }
-
-    if (y - depth < LevelChunk::MIN_Y)
-        return;
-
-    if (depth > material.mSeaFloorDepth) {
-        chunk.setBlock(x, y - depth, z, *seaFloorBlock);
-        return;
-    }
-
-    for (int32_t i = 0; i < 3; i++) {
-        const int32_t midY = (y - depth) - i;
-        if (midY < LevelChunk::MIN_Y)
-            break;
-
-        chunk.setBlock(x, midY, z, *midBlock);
     }
 }

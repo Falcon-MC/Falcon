@@ -35,6 +35,9 @@ public:
     std::vector<SurfaceMaterialAdjustmentAttributes> mSurfaceMaterialAdjustments;
     // max_puddle_depth_below_sea_level of the swamp builder
     int32_t mMaxPuddleDepth = 0;
+    // bryce_pillars and has_forest of the mesa builder
+    bool mBrycePillars = false;
+    bool mHasForest = false;
 
     static const SurfaceBuilderComponent *getForBiome(int32_t biomeId);
 };

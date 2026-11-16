@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
+#include "World/Level/LevelGen/Overworld/Surface/MesaSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Surface/NoiseGradientSurfaceBuilder.h"
 #include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Random/XoroshiroPositionalFactory.h"
@@ -43,18 +44,15 @@ private:
     // the lowest block a column's builders may change
     int32_t _lowestSurfaceY(int32_t worldX, int32_t worldZ) const;
 
-    // builders other than the overworld one, not ported yet
-    void _buildLegacyColumn(LevelChunk &chunk, int32_t x, int32_t z, const SurfaceBuilderComponent &component) const;
-
     const OverworldClimate &mClimate;
     // the frozen ocean builder's own factory, from the level seed cut to 32 bits
     XoroshiroPositionalFactory mIcebergFactory;
     std::vector<SurfaceSimplexNoise> mSurfaceNoise;
-    NormalNoisePtr mNoise;
     std::vector<SurfaceSimplexNoise> mAdjustmentNoise;
     std::vector<SurfaceSimplexNoise> mSwampNoise;
     NormalNoisePtr mIcebergPillarNoise;
     NormalNoisePtr mIcebergPillarRoofNoise;
     NormalNoisePtr mIcebergSurfaceNoise;
     NoiseGradientSurfaceBuilder mSulfurCaves;
+    MesaSurfaceBuilder mMesa;
 };
