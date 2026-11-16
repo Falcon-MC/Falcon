@@ -107,14 +107,9 @@ bool LodestoneHandler::useCompassOn(ServerNetworkHandler &owner, ServerPlayer &p
     return true;
 }
 
-void LodestoneHandler::destroy(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    LodestoneBlockActor *lodestone = level.getBlockActors().find<LodestoneBlockActor>(position);
-    if (lodestone == nullptr || lodestone->mTrackingId == PositionTrackingDB::INVALID_ID)
-        return;
-
+void LodestoneHandler::release(ServerNetworkHandler &owner, Level &level, int32_t trackingId) {
     World &world = owner.getWorldOf(level);
-    const TrackingRecord *record = world.getPositionTracking().destroy(lodestone->mTrackingId);
-    lodestone->mTrackingId = PositionTrackingDB::INVALID_ID;
+    const TrackingRecord *record = world.getPositionTracking().destroy(trackingId);
     if (record != nullptr)
         broadcast(owner, world, *record);
 }

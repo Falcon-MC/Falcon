@@ -41,6 +41,10 @@ public:
         return nullptr;
     }
 
+    // the block went away with its actor, whatever removed it; never on a chunk unload
+    virtual void onRemoved() {
+    }
+
     virtual bool tick(ServerNetworkHandler &owner) {
         (void) owner;
         return true;

@@ -16,6 +16,9 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
+    // the record goes with the lodestone: broken, blown up, replaced by a command or a structure
+    void onRemoved() override;
+
     // the PositionTrackingDB record of this lodestone, 0 until a compass links to it
     int32_t mTrackingId = 0;
 };
