@@ -474,6 +474,55 @@ int main() {
             require(handler.loadWorld("Locked", false, 1) == nullptr, "Locked world unexpectedly opened");
             require(handler.getWorlds().find("Locked") == nullptr, "Failed world remained registered");
         });
+        check("entity saves of a whole pass are one database write", [&]() {
+            LevelStorage storage;
+            require(storage.open(WorldManager::getWorldsDirectory(), "Batched", 0), "Could not open batch fixture");
+            Tag cow = Tag::ofCompound();
+            cow.putString("identifier", "minecraft:cow");
+            cow.putLong("UniqueID", 987654321);
+            Tag chest = Tag::ofCompound();
+            chest.putString("id", "Chest");
+            chest.putInt("x", 32);
+            chest.putInt("y", 64);
+            chest.putInt("z", 32);
+
+            storage.beginBatch();
+            const uint64_t before = LevelStorage::getWriteCount();
+            require(storage.saveEntities(2, 2, {cow}), "A batched entity save failed");
+            require(storage.saveEntities(3, 2, {}), "A batched empty entity save failed");
+            require(storage.saveBlockEntities(2, 2, {chest}), "A batched block entity save failed");
+            require(storage.saveBlockEntities(3, 2, {}), "A batched empty block entity save failed");
+            require(LevelStorage::getWriteCount() == before, "A batched save wrote to the database before the commit");
+            require(storage.loadEntities(2, 2).empty(), "A batched entity was readable before the commit");
+            require(storage.commitBatch(), "The batch commit failed");
+            require(LevelStorage::getWriteCount() == before + 1, "The batch was not a single database write");
+
+            const std::vector<Tag> entities = storage.loadEntities(2, 2);
+            require(entities.size() == 1 && entities[0].getLong("UniqueID", 0) == 987654321,
+                    "The batched entity was not stored");
+            require(storage.loadBlockEntities(2, 2).size() == 1, "The batched block entity was not stored");
+            require(storage.saveEntities(2, 2, {cow}), "An entity save after the commit failed");
+            require(LevelStorage::getWriteCount() == before + 2, "A save after the commit stayed in the batch");
+        });
+        check("a compaction keeps its database open after the storage closes", [&]() {
+            std::function<void()> compaction;
+            {
+                LevelStorage storage;
+                require(storage.open(WorldManager::getWorldsDirectory(), "Compacted", 0),
+                        "Could not open compaction fixture");
+                require(storage.saveEntities(0, 0, {}), "Could not write compaction fixture");
+                compaction = storage.compactionTask();
+                require(static_cast<bool>(compaction), "An open storage gave no compaction");
+            }
+            LevelStorage reopened;
+            require(!reopened.open(WorldManager::getWorldsDirectory(), "Compacted", 0),
+                    "A pending compaction did not keep its database open");
+            compaction();
+            compaction = nullptr;
+            require(reopened.open(WorldManager::getWorldsDirectory(), "Compacted", 0),
+                    "The database stayed open after its compaction");
+            require(!static_cast<bool>(LevelStorage().compactionTask()), "A closed storage gave a compaction");
+        });
         check("paused gameplay packets", [&]() {
             handler.executeConsoleCommand("time set 1000");
             host.tick(true);
