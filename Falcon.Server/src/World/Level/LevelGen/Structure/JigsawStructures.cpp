@@ -70,7 +70,7 @@ namespace {
         return number(member(value, "min_inclusive"), fallback);
     }
 
-    // Java's setLargeFeatureSeed on the 48 bit generator
+    // the 48 bit generator seeded from the world seed and the chunk, as large features are
     LegacyRandom largeFeatureRandom(int64_t seed, int32_t chunkX, int32_t chunkZ) {
         LegacyRandom base(seed);
         const int64_t a = base.nextLong();
@@ -241,7 +241,7 @@ namespace {
         PiecePlacer(const JigsawStructures &registry, const JigsawPlacer::Piece &piece, int32_t chunkX,
                     int32_t chunkZ, uint32_t seed, std::mt19937 &chunkRandom, StructureTerrain &terrain,
                     ChunkShare &share)
-                : mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mSeed(seed),
+                : mPiece(piece), mChunkX(chunkX), mChunkZ(chunkZ), mRandom(seed),
                   mChunkRandom(chunkRandom), mTerrain(terrain), mShare(share),
                   mList(registry.processors(piece.mElement->mProcessors)) {
             if (mList != nullptr) {
@@ -256,7 +256,6 @@ namespace {
                     _placeJigsaw(entry);
             }
 
-            std::mt19937 random(mSeed);
             std::vector<std::vector<Position>> candidates(mList == nullptr ? 0 : mList->mCapped.size());
             for (const StructureTemplate::BlockEntry &entry: shape.getBlocks()) {
                 const StructureTemplate::PaletteEntry &palette = shape.getPalette()[(size_t) entry.mPaletteIndex];
@@ -268,7 +267,7 @@ namespace {
                 if (!_position(entry, position) || !StructureBlockTable::translate(palette, mPiece.mQuarterTurns, block))
                     continue;
 
-                block = StructureProcessors::apply(mRules, block, _world(position), random);
+                block = StructureProcessors::apply(mRules, block, _world(position), mRandom);
                 mShare.mBlocks[position] = block;
                 for (size_t index = 0; index < candidates.size(); ++index) {
                     if (mList->mCapped[index].mReplacements.count(block.mName) != 0)
@@ -318,8 +317,7 @@ namespace {
                 || !StructureBlockTable::translate(finalState, mPiece.mQuarterTurns, block))
                 return;
 
-            std::mt19937 random(mSeed);
-            mShare.mBlocks[position] = StructureProcessors::apply(mRules, block, _world(position), random);
+            mShare.mBlocks[position] = StructureProcessors::apply(mRules, block, _world(position), mRandom);
         }
 
         // a container of the template keeps its loot table; its seed is the chunk's next draw when the template
@@ -361,7 +359,8 @@ namespace {
         const JigsawPlacer::Piece &mPiece;
         int32_t mChunkX;
         int32_t mChunkZ;
-        uint32_t mSeed;
+        // one generator for the whole piece, its jigsaws included
+        std::mt19937 mRandom;
         std::mt19937 &mChunkRandom;
         StructureTerrain &mTerrain;
         ChunkShare &mShare;
