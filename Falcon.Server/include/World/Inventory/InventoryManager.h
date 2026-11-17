@@ -154,6 +154,8 @@ public:
 
     static void tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
+    static int getFuelTime(const ItemStack &item);
+
     static void onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     bool onClientOpenChest(const Vector3i &position);

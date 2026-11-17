@@ -693,6 +693,10 @@ namespace {
     }
 }
 
+int InventoryManager::getFuelTime(const ItemStack &item) {
+    return fuelTime(item);
+}
+
 void InventoryManager::tickFurnace(ServerNetworkHandler &owner) {
     if (mPlayer == nullptr || !isFurnaceOpen()) {
         return;
