@@ -22,6 +22,8 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level);
 
+    static int32_t countPopulationActors(ServerNetworkHandler &owner, Level &level);
+
     // the mobs a herd could be drawn from at the spot, in roll order; empty when no mob fits there
     std::vector<std::string> candidatesAt(Level &level, const Vector3i &position, bool surface, int32_t difficulty,
                                           const std::vector<Vector3f> &players);

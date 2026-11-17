@@ -140,6 +140,25 @@ float NaturalSpawner::_nextFloat() {
     return distribution(mRandom);
 }
 
+int32_t NaturalSpawner::countPopulationActors(ServerNetworkHandler &owner, Level &level) {
+    int32_t count = 0;
+    const char *lastIdentifier = nullptr;
+    bool lastPopulated = false;
+    for (auto &entry: owner.getActors()) {
+        const ServerActor &actor = *entry.second;
+        if (!actor.isAlive() || !actor.isIn(level))
+            continue;
+
+        const char *identifier = actor.getIdentifier();
+        if (lastIdentifier == nullptr || (identifier != lastIdentifier && std::strcmp(identifier, lastIdentifier) != 0))
+            lastPopulated = !SpawnRules::getPopulation(identifier).empty();
+        lastIdentifier = identifier;
+        if (lastPopulated)
+            ++count;
+    }
+    return count;
+}
+
 void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     std::vector<Vector3f> players;
     for (auto &entry: owner.getPlayers()) {
@@ -157,19 +176,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     if (!level.getGameRules().getBool("domobspawning"))
         return;
 
-    // actors come in runs of one type: what the rules say of the last identifier asked is kept
-    int32_t mobCount = 0;
-    const char *lastIdentifier = nullptr;
-    bool lastPopulated = false;
-    for (auto &entry: owner.getActors()) {
-        const ServerActor &actor = *entry.second;
-        const char *identifier = actor.getIdentifier();
-        if (lastIdentifier == nullptr || (identifier != lastIdentifier && std::strcmp(identifier, lastIdentifier) != 0))
-            lastPopulated = !SpawnRules::getPopulation(identifier).empty();
-        lastIdentifier = identifier;
-        if (lastPopulated && actor.isAlive())
-            ++mobCount;
-    }
+    const int32_t mobCount = countPopulationActors(owner, level);
 
     const int32_t difficulty = (int32_t) owner.getProperties().getDifficulty();
     // a ticking chunk goes on only when nextInt(2000) <= 10: the gap to the next one that does is drawn

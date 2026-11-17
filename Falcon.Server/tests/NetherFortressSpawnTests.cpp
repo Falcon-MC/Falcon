@@ -100,6 +100,20 @@ namespace {
         require(!contains(peaceful, "minecraft:blaze"), "a blaze spawns on peaceful");
 
     }
+
+    void checkPopulationCountPerLevel() {
+        ServerNetworkHandler owner("Spawn caps", "", 1);
+        Level &overworld = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        Level &nether = owner.getWorlds().getDefault().getLevel(DimensionType::Nether);
+        for (int32_t i = 0; i < 201; ++i)
+            require(owner.spawnActor(nether, "minecraft:zombie", Vector3f((float) i, 80.0f, 0.5f)) != nullptr,
+                    "could not create a population actor for the other level");
+
+        require(NaturalSpawner::countPopulationActors(owner, overworld) == 0,
+                "mobs in another dimension consumed the Overworld spawn cap");
+        require(NaturalSpawner::countPopulationActors(owner, nether) == 201,
+                "the Nether spawn cap did not count its own mobs");
+    }
 }
 
 int main() {
@@ -115,6 +129,7 @@ int main() {
         SpawnRules::initialize();
         checkTable();
         checkCandidates(directory);
+        checkPopulationCountPerLevel();
         std::cout << "fortress spawn checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';
