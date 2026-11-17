@@ -244,11 +244,12 @@ int main() {
         {
             LevelStorage legacy;
             require(legacy.open(directory.string(), "Legacy"), "Could not create legacy world");
-            legacy.writeLevelDat("Legacy", 0, Level::UNSET_SPAWN_Y, 0, 0, 1, 12345, 0, false, false, 0);
+            legacy.writeLevelDat("Legacy", 0, Level::UNSET_SPAWN_Y, 0, 0, 1, 12345, 0, 215, false, false, 0);
         }
         {
             Level legacy("Legacy", 4, 12345);
             require(legacy.openStorage(directory.string()), "Could not migrate legacy spawn");
+            require(legacy.getWorldTick() == 215, "World tick was not restored from level.dat");
             require(samePosition(legacy.getSpawnPosition(), generatedSpawn), "Legacy default spawn changed");
             legacy.closeStorage();
         }

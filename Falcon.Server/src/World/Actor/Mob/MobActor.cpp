@@ -325,6 +325,13 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
     }
 }
 
+void MobActor::useSpawnEquipment(ServerNetworkHandler &owner, const std::string &table, float dropChance) {
+    if (mEquipment.equipFromTable(owner, *this, table)) {
+        mEquipmentInherited = true;
+        mEquipment.setDropChanceOverride(dropChance);
+    }
+}
+
 void MobActor::upgradeDefinition(ServerNetworkHandler &owner, bool loaded) {
     mActorVersion = EntityEvents::upgrade(owner, *this, loaded ? mActorVersion : INT32_MAX);
 }

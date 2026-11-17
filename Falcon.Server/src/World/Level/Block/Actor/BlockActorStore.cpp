@@ -21,6 +21,7 @@
 #include "World/Level/Block/Actor/ItemFrameBlockActor.h"
 #include "World/Level/Block/Actor/LodestoneBlockActor.h"
 #include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
+#include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Actor/StructureBlockActor.h"
 #include "World/Level/Level.h"
@@ -355,6 +356,7 @@ FALCON_REGISTER_BLOCK_ACTOR(BellBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(StructureBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(LodestoneBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(MobSpawnerBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(TrialSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BannerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FlowerPotBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(CauldronBlockActor);

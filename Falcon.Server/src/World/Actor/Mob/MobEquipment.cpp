@@ -149,9 +149,13 @@ void MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &m
     if (path == nullptr)
         return;
 
-    const LootTable *table = LootTableRegistry::getInstance().get(path->string());
+    equipFromTable(owner, mob, path->string());
+}
+
+bool MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &mob, const std::string &path) {
+    const LootTable *table = LootTableRegistry::getInstance().get(path);
     if (table == nullptr)
-        return;
+        return false;
 
     Level &level = owner.getLevelFor(mob);
     LootContext context(equipmentRandom());
@@ -171,6 +175,7 @@ void MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &m
 
     if (equipped)
         broadcast(owner, mob);
+    return true;
 }
 
 int MobEquipment::_slotFor(const ItemStack &item) const {
@@ -272,7 +277,9 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
         if (item.isAir())
             continue;
 
-        const float chance = slot == BODY ? 1.0f : _dropChance(mob, slot);
+        if (mDropChanceOverride.has_value() && *mDropChanceOverride <= 0.0f)
+            continue;
+        const float chance = mDropChanceOverride.value_or(slot == BODY ? 1.0f : _dropChance(mob, slot));
         const bool guaranteed = chance >= 1.0f;
         if (!guaranteed && !killedByPlayer)
             continue;
@@ -396,6 +403,8 @@ bool MobEquipment::repairSlot(int slot, int32_t amount) {
 }
 
 void MobEquipment::saveNbt(Tag &data) const {
+    if (mDropChanceOverride.has_value())
+        data.putFloat("FalconEquipmentDropChance", *mDropChanceOverride);
     data.put(TAG_MAINHAND, singleItemList(mSlots[MAINHAND]));
     data.put(TAG_OFFHAND, singleItemList(mSlots[OFFHAND]));
 
@@ -414,6 +423,9 @@ void MobEquipment::saveNbt(Tag &data) const {
 }
 
 void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    mDropChanceOverride.reset();
+    if (data.contains("FalconEquipmentDropChance", Tag::Type::Float))
+        mDropChanceOverride = data.getFloat("FalconEquipmentDropChance");
     for (ItemStack &item: mSlots)
         item = ItemStack::air();
 

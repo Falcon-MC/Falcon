@@ -118,7 +118,12 @@ public:
         return getDayTime() > 13184 && getDayTime() < 22800;
     }
 
+    int64_t getWorldTick() const {
+        return mWorldTick;
+    }
+
     void tickTime() {
+        ++mWorldTick;
         if (!mTimePaused && mGameRules.getBool("dodaylightcycle"))
             ++mTime;
     }
@@ -779,6 +784,7 @@ private:
     std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;
+    int64_t mWorldTick = 0;
     bool mTimePaused = false;
     bool mRaining = false;
     int32_t mRainTime = 0;

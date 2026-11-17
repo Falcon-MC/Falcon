@@ -1215,7 +1215,7 @@ bool LevelStorage::_recordWrite(bool success) const {
 }
 
 void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time,
+                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time, int64_t worldTick,
                                  bool bonusChestEnabled, bool bonusChestSpawned, int64_t worldStartCount) const {
     if (mPath.empty())
         return;
@@ -1238,6 +1238,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putInt("SpawnZ", spawnZ);
     data.putLong("RandomSeed", seed);
     data.putLong("Time", time);
+    data.putLong("currentTick", worldTick);
     data.putInt("StorageVersion", 10);
     data.putInt("NetworkVersion", 2225);
     data.putByte("bonusChestEnabled", bonusChestEnabled ? 1 : 0);

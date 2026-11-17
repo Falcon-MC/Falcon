@@ -7,6 +7,8 @@
 #include "Protocol/Types/ItemDefinition.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
+#include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
+#include "World/Level/Block/TrialSpawnerBlock.h"
 #include "World/Level/Level.h"
 
 #include "World/Item/ItemClassRegistry.h"
@@ -94,6 +96,14 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
         BlockActionHandler::broadcastBlockActorData(owner, level, spawner);
         player.consumeOneHeldItem();
         return true;
+    }
+
+    if (clicked != nullptr && TrialSpawnerBlock::matches(clicked->mName)) {
+        auto &spawner = level.getBlockActors().getOrCreate<TrialSpawnerBlockActor>(blockPosition);
+        if (spawner.configureFromSpawnEgg(owner, entityIdentifier)) {
+            player.consumeOneHeldItem();
+            return true;
+        }
     }
 
     Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y, (float) blockPosition.z + 0.5f);
