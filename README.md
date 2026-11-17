@@ -30,8 +30,8 @@ inventories, movement and gameplay are reimplemented by hand, with vanilla behav
 
 ## Getting started
 
-Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases), check it
-against its `.sha256` file and run it. On the first start, a setup wizard writes `server.properties`.
+Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases) and run it.
+On the first start, a setup wizard writes `server.properties`.
 
 Every setting is described on the [website](https://falcon-mc.com).
 
