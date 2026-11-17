@@ -6,7 +6,9 @@
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Components/BlockPlacementComponent.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
+#include "World/Level/Block/BlockPrecipitation.h"
 #include "World/Level/Block/LiquidView.h"
+#include "World/Level/Block/SnowLayerBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockIdentifier.h"
@@ -1160,6 +1162,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     const BlockState clickedState = level.getBlockState(transaction.mBlockPosition.x, transaction.mBlockPosition.y,
                                                         transaction.mBlockPosition.z);
 
+    const ItemStack &handItem = inventory.getItemInHand();
+    const Block *heldBlock = handItem.mBlockDefinition != nullptr
+                                     ? VanillaBlocks::fromIdentifier(handItem.mBlockDefinition->getIdentifier())
+                                     : nullptr;
+    const bool snowLayerPlacement = heldBlock != nullptr && SnowLayerBlock::matches(heldBlock->getIdentifier());
+    const bool snowloggingClicked = snowLayerPlacement && BlockPrecipitation::isSnowloggable(clickedState);
+
     static const int offsets[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     const int face = transaction.mBlockFace;
@@ -1167,19 +1176,16 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     const int placementFace = replacesClicked ? PlacementOrientation::FACE_UP : face;
 
     Vector3i target = transaction.mBlockPosition;
-    if (!replacesClicked) {
+    if (!replacesClicked && !snowloggingClicked) {
         target = Vector3i(transaction.mBlockPosition.x + offsets[face][0],
                           transaction.mBlockPosition.y + offsets[face][1],
                           transaction.mBlockPosition.z + offsets[face][2]);
     }
 
-    const ItemStack &handItem = inventory.getItemInHand();
-    const Block *heldBlock = handItem.mBlockDefinition != nullptr
-                                     ? VanillaBlocks::fromIdentifier(handItem.mBlockDefinition->getIdentifier())
-                                     : nullptr;
-
     if (heldBlock != nullptr)
         target = heldBlock->resolvePlacementPosition(level, target, face);
+    if (snowloggingClicked)
+        target = transaction.mBlockPosition;
 
     if (target.y < level.getMinY() || target.y > level.getMaxY())
         return false;
@@ -1329,15 +1335,17 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const bool merged = mergeResult == PlacementMergeResult::Merged;
 
-    // TODO: snowlogging
     const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
-    if (!merged && !BlockSupport::isReplaceable(targetState))
+    const bool snowloggingTarget = snowLayerPlacement && BlockPrecipitation::isSnowloggable(targetState);
+    if (!merged && !snowloggingTarget && !BlockSupport::isReplaceable(targetState))
         return false;
 
     const BlockData *placedData = BlockDataTable::find(definition.getIdentifier().c_str());
 
     const BlockState targetOverlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
     const bool targetHasLiquid = LiquidView(targetState).isLiquid() || LiquidView(targetOverlay).isLiquid();
+    if (snowloggingTarget && targetOverlay.mName != BlockNames::AIR)
+        return false;
     if (!merged && targetHasLiquid && placedData != nullptr && !placedData->mSolid
         && LiquidPhysicsSystem::getWaterloggingLevel(BlockState(definition.getIdentifier(), definition.getState()))
                    == 0)
@@ -1409,7 +1417,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         broadcastBlockUpdate(owner, level, entry.mPosition, entry.mState);
     }
 
-    if (waterlogsTarget)
+    if (waterlogsTarget || snowloggingTarget)
         level.setBlockStateAtLayer(target.x, target.y, target.z, 1, targetState);
 
     PlayerPlaceBlockAfterEvent placeEvent(player, target, placedState.mName);
@@ -1438,15 +1446,15 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     const Vector3f targetCenter((float) target.x + 0.5f, (float) target.y + 0.5f, (float) target.z + 0.5f);
     broadcastToViewers(owner, level, targetCenter, update);
 
-    if (waterlogsTarget) {
+    if (waterlogsTarget || snowloggingTarget) {
         const BlockState overlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
 
-        UpdateBlockPacket waterUpdate;
-        waterUpdate.mBlockPosition = target;
-        waterUpdate.mRuntimeId = (uint32_t) BlockStateHasher::hash(overlay.mName, overlay.mStates);
-        waterUpdate.mFlags = UpdateBlockPacket::Flag::All;
-        waterUpdate.mDataLayer = 1;
-        broadcastToViewers(owner, level, targetCenter, waterUpdate);
+        UpdateBlockPacket overlayUpdate;
+        overlayUpdate.mBlockPosition = target;
+        overlayUpdate.mRuntimeId = (uint32_t) BlockStateHasher::hash(overlay.mName, overlay.mStates);
+        overlayUpdate.mFlags = UpdateBlockPacket::Flag::All;
+        overlayUpdate.mDataLayer = 1;
+        broadcastToViewers(owner, level, targetCenter, overlayUpdate);
     }
 
     owner.playBlockSound(level, LevelSoundEvent::PLACE, targetCenter, (int32_t) blockHash);
@@ -1456,7 +1464,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     BlockActor *blockActor = level.getBlockActors().find(target);
     if (blockActor != nullptr) {
-        BlockPickItem::restoreBlockData(*blockActor, placedWithItem, owner.getCodecContext());
+        if (!snowloggingTarget)
+            BlockPickItem::restoreBlockData(*blockActor, placedWithItem, owner.getCodecContext());
 
         BlockActorDataPacket data;
         data.mBlockPosition = target;
