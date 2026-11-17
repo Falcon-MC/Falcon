@@ -853,7 +853,7 @@ namespace {
             {BlockTypeIds::CINNABAR_BRICK_STAIRS, "minecraft:cinnabar_brick_stairs", "Cinnabar Brick Stairs", 1.5f, 6.0f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, true, true, 0, 0, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::DEEPSLATE_GOLD_ORE, "minecraft:deepslate_gold_ore", "Deepslate Gold Ore", 4.5f, 3.0f, BlockToolType::Pickaxe, BlockToolTier::Iron, false, true, 0, false, true, 0, 0, BlockDropKind::Other, "minecraft:raw_gold", 1, 1},
             {BlockTypeIds::ANCIENT_DEBRIS, "minecraft:ancient_debris", "Ancient Debris", 30.0f, 1200.0f, BlockToolType::Pickaxe, BlockToolTier::Diamond, false, false, 0, false, true, 0, 0, BlockDropKind::Self, "", 1, 1},
-            {BlockTypeIds::VAULT, "minecraft:vault", "Vault", 50.0f, 50.0f, BlockToolType::None, BlockToolTier::None, true, false, 0, false, true, 0, 0, BlockDropKind::Self, "", 1, 1},
+            {BlockTypeIds::VAULT, "minecraft:vault", "Vault", 50.0f, 50.0f, BlockToolType::None, BlockToolTier::None, true, false, 0, false, true, 0, 0, BlockDropKind::Nothing, "", 0, 0},
             {BlockTypeIds::BEEHIVE, "minecraft:beehive", "Beehive", 0.6f, 3.0f, BlockToolType::Axe, BlockToolTier::None, true, true, 0, false, true, 5, 20, BlockDropKind::Nothing, "", 0, 0},
             {BlockTypeIds::STRIPPED_POPLAR_LOG, "minecraft:stripped_poplar_log", "Stripped Poplar Log", 2.0f, 2.0f, BlockToolType::Axe, BlockToolTier::None, true, false, 0, false, true, 5, 5, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::HARD_ORANGE_STAINED_GLASS, "minecraft:hard_orange_stained_glass", "Hard Orange Stained Glass", 10.0f, 0.3f, BlockToolType::None, BlockToolTier::None, true, true, 0, true, true, 0, 0, BlockDropKind::Nothing, "", 0, 0},

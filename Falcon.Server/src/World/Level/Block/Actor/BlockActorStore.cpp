@@ -1,6 +1,7 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 
 #include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/VaultBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
@@ -305,12 +306,21 @@ void BlockActorStore::keepGenerated(const Tag &data) {
     if (mBlockActors.count(key) != 0)
         return;
 
+    if (data.getString("id") == VaultBlockActor::BLOCK_ACTOR_ID) {
+        auto vault = std::make_unique<VaultBlockActor>();
+        vault->setPosition(position);
+        vault->loadVaultData(data);
+        insert(std::move(vault));
+        return;
+    }
+
     const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
     mUnknownBlockActors[key] = UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
     _index(key);
 }
 
 FALCON_REGISTER_BLOCK_ACTOR(ChestBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(VaultBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FurnaceBlockActor);
 
 namespace {

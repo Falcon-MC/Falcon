@@ -232,7 +232,7 @@ namespace {
         return container == nullptr ? nullptr : ContainerBlock::createBlockActor(container->mKind);
     }
 
-    // the trial spawner and the vault have no class here: their save is kept, with the fields the game saves
+    // the templates use a different format for vault keys and loot paths
     Tag generatedActor(const std::string &block, const Tag &data, int32_t x, int32_t y, int32_t z) {
         Tag actor = Tag::ofCompound();
         if (block == "minecraft:trial_spawner") {
@@ -259,10 +259,12 @@ namespace {
             settings.put("key_item", item);
             const std::string table = config != nullptr ? config->getString("loot_table", std::string()) : std::string();
             settings.putString("loot_table", lootPath(table));
-            settings.putString("override_loot_table_to_display", "");
+            const std::string display =
+                    config != nullptr ? config->getString("override_loot_table_to_display") : std::string();
+            settings.putString("override_loot_table_to_display", display.empty() ? display : lootPath(display));
             Tag state = Tag::ofCompound();
             state.put("items_to_eject", Tag::ofList(Tag::Type::Compound, {}));
-            state.put("rewarded_players", Tag::ofList(Tag::Type::Compound, {}));
+            state.put("rewarded_players", Tag::ofList(Tag::Type::Long));
             state.putLong("state_updating_resumes_at", 0);
             actor.putString("id", "Vault");
             actor.put("config", settings);
