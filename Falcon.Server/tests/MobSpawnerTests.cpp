@@ -4,6 +4,7 @@
 #include "Server/ServerPaths.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Mob/Hostile/AbstractSlimeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Actor/ServerActor.h"
@@ -440,6 +441,50 @@ namespace {
         arena.mOwner.erasePlayer(player.getNetworkIdentifier());
     }
 
+    void trialSpawnerSlimeClearance(Arena &arena, int32_t variant) {
+        arena.clear();
+        const Vector3i pos(32, 80, 32);
+        arena.spawner(pos, nullptr);
+        for (int32_t x = pos.x - 6; x <= pos.x + 6; ++x) {
+            for (int32_t z = pos.z - 6; z <= pos.z + 6; ++z)
+                arena.mLevel->setBlockState(x, pos.y + 1, z, BlockState("minecraft:stone"));
+        }
+        Tag states = Tag::ofCompound();
+        states.putByte("ominous", 0);
+        states.putInt("trial_spawner_state", 1);
+        arena.mLevel->setBlockState(pos.x, pos.y, pos.z, BlockState("minecraft:trial_spawner", states));
+        auto &spawner = arena.mLevel->getBlockActors().getOrCreate<TrialSpawnerBlockActor>(pos);
+
+        Tag entity = Tag::ofCompound();
+        entity.putString("id", "minecraft:slime");
+        entity.putInt("Size", variant);
+        Tag spawn = Tag::ofCompound();
+        spawn.put("entity", entity);
+        Tag entry = Tag::ofCompound();
+        entry.put("data", spawn);
+        entry.putInt("weight", 1);
+        Tag potentials = Tag::ofList(Tag::Type::Compound);
+        potentials.addToList(entry);
+        Tag config = Tag::ofCompound();
+        config.put("spawn_potentials", potentials);
+        Tag data = Tag::ofCompound();
+        data.put("normal_config", config);
+        spawner.loadTrialData(TrialSpawnerBlockActor::createTrialData(data));
+
+        ServerPlayer &player = arena.player(9510, Vector3f(34.5f, 79.0f, 32.5f));
+        player.setUniqueId(9510);
+        for (int i = 0; i < 200 && arena.all("minecraft:slime").empty(); ++i) {
+            arena.mLevel->tickTime();
+            require(spawner.tick(arena.mOwner), "slime trial spawner removed itself");
+        }
+        const auto slimes = arena.all("minecraft:slime");
+        require(slimes.size() == 1, "configured slime did not fit under a two block ceiling");
+        const auto *slime = dynamic_cast<const AbstractSlimeActor *>(slimes.front());
+        require(slime != nullptr && slime->getSizeVariant() == variant, "trial spawned the wrong slime size");
+        arena.mOwner.erasePlayer(player.getNetworkIdentifier());
+        arena.mLevel->getBlockActors().remove(pos);
+    }
+
     void trialSpawnerNamedPreset(Arena &arena, bool ominous, const char *preset, const char *entity) {
         arena.clear();
         const Vector3i position(32, 80, 32);
@@ -626,6 +671,8 @@ int main() {
         trialSpawnerCycle(arena, false, 36000);
         trialSpawnerCycle(arena, true, 36000);
         trialSpawnerCycle(arena, true, 40);
+        trialSpawnerSlimeClearance(arena, 1);
+        trialSpawnerSlimeClearance(arena, 2);
         trialSpawnerNamedPreset(arena, false, "breeze", "minecraft:breeze");
         trialSpawnerNamedPreset(arena, true, "breeze", "minecraft:breeze");
         trialSpawnerNamedPreset(arena, true, "melee/zombie", "minecraft:zombie");

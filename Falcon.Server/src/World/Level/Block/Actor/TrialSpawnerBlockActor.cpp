@@ -503,7 +503,10 @@ bool TrialSpawnerBlockActor::tick(ServerNetworkHandler &owner) {
         const std::string identifier = entity->getString("id");
         if (identifier.empty())
             return true;
-        const ActorSize size = ActorClassRegistry::getSize(identifier);
+        ActorSize size = ActorClassRegistry::getSize(identifier);
+        if (entity->contains("Size", Tag::Type::Int)
+            && dynamic_cast<const AbstractSlimeActor *>(ActorClassRegistry::getPrototype(identifier)) != nullptr)
+            size = AbstractSlimeActor::getSizeForVariant(entity->getInt("Size"));
         const float halfWidth = size.mWidth * 0.5f;
         const Vector3f feet(x + 0.5f, (float) y, z + 0.5f);
         const AxisAlignedBB box(feet.x - halfWidth, feet.y, feet.z - halfWidth, feet.x + halfWidth,
