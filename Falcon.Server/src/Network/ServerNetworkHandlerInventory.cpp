@@ -107,7 +107,7 @@ int32_t ServerNetworkHandler::repairWithMending(ServerPlayer &player, int32_t xp
             return;
 
         const ItemData *itemData = ItemDataTable::find(item.mDefinition->getIdentifier());
-        if (itemData == nullptr || itemData->mMaxDurability <= 0)
+        if (itemData == nullptr || itemData->mMaxDurability <= 0 || item.mDamage <= 0)
             return;
 
         if (ItemEnchantments::getLevel(item, EnchantmentIds::MENDING) > 0)
@@ -124,8 +124,6 @@ int32_t ServerNetworkHandler::repairWithMending(ServerPlayer &player, int32_t xp
 
     static std::mt19937 mendingRng(0x85EBCA6Bu);
     MendingSlot &chosen = candidates[mendingRng() % candidates.size()];
-    if (chosen.mItem.mDamage <= 0)
-        return xp;
 
     const int32_t repaired = std::min(chosen.mItem.mDamage, xp * 2);
     chosen.mItem.mDamage -= repaired;
