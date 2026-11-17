@@ -22,6 +22,8 @@ class World {
 public:
     World(uint32_t id, const std::string &name, int viewDistance, int64_t seed);
 
+    ~World();
+
     World(const World &) = delete;
 
     World &operator=(const World &) = delete;

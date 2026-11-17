@@ -11,6 +11,9 @@
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
+#include "World/Level/Block/Systems/FireSystem.h"
+#include "World/Level/Block/Systems/CommandBlockSystem.h"
+#include "World/Level/Block/OpenableBlock.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -119,6 +122,32 @@ namespace {
         player.getInventory().setOffhand(enchanted("minecraft:diamond_pickaxe", 80));
         require(owner.repairWithMending(player, 1) == 0, "an intact item consumed Mending XP");
         require(player.getInventory().getOffhand().mDamage == 78, "Mending ignored a damaged item in the offhand");
+    }
+
+    void blockSystemStateIsPerWorld() {
+        ServerNetworkHandler owner("Block system state", "", 1);
+        World &firstWorld = owner.getWorlds().getDefault();
+        World &secondWorld = owner.getWorlds().add("state-isolation", 4, 1);
+        Level &first = firstWorld.getOverworld();
+        Level &second = secondWorld.getOverworld();
+        require(first.getDimensionId() == second.getDimensionId(), "test worlds do not share a dimension id");
+
+        const Vector3i position(8, 64, 8);
+        first.setBlockState(position.x, position.y, position.z, block("minecraft:fire"));
+        first.getGameRules().setFromString("dofiretick", "true");
+        FireSystem::scheduleUpdate(first, position, 1);
+        FireSystem::tick(owner, second);
+        FireSystem::tick(owner, first);
+        require(first.getBlockState(position.x, position.y, position.z).mName == "minecraft:air",
+                "another world's fire tick consumed this world's scheduled update");
+
+        CommandBlockSystem::getOrCreate(first, position);
+        require(CommandBlockSystem::find(second, position) == nullptr,
+                "a command block cache entry leaked into another world");
+
+        OpenableBlock::setManualOverride(first, position, true);
+        require(!OpenableBlock::hasManualOverride(second, position),
+                "a door override leaked into another world");
     }
 
     void freezing() {
@@ -578,6 +607,7 @@ int main() {
         armorStandExchange();
         sleepThreshold();
         mendingRepairsDamagedItems();
+        blockSystemStateIsPerWorld();
         pistons();
         fallDamageReduction();
         std::cout << "26.60 migration and gameplay regressions passed\n";

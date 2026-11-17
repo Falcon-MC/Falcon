@@ -17,6 +17,8 @@ public:
 
     static void setManualOverride(Level &level, const Vector3i &position, bool manual);
 
+    static void forgetLevel(const Level &level);
+
     static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state);
 
     static void openOnPlace(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
