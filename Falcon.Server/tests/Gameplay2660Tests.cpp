@@ -20,12 +20,13 @@
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Inventory/ItemStackNbt.h"
-#include "World/Item/ItemData.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/ItemData.h"
+#include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemNetworkIdTable.h"
+#include "World/Item/PotionEffects.h"
 #include "World/Item/ThrowableItem.h"
 #include "World/Item/VanillaItems.h"
-#include "World/Item/PotionEffects.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -100,6 +101,24 @@ namespace {
         require(ServerNetworkHandler::getRequiredSleepers(3, 50) == 2, "required sleepers must round up");
         require(ServerNetworkHandler::getRequiredSleepers(4, 100) == 4, "everyone must sleep at 100 percent");
         require(ServerNetworkHandler::getRequiredSleepers(4, 0) == 1, "at least one sleeper is always required");
+    }
+
+    void mendingRepairsDamagedItems() {
+        ServerNetworkHandler owner("Mending regression", "", 1);
+        ServerPlayer player(NetworkIdentifier{}, 9300);
+        const auto enchanted = [](const char *identifier, int32_t damage) {
+            ItemStack item;
+            item.mDefinition = std::make_shared<ItemDefinition>(identifier, 1, false, Tag());
+            item.mCount = 1;
+            item.mDamage = damage;
+            ItemEnchantments::write(item, {{EnchantmentIds::MENDING, 1}});
+            return item;
+        };
+
+        player.getInventory().setItemInHand(enchanted("minecraft:diamond_sword", 0));
+        player.getInventory().setOffhand(enchanted("minecraft:diamond_pickaxe", 80));
+        require(owner.repairWithMending(player, 1) == 0, "an intact item consumed Mending XP");
+        require(player.getInventory().getOffhand().mDamage == 78, "Mending ignored a damaged item in the offhand");
     }
 
     void freezing() {
@@ -558,6 +577,7 @@ int main() {
         freezing();
         armorStandExchange();
         sleepThreshold();
+        mendingRepairsDamagedItems();
         pistons();
         fallDamageReduction();
         std::cout << "26.60 migration and gameplay regressions passed\n";
