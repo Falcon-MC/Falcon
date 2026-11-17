@@ -1,5 +1,9 @@
 #include "World/Level/World.h"
 
+#include "World/Level/Block/OpenableBlock.h"
+#include "World/Level/Block/Systems/CommandBlockSystem.h"
+#include "World/Level/Block/Systems/FireSystem.h"
+
 #include <exception>
 
 World::World(uint32_t id, const std::string &name, int viewDistance, int64_t seed)
@@ -8,6 +12,14 @@ World::World(uint32_t id, const std::string &name, int viewDistance, int64_t see
           mTheEnd(new Level(name, viewDistance, seed, DimensionType::TheEnd)), mDragonFight(new EndDragonFight(seed)) {
     for (Level *level: getLevels())
         level->setWorldId(id);
+}
+
+World::~World() {
+    for (Level *level: getLevels()) {
+        FireSystem::forgetLevel(*level);
+        CommandBlockSystem::forgetLevel(*level);
+        OpenableBlock::forgetLevel(*level);
+    }
 }
 
 bool World::open(const std::string &worldsDirectory, size_t workerThreads, const Level::PacketBroadcaster &broadcaster,

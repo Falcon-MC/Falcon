@@ -29,10 +29,10 @@ namespace {
                 mSyncedRevisions;
     };
 
-    std::unordered_map<int32_t, CommandBlockState> gStates;
+    std::unordered_map<const Level *, CommandBlockState> gStates;
 
     CommandBlockState &stateOf(Level &level) {
-        return gStates[level.getDimensionId()];
+        return gStates[&level];
     }
 
     class CommandBlockOrigin final : public CommandOrigin {
@@ -218,6 +218,10 @@ namespace {
 
         return true;
     }
+}
+
+void CommandBlockSystem::forgetLevel(const Level &level) {
+    gStates.erase(&level);
 }
 
 int64_t CommandBlockSystem::packPosition(const Vector3i &position) {

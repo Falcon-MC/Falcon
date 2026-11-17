@@ -31,4 +31,6 @@ public:
     static void broadcastData(ServerNetworkHandler &owner, Level &level, const CommandBlockActor &actor);
 
     static void tickCommandBlocks(ServerNetworkHandler &owner, Level &level);
+
+    static void forgetLevel(const Level &level);
 };

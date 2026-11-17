@@ -41,10 +41,10 @@ namespace {
         std::map<int64_t, std::vector<ScheduledPosition>> mBuckets;
     };
 
-    std::unordered_map<int32_t, FireSchedule> gSchedules;
+    std::unordered_map<const Level *, FireSchedule> gSchedules;
 
     FireSchedule &scheduleOf(Level &level) {
-        return gSchedules[level.getDimensionId()];
+        return gSchedules[&level];
     }
 
     const char *UNBURNABLE_BLOCKS[] = {"minecraft:crimson_button",
@@ -519,4 +519,8 @@ void FireSystem::tick(ServerNetworkHandler &owner, Level &level) {
         if (actor != nullptr)
             touchActor(owner, level, *actor);
     }
+}
+
+void FireSystem::forgetLevel(const Level &level) {
+    gSchedules.erase(&level);
 }

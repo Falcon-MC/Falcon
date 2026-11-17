@@ -40,4 +40,6 @@ public:
     static void scheduleUpdate(Level &level, const Vector3i &position, int64_t delay);
 
     static void tick(ServerNetworkHandler &owner, Level &level);
+
+    static void forgetLevel(const Level &level);
 };
