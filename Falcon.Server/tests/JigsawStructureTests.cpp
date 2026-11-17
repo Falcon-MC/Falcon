@@ -22,7 +22,7 @@ namespace {
 
     void checkDefinitions() {
         const JigsawStructures &structures = JigsawStructures::get();
-        require(structures.sets().size() == 2, "The game has two structure sets");
+        require(structures.sets().size() == 3, "The game has three structure sets");
 
         const JigsawStructures::Structure *ruins = structures.structure("minecraft:trail_ruins");
         require(ruins != nullptr && ruins->mMaxDepth == 7 && ruins->mStartY == -15 && ruins->mAdapts
@@ -60,6 +60,25 @@ namespace {
 
         const StructureFeature *feature = StructureFeature::get("abandoned_camp");
         require(feature != nullptr && feature->getSpacing() == 37, "The camps are not registered for /locate");
+
+        const JigsawStructures::Structure *chambers = structures.structure("minecraft:trial_chambers");
+        require(chambers != nullptr && chambers->mMaxDepth == 20 && chambers->mStartY == -40
+                        && chambers->mStartYMax == -20 && chambers->mPadding == 10 && chambers->mAliases.size() == 3
+                        && chambers->mAdaptation == TerrainBeard::Adaptation::Encapsulate,
+                "The trial chambers are not registered");
+        const JigsawPlacer::Pool *hallway = structures.pool("minecraft:trial_chambers/hallway");
+        require(hallway != nullptr && hallway->mSlots.size() == 1225
+                        && hallway->mFallback == "minecraft:trial_chambers/hallway/fallback",
+                "The hallway pool differs");
+        const JigsawPlacer::Pool *skeleton = structures.pool("minecraft:trial_chambers/spawner/ranged/skeleton");
+        require(skeleton != nullptr && skeleton->mSlots.size() == 1
+                        && skeleton->mSlots[0]->mLocation == "minecraft:trial_chambers/spawner/ranged/skeleton",
+                "An alias target has no pool");
+        const JigsawStructures::ProcessorList *bulbs =
+                structures.processors("minecraft:trial_chambers_copper_bulb_degradation");
+        require(bulbs != nullptr && bulbs->mRules.size() == 3, "The copper bulbs do not age");
+        const StructureFeature *trial = StructureFeature::get("trial_chambers");
+        require(trial != nullptr && trial->getSpacing() == 34, "The trial chambers are not registered for /locate");
     }
 
     void checkBeard() {
@@ -139,6 +158,7 @@ int main() {
         checkBeard();
         checkPlans("trail_ruins");
         checkPlans("abandoned_camp");
+        checkPlans("trial_chambers");
     } catch (const std::exception &error) {
         std::clog << "Jigsaw structure regression failed: " << error.what() << '\n';
         return 1;

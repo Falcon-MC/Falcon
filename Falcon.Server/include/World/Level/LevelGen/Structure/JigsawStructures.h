@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace json {
@@ -23,8 +24,9 @@ class LevelChunk;
 
 /**
  * The structures the game reads from its worldgen definitions (BedrockData worldgen.json): trail ruins and the
- * abandoned camps. A structure set draws one candidate chunk per region, picks one of its structures by weight and
- * grows it with the jigsaw placer; each chunk then writes the part of the pieces inside it.
+ * abandoned camps, plus the trial chambers it builds in code. A structure set draws one candidate chunk per region,
+ * picks one of its structures by weight and grows it with the jigsaw placer; each chunk then writes the part of the
+ * pieces inside it.
  */
 class JigsawStructures {
 public:
@@ -49,20 +51,34 @@ public:
         bool mEquals = true;
     };
 
+    // one draw per binding picks a choice by weight; each choice points some pool names at other pools
+    struct AliasBinding {
+        struct Choice {
+            int32_t mWeight = 1;
+            std::vector<std::pair<std::string, std::string>> mTargets;
+        };
+        std::vector<Choice> mChoices;
+    };
+
     struct Structure {
         std::string mIdentifier;
         // every test must hold
         std::vector<BiomeTest> mBiomeFilter;
+        // the biomes a structure built in code may start in; empty: the tests decide
+        std::vector<int32_t> mBiomes;
         std::string mStartPool;
         std::string mStartJigsaw;
         int32_t mMaxDepth = 0;
         int32_t mMaxDistanceHorizontal = 0;
         int32_t mMaxDistanceVertical = 0;
         int32_t mStartY = 0;
+        // above mStartY: the start height is drawn between the two, both included
+        int32_t mStartYMax = 0;
         int32_t mPadding = 0;
         JigsawPlacer::Projection mProjection = JigsawPlacer::Projection::None;
         TerrainBeard::Adaptation mAdaptation = TerrainBeard::Adaptation::BeardThin;
         bool mAdapts = false;
+        std::vector<AliasBinding> mAliases;
     };
 
     struct WeightedStructure {
@@ -116,6 +132,15 @@ public:
     static bool passes(const Structure &structure, int32_t biomeId);
 
 private:
+    // the trial chambers' pools, processors, structure and set, as the game registers them in code
+    void _loadTrialChambers();
+
+    void _addSet(std::unique_ptr<Set> set);
+
+    // each alias of the structure to the pool it stands for at this start
+    static std::map<std::string, std::string> _resolveAliases(const Structure &structure, int64_t seed, int32_t x,
+                                                              int32_t y, int32_t z);
+
     std::shared_ptr<const Plan> _generate(const ChunkGenerator &generator, const Structure &structure,
                                           int32_t chunkX, int32_t chunkZ) const;
 

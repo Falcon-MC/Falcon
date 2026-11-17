@@ -3,6 +3,8 @@
 #include "Core/Json/Json.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -84,6 +86,12 @@ namespace {
         const int64_t mixed = (116129781LL * (int64_t) z) ^ (int64_t) y ^ (int64_t) (int32_t) ((uint32_t) x * 3129871U);
         const uint64_t spread = (uint64_t) mixed * (42317861ULL * (uint64_t) mixed + 11ULL);
         return (int64_t) (int32_t) (uint32_t) (spread >> 16);
+    }
+
+    // the same hash kept whole, the seed of a positional random
+    int64_t blockSeed(int32_t x, int32_t y, int32_t z) {
+        const int64_t mixed = (116129781LL * (int64_t) z) ^ (int64_t) y ^ (int64_t) (int32_t) ((uint32_t) x * 3129871U);
+        return (int64_t) (((uint64_t) mixed * (42317861ULL * (uint64_t) mixed + 11ULL)) >> 16);
     }
 
     bool insideChunk(int32_t x, int32_t z, int32_t chunkX, int32_t chunkZ) {
@@ -211,15 +219,61 @@ namespace {
         return TerrainBeard::Adaptation::BeardThin;
     }
 
-    std::unique_ptr<BlockActor> containerOf(const BlockState &block) {
-        const ContainerBlockDefinition *container = ContainerBlock::findDefinition(block.mName);
-        return container == nullptr ? nullptr : ContainerBlock::createBlockActor(container->mKind);
-    }
-
     std::string lootPath(const std::string &name) {
         if (name.rfind("loot_tables/", 0) == 0)
             return name;
         return "loot_tables/" + withoutNamespace(name) + ".json";
+    }
+
+    std::unique_ptr<BlockActor> containerOf(const BlockState &block) {
+        if (block.mName == "minecraft:chest")
+            return BlockActorStore::create(ChestBlockActor::BLOCK_ACTOR_ID);
+        const ContainerBlockDefinition *container = ContainerBlock::findDefinition(block.mName);
+        return container == nullptr ? nullptr : ContainerBlock::createBlockActor(container->mKind);
+    }
+
+    // the trial spawner and the vault have no class here: their save is kept, with the fields the game saves
+    Tag generatedActor(const std::string &block, const Tag &data, int32_t x, int32_t y, int32_t z) {
+        Tag actor = Tag::ofCompound();
+        if (block == "minecraft:trial_spawner") {
+            actor.putString("id", "TrialSpawner");
+            actor.putLong("cooldown_end_at", 0);
+            actor.put("current_mobs", Tag::ofList(Tag::Type::Compound, {}));
+            actor.putLong("next_mob_spawns_at", 0);
+            actor.putString("normal_config", data.getString("normal_config", std::string()));
+            actor.putString("ominous_config", data.getString("ominous_config", std::string()));
+            actor.put("registered_players", Tag::ofList(Tag::Type::Compound, {}));
+            actor.putInt("required_player_range", 14);
+            actor.putInt("total_mobs_spawned", 0);
+        } else if (block == "minecraft:vault") {
+            const Tag *config = data.get("config");
+            const Tag *key = config != nullptr ? config->get("key_item") : nullptr;
+            Tag item = Tag::ofCompound();
+            item.putByte("Count", (int8_t) (key != nullptr ? key->getInt("count", 1) : 1));
+            item.putShort("Damage", 0);
+            item.putString("Name", key != nullptr ? key->getString("id", std::string()) : std::string());
+            item.putByte("WasPickedUp", 0);
+            Tag settings = Tag::ofCompound();
+            settings.putFloat("activation_range", 4.0f);
+            settings.putFloat("deactivation_range", 4.5f);
+            settings.put("key_item", item);
+            const std::string table = config != nullptr ? config->getString("loot_table", std::string()) : std::string();
+            settings.putString("loot_table", lootPath(table));
+            settings.putString("override_loot_table_to_display", "");
+            Tag state = Tag::ofCompound();
+            state.put("items_to_eject", Tag::ofList(Tag::Type::Compound, {}));
+            state.put("rewarded_players", Tag::ofList(Tag::Type::Compound, {}));
+            state.putLong("state_updating_resumes_at", 0);
+            actor.putString("id", "Vault");
+            actor.put("config", settings);
+            actor.put("data", state);
+        } else {
+            return Tag();
+        }
+        actor.putInt("x", x);
+        actor.putInt("y", y);
+        actor.putInt("z", z);
+        return actor;
     }
 
     struct ChunkShare {
@@ -232,6 +286,10 @@ namespace {
             std::string mBlock;
         };
         std::vector<Loot> mLoot;
+        // block actors of no class, with the block they belong to
+        std::vector<std::pair<Tag, std::string>> mGenerated;
+        // the four faces of a decorated pot
+        std::map<Position, Tag> mSherds;
     };
 
     // one piece clipped to one chunk: jigsaws become their final state, rules draw from MT(post process seed)
@@ -323,6 +381,15 @@ namespace {
         // a container of the template keeps its loot table; its seed is the chunk's next draw when the template
         // gives none
         void _loot(const StructureTemplate::BlockEntry &entry, const Position &position, const BlockState &block) {
+            Tag generated = generatedActor(block.mName, entry.mData, std::get<0>(position), std::get<1>(position),
+                                           std::get<2>(position));
+            if (generated.isCompound()) {
+                mShare.mGenerated.emplace_back(std::move(generated), block.mName);
+                return;
+            }
+            const Tag *sherds = entry.mData.get("sherds");
+            if (sherds != nullptr && sherds->isList())
+                mShare.mSherds[position] = *sherds;
             if (!entry.mData.contains("LootTable") || containerOf(block) == nullptr)
                 return;
 
@@ -392,6 +459,7 @@ JigsawStructures &JigsawStructures::get() {
         const std::unique_ptr<json::Value> document = json::parse(FalconWorldgenData::kWorldgenJson);
         if (document != nullptr)
             loaded->load(*document);
+        loaded->_loadTrialChambers();
         return loaded;
     }();
     return *structures;
@@ -527,9 +595,13 @@ void JigsawStructures::load(const json::Value &document) {
         if (out->mStructures.empty())
             continue;
 
-        mSets.push_back(std::move(out));
-        mFeatures.push_back(std::make_unique<SetFeature>(*this, *mSets.back()));
+        _addSet(std::move(out));
     }
+}
+
+void JigsawStructures::_addSet(std::unique_ptr<Set> set) {
+    mSets.push_back(std::move(set));
+    mFeatures.push_back(std::make_unique<SetFeature>(*this, *mSets.back()));
 }
 
 const JigsawPlacer::Pool *JigsawStructures::pool(const std::string &name) const {
@@ -555,6 +627,9 @@ const JigsawStructures::Structure *JigsawStructures::structure(const std::string
 }
 
 bool JigsawStructures::passes(const Structure &structure, int32_t biomeId) {
+    if (!structure.mBiomes.empty()
+        && std::find(structure.mBiomes.begin(), structure.mBiomes.end(), biomeId) == structure.mBiomes.end())
+        return false;
     for (const BiomeTest &test: structure.mBiomeFilter) {
         if (BiomeChunkGenDataRegistry::hasTag(biomeId, test.mTag) != test.mEquals)
             return false;
@@ -562,12 +637,49 @@ bool JigsawStructures::passes(const Structure &structure, int32_t biomeId) {
     return true;
 }
 
+std::map<std::string, std::string> JigsawStructures::_resolveAliases(const Structure &structure, int64_t seed,
+                                                                    int32_t x, int32_t y, int32_t z) {
+    std::map<std::string, std::string> resolved;
+    if (structure.mAliases.empty())
+        return resolved;
+
+    // the world seed's random forked at the start position, apart from the start's own random
+    LegacyRandom base(seed);
+    const int64_t forked = base.nextLong();
+    LegacyRandom random(blockSeed(x, y, z) ^ forked);
+    for (const AliasBinding &binding: structure.mAliases) {
+        int32_t total = 0;
+        for (const AliasBinding::Choice &choice: binding.mChoices)
+            total += choice.mWeight;
+        int32_t draw = total != 0 ? random.nextInt(total) : 0;
+        for (const AliasBinding::Choice &choice: binding.mChoices) {
+            draw -= choice.mWeight;
+            if (draw >= 0)
+                continue;
+            for (const std::pair<std::string, std::string> &target: choice.mTargets)
+                resolved[target.first] = target.second;
+            break;
+        }
+    }
+    return resolved;
+}
+
 std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::_generate(const ChunkGenerator &generator,
                                                                           const Structure &structure, int32_t chunkX,
                                                                           int32_t chunkZ) const {
     LegacyRandom random = largeFeatureRandom(generator.getSeed(), chunkX, chunkZ);
+    // the height is the start's first draw
+    int32_t startY = structure.mStartY;
+    if (structure.mStartYMax > structure.mStartY)
+        startY += random.nextInt(structure.mStartYMax - structure.mStartY + 1);
+
+    const std::map<std::string, std::string> aliases =
+            _resolveAliases(structure, generator.getSeed(), chunkX * 16, startY, chunkZ * 16);
     const auto nextInt = [&random](int32_t bound) { return random.nextInt(bound); };
-    const auto pools = [this](const std::string &name) { return pool(name); };
+    const auto pools = [this, &aliases](const std::string &name) {
+        const auto aliased = aliases.find(withNamespace(name));
+        return pool(aliased == aliases.end() ? name : aliased->second);
+    };
 
     // the noise column, water included, the ground the game projects the start on
     std::map<std::pair<int32_t, int32_t>, std::array<int32_t, 256>> heights;
@@ -584,7 +696,7 @@ std::shared_ptr<const JigsawStructures::Plan> JigsawStructures::_generate(const 
     settings.mStartJigsaw = structure.mStartJigsaw;
     settings.mMaxDepth = structure.mMaxDepth;
     settings.mStartX = chunkX * 16;
-    settings.mStartY = structure.mStartY;
+    settings.mStartY = startY;
     settings.mStartZ = chunkZ * 16;
     settings.mProjection = structure.mProjection;
     settings.mMaxDistanceHorizontal = structure.mMaxDistanceHorizontal;
@@ -799,7 +911,19 @@ void JigsawStructures::place(const ChunkGenerator &generator, Level &level, Leve
                 continue;
             actor->setPosition(position);
             actor->setLootTable(loot.mTable, loot.mSeed);
+            const auto sherds = share.mSherds.find(loot.mPosition);
+            auto *pot = dynamic_cast<DecoratedPotBlockActor *>(actor.get());
+            if (pot != nullptr && sherds != share.mSherds.end())
+                pot->setSherds(sherds->second);
             level.getBlockActors().insert(std::move(actor));
+        }
+
+        for (const std::pair<Tag, std::string> &generated: share.mGenerated) {
+            const Position position = {generated.first.getInt("x", 0), generated.first.getInt("y", 0),
+                                       generated.first.getInt("z", 0)};
+            const auto block = share.mBlocks.find(position);
+            if (block != share.mBlocks.end() && block->second.mName == generated.second)
+                level.getBlockActors().keepGenerated(generated.first);
         }
     }
 }
