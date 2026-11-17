@@ -66,6 +66,30 @@ namespace {
         return tags;
     }
 
+    bool stripMetadataSuffix(std::string &itemId, int32_t &metadata) {
+        const size_t namespaceSeparator = itemId.find(':');
+        const size_t metadataSeparator = itemId.find_last_of(':');
+        if (namespaceSeparator == std::string::npos || metadataSeparator == namespaceSeparator
+            || metadataSeparator + 1 == itemId.size()) {
+            return false;
+        }
+
+        int32_t parsed = 0;
+        for (size_t index = metadataSeparator + 1; index < itemId.size(); ++index) {
+            const char digit = itemId[index];
+            if (digit < '0' || digit > '9')
+                return false;
+            const int value = digit - '0';
+            if (parsed > (INT32_MAX - value) / 10)
+                return false;
+            parsed = parsed * 10 + value;
+        }
+
+        itemId.resize(metadataSeparator);
+        metadata = parsed;
+        return true;
+    }
+
     std::vector<IngredientChoice> parseIngredient(const json::Value &value, const TagMap &tags) {
         const json::Value *typeValue = value.get("type");
         const std::string type = typeValue == nullptr ? std::string() : typeValue->string();
@@ -93,8 +117,12 @@ namespace {
         if (itemId == nullptr || itemId->mType != json::Value::Type::String)
             return {};
         const json::Value *auxValue = value.get("auxValue");
-        const int32_t aux = auxValue == nullptr ? 0 : auxValue->integer(0);
-        return {{false, itemId->mString, aux, count}};
+        int32_t aux = auxValue == nullptr ? 0 : auxValue->integer(0);
+        std::string canonicalItemId = itemId->mString;
+        int32_t suffixAux = 0;
+        if (stripMetadataSuffix(canonicalItemId, suffixAux) && auxValue == nullptr)
+            aux = suffixAux;
+        return {{false, std::move(canonicalItemId), aux, count}};
     }
 
     void addRecipe(RecipeStorage &storage, const json::Value &source, int32_t width, int32_t height,
@@ -298,6 +326,11 @@ namespace {
             return;
 
         const json::Value *auxValue = input.get("auxValue");
+        int32_t inputAux = auxValue == nullptr ? 0 : auxValue->integer(0);
+        std::string canonicalInputId = inputItem->mString;
+        int32_t suffixAux = 0;
+        if (stripMetadataSuffix(canonicalInputId, suffixAux) && auxValue == nullptr)
+            inputAux = suffixAux;
         const json::Value *countValue = outputData->mArray.front()->get("count");
         const json::Value *priority = source.get("priority");
         const int32_t outputCount = countValue == nullptr ? 1 : countValue->integer(1);
@@ -306,8 +339,8 @@ namespace {
 
         storage.mStonecutterRecipes.push_back(
                 {storage.store(id->string()), storage.store(uuid == nullptr ? std::string() : uuid->string()),
-                 storage.store(inputItem->mString), auxValue == nullptr ? 0 : auxValue->integer(0),
-                 storage.store(output->mString), outputCount, priority == nullptr ? 0 : priority->integer(0)});
+                 storage.store(canonicalInputId), inputAux, storage.store(output->mString), outputCount,
+                 priority == nullptr ? 0 : priority->integer(0)});
     }
 
     void loadBrewingMixes(RecipeStorage &storage, std::vector<BrewingMixData> &target, const json::Value *mixes) {
