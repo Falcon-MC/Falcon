@@ -1063,6 +1063,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
     for (const char *blockName: furnaceBlocks) {
         for (size_t index = 0; index < CraftingRecipeTable::getFurnaceRecipeCount(); ++index) {
             const FurnaceRecipeData &source = furnaceRecipes[index];
+            if (std::string(source.mBlockName) != blockName)
+                continue;
             const ItemNetworkIdEntry *inputNetwork = ItemNetworkIdTable::find(source.mInputItemId);
             const ItemNetworkIdEntry *outputNetwork = ItemNetworkIdTable::find(source.mOutputItemId);
             if (inputNetwork == nullptr || outputNetwork == nullptr) {

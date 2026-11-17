@@ -236,7 +236,7 @@ namespace {
     }
 
     void loadFurnaceRecipe(RecipeStorage &storage, std::vector<FurnaceRecipeData> &target, const json::Value &source,
-                           const TagMap &tags) {
+                           const TagMap &tags, const std::string &blockName) {
         const json::Value *inputData = source.get("input");
         const json::Value *outputData = source.get("output");
         if (inputData == nullptr || inputData->mType != json::Value::Type::Array || inputData->mArray.empty()
@@ -269,8 +269,8 @@ namespace {
                 continue;
             }
             const std::string recipeId = index == 0 ? baseId : baseId + "#" + std::to_string(index);
-            target.push_back({storage.store(recipeId), storage.store(choice.mItemId), choice.mAuxValue, choice.mCount,
-                              storage.store(output->mString), outputCount, priority});
+            target.push_back({storage.store(recipeId), storage.store(blockName), storage.store(choice.mItemId),
+                              choice.mAuxValue, choice.mCount, storage.store(output->mString), outputCount, priority});
         }
     }
 
@@ -358,16 +358,16 @@ namespace {
                 continue;
 
             const std::string blockName = block->string();
-            if (blockName == "furnace" || blockName == "campfire" || blockName == "soul_campfire") {
+            if (blockName == "furnace" || blockName == "blast_furnace" || blockName == "smoker"
+                || blockName == "campfire" || blockName == "soul_campfire") {
                 if (type->integer(-1) != 1)
                     continue;
 
-                std::vector<FurnaceRecipeData> &target = blockName == "furnace"
-                                                                 ? storage.mFurnaceRecipes
-                                                                 : (blockName == "campfire"
-                                                                            ? storage.mCampfireRecipes
-                                                                            : storage.mSoulCampfireRecipes);
-                loadFurnaceRecipe(storage, target, *recipe, tags);
+                std::vector<FurnaceRecipeData> &target =
+                        blockName == "campfire"          ? storage.mCampfireRecipes
+                        : blockName == "soul_campfire"   ? storage.mSoulCampfireRecipes
+                                                          : storage.mFurnaceRecipes;
+                loadFurnaceRecipe(storage, target, *recipe, tags, blockName);
                 continue;
             }
 
