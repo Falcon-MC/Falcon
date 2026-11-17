@@ -53,7 +53,7 @@ on the issue first so the approach can be agreed on before you write the code.
    | Platform | Requirements                                                                           |
    |----------|----------------------------------------------------------------------------------------|
    | Windows  | [MSYS2](https://www.msys2.org) UCRT64 with `gcc`, `cmake`, `ninja`, `openssl`, `zlib` |
-   | Linux    | `g++` with C++17 support, `cmake` 3.16+, `ninja`, OpenSSL and zlib development headers |
+   | Linux    | `g++` with C++20 support, `cmake` 3.16+, `ninja`, OpenSSL and zlib development headers |
    | macOS    | Xcode command line tools, `cmake`, `ninja`, `openssl@3`                                |
 
 3. Branch off `dev` and open the pull request against it. Work that targets an upcoming protocol version goes

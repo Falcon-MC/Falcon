@@ -14,13 +14,13 @@
 	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 	<img src="https://img.shields.io/badge/minecraft-v1.26.60%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2225-blue" alt="Protocol">
-	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
+	<img src="https://img.shields.io/badge/language-C%2B%2B20-00599C" alt="C++20">
 	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
 </p>
 
 ## What is this?
 
-Falcon is a Minecraft: Bedrock Edition server written from scratch in C++17. Protocol, world storage,
+Falcon is a Minecraft: Bedrock Edition server written from scratch in C++20. Protocol, world storage,
 inventories, movement and gameplay are reimplemented by hand, with vanilla behavior as the reference.
 
 - **Native** - one self-contained executable, no runtime to install
@@ -59,7 +59,7 @@ Telemetry is off unless you set `emit-server-telemetry=true`, and it names no se
 
 ## Building
 
-You need CMake 3.16+, a C++17 compiler, zlib and OpenSSL. On Windows, use MSYS2 UCRT64.
+You need CMake 3.16+, a C++20 compiler, zlib and OpenSSL. On Windows, use MSYS2 UCRT64.
 
 ```
 cmake -B build -G Ninja

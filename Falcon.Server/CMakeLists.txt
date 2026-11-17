@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(Falcon.Server LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(FALCON_BEDROCK_DATA_PROTOCOL 2225)
@@ -213,7 +213,7 @@ endif()
 # the transport library keeps its secure contexts to itself: it is built to pass them through this
 # small library, which keeps what a peer sent while its session was set up
 add_library(FalconTransportTranscript STATIC ${FALCON_TRANSPORT_TRANSCRIPT_SOURCE})
-target_compile_features(FalconTransportTranscript PRIVATE cxx_std_17)
+target_compile_features(FalconTransportTranscript PRIVATE cxx_std_20)
 target_include_directories(FalconTransportTranscript PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${OPENSSL_INCLUDE_DIR})
 if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

@@ -93,10 +93,15 @@ namespace {
         return fs::u8path(utf8).native();
     }
 
+    std::string pathUtf8(const fs::path &path) {
+        const std::u8string utf8 = path.u8string();
+        return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+    }
+
     std::string fromDotnet(const DotnetChar *value) {
         if (value == nullptr)
             return std::string();
-        return fs::path(DotnetString(value)).u8string();
+        return pathUtf8(fs::path(DotnetString(value)));
     }
 
     void DOTNET_HOST_CALLTYPE collectHostError(const DotnetChar *message) {
@@ -276,8 +281,8 @@ namespace {
         void *context = nullptr;
         const int32_t initialized = initialize(runtimeConfig.native().c_str(), &parameters, &context);
         if (initialized < 0 || context == nullptr) {
-            error = describeFailure("Starting the runtime from " + runtimeConfig.u8string() + " with "
-                                            + library.u8string(),
+            error = describeFailure("Starting the runtime from " + pathUtf8(runtimeConfig) + " with "
+                                            + pathUtf8(library),
                                     initialized);
             return false;
         }
@@ -304,7 +309,7 @@ namespace {
         const int resolved = gLoadAssembly(assembly.native().c_str(), type.c_str(), method.c_str(),
                                            UNMANAGED_CALLERS_ONLY, nullptr, &entry);
         if (resolved < 0 || entry == nullptr) {
-            error = describeFailure("Loading " + std::string(LOADER_TYPE) + " from " + assembly.u8string(), resolved);
+            error = describeFailure("Loading " + std::string(LOADER_TYPE) + " from " + pathUtf8(assembly), resolved);
             return false;
         }
 
@@ -363,7 +368,7 @@ bool DotnetHost::load(LoadedPlugin &plugin) {
     for (const std::string &dependency: plugin.mDescription.mSoftDepend)
         dependencies.push_back(dependency.c_str());
 
-    const std::string assemblyPath = assembly.u8string();
+    const std::string assemblyPath = pathUtf8(assembly);
     int accepted = 0;
     try {
         accepted = gEntry(&PluginServerApi::get(), PluginManager::toHandle(plugin), &plugin.mCallbacks,
