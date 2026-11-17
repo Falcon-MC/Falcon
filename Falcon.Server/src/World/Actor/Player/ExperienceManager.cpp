@@ -87,7 +87,7 @@ void ExperienceManager::setXpAndProgress(int level, float progress) {
 }
 
 int ExperienceManager::getRemainderXp() const {
-    return (int) ((float) getXpToCompleteLevel(mXpLevel) * mXpProgress);
+    return (int) std::round((float) getXpToCompleteLevel(mXpLevel) * mXpProgress);
 }
 
 int ExperienceManager::getCurrentTotalXp() const {
@@ -96,10 +96,10 @@ int ExperienceManager::getCurrentTotalXp() const {
 
 void ExperienceManager::setCurrentTotalXp(int amount) {
     const int total = std::max(0, amount);
-    const float newLevel = getLevelFromXp(total);
-    const int level = (int) newLevel;
+    const int level = (int) getLevelFromXp(total);
+    const int remaining = total - getXpToReachLevel(level);
 
-    setXpAndProgress(level, newLevel - (float) level);
+    setXpAndProgress(level, (float) remaining / (float) getXpToCompleteLevel(level));
 }
 
 void ExperienceManager::addXp(int amount) {

@@ -32,6 +32,8 @@ public:
 
     void setContainerItem(int slot, ItemStack item) override;
 
+    bool canHoldInSlot(int slot, const ItemStack &item) const override;
+
     void clear();
 
     Tag saveNbt() const;
