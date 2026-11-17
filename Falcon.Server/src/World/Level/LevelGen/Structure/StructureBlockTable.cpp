@@ -556,6 +556,12 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         return true;
     }
 
+    if (name == "minecraft:decorated_pot") {
+        states.putInt("direction", (cardinalIndex(property(entry, "facing")) + quarterTurns) & 3);
+        out = BlockState(name, states);
+        return true;
+    }
+
     if (name == "minecraft:tripwire") {
         const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates("minecraft:trip_wire");
         if (defaults == nullptr)
