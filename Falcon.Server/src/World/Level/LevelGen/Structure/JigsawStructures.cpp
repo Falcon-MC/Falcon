@@ -104,32 +104,6 @@ namespace {
                && box.mMinZ <= chunkZ * 16 + 15;
     }
 
-    // name[key=value,...]
-    bool parseState(const std::string &state, StructureTemplate::PaletteEntry &out) {
-        const size_t open = state.find('[');
-        out.mName = state.substr(0, open);
-        out.mProperties.clear();
-        if (open == std::string::npos)
-            return true;
-
-        const size_t close = state.find(']', open);
-        if (close == std::string::npos)
-            return false;
-
-        size_t start = open + 1;
-        while (start < close) {
-            size_t end = state.find(',', start);
-            if (end == std::string::npos || end > close)
-                end = close;
-            const size_t equals = state.find('=', start);
-            if (equals == std::string::npos || equals > end)
-                return false;
-            out.mProperties[state.substr(start, equals - start)] = state.substr(equals + 1, end - equals - 1);
-            start = end + 1;
-        }
-        return true;
-    }
-
     BlockState defaultState(const std::string &name) {
         const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates(name);
         return BlockState(name, defaults != nullptr ? *defaults : Tag::ofCompound());
@@ -365,10 +339,9 @@ namespace {
             if (!_position(entry, position))
                 return;
 
-            StructureTemplate::PaletteEntry finalState;
             BlockState block;
-            if (!parseState(entry.mData.getString("final_state", "minecraft:air"), finalState)
-                || !StructureBlockTable::translate(finalState, mPiece.mQuarterTurns, block))
+            if (!StructureBlockTable::translateFinalState(entry.mData.getString("final_state", "minecraft:air"),
+                                                          mPiece.mQuarterTurns, block))
                 return;
 
             mShare.mBlocks[position] = StructureProcessors::apply(mRules, block, _world(position), mRandom);

@@ -30,6 +30,8 @@ public:
 
     void decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const override;
 
+    void decorateBeforePortal(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const;
+
     int64_t getSeed() const override {
         return mSeed;
     }

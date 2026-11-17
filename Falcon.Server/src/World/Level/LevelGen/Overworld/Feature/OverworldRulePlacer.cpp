@@ -2435,6 +2435,7 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
             {"minecraft:_huge_warped_fungus_feature", &NetherFeatures::placeHugeWarpedFungus},
             {"minecraft:_weeping_vines_cluster_feature", &NetherFeatures::placeWeepingVines},
             {"minecraft:_twisting_vines_cluster_feature", &NetherFeatures::placeTwistingVines},
+            {"minecraft:nether_fossil_feature", &NetherFeatures::placeFossil},
             {"minecraft:_basalt_pillar_feature", &NetherFeatures::placeBasaltPillar},
             {"minecraft:delta_feature", &NetherFeatures::placeDelta},
             {"minecraft:basalt_columns_feature", &NetherFeatures::placeBasaltColumns}};

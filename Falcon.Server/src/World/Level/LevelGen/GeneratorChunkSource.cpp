@@ -257,8 +257,9 @@ int32_t TerrainCache::storeStartValue(const std::string &structure, int32_t star
     return mStartValues.emplace(std::make_tuple(structure, startX, startZ), value).first->second;
 }
 
-GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
-        : mScratch("generator", 1, seed, dimension), mCache(cache) {
+GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache,
+                                           Decoration decoration)
+        : mScratch("generator", 1, seed, dimension), mCache(cache), mDecoration(std::move(decoration)) {
     mScratch.setTerrainCache(&cache);
 }
 
@@ -309,7 +310,10 @@ uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
 
     const size_t first = overflow.size();
     LevelChunk &center = mScratch.insertChunk(std::move(chunk));
-    mScratch.decorate(center, &overflow);
+    if (mDecoration)
+        mDecoration(mScratch, center, &overflow);
+    else
+        mScratch.decorate(center, &overflow);
 
     // beyond the 3x3: in no cached copy, left unordered
     for (size_t index = first; index < overflow.size(); index++) {

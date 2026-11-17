@@ -5,8 +5,8 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 
-StructureTerrain::StructureTerrain(const ChunkGenerator &generator, TerrainCache *cache)
-        : mGenerator(generator), mCache(cache) {}
+StructureTerrain::StructureTerrain(const ChunkGenerator &generator, TerrainCache *cache, bool populated)
+        : mGenerator(generator), mCache(cache), mPopulated(populated) {}
 
 StructureTerrain::~StructureTerrain() = default;
 
@@ -40,9 +40,12 @@ const BlockState &StructureTerrain::getBlock(int32_t x, int32_t y, int32_t z) {
 StructureTerrain::Chunk &StructureTerrain::_chunkAt(int32_t x, int32_t z) {
     Chunk &chunk = mChunks[{x >> 4, z >> 4}];
     if (chunk.mChunk == nullptr) {
-        chunk.mChunk = mCache != nullptr
-                               ? mCache->sharedTerrain(x >> 4, z >> 4)
-                               : std::shared_ptr<const LevelChunk>(mGenerator.generateTerrain(x >> 4, z >> 4));
+        if (mCache == nullptr)
+            chunk.mChunk = mGenerator.generateTerrain(x >> 4, z >> 4);
+        else if (mPopulated)
+            chunk.mChunk = std::make_shared<const LevelChunk>(mCache->neighbour(x >> 4, z >> 4));
+        else
+            chunk.mChunk = mCache->sharedTerrain(x >> 4, z >> 4);
         chunk.mTops.fill(INT16_MIN);
     }
 

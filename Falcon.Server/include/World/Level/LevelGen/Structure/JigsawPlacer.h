@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -100,6 +101,8 @@ public:
         Projection mProjection = Projection::None;
         int32_t mMaxDistanceHorizontal = 0;
         int32_t mMaxDistanceVertical = 0;
+        std::optional<int32_t> mAssemblyOriginY;
+        bool mForwardShuffle = false;
         int32_t mPaddingTop = 0;
         int32_t mPaddingBottom = 0;
         int32_t mDimensionMinY = 0;
@@ -158,8 +161,8 @@ private:
 
     std::vector<size_t> _shuffledJigsaws(const Template &source);
 
-    template <typename T>
-    void _shuffle(std::vector<T> &values);
+    template <typename Range>
+    void _shuffle(Range &values);
 
     void _expand(const Queued &entry);
 
@@ -174,4 +177,5 @@ private:
     std::vector<Shape> mShapes;
     std::vector<Queued> mQueue;
     int32_t mSequence = 0;
+    bool mForwardShuffle = false;
 };

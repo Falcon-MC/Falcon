@@ -146,7 +146,9 @@ private:
 // per worker: a private scratch level holding a chunk and its neighbours, from the shared TerrainCache, while decorated
 class GeneratorChunkSource {
 public:
-    GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache);
+    using Decoration = std::function<void(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *)>;
+
+    GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache, Decoration decoration = {});
 
     GeneratorChunkSource(const GeneratorChunkSource &) = delete;
 
@@ -169,4 +171,5 @@ private:
 
     Level mScratch;
     TerrainCache &mCache;
+    Decoration mDecoration;
 };

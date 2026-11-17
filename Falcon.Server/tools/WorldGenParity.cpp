@@ -11,6 +11,7 @@
 //   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
 //
 // --dimension: 0 overworld (default), 1 nether, 2 end; only its build range is compared
+// populated Nether comparisons report positive placement chunk overlap for three structures
 // --terrain-only: chunks as the noise fills them, before population
 // --blocks: one "x y z expected generated" line per block that differs or is not plain terrain, for scripts
 // --far: 6x6 chunks at +-1000 and +-10000 on both axes, one report each: climate-only bugs hide near the origin
@@ -1031,9 +1032,128 @@ namespace {
         }
     }
 
+    struct PlacementScore {
+        const char *mName;
+        uint64_t mExpected = 0;
+        uint64_t mGenerated = 0;
+        uint64_t mShared = 0;
+        uint64_t mGeneratedWithoutReference = 0;
+        uint64_t mMarkerPositions = 0;
+        uint64_t mMatchingMarkers = 0;
+        uint64_t mSharedMarkerPositions = 0;
+
+        void add(bool expected, bool generated) {
+            mExpected += expected;
+            mGenerated += generated;
+            mShared += expected && generated;
+        }
+
+        void addMarker(bool expected, bool generated, bool sameState) {
+            mMarkerPositions += expected || generated;
+            mSharedMarkerPositions += expected && generated;
+            mMatchingMarkers += expected && generated && sameState;
+        }
+
+        void print() const {
+            if (mGeneratedWithoutReference != 0)
+                LOG_INFO(LogAreaID::Level, "Nether placement %s: %llu Falcon chunks lack a BDS reference",
+                         mName, (unsigned long long) mGeneratedWithoutReference);
+
+            const uint64_t total = mExpected + mGenerated - mShared;
+            if (total == 0) {
+                LOG_INFO(LogAreaID::Level, "Nether placement %s: no positive chunks in either world", mName);
+                return;
+            }
+            const double percent = 100.0 * (double) mShared / (double) total;
+            LOG_INFO(LogAreaID::Level, "Nether placement %s: %.2f%% overlap (%llu shared, %llu BDS, %llu Falcon)",
+                     mName, percent, (unsigned long long) mShared, (unsigned long long) mExpected,
+                     (unsigned long long) mGenerated);
+            if (mMarkerPositions != 0)
+                LOG_INFO(LogAreaID::Level, "Nether markers %s: %.2f%% identical (%llu / %llu; %llu shared positions before comparing states)",
+                         mName, 100.0 * (double) mMatchingMarkers / (double) mMarkerPositions,
+                         (unsigned long long) mMatchingMarkers, (unsigned long long) mMarkerPositions,
+                         (unsigned long long) mSharedMarkerPositions);
+        }
+    };
+
+    struct NetherPlacement {
+        bool mFossil = false;
+        bool mPortal = false;
+        bool mBastion = false;
+        bool mDriedGhast = false;
+
+        void merge(const NetherPlacement &other) {
+            mFossil |= other.mFossil;
+            mPortal |= other.mPortal;
+            mBastion |= other.mBastion;
+            mDriedGhast |= other.mDriedGhast;
+        }
+    };
+
+    NetherPlacement netherMarkers(const BlockState &block) {
+        const std::string &name = block.mName;
+        return {name == "minecraft:bone_block",
+                name == "minecraft:obsidian" || name == "minecraft:crying_obsidian",
+                name == "minecraft:polished_blackstone_bricks"
+                        || name == "minecraft:cracked_polished_blackstone_bricks"
+                        || name == "minecraft:gilded_blackstone",
+                name == "minecraft:dried_ghast"};
+    }
+
+    NetherPlacement netherBounds(const LevelChunk &chunk) {
+        const ChunkStructureBounds &bounds = chunk.getStructureBounds();
+        return {bounds.hasName("minecraft:nether_fossil"), bounds.hasName("minecraft:ruined_portal"),
+                bounds.hasName("minecraft:bastion_remnant")};
+    }
+
+    void compareNetherPlacement(const LevelChunk *expected, const LevelChunk &generated, PlacementScore &fossils,
+                                PlacementScore &portals, PlacementScore &bastions, PlacementScore &driedGhasts) {
+        NetherPlacement falcon = netherBounds(generated);
+        NetherPlacement vanilla = expected != nullptr ? netherBounds(*expected) : NetherPlacement{};
+        // fossils and older saves can lack bounds: use the generated blocks as placement markers
+        for (int32_t x = 0; x < 16; ++x) {
+            for (int32_t z = 0; z < 16; ++z) {
+                for (int32_t y = gMinY; y <= gMaxY; ++y) {
+                    const BlockState &actual = generated.getBlock(x, y, z);
+                    const NetherPlacement actualMarkers = netherMarkers(actual);
+                    falcon.merge(actualMarkers);
+                    if (expected == nullptr)
+                        continue;
+
+                    const BlockState &reference = expected->getBlock(x, y, z);
+                    const NetherPlacement referenceMarkers = netherMarkers(reference);
+                    vanilla.merge(referenceMarkers);
+                    const bool sameState = reference == actual;
+                    fossils.addMarker(referenceMarkers.mFossil, actualMarkers.mFossil, sameState);
+                    portals.addMarker(referenceMarkers.mPortal, actualMarkers.mPortal, sameState);
+                    bastions.addMarker(referenceMarkers.mBastion, actualMarkers.mBastion, sameState);
+                    driedGhasts.addMarker(referenceMarkers.mDriedGhast, actualMarkers.mDriedGhast, sameState);
+                }
+            }
+        }
+
+        if (expected == nullptr) {
+            fossils.mGeneratedWithoutReference += falcon.mFossil;
+            portals.mGeneratedWithoutReference += falcon.mPortal;
+            bastions.mGeneratedWithoutReference += falcon.mBastion;
+            driedGhasts.mGeneratedWithoutReference += falcon.mDriedGhast;
+            return;
+        }
+
+        fossils.add(vanilla.mFossil, falcon.mFossil);
+        portals.add(vanilla.mPortal, falcon.mPortal);
+        bastions.add(vanilla.mBastion, falcon.mBastion);
+        driedGhasts.add(vanilla.mDriedGhast, falcon.mDriedGhast);
+    }
+
     int compareArea(LevelStorage &storage, const Options &options, const ChunkArea &area,
                     const BlockClassifier &classifier, const BiomeNames &biomes) {
         ParityReport report(classifier, biomes);
+        const bool trackPlacement = gDimension == DimensionType::Nether && !options.mTerrainOnly;
+        PlacementScore fossils{"nether_fossil"};
+        PlacementScore portals{"ruined_portal"};
+        PlacementScore bastions{"bastion_remnant"};
+        PlacementScore driedGhasts{"dried_ghast"};
         uint64_t skipped[3] = {0, 0, 0};
         std::ofstream blocks;
         if (!options.mBlocks.empty())
@@ -1044,10 +1164,14 @@ namespace {
             const LoadResult loaded = loadExpected(storage, expected);
             if (loaded != LoadResult::Loaded) {
                 skipped[(int) loaded - 1]++;
+                if (trackPlacement)
+                    compareNetherPlacement(nullptr, generated, fossils, portals, bastions, driedGhasts);
                 return;
             }
 
             report.compare(expected, generated);
+            if (trackPlacement)
+                compareNetherPlacement(&expected, generated, fossils, portals, bastions, driedGhasts);
             if (blocks.is_open())
                 writeBlocks(blocks, expected, generated);
         });
@@ -1058,6 +1182,12 @@ namespace {
         }
 
         report.printText(options.mSeed, area, skipped);
+        if (trackPlacement) {
+            fossils.print();
+            portals.print();
+            bastions.print();
+            driedGhasts.print();
+        }
 
         if (!options.mCsv.empty() && !report.writeCsv(options.mCsv)) {
             LOG_ERROR(LogAreaID::Level, "could not write %s", options.mCsv.c_str());

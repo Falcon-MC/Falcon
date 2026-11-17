@@ -46,6 +46,7 @@ public:
 
 private:
     bool _read(const Tag &root);
+    bool _readBedrockMobPiece(const Tag &root);
 
     int32_t mSizeX = 0;
     int32_t mSizeY = 0;

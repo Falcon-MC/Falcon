@@ -472,6 +472,16 @@ void BiomeChunkGenDataRegistry::initialize() {
     if (_featuresByBiome().find(BiomeIds::DAPPLED_FOREST) == _featuresByBiome().end())
         _featuresByBiome()[BiomeIds::DAPPLED_FOREST] = dappledForestFeatures(_featuresByBiome());
 
+    auto &valley = _featuresByBiome()[NetherBiomeIds::SOULSAND_VALLEY];
+    const char *const fossil = "minecraft:nether_fossil_feature";
+    if (std::none_of(valley.begin(), valley.end(), [fossil](const BiomeFeatureEntry &entry) {
+            return entry.mFeature == fossil;
+        })) {
+        auto rule = heightmapRule("minecraft:soulsand_valley_fossil_surface_feature", fossil, "surface_pass", "1", 1, 2);
+        rule.mCoordinates[1] = {1, "32.000000", "125.000000"};
+        valley.push_back(std::move(rule));
+    }
+
     loaded = true;
 }
 

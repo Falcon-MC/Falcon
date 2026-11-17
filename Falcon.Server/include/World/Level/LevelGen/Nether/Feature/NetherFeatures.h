@@ -16,6 +16,8 @@ namespace NetherFeatures {
 
     bool placeTwistingVines(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
+    bool placeFossil(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
+
     bool placeBasaltPillar(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);
 
     bool placeDelta(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random);

@@ -156,8 +156,13 @@ std::shared_ptr<const JigsawPlacer::Template> JigsawPlacer::featureTemplate() {
     return FEATURE;
 }
 
-template <typename T>
-void JigsawPlacer::_shuffle(std::vector<T> &values) {
+template <typename Range>
+void JigsawPlacer::_shuffle(Range &values) {
+    if (mForwardShuffle) {
+        for (size_t index = 1; index < values.size(); ++index)
+            std::swap(values[index], values[(size_t) mNextInt((int32_t) index + 1)]);
+        return;
+    }
     for (size_t size = values.size(); size > 1; --size) {
         const size_t other = (size_t) mNextInt((int32_t) size);
         std::swap(values[size - 1], values[other]);
@@ -192,6 +197,7 @@ bool JigsawPlacer::place(const Settings &settings, Result &result) {
     mShapes.clear();
     mQueue.clear();
     mSequence = 0;
+    mForwardShuffle = settings.mForwardShuffle;
     result = Result();
 
     const int32_t quarterTurns = mNextInt(4);
@@ -266,14 +272,17 @@ bool JigsawPlacer::place(const Settings &settings, Result &result) {
 
     const int64_t horizontal = settings.mMaxDistanceHorizontal;
     const int64_t vertical = settings.mMaxDistanceVertical;
+    const bool unprojectedBounds = settings.mAssemblyOriginY.has_value();
+    const int64_t centreY = unprojectedBounds ? (int64_t) *settings.mAssemblyOriginY + source->mSizeY / 2 : result.y;
+    const int64_t upperPadding = unprojectedBounds ? 0 : 1;
     Shape outer;
     outer.mBounds.mMinX = (int32_t) std::max<int64_t>((int64_t) result.x - horizontal, INT32_MIN);
-    outer.mBounds.mMaxX = (int32_t) std::min<int64_t>((int64_t) result.x + horizontal, INT32_MAX - 1) + 1;
+    outer.mBounds.mMaxX = (int32_t) std::min<int64_t>((int64_t) result.x + horizontal + upperPadding, INT32_MAX);
     outer.mBounds.mMinZ = (int32_t) std::max<int64_t>((int64_t) result.z - horizontal, INT32_MIN);
-    outer.mBounds.mMaxZ = (int32_t) std::min<int64_t>((int64_t) result.z + horizontal, INT32_MAX - 1) + 1;
-    outer.mBounds.mMinY = (int32_t) std::max<int64_t>((int64_t) result.y - vertical,
+    outer.mBounds.mMaxZ = (int32_t) std::min<int64_t>((int64_t) result.z + horizontal + upperPadding, INT32_MAX);
+    outer.mBounds.mMinY = (int32_t) std::max<int64_t>(centreY - vertical,
                                                       (int64_t) settings.mPaddingBottom + settings.mDimensionMinY);
-    outer.mBounds.mMaxY = (int32_t) std::min<int64_t>((int64_t) result.y + vertical + 1,
+    outer.mBounds.mMaxY = (int32_t) std::min<int64_t>(centreY + vertical + upperPadding,
                                                       (int64_t) settings.mDimensionHeight - settings.mPaddingTop);
     outer.mTaken.push_back(takenOf(start.mBox));
     mShapes.push_back(std::move(outer));
@@ -353,9 +362,9 @@ void JigsawPlacer::_expand(const Queued &entry) {
             if (other == nullptr)
                 other = std::make_shared<const Template>();
 
-            std::array<int32_t, 4> turns = {0, 1, 2, 3};
-            for (int32_t size = 4; size > 1; --size)
-                std::swap(turns[(size_t) (size - 1)], turns[(size_t) mNextInt(size)]);
+            std::array<int32_t, 4> turns = mForwardShuffle ? std::array<int32_t, 4>{1, 2, 3, 0}
+                                                          : std::array<int32_t, 4>{0, 1, 2, 3};
+            _shuffle(turns);
 
             bool placed = false;
             for (const int32_t childTurns: turns) {
