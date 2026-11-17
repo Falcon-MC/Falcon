@@ -3,6 +3,8 @@
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Inventory/SimpleContainerInventory.h"
 
+#include <memory>
+
 class ContainerBlockActor : public BlockActor {
 public:
     explicit ContainerBlockActor(int size) : mInventory(size) {}
@@ -124,7 +126,7 @@ public:
     static const int SLOT_FUEL = 4;
     static const int FIRST_POTION_SLOT = 1;
     static const int POTION_SLOTS = 3;
-    static const int MAX_BREW_TIME = 400;
+    static constexpr int MAX_BREW_TIME = 400;
     static const int FUEL_PER_BLAZE_POWDER = 20;
 
     BrewingStandBlockActor() : ContainerBlockActor(SIZE) {}
@@ -154,9 +156,10 @@ private:
 
     void _updateSlotStates(ServerNetworkHandler &owner);
 
-    int mBrewTime = MAX_BREW_TIME;
+    int mBrewTime = 0;
     int mFuelAmount = 0;
     int mFuelTotal = 0;
+    std::shared_ptr<ItemDefinition> mBrewingIngredient;
 };
 
 class BeaconBlockActor final : public ContainerBlockActor {
