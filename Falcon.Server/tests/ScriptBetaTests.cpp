@@ -100,7 +100,12 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
             U.isValid({ min: { x: 1, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }),
             b(U.translate(box, { x: 1.5, y: -2.5, z: 0 }))].join("|");
         r.volumeBox = b(new BlockVolume({ x: 2, y: 5, z: 1 }, { x: -1, y: 3, z: 4 }).getBoundingBox());
-        try { new ListBlockVolume([]).getBoundingBox(); r.emptyBox = "ok"; } catch (e) { r.emptyBox = e.name + ":" + e.message; }
+        try {
+            new ListBlockVolume([]).getBoundingBox();
+            r.emptyBox = "ok";
+        } catch (e) {
+            r.emptyBox = e.name + ":" + e.message;
+        }
         r.boxCtor = (() => { try { new U(); return "ok"; } catch (e) { return e.name; } })();
         r.enums = PoiBlockOccupancyFilter.Any + ":" + WatchdogTerminateReason.Hang;
         const structures = (p) => { try { return JSON.stringify(overworld.getGeneratedStructures(p)); } catch (e) { return e.name; } };
@@ -121,11 +126,21 @@ system.afterEvents.scriptEventReceive.subscribe((event) => {
         r.waypoints = rules.playerWaypoints;
         rules.playerWaypoints = "Off";
         r.waypointsOff = rules.playerWaypoints;
-        try { rules.playerWaypoints = "None"; r.waypointsBad = "ok"; } catch (e) { r.waypointsBad = e.name; }
+        try {
+            rules.playerWaypoints = "None";
+            r.waypointsBad = "ok";
+        } catch (e) {
+            r.waypointsBad = e.name;
+        }
         r.cheats = world.allowCheats;
         world.allowCheats = false;
         r.cheatsOff = world.allowCheats;
-        try { world.allowCheats = 1; r.cheatsBad = "ok"; } catch (e) { r.cheatsBad = e.name; }
+        try {
+            world.allowCheats = 1;
+            r.cheatsBad = "ok";
+        } catch (e) {
+            r.cheatsBad = e.name;
+        }
         const player = world.getPlayers().find((p) => p.name === "Alex");
         r.splitScreen = String(player.getSplitScreenSlot());
         const fail = (f) => { try { f(); return "ok"; } catch (e) { return e.name + ":" + e.message; } };

@@ -213,7 +213,9 @@ namespace {
 
         template <typename Job>
         void run(size_t count, Job &&job) {
-            std::function<void(size_t)> call = [&job](size_t index) { job(index); };
+            std::function<void(size_t)> call = [&job](size_t index) {
+                job(index);
+            };
             {
                 std::lock_guard<std::mutex> lock(mMutex);
                 mJob = &call;

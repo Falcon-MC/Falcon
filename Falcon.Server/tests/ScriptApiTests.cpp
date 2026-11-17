@@ -559,7 +559,9 @@ system.runTimeout(() => {
                         propertyError(() => cow.setProperty("minecraft:climate_variant", "warm")),
                         cow.getProperty("minecraft:climate_variant")].join("|");
     r.killed = cow.kill();
-  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+  } catch (e) {
+    r.error = e.name + ":" + e.message + ":" + e.stack;
+  }
     world.setDynamicProperty("entities", JSON.stringify(r));
 }, 2);
 system.runTimeout(() => {
@@ -610,7 +612,9 @@ system.runTimeout(() => {
     r.sbEnums = [DisplaySlotId.BelowName, ObjectiveSortOrder.Descending, ScoreboardIdentityType.FakePlayer].join(",");
     sb.setObjectiveAtDisplaySlot(DisplaySlotId.BelowName, { objective: obj });
     obj.setScore("kept", 42);
-  } catch (e) { r.sbError = e.name + ":" + e.message + ":" + e.stack; }
+  } catch (e) {
+    r.sbError = e.name + ":" + e.message + ":" + e.stack;
+  }
 }, 3);
 system.runTimeout(() => world.setDynamicProperty("entities", JSON.stringify(r)), 7);
 )JS";
@@ -995,7 +999,9 @@ system.runTimeout(() => {
     const cursorComponent = player.getComponent("cursor_inventory");
     r.cursorMore = fail(() => cursorComponent.clear()) + ":" + (cursorComponent.item === undefined) + ":"
         + cursorComponent.isValid + ":" + (cursorComponent.entity === player);
-  } catch (e) { r.error = e.name + ":" + e.message + ":" + e.stack; }
+  } catch (e) {
+    r.error = e.name + ":" + e.message + ":" + e.stack;
+  }
     world.setDynamicProperty("items", JSON.stringify(r));
 }, 2);
 system.runTimeout(() => world.setDynamicProperty("items", JSON.stringify(r)), 7);
