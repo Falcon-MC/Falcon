@@ -1,5 +1,6 @@
 #include "World/Level/LevelGen/Nether/NetherStructures.h"
 
+#include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -157,7 +158,9 @@ namespace {
         return plans.try_emplace(key, plan).first->second;
     }
 
-    void placeBastion(const std::vector<JigsawPlacer::Piece> &plan, LevelChunk &chunk, const Box &clip, uint32_t seed) {
+    void placeBastion(const std::vector<JigsawPlacer::Piece> &plan, Level &level,
+                      LevelChunk &chunk, const Box &clip, uint32_t seed) {
+        std::mt19937 lootRandom(seed);
         for (const JigsawPlacer::Piece &piece: plan) {
             const auto &bounds = piece.mBox;
             const Box box{bounds.mMinX, bounds.mMinY, bounds.mMinZ, bounds.mMaxX, bounds.mMaxY, bounds.mMaxZ};
@@ -210,6 +213,18 @@ namespace {
                     }
                 }
                 chunk.setBlock(localX, y, localZ, block);
+                if (block.mName != BlockNames::CHEST)
+                    continue;
+
+                const std::string table = entry.mData.getString("LootTable");
+                if (table.empty())
+                    continue;
+                const size_t colon = table.find(':');
+                const std::string path = "loot_tables/" + table.substr(colon == std::string::npos ? 0 : colon + 1)
+                                         + ".json";
+                const int32_t lootSeed = entry.mData.contains("LootTableSeed") ? entry.mData.getInt("LootTableSeed")
+                                                                               : FeatureRandom::nextInt(lootRandom);
+                level.getBlockActors().getOrCreate<ChestBlockActor>(Vector3i(x, y, z)).setLootTable(path, lootSeed);
             }
         }
     }
@@ -224,7 +239,7 @@ void NetherStructures::place(const ChunkGenerator &generator, Level &level, Leve
     constexpr int32_t REACH = 7;
     for (const StructureChunkPos &start: BASTION.getCandidatesIn(seed, x - REACH, z - REACH, x + REACH, z + REACH)) {
         if (BASTION.isStartChunk(generator, start.x, start.z))
-            placeBastion(*cachedBastionPlan(generator, start), chunk, clip, StructureFeature::getPostProcessSeed(seed, x, z));
+            placeBastion(*cachedBastionPlan(generator, start), level, chunk, clip, StructureFeature::getPostProcessSeed(seed, x, z));
     }
 
 }
