@@ -22,7 +22,7 @@ struct ChunkStreamState {
     int64_t mLastLoaderChunk = INT64_MAX;
     uint64_t mSendTick = UINT64_MAX;
     // tick the send queue is looked at again: a pass that found every chunk still generating waits a few
-    int64_t mLoadRetryTick = 0;
+    uint64_t mLoadRetryTick = 0;
     unsigned mSendsThisTick = 0;
     int32_t mComparatorChunkX = 0;
     int32_t mComparatorChunkZ = 0;

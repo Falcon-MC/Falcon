@@ -280,7 +280,8 @@ namespace {
 
     void loadQueuedChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player,
                           int32_t attempts) {
-        if (state.mSendQueue.empty() || owner.getCurrentTick() < state.mLoadRetryTick)
+        // chunk retries keep running while the world is paused
+        if (state.mSendQueue.empty() || owner.getChunkStreamTick() < state.mLoadRetryTick)
             return;
 
         Level &level = owner.getLevelFor(player);
@@ -339,7 +340,7 @@ namespace {
 
         // every chunk tried is still generating: sorting the same ones again each tick buys nothing
         if (!progressed)
-            state.mLoadRetryTick = owner.getCurrentTick() + LOAD_RETRY_TICKS;
+            state.mLoadRetryTick = owner.getChunkStreamTick() + LOAD_RETRY_TICKS;
     }
 
     LevelChunkPacket makeChunkPacket(Level &level, int32_t chunkX, int32_t chunkZ, const PacketCodecContext &context,
