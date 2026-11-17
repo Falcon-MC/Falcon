@@ -47,7 +47,7 @@ public:
         std::vector<Chest> mChests;
     };
 
-    // read on the bare terrain: the game reads the neighbour chunks in whatever state they are
+    // nether plans replay the local feature pass before reading neighbouring chunks
     static std::shared_ptr<const Plan> plan(const ChunkGenerator &generator, int32_t startX, int32_t startZ,
                                             TerrainCache *cache = nullptr);
 

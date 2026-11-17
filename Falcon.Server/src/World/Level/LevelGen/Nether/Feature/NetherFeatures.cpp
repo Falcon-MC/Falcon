@@ -1,13 +1,19 @@
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatures.h"
 
 #include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Level.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
+#include "World/Level/LevelGen/Nether/NetherGeneratorConstants.h"
 #include "World/Level/LevelGen/Random/GameRandom.h"
+#include "World/Level/LevelGen/Structure/StructureBlockTable.h"
+#include "World/Level/LevelGen/Structure/StructureTemplate.h"
 #include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -478,5 +484,80 @@ bool NetherFeatures::placeBasaltColumns(BlockManager &blocks, int32_t x, int32_t
             }
         }
     }
+    return true;
+}
+
+bool NetherFeatures::placeFossil(BlockManager &blocks, int32_t x, int32_t y, int32_t z, std::mt19937 &random) {
+    const int32_t rotation = nextInt(random, 4);
+    const int32_t variant = nextInt(random, 14) + 1;
+    const auto footprint = StructureTemplate::load("nether_fossils/fossil_" + std::to_string(variant) + ".nbt");
+    if (footprint == nullptr)
+        return false;
+
+    const int32_t sizeX = footprint->getSizeX();
+    const int32_t sizeY = footprint->getSizeY();
+    const int32_t sizeZ = footprint->getSizeZ();
+    std::array<std::array<int32_t, 2>, 4> corners{{{0, 0}, {sizeX - 1, 0},
+                                                 {0, sizeZ - 1}, {sizeX - 1, sizeZ - 1}}};
+    for (auto &[dx, dz]: corners)
+        StructureTemplate::rotate(rotation, dx, dz);
+
+    // search below the scatter anchor using the rotated footprint
+    --y;
+    if (y + sizeY >= blocks.getLevel().getMaxY())
+        return false;
+
+    constexpr int32_t SEA_LEVEL = NetherGeneratorConstants::LAVA_LEVEL + 1;
+    for (; y > SEA_LEVEL; --y) {
+        bool supported = true;
+        for (const auto &[dx, dz]: corners) {
+            const BlockState &support = blocks.getBlockAt(x + dx, y, z + dz);
+            if (isLava(support))
+                return false;
+
+            supported &= (support.mName == BlockNames::SOUL_SAND
+                          || BlockSupport::isAttachable(support, PlacementOrientation::FACE_UP))
+                         && isAirAt(blocks, x + dx, y + sizeY - 1, z + dz);
+        }
+        if (supported)
+            break;
+    }
+    if (y <= SEA_LEVEL)
+        return false;
+
+    for (const StructureTemplate::BlockEntry &entry: footprint->getBlocks()) {
+        BlockState state;
+        if (!StructureBlockTable::translate(footprint->getPalette()[entry.mPaletteIndex], rotation, state)
+            || isAir(state))
+            continue;
+
+        int32_t dx = entry.x;
+        int32_t dz = entry.z;
+        StructureTemplate::rotate(rotation, dx, dz);
+        blocks.setBlockStateAt(x + dx, y + 1 + entry.y, z + dz, state);
+    }
+    if (nextFloat(random) <= 0.5f) {
+        static constexpr const char *DIRECTIONS[] = {"south", "west", "north", "east"};
+        const char *direction = DIRECTIONS[nextInt(random, 4)];
+        int32_t reachX = sizeX - 1;
+        int32_t reachZ = sizeZ - 1;
+        StructureTemplate::rotate(rotation, reachX, reachZ);
+        const int32_t ghastX = x + (reachX > 0 ? nextInt(random, reachX) : 0);
+        const int32_t ghastZ = z + (reachZ > 0 ? nextInt(random, reachZ) : 0);
+        for (int32_t py = y + 1; py <= y + sizeY; ++py) {
+            const BlockState &block = blocks.getBlockAt(ghastX, py, ghastZ);
+            if (block.mName == BlockNames::BONE_BLOCK)
+                break;
+            if (!isAir(block))
+                continue;
+            if (blocks.getBlockAt(ghastX, py - 1, ghastZ).mName == BlockNames::SOUL_SOIL) {
+                BlockState ghast = VanillaBlocks::DRIED_GHAST().toBlockState();
+                ghast.mStates.putString("minecraft:cardinal_direction", direction);
+                blocks.setBlockStateAt(ghastX, py, ghastZ, ghast);
+            }
+            break;
+        }
+    }
+
     return true;
 }

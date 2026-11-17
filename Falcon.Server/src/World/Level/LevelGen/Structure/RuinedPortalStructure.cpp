@@ -10,6 +10,9 @@
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
+#include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/LevelGen/Nether/NetherGenerator.h"
+#include "World/Level/LevelGen/Nether/NetherGeneratorConstants.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
 #include "World/Level/LevelGen/Structure/StructureConnections.h"
@@ -74,7 +77,7 @@ namespace {
             "minecraft:red_sandstone_wall", "minecraft:red_nether_brick_wall"};
 
     using Position = std::tuple<int32_t, int32_t, int32_t>;
-    using PlanKey = std::tuple<int64_t, int32_t, int32_t>;
+    using PlanKey = std::tuple<DimensionType, int64_t, int32_t, int32_t>;
 
     std::mutex plansMutex;
     std::map<PlanKey, std::shared_ptr<const RuinedPortalStructure::Plan>> plans;
@@ -124,36 +127,46 @@ namespace {
         return min + (max - min + 1) / 2;
     }
 
-    // the portal's own view of the world: its blocks over the bare terrain
+    // the portal's own writes over its terrain snapshot
     class World {
     public:
-        explicit World(StructureTerrain &terrain) : mTerrain(terrain) {}
+        World(StructureTerrain &terrain, DimensionType dimension)
+                : mTerrain(terrain), mMinY(Dimension::getMinY(dimension)), mMaxY(Dimension::getMaxY(dimension)),
+                  mNether(dimension == DimensionType::Nether) {}
+
+        bool containsHeight(int32_t y) const {
+            return y >= mMinY && y <= mMaxY;
+        }
 
         const BlockState &get(int32_t x, int32_t y, int32_t z) {
             static const BlockState air(BlockNames::AIR);
-            if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+            if (!containsHeight(y))
                 return air;
             const auto placed = mBlocks.find({x, y, z});
             return placed != mBlocks.end() ? placed->second : mTerrain.getBlock(x, y, z);
         }
 
         void set(int32_t x, int32_t y, int32_t z, const BlockState &block) {
-            if (y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y)
+            if (containsHeight(y))
                 mBlocks[{x, y, z}] = block;
         }
 
         void setWater(int32_t x, int32_t y, int32_t z) {
-            if (y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y)
+            if (containsHeight(y))
                 mWater.insert(Position(x, y, z));
         }
 
         // above the top solid block, without leaves; water stops it only when asked
         int32_t aboveTopSolid(int32_t x, int32_t z, bool waterStops) {
-            for (int32_t y = LevelChunk::MAX_Y; y >= LevelChunk::MIN_Y; --y) {
+            int32_t y = mMaxY;
+            // descend through the ceiling before looking for the floor
+            while (mNether && y > mMinY && _stops(get(x, y, z), waterStops))
+                --y;
+            for (; y >= mMinY; --y) {
                 if (_stops(get(x, y, z), waterStops))
                     return y + 1;
             }
-            return LevelChunk::MIN_Y;
+            return mMinY;
         }
 
         // a corner holding the portal up: the same rule as the height above
@@ -180,6 +193,9 @@ namespace {
         }
 
         StructureTerrain &mTerrain;
+        const int32_t mMinY;
+        const int32_t mMaxY;
+        const bool mNether;
         std::map<Position, BlockState> mBlocks;
         std::set<Position> mWater;
     };
@@ -208,10 +224,12 @@ namespace {
 
     class PortalBuilder {
     public:
-        PortalBuilder(const ChunkGenerator &generator, int32_t startX, int32_t startZ, TerrainCache *cache)
-                : mGenerator(generator), mTerrain(generator, cache), mWorld(mTerrain),
+        PortalBuilder(const ChunkGenerator &generator, int32_t startX, int32_t startZ, TerrainCache *cache,
+                      bool populated = false)
+                : mGenerator(generator), mTerrain(generator, cache, populated), mWorld(mTerrain, generator.getDimensionType()),
                   mRandom(StructureFeature::createPostProcessRandom(generator.getSeed(), startX, startZ)),
-                  mOriginX(startX * 16), mOriginZ(startZ * 16) {
+                  mOriginX(startX * 16), mOriginZ(startZ * 16),
+                  mNether(generator.getDimensionType() == DimensionType::Nether) {
             // createStart keeps the biome over the preliminary surface
             const int32_t height = generator.getPreliminarySurfaceLevel(startX * 4, startZ * 4);
             mBiome = generator.pickBiome(mOriginX + 8, height, mOriginZ + 8);
@@ -230,6 +248,8 @@ namespace {
             plan->mQuarterTurns = FeatureRandom::nextInt(mRandom, 4);
             plan->mMirror = FeatureRandom::nextFloat(mRandom) >= 0.5f ? 1 : 0;
             const int32_t originHeight = mWorld.aboveTopSolid(mOriginX, mOriginZ, landStopsOnWater);
+            if (!mWorld.containsHeight(originHeight - 1))
+                return nullptr;
             if (FeatureRandom::nextFloat(mRandom) < GIANT_CHANCE)
                 plan->mTemplate =
                         GIANT_PORTALS[(size_t) FeatureRandom::nextInt(mRandom, (int32_t) GIANT_PORTALS.size())];
@@ -244,7 +264,9 @@ namespace {
             const int32_t middleHeight = mWorld.aboveTopSolid(middle(plan->mMinX, plan->mMaxX),
                                                               middle(plan->mMinZ, plan->mMaxZ), landStopsOnWater);
             int32_t y = middleHeight - 1;
-            if (lowPlacement) {
+            if (mNether) {
+                y = 15 + FeatureRandom::nextInt(mRandom, 85);
+            } else if (lowPlacement) {
                 const int32_t biome = mGenerator.pickBiome(middle(plan->mMinX, plan->mMaxX),
                                                            middle(plan->mMinY, plan->mMaxY),
                                                            middle(plan->mMinZ, plan->mMaxZ));
@@ -264,8 +286,8 @@ namespace {
 
             _spreadNetherrack(*plan, lowPlacement || desert);
 
-            // the template air digs a pocket unless it is ignored
-            const bool keepAir = lowPlacement || (!desert && FeatureRandom::nextFloat(mRandom) < 0.5f);
+            const bool submerged = mNether && plan->mMinY < NetherGeneratorConstants::LAVA_LEVEL + 1;
+            const bool keepAir = !submerged && (lowPlacement || (!desert && FeatureRandom::nextFloat(mRandom) < 0.5f));
 
             const bool waterlogged = _isUnderWater(*plan);
             _placeTemplate(*plan, *shape, keepAir, waterlogged);
@@ -286,7 +308,7 @@ namespace {
                 mossiness = 0.8f;
             else if (BiomeChunkGenDataRegistry::hasTag(mBiome, "swamp"))
                 mossiness = 0.5f;
-            _age(*plan, mossiness, ice);
+            _age(*plan, mNether ? 0.0f : mossiness, ice);
             _shapeStairs(*plan);
 
             for (const auto &entry: mWorld.getBlocks())
@@ -336,7 +358,7 @@ namespace {
         // down until three of the four corners under the box hold it
         void _settle(RuinedPortalStructure::Plan &plan) {
             const bool waterSolid = !mOceanOrSwamp;
-            while (plan.mMinY > LevelChunk::MIN_Y + 15) {
+            while (plan.mMinY > (mNether ? 15 : LevelChunk::MIN_Y + 15)) {
                 const int32_t below = plan.mMinY - 1;
                 int32_t solid = 0;
                 solid += mWorld.isSolid(plan.mMinX, below, plan.mMinZ, waterSolid) ? 1 : 0;
@@ -400,8 +422,14 @@ namespace {
                     continue;
 
                 BlockState block;
-                if (!StructureBlockTable::translate(palette, plan.mQuarterTurns, plan.mMirror, block))
+                const bool legacySlab = mNether && palette.mName == "minecraft:stone_slab";
+                if (legacySlab) {
+                    const StructureTemplate::PaletteEntry alias{BlockNames::SMOOTH_STONE_SLAB, palette.mProperties};
+                    if (!StructureBlockTable::translate(alias, plan.mQuarterTurns, plan.mMirror, block))
+                        continue;
+                } else if (!StructureBlockTable::translate(palette, plan.mQuarterTurns, plan.mMirror, block)) {
                     continue;
+                }
 
                 int32_t x = entry.x;
                 int32_t z = entry.z;
@@ -410,7 +438,7 @@ namespace {
                 x += mOriginX;
                 z += mOriginZ;
                 const int32_t y = plan.mMinY + entry.y;
-                if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
+                if (!mWorld.containsHeight(y))
                     continue;
 
                 mWorld.set(x, y, z, block);
@@ -418,8 +446,9 @@ namespace {
                     mWorld.setWater(x, y, z);
                 if (entry.mData.getString("id", std::string()) == "minecraft:chest"
                     && block.mName == BlockNames::CHEST) {
-                    // placing a chest draws its seed
-                    const int32_t seed = FeatureRandom::nextInt(mRandom);
+                    // an existing template seed leaves the random stream untouched
+                    const int32_t seed = entry.mData.contains("LootTableSeed") ? entry.mData.getInt("LootTableSeed", 0)
+                                                                              : FeatureRandom::nextInt(mRandom);
                     const std::string table = entry.mData.getString("LootTable", std::string());
                     if (!table.empty())
                         plan.mChests.push_back({x, y, z, lootTablePath(table), seed});
@@ -440,6 +469,53 @@ namespace {
         void _ageBlock(int32_t x, int32_t y, int32_t z, float mossiness, bool ice) {
             const BlockState block = mWorld.get(x, y, z);
             const std::string &name = block.mName;
+            if (mNether) {
+                if (isOneOf(FULL_BLOCKS, name)) {
+                    if (name == BlockNames::STONE) {
+                        const BlockState stair = randomStairs(mRandom, BlockNames::POLISHED_BLACKSTONE_STAIRS);
+                        mWorld.set(x, y, z, FeatureRandom::nextInt(mRandom, 2) == 0
+                                                ? defaultState(BlockNames::POLISHED_BLACKSTONE) : stair);
+                    } else if (name == "minecraft:chiseled_stone_bricks") {
+                        mWorld.set(x, y, z, defaultState(BlockNames::CHISELED_POLISHED_BLACKSTONE));
+                    } else {
+                        const BlockState stair = randomStairs(mRandom, BlockNames::POLISHED_BLACKSTONE_BRICK_STAIRS);
+                        const int32_t variant = FeatureRandom::nextInt(mRandom, 3);
+                        if (variant == 2)
+                            mWorld.set(x, y, z, stair);
+                        else
+                            mWorld.set(x, y, z, defaultState(variant == 0 ? BlockNames::POLISHED_BLACKSTONE_BRICKS
+                                                                        : BlockNames::CRACKED_POLISHED_BLACKSTONE_BRICKS));
+                    }
+                    return;
+                }
+                if (name == "minecraft:stone_brick_stairs") {
+                    const bool upsideDown = block.mStates.getByte("upside_down_bit", 0) != 0;
+                    if (FeatureRandom::nextFloat(mRandom) < 0.5f) {
+                        mWorld.set(x, y, z, stairs(BlockNames::POLISHED_BLACKSTONE_BRICK_STAIRS,
+                                                   block.mStates.getInt("weirdo_direction", 0), upsideDown));
+                    } else {
+                        BlockState slab = defaultState(BlockNames::POLISHED_BLACKSTONE_BRICK_SLAB);
+                        slab.mStates.putString("minecraft:vertical_half", upsideDown ? "top" : "bottom");
+                        mWorld.set(x, y, z, slab);
+                    }
+                    return;
+                }
+                if (isOneOf(SLABS, name)) {
+                    BlockState slab = defaultState(BlockNames::POLISHED_BLACKSTONE_BRICK_SLAB);
+                    slab.mStates.putString("minecraft:vertical_half",
+                                           block.mStates.getString("minecraft:vertical_half", "bottom"));
+                    mWorld.set(x, y, z, slab);
+                    return;
+                }
+                if (isOneOf(WALLS, name)) {
+                    mWorld.set(x, y, z, defaultState(BlockNames::POLISHED_BLACKSTONE_BRICK_WALL));
+                    return;
+                }
+                if (name == "minecraft:iron_bars") {
+                    mWorld.set(x, y, z, defaultState(BlockNames::IRON_CHAIN));
+                    return;
+                }
+            }
             if (isOneOf(FULL_BLOCKS, name)) {
                 if (FeatureRandom::nextFloat(mRandom) < 0.5f)
                     return;
@@ -540,6 +616,7 @@ namespace {
         std::mt19937 mRandom;
         int32_t mOriginX;
         int32_t mOriginZ;
+        bool mNether;
         int32_t mBiome = 0;
         bool mOceanOrSwamp = false;
     };
@@ -547,7 +624,7 @@ namespace {
 
 std::shared_ptr<const RuinedPortalStructure::Plan>
 RuinedPortalStructure::plan(const ChunkGenerator &generator, int32_t startX, int32_t startZ, TerrainCache *cache) {
-    const PlanKey key(generator.getSeed(), startX, startZ);
+    const PlanKey key(generator.getDimensionType(), generator.getSeed(), startX, startZ);
     {
         const std::lock_guard<std::mutex> lock(plansMutex);
         const auto found = plans.find(key);
@@ -555,17 +632,43 @@ RuinedPortalStructure::plan(const ChunkGenerator &generator, int32_t startX, int
             return found->second;
     }
 
-    PortalBuilder builder(generator, startX, startZ, cache);
-    const std::shared_ptr<const Plan> built = builder.build();
+    std::shared_ptr<const Plan> built;
+    if (const auto *nether = dynamic_cast<const NetherGenerator *>(&generator)) {
+        TerrainCache populated(generator);
+        GeneratorChunkSource source(generator.getSeed(), DimensionType::Nether, populated,
+                                    [nether](Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) {
+            nether->decorateBeforePortal(level, chunk, overflow);
+        });
+        // replay the feature pass with a halo for writes from neighbouring chunks
+        constexpr int32_t radius = REACH + 1;
+        for (int32_t z = startZ - radius; z <= startZ + radius; ++z) {
+            for (const int32_t pass: {0, 1}) {
+                for (int32_t x = startX - radius; x <= startX + radius; ++x) {
+                    if ((TerrainCache::decorationClass(x, z) & 1) != pass)
+                        continue;
+                    LevelChunk chunk(x, z);
+                    chunk.setDimension(DimensionType::Nether);
+                    std::vector<GeneratedBlockChange> overflow;
+                    std::vector<Tag> blockActors;
+                    std::vector<Tag> entities;
+                    uint64_t base = 0;
+                    source.populateGenerated(chunk, {}, overflow, blockActors, entities, base);
+                }
+            }
+        }
+        built = PortalBuilder(generator, startX, startZ, &populated, true).build();
+    } else {
+        built = PortalBuilder(generator, startX, startZ, cache).build();
+    }
     const std::lock_guard<std::mutex> lock(plansMutex);
     if (plans.size() >= MAX_CACHED_PLANS)
         plans.clear();
-    plans.emplace(key, built);
-    return built;
+    return plans.try_emplace(key, std::move(built)).first->second;
 }
 
 void RuinedPortalStructure::place(const ChunkGenerator &generator, Level &level, LevelChunk &chunk) {
-    const StructureFeature *portals = StructureFeature::get("ruined_portal");
+    const bool nether = generator.getDimensionType() == DimensionType::Nether;
+    const StructureFeature *portals = StructureFeature::get(nether ? "ruined_portal_nether" : "ruined_portal");
     for (int32_t startX = chunk.getX() - REACH; startX <= chunk.getX() + REACH; ++startX) {
         for (int32_t startZ = chunk.getZ() - REACH; startZ <= chunk.getZ() + REACH; ++startZ) {
             if (!portals->isStartChunk(generator, startX, startZ))

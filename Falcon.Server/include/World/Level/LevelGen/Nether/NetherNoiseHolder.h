@@ -74,10 +74,6 @@ public:
         return *mRandomSource;
     }
 
-    static void setInstance(const NetherNoiseHolder *instance);
-
-    static const NetherNoiseHolder *get();
-
 private:
     IRandomPtr mRandomSource;
     std::unique_ptr<NetherTerrainNoises> mTerrainNoises;

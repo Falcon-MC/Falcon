@@ -26,10 +26,12 @@ public:
         const char *mOutput;
         const char *mOutputState;
         int32_t mOutputValue;
+        int32_t mVerticalRange = 0;
+        float mVerticalChance = 0.0f;
     };
 
     static const std::vector<Rule> &get(const std::string &name);
 
     static BlockState apply(const std::vector<const Rule *> &rules, const BlockState &block, const BlockState &world,
-                            std::mt19937 &random);
+                            std::mt19937 &random, int32_t relativeY = 0);
 };

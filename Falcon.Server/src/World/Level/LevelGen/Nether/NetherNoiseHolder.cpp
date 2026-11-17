@@ -37,21 +37,6 @@ NetherDeltaNoises::NetherDeltaNoises(IRandom &random) {
     mSurfaceSecondaryNoise = makeIdentical(random, -6, {1.0f, 0.0f, 1.0f, 1.0f});
 }
 
-namespace {
-    const NetherNoiseHolder *&sharedInstance() {
-        static const NetherNoiseHolder *instance = nullptr;
-        return instance;
-    }
-}
-
-void NetherNoiseHolder::setInstance(const NetherNoiseHolder *instance) {
-    sharedInstance() = instance;
-}
-
-const NetherNoiseHolder *NetherNoiseHolder::get() {
-    return sharedInstance();
-}
-
 NetherNoiseHolder::NetherNoiseHolder(int64_t seed) {
     mRandomSource = std::make_shared<XoroshiroRandom>(seed);
     mTerrainNoises = std::make_unique<NetherTerrainNoises>((uint32_t) seed);
