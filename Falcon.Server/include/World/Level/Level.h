@@ -56,6 +56,8 @@ public:
     Level(const std::string &name, int viewDistance, int64_t seed = 0,
           DimensionType dimension = DimensionType::Overworld);
 
+    ~Level();
+
     Level &operator=(Level &&other) noexcept;
 
     const std::string &getName() const {

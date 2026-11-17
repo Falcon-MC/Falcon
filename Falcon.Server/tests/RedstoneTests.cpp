@@ -18,6 +18,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
     const Vector3i ORIGIN(8, 64, 8);
@@ -151,6 +152,45 @@ namespace {
                 "a comparator read a hopper two blocks away through air");
     }
 
+    void comparatorReload() {
+        RedstoneFixture fixture;
+        fixture.mLevel.setOwner(&fixture.mOwner);
+
+        fixture.set(Vector3i(ORIGIN.x + 1, ORIGIN.y, ORIGIN.z), VanillaBlocks::STONE().toBlockState());
+        const Vector3i hopperPosition(ORIGIN.x + 2, ORIGIN.y, ORIGIN.z);
+        fixture.set(hopperPosition, VanillaBlocks::HOPPER().toBlockState());
+        HopperBlockActor &hopper = fixture.mLevel.getBlockActors().getOrCreate<HopperBlockActor>(hopperPosition);
+        for (int slot = 0; slot < 5; ++slot)
+            hopper.getContainer()->setContainerItem(slot, fixture.mOwner.createItemStack("minecraft:dirt", 64));
+
+        BlockState comparator = VanillaBlocks::POWERED_COMPARATOR().toBlockState();
+        comparator.mStates.putString("minecraft:cardinal_direction", "east");
+        fixture.set(ORIGIN, comparator);
+
+        // mimic a reload with no cached circuit output
+        LevelChunk saved = fixture.mLevel.extractChunk(0, 0);
+        fixture.mLevel.insertChunk(std::move(saved));
+
+        require(fixture.signal(hopperPosition) == 15, "the reloaded hopper did not retain its full inventory");
+        require(fixture.mLevel.isUpdateScheduled(ORIGIN),
+                "a reloaded comparator with a different analog input was not scheduled");
+        RedstoneSystem::onRedstoneUpdate(fixture.mOwner, fixture.mLevel, ORIGIN, fixture.at(ORIGIN),
+                                         BlockUpdateType::Scheduled);
+        const int output = RedstoneSystem::getComparatorOutput(fixture.mLevel, ORIGIN);
+        require(output == 15, "a reloaded comparator restored output " + std::to_string(output));
+        require(fixture.at(ORIGIN).mName == BlockNames::POWERED_COMPARATOR,
+                "a reloaded comparator did not restore its lit state");
+    }
+
+    void comparatorStateIsLevelScoped() {
+        RedstoneFixture fixture;
+        Level other("Other", 4, 0, DimensionType::Overworld);
+
+        RedstoneSystem::setComparatorOutput(fixture.mLevel, ORIGIN, 12);
+        require(RedstoneSystem::getComparatorOutput(other, ORIGIN) == 0,
+                "one world's comparator output leaked into another world");
+    }
+
     void lightningRod() {
         RedstoneFixture fixture;
 
@@ -271,6 +311,8 @@ int main() {
         stateSignals();
         containerSignals();
         comparatorThroughBlock();
+        comparatorReload();
+        comparatorStateIsLevelScoped();
         hopperLock();
         lightningRod();
         copperBulb();

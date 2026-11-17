@@ -12,6 +12,7 @@
 
 class Actor;
 class Level;
+class LevelChunk;
 class ServerNetworkHandler;
 
 namespace RedstoneFace {
@@ -89,6 +90,14 @@ public:
 
     static void onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &previous);
+
+    static void onChunkLoaded(ServerNetworkHandler &owner, Level &level, const LevelChunk &chunk);
+
+    static void onChunkUnloaded(Level &level, int32_t chunkX, int32_t chunkZ);
+
+    static void forgetLevel(Level &level);
+
+    static void moveLevelState(Level &from, Level &to);
 
     static void onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
