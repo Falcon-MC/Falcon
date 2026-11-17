@@ -22,6 +22,8 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level);
 
+    static int32_t countPopulationActors(ServerNetworkHandler &owner, Level &level);
+
     // the mobs a herd could be drawn from at the spot, in roll order; empty when no mob fits there
     std::vector<std::string> candidatesAt(Level &level, const Vector3i &position, bool surface, int32_t difficulty,
                                           const std::vector<Vector3f> &players);
@@ -59,12 +61,12 @@ private:
     void _despawn(ServerNetworkHandler &owner, Level &level, const std::vector<Vector3f> &players);
 
     void _tickChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, int32_t difficulty,
-                    int32_t mobCount, const std::vector<Vector3f> &players);
+                    int32_t &mobCount, const std::vector<Vector3f> &players);
 
     void _count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts);
 
     void _spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
-                       int32_t mobCount, Counts &counts);
+                       int32_t &mobCount, Counts &counts);
 
     bool _makeSite(Level &level, const Vector3i &position, const std::vector<Vector3f> &players, bool surface,
                    SpawnSite &site);
@@ -94,4 +96,6 @@ private:
     int64_t mCensusTick = -1;
     std::unordered_set<int64_t> mSurfaceMobs;
     std::mt19937 mRandom{std::random_device{}()};
+
+    friend struct NaturalSpawnerTestAccess;
 };
