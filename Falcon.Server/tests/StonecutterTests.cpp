@@ -83,6 +83,22 @@ namespace {
         require(andesite->mInputs.front().mItemId == "minecraft:andesite"
                         && andesite->mInputs.front().mAuxValue == 0x7fff && andesite->mOutputs.front().mCount == 2,
                 "the andesite slab recipe is sent wrong");
+        int32_t chiseledId = 0;
+        for (const auto &entry: indices) {
+            if (std::string(CraftingRecipeTable::getStonecutterRecipes()[entry.second].mRecipeId)
+                == "minecraft:chiseled_deepslate_from_cobbled_deepslate_stonecutting") {
+                chiseledId = entry.first;
+                break;
+            }
+        }
+        const auto chiseled = std::find_if(packet.mShapelessRecipes.begin(), packet.mShapelessRecipes.end(),
+                                           [&](const CraftingRecipeEntry &entry) {
+                                               return entry.mRecipeNetId == chiseledId;
+                                           });
+        require(chiseled != packet.mShapelessRecipes.end() && chiseled->mInputs.size() == 1
+                        && chiseled->mInputs.front().mItemId == "minecraft:cobbled_deepslate"
+                        && chiseled->mInputs.front().mAuxValue == 0,
+                "the stonecutter packet did not separate the item identifier and its data value");
     }
 
     int32_t netIdOf(ServerNetworkHandler &owner, const char *recipeId) {
@@ -148,10 +164,11 @@ namespace {
     void checkInputMatching(ServerNetworkHandler &owner) {
         const StonecutterRecipeData *chiseled = findRecipe(
                 "minecraft:chiseled_deepslate_from_cobbled_deepslate_stonecutting");
-        require(chiseled != nullptr && std::string(chiseled->mInputItemId) == "minecraft:cobbled_deepslate:0",
-                "the chiseled deepslate recipe no longer names its input with a data value");
+        require(chiseled != nullptr && std::string(chiseled->mInputItemId) == "minecraft:cobbled_deepslate"
+                        && chiseled->mInputAuxValue == 0,
+                "the chiseled deepslate recipe does not store its item identifier and data separately");
         require(StonecutterRecipes::matchesInput(*chiseled, makeItem(owner, "minecraft:cobbled_deepslate", 1)),
-                "an input named with a data value does not match its item");
+                "an input with data value zero does not match its item");
         require(!StonecutterRecipes::matchesInput(*chiseled, makeItem(owner, "minecraft:deepslate", 1)),
                 "another item matches the chiseled deepslate recipe");
     }
