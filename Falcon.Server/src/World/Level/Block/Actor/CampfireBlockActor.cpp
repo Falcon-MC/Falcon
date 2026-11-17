@@ -9,6 +9,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
 
+#include <algorithm>
 #include <memory>
 #include <random>
 #include <string>
@@ -42,16 +43,40 @@ namespace {
 }
 
 Tag CampfireBlockActor::saveNbt() const {
-    Tag data = ContainerBlockActor::saveNbt();
-    for (int slot = 0; slot < SIZE; ++slot)
+    Tag data = Tag::ofCompound();
+    for (int slot = 0; slot < SIZE; ++slot) {
+        const ItemStack &item = mInventory.getContainerItem(slot);
+        if (!item.isAir() && item.mCount > 0)
+            data.put(slotKey("Item", slot), ItemStackNbt::write(item));
         data.putInt(slotKey("ItemTime", slot), mCookTimes[slot]);
+    }
     return data;
 }
 
 void CampfireBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    ContainerBlockActor::loadNbt(data, context);
-    for (int slot = 0; slot < SIZE; ++slot)
+    bool legacy = data.contains("Items", Tag::Type::List);
+    for (int slot = 0; slot < SIZE; ++slot) {
+        if (data.contains(slotKey("Item", slot)))
+            legacy = false;
+    }
+
+    // older Falcon saves used a container list and remaining ticks
+    if (legacy) {
+        ContainerBlockActor::loadNbt(data, context);
+        for (int slot = 0; slot < SIZE; ++slot) {
+            const int remaining = std::clamp(data.getInt(slotKey("ItemTime", slot)), 0, COOK_TIME);
+            mCookTimes[slot] = mInventory.getContainerItem(slot).isAir() ? 0 : COOK_TIME - remaining;
+        }
+        return;
+    }
+
+    mInventory.clear();
+    for (int slot = 0; slot < SIZE; ++slot) {
+        const Tag *item = data.get(slotKey("Item", slot));
+        if (item != nullptr && item->isCompound())
+            mInventory.setContainerItem(slot, ItemStackNbt::read(*item, context));
         mCookTimes[slot] = data.getInt(slotKey("ItemTime", slot));
+    }
 }
 
 Tag CampfireBlockActor::getSpawnCompound() const {
@@ -76,7 +101,7 @@ bool CampfireBlockActor::addFood(const ItemStack &item) {
         ItemStack food = item;
         food.mCount = 1;
         mInventory.setContainerItem(slot, std::move(food));
-        mCookTimes[slot] = COOK_TIME;
+        mCookTimes[slot] = 0;
         return true;
     }
     return false;
@@ -104,6 +129,11 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
             continue;
         }
 
+        if (!lit) {
+            mCookTimes[slot] = 0;
+            continue;
+        }
+
         const FurnaceRecipeData *recipe = CraftingRecipeTable::findCampfireRecipe(identifier, item.mDamage, _isSoul());
         if (recipe == nullptr) {
             mInventory.setContainerItem(slot, ItemStack::air());
@@ -114,13 +144,10 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
             continue;
         }
 
-        if (mCookTimes[slot] > 0) {
-            if (lit)
-                --mCookTimes[slot];
-            else
-                mCookTimes[slot] = COOK_TIME;
+        if (mCookTimes[slot] < COOK_TIME)
+            ++mCookTimes[slot];
+        if (mCookTimes[slot] < COOK_TIME)
             continue;
-        }
 
         std::shared_ptr<ItemDefinition> output = owner.getItemDefinitions().getDefinition(recipe->mOutputItemId);
         mInventory.setContainerItem(slot, ItemStack::air());

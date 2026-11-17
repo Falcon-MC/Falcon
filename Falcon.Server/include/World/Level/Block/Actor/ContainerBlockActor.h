@@ -218,7 +218,7 @@ public:
     static constexpr const char *BLOCK_ACTOR_ID = "Campfire";
 
     static const int SIZE = 4;
-    static const int COOK_TIME = 600;
+    static constexpr int COOK_TIME = 600;
 
     CampfireBlockActor() : ContainerBlockActor(SIZE) {}
 
