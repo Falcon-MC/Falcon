@@ -21,6 +21,17 @@
 #include <string>
 #include <vector>
 
+struct NaturalSpawnerTestAccess {
+    static void seed(NaturalSpawner &spawner, std::uint32_t seed) {
+        spawner.mRandom.seed(seed);
+    }
+
+    static void tickChunk(NaturalSpawner &spawner, ServerNetworkHandler &owner, Level &level, int32_t &mobCount,
+                         const std::vector<Vector3f> &players) {
+        spawner._tickChunk(owner, level, 0, 0, 2, mobCount, players);
+    }
+};
+
 namespace {
     void require(bool condition, const std::string &message) {
         if (!condition)
@@ -101,6 +112,48 @@ namespace {
 
     }
 
+    void checkGlobalSpawnCap(const std::filesystem::path &directory) {
+        ServerNetworkHandler owner("Spawn cap", "", 1);
+        const std::filesystem::path path = directory / "normal.properties";
+        std::ofstream(path) << "difficulty=normal\n";
+        owner.setProperties(PropertiesSettings(path.string()));
+        Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Nether);
+        for (int32_t x = -1; x <= 1; ++x) {
+            for (int32_t z = -1; z <= 1; ++z)
+                level.insertChunk(LevelChunk(x, z)).setPopulated(true);
+        }
+
+        for (int32_t x = 0; x <= 15; ++x) {
+            for (int32_t z = 0; z <= 15; ++z) {
+                level.setBlockState(x, 60, z, BlockState("minecraft:nether_brick"));
+                level.setBlockState(x, 64, z, BlockState("minecraft:nether_brick"));
+                level.setBlockState(x, 68, z, BlockState("minecraft:nether_brick"));
+            }
+        }
+        ChunkStructureBounds::Box whole{0, 50, 0, 15, 80, 15};
+        ChunkStructureBounds::Box piece{0, 58, 0, 15, 70, 15};
+        level.getChunk(0, 0).getStructureBounds().addStart("minecraft:fortress", 0, whole, {piece},
+                                                           ChunkStructureBounds::chunkBox(0, 0, 0, 127));
+
+        for (int32_t i = 0; i < 199; ++i)
+            require(owner.spawnActor(level, "minecraft:zombie", Vector3f(1000.0f + (float) i, 80.0f, 1000.0f))
+                            != nullptr,
+                    "could not create a population actor near the cap");
+
+        NaturalSpawner spawner;
+        NaturalSpawnerTestAccess::seed(spawner, 1234);
+        int32_t mobCount = NaturalSpawner::countPopulationActors(owner, level);
+        require(mobCount == 199, "the near-cap fixture did not start at 199 population actors");
+        const std::vector<Vector3f> players = {Vector3f(3.5f, 61.0f, 40.5f)};
+        for (int32_t attempt = 0; attempt < 32 && mobCount < 200; ++attempt) {
+            NaturalSpawnerTestAccess::tickChunk(spawner, owner, level, mobCount, players);
+            const int32_t actualCount = NaturalSpawner::countPopulationActors(owner, level);
+            require(actualCount <= 200, "one tick exceeded the global natural spawn cap");
+            require(mobCount == actualCount, "the tick-local count missed a successful natural spawn");
+        }
+        require(mobCount == 200, "the near-cap fixture did not use its final spawn slot");
+    }
+
     void checkPopulationCountPerLevel() {
         ServerNetworkHandler owner("Spawn caps", "", 1);
         Level &overworld = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
@@ -129,6 +182,7 @@ int main() {
         SpawnRules::initialize();
         checkTable();
         checkCandidates(directory);
+        checkGlobalSpawnCap(directory);
         checkPopulationCountPerLevel();
         std::cout << "fortress spawn checks passed\n";
     } catch (const std::exception &error) {

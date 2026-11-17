@@ -176,7 +176,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     if (!level.getGameRules().getBool("domobspawning"))
         return;
 
-    const int32_t mobCount = countPopulationActors(owner, level);
+    int32_t mobCount = countPopulationActors(owner, level);
 
     const int32_t difficulty = (int32_t) owner.getProperties().getDifficulty();
     // a ticking chunk goes on only when nextInt(2000) <= 10: the gap to the next one that does is drawn
@@ -191,7 +191,7 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
 }
 
 void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
-                                int32_t difficulty, int32_t mobCount, const std::vector<Vector3f> &players) {
+                                int32_t difficulty, int32_t &mobCount, const std::vector<Vector3f> &players) {
     if (!level.isChunkResident(chunkX, chunkZ))
         return;
 
@@ -311,7 +311,7 @@ std::vector<std::string> NaturalSpawner::candidatesAt(Level &level, const Vector
 }
 
 void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
-                                   int32_t mobCount, Counts &counts) {
+                                   int32_t &mobCount, Counts &counts) {
     std::vector<Candidate> candidates;
     int32_t totalWeight = 0;
     _collectCandidates(level, site, difficulty, candidates, totalWeight);
@@ -371,7 +371,10 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
         if (spawned == nullptr)
             continue;
 
-        const int32_t spawnedPool = poolIndex(SpawnRules::getPopulation(identifier));
+        const std::string &population = SpawnRules::getPopulation(identifier);
+        const int32_t spawnedPool = poolIndex(population);
+        if (!population.empty())
+            ++mobCount;
         if (spawnedPool >= 0)
             ++counts.mPools[row][spawnedPool];
         ++counts.mTypes[row][identifier];
