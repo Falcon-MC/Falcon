@@ -21,7 +21,8 @@ namespace {
         std::vector<ElementData> mElements;
     };
 
-    // in the game's registration order; it names one template EMPTY_pot, the pack holds empty_pot
+    // in the game's registration order; EMPTY_pot is the game's spelling: the pack holds empty_pot, so the game
+    // finds no template for it and tries the next element
     const std::vector<PoolData> POOLS = {
             {"minecraft:trial_chambers/chamber/end", "minecraft:empty", {
                     {"minecraft:trial_chambers/corridor/end_1", 1, true},
@@ -181,7 +182,7 @@ namespace {
                     {"minecraft:trial_chambers/corridor/atrium/grand_staircase_2", 1, false},
                     {"minecraft:trial_chambers/corridor/atrium/grand_staircase_3", 1, false}}},
             {"minecraft:trial_chambers/decor", "minecraft:empty", {
-                    {nullptr, 22, false}, {"minecraft:trial_chambers/decor/empty_pot", 2, false},
+                    {nullptr, 22, false}, {"minecraft:trial_chambers/decor/EMPTY_pot", 2, false},
                     {"minecraft:trial_chambers/decor/dead_bush_pot", 2, false},
                     {"minecraft:trial_chambers/decor/undecorated_pot", 10, false},
                     {"minecraft:trial_chambers/decor/flow_pot", 1, false},

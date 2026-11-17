@@ -348,9 +348,10 @@ void JigsawPlacer::_expand(const Queued &entry) {
             if (candidate == nullptr || (candidate->mLocation.empty() && candidate->mFeature.empty()))
                 break;
 
-            const std::shared_ptr<const Template> other = mTemplates(*candidate);
+            // a template the pack lacks has no jigsaw: its turns are drawn, nothing fits, the next one is tried
+            std::shared_ptr<const Template> other = mTemplates(*candidate);
             if (other == nullptr)
-                break;
+                other = std::make_shared<const Template>();
 
             std::array<int32_t, 4> turns = {0, 1, 2, 3};
             for (int32_t size = 4; size > 1; --size)
