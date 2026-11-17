@@ -3441,7 +3441,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         expect(it, "dynamic", "me:TypeError");
         expect(it, "clone", "2:true:Blade:me");
         expect(it, "stackable", "true:false:true");
-        expect(it, "durability", "true:1562:10:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError");
+        expect(it, "durability", "true:1561:10:ArgumentOutOfBoundsError:ArgumentOutOfBoundsError");
         expect(it, "enchant", "true:1:3:false:Sword");
         expect(it, "enchantErrors",
                "EnchantmentTypeUnknownIdError,EnchantmentLevelOutOfBoundsError,"
