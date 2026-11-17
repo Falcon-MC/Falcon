@@ -1,5 +1,6 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
+#include "World/Level/Chunk/LevelChunk.h"
 
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -176,10 +177,14 @@ namespace {
         std::vector<Vector3i> mPendingNotifications;
     };
 
-    std::unordered_map<int32_t, RedstoneState> gStates;
+    std::unordered_map<const Level *, RedstoneState> gStates;
 
     RedstoneState &stateOf(Level &level) {
-        return gStates[level.getDimensionId()];
+        return gStates[&level];
+    }
+
+    bool isComparatorState(const BlockState &state) {
+        return RedstoneComparatorBlock::matches(state.mName);
     }
 
     int redstoneChange(Level &level, const Vector3i &position, int previousPower, int power) {
@@ -1375,6 +1380,62 @@ void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level,
     level.updateAround(position);
     updateAroundRedstone(owner, level, position);
     updateComparatorOutputLevel(owner, level, position, true);
+}
+
+void RedstoneSystem::onChunkLoaded(ServerNetworkHandler &owner, Level &level, const LevelChunk &chunk) {
+    // saved comparators need a fresh circuit output
+    for (int section = 0; section < LevelChunk::SUB_CHUNK_COUNT; ++section) {
+        const SubChunk &subChunk = chunk.getSubChunk(section);
+        if (!subChunk.paletteMatches(SubChunk::PaletteQuery::Comparator, isComparatorState))
+            continue;
+
+        for (int x = 0; x < 16; ++x) {
+            for (int z = 0; z < 16; ++z) {
+                for (int y = 0; y < 16; ++y) {
+                    const BlockState &state = subChunk.getBlock(x, y, z);
+                    if (!isComparatorState(state))
+                        continue;
+
+                    const Vector3i position(chunk.getX() * 16 + x,
+                                            (section + LevelChunk::LOWEST_SUB_CHUNK_Y) * 16 + y,
+                                            chunk.getZ() * 16 + z);
+                    setComparatorOutput(level, position, 0);
+                    diodeUpdateState(owner, level, position, state);
+                }
+            }
+        }
+    }
+}
+
+void RedstoneSystem::onChunkUnloaded(Level &level, int32_t chunkX, int32_t chunkZ) {
+    const auto found = gStates.find(&level);
+    if (found == gStates.end())
+        return;
+
+    std::unordered_map<int64_t, int32_t> &outputs = found->second.mComparatorOutputs;
+    for (auto it = outputs.begin(); it != outputs.end();) {
+        const Vector3i position = unpackPosition(it->first);
+        if ((position.x >> 4) == chunkX && (position.z >> 4) == chunkZ)
+            it = outputs.erase(it);
+        else
+            ++it;
+    }
+}
+
+void RedstoneSystem::forgetLevel(Level &level) {
+    gStates.erase(&level);
+}
+
+void RedstoneSystem::moveLevelState(Level &from, Level &to) {
+    if (&from == &to)
+        return;
+
+    gStates.erase(&to);
+    auto state = gStates.extract(&from);
+    if (!state.empty()) {
+        state.key() = &to;
+        gStates.insert(std::move(state));
+    }
 }
 
 void RedstoneSystem::onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

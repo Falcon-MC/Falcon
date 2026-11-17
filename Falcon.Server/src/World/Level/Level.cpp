@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/Particle/Particle.h"
 #include "World/Level/LightSystem.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 
 #include "World/Level/Block/Actor/DataDrivenBlockActor.h"
 #include "World/Level/Block/BlockData.h"
@@ -82,6 +83,10 @@ Level::Level(const std::string &name, int viewDistance, int64_t seed, DimensionT
         : mName(name), mViewDistance(viewDistance), mSeed(seed), mDimension(dimension),
           mGenerator(DimensionFactory::createGenerator(dimension, seed)), mLiquidPhysics(*this) {}
 
+Level::~Level() {
+    RedstoneSystem::forgetLevel(*this);
+}
+
 void Level::decorate(LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) {
     mGenerator->decorate(*this, chunk, overflow);
 }
@@ -89,6 +94,8 @@ void Level::decorate(LevelChunk &chunk, std::vector<GeneratedBlockChange> *overf
 Level &Level::operator=(Level &&other) noexcept {
     if (this == &other)
         return *this;
+
+    RedstoneSystem::moveLevelState(other, *this);
 
     _finishPendingChangeWrite(true);
     other._finishPendingChangeWrite(true);
@@ -618,6 +625,8 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     _loadPendingTicks(result.first->second);
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
+    if (mOwner != nullptr)
+        RedstoneSystem::onChunkLoaded(*mOwner, *this, result.first->second);
     return result.first->second;
 }
 
@@ -643,6 +652,8 @@ LevelChunk &Level::insertChunk(LevelChunk chunk) {
         LevelChunk &inserted = result.first->second;
         _loadPendingTicks(inserted);
         _refreshChunkShapes(inserted.getX(), inserted.getZ());
+        if (mOwner != nullptr)
+            RedstoneSystem::onChunkLoaded(*mOwner, *this, inserted);
     }
     return result.first->second;
 }
@@ -712,6 +723,7 @@ LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
 
     LevelChunk chunk = std::move(it->second);
     mChunks.erase(it);
+    RedstoneSystem::onChunkUnloaded(*this, chunkX, chunkZ);
     gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
     _dropPendingTicks(chunkX, chunkZ);
     return chunk;
@@ -719,6 +731,7 @@ LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
 
 void Level::dropChunk(int32_t chunkX, int32_t chunkZ) {
     mChunks.erase(_packChunk(chunkX, chunkZ));
+    RedstoneSystem::onChunkUnloaded(*this, chunkX, chunkZ);
     gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
     _dropPendingTicks(chunkX, chunkZ);
 }
