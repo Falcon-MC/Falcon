@@ -978,6 +978,7 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             parsedOutput.mRuntimeId = networkEntry->mNetworkId;
             parsedOutput.mCount = output.mCount;
             parsedOutput.mMeta = output.mDamage;
+            parsedOutput.mTag = output.mTag;
             parsedOutput.mIsShield = std::string(output.mItemId) == "minecraft:shield";
             const auto blockDefinition = owner.getBlockDefinitions().getDefinition(output.mItemId);
             parsedOutput.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
@@ -988,6 +989,7 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
                 resolvedOutput.mBlockDefinition = owner.getBlockDefinitions().getDefinition(output.mItemId);
                 resolvedOutput.mCount = output.mCount;
                 resolvedOutput.mDamage = output.mDamage;
+                resolvedOutput.mTag = output.mTag;
             }
         }
 

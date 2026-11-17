@@ -1,6 +1,8 @@
 #include "World/Item/CraftingRecipeTable.h"
 #include "CraftingRecipeJson.h"
 #include "Core/Json/Json.h"
+#include "Core/NBT/NbtIo.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/ProtocolData.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
@@ -125,6 +127,39 @@ namespace {
         return {{false, std::move(canonicalItemId), aux, count}};
     }
 
+    std::string decodeBase64(const std::string &value) {
+        static const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string decoded;
+        unsigned int buffer = 0;
+        int bits = 0;
+        for (const char character: value) {
+            if (character == '=')
+                break;
+            const size_t index = alphabet.find(character);
+            if (index == std::string::npos)
+                return {};
+            buffer = (buffer << 6) | (unsigned int) index;
+            bits += 6;
+            if (bits >= 8) {
+                bits -= 8;
+                decoded.push_back((char) ((buffer >> bits) & 0xff));
+                buffer &= (1u << bits) - 1;
+            }
+        }
+        return decoded;
+    }
+
+    Tag outputTag(const json::Value &output) {
+        const json::Value *encoded = output.get("nbt_b64");
+        if (encoded == nullptr || encoded->mType != json::Value::Type::String)
+            return Tag();
+        const std::string bytes = decodeBase64(encoded->mString);
+        if (bytes.empty())
+            return Tag();
+        ReadOnlyBinaryStream stream(bytes);
+        return NbtIo::readTag(stream, NbtVariant::LittleEndian);
+    }
+
     void addRecipe(RecipeStorage &storage, const json::Value &source, int32_t width, int32_t height,
                    const std::vector<IngredientChoice> &ingredients, size_t variant) {
         const json::Value *outputData = source.get("output");
@@ -140,7 +175,7 @@ namespace {
             const int32_t count = countValue == nullptr ? 1 : countValue->integer(1);
             const json::Value *damageValue = output->get("damage");
             const int32_t damage = damageValue == nullptr ? 0 : damageValue->integer(0);
-            storage.mOutputs.push_back({storage.store(itemId->mString), count, damage});
+            storage.mOutputs.push_back({storage.store(itemId->mString), count, damage, outputTag(*output)});
         }
         if (storage.mOutputs.size() == outputOffset)
             return;

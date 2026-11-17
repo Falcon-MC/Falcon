@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/NBT/Tag.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -15,6 +17,7 @@ struct CraftingOutputData {
     const char *mItemId;
     int32_t mCount;
     int32_t mDamage;
+    Tag mTag;
 };
 
 struct CraftingRecipeData {

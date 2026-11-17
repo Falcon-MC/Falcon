@@ -73,6 +73,7 @@ namespace {
             const CraftingOutputData &output = outputs[recipe.mOutputOffset + i];
             ItemStack result = owner.createItemStack(output.mItemId, output.mCount);
             result.mDamage = output.mDamage;
+            result.mTag = output.mTag;
             if (!result.isAir())
                 results.push_back(std::move(result));
         }
