@@ -18,7 +18,7 @@ namespace {
     const int MAX_FLIGHT = 3;
     // the last data value of a plain map: 2 shows the players
     const int LAST_PLAIN_MAP = 2;
-    const uint32_t OPAQUE = 0xFF000000u;
+    const uint32_t OPAQUE_ALPHA_MASK = 0xFF000000u;
 
     // by firework color, black first
     const uint32_t FIREWORK_COLORS[] = {0x1D1D21, 0xB02E26, 0x5E7C16, 0x835432, 0x3C44AA, 0x8932B8,
@@ -50,7 +50,7 @@ namespace {
         tag.put("FireworksItem", star);
         // a color past the sixteen leaves the star black
         const uint32_t rgb = color >= 0 && color < FIREWORK_COLOR_COUNT ? FIREWORK_COLORS[color] : 0;
-        tag.putInt(DyeableItems::TAG_CUSTOM_COLOR, (int32_t) (OPAQUE | rgb));
+        tag.putInt(DyeableItems::TAG_CUSTOM_COLOR, (int32_t) (OPAQUE_ALPHA_MASK | rgb));
         item.mDamage = (uint8_t) color;
     }
 

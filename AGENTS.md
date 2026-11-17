@@ -12,7 +12,7 @@ where the two disagree, CONTRIBUTING.md wins.
 Falcon is a Minecraft: Bedrock Edition server written from scratch in C++. It is not derived from any other
 server: the protocol, storage, gameplay and networking are implemented in this organisation's repositories.
 
-- **Language:** C++17. Do not use newer language features.
+- **Language:** C++20. Do not use newer language features.
 - **Build system:** CMake with Ninja, dependencies pulled with `FetchContent`.
 - **Platforms:** Windows (MSYS2 UCRT64, gcc), Linux (gcc) and macOS (clang), all built by CI.
 - **License:** LGPL-3.0.
