@@ -138,7 +138,9 @@ namespace {
                 continue;
             const json::Value *countValue = output->get("count");
             const int32_t count = countValue == nullptr ? 1 : countValue->integer(1);
-            storage.mOutputs.push_back({storage.store(itemId->mString), count});
+            const json::Value *damageValue = output->get("damage");
+            const int32_t damage = damageValue == nullptr ? 0 : damageValue->integer(0);
+            storage.mOutputs.push_back({storage.store(itemId->mString), count, damage});
         }
         if (storage.mOutputs.size() == outputOffset)
             return;

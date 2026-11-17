@@ -14,6 +14,7 @@ struct CraftingIngredientData {
 struct CraftingOutputData {
     const char *mItemId;
     int32_t mCount;
+    int32_t mDamage;
 };
 
 struct CraftingRecipeData {
