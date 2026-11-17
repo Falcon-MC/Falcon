@@ -40,6 +40,7 @@ enum class MobEffectId : int32_t {
     BadOmen = 28,
     VillageHero = 29,
     Darkness = 30,
+    TrialOmen = 31,
     Weaving = 33,
     RaidOmen = 36,
     Freezing = 38

@@ -208,7 +208,7 @@ namespace {
             Tag map = Tag::ofCompound();
             map.putLong("mapId", -9);
             require(storage.saveMapData(-9, map), "could not save the map");
-            storage.writeLevelDat("World", 0, 80, 0, 0, 1, 12345, 0, false, false, 0);
+            storage.writeLevelDat("World", 0, 80, 0, 0, 1, 12345, 0, 0, false, false, 0);
         }
         {
             LevelStorage storage;

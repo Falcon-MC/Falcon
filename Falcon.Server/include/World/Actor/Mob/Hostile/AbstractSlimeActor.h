@@ -29,6 +29,7 @@ public:
 
     void setSizeVariant(int variant);
 
+    static ActorSize getSizeForVariant(int variant);
     ActorSize getSize() const override;
 
     float getDefaultMaxHealth() const override;

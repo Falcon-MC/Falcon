@@ -1358,7 +1358,7 @@ namespace {
             {BlockTypeIds::BIRCH_DOUBLE_SLAB, "minecraft:birch_double_slab", "Birch Double Slab", 2.0f, 15.0f, BlockToolType::Axe, BlockToolTier::None, true, false, 0, false, true, 5, 20, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::WHITE_CONCRETE, "minecraft:white_concrete", "White Concrete", 1.8f, 9.0f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, false, true, 0, 0, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::MATERIAL_REDUCER, "minecraft:material_reducer", "Material Reducer", 2.5f, 10.0f, BlockToolType::None, BlockToolTier::None, true, false, 0, false, true, 0, 0, BlockDropKind::Self, "", 1, 1},
-            {BlockTypeIds::TRIAL_SPAWNER, "minecraft:trial_spawner", "Trial Spawner", 50.0f, 50.0f, BlockToolType::None, BlockToolTier::None, true, false, 0, false, true, 0, 0, BlockDropKind::Self, "", 1, 1},
+            {BlockTypeIds::TRIAL_SPAWNER, "minecraft:trial_spawner", "Trial Spawner", 50.0f, 50.0f, BlockToolType::None, BlockToolTier::None, true, false, 0, false, true, 0, 0, BlockDropKind::Nothing, "", 0, 0},
             {BlockTypeIds::ACACIA_FENCE, "minecraft:acacia_fence", "Acacia Fence", 2.0f, 3.0f, BlockToolType::Axe, BlockToolTier::None, true, false, 0, true, true, 5, 20, BlockDropKind::Self, "", 1, 1},
             {BlockTypeIds::GRASS_PATH, "minecraft:grass_path", "Dirt Path", 0.65f, 0.65f, BlockToolType::Shovel, BlockToolTier::None, true, true, 0, true, true, 0, 0, BlockDropKind::Other, "minecraft:dirt", 1, 1},
             {BlockTypeIds::RESIN_BRICK_WALL, "minecraft:resin_brick_wall", "Resin Brick Wall", 1.5f, 6.0f, BlockToolType::Pickaxe, BlockToolTier::Wooden, false, false, 0, true, false, 0, 0, BlockDropKind::Self, "", 1, 1},

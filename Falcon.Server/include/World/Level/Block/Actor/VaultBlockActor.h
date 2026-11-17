@@ -19,7 +19,6 @@ public:
     Tag saveNbt() const override;
     Tag getSpawnCompound() const override;
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
-    void loadVaultData(const Tag &data);
     bool tick(ServerNetworkHandler &owner) override;
     bool unlock(ServerNetworkHandler &owner, ServerPlayer &player);
 

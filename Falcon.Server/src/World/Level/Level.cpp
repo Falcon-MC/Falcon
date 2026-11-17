@@ -110,6 +110,7 @@ Level &Level::operator=(Level &&other) noexcept {
     mName = std::move(other.mName);
     mViewDistance = other.mViewDistance;
     mTime = other.mTime;
+    mWorldTick = other.mWorldTick;
     mSeed = other.mSeed;
     mDimension = other.mDimension;
     mWorldId = other.mWorldId;
@@ -173,6 +174,7 @@ bool Level::openStorage(const std::string &worldsDirectory) {
     if (mDimension == DimensionType::Overworld) {
         Tag levelDat;
         if (mStorage.readLevelDat(levelDat)) {
+            mWorldTick = std::max<int64_t>(0, levelDat.getLong("currentTick"));
             if (levelDat.contains("Time"))
                 setTime(levelDat.getLong("Time"));
 
@@ -212,7 +214,8 @@ void Level::saveLevelDat() {
     const Vector3i spawn = mHasSpawnPosition          ? mSpawnPosition
                            : mHasDefaultSpawnPosition ? mDefaultSpawnPosition
                                                       : Vector3i(0, UNSET_SPAWN_Y, 0);
-    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled, mBonusChestSpawned,
+    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mWorldTick, mBonusChestEnabled,
+                           mBonusChestSpawned,
                            (int64_t) (uint32_t) (mWorldStartCount - 1));
 }
 
@@ -348,7 +351,7 @@ std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
 }
 
 bool Level::hasStoredEntity(int64_t uniqueId) const {
-    return mStorage.isOpen() && mStorage.hasEntity(uniqueId);
+    return mStorage.isOpen() && mErasingEntities.count(uniqueId) == 0 && mStorage.hasEntity(uniqueId);
 }
 
 void Level::eraseEntity(int64_t uniqueId) {

@@ -1,3 +1,4 @@
+#include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
 
 #include "Core/Json/Json.h"
@@ -232,20 +233,13 @@ namespace {
         return container == nullptr ? nullptr : ContainerBlock::createBlockActor(container->mKind);
     }
 
-    // the templates use a different format for vault keys and loot paths
     Tag generatedActor(const std::string &block, const Tag &data, int32_t x, int32_t y, int32_t z) {
         Tag actor = Tag::ofCompound();
         if (block == "minecraft:trial_spawner") {
-            actor.putString("id", "TrialSpawner");
-            actor.putLong("cooldown_end_at", 0);
-            actor.put("current_mobs", Tag::ofList(Tag::Type::Compound, {}));
-            actor.putLong("next_mob_spawns_at", 0);
-            actor.putString("normal_config", data.getString("normal_config", std::string()));
-            actor.putString("ominous_config", data.getString("ominous_config", std::string()));
-            actor.put("registered_players", Tag::ofList(Tag::Type::Compound, {}));
-            actor.putInt("required_player_range", 14);
-            actor.putInt("total_mobs_spawned", 0);
+            actor = TrialSpawnerBlockActor::createTrialData(data);
+            actor.putString("id", TrialSpawnerBlockActor::BLOCK_ACTOR_ID);
         } else if (block == "minecraft:vault") {
+            // the templates use a different format for vault keys and loot paths
             const Tag *config = data.get("config");
             const Tag *key = config != nullptr ? config->get("key_item") : nullptr;
             Tag item = Tag::ofCompound();
@@ -288,7 +282,7 @@ namespace {
             std::string mBlock;
         };
         std::vector<Loot> mLoot;
-        // block actors of no class, with the block they belong to
+        // generated block actor data, with the block it belongs to
         std::vector<std::pair<Tag, std::string>> mGenerated;
         // the four faces of a decorated pot
         std::map<Position, Tag> mSherds;
@@ -924,8 +918,17 @@ void JigsawStructures::place(const ChunkGenerator &generator, Level &level, Leve
             const Position position = {generated.first.getInt("x", 0), generated.first.getInt("y", 0),
                                        generated.first.getInt("z", 0)};
             const auto block = share.mBlocks.find(position);
-            if (block != share.mBlocks.end() && block->second.mName == generated.second)
+            if (block == share.mBlocks.end() || block->second.mName != generated.second)
+                continue;
+            if (generated.first.getString("id") == TrialSpawnerBlockActor::BLOCK_ACTOR_ID) {
+                auto spawner = std::make_unique<TrialSpawnerBlockActor>();
+                const auto &[x, y, z] = position;
+                spawner->setPosition(Vector3i(x, y, z));
+                spawner->loadTrialData(generated.first);
+                level.getBlockActors().insert(std::move(spawner));
+            } else {
                 level.getBlockActors().keepGenerated(generated.first);
+            }
         }
     }
 }

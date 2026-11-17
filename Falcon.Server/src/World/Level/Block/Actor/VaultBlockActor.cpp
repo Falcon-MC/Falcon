@@ -51,11 +51,7 @@ Tag VaultBlockActor::getSpawnCompound() const {
     return packet;
 }
 
-void VaultBlockActor::loadNbt(const Tag &data, const PacketCodecContext &) {
-    loadVaultData(data);
-}
-
-void VaultBlockActor::loadVaultData(const Tag &save) {
+void VaultBlockActor::loadNbt(const Tag &save, const PacketCodecContext &) {
     const Tag *config = save.get("config");
     mConfig = config != nullptr && config->isCompound() ? *config : Tag::ofCompound();
     mDisplay = Tag();

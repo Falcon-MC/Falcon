@@ -75,7 +75,7 @@ public:
     // stored block actors joining a chunk already loaded
     void addLoaded(const std::vector<Tag> &blockActors, const PacketCodecContext &context);
 
-    // a save written by generation, kept as is: the chunk's first load reads it into its class when there is one
+    // load a generated actor when possible, or keep its tag for the next chunk load
     void keepGenerated(const Tag &data);
 
     static std::unique_ptr<BlockActor> create(const std::string &blockActorId);
@@ -108,6 +108,7 @@ public:
     }
 
 private:
+    void _loadOne(const Tag &data, const PacketCodecContext *context);
     void _index(int64_t key);
 
     // once neither kind is left at the position
