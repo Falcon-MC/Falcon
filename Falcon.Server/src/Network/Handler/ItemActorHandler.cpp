@@ -390,10 +390,12 @@ add.mMetadata.mEntries.push_back(flags3);
                 continue;
 
             PlayerInventory &inventory = player.getInventory();
-            if (freeSpaceFor(inventory, actor.getItem()) < actor.getItem().mCount)
+            const int pickupCount = std::min(freeSpaceFor(inventory, actor.getItem()), actor.getItem().mCount);
+            if (pickupCount <= 0)
                 continue;
 
-            const ItemStack pickedItem = actor.getItem();
+            ItemStack pickedItem = actor.getItem();
+            pickedItem.mCount = pickupCount;
 
             ItemStack eventItem = pickedItem;
             PluginEvent pluginEvent;
@@ -413,12 +415,16 @@ add.mMetadata.mEntries.push_back(flags3);
             }
 
             std::vector<int> touchedSlots;
-            if (!inventory.addItem(actor.getItem(), touchedSlots))
+            const int remaining = inventory.addItemPartial(pickedItem, touchedSlots);
+            const int collectedCount = pickupCount - remaining;
+            if (collectedCount <= 0)
                 continue;
+            pickedItem.mCount = collectedCount;
+            actor.getItem().mCount -= collectedCount;
 
             if (pickedItem.mDefinition != nullptr) {
                 EntityItemPickupAfterEvent pickupEvent(player, pickedItem.mDefinition->getIdentifier(),
-                                                       pickedItem.mCount);
+                                                       collectedCount);
                 owner.getEventBus().after().mEntityItemPickup.emit(pickupEvent);
                 owner.getScriptEngine().onEntityItemPickup(player, pickedItem);
             }
@@ -426,7 +432,10 @@ add.mMetadata.mEntries.push_back(flags3);
             for (int slot: touchedSlots)
                 player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
 
-            ItemActorHandler::collect(owner, actor, player);
+            if (actor.getItem().mCount <= 0)
+                ItemActorHandler::collect(owner, actor, player);
+            else
+                ItemActorHandler::refresh(owner, actor);
             return;
         }
     }
