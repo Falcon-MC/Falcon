@@ -521,12 +521,23 @@ namespace {
                 packet);
     }
 
-    const FurnaceRecipeData *findFurnaceRecipe(const ItemStack &input) {
+    const char *furnaceRecipeBlock(FurnaceKind kind) {
+        switch (kind) {
+            case FurnaceKind::BlastFurnace:
+                return "blast_furnace";
+            case FurnaceKind::Smoker:
+                return "smoker";
+            default:
+                return "furnace";
+        }
+    }
+
+    const FurnaceRecipeData *findFurnaceRecipe(const ItemStack &input, FurnaceKind kind) {
         if (input.isAir() || input.mDefinition == nullptr) {
             return nullptr;
         }
 
-        // by input item, in table order: a furnace asks every tick, and the table holds every smelting recipe
+        // by input item, in table order: a furnace asks every tick, and the table holds all smelting recipes
         static const std::unordered_map<std::string, std::vector<const FurnaceRecipeData *>> byInput = [] {
             std::unordered_map<std::string, std::vector<const FurnaceRecipeData *>> index;
             const FurnaceRecipeData *recipes = CraftingRecipeTable::getFurnaceRecipes();
@@ -543,7 +554,8 @@ namespace {
             return nullptr;
 
         for (const FurnaceRecipeData *candidate: found->second) {
-            if ((candidate->mInputAuxValue >= 0 && input.mDamage != candidate->mInputAuxValue)
+            if (std::string(candidate->mBlockName) != furnaceRecipeBlock(kind)
+                || (candidate->mInputAuxValue >= 0 && input.mDamage != candidate->mInputAuxValue)
                 || input.mCount < candidate->mInputCount)
                 continue;
             return candidate;
@@ -564,7 +576,8 @@ namespace {
             return false;
         }
 
-        const FurnaceRecipeData *recipe = findFurnaceRecipe(state.mInventory.mItems[FurnaceInventory::SLOT_INPUT]);
+        const FurnaceRecipeData *recipe =
+                findFurnaceRecipe(state.mInventory.mItems[FurnaceInventory::SLOT_INPUT], state.mKind);
         ItemStack result = ItemStack::air();
         if (recipe != nullptr) {
             result.mDefinition = owner.getItemDefinitions().getDefinition(recipe->mOutputItemId);

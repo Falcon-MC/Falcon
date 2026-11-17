@@ -30,6 +30,7 @@ struct CraftingRecipeData {
 
 struct FurnaceRecipeData {
     const char *mRecipeId;
+    const char *mBlockName;
     const char *mInputItemId;
     int32_t mInputAuxValue;
     int32_t mInputCount;
