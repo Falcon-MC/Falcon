@@ -176,7 +176,11 @@ namespace {
                 {"minecraft:cobblestone_stairs", "minecraft:stone_stairs"},
                 {"minecraft:oak_fence_gate", "minecraft:fence_gate"},
                 {"minecraft:oak_pressure_plate", "minecraft:wooden_pressure_plate"},
-                {"minecraft:attached_melon_stem", "minecraft:melon_stem"}};
+                {"minecraft:attached_melon_stem", "minecraft:melon_stem"},
+                {"minecraft:cobweb", "minecraft:web"},
+                {"minecraft:dead_bush", "minecraft:deadbush"},
+                {"minecraft:chain", "minecraft:iron_chain"},
+                {"minecraft:waxed_copper_block", "minecraft:waxed_copper"}};
         return names;
     }
 
@@ -186,8 +190,54 @@ namespace {
         // states the game recomputes from neighbours, reads from block layer 1, or does not carry
         if (key == "waterlogged" || key == "distance" || key == "snowy" || key == "persistent" || key == "stage"
             || key == "signal_fire" || key == "occupied" || key == "has_book" || key == "east" || key == "north"
-            || key == "south" || key == "west" || key == "up" || key == "variant" || key == "powered")
+            || key == "south" || key == "west" || key == "up" || key == "variant" || key == "powered"
+            || key == "cracked")
             return true;
+
+        static const std::unordered_map<std::string, std::string> BITS = {
+                {"ominous", "ominous"}, {"triggered", "triggered_bit"}, {"attached", "attached_bit"}};
+        const auto bit = BITS.find(key);
+        if (bit != BITS.end()) {
+            if (!states.contains(bit->second))
+                return false;
+            states.putByte(bit->second, value == "true" ? 1 : 0);
+            return true;
+        }
+
+        if (key == "enabled") {
+            if (!states.contains("toggle_bit"))
+                return false;
+            states.putByte("toggle_bit", value == "true" ? 0 : 1);
+            return true;
+        }
+
+        if (key == "candles") {
+            if (!states.contains("candles"))
+                return false;
+            states.putInt("candles", std::max(std::atoi(value.c_str()), 1) - 1);
+            return true;
+        }
+
+        if (key == "trial_spawner_state") {
+            static const std::array<const char *, 6> STATES = {"inactive",
+                                                               "waiting_for_players",
+                                                               "active",
+                                                               "waiting_for_reward_ejection",
+                                                               "ejecting_reward",
+                                                               "cooldown"};
+            const auto found = std::find(STATES.begin(), STATES.end(), value);
+            if (found == STATES.end() || !states.contains("trial_spawner_state"))
+                return false;
+            states.putInt("trial_spawner_state", (int32_t) (found - STATES.begin()));
+            return true;
+        }
+
+        if (key == "vault_state") {
+            if (!states.contains("vault_state"))
+                return false;
+            states.putString("vault_state", value);
+            return true;
+        }
 
         if (key == "axis") {
             if (!states.contains("pillar_axis"))
@@ -502,7 +552,18 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         states.putInt("facing_direction", face == "floor"     ? 1
                                           : face == "ceiling" ? 0
                                                               : facingDirection(rotatedFacing(entry, quarterTurns)));
-        out = BlockState(name, states);
+        out = BlockState(name == "minecraft:oak_button" ? std::string("minecraft:wooden_button") : name, states);
+        return true;
+    }
+
+    if (name == "minecraft:tripwire") {
+        const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates("minecraft:trip_wire");
+        if (defaults == nullptr)
+            return false;
+        states = *defaults;
+        states.putByte("attached_bit", property(entry, "attached") == "true" ? 1 : 0);
+        states.putByte("disarmed_bit", property(entry, "disarmed") == "true" ? 1 : 0);
+        out = BlockState("minecraft:trip_wire", states);
         return true;
     }
 
