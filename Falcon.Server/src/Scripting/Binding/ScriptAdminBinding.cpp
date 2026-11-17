@@ -192,7 +192,9 @@ namespace {
     const allowList = new AllowList(token);
     const levelStorage = new LevelStorage(token);
     const DedicatedServerUtils = define(class {
-        constructor(key) { guard(key, "DedicatedServerUtils"); }
+        constructor(key) {
+            guard(key, "DedicatedServerUtils");
+        }
     }, "DedicatedServerUtils");
     getter(DedicatedServerUtils, "allowList", function () {
         check("Native property getter", "DedicatedServerUtils.allowList");
@@ -251,7 +253,9 @@ namespace {
 
     const joinCallbacks = [];
     const AsyncPlayerJoinBeforeEventSignal = define(class {
-        constructor(key) { guard(key, "AsyncPlayerJoinBeforeEventSignal"); }
+        constructor(key) {
+            guard(key, "AsyncPlayerJoinBeforeEventSignal");
+        }
     }, "AsyncPlayerJoinBeforeEventSignal");
     method(AsyncPlayerJoinBeforeEventSignal, "subscribe", function (callback) {
         fn("AsyncPlayerJoinBeforeEventSignal.subscribe");
@@ -270,7 +274,9 @@ namespace {
     });
     const asyncPlayerJoin = new AsyncPlayerJoinBeforeEventSignal(token);
     const AdminBeforeEvents = define(class {
-        constructor(key) { guard(key, "AdminBeforeEvents"); }
+        constructor(key) {
+            guard(key, "AdminBeforeEvents");
+        }
     }, "AdminBeforeEvents");
     getter(AdminBeforeEvents, "asyncPlayerJoin", function () {
         check("Native property getter", "AdminBeforeEvents.asyncPlayerJoin");

@@ -40,8 +40,15 @@ r.plainDsn = errorOf(() => sentry.init({ dsn: "http://key@127.0.0.1:1/42" }));
 const seen = [];
 const exec = RegExp.prototype.exec;
 const stringify = JSON.stringify;
-RegExp.prototype.exec = function (text) { seen.push(String(text)); return exec.call(this, text); };
-JSON.stringify = function (...args) { const text = stringify.apply(this, args); seen.push(String(text)); return text; };
+RegExp.prototype.exec = function (text) {
+    seen.push(String(text));
+    return exec.call(this, text);
+};
+JSON.stringify = function (...args) {
+    const text = stringify.apply(this, args);
+    seen.push(String(text));
+    return text;
+};
 r.init = errorOf(() => sentry.init({ dsn: secrets.get("dsn"), maxBreadcrumbs: 1 }));
 r.again = errorOf(() => sentry.init({ dsn: "http://key@127.0.0.1:1/42" }));
 sentry.addTag("team", "blue");

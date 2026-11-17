@@ -284,7 +284,9 @@ namespace {
     const CloseAfterEventSignal = makeSignal("CloseAfterEventSignal", listOf);
     const MessageAfterEventSignal = makeSignal("MessageAfterEventSignal", listOf);
     const WebSocketClientAfterEvents = define(class {
-        constructor(key) { guard(key, "WebSocketClientAfterEvents"); }
+        constructor(key) {
+            guard(key, "WebSocketClientAfterEvents");
+        }
     }, "WebSocketClientAfterEvents");
     const eventsOf = new WeakMap();
     getter(WebSocketClientAfterEvents, "close", function () {
@@ -477,7 +479,9 @@ namespace {
     const packetReceive = new PacketReceiveBeforeEventSignal(token);
     const packetSend = new PacketSendBeforeEventSignal(token);
     const NetworkBeforeEvents = define(class {
-        constructor(key) { guard(key, "NetworkBeforeEvents"); }
+        constructor(key) {
+            guard(key, "NetworkBeforeEvents");
+        }
     }, "NetworkBeforeEvents");
     getter(NetworkBeforeEvents, "packetReceive", function () {
         check("Native property getter", "NetworkBeforeEvents.packetReceive");
