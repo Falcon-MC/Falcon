@@ -415,14 +415,12 @@ void InventoryManager::_releaseFurnaceExperience(ServerNetworkHandler &owner, Fu
 
 namespace {
     bool isWoodLike(const std::string &id) {
-        return id == "minecraft:wood" || id == "minecraft:crimson_stem" || id == "minecraft:warped_stem"
-               || id == "minecraft:crimson_hyphae" || id == "minecraft:warped_hyphae"
+        return id == "minecraft:wood"
                || id.find("oak_") != std::string::npos || id.find("spruce_") != std::string::npos
                || id.find("birch_") != std::string::npos || id.find("jungle_") != std::string::npos
                || id.find("acacia_") != std::string::npos || id.find("dark_oak_") != std::string::npos
                || id.find("mangrove_") != std::string::npos || id.find("cherry_") != std::string::npos
-               || id.find("bamboo_") != std::string::npos || id.find("crimson_") != std::string::npos
-               || id.find("warped_") != std::string::npos || id.find("pale_oak_") != std::string::npos
+               || id.find("bamboo_") != std::string::npos || id.find("pale_oak_") != std::string::npos
                || id.find("poplar_") != std::string::npos;
     }
 
@@ -433,6 +431,20 @@ namespace {
         const std::string id = item.mDefinition->getIdentifier();
         if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(id))
             return custom->mHasFuel ? (int) std::lround(custom->mFuelDuration * 20.0f) : 0;
+        struct FuelDefinition {
+            const char *mIdentifier;
+            int mTicks;
+        };
+        static const FuelDefinition fuels[] = {
+                {"minecraft:scaffolding", 50}, {"minecraft:ladder", 300},
+                {"minecraft:mangrove_propagule", 100}, {"minecraft:azalea", 100},
+                {"minecraft:flowering_azalea", 100}, {"minecraft:deadbush", 100},
+                {"minecraft:leaf_litter", 100}, {"minecraft:short_dry_grass", 100},
+                {"minecraft:tall_dry_grass", 100}};
+        for (const FuelDefinition &fuel: fuels) {
+            if (id == fuel.mIdentifier)
+                return fuel.mTicks;
+        }
         if (id == "minecraft:lava_bucket")
             return 20000;
         if (id == "minecraft:coal_block")
