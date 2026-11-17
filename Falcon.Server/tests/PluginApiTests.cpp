@@ -74,7 +74,7 @@ namespace {
         require(api.entityAddEffect(body, FALCON_EFFECT_SPEED, 200, 1, 1) == 1, "speed was not added");
         require(api.entityAddEffect(body, FALCON_EFFECT_SPEED, 100, 0, 1) == 0,
                 "a weaker speed replaced a stronger one");
-        require(api.entityAddEffect(body, 31, 100, 0, 1) == 0, "an unknown effect id was accepted");
+        require(api.entityAddEffect(body, 255, 100, 0, 1) == 0, "an unknown effect id was accepted");
         require(api.entityAddEffect(body, FALCON_EFFECT_HASTE, 0, 0, 1) == 0, "a zero duration was accepted");
         require(api.entityAddEffect(body, FALCON_EFFECT_HASTE, 100, 256, 1) == 0, "amplifier 256 was accepted");
         require(api.entityAddEffect(body, FALCON_EFFECT_NIGHT_VISION, FALCON_EFFECT_INFINITE, 0, 0) == 1,

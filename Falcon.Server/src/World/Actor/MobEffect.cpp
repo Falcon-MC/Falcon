@@ -92,6 +92,8 @@ const char *getMobEffectName(MobEffectId id) {
             return "village_hero";
         case MobEffectId::Darkness:
             return "darkness";
+        case MobEffectId::TrialOmen:
+            return "trial_omen";
         case MobEffectId::Weaving:
             return "weaving";
         case MobEffectId::RaidOmen:

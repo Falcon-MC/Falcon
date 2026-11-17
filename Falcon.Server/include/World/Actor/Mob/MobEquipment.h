@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,11 @@ public:
     int getArmorCount() const;
 
     void equipFromTable(ServerNetworkHandler &owner, const MobActor &mob);
+
+    bool equipFromTable(ServerNetworkHandler &owner, const MobActor &mob, const std::string &path);
+    void setDropChanceOverride(float chance) {
+        mDropChanceOverride = chance;
+    }
 
     void sendTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const;
 
@@ -90,6 +96,7 @@ private:
 
     static void _damageForDrop(ItemStack &item);
 
+    std::optional<float> mDropChanceOverride;
     std::array<ItemStack, SLOT_COUNT> mSlots;
     std::vector<ItemStack> mInventory;
 };

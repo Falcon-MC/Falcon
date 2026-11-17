@@ -420,6 +420,8 @@ public:
 
     static Actor *findActor(ServerNetworkHandler &owner, uint64_t runtimeId);
 
+    void useSpawnEquipment(ServerNetworkHandler &owner, const std::string &table, float dropChance);
+
     MobEquipment &getEquipment() {
         return mEquipment;
     }

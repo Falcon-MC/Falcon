@@ -59,9 +59,13 @@ void AbstractSlimeActor::setSizeVariant(int variant) {
     mSizeVariant = isValidSize(variant) ? variant : LARGE_SIZE;
 }
 
-ActorSize AbstractSlimeActor::getSize() const {
-    const float extent = SIZE_SCALE * (float) mSizeVariant;
+ActorSize AbstractSlimeActor::getSizeForVariant(int variant) {
+    const float extent = SIZE_SCALE * (float) (isValidSize(variant) ? variant : LARGE_SIZE);
     return ActorSize{extent, extent};
+}
+
+ActorSize AbstractSlimeActor::getSize() const {
+    return getSizeForVariant(mSizeVariant);
 }
 
 float AbstractSlimeActor::getDefaultMaxHealth() const {
