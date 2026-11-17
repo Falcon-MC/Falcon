@@ -312,3 +312,13 @@ jobs:
           gh api "repos/Falcon-MC/falcon-mc.github.io/dispatches" \
             -f event_type=falcon-release \
             -f "client_payload[tag]=${{ needs.prepare.outputs.tag }}"
+
+  verify-eggs:
+    needs: [prepare, release]
+    if: needs.prepare.outputs.draft != 'true'
+    uses: Falcon-MC/Pterodactyl/.github/workflows/notify-release.yml@main
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+    secrets:
+      AUTOMATION_APP_ID: ${{ secrets.AUTOMATION_APP_ID }}
+      AUTOMATION_APP_PRIVATE_KEY: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
