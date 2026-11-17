@@ -1,6 +1,9 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 
+#include "Network/ServerNetworkHandler.h"
+
 #include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/VaultBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
@@ -274,44 +277,45 @@ void BlockActorStore::loadChunk(int32_t chunkX, int32_t chunkZ, const std::vecto
 }
 
 void BlockActorStore::addLoaded(const std::vector<Tag> &blockActors, const PacketCodecContext &context) {
-    for (const Tag &data: blockActors) {
-        if (data.getType() != Tag::Type::Compound)
-            continue;
+    for (const Tag &data: blockActors)
+        _loadOne(data, &context);
+}
 
-        const Vector3i position = positionOf(data);
-        std::unique_ptr<BlockActor> blockActor = create(data.getString("id"));
-        if (blockActor == nullptr) {
-            // no class here, or its plugin is gone: the game, or that plugin, still owns this data
-            const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
-            const int64_t key = packPosition(position);
-            if (mBlockActors.count(key) != 0)
-                continue;
-            mUnknownBlockActors[key] = UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
-            _index(key);
-            continue;
-        }
+void BlockActorStore::_loadOne(const Tag &data, const PacketCodecContext *context) {
+    if (!data.isCompound())
+        return;
 
-        blockActor->setPosition(position);
-        blockActor->loadNbt(data, context);
-        blockActor->loadLootTable(data);
-        blockActor->loadDynamicProperties(data);
-        blockActor->loadEntityStorage(data);
-        insert(std::move(blockActor));
+    const Vector3i position = positionOf(data);
+    std::unique_ptr<BlockActor> actor = context == nullptr ? nullptr : create(data.getString("id"));
+    if (actor == nullptr) {
+        // preserve data even when the actor type or codec context is unavailable
+        const int64_t key = packPosition(position);
+        if (mBlockActors.count(key) != 0)
+            return;
+        const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
+        mUnknownBlockActors[key] = UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
+        _index(key);
+        return;
     }
+
+    actor->setPosition(position);
+    actor->loadNbt(data, *context);
+    actor->loadLootTable(data);
+    actor->loadDynamicProperties(data);
+    actor->loadEntityStorage(data);
+    insert(std::move(actor));
 }
 
 void BlockActorStore::keepGenerated(const Tag &data) {
-    const Vector3i position = positionOf(data);
-    const int64_t key = packPosition(position);
-    if (mBlockActors.count(key) != 0)
+    if (!data.isCompound() || find(positionOf(data)) != nullptr)
         return;
 
-    const BlockState *block = mLevel->peekBlockPtr(position.x, position.y, position.z);
-    mUnknownBlockActors[key] = UnknownBlockActor{data, block != nullptr ? block->mName : std::string()};
-    _index(key);
+    const ServerNetworkHandler *owner = mLevel->getOwner();
+    _loadOne(data, owner == nullptr ? nullptr : &owner->getCodecContext());
 }
 
 FALCON_REGISTER_BLOCK_ACTOR(ChestBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(VaultBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FurnaceBlockActor);
 
 namespace {

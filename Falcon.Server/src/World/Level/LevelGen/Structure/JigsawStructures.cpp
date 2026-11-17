@@ -239,6 +239,7 @@ namespace {
             actor = TrialSpawnerBlockActor::createTrialData(data);
             actor.putString("id", TrialSpawnerBlockActor::BLOCK_ACTOR_ID);
         } else if (block == "minecraft:vault") {
+            // the templates use a different format for vault keys and loot paths
             const Tag *config = data.get("config");
             const Tag *key = config != nullptr ? config->get("key_item") : nullptr;
             Tag item = Tag::ofCompound();
@@ -252,10 +253,12 @@ namespace {
             settings.put("key_item", item);
             const std::string table = config != nullptr ? config->getString("loot_table", std::string()) : std::string();
             settings.putString("loot_table", lootPath(table));
-            settings.putString("override_loot_table_to_display", "");
+            const std::string display =
+                    config != nullptr ? config->getString("override_loot_table_to_display") : std::string();
+            settings.putString("override_loot_table_to_display", display.empty() ? display : lootPath(display));
             Tag state = Tag::ofCompound();
             state.put("items_to_eject", Tag::ofList(Tag::Type::Compound, {}));
-            state.put("rewarded_players", Tag::ofList(Tag::Type::Compound, {}));
+            state.put("rewarded_players", Tag::ofList(Tag::Type::Long));
             state.putLong("state_updating_resumes_at", 0);
             actor.putString("id", "Vault");
             actor.put("config", settings);

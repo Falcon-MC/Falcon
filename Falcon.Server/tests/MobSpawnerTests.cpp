@@ -1,3 +1,4 @@
+#include "Falcon/Plugin/PluginRegistrationScope.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "Server/PropertiesSettings.h"
@@ -10,8 +11,11 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Item/ItemClassRegistry.h"
 #include "World/Item/VanillaItems.h"
+#include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
+#include "World/Level/Block/Actor/VaultBlockActor.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
 #include "World/Level/Block/BlockState.h"
@@ -237,6 +241,125 @@ namespace {
         arena.mLevel->getBlockActors().tick(arena.mOwner);
         require(arena.mOwner.getActors().empty() && spawner.getDelay() == 0, "an empty spawner did something");
         arena.mOwner.erasePlayer(player.getNetworkIdentifier());
+    }
+
+    class PluginVault final : public BlockActor {
+    public:
+        const char *getBlockActorId() const override {
+            return VaultBlockActor::BLOCK_ACTOR_ID;
+        }
+
+        Tag saveNbt() const override {
+            return mData;
+        }
+
+        void loadNbt(const Tag &data, const PacketCodecContext &) override {
+            mData = data;
+        }
+
+    private:
+        Tag mData;
+    };
+
+    void generatedVaultUsesPluginFactory(Arena &arena) {
+        const Vector3i pos(33, 80, 32);
+        arena.mLevel->setBlockState(pos.x, pos.y, pos.z, BlockState("minecraft:vault"));
+        Tag data = Tag::ofCompound();
+        data.putString("id", VaultBlockActor::BLOCK_ACTOR_ID);
+        data.putInt("x", pos.x);
+        data.putInt("y", pos.y);
+        data.putInt("z", pos.z);
+        data.putInt("plugin_data", 42);
+
+        int pluginOwner = 0;
+        {
+            const PluginRegistrationScope scope(&pluginOwner, true);
+            BlockActorClassRegistry::Registration(VaultBlockActor::BLOCK_ACTOR_ID,
+                                                  []() -> std::unique_ptr<BlockActor> {
+                                                      return std::make_unique<PluginVault>();
+                                                  });
+        }
+        auto &actors = arena.mLevel->getBlockActors();
+        actors.keepGenerated(data);
+        BlockActorClassRegistry::remove(&pluginOwner);
+
+        auto *vault = actors.find<PluginVault>(pos);
+        require(vault != nullptr, "generated vault ignored the plugin factory");
+        require(vault->saveNbt().getInt("plugin_data") == 42, "generated vault did not load the plugin data");
+        actors.remove(pos);
+    }
+
+    void vaultCycle(Arena &arena, bool ominous) {
+        arena.mOwner.getItemEntities().clear();
+        const Vector3i pos(32, 80, 32);
+        Tag states = Tag::ofCompound();
+        states.putString("vault_state", "inactive");
+        states.putByte("ominous", ominous ? 1 : 0);
+        const BlockState placed("minecraft:vault", states);
+        arena.mLevel->setBlockState(pos.x, pos.y, pos.z, placed);
+
+        Tag data = Tag::ofCompound();
+        data.putString("id", "Vault");
+        data.putInt("x", pos.x);
+        data.putInt("y", pos.y);
+        data.putInt("z", pos.z);
+        auto &actors = arena.mLevel->getBlockActors();
+        actors.keepGenerated(data);
+        auto *vault = actors.find<VaultBlockActor>(pos);
+        require(vault != nullptr, "generated vault did not get its block actor");
+
+        ServerPlayer &player = arena.player(9600, Vector3f(34.5f, 80.0f, 32.5f));
+        player.setUuid("vault-test-player");
+        player.setUniqueId(9600);
+        const auto *block = VanillaBlocks::fromState(placed);
+        const char *correct = ominous ? "minecraft:ominous_trial_key" : "minecraft:trial_key";
+        const char *incorrect = ominous ? "minecraft:trial_key" : "minecraft:ominous_trial_key";
+
+        require(vault->tick(arena.mOwner), "vault removed itself");
+        const Tag preview = vault->getSpawnCompound();
+        require(preview.contains("display_item", Tag::Type::Compound), "vault did not display loot");
+        const Tag *connected = preview.get("connected_players");
+        require(connected != nullptr && connected->getList().size() == 1
+                        && connected->getList().front().asLong() == 9600,
+                "vault did not send the connected player");
+
+        player.getInventory().setItemInHand(arena.mOwner.createItemStack(incorrect, 2));
+        require(block != nullptr && block->onInteract(arena.mOwner, player, pos, placed), "vault interaction fell through");
+        require(player.getInventory().getItemInHand().mCount == 2, "vault consumed the wrong key");
+        player.getInventory().setItemInHand(arena.mOwner.createItemStack(correct, 2));
+        require(block->onInteract(arena.mOwner, player, pos, placed), "vault did not handle the right key");
+        require(player.getInventory().getItemInHand().mCount == 1, "vault did not consume the right key");
+
+        const auto stored = actors.saveChunk(pos.x >> 4, pos.z >> 4);
+        actors.remove(pos);
+        actors.addLoaded(stored, arena.mOwner.getCodecContext());
+        vault = actors.find<VaultBlockActor>(pos);
+        require(vault != nullptr, "vault did not reload");
+        for (int i = 0; i < 33; ++i)
+            require(vault->tick(arena.mOwner), "vault stopped ticking");
+        require(arena.mOwner.getItemEntities().empty(), "vault ejected before opening the shutter");
+        require(vault->tick(arena.mOwner) && arena.mOwner.getItemEntities().size() == 1,
+                "vault did not eject its first item after opening the shutter");
+        for (int i = 0; i < 400; ++i)
+            require(vault->tick(arena.mOwner), "vault stopped ticking");
+        require(!arena.mOwner.getItemEntities().empty(), "vault lost its queued loot on reload");
+        const size_t count = arena.mOwner.getItemEntities().size();
+        ServerPlayer &visitor = arena.player(9601, Vector3f(34.5f, 80.0f, 32.5f));
+        visitor.setUuid("vault-second-player");
+        visitor.setUniqueId(9601);
+        visitor.getInventory().setItemInHand(arena.mOwner.createItemStack(correct, 1));
+        for (int i = 0; i < 20; ++i)
+            require(vault->tick(arena.mOwner), "vault did not activate for the next player");
+
+        player.setUniqueId(9610);
+        require(!vault->unlock(arena.mOwner, player), "vault rewarded the same account twice");
+        require(player.getInventory().getItemInHand().mCount == 1, "vault consumed a repeat player's key");
+        require(arena.mOwner.getItemEntities().size() == count, "vault duplicated loot");
+        arena.mOwner.erasePlayer(player.getNetworkIdentifier());
+        require(vault->unlock(arena.mOwner, visitor), "vault did not accept a different player");
+        require(visitor.getInventory().getItemInHand().isAir(), "vault did not consume the second player's key");
+        arena.mOwner.erasePlayer(visitor.getNetworkIdentifier());
+        actors.remove(pos);
     }
 
     void trialSpawnerData(Arena &arena) {
@@ -667,6 +790,10 @@ int main() {
         needsSpace(arena);
         emptySpawner(arena);
         spawnEgg(arena);
+        arena.mLevel->setOwner(&arena.mOwner);
+        generatedVaultUsesPluginFactory(arena);
+        vaultCycle(arena, false);
+        vaultCycle(arena, true);
         trialSpawnerData(arena);
         trialSpawnerCycle(arena, false, 36000);
         trialSpawnerCycle(arena, true, 36000);
