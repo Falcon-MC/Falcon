@@ -25,7 +25,6 @@ namespace {
     const float MINIMUM_SPEED = 0.13f;
     const float MINIMUM_LUNGE_FOOD = 6.0f;
     const float BASE_LUNGE_EXHAUST = 4.0f;
-    const int32_t STAB_COOLDOWN_TICKS = 20;
     const int32_t SWEEP_INTERVAL_TICKS = 5;
     const float MAX_STAB_DISTANCE = 5.0f;
     const float MINIMUM_AIM_DOT = 0.866f;
@@ -272,7 +271,7 @@ void SpearItem::stab(ServerNetworkHandler &owner, ServerPlayer &player, const It
     if (player.hasItemCooldown(item, owner.getCurrentTick()))
         return;
 
-    player.startItemCooldown(item, owner.getCurrentTick(), STAB_COOLDOWN_TICKS);
+    player.startItemCooldown(item, owner.getCurrentTick());
     applyLunge(owner, player, item);
 
     Level &level = owner.getLevelFor(player);
