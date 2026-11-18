@@ -9,9 +9,6 @@ namespace {
     const char *TAG_HAS_BOOK = "hasBook";
     const char *TAG_BOOK = "book";
     const char *TAG_FACING = "facing";
-    const char *TAG_RECORD_ITEM = "RecordItem";
-    const char *TAG_FINISHED_RECORDING = "FinishedRecording";
-    const char *TAG_TICKS_PLAYING = "TicksPlaying";
     const char *TAG_DISABLED_SLOTS = "disabled_slots";
     const char *TAG_CRAFTING_TICKS = "crafting_ticks_remaining";
     const char *STATE_CRAFTING = "crafting";
@@ -81,34 +78,6 @@ ItemStack LecternBlockActor::takeBook() {
     mPage = 0;
     mTotalPages = 0;
     return book;
-}
-
-// the record alone goes to disk; TicksPlaying and FinishedRecording ride the update packet only
-Tag JukeboxBlockActor::saveNbt() const {
-    Tag data = Tag::ofCompound();
-    const ItemStack &record = mInventory.getContainerItem(0);
-    if (!record.isAir() && record.mCount > 0)
-        data.put(TAG_RECORD_ITEM, ItemStackNbt::write(record));
-    return data;
-}
-
-void JukeboxBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    mFinishedRecording = true;
-    mTicksPlaying = 0;
-    mInventory.clear();
-    if (const Tag *record = data.get(TAG_RECORD_ITEM))
-        mInventory.setContainerItem(0, ItemStackNbt::read(*record, context));
-}
-
-// the client reads both back from the update packet to start or stop the disc
-Tag JukeboxBlockActor::getSpawnCompound() const {
-    Tag data = BlockActor::getSpawnCompound();
-    data.putByte(TAG_FINISHED_RECORDING, mFinishedRecording ? 1 : 0);
-    data.putInt(TAG_TICKS_PLAYING, mTicksPlaying);
-    const ItemStack &record = mInventory.getContainerItem(0);
-    if (!record.isAir() && record.mCount > 0)
-        data.put(TAG_RECORD_ITEM, ItemStackNbt::write(record));
-    return data;
 }
 
 Tag CrafterBlockActor::saveNbt() const {
