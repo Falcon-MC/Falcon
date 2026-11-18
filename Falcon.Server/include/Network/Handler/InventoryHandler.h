@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Protocol/Types/HandSlot.h"
 
 #include <cstdint>
 
@@ -14,6 +15,27 @@ class InventoryTransactionPacket;
 class ContainerClosePacket;
 class CraftingEventPacket;
 class MobArmorEquipmentPacket;
+
+// an item use from the offhand: the held item is the offhand until the scope ends, then the slot is synced
+class ActiveHandScope {
+public:
+    ActiveHandScope(ServerNetworkHandler &owner, ServerPlayer &player, HandSlot hand, bool sync = true);
+
+    ~ActiveHandScope();
+
+    void syncOnExit() {
+        mSync = true;
+    }
+
+    ActiveHandScope(const ActiveHandScope &) = delete;
+    ActiveHandScope &operator=(const ActiveHandScope &) = delete;
+
+private:
+    ServerNetworkHandler &mOwner;
+    ServerPlayer &mPlayer;
+    bool mOffhand;
+    bool mSync;
+};
 
 class InventoryHandler {
 public:
@@ -33,6 +55,8 @@ public:
     static void sendOffhandContent(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    static void swapOffhand(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player, const MobEquipmentPacket &packet);
 

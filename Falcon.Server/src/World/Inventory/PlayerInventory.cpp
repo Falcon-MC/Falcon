@@ -213,6 +213,12 @@ void PlayerInventory::setOffhand(ItemStack item) {
     mOffhand = std::move(item);
 }
 
+void PlayerInventory::swapOffhand() {
+    if (mSelectedSlot < 0 || mSelectedSlot >= CONTAINER_SIZE)
+        return;
+    std::swap(mItems[(size_t) mSelectedSlot], mOffhand);
+}
+
 void PlayerInventory::setBodyArmor(ItemStack item) {
     assignNetId(item);
     mBodyArmor = std::move(item);

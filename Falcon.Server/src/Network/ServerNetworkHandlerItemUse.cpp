@@ -152,7 +152,10 @@ bool ServerNetworkHandler::_keepItemUse(ServerPlayer &player) {
     const PlayerInventory &inventory = player.getInventory();
     const ItemStack &held = inventory.getItemInHand();
     const ItemStack used = player.getItemUseItem();
-    if (inventory.getSelectedSlot() == player.getItemUseSlot() && !held.isAir() && held.mDefinition == used.mDefinition)
+    const bool sameSource = player.isItemUseOffhand() ? inventory.isOffhandActive()
+                                                      : !inventory.isOffhandActive()
+                                                                && inventory.getSelectedSlot() == player.getItemUseSlot();
+    if (sameSource && !held.isAir() && held.mDefinition == used.mDefinition)
         return true;
 
     player.getFlags().set(ActorFlag::UsingItem, false);
@@ -163,7 +166,11 @@ bool ServerNetworkHandler::_keepItemUse(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
-    if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem) || !_keepItemUse(player))
+    if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
+        return;
+    // the use goes on with the hand that started it; the offhand slot syncs only once it is consumed
+    ActiveHandScope hand(*this, player, player.isItemUseOffhand() ? HandSlot::OffHand : HandSlot::MainHand, false);
+    if (!_keepItemUse(player))
         return;
 
     const int64_t itemUseTicks = mCurrentTick - player.getItemUseStartTick();
@@ -171,6 +178,7 @@ void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
     const bool consumable = isConsumable(item);
 
     if (consumable && itemUseTicks >= useDurationTicksFor(item)) {
+        hand.syncOnExit();
         _consumeHeldItem(player);
         return;
     }
@@ -192,7 +200,10 @@ void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId) {
-    if (!player.getFlags().get(ActorFlag::UsingItem) || !_keepItemUse(player))
+    if (!player.getFlags().get(ActorFlag::UsingItem))
+        return;
+    const ActiveHandScope hand(*this, player, player.isItemUseOffhand() ? HandSlot::OffHand : HandSlot::MainHand);
+    if (!_keepItemUse(player))
         return;
 
     const ItemStack &heldItem = player.getInventory().getItemInHand();
@@ -319,7 +330,8 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (packUse == PackShooter::Use::Drawing) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
-            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
+            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem,
+                                   player.getInventory().isOffhandActive());
             _sendEntityData(player);
             mScriptEngine.onItemStartUse(player, heldItem, drawDuration);
             return;
@@ -338,7 +350,8 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
             && itemType->onStartUsing(*this, player, heldItem)) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
-            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
+            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem,
+                                   player.getInventory().isOffhandActive());
             _sendEntityData(player);
             const int32_t duration = itemType->getUseDuration();
             mScriptEngine.onItemStartUse(player, heldItem,
@@ -379,7 +392,8 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
     player.getFlags().set(ActorFlag::UsingItem, true);
     player.setItemUseStartTick(mCurrentTick);
-    player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
+    player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem,
+                            player.getInventory().isOffhandActive());
     _sendEntityData(player);
 
     if (heldItem.mDefinition != nullptr) {

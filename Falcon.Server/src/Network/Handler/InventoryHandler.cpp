@@ -412,6 +412,34 @@ void InventoryHandler::sendArmorContent(ServerNetworkHandler &owner, ServerPlaye
     owner.sendToPlayerViewers(player, equipment, false);
 }
 
+ActiveHandScope::ActiveHandScope(ServerNetworkHandler &owner, ServerPlayer &player, HandSlot hand, bool sync) :
+    mOwner(owner), mPlayer(player), mOffhand(hand == HandSlot::OffHand), mSync(sync) {
+    if (mOffhand)
+        mPlayer.getInventory().setOffhandActive(true);
+}
+
+ActiveHandScope::~ActiveHandScope() {
+    if (!mOffhand)
+        return;
+    mPlayer.getInventory().setOffhandActive(false);
+    if (!mSync)
+        return;
+    mPlayer.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
+    InventoryHandler::sendOffhandContent(mOwner, mPlayer);
+}
+
+void InventoryHandler::swapOffhand(ServerNetworkHandler &owner, ServerPlayer &player) {
+    if (!player.isSpawned() || player.isDead() || player.isSpectator())
+        return;
+
+    PlayerInventory &inventory = player.getInventory();
+    inventory.swapOffhand();
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
+    sendHeldItem(owner, player);
+    sendOffhandContent(owner, player);
+}
+
 void InventoryHandler::sendOffhandContent(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack &offhand = player.getInventory().getOffhand();
 
@@ -858,6 +886,7 @@ bool InventoryHandler::interactWithEntity(ServerNetworkHandler &owner, ServerPla
 
 void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlayer &player,
                                          const InventoryTransactionPacket &packet) {
+    const ActiveHandScope hand(owner, player, packet.mHand);
     if (packet.mTransactionType == InventoryTransactionType::ItemUseOnEntity) {
         if (packet.mHotbarSlot != player.getInventory().getSelectedSlot()) {
             owner._sendInventory(player);
@@ -889,6 +918,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
             transaction.mClientInteractPrediction = packet.mClientInteractPrediction;
             transaction.mTriggerType = packet.mTriggerType;
             transaction.mClientCooldownState = packet.mClientCooldownState;
+            transaction.mHand = packet.mHand;
             BlockActionHandler::placeBlock(owner, player, transaction);
         } else if (packet.mActionType == 1) {
             owner._useHeldItem(player);

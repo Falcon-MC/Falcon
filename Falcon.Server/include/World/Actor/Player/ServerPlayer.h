@@ -779,10 +779,15 @@ public:
         mItemUseStartTick = tick;
     }
 
-    // the slot and item a use started with
-    void setItemUseSource(int slot, const ItemStack &item) {
+    // the slot, hand and item a use started with
+    void setItemUseSource(int slot, const ItemStack &item, bool offhand) {
         mItemUseSlot = slot;
         mItemUseItem = item;
+        mItemUseOffhand = offhand;
+    }
+
+    bool isItemUseOffhand() const {
+        return mItemUseOffhand;
     }
 
     int getItemUseSlot() const {
@@ -1262,6 +1267,7 @@ private:
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
     int mItemUseSlot = -1;
+    bool mItemUseOffhand = false;
     ItemStack mItemUseItem;
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;

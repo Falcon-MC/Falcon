@@ -19,6 +19,7 @@
 #include "World/Item/ItemEnchantments.h"
 #include "Network/Handler/BadPacketHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginEvent.h"
@@ -536,6 +537,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         }
     }
     if (packet.mHasItemUseTransaction) {
+        const ActiveHandScope hand(owner, player, packet.mItemUseTransaction.mHand);
         if (packet.mItemUseTransaction.mActionType == 0)
             BlockActionHandler::placeBlock(owner, player, packet.mItemUseTransaction);
         else if (transactionBreakPending)
@@ -636,8 +638,17 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         }
     }
 
-    if (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1)
+    if (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1) {
+        const ActiveHandScope hand(owner, player, packet.mItemUseTransaction.mHand);
         owner._useHeldItem(player);
+    }
+
+    // the input flag and the player action carry the same key press: one swap per input
+    bool swapOffhand = packet.hasInputFlag((int32_t) PlayerAuthInputData::SwapOffhand);
+    for (const PlayerBlockActionData &action: packet.mPlayerActions)
+        swapOffhand = swapOffhand || action.mAction == PlayerActionType::SwapOffhand;
+    if (swapOffhand)
+        InventoryHandler::swapOffhand(owner, player);
 
     (void) id;
 }

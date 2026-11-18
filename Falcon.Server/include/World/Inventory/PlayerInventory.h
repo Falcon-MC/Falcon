@@ -150,13 +150,27 @@ public:
 
     void setSelectedSlot(int slot);
 
+    // the hand an item use names: the held item reads and writes the offhand while it is active
     const ItemStack &getItemInHand() const {
-        return getItem(mSelectedSlot);
+        return mOffhandActive ? mOffhand : getItem(mSelectedSlot);
     }
 
     void setItemInHand(ItemStack item) {
-        setItem(mSelectedSlot, std::move(item));
+        if (mOffhandActive)
+            setOffhand(std::move(item));
+        else
+            setItem(mSelectedSlot, std::move(item));
     }
+
+    bool isOffhandActive() const {
+        return mOffhandActive;
+    }
+
+    void setOffhandActive(bool active) {
+        mOffhandActive = active;
+    }
+
+    void swapOffhand();
 
     ItemStack *resolveSlot(ContainerSlotType container, int slot);
 
@@ -196,4 +210,5 @@ private:
     ItemStack mStonecutterInput;
     int mSelectedSlot;
     int32_t mNextNetId;
+    bool mOffhandActive = false;
 };
