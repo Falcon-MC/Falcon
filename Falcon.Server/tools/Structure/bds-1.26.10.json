@@ -11825,6 +11825,16 @@
       "old": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftStructure.cpp",
       "path": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftStructure.cpp",
       "sha256": "ba52b91aa8e6b90fe9761df745b72eb1fbb789b79c880a613f73665bd11e81e6"
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/Block/SmithingTableBlock.h",
+      "path": "Falcon.Server/include/World/Level/Block/SmithingTableBlock.h",
+      "sha256": "cbfbfdd31bd4dadfaf48ca250dc487b6e8b49077453aee683567077bec9b8c3d"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/Block/SmithingTableBlock.cpp",
+      "path": "Falcon.Server/src/World/Level/Block/SmithingTableBlock.cpp",
+      "sha256": "cb433aa8e7458681adbe1b5eef7db0cc8f0196d066ce910ff718a3cc5ba4cb11"
     }
   ]
 }

@@ -1043,11 +1043,31 @@ bool InventoryManager::onClientOpenCartography(const Vector3i &position) {
     return _openWorkbench(ContainerType::Cartography, position);
 }
 
+bool InventoryManager::onClientOpenSmithing(const Vector3i &position) {
+    return _openWorkbench(ContainerType::SmithingTable, position);
+}
+
+bool InventoryManager::isSmithingOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::SmithingTable;
+}
+
+void InventoryManager::syncSmithingInputs() {
+    if (mPlayer == nullptr || mSender == nullptr || !isSmithingOpen())
+        return;
+    for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
+        InventorySlotPacket packet;
+        packet.mContainerId = CONTAINER_ID_UI;
+        packet.mSlot = PlayerInventory::SMITHING_FIRST_SLOT + index;
+        packet.mItem = mPlayer->getInventory().getSmithingItem(index);
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+    }
+}
+
 bool InventoryManager::onClientOpenStonecutter(const Vector3i &position) {
     return _openWorkbench(ContainerType::Stonecutter, position);
 }
 
-// the anvil, the cartography table and the stonecutter share a window: none keeps its slots once closed
+// temporary workbenches share one window and return their inputs when closed
 bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &position) {
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
@@ -1133,6 +1153,16 @@ void InventoryManager::_closeAnvil() {
 
     mClientMapLock = CartographyLock();
     PlayerInventory &inventory = mPlayer->getInventory();
+    if (mAnvilWindowType == ContainerType::SmithingTable) {
+        for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
+            ItemStack item = inventory.getSmithingItem(index);
+            if (item.isAir())
+                continue;
+            inventory.setSmithingItem(index, ItemStack::air());
+            _returnToInventory(std::move(item));
+        }
+        return;
+    }
     const bool cartography = mAnvilWindowType == ContainerType::Cartography;
     const bool stonecutter = mAnvilWindowType == ContainerType::Stonecutter;
     const int size = stonecutter ? 1 : (cartography ? PlayerInventory::CARTOGRAPHY_SIZE : PlayerInventory::ANVIL_SIZE);

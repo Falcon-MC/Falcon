@@ -4,7 +4,9 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/ProtocolData.h"
+#include "Protocol/Types/CraftingRecipeEntry.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Item/ItemNetworkIdTable.h"
 
 #include <algorithm>
 #include <cctype>
@@ -35,6 +37,7 @@ namespace {
         std::vector<FurnaceRecipeData> mFurnaceRecipes;
         std::vector<FurnaceRecipeData> mCampfireRecipes;
         std::vector<FurnaceRecipeData> mSoulCampfireRecipes;
+        std::vector<SmithingRecipeEntry> mSmithing[2];
         std::vector<StonecutterRecipeData> mStonecutterRecipes;
         std::vector<BrewingMixData> mPotionMixes;
         std::vector<BrewingMixData> mContainerMixes;
@@ -404,6 +407,22 @@ namespace {
         return expected < 0 || expected == actual;
     }
 
+    RecipeIngredientEntry smithingIngredient(const json::Value *ingredient) {
+        RecipeIngredientEntry value;
+        if (ingredient == nullptr)
+            return value;
+        if (const auto *name = ingredient->get("itemId")) {
+            value.mItemId = name->string();
+            value.mAuxValue = 0x7fff;
+            value.mHasItem = !value.mItemId.empty();
+        } else if (const auto *tag = ingredient->get("itemTag")) {
+            value.mType = RecipeIngredientType::ItemTag;
+            value.mItemTag = tag->string();
+            value.mHasItem = !value.mItemTag.empty();
+        }
+        return value;
+    }
+
     RecipeStorage &getStorage() {
         static RecipeStorage storage;
         if (storage.mLoaded)
@@ -441,6 +460,31 @@ namespace {
                 continue;
             }
 
+            if (blockName == "smithing_table") {
+                const int kind = type->integer(-1);
+                const auto *id = recipe->get("id");
+                if ((kind != 6 && kind != 7) || id == nullptr)
+                    continue;
+                SmithingRecipeEntry entry;
+                entry.mRecipeId = id->string();
+                entry.mBlockName = blockName;
+                entry.mTemplate = smithingIngredient(recipe->get("template"));
+                entry.mInput = smithingIngredient(recipe->get("base"));
+                entry.mAddition = smithingIngredient(recipe->get("addition"));
+                if (!entry.mTemplate.mHasItem || !entry.mInput.mHasItem || !entry.mAddition.mHasItem)
+                    continue;
+                if (kind == 6) {
+                    const auto *result = recipe->get("result");
+                    const auto *name = result == nullptr ? nullptr : result->get("id");
+                    const auto *network = name == nullptr ? nullptr : ItemNetworkIdTable::find(name->string());
+                    if (network == nullptr)
+                        continue;
+                    entry.mOutput.mRuntimeId = network->mNetworkId;
+                }
+                storage.mSmithing[kind - 6].push_back(std::move(entry));
+                continue;
+            }
+
             if (blockName == "stonecutter") {
                 if (type->integer(-1) == 1)
                     loadStonecutterRecipe(storage, *recipe);
@@ -464,6 +508,10 @@ namespace {
         }
         return storage;
     }
+}
+
+const std::vector<SmithingRecipeEntry> &CraftingRecipeTable::getSmithingRecipes(bool trim) {
+    return getStorage().mSmithing[trim ? 1 : 0];
 }
 
 const CraftingRecipeData *CraftingRecipeTable::getRecipes() {

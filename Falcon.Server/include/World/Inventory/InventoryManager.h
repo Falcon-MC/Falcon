@@ -81,6 +81,10 @@ public:
 
     bool isCartographyOpen() const;
 
+    bool onClientOpenSmithing(const Vector3i &position);
+    bool isSmithingOpen() const;
+    void syncSmithingInputs();
+
     bool onClientOpenStonecutter(const Vector3i &position);
 
     bool isStonecutterOpen() const;

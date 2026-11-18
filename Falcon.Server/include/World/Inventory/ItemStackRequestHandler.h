@@ -13,6 +13,7 @@
 #include <vector>
 
 class MerchantOffers;
+class CraftingDataPacket;
 
 // the offer a request traded for and how many times
 struct TradeCraft {
@@ -45,5 +46,6 @@ public:
             const CartographyRecipes::Maps *cartographyMaps = nullptr, CartographyLock *outCartographyLock = nullptr,
             const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes = nullptr,
             ItemStack *outCraftedRecipeItem = nullptr, const MerchantOffers *tradeOffers = nullptr,
-            TradeCraft *outTrade = nullptr);
+            TradeCraft *outTrade = nullptr, const CraftingDataPacket *smithingRecipes = nullptr,
+            int32_t clientProtocol = 0);
 };

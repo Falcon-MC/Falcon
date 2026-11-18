@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+struct SmithingRecipeEntry;
+
 struct CraftingIngredientData {
     const char *mItemId;
     int32_t mAuxValue;
@@ -71,6 +73,8 @@ public:
 
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
+
+    static const std::vector<SmithingRecipeEntry> &getSmithingRecipes(bool trim);
 
     static const StonecutterRecipeData *getStonecutterRecipes();
     static size_t getStonecutterRecipeCount();

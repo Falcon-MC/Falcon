@@ -22,6 +22,7 @@ public:
     static const int CARTOGRAPHY_INPUT = 0;
     static const int CARTOGRAPHY_ADDITIONAL = 1;
     static const int TRADE_SIZE = 2;
+    static const int SMITHING_SIZE = 3;
     static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
     // the body armor is saved right behind the four worn pieces
@@ -35,6 +36,7 @@ public:
     static const int OFFHAND_NETWORK_SLOT = 1;
     static const int CRAFTING_NETWORK_SLOT_FIRST = 28;
     static const int CRAFTING_TABLE_NETWORK_SLOT_FIRST = 32;
+    static const int SMITHING_FIRST_SLOT = 51;
 
     static const int ARMOR_HEAD = 0;
     static const int ARMOR_TORSO = 1;
@@ -116,6 +118,13 @@ public:
 
     void setStonecutterInput(ItemStack item);
 
+    static int smithingIndex(ContainerSlotType container);
+
+    const ItemStack &getSmithingItem(int index) const {
+        return mSmithing[(size_t) index];
+    }
+    void setSmithingItem(int index, ItemStack item);
+
     const ItemStack &getOffhand() const {
         return mOffhand;
     }
@@ -175,6 +184,7 @@ private:
     std::vector<ItemStack> mCrafting;
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
+    std::vector<ItemStack> mSmithing;
     std::vector<ItemStack> mAnvil;
     std::vector<ItemStack> mCartography;
     std::vector<ItemStack> mTrade;
