@@ -50,7 +50,6 @@ namespace {
              false, true},
             {ContainerBlockKind::DecoratedPot, DecoratedPotBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false,
              true},
-            {ContainerBlockKind::Jukebox, JukeboxBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false, true},
             {ContainerBlockKind::Shelf, ShelfBlockActor::BLOCK_ACTOR_ID, ContainerType::None, false, true}};
 
     const ContainerBlockDefinition &definitionOf(ContainerBlockKind kind) {
@@ -119,10 +118,6 @@ namespace {
         }
         if (identifier == "minecraft:decorated_pot") {
             outKind = ContainerBlockKind::DecoratedPot;
-            return true;
-        }
-        if (identifier == "minecraft:jukebox") {
-            outKind = ContainerBlockKind::Jukebox;
             return true;
         }
         if (endsWith(identifier, "_shelf")) {
@@ -211,8 +206,6 @@ std::unique_ptr<BlockActor> ContainerBlock::createBlockActor(ContainerBlockKind 
             return std::unique_ptr<BlockActor>(new ChiseledBookshelfBlockActor());
         case ContainerBlockKind::DecoratedPot:
             return std::unique_ptr<BlockActor>(new DecoratedPotBlockActor());
-        case ContainerBlockKind::Jukebox:
-            return std::unique_ptr<BlockActor>(new JukeboxBlockActor());
         case ContainerBlockKind::Shelf:
             return std::unique_ptr<BlockActor>(new ShelfBlockActor());
     }
