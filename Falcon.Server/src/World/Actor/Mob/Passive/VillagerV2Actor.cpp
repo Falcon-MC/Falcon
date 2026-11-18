@@ -1,6 +1,8 @@
 #include "World/Actor/Mob/Passive/VillagerV2Actor.h"
 
 #include "World/Actor/ActorClassRegistry.h"
+#include "World/Item/Item.h"
+#include "World/Item/VanillaItems.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <string>
@@ -9,22 +11,10 @@ FALCON_REGISTER_ACTOR(VillagerV2Actor, VillagerV2Actor::IDENTIFIER);
 
 namespace {
     const char *const TAG_WILLING = "Willing";
-    const char *const BREAD = "minecraft:bread";
-    const char *const CROPS[] = {"minecraft:carrot", "minecraft:potato", "minecraft:beetroot"};
-    // one stack must hold it: the game never adds two slots up
-    const int BREAD_NEEDED = 3;
-    const int CROPS_NEEDED = 12;
 
-    bool isBread(const ItemStack &item) {
-        return item.mDefinition->getIdentifier() == BREAD;
-    }
-
-    bool isCrop(const ItemStack &item) {
-        for (const char *crop: CROPS) {
-            if (item.mDefinition->getIdentifier() == crop)
-                return true;
-        }
-        return false;
+    int32_t breedingCountOf(const ItemStack &item) {
+        const Item *type = VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
+        return type == nullptr ? 0 : type->getVillagerBreedingCount();
     }
 }
 
@@ -62,7 +52,8 @@ int VillagerV2Actor::findBreedingFoodSlot() const {
         const ItemStack &item = equipment.getInventoryItem(slot);
         if (item.isAir())
             continue;
-        if ((isBread(item) && item.mCount >= BREAD_NEEDED) || (isCrop(item) && item.mCount >= CROPS_NEEDED))
+        const int32_t needed = breedingCountOf(item);
+        if (needed > 0 && item.mCount >= needed)
             return slot;
     }
     return -1;
@@ -75,6 +66,6 @@ void VillagerV2Actor::consumeBreedingFood() {
 
     MobEquipment &equipment = getEquipment();
     ItemStack item = equipment.getInventoryItem(slot);
-    item.mCount -= isBread(item) ? BREAD_NEEDED : CROPS_NEEDED;
+    item.mCount -= breedingCountOf(item);
     equipment.setInventoryItem(slot, item.mCount > 0 ? item : ItemStack::air());
 }

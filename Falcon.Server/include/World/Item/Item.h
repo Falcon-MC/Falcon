@@ -73,6 +73,11 @@ public:
         return false;
     }
 
+    // how many of this item in one stack let a villager breed; 0: not breeding food
+    virtual int32_t getVillagerBreedingCount() const {
+        return 0;
+    }
+
     virtual bool isFertilizer() const {
         return false;
     }
