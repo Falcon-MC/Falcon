@@ -94,6 +94,35 @@ void TerrainBeard::addJunction(int32_t chunkX, int32_t chunkZ, int32_t x, int32_
     mMaxY = std::max(mMaxY, y + 11);
 }
 
+void TerrainBeard::addBuriedBox(int32_t chunkX, int32_t chunkZ, const Box &box) {
+    const int32_t minX = chunkX * 16;
+    const int32_t minZ = chunkZ * 16;
+    if (box.mMaxX < minX - 12 || box.mMinX > minX + 27 || box.mMaxZ < minZ - 12 || box.mMinZ > minZ + 27)
+        return;
+
+    mBuried.push_back(box);
+    mMinY = std::min(mMinY, box.mMinY - 12);
+    mMaxY = std::max(mMaxY, box.mMaxY + 11);
+}
+
+float TerrainBeard::buried(int32_t x, int32_t y, int32_t z) const {
+    float total = 0.0f;
+    for (const Box &box: mBuried) {
+        const int32_t nearestY = std::min(std::max(y, box.mMinY), box.mMaxY);
+        const int32_t dx = std::max(outside(x, box.mMinX, box.mMaxX), 0);
+        const int32_t dz = std::max(outside(z, box.mMinZ, box.mMaxZ), 0);
+        // the height counts half, the length is truncated to a whole block before the six block falloff
+        const int32_t dy = (int32_t) ((float) (y - nearestY) * 0.5f);
+        const int32_t length = (int32_t) std::sqrt((double) (dy * dy + dx * dx + dz * dz));
+        const float distance = (float) ((double) length / 6.0);
+        if (distance <= 0.0f)
+            total += 1.0f;
+        else if (distance <= 1.0f)
+            total += 1.0f - distance;
+    }
+    return total;
+}
+
 double TerrainBeard::compute(int32_t x, int32_t y, int32_t z) const {
     double total = 0.0;
     for (const Piece &piece: mPieces) {
