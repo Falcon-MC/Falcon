@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Structure/StructurePiece.h"
 
 #include <cstdint>
+#include <functional>
 #include <random>
 #include <string>
 
@@ -14,7 +15,9 @@ class LevelChunk;
 // written, as the game clips a piece to the chunk box it post processes
 class StructurePieceWriter {
 public:
-    StructurePieceWriter(Level &level, LevelChunk &chunk, const StructurePiece &piece);
+    using ReplaceBlock = std::function<bool(const BlockState &)>;
+
+    StructurePieceWriter(Level &level, LevelChunk &chunk, const StructurePiece &piece, ReplaceBlock replaceBlock = {});
 
     bool inChunk(int32_t x, int32_t y, int32_t z) const;
 
@@ -43,4 +46,5 @@ private:
     Level &mLevel;
     LevelChunk &mChunk;
     const StructurePiece &mPiece;
+    ReplaceBlock mReplaceBlock;
 };
