@@ -76,6 +76,5 @@ int main() {
         std::fprintf(stderr, "FAILED: %s\n", exception.what());
         return 1;
     }
-    std::printf("kelp tests passed\n");
     return 0;
 }
