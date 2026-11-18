@@ -117,6 +117,24 @@ namespace {
         return Uuid(most, least);
     }
 
+    // what the client's recipe book needs to show the recipe; registered for the unlocking too
+    void addUnlocking(ServerNetworkHandler &owner, CraftingRecipeEntry &entry, const std::string &recipeId,
+                      const RecipeUnlockRequirement *requirement) {
+        owner.getRecipeUnlockIndexMutable().add(recipeId, entry.mRecipeId, entry.mRecipeNetId, requirement);
+        entry.mHasUnlockingRequirement = requirement != nullptr;
+        if (requirement == nullptr)
+            return;
+
+        entry.mUnlockingContext = (int32_t) requirement->mContext;
+        entry.mHasUnlockingIngredients = !requirement->mItems.empty();
+        entry.mUnlockingIngredients.clear();
+        for (RecipeIngredientEntry item: requirement->mItems) {
+            if (item.mType == RecipeIngredientType::Name && item.mAuxValue < 0)
+                item.mAuxValue = 0x7fff;
+            entry.mUnlockingIngredients.push_back(std::move(item));
+        }
+    }
+
     std::string packRecipeId(uint32_t value) {
         std::string result(4, '\0');
         result[0] = (char) (value >> 24);
@@ -996,6 +1014,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         if (entry.mOutputs.empty())
             continue;
 
+        addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                     CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
         if (source.mWidth > 0)
             cached.mShapedRecipes.push_back(entry);
         else
@@ -1046,6 +1066,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         parsedOutput.mBlockRuntimeId = outputBlock == nullptr ? 0 : outputBlock->getRuntimeId();
         entry.mOutputs.push_back(parsedOutput);
 
+        static const RecipeUnlockRequirement ALWAYS{RecipeUnlockRequirement::Context::AlwaysUnlocked, {}};
+        addUnlocking(owner, entry, recipe.mIdentifier, &ALWAYS);
         if (recipe.mShaped)
             cached.mShapedRecipes.push_back(entry);
         else
@@ -1099,6 +1121,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             output.mIsShield = std::string(source.mOutputItemId) == "minecraft:shield";
             entry.mOutputs.push_back(output);
             owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+            addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                         CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
             cached.mShapelessRecipes.push_back(std::move(entry));
         }
     }
@@ -1144,6 +1168,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         entry.mOutputs.push_back(output);
 
         owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+        addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                     CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
         stonecutterIndices[entry.mRecipeNetId] = (uint32_t) index;
         cached.mShapelessRecipes.push_back(std::move(entry));
     }

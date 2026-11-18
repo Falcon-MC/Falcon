@@ -835,6 +835,15 @@ public:
         return mStonecutterRecipeIndices;
     }
 
+    const RecipeUnlockIndex &getRecipeUnlockIndex() {
+        _buildCraftingData();
+        return mRecipeUnlockIndex;
+    }
+
+    RecipeUnlockIndex &getRecipeUnlockIndexMutable() {
+        return mRecipeUnlockIndex;
+    }
+
     // custom recipes absent
     std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() {
         return mVanillaRecipeIds;
@@ -1237,6 +1246,7 @@ private:
     std::vector<ItemStack> mRecipeOutputs;
     std::vector<uint32_t> mRecipeSourceIndices;
     std::unordered_map<int32_t, std::string> mVanillaRecipeIds;
+    RecipeUnlockIndex mRecipeUnlockIndex;
     std::unordered_map<int32_t, uint32_t> mStonecutterRecipeIndices;
     std::vector<int32_t> mCreativeSourceIndices;
     PlayerDataProvider mPlayerData;

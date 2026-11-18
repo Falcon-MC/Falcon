@@ -52,6 +52,7 @@
 #include "Server/Commands/StopCommand.h"
 #include "Server/Commands/StopSoundCommand.h"
 #include "Server/Commands/SummonCommand.h"
+#include "Server/Commands/RecipeCommand.h"
 #include "Server/Commands/TagCommand.h"
 #include "Server/Commands/TickingAreaCommand.h"
 #include "Server/Commands/TeleportCommand.h"
@@ -380,6 +381,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
     mCommands.registerCommand(std::make_shared<TestForBlocksCommand>());
     mCommands.registerCommand(std::make_shared<TagCommand>(*this));
+    mCommands.registerCommand(std::make_shared<RecipeCommand>(*this));
     mCommands.registerCommand(std::make_shared<ScoreboardCommand>(*this));
     mCommands.registerCommand(std::make_shared<TickingAreaCommand>(*this));
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/NBT/Tag.h"
+#include "Protocol/Types/CraftingRecipeEntry.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -64,6 +65,20 @@ struct BrewingMixData {
     int32_t mOutputMeta;
 };
 
+// what puts a recipe in a player's recipe book, as the game's recipe data gives it
+struct RecipeUnlockRequirement {
+    enum class Context : int32_t { None = 0, AlwaysUnlocked = 1, PlayerInWater = 2, PlayerHasManyItems = 3 };
+
+    Context mContext = Context::None;
+    // any one of these, held in the inventory, unlocks it
+    std::vector<RecipeIngredientEntry> mItems;
+
+    // the others have no place in the recipe book
+    bool isUnlockable() const {
+        return mContext != Context::None || !mItems.empty();
+    }
+};
+
 class CraftingRecipeTable {
 public:
     static const CraftingRecipeData *getRecipes();
@@ -90,4 +105,10 @@ public:
 
     // ingredient variants of one recipe share its answer
     static bool isKnownBy(const std::string &recipeId, int32_t protocol);
+
+    // the variants of one recipe share its requirement; null for a recipe without one
+    static const RecipeUnlockRequirement *getUnlockRequirement(const std::string &recipeId);
+
+    // the recipe a variant id belongs to
+    static std::string baseRecipeId(const std::string &recipeId);
 };
