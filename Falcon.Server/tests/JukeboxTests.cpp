@@ -96,6 +96,7 @@ namespace {
                 "the jukebox took the wrong items");
         require(HopperBlockActor::addOne(jukebox, item(server, "minecraft:music_disc_wait")),
                 "a hopper could not put a record in");
+        require(!jukebox.canTakeFromSlot(0), "a hopper could take a record before it played");
         jukebox.tick(server);
         require(jukebox.isPlaying() && !jukebox.canHoldInSlot(0, item(server, "minecraft:music_disc_13")),
                 "a hopper's record did not play or a second one fit");

@@ -99,7 +99,10 @@ void JukeboxBlockActor::setRecord(ItemStack record, bool play) {
     mRecord = std::move(record);
     mTicksPlaying = 0;
     mPlayedTicks = 0;
-    if (play && findSong(mRecord) != nullptr)
+    // the game marks it playing at once: a hopper below cannot take it before it has played
+    const bool plays = play && findSong(mRecord) != nullptr;
+    mFinishedRecording = !plays;
+    if (plays)
         mPending = Pending::Play;
     else
         mPending = wasPlaying ? Pending::Stop : Pending::None;
