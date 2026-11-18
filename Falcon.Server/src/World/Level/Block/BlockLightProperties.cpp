@@ -15,7 +15,8 @@ namespace {
                || identifier == "minecraft:azalea_leaves_flowered";
     }
 
-    int lightFilterOverride(const std::string &identifier) {
+    int lightFilterOverride(const BlockState &state) {
+        const std::string &identifier = state.mName;
         if (BlockIdentifier::equalsAny(identifier,
                                        {"minecraft:water", "minecraft:flowing_water", "minecraft:lava",
                                         "minecraft:flowing_lava", "minecraft:ice", "minecraft:frosted_ice"}))
@@ -27,8 +28,12 @@ namespace {
         if (BlockIdentifier::equalsAny(identifier, {"minecraft:slime", "minecraft:honey_block", "minecraft:barrier"}))
             return 1;
 
+        // lava stops more light than the other contents
         if (identifier == "minecraft:cauldron")
-            return 3;
+            return state.mStates.getString("cauldron_liquid", "water") == "lava"
+                                   && state.mStates.getInt("fill_level", 0) > 0
+                           ? 14
+                           : 3;
 
         if (identifier == "minecraft:daylight_detector" || identifier == "minecraft:daylight_detector_inverted")
             return 0;
@@ -41,7 +46,7 @@ namespace {
         if (data == nullptr)
             return TRANSPARENT_BIT;
 
-        int filter = lightFilterOverride(state.mName);
+        int filter = lightFilterOverride(state);
         if (filter < 0)
             filter = data->mSolid && !data->mTransparent ? FULL_FILTER : 1;
 

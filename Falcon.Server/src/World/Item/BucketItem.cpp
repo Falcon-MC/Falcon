@@ -3,7 +3,6 @@
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockData.h"
-#include "World/Level/Block/CauldronBlock.h"
 #include "World/Level/Block/LavaBlock.h"
 #include "World/Level/Block/LiquidBlock.h"
 #include "World/Level/Block/WaterBlock.h"
@@ -186,31 +185,6 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
     const LiquidBlock clickedLiquid(clickedState);
 
     if (content == Content::Empty) {
-        if (clickedState.mName == "minecraft:cauldron") {
-            const CauldronBlock cauldron(clickedState);
-            if (!cauldron.isFull() || cauldron.getLiquid() == CauldronBlock::Liquid::Empty) {
-                sendBlockState(owner, level, clickedPosition);
-                return false;
-            }
-
-            const Content cauldronContent = cauldron.getLiquid() == CauldronBlock::Liquid::Lava ? Content::Lava
-                                                                                                : Content::Water;
-            const char *filledIdentifier = getFilledIdentifier(cauldronContent);
-            if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
-                sendBlockState(owner, level, clickedPosition);
-                return false;
-            }
-            sendArmSwing(owner, player, clickedPosition);
-            level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z,
-                                cauldron.withFillLevel(cauldron.getLiquid(), 0));
-            sendBlockState(owner, level, clickedPosition);
-            const char *sound = cauldronContent == Content::Water ? WaterBlock(clickedState).getBucketFillSound()
-                                                                  : LavaBlock(clickedState).getBucketFillSound();
-            sendSound(owner, level, clickedPosition, sound);
-            applyResult(owner, player, heldItem, filledIdentifier);
-            return true;
-        }
-
         if (clickedState.mName == "minecraft:powder_snow") {
             if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
                 sendBlockState(owner, level, clickedPosition);
@@ -262,34 +236,6 @@ bool BucketItem::use(ServerNetworkHandler &owner, ServerPlayer &player, const It
                                                             : LavaBlock(source).getBucketFillSound();
         sendSound(owner, level, clickedPosition, sound);
         applyResult(owner, player, heldItem, filledIdentifier);
-        return true;
-    }
-
-    if (clickedState.mName == "minecraft:cauldron") {
-        if (content == Content::PowderSnow) {
-            sendBlockState(owner, level, clickedPosition);
-            return false;
-        }
-        const CauldronBlock cauldron(clickedState);
-        const CauldronBlock::Liquid liquid = content == Content::Lava ? CauldronBlock::Liquid::Lava
-                                                                      : CauldronBlock::Liquid::Water;
-        if (!cauldron.canFill(liquid)) {
-            sendBlockState(owner, level, clickedPosition);
-            return false;
-        }
-
-        if (!PluginEvents::bucket(player, level, clickedPosition, content == Content::Empty, heldItem)) {
-            sendBlockState(owner, level, clickedPosition);
-            return false;
-        }
-        sendArmSwing(owner, player, clickedPosition);
-        const BlockState filledCauldron = cauldron.withFillLevel(liquid, 6);
-        level.setBlockState(clickedPosition.x, clickedPosition.y, clickedPosition.z, filledCauldron);
-        sendBlockUpdate(owner, level, clickedPosition, filledCauldron);
-        const char *sound = content == Content::Water ? WaterBlock(filledCauldron).getBucketEmptySound()
-                                                      : LavaBlock(filledCauldron).getBucketEmptySound();
-        sendSound(owner, level, clickedPosition, sound);
-        applyResult(owner, player, heldItem, "minecraft:bucket");
         return true;
     }
 
