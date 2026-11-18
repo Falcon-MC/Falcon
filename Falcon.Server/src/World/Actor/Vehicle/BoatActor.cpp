@@ -321,6 +321,18 @@ bool BoatActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *
     return true;
 }
 
+void BoatActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
+    if (isDead())
+        return;
+    if (!mExpired) {
+        RideSystem::ejectAll(owner, *this);
+        mLeash.detach(owner, *this, true);
+        if (mChest != nullptr)
+            mChest->dropAll(owner, *this);
+    }
+    ServerActor::kill(owner, source, lootingLevel);
+}
+
 void BoatActor::_damage(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
     if (mExpired)
         return;

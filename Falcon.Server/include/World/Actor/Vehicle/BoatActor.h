@@ -69,6 +69,9 @@ public:
 
     bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) override;
 
+    // /kill and the scripting kill: the chest and the lead still drop
+    void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
+
     bool isExpired() const override {
         return mExpired;
     }
