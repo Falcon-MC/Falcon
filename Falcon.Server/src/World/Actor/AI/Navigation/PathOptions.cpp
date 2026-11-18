@@ -1,6 +1,7 @@
 #include "World/Actor/AI/Navigation/PathOptions.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Level/Storage/BlockStateUpgrades.h"
 #include "Core/Json/Json.h"
 
 namespace {
@@ -21,6 +22,8 @@ namespace {
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
     const char *const FLEE_SUN_BEHAVIOR = "minecraft:behavior.flee_sun";
+    const char *const PREFERRED_PATH_COMPONENT = "minecraft:preferred_path";
+    const int32_t PREFERRED_DEFAULT_FALL = 3;
 
     void readFlag(const json::Value &component, const char *key, bool &flag) {
         const json::Value *value = component.get(key);
@@ -40,6 +43,40 @@ namespace {
 
             const std::string identifier = name->string();
             blocks.push_back(identifier.find(':') == std::string::npos ? "minecraft:" + identifier : identifier);
+        }
+    }
+
+    float numberIn(const json::Value &component, const char *key, float fallback) {
+        const json::Value *value = component.get(key);
+        return value == nullptr ? fallback : (float) value->number(fallback);
+    }
+
+    void readPreferredPath(const json::Value &component, PathOptions &options) {
+        options.mHasPreferredPath = true;
+        options.mDefaultBlockCost = numberIn(component, "default_block_cost", 0.0f);
+        options.mJumpCost = numberIn(component, "jump_cost", 0.0f);
+        options.mMaxFallBlocks = (int32_t) numberIn(component, "max_fall_blocks", (float) PREFERRED_DEFAULT_FALL);
+        const json::Value *sets = component.get("preferred_path_blocks");
+        if (sets == nullptr || !sets->isArray())
+            return;
+
+        for (const std::unique_ptr<json::Value> &set: sets->mArray) {
+            const float cost = numberIn(*set, "cost", 0.0f);
+            const json::Value *blocks = set->get("blocks");
+            if (blocks == nullptr || !blocks->isArray())
+                continue;
+            for (const std::unique_ptr<json::Value> &block: blocks->mArray) {
+                const json::Value *name = block->isString() ? block.get() : block->get("name");
+                if (name == nullptr)
+                    continue;
+                const std::string identifier = name->string();
+                // a block listed twice keeps its first cost
+                options.mBlockCosts.emplace(
+                        BlockStateUpgrades::currentName(identifier.find(':') == std::string::npos
+                                                                ? "minecraft:" + identifier
+                                                                : identifier),
+                        cost);
+            }
         }
     }
 }
@@ -85,6 +122,9 @@ PathOptions PathOptions::read(const MobActor &mob) {
 
     if (mob.getComponent(FLEE_SUN_BEHAVIOR) != nullptr)
         options.mAvoidSun = true;
+
+    if (const json::Value *preferredPath = mob.getComponent(PREFERRED_PATH_COMPONENT))
+        readPreferredPath(*preferredPath, options);
 
     return options;
 }

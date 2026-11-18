@@ -216,6 +216,10 @@ namespace {
         // the second gaussian value, kept for the next call
         const std::mt19937 *mGaussianOwner = nullptr;
         float mGaussian = 0.0f;
+        // the rules of a pass and biome share their molang variables: a scatter leaves variable.origin* at its
+        // input, read by the rules after it
+        bool mSharesOrigin = false;
+        float mOrigin[3] = {0.0f, 0.0f, 0.0f};
     };
     thread_local PlacementContext placementContext;
 
@@ -291,8 +295,19 @@ namespace {
         ScatterVariables(BlockManager &blocks, const int32_t origin[3]) : mBlocks(blocks) {
             for (size_t axis = 0; axis < 3; axis++) {
                 mOrigin[axis] = static_cast<float>(origin[axis]);
+                mOriginVariable[axis] = mOrigin[axis];
                 mWorld[axis] = 0.0f;
             }
+        }
+
+        // the rule's variable.origin*, left by the last scatter
+        static ScatterVariables forRule(BlockManager &blocks, const int32_t origin[3]) {
+            ScatterVariables variables(blocks, origin);
+            if (placementContext.mSharesOrigin) {
+                for (size_t axis = 0; axis < 3; axis++)
+                    variables.mOriginVariable[axis] = placementContext.mOrigin[axis];
+            }
+            return variables;
         }
 
         float variable(const std::string &name) const override {
@@ -300,7 +315,7 @@ namespace {
             static const char *const WORLDS[] = {"worldx", "worldy", "worldz"};
             for (size_t axis = 0; axis < 3; axis++) {
                 if (name == ORIGINS[axis])
-                    return mOrigin[axis];
+                    return mOriginVariable[axis];
                 if (name == WORLDS[axis])
                     return mWorld[axis];
             }
@@ -340,6 +355,7 @@ namespace {
     private:
         BlockManager &mBlocks;
         float mOrigin[3];
+        float mOriginVariable[3];
         float mWorld[3];
     };
 
@@ -2639,6 +2655,10 @@ void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, 
             if (rules == nullptr)
                 continue;
 
+            placementContext.mSharesOrigin = true;
+            placementContext.mOrigin[0] = static_cast<float>(chunk.getX() << 4);
+            placementContext.mOrigin[1] = 0.0f;
+            placementContext.mOrigin[2] = static_cast<float>(chunk.getZ() << 4);
             for (const BiomeFeatureEntry &entry: *rules) {
                 if (entry.mPass != pass)
                     continue;
@@ -2743,7 +2763,7 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
     const uint32_t seed = ruleSeed(decorationSeed, entry.mIdentifier);
     std::mt19937 scatter(seed);
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
-    ScatterVariables variables(blocks, origin);
+    ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
     int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator, percent, iterationsExpression,
                                       variables, scatter);
     if (!coordinatesDraw)
@@ -2761,7 +2781,7 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
     std::mt19937 scatter(seed);
 
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
-    ScatterVariables variables(blocks, origin);
+    ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
     int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator,
                                       FeatureExpression::parse(entry.mChancePercent),
                                       FeatureExpression::parse(entry.mIterations), variables, scatter);
@@ -4225,6 +4245,8 @@ bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefin
     // the iterations, positions and the placed feature all draw from the
     // rule's placement twister
     const int32_t origin[3] = {x, y, z};
+    for (size_t axis = 0; axis < 3; axis++)
+        placementContext.mOrigin[axis] = static_cast<float>(origin[axis]);
     ScatterVariables variables(blocks, origin);
     const int32_t iterations = iterationsOf(scatter.mChanceNumerator, scatter.mChanceDenominator, scatter.mParsedChance,
                                             scatter.mParsedIterations, variables, random);

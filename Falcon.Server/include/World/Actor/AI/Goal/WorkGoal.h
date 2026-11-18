@@ -37,6 +37,12 @@ public:
         return mWorkedTicks;
     }
 
+protected:
+    // each tick at the site: the job sound on its delay
+    virtual void useWorkstation(ServerNetworkHandler &owner, MobActor &mob);
+
+    void playWorkSound(ServerNetworkHandler &owner, MobActor &mob) const;
+
 private:
     bool _isRainingOnSite(ServerNetworkHandler &owner, const MobActor &mob) const;
 

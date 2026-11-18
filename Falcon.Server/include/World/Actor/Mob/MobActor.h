@@ -166,6 +166,11 @@ public:
         return mBehaviorsRemoved;
     }
 
+    // the running goals stop; they may start again on the next tick
+    void stopGoals(ServerNetworkHandler &owner) {
+        mGoalSelector.stopAll(owner, *this);
+    }
+
     MobExplode &getExplode() {
         return mExplode;
     }
@@ -663,6 +668,8 @@ private:
     bool _tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
     bool _tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _trySpawnEggBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
     bool _tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 

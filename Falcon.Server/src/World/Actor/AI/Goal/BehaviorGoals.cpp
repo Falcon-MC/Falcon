@@ -17,6 +17,7 @@
 #include "World/Actor/AI/Goal/EatBlockGoal.h"
 #include "World/Actor/AI/Goal/EquipItemGoal.h"
 #include "World/Actor/AI/Goal/ExploreOutskirtsGoal.h"
+#include "World/Actor/AI/Goal/FertilizeFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/FindMountGoal.h"
 #include "World/Actor/AI/Goal/FleeSunGoal.h"
 #include "World/Actor/AI/Goal/FloatGoal.h"
@@ -27,12 +28,14 @@
 #include "World/Actor/AI/Goal/GoHomeGoal.h"
 #include "World/Actor/AI/Goal/GoalSelector.h"
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
+#include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
 #include "World/Actor/AI/Goal/LeapAtTargetGoal.h"
 #include "World/Actor/AI/Goal/LookAtEntityGoal.h"
 #include "World/Actor/AI/Goal/LookAtPlayerGoal.h"
+#include "World/Actor/AI/Goal/MakeLoveGoal.h"
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 #include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
 #include "World/Actor/AI/Goal/MingleGoal.h"
@@ -59,8 +62,10 @@
 #include "World/Actor/AI/Goal/RandomStrollGoal.h"
 #include "World/Actor/AI/Goal/RandomSwimGoal.h"
 #include "World/Actor/AI/Goal/RangedAttackGoal.h"
+#include "World/Actor/AI/Goal/ReceiveLoveGoal.h"
 #include "World/Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "World/Actor/AI/Goal/SilverfishGoals.h"
+#include "World/Actor/AI/Goal/ShareItemsGoal.h"
 #include "World/Actor/AI/Goal/SitGoal.h"
 #include "World/Actor/AI/Goal/SleepGoal.h"
 #include "World/Actor/AI/Goal/SlimeGoals.h"
@@ -76,8 +81,10 @@
 #include "World/Actor/AI/Goal/TimerFlagGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
+#include "World/Actor/AI/Goal/WorkComposterGoal.h"
 #include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Mob/Passive/VillagerV2Actor.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 
 #include <algorithm>
@@ -217,6 +224,31 @@ namespace {
         const json::Value *value = component.get(key);
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
+
+    // the share_items definition defaults
+    const int32_t SHARE_DEFAULT_MAX_DISTANCE = 1;
+    // the harvest_farm_block definition defaults
+    const float HARVEST_DEFAULT_SPEED = 0.5f;
+    const float HARVEST_DEFAULT_RANGE = 16.0f;
+    const float HARVEST_DEFAULT_HEIGHT = 1.0f;
+    const float HARVEST_DEFAULT_GOAL_RADIUS = 1.5f;
+    const float HARVEST_DEFAULT_SEARCH_SECONDS = 1.0f;
+    const float HARVEST_DEFAULT_COOLDOWN_SECONDS = 8.0f;
+    const float HARVEST_DEFAULT_TASK_SECONDS = 0.5f;
+    // the fertilize_farm_block definition defaults
+    const float FERTILIZE_DEFAULT_SPEED = 0.5f;
+    const float FERTILIZE_DEFAULT_RANGE = 1.0f;
+    const float FERTILIZE_DEFAULT_HEIGHT = 1.0f;
+    const float FERTILIZE_DEFAULT_COUNT = 9.0f;
+    const float FERTILIZE_DEFAULT_GOAL_RADIUS = 1.5f;
+    const float FERTILIZE_DEFAULT_USES = 1.0f;
+    const float FERTILIZE_DEFAULT_COOLDOWN_SECONDS = 8.0f;
+    // the wait after a stuck walk, which no field of the definition sets
+    const int32_t FERTILIZE_GIVE_UP_TICKS = 160;
+    // the work_composter definition defaults
+    const float COMPOSTER_DEFAULT_USE_MIN = 100.0f;
+    const float COMPOSTER_DEFAULT_USE_MAX = 200.0f;
+    const float COMPOSTER_DEFAULT_INTERACTIONS = 1.0f;
 
     // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s
     const int32_t TARGET_SCAN_INTERVAL = 10;
@@ -554,6 +586,24 @@ namespace {
         }
         settings.mMinDurationTicks = secondsToTicks(minimum);
         settings.mMaxDurationTicks = secondsToTicks(maximum);
+        return settings;
+    }
+
+    // the game drops the fraction of a tick: seconds * 20, truncated
+    int32_t secondsAsTicks(const json::Value &component, const char *key, float fallback) {
+        return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+    }
+
+    WorkGoal::Settings workSettings(const MobActor &mob, const json::Value &component) {
+        WorkGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", WORK_DEFAULT_SPEED);
+        settings.mActiveTicks = (int32_t) numberOf(component, "active_time", 0.0f);
+        settings.mCanWorkInRain = isFlagSet(component, "can_work_in_rain");
+        settings.mRainToleranceTicks = (int32_t) numberOf(component, "work_in_rain_tolerance", -1.0f);
+        settings.mCooldownTicks = (int32_t) numberOf(component, "goal_cooldown", 0.0f);
+        settings.mSoundDelayMin = (int32_t) numberOf(component, "sound_delay_min", 0.0f);
+        settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
+        settings.mOnArrival = cloneOf(component.get("on_arrival"));
         return settings;
     }
 
@@ -1126,17 +1176,69 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                 numberOf(component, "max_distance_from_player", TRADE_DEFAULT_MAX_DISTANCE));
     }
 
-    if (behavior == "work") {
-        WorkGoal::Settings settings;
-        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", WORK_DEFAULT_SPEED);
-        settings.mActiveTicks = (int32_t) numberOf(component, "active_time", 0.0f);
-        settings.mCanWorkInRain = isFlagSet(component, "can_work_in_rain");
-        settings.mRainToleranceTicks = (int32_t) numberOf(component, "work_in_rain_tolerance", -1.0f);
-        settings.mCooldownTicks = (int32_t) numberOf(component, "goal_cooldown", 0.0f);
-        settings.mSoundDelayMin = (int32_t) numberOf(component, "sound_delay_min", 0.0f);
-        settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
-        settings.mOnArrival = cloneOf(component.get("on_arrival"));
-        return std::make_unique<WorkGoal>(std::move(settings));
+    if (behavior == "work")
+        return std::make_unique<WorkGoal>(workSettings(mob, component));
+
+    if (behavior == "work_composter") {
+        WorkComposterGoal::Composting composting;
+        composting.mUseBlockMin = (int32_t) numberOf(component, "use_block_min", COMPOSTER_DEFAULT_USE_MIN);
+        composting.mUseBlockMax = (int32_t) numberOf(component, "use_block_max", COMPOSTER_DEFAULT_USE_MAX);
+        composting.mBlockInteractionMax = (int32_t) numberOf(component, "block_interaction_max",
+                                                             COMPOSTER_DEFAULT_INTERACTIONS);
+        const json::Value *canEmpty = component.get("can_empty_composter");
+        composting.mCanEmpty = canEmpty == nullptr || canEmpty->boolean(true);
+        return std::make_unique<WorkComposterGoal>(workSettings(mob, component), composting);
+    }
+
+    // the game refuses these goals on anything but a villager
+    const bool villager = dynamic_cast<const VillagerV2Actor *>(&mob) != nullptr;
+    if (behavior == "make_love")
+        return villager ? std::make_unique<MakeLoveGoal>() : nullptr;
+
+    if (behavior == "receive_love")
+        return villager ? std::make_unique<ReceiveLoveGoal>() : nullptr;
+
+    if (behavior == "share_items") {
+        ShareItemsGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mMaxDistance = (int32_t) numberOf(component, "max_dist", (float) SHARE_DEFAULT_MAX_DISTANCE);
+        const json::Value *types = component.get("entity_types");
+        if (types != nullptr && types->isArray()) {
+            for (const std::unique_ptr<json::Value> &type: types->mArray)
+                settings.mFilters.push_back(cloneOf(type->get("filters")));
+        } else if (types != nullptr) {
+            settings.mFilters.push_back(cloneOf(types->get("filters")));
+        }
+        return std::make_unique<ShareItemsGoal>(std::move(settings));
+    }
+
+    if (behavior == "harvest_farm_block") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", HARVEST_DEFAULT_SPEED);
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", HARVEST_DEFAULT_RANGE);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", HARVEST_DEFAULT_HEIGHT);
+        settings.mSearchCount = (int32_t) numberOf(component, "search_count", 0.0f);
+        settings.mGoalRadius = numberOf(component, "goal_radius", HARVEST_DEFAULT_GOAL_RADIUS);
+        HarvestFarmBlockGoal::Timing timing;
+        timing.mMaxTicksBeforeSearch = secondsAsTicks(component, "max_seconds_before_search",
+                                                      HARVEST_DEFAULT_SEARCH_SECONDS);
+        timing.mSearchCooldownTicks = secondsAsTicks(component, "search_cooldown_max_seconds",
+                                                     HARVEST_DEFAULT_COOLDOWN_SECONDS);
+        timing.mTicksUntilNewTask = secondsAsTicks(component, "seconds_until_new_task", HARVEST_DEFAULT_TASK_SECONDS);
+        return std::make_unique<HarvestFarmBlockGoal>(settings, timing);
+    }
+
+    if (behavior == "fertilize_farm_block") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", FERTILIZE_DEFAULT_SPEED);
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", FERTILIZE_DEFAULT_RANGE);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", FERTILIZE_DEFAULT_HEIGHT);
+        settings.mSearchCount = (int32_t) numberOf(component, "search_count", FERTILIZE_DEFAULT_COUNT);
+        settings.mGoalRadius = numberOf(component, "goal_radius", FERTILIZE_DEFAULT_GOAL_RADIUS);
+        settings.mGiveUpTicks = FERTILIZE_GIVE_UP_TICKS;
+        return std::make_unique<FertilizeFarmBlockGoal>(
+                settings, (int32_t) numberOf(component, "max_fertilizer_usage", FERTILIZE_DEFAULT_USES),
+                secondsAsTicks(component, "search_cooldown_max_seconds", FERTILIZE_DEFAULT_COOLDOWN_SECONDS));
     }
 
     if (behavior == "sleep") {

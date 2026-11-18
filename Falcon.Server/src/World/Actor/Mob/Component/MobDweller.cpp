@@ -15,6 +15,7 @@
 
 namespace {
     const char *const DWELLER_COMPONENT = "minecraft:dweller";
+    const char *const TAG_REWARD_FIRST_FOUNDING = "RewardPlayersOnFirstFounding";
     const float DEFAULT_BOUNDS_TOLERANCE = 10.0f;
     const int32_t MIGRATION_RADIUS = 64;
     const char *const CAN_JOIN_RAID_COMPONENT = "minecraft:can_join_raid";
@@ -134,6 +135,24 @@ void MobDweller::joinVillage(ServerNetworkHandler &owner, const MobActor &mob, V
     village.addDweller(owner, mRole, id);
     mVillage = village.shared_from_this();
     mHasJoinedVillage = true;
+    _onJoined(village);
+}
+
+void MobDweller::saveNbt(const MobActor &mob, Tag &data) const {
+    if (mob.getComponent(DWELLER_COMPONENT) != nullptr)
+        data.putByte(TAG_REWARD_FIRST_FOUNDING, mRewardsFirstFounding ? 1 : 0);
+}
+
+void MobDweller::loadNbt(const Tag &data) {
+    mRewardsFirstFounding = data.getByte(TAG_REWARD_FIRST_FOUNDING, mRewardsFirstFounding ? 1 : 0) != 0;
+}
+
+void MobDweller::_onJoined(Village &village) {
+    if (mRole != DwellerRole::Inhabitant || !mRewardsFirstFounding)
+        return;
+
+    mRewardsFirstFounding = false;
+    village.changeAllStandings(mFirstFoundingReward);
 }
 
 void MobDweller::_read(const json::Value &component) {
@@ -147,6 +166,8 @@ void MobDweller::_read(const json::Value &component) {
     const json::Value *tolerance = component.get("dwelling_bounds_tolerance");
     mBoundsTolerance = tolerance == nullptr ? DEFAULT_BOUNDS_TOLERANCE
                                             : (float) tolerance->number(DEFAULT_BOUNDS_TOLERANCE);
+    const json::Value *reward = component.get("first_founding_reward");
+    mFirstFoundingReward = reward == nullptr ? 0 : (int32_t) reward->number(0.0);
 }
 
 void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
@@ -180,6 +201,7 @@ void MobDweller::_updateVillage(ServerNetworkHandler &owner, MobActor &mob) {
             next->addDweller(owner, mRole, id);
             mVillage = next;
             mHasJoinedVillage = true;
+            _onJoined(*next);
         }
     } else if (current != nullptr) {
         current->markDwellerSeen(mRole, id);
