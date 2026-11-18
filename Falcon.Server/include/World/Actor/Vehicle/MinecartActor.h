@@ -47,6 +47,8 @@ public:
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
+    bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) override;
+
     bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) override;
 
     bool isExpired() const override {
@@ -66,7 +68,8 @@ public:
     void loadEquipment(const Tag &data, const PacketCodecContext &context) override;
 
     // a command block minecart's command, as the client edits it
-    void setCommand(const std::string &command, const std::string &name, bool trackOutput);
+    void setCommand(ServerNetworkHandler &owner, const std::string &command, const std::string &name,
+                    bool trackOutput);
 
     // the rider's forward input, which nudges a stopped minecart
     static void readRider(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerAuthInputPacket &packet);
@@ -95,6 +98,10 @@ private:
 
     void _runCommand(ServerNetworkHandler &owner);
 
+    void _sendCommand(ServerNetworkHandler &owner);
+
+    void _appendCommand(EntityDataMap &metadata) const;
+
     void _prime(ServerNetworkHandler &owner, int32_t fuse);
 
     void _explode(ServerNetworkHandler &owner);
@@ -112,6 +119,8 @@ private:
     int32_t mHurtDirection = 1;
     int32_t mIntegrity = 0;
     bool mExpired = false;
+    // the damage being taken came from an explosion
+    bool mHitByExplosion = false;
     // the rail_sensor: whether the activator rail under it was powered last tick
     bool mActivated = false;
     // the hopper's item_hopper, switched off by a powered activator rail

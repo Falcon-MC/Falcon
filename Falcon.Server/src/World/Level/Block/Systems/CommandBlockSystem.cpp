@@ -283,7 +283,7 @@ void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, Serve
                                      (int32_t) std::floor(minecart->getPosition().y),
                                      (int32_t) std::floor(minecart->getPosition().z))))
             return;
-        minecart->setCommand(packet.mCommand, packet.mName, packet.mOutputTracked);
+        minecart->setCommand(owner, packet.mCommand, packet.mName, packet.mOutputTracked);
         return;
     }
 

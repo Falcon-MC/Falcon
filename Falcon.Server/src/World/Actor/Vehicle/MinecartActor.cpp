@@ -9,6 +9,8 @@
 #include "Protocol/Types/ItemDefinition.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
+#include "World/Actor/DamageCause.h"
+#include "World/Inventory/InventoryManager.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Movement/ActorCollisionSystem.h"
@@ -60,6 +62,12 @@ namespace {
     constexpr int32_t ACTOR_DATA_HURT_TIME = 11;
     constexpr int32_t ACTOR_DATA_HURT_DIRECTION = 12;
     constexpr int32_t ACTOR_DATA_DISPLAY_OFFSET = 17;
+    constexpr int32_t ACTOR_DATA_COMMAND_BLOCK_ENABLED = 70;
+    constexpr int32_t ACTOR_DATA_COMMAND_BLOCK_COMMAND = 71;
+    constexpr int32_t ACTOR_DATA_COMMAND_BLOCK_LAST_OUTPUT = 72;
+    constexpr int32_t ACTOR_DATA_COMMAND_BLOCK_TRACK_OUTPUT = 73;
+    constexpr int32_t ACTOR_DATA_COMMAND_BLOCK_TICK_DELAY = 106;
+    constexpr int32_t ACTOR_DATA_COMMAND_BLOCK_EXECUTE_ON_FIRST_TICK = 107;
 
     // minecraft:rail_movement max_speed
     const float MAX_SPEED = 0.4f;
@@ -301,9 +309,30 @@ bool MinecartActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player
             return true;
         }
         case Kind::CommandBlock:
-            return false;
+            // the command block screen, as a block's, for operators in creative only
+            if (!player.isOp() || !player.isCreative())
+                return false;
+            return player.getInventoryManager().openEntityContainer(*this, ContainerType::CommandBlock);
     }
     return false;
+}
+
+// the TNT minecart lights at once from fire, lava and a burning projectile, and goes off when an explosion breaks it
+bool MinecartActor::senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
+    (void) amount;
+    mHitByExplosion = DamageCause::matches("entity_explosion", source)
+                      || source.mDeathMessageKey.rfind("death.attack.explosion", 0) == 0;
+    if (mKind != Kind::Tnt)
+        return true;
+
+    const bool burning = DamageCause::matches("fire", source) || DamageCause::matches("lava", source)
+                         || (source.mProjectile && source.mDamager != nullptr
+                             && source.mDamager->getFlags().get(ActorFlag::OnFire));
+    if (burning && owner.getLevelFor(*this).getGameRules().getBool("tntexplodes")) {
+        _explode(owner);
+        return false;
+    }
+    return true;
 }
 
 bool MinecartActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
@@ -318,8 +347,8 @@ bool MinecartActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPlay
     const bool creative = source != nullptr && source->isCreative();
     if (!creative && mIntegrity > 0)
         return true;
-    // a TNT minecart broken by a hit explodes when it was already lit
-    if (mKind == Kind::Tnt && mFuse >= 0) {
+    // a TNT minecart broken while lit or by an explosion goes off instead of dropping
+    if (mKind == Kind::Tnt && (mFuse >= 0 || mHitByExplosion)) {
         _explode(owner);
         return true;
     }
@@ -721,6 +750,17 @@ void MinecartActor::_prime(ServerNetworkHandler &owner, int32_t fuse) {
 }
 
 void MinecartActor::_tickTnt(ServerNetworkHandler &owner) {
+    // standing in lava or fire burns the minecart, which lights its TNT at once
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f position = getPosition();
+    const BlockState *inside = level.peekBlockPtr((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                                                  (int32_t) std::floor(position.z));
+    if (inside != nullptr && level.getGameRules().getBool("tntexplodes")
+        && (LiquidBlocksFetch::at(level, position).lava || inside->mName == "minecraft:fire"
+            || inside->mName == "minecraft:soul_fire")) {
+        _explode(owner);
+        return;
+    }
     if (mFuse < 0)
         return;
     if (mFuse == 0) {
@@ -760,12 +800,59 @@ void MinecartActor::_tickHopper(ServerNetworkHandler &owner) {
         mHopperCooldown = HOPPER_COOLDOWN;
 }
 
-void MinecartActor::setCommand(const std::string &command, const std::string &name, bool trackOutput) {
+void MinecartActor::setCommand(ServerNetworkHandler &owner, const std::string &command, const std::string &name,
+                               bool trackOutput) {
     mCommand = command;
     mCommandName = name;
     mTrackOutput = trackOutput;
     if (!trackOutput)
         mLastOutput.clear();
+    _sendCommand(owner);
+}
+
+void MinecartActor::_sendCommand(ServerNetworkHandler &owner) {
+    EntityDataMap metadata;
+    _appendCommand(metadata);
+    owner.sendActorMetadata(*this, metadata);
+}
+
+// the command block data the minecart's screen reads
+void MinecartActor::_appendCommand(EntityDataMap &metadata) const {
+    EntityDataEntry enabled;
+    enabled.mId = ACTOR_DATA_COMMAND_BLOCK_ENABLED;
+    enabled.mFormat = EntityDataFormat::Byte;
+    enabled.mByteValue = 1;
+    metadata.mEntries.push_back(enabled);
+
+    EntityDataEntry command;
+    command.mId = ACTOR_DATA_COMMAND_BLOCK_COMMAND;
+    command.mFormat = EntityDataFormat::String;
+    command.mStringValue = mCommand;
+    metadata.mEntries.push_back(command);
+
+    EntityDataEntry output;
+    output.mId = ACTOR_DATA_COMMAND_BLOCK_LAST_OUTPUT;
+    output.mFormat = EntityDataFormat::String;
+    output.mStringValue = mLastOutput;
+    metadata.mEntries.push_back(output);
+
+    EntityDataEntry track;
+    track.mId = ACTOR_DATA_COMMAND_BLOCK_TRACK_OUTPUT;
+    track.mFormat = EntityDataFormat::Byte;
+    track.mByteValue = mTrackOutput ? 1 : 0;
+    metadata.mEntries.push_back(track);
+
+    EntityDataEntry delay;
+    delay.mId = ACTOR_DATA_COMMAND_BLOCK_TICK_DELAY;
+    delay.mFormat = EntityDataFormat::Int;
+    delay.mIntValue = 0;
+    metadata.mEntries.push_back(delay);
+
+    EntityDataEntry firstTick;
+    firstTick.mId = ACTOR_DATA_COMMAND_BLOCK_EXECUTE_ON_FIRST_TICK;
+    firstTick.mFormat = EntityDataFormat::Byte;
+    firstTick.mByteValue = 0;
+    metadata.mEntries.push_back(firstTick);
 }
 
 void MinecartActor::_runCommand(ServerNetworkHandler &owner) {
@@ -778,9 +865,12 @@ void MinecartActor::_runCommand(ServerNetworkHandler &owner) {
     MinecartCommandOrigin origin(mCommandName.empty() ? std::string("@") : mCommandName, *this,
                                  owner.getLevelFor(*this));
     owner.getCommands().dispatch(origin, mCommand);
+    const std::string previous = mLastOutput;
     mLastOutput = mTrackOutput && owner.getLevelFor(*this).getGameRules().getBool("commandblockoutput")
                           ? origin.getOutput()
                           : std::string();
+    if (mLastOutput != previous)
+        _sendCommand(owner);
 }
 
 void MinecartActor::readRider(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerAuthInputPacket &packet) {
@@ -842,6 +932,9 @@ void MinecartActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     offset.mFormat = EntityDataFormat::Int;
     offset.mIntValue = DISPLAY_OFFSET;
     metadata.mEntries.push_back(offset);
+
+    if (mKind == Kind::CommandBlock)
+        _appendCommand(metadata);
 }
 
 Tag MinecartActor::saveNbt() const {

@@ -2,6 +2,11 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Vehicle/MinecartActor.h"
+#include "World/Item/MinecartItem.h"
+#include "World/Level/Block/DispenseSource.h"
+#include "World/Level/Block/Inventory/SimpleContainerInventory.h"
+#include "Protocol/Types/ItemDefinition.h"
+#include "World/Item/VanillaItems.h"
 #include "World/Level/Block/BaseRailBlock.h"
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Level.h"
@@ -93,6 +98,60 @@ namespace {
                 "a powered rail did not start the minecart away from the stone");
         require(near(minecart->getPosition().z, 8.5f), "the minecart left the middle of its rail");
     }
+
+    size_t minecartsIn(ServerNetworkHandler &owner) {
+        size_t count = 0;
+        for (auto &entry: owner.getActors())
+            count += entry.second->isMinecart() && !entry.second->isExpired() ? 1 : 0;
+        return count;
+    }
+
+    void dispenserPutsAMinecartOnTheRail() {
+        Fixture fixture;
+        fixture.mLevel.setBlockState(9, 64, 8, rail("minecraft:rail", BaseRailBlock::STRAIGHT_EAST_WEST));
+        SimpleContainerInventory container(9);
+        ItemStack minecart;
+        minecart.mDefinition = std::make_shared<ItemDefinition>("minecraft:minecart", 1, false, Tag());
+        minecart.mCount = 2;
+        container.setContainerItem(0, minecart);
+        const MinecartItem item(Item(*VanillaItems::fromIdentifier("minecraft:minecart")));
+        // facing east, toward the rail
+        const DispenseSource east{fixture.mOwner, fixture.mLevel, Vector3i(8, 64, 8), container, 0,
+                                  Vector3f(9.2f, 64.3f, 8.5f), 5};
+        require(item.dispense(east) && container.getContainerItem(0).mCount == 1
+                        && minecartsIn(fixture.mOwner) == 1,
+                "a dispenser facing a rail did not place a minecart");
+        // facing west, toward stone: nothing to place on
+        fixture.mLevel.setBlockState(7, 64, 8, BlockState("minecraft:stone"));
+        const DispenseSource west{fixture.mOwner, fixture.mLevel, Vector3i(8, 64, 8), container, 0,
+                                  Vector3f(7.8f, 64.3f, 8.5f), 4};
+        require(!item.dispense(west) && container.getContainerItem(0).mCount == 1,
+                "a dispenser without a rail in front placed a minecart");
+    }
+
+    void lavaLightsATntMinecart() {
+        Fixture fixture;
+        fixture.mLevel.setBlockState(8, 64, 8, BlockState("minecraft:lava"));
+        ServerActor *tnt = fixture.mOwner.spawnActor(fixture.mLevel, "minecraft:tnt_minecart",
+                                                     Vector3f(8.5f, 64.0f, 8.5f));
+        require(tnt != nullptr, "the TNT minecart did not spawn");
+        tnt->tick(fixture.mOwner);
+        require(tnt->isExpired(), "a TNT minecart in lava did not go off");
+    }
+
+    void commandBlockMinecartShowsItsCommand() {
+        Fixture fixture;
+        auto *minecart = dynamic_cast<MinecartActor *>(fixture.mOwner.spawnActor(
+                fixture.mLevel, "minecraft:command_block_minecart", Vector3f(8.5f, 64.0f, 8.5f)));
+        require(minecart != nullptr, "the command block minecart did not spawn");
+        minecart->setCommand(fixture.mOwner, "say hi", "", true);
+        EntityDataMap metadata;
+        minecart->fillSpawnMetadata(metadata);
+        bool command = false;
+        for (const EntityDataEntry &entry: metadata.mEntries)
+            command = command || (entry.mId == 71 && entry.mStringValue == "say hi");
+        require(command, "the command block minecart does not carry its command");
+    }
 }
 
 int main() {
@@ -102,6 +161,9 @@ int main() {
         itemsPlaceTheirMinecart();
         minecartsPushAsLegacyMinecarts();
         poweredRailStartsAMinecart();
+        dispenserPutsAMinecartOnTheRail();
+        lavaLightsATntMinecart();
+        commandBlockMinecartShowsItsCommand();
     } catch (const std::exception &error) {
         std::clog << "Minecart regression failed: " << error.what() << '\n';
         return 1;
