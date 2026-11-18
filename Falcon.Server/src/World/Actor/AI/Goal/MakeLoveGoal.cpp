@@ -20,6 +20,7 @@ namespace {
     const int32_t START_CHANCE = 500;
     const int32_t LOVE_TICKS = 300;
     const float BREED_DISTANCE_SQUARED = 2.25f;
+    const float WALK_SPEED_MULTIPLIER = 0.25f;
     // the partner search box: the villager's box grown by 8 across, 3 up and down
     const float SEARCH_HORIZONTAL = 8.0f;
     const float SEARCH_VERTICAL = 3.0f;
@@ -142,6 +143,9 @@ void MakeLoveGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     villager.getLookControl().setLookAt(partner->getPosition());
+    // the partner only walks up from 3 blocks away: the initiator closes the rest
+    if (villager.distanceSquaredTo(*partner) > BREED_DISTANCE_SQUARED)
+        villager.getNavigation().moveTo(partner->getPosition(), villager.getMovementSpeed() * WALK_SPEED_MULTIPLIER);
     if (mLoveTicks == 0 && partner->getFlags().get(ActorFlag::InLove)
         && villager.distanceSquaredTo(*partner) <= BREED_DISTANCE_SQUARED)
         _spawnBaby(owner, villager, *partner);

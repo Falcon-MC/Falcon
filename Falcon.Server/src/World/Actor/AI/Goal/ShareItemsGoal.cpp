@@ -109,7 +109,9 @@ bool ShareItemsGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
 bool ShareItemsGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const Actor *target = mob.getTarget(owner);
-    return target != nullptr && target->isAlive() && mob.distanceSquaredTo(*target) <= KEEP_DISTANCE_SQUARED;
+    // the goal ends with the throw
+    return !mItem.isAir() && target != nullptr && target->isAlive()
+           && mob.distanceSquaredTo(*target) <= KEEP_DISTANCE_SQUARED;
 }
 
 void ShareItemsGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
