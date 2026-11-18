@@ -30,6 +30,7 @@
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Item/SpawnEggItem.h"
 
 #include <algorithm>
 #include <cmath>
@@ -83,6 +84,9 @@ namespace {
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
     const char *const INVENTORY_COMPONENT = "minecraft:inventory";
     const char *const NAMEABLE_COMPONENT = "minecraft:nameable";
+    const char *const SPAWN_EGG_INTERACTION_COMPONENT = "minecraft:spawn_egg_interaction";
+    // the size a hatched baby is sent with, as a bred one is
+    const float BABY_SCALE = 0.5f;
     const char *const LEASHABLE_COMPONENT = "minecraft:leashable";
     const char *const NAME_TAG_ITEM = "minecraft:name_tag";
     const char *const LEAD_ITEM = "minecraft:lead";
@@ -1397,12 +1401,25 @@ bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryNameTag(owner, player, held) || _tryTieLeads(owner, player) || _tryLeash(owner, player, held)
         || _tryInteract(owner, player)
-        || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
+        || _trySpawnEggBaby(owner, player, held) || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held)
+        || _tryStartLove(owner, player, held)
         || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player)
         || _tryTrade(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
+}
+
+// minecraft:spawn_egg_interaction: an egg of the mob's own kind used on it hatches a baby beside it
+bool MobActor::_trySpawnEggBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+    if (held.isAir() || getComponent(SPAWN_EGG_INTERACTION_COMPONENT) == nullptr
+        || SpawnEggItem::spawnedActorOf(held.mDefinition->getIdentifier()) != getIdentifier())
+        return false;
+
+    if (owner.spawnBabyActor(owner.getLevelFor(*this), getIdentifier(), getPosition(), BABY_SCALE) == nullptr)
+        return false;
+    player.consumeOneHeldItem();
+    return true;
 }
 
 bool MobActor::_tryTrade(ServerNetworkHandler &owner, ServerPlayer &player) {
