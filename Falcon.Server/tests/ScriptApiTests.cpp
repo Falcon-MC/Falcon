@@ -2320,6 +2320,8 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         owner.setSpawnCause("Born");
         ServerActor *calf = owner.spawnActor(world.getOverworld(), "minecraft:cow", Vector3f(4.5f, 100.0f, 4.5f));
         require(calf != nullptr, "no fixture calf");
+        const int64_t cowId = cow->getUniqueId();
+        const int64_t calfId = calf->getUniqueId();
         ServerActor *wolf = owner.spawnActor(world.getOverworld(), "minecraft:wolf", Vector3f(8.5f, 100.0f, 8.5f));
         MobActor *wolfMob = dynamic_cast<MobActor *>(wolf);
         require(wolfMob != nullptr, "no fixture wolf");
@@ -3100,14 +3102,20 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                         && std::fabs(local.y - 1.0f) < 0.001f,
                 "^ ^1 ^ did not move up");
         require(!Command::parsePosition({"^", "~", "^"}, 0, Vector3f(), Vector3f(), local), "^ mixed with ~ parsed");
-        ScriptCommandOrigin fromCow(world.getOverworld(), cow);
+        // the script above kills whichever fixture cow its query lists first, and that order follows the actor map,
+        // which differs between standard libraries: the survivor runs the commands
+        ServerActor *selfCow = owner.getActor(cowId);
+        if (selfCow == nullptr || selfCow->isDead())
+            selfCow = owner.getActor(calfId);
+        require(selfCow != nullptr && !selfCow->isDead(), "no cow left to run commands from");
+        ScriptCommandOrigin fromCow(world.getOverworld(), selfCow);
         const std::vector<ServerActor *> selfTargets = owner.resolveActorTargets(fromCow, "@s");
-        require(selfTargets.size() == 1 && selfTargets[0] == cow, "@s of a cow did not resolve to it");
+        require(selfTargets.size() == 1 && selfTargets[0] == selfCow, "@s of a cow did not resolve to it");
         require(owner.resolveActorTargets(fromCow, "@s[type=minecraft:pig]").empty(), "@s ignored its type filter");
-        ExecuteCommandOrigin executedFromCow(fromCow, nullptr, cow->getPosition(), cow->getRotation(),
+        ExecuteCommandOrigin executedFromCow(fromCow, nullptr, selfCow->getPosition(), selfCow->getRotation(),
                                              &world.getOverworld());
         const std::vector<ServerActor *> executedTargets = owner.resolveActorTargets(executedFromCow, "@s");
-        require(executedTargets.size() == 1 && executedTargets[0] == cow, "execute lost the cow running it");
+        require(executedTargets.size() == 1 && executedTargets[0] == selfCow, "execute lost the cow running it");
         require(commands.dispatch(playerOrigin, "beta:toggle off"), "an enumName parameter did not parse");
         player.setOp(wasOp);
 
