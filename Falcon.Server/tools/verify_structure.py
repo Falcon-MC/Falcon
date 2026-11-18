@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the BDS layout inventory; optionally audit the original include-only relocation."""
+"""Check the source layout inventory; optionally audit the original include-only relocation."""
 
 import argparse
 import hashlib
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def verify(root, verify_content):
-    manifest_path = root / 'Falcon.Server/tools/Structure/bds-1.26.10.json'
+    manifest_path = root / 'Falcon.Server/tools/Structure/inventory.json'
     manifest = json.loads(manifest_path.read_text())
     records = manifest['files']
     headers = {
