@@ -1407,7 +1407,7 @@ void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::stri
         target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
 }
 
-void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported) {
+void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported, const ServerPlayer *except) {
     MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
     move.mPosition = actor.getPosition();
@@ -1415,15 +1415,15 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleporte
     move.mRotation = actor.getRotation();
     move.mTeleported = teleported;
 
-    _sendToViewers(actor, move);
+    _sendToViewers(actor, move, except);
 }
 
-void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet) {
+void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet, const ServerPlayer *except) {
     // kept between calls: a crowd sends one packet an actor a tick
     static std::vector<NetworkIdentifier> viewers;
     viewers.clear();
     const auto consider = [&](ServerPlayer &player) {
-        if (!player.isSpawned())
+        if (!player.isSpawned() || &player == except)
             return;
 
         const std::unordered_set<uint64_t> &visible = player.getVisibleActors();

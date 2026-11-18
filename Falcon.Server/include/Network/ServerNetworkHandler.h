@@ -479,7 +479,8 @@ public:
 
     bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor);
 
-    void broadcastActorMove(ServerActor &actor, bool teleported = false);
+    // except: a viewer predicting the actor itself, the rider steering it
+    void broadcastActorMove(ServerActor &actor, bool teleported = false, const ServerPlayer *except = nullptr);
 
     void syncActorProperties(ServerActor &actor);
 
@@ -885,7 +886,7 @@ public:
     void _flushExplosions();
 
     // only players the actor was spawned for; others get the state with the spawn
-    void _sendToViewers(const ServerActor &actor, const Packet &packet);
+    void _sendToViewers(const ServerActor &actor, const Packet &packet, const ServerPlayer *except = nullptr);
 
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
 
