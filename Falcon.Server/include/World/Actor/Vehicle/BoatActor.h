@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Actor/ActorLeash.h"
+#include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Vehicle/VehicleChest.h"
 
@@ -54,6 +56,12 @@ public:
 
     Container *getEntityContainer() override;
 
+    const json::Value *getLeashableComponent() const override;
+
+    ActorLeash *getActorLeash() override {
+        return &mLeash;
+    }
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
     bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) override;
@@ -94,10 +102,20 @@ private:
 
     void _pullInMobs(ServerNetworkHandler &owner);
 
+    // leashable_to: the leads the player holds move to the boat
+    bool _takeLeads(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    bool _useLead(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    // the legacy_boat push of the pushers touching the boat; the pushed actors take their share at once
+    Vector3f _push(ServerNetworkHandler &owner);
+
     float _momentum(Level &level) const;
 
     int32_t mVariant = 0;
     std::unique_ptr<VehicleChest> mChest;
+    ActorLeash mLeash;
+    PushableByEntityPresets mPushPresets;
     Water mWater = Water::Floating;
     int64_t mSinkTick = -1;
     int32_t mHurtTime = 0;

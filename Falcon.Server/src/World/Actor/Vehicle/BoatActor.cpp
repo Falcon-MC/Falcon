@@ -14,6 +14,8 @@
 #include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/Movement/PhysicsComponent.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/PlayerInventory.h"
+#include "Protocol/Types/ItemDefinition.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockNames.h"
@@ -25,6 +27,7 @@
 #include <array>
 #include <cmath>
 #include <random>
+#include <vector>
 
 FALCON_REGISTER_ACTOR(BoatActor, BoatActor::BOAT);
 
@@ -46,6 +49,12 @@ namespace {
     const char *const DROP_RULE = "doentitydrops";
     const char *const RIDEABLE = "minecraft:rideable";
     const char *const BUOYANT = "minecraft:buoyant";
+    const char *const LEASHABLE = "minecraft:leashable";
+    const char *const LEASHABLE_TO = "minecraft:leashable_to";
+    const char *const PUSHABLE_BY_ENTITY = "minecraft:pushable_by_entity";
+    const char *const LEAD_ITEM = "minecraft:lead";
+    // the farthest a held lead reaches to be tied to the boat: the default leash break distance
+    const float LEAD_TRANSFER_RADIUS = 12.0f;
 
     // minecraft:hurt_on_condition: lava, 4 a tick
     const float LAVA_DAMAGE = 4.0f;
@@ -193,12 +202,109 @@ Container *BoatActor::getEntityContainer() {
 bool BoatActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     if (mExpired)
         return false;
+    if (_takeLeads(owner, player) || _useLead(owner, player))
+        return true;
     if (mChest != nullptr && player.getFlags().get(ActorFlag::Sneaking))
         return mChest->open(owner, player, *this);
     if (player.isRiding() || player.getFlags().get(ActorFlag::Sneaking)
         || !_canSeat(ActorClassRegistry::getSize("minecraft:player").mWidth))
         return false;
     return RideSystem::mount(owner, player, *this, true);
+}
+
+const json::Value *BoatActor::getLeashableComponent() const {
+    const json::Value *components = componentsOf(getTypeId());
+    return components == nullptr ? nullptr : components->get(LEASHABLE);
+}
+
+bool BoatActor::_takeLeads(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const json::Value *components = componentsOf(getTypeId());
+    if (components == nullptr || components->get(LEASHABLE_TO) == nullptr)
+        return false;
+
+    std::vector<ServerActor *> led;
+    owner.forEachActorNear(player.getPosition(), LEAD_TRANSFER_RADIUS, [&](ServerActor &actor) {
+        ActorLeash *leash = actor.getActorLeash();
+        if (&actor != this && leash != nullptr && leash->getHolderId() == player.getUniqueId()
+            && actor.sharesLevelWith(player))
+            led.push_back(&actor);
+    });
+    for (ServerActor *actor: led)
+        actor->getActorLeash()->attach(owner, *actor, getUniqueId());
+    return !led.empty();
+}
+
+bool BoatActor::_useLead(ServerNetworkHandler &owner, ServerPlayer &player) {
+    if (getLeashableComponent() == nullptr)
+        return false;
+
+    if (mLeash.isLeashed()) {
+        if (mLeash.getHolderId() != player.getUniqueId())
+            return false;
+        mLeash.detach(owner, *this, !player.isCreative());
+        return true;
+    }
+
+    const ItemStack &held = player.getInventory().getItemInHand();
+    if (held.mDefinition == nullptr || held.mDefinition->getIdentifier() != LEAD_ITEM)
+        return false;
+    mLeash.attach(owner, *this, player.getUniqueId());
+    player.consumeOneHeldItem();
+    return true;
+}
+
+Vector3f BoatActor::_push(ServerNetworkHandler &owner) {
+    const json::Value *components = componentsOf(getTypeId());
+    mPushPresets.refresh(components == nullptr ? nullptr : components->get(PUSHABLE_BY_ENTITY));
+    Vector3f total(0.0f, 0.0f, 0.0f);
+    if (mPushPresets.mPresets.empty())
+        return total;
+
+    const AxisAlignedBB self = ActorPushSystem::boundingBoxOf(*this);
+    const bool steered = _controller(owner) != nullptr;
+    const auto pushBy = [&](Actor &pusher, float pusherWidth) {
+        // riders and their vehicle never push each other; a sneaking pusher does not push
+        if (pusher.getVehicleId() == getUniqueId() || pusher.getUniqueId() == getVehicleId()
+            || pusher.getFlags().get(ActorFlag::Sneaking)
+            || !ActorPushSystem::boundingBoxOf(pusher).intersectsWith(self))
+            return;
+
+        const PushableByEntityPreset *preset = PushableByEntity::findPreset(owner, *this, mPushPresets, pusher);
+        if (preset == nullptr || preset->mMode != PushMode::LegacyBoat)
+            return;
+        const float offsetX = pusher.getPosition().x - getPosition().x;
+        const float offsetZ = pusher.getPosition().z - getPosition().z;
+        if (!PushableByEntity::inReach(*preset, offsetX, offsetZ, pusherWidth))
+            return;
+
+        const Vector3f push = PushableByEntity::legacyBoatPush(*preset, offsetX, offsetZ);
+        total = Vector3f(total.x + push.x, total.y, total.z + push.z);
+
+        // the pushed actor takes its share unless its own preset refuses this boat; a player moves itself
+        ServerActor *other = dynamic_cast<ServerActor *>(&pusher);
+        if (other == nullptr)
+            return;
+        const MobActor *mob = dynamic_cast<const MobActor *>(other);
+        const PushableByEntityPreset *refused =
+                mob == nullptr ? nullptr : PushableByEntity::findPreset(owner, *mob, mob->getPushPresets(), *this);
+        if (refused != nullptr && refused->mMode == PushMode::None)
+            return;
+        const Vector3f motion = other->getMotion();
+        other->setMotion(Vector3f(motion.x - push.x * preset->mPushScaleOther, motion.y,
+                                  motion.z - push.z * preset->mPushScaleOther));
+    };
+
+    Level &level = owner.getLevelFor(*this);
+    owner.forEachActorNear(getPosition(), WIDTH + owner.getWidestActorHalfWidth(), [&](ServerActor &actor) {
+        if (&actor != this && actor.isAlive() && !actor.isProjectile() && actor.isPushable()
+            && &owner.getLevelFor(actor) == &level)
+            pushBy(actor, actor.getSize().mWidth);
+    });
+    owner.forEachPlayerNear(getPosition(), WIDTH, [&](ServerPlayer &player) {
+        if (player.isSpawned() && !player.isDead() && !player.isSpectator() && player.sharesLevelWith(*this))
+            pushBy(player, ActorClassRegistry::getSize("minecraft:player").mWidth);
+    });
+    return steered ? Vector3f(0.0f, 0.0f, 0.0f) : total;
 }
 
 bool BoatActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
@@ -243,6 +349,7 @@ void BoatActor::_destroy(ServerNetworkHandler &owner, bool drop) {
         return;
     mExpired = true;
     RideSystem::ejectAll(owner, *this);
+    mLeash.detach(owner, *this, true);
     if (mChest != nullptr)
         mChest->dropAll(owner, *this);
     if (drop)
@@ -299,6 +406,7 @@ void BoatActor::tick(ServerNetworkHandler &owner) {
     _tickWater(owner);
     if (mExpired)
         return;
+    mLeash.tick(owner, *this);
     ServerActor::tick(owner);
     if (!mExpired)
         _pullInMobs(owner);
@@ -382,6 +490,7 @@ float BoatActor::_momentum(Level &level) const {
 }
 
 void BoatActor::tickMovement(ServerNetworkHandler &owner) {
+    const Vector3f push = _push(owner);
     // a steering player predicts the boat: the server holds it where that player put it
     if (ServerPlayer *controller = _controller(owner)) {
         RideSystem::syncPassengerPositions(owner, *this);
@@ -395,8 +504,8 @@ void BoatActor::tickMovement(ServerNetworkHandler &owner) {
     Level &level = owner.getLevelFor(*this);
     const float momentum = _momentum(level);
     Vector3f motion = getMotion();
-    motion.x *= momentum;
-    motion.z *= momentum;
+    motion.x = (motion.x + push.x) * momentum;
+    motion.z = (motion.z + push.z) * momentum;
 
     AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*this);
     const ActorMoveResult result = ActorCollisionSystem::move(level, box, motion, 0.0f, isOnGround(), this);
@@ -455,6 +564,8 @@ void BoatActor::fillSpawnMetadata(EntityDataMap &metadata) const {
     flags3.mLongValue = getFlags().getExtendedBits();
     metadata.mEntries.push_back(flags3);
 
+    mLeash.appendSpawnMetadata(metadata);
+
     EntityDataEntry variant;
     variant.mId = ACTOR_DATA_VARIANT;
     variant.mFormat = EntityDataFormat::Int;
@@ -465,6 +576,7 @@ void BoatActor::fillSpawnMetadata(EntityDataMap &metadata) const {
 Tag BoatActor::saveNbt() const {
     Tag data = ServerActor::saveNbt();
     data.putInt(TAG_VARIANT, mVariant);
+    mLeash.saveNbt(data);
     if (mChest != nullptr)
         mChest->save(data);
     return data;
@@ -473,6 +585,8 @@ Tag BoatActor::saveNbt() const {
 void BoatActor::loadNbt(const Tag &data) {
     ServerActor::loadNbt(data);
     mVariant = data.getInt(TAG_VARIANT, 0);
+    mLeash.loadNbt(data);
+    getFlags().set(ActorFlag::Leashed, mLeash.isLeashed());
 }
 
 void BoatActor::loadEquipment(const Tag &data, const PacketCodecContext &context) {

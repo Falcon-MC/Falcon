@@ -1466,6 +1466,10 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     return true;
 }
 
+const json::Value *MobActor::getLeashableComponent() const {
+    return getComponent(LEASHABLE_COMPONENT);
+}
+
 bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
     if (getComponent(LEASHABLE_COMPONENT) == nullptr)
         return false;

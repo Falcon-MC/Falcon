@@ -1,4 +1,5 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Vehicle/BoatActor.h"
 
 #include <iostream>
@@ -42,6 +43,28 @@ namespace {
         require(chest.isChestBoat() && chest.getEntityContainer() != nullptr, "a chest boat carries a chest");
         require(near(chest.getSeatOffset(0, 1).x, 0.2f), "a chest boat seats its rider in front of the chest");
     }
+
+    void boatsPushAlongTheirCentres() {
+        BoatActor boat(4, BoatActor::BOAT);
+        const json::Value *definition = EntityDefinitions::find(BoatActor::BOAT);
+        const json::Value *component = definition->get("components")->get("minecraft:pushable_by_entity");
+        PushableByEntityPresets presets;
+        presets.refresh(component);
+        require(presets.mPresets.size() == 2 && presets.mPresets[1].mMode == PushMode::LegacyBoat,
+                "the boat's second preset is the legacy boat push");
+        const PushableByEntityPreset &preset = presets.mPresets[1];
+        require(near(preset.mMinDistance, 0.55f) && preset.mMaxDistance > 1000.0f, "the legacy push reaches far");
+
+        // a pusher one block east: 0.1 strength, half of it for the boat, pushed west
+        const Vector3f push = PushableByEntity::legacyBoatPush(preset, 1.0f, 0.0f);
+        require(near(push.x, -0.05f) && near(push.z, 0.0f), "a boat is pushed away from its pusher");
+        // closer than a block the strength stays whole
+        const Vector3f close = PushableByEntity::legacyBoatPush(preset, 0.0f, 0.6f);
+        require(near(close.z, -0.05f), "a close pusher pushes at full strength");
+        require(!PushableByEntity::inReach(preset, 0.5f, 0.0f, 1.4f), "boats on top of each other do not push");
+
+        require(boat.getLeashableComponent() != nullptr && boat.getActorLeash() != nullptr, "a boat takes a lead");
+    }
 }
 
 int main() {
@@ -49,6 +72,7 @@ int main() {
         EntityDefinitions::initialize();
         variantsFollowTheItems();
         seatsFollowTheDefinition();
+        boatsPushAlongTheirCentres();
     } catch (const std::exception &error) {
         std::clog << "Boat regression failed: " << error.what() << '\n';
         return 1;

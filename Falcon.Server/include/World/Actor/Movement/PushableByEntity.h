@@ -7,7 +7,7 @@
 #include <vector>
 
 class Actor;
-class MobActor;
+class ServerActor;
 class ServerNetworkHandler;
 
 enum class PushMode : uint8_t {
@@ -15,7 +15,9 @@ enum class PushMode : uint8_t {
     // the matching pusher does not push at all
     None,
     // kicks the actor away from what touched it
-    Ball
+    Ball,
+    // a boat's push: the two boxes part along the line between the centres
+    LegacyBoat
 };
 
 // a minecraft:pushable_by_entity preset
@@ -25,6 +27,8 @@ struct PushableByEntityPreset {
     float mMaxDistance = 0.0f;
     bool mRequireCollisionOverlap = true;
     float mPushScaleSelf = 1.0f;
+    float mPushScaleOther = 1.0f;
+    float mStrengthMultiplier = 1.0f;
     float mKickSpeedScale = 0.0f;
     float mMinKickSpeed = 0.0f;
     float mMaxKickSpeed = 0.0f;
@@ -52,7 +56,7 @@ public:
     static constexpr const char *KICK_SOUND = "pushed_by_player";
 
     // the first preset whose filters accept the pusher; nullptr: the default push
-    static const PushableByEntityPreset *findPreset(ServerNetworkHandler &owner, const MobActor &self,
+    static const PushableByEntityPreset *findPreset(ServerNetworkHandler &owner, const ServerActor &self,
                                                     const PushableByEntityPresets &presets, const Actor &pusher);
 
     // offset: pusher position minus self position, horizontal only; false when out of the preset's reach
@@ -61,4 +65,8 @@ public:
     // the velocity the kick adds to self; pusherSpeed is the pusher's speed last tick
     static Vector3f kick(const PushableByEntityPreset &preset, float offsetX, float offsetZ, float pusherSpeed,
                          bool selfOnGround);
+
+    // legacy_boat: the push self takes, along the offset to the pusher; scaled by push_scale_other it is the push
+    // the pusher takes the other way
+    static Vector3f legacyBoatPush(const PushableByEntityPreset &preset, float offsetX, float offsetZ);
 };
