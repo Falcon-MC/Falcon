@@ -1,6 +1,7 @@
 #include "World/Actor/Mob/Component/MobShareables.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Item/Item.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
@@ -162,6 +163,75 @@ bool MobShareables::store(ServerNetworkHandler &owner, MobActor &mob, const Item
     owner.dropItem(level, mob.getPosition(), item, ItemActorHandler::randomDropMotion(),
                    ItemActorHandler::DROP_PICKUP_DELAY);
     return false;
+}
+
+int32_t MobShareables::_inventoryCount(const MobActor &mob, const ItemStack &item) {
+    const MobEquipment &equipment = mob.getEquipment();
+    int32_t count = 0;
+    for (int slot = 0; slot < equipment.getInventorySize(); ++slot) {
+        const ItemStack &held = equipment.getInventoryItem(slot);
+        if (!held.isAir() && held.mDefinition == item.mDefinition)
+            count += held.mCount;
+    }
+    return count;
+}
+
+int32_t MobShareables::surplusOf(const MobActor &mob, const ItemStack &item) {
+    const json::Value *entry = findEntry(mob, item);
+    if (entry == nullptr || flagIn(*entry, "pickup_only"))
+        return 0;
+
+    const int32_t kept = integerIn(*entry, "want_amount", 0) + std::max(0, integerIn(*entry, "surplus_amount", 0));
+    const int32_t held = _inventoryCount(mob, item);
+    if (held <= kept)
+        return 0;
+    return std::min(held - kept, (int32_t) ((float) kept * (1.0f / 3.0f)));
+}
+
+int32_t MobShareables::wantedCountOf(const MobActor &mob, const ItemStack &item) {
+    const json::Value *entry = findEntry(mob, item);
+    const int32_t wanted = entry == nullptr ? 0 : integerIn(*entry, "want_amount", 0);
+    if (wanted <= 0)
+        return 0;
+    return std::max(0, wanted - _inventoryCount(mob, item));
+}
+
+ItemStack MobShareables::sharedStack(ServerNetworkHandler &owner, const MobActor &mob, const ItemStack &item,
+                                     int32_t count, int32_t &consumed) {
+    consumed = 0;
+    const json::Value *entry = findEntry(mob, item);
+    const json::Value *craftInto = entry == nullptr ? nullptr : entry->get("craft_into");
+    if (craftInto == nullptr || !craftInto->isString()) {
+        ItemStack shared = item;
+        shared.mCount = std::min(count, PlayerInventory::getMaxStackSize(item));
+        consumed = shared.mCount;
+        return shared;
+    }
+
+    const std::string input(item.mDefinition->getIdentifier());
+    const std::string output = LegacyItemMapper::getInstance().resolveWithData(craftInto->mString);
+    const CraftingRecipeData *recipes = CraftingRecipeTable::getRecipes();
+    const CraftingIngredientData *ingredients = CraftingRecipeTable::getIngredients();
+    const CraftingOutputData *outputs = CraftingRecipeTable::getOutputs();
+    for (size_t index = 0; index < CraftingRecipeTable::getRecipeCount(); ++index) {
+        const CraftingRecipeData &recipe = recipes[index];
+        if (recipe.mOutputCount == 0 || output != outputs[recipe.mOutputOffset].mItemId)
+            continue;
+
+        int32_t needed = 0;
+        for (uint32_t ingredient = 0; ingredient < recipe.mIngredientCount; ++ingredient) {
+            const CraftingIngredientData &data = ingredients[recipe.mIngredientOffset + ingredient];
+            if (data.mItemId != nullptr && input == data.mItemId)
+                needed += std::max(1, data.mCount);
+        }
+        if (needed <= 0)
+            continue;
+        if (count < needed)
+            return ItemStack::air();
+        consumed = count / needed * needed;
+        return owner.createItemStack(output, count / needed);
+    }
+    return ItemStack::air();
 }
 
 int MobShareables::_equipmentSlotFor(const MobActor &mob, const ItemStack &item) {

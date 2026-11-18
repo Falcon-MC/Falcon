@@ -14,6 +14,7 @@ class ServerNetworkHandler;
 class ServerPlayer;
 class ItemStack;
 class Actor;
+class Level;
 struct DispenseSource;
 struct Vector3f;
 struct Vector3i;
@@ -61,6 +62,18 @@ public:
     }
 
     virtual bool takesPriorityOverBlockInteraction() const {
+        return false;
+    }
+
+    // a mob's use on a block, as fertilize_farm_block makes it: false when the block takes none
+    virtual bool fertilizeBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        return false;
+    }
+
+    virtual bool isFertilizer() const {
         return false;
     }
 

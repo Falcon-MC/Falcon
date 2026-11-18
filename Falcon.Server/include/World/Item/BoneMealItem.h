@@ -13,6 +13,12 @@ public:
 
     bool dispense(const DispenseSource &source) const override;
 
+    bool fertilizeBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const override;
+
+    bool isFertilizer() const override {
+        return true;
+    }
+
 private:
     static constexpr int USE_COOLDOWN_TICKS = 4;
 

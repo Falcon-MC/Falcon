@@ -433,6 +433,12 @@ size_t Village::countBeds() const {
     return count;
 }
 
+bool Village::hasRoomForBaby() const {
+    if (mMTick != 0 && mLastTick < mMTick)
+        return false;
+    return std::max<size_t>(1, countBeds()) > getInhabitantCount();
+}
+
 std::vector<std::shared_ptr<PoiInstance>> Village::getPois() const {
     std::vector<std::shared_ptr<PoiInstance>> pois;
     for (const Inhabitant &inhabitant: mInhabitants) {
