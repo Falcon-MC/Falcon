@@ -7,6 +7,7 @@
 #include <utility>
 
 namespace {
+    const int32_t REPATH_INTERVAL = 10;
     // the game looks for a partner every 10 ticks once at the meeting point
     const int32_t SEARCH_INTERVAL = 10;
     const float SEARCH_RANGE = 8.0f;
@@ -33,6 +34,7 @@ void MingleGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     MoveToPoiGoal::start(owner, mob);
     mTicksLeft = mSettings.mDurationTicks;
     mSearchTicks = 0;
+    mRepathTicks = 0;
     mPartnerId = 0;
 }
 
@@ -55,7 +57,7 @@ void MingleGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         float closest = FLT_MAX;
         owner.forEachActorNear(mob.getPosition(), SEARCH_RANGE, [&](ServerActor &actor) {
             MobActor *candidate = dynamic_cast<MobActor *>(&actor);
-            if (candidate == nullptr || candidate == &mob || !candidate->isAlive()
+            if (candidate == nullptr || candidate == &mob || !candidate->isAlive() || !candidate->sharesLevelWith(mob)
                 || candidate->getIdentifier() != mSettings.mPartnerType || candidate->getFlags().get(ActorFlag::Baby))
                 return;
             const float distance = mob.distanceSquaredTo(*candidate);
@@ -68,15 +70,21 @@ void MingleGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     }
 
     const Actor *partner = owner.getActor(mPartnerId);
-    if (partner == nullptr || !partner->isAlive()) {
+    if (partner == nullptr || !partner->isAlive() || !partner->sharesLevelWith(mob)) {
         mPartnerId = 0;
         return;
     }
 
     --mTicksLeft;
     mob.getLookControl().setLookAt(partner->getPosition());
-    if (mob.distanceSquaredTo(*partner) > mSettings.mMingleDistance * mSettings.mMingleDistance)
-        mob.getNavigation().moveTo(partner->getPosition(), mSettings.mSpeed);
-    else
+    if (mob.distanceSquaredTo(*partner) <= mSettings.mMingleDistance * mSettings.mMingleDistance) {
         mob.getNavigation().stop(mob);
+        mRepathTicks = 0;
+        return;
+    }
+    // moveTo always asks for a new search: the path budget is shared by every mob
+    if (--mRepathTicks > 0)
+        return;
+    mRepathTicks = REPATH_INTERVAL;
+    mob.getNavigation().moveTo(partner->getPosition(), mSettings.mSpeed);
 }

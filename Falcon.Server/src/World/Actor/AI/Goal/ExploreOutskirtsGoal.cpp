@@ -60,15 +60,17 @@ bool ExploreOutskirtsGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
 bool ExploreOutskirtsGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
-    if (mArrived)
-        return mWaitTicks < mSettings.mMaxWaitTicks;
+    if (mArrived && !mReturning)
+        return true;
     return !mob.getNavigation().isDone();
 }
 
 void ExploreOutskirtsGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
     mArrived = false;
+    mReturning = false;
     mWaitTicks = 0;
+    mHome = mob.getPosition();
     mob.getNavigation().moveTo(mTarget, mSettings.mSpeed);
 }
 
@@ -86,6 +88,11 @@ void ExploreOutskirtsGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mArrived = true;
         mob.getNavigation().stop(mob);
     }
-    if (mArrived)
-        ++mWaitTicks;
+    if (!mArrived || mReturning)
+        return;
+    // back home before the goal can start again: from the outskirts it would pick the same spot
+    if (++mWaitTicks >= mSettings.mMaxWaitTicks) {
+        mReturning = true;
+        mob.getNavigation().moveTo(mHome, mSettings.mSpeed);
+    }
 }

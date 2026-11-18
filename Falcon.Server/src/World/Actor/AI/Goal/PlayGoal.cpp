@@ -29,7 +29,7 @@ int64_t PlayGoal::_findFriend(ServerNetworkHandler &owner, MobActor &mob) const 
     float closest = FLT_MAX;
     owner.forEachActorNear(mob.getPosition(), std::sqrt(area.x * area.x + area.y * area.y + area.z * area.z),
                            [&](ServerActor &actor) {
-                               if (&actor == &mob || !actor.isAlive()
+                               if (&actor == &mob || !actor.isAlive() || !actor.sharesLevelWith(mob)
                                    || !ActorPushSystem::boundingBoxOf(actor).intersectsWith(box))
                                    return;
                                bool matches = mSettings.mFriendFilters.empty();
@@ -72,7 +72,7 @@ void PlayGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 void PlayGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     --mTicksLeft;
     const Actor *friendActor = mFriendId == 0 ? nullptr : owner.getActor(mFriendId);
-    if (friendActor != nullptr && friendActor->isAlive()) {
+    if (friendActor != nullptr && friendActor->isAlive() && friendActor->sharesLevelWith(mob)) {
         if (mob.distanceSquaredTo(*friendActor) > mSettings.mFollowDistance * mSettings.mFollowDistance
             && mob.getNavigation().isDone())
             mob.getNavigation().moveTo(friendActor->getPosition(), mSettings.mSpeed);

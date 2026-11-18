@@ -31,6 +31,9 @@ public:
 private:
     Settings mSettings;
     Vector3f mTarget;
+    // where the walk out began: the villager returns there after looking around
+    Vector3f mHome;
     int32_t mWaitTicks = 0;
     bool mArrived = false;
+    bool mReturning = false;
 };

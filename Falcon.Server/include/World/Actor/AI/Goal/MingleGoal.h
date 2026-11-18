@@ -34,5 +34,6 @@ private:
     int32_t mCooldown = 0;
     int32_t mTicksLeft = 0;
     int32_t mSearchTicks = 0;
+    int32_t mRepathTicks = 0;
     int64_t mPartnerId = 0;
 };
