@@ -90,9 +90,10 @@ namespace {
         require(shared != nullptr, "login did not produce a crafting packet");
 
         ReadOnlyBinaryStream stream(shared->getPacket());
-        // This is a server-generated catalog. Give the test decoder room for the full shaped recipe list.
+        // This is a server-generated catalog. Give the test decoder room for the full recipe lists.
         auto settings = stream.getEncodingSettings();
-        settings.mMaxListSize = std::max(settings.mMaxListSize, catalog.mShapedRecipes.size());
+        settings.mMaxListSize = std::max({settings.mMaxListSize, catalog.mShapedRecipes.size(),
+                                          catalog.mShapelessRecipes.size()});
         stream.setEncodingSettings(settings);
         require(stream.getUnsignedVarInt() == (uint32_t) CraftingDataPacket::ID,
                 "incorrect crafting data packet header");
