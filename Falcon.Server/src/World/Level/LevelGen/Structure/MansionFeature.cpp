@@ -2,6 +2,7 @@
 
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
 #include "World/Level/LevelGen/ChunkGenerator.h"
+#include "World/Level/LevelGen/Overworld/OverworldGeneratorConstants.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 
 #include <algorithm>
@@ -41,8 +42,10 @@ int32_t MansionFeature::getBaseY(StructureTerrain &terrain, int32_t chunkX, int3
     const int32_t z = chunkZ * 16;
     const int32_t farX = x + FAR_X[quarterTurns & 3];
     const int32_t farZ = z + FAR_Z[quarterTurns & 3];
-    return 1 + std::min({terrain.getSolidHeight(x + 7, z + 7), terrain.getSolidHeight(x + 7, farZ),
-                         terrain.getSolidHeight(farX, z + 7), terrain.getSolidHeight(farX, farZ)});
+    const int32_t lowest = std::min({terrain.getSolidHeight(x + 7, z + 7), terrain.getSolidHeight(x + 7, farZ),
+                                     terrain.getSolidHeight(farX, z + 7), terrain.getSolidHeight(farX, farZ)});
+    // never below the sea: over water the mansion stands on the surface, its foundation down to the floor
+    return 1 + std::max(lowest, OverworldGeneratorConstants::SEA_LEVEL - 1);
 }
 
 bool MansionFeature::_isValidStart(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const {

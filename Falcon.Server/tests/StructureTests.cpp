@@ -508,6 +508,18 @@ namespace {
         StructureTerrain terrain(*generator);
         require(turn == 0 && MansionFeature::getBaseY(terrain, start.x, start.z, turn) == 74,
                 "The seed 42 woodland mansion entrance pose differs from BDS");
+
+        // a mansion over the sea: BDS stands it on the water at 63, its cobblestone foundation down to the floor
+        const auto oceanGenerator = DimensionFactory::createGenerator(DimensionType::Overworld, -822577560950528980LL);
+        StructureChunkPos oceanStart;
+        require(mansions->findNearest(*oceanGenerator, 680, 800, oceanStart) && oceanStart.x == 41
+                        && oceanStart.z == 46,
+                "The ocean woodland mansion start differs from BDS");
+        auto oceanRandom = mansions->createStartRandom(oceanGenerator->getSeed(), oceanStart.x, oceanStart.z);
+        const int32_t oceanTurn = (int32_t) (oceanRandom() % 4);
+        StructureTerrain oceanTerrain(*oceanGenerator);
+        const int32_t oceanY = MansionFeature::getBaseY(oceanTerrain, oceanStart.x, oceanStart.z, oceanTurn);
+        require(oceanY == 63, "The ocean woodland mansion does not stand on the water");
         const auto plan = MansionLayout::build(random);
         const auto &floor = plan.mBase;
         // carpet footprints on the ground floor, excluding the entrance
