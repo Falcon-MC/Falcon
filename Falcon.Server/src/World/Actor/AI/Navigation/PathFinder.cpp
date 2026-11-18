@@ -11,7 +11,7 @@
 #include <cstdlib>
 
 namespace {
-    const int32_t DIRECT_MOVE_COST = 10;
+    const int32_t DIRECT_MOVE_COST = NodeEvaluator::BLOCK_COST;
     const int32_t OBLIQUE_MOVE_COST = 14;
     const int32_t MAX_SMOOTH_LOOKAHEAD = 8;
     const float BLOCK_CENTER = 0.5f;
@@ -224,7 +224,8 @@ void PathFinder::_expandGround(int32_t nodeIndex) {
             continue;
 
         const int32_t y = node.mY + offset;
-        _offer(x, y, z, node.mG + DIRECT_MOVE_COST + mEvaluator.extraCost(x, y, z), nodeIndex);
+        const int32_t jump = offset > 0 ? mEvaluator.jumpCost() : 0;
+        _offer(x, y, z, node.mG + DIRECT_MOVE_COST + mEvaluator.extraCost(x, y, z) + jump, nodeIndex);
     }
 
     for (int32_t direction = 0; direction < 4; ++direction) {

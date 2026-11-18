@@ -669,6 +669,8 @@ private:
 
     bool _tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
+    bool _trySpawnEggBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
     bool _tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
     bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
