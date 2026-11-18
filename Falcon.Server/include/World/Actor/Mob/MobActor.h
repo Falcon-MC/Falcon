@@ -213,6 +213,9 @@ public:
     // this reuses one key buffer
     const json::Value *getComponent(const char *name) const;
 
+    // minecraft:persistent in the active groups keeps the mob too
+    bool isPersistent() const override;
+
     const std::unordered_map<std::string, const json::Value *> &getComponents() const;
 
     // minecraft:pushable_by_entity presets, parsed once per component change

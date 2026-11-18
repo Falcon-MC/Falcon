@@ -144,6 +144,22 @@ namespace {
     }
 }
 
+namespace {
+    // minecraft:persistent keeps a mob even when it came from the natural spawner
+    void persistentComponentKeepsTheMob(Arena &arena) {
+        MobActor &villager = arena.adult(Vector3f(0.5f, 64.0f, 0.5f));
+        villager.setPersistent(false);
+        require(villager.isPersistent(), "a villager without the persistent flag lost minecraft:persistent");
+
+        MobActor *cow = dynamic_cast<MobActor *>(
+                arena.mOwner.spawnActor(*arena.mLevel, "minecraft:cow", Vector3f(3.5f, 64.0f, 3.5f)));
+        require(cow != nullptr, "the cow did not spawn");
+        cow->startDefinition(arena.mOwner);
+        cow->setPersistent(false);
+        require(!cow->isPersistent(), "a cow without minecraft:persistent stayed persistent");
+    }
+}
+
 int main() {
     const std::filesystem::path originalRoot = ServerPaths::getRoot();
     const std::filesystem::path directory =
@@ -160,6 +176,7 @@ int main() {
         villagersPreferPaths(arena);
         pistonsPushVillagers(arena);
         eggHatchesABaby(arena);
+        persistentComponentKeepsTheMob(arena);
         std::cout << "villager component checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';
