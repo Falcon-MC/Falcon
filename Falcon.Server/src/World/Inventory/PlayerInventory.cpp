@@ -22,6 +22,7 @@ PlayerInventory::PlayerInventory()
         item = ItemStack::air();
     }
     mStonecutterInput = ItemStack::air();
+    mBeaconPayment = ItemStack::air();
 
     for (ItemStack &item: mItems) {
         item = ItemStack::air();
@@ -221,6 +222,11 @@ void PlayerInventory::setStonecutterInput(ItemStack item) {
     mStonecutterInput = std::move(item);
 }
 
+void PlayerInventory::setBeaconPayment(ItemStack item) {
+    assignNetId(item);
+    mBeaconPayment = std::move(item);
+}
+
 void PlayerInventory::setOffhand(ItemStack item) {
     assignNetId(item);
     mOffhand = std::move(item);
@@ -328,6 +334,12 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
                 return nullptr;
             }
             return &mStonecutterInput;
+
+        case ContainerSlotType::BeaconPayment:
+            if (slot != BEACON_PAYMENT_NETWORK_SLOT) {
+                return nullptr;
+            }
+            return &mBeaconPayment;
 
         case ContainerSlotType::CraftingInput:
             if (slot >= CRAFTING_NETWORK_SLOT_FIRST && slot < CRAFTING_NETWORK_SLOT_FIRST + CRAFTING_SIZE) {

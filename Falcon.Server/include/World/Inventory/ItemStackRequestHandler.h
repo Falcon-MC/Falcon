@@ -21,6 +21,13 @@ struct TradeCraft {
     int32_t mCrafts = 0;
 };
 
+// what a paid beacon screen chose
+struct BeaconChoice {
+    bool mPaid = false;
+    int32_t mPrimary = 0;
+    int32_t mSecondary = 0;
+};
+
 class BundleSyncData {
 public:
     int32_t mBundleId = 0;
@@ -29,7 +36,8 @@ public:
     std::vector<ItemStack> mContents;
 };
 
-// one request applied atomically; the response lists the slots the client must resync
+// one request applied atomically; the response lists the slots the client must resync;
+// beaconLevels: the open beacon's pyramid, -1 while no beacon screen is open
 class ItemStackRequestHandler {
 public:
     static const int RESULT_OK = 0;
@@ -47,5 +55,6 @@ public:
             const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes = nullptr,
             ItemStack *outCraftedRecipeItem = nullptr, const MerchantOffers *tradeOffers = nullptr,
             TradeCraft *outTrade = nullptr, const CraftingDataPacket *smithingRecipes = nullptr,
-            int32_t clientProtocol = 0, bool grindstoneOpen = false, int32_t *outGrindstoneXpCost = nullptr);
+            int32_t clientProtocol = 0, bool grindstoneOpen = false, int32_t *outGrindstoneXpCost = nullptr,
+            int32_t beaconLevels = -1, BeaconChoice *outBeacon = nullptr);
 };

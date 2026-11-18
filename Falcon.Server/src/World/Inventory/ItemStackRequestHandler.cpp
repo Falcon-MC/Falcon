@@ -15,6 +15,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
@@ -108,6 +109,10 @@ namespace {
         ItemStack mCraftedRecipeOutput;
         bool mCraftedRecipe = false;
         const MerchantOffers *mTradeOffers = nullptr;
+        int32_t mBeaconLevels = -1;
+        bool mBeaconActive = false;
+        int32_t mBeaconConsumed = 0;
+        BeaconChoice mBeaconChoice;
         bool mTradeActive = false;
         // an automatic trade may also pay from the inventory
         bool mTradeAuto = false;
@@ -260,6 +265,9 @@ namespace {
             return nullptr;
         }
         if (container == ContainerSlotType::StonecutterInput && context.mStonecutterRecipes == nullptr) {
+            return nullptr;
+        }
+        if (container == ContainerSlotType::BeaconPayment && context.mBeaconLevels < 0) {
             return nullptr;
         }
         if (container == ContainerSlotType::FurnaceIngredient || container == ContainerSlotType::BlastFurnaceIngredient
@@ -423,6 +431,11 @@ namespace {
         return false;
     }
 
+    bool acceptsInBeaconSlot(ContainerSlotType container, const ItemStack &item) {
+        return container != ContainerSlotType::BeaconPayment || item.isAir()
+               || BeaconBlockActor::isPaymentItem(item.mDefinition->getIdentifier());
+    }
+
     bool acceptsInOpenContainer(const RequestContext &context, const ItemStack *slot, const ItemStack &item) {
         if (context.mOpenContainer == nullptr || context.mContainerSlots.empty() || item.isAir())
             return true;
@@ -503,6 +516,7 @@ namespace {
         }
 
         if (!acceptsInSmithingSlot(context, action.mDestination.mContainerName.mContainer, *source)
+            || !acceptsInBeaconSlot(action.mDestination.mContainerName.mContainer, *source)
             || !acceptsInArmorSlot(action.mDestination.mContainerName, action.mDestination.mSlot, *source)) {
             return false;
         }
@@ -574,6 +588,8 @@ namespace {
 
         if (!acceptsInSmithingSlot(context, action.mDestination.mContainerName.mContainer, *source)
             || !acceptsInSmithingSlot(context, action.mSource.mContainerName.mContainer, *destination)
+            || !acceptsInBeaconSlot(action.mDestination.mContainerName.mContainer, *source)
+            || !acceptsInBeaconSlot(action.mSource.mContainerName.mContainer, *destination)
             || !acceptsInArmorSlot(action.mDestination.mContainerName, action.mDestination.mSlot, *source)
             || !acceptsInArmorSlot(action.mSource.mContainerName, action.mSource.mSlot, *destination)) {
             return false;
@@ -659,6 +675,14 @@ namespace {
         if (context.mStonecutterActive && action.mType == ItemStackRequestActionType::Consume
             && action.mSource.mContainerName.mContainer == ContainerSlotType::StonecutterInput)
             context.mStonecutterInputConsumed += action.mCount;
+
+        // the payment slot only empties to pay
+        if (action.mSource.mContainerName.mContainer == ContainerSlotType::BeaconPayment
+            && action.mType == ItemStackRequestActionType::Consume) {
+            if (!BeaconBlockActor::isPaymentItem(source->mDefinition->getIdentifier()))
+                return false;
+            context.mBeaconConsumed += action.mCount;
+        }
 
         if (context.mTradeActive && action.mType == ItemStackRequestActionType::Consume
             && !consumeTradeItem(context, action.mSource.mContainerName.mContainer, *source, action.mCount))
@@ -1190,6 +1214,19 @@ namespace {
         }
     }
 
+    // the item itself goes with a consume from the payment slot, checked once the request ends
+    bool payBeacon(RequestContext &context, const ItemStackRequestAction &action) {
+        if (context.mBeaconLevels <= 0 || context.mBeaconActive
+            || !BeaconBlockActor::isEffectAvailable(action.mPrimaryEffect, context.mBeaconLevels))
+            return false;
+
+        context.mBeaconActive = true;
+        context.mBeaconChoice.mPaid = true;
+        context.mBeaconChoice.mPrimary = action.mPrimaryEffect;
+        context.mBeaconChoice.mSecondary = action.mSecondaryEffect;
+        return true;
+    }
+
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
         if (context.mGrindstoneActive) {
@@ -1318,8 +1355,10 @@ namespace {
             case ItemStackRequestActionType::CraftNonImplemented:
             case ItemStackRequestActionType::MineBlock:
             case ItemStackRequestActionType::LabTableCombine:
-            case ItemStackRequestActionType::BeaconPayment:
                 return true;
+
+            case ItemStackRequestActionType::BeaconPayment:
+                return payBeacon(context, action);
 
             default:
                 LOG_WARN(LogAreaID::Server, "Unhandled item stack request action %d",
@@ -1339,7 +1378,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
         const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
-        int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost) {
+        int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost, int32_t beaconLevels,
+        BeaconChoice *outBeacon) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1370,6 +1410,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mSmithingRecipes = smithingRecipes;
     context.mClientProtocol = clientProtocol;
     context.mTradeOffers = tradeOffers;
+    context.mBeaconLevels = beaconLevels;
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -1446,6 +1487,13 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         return entry;
     }
 
+    // one item pays: none, or one taken without a payment, means a forged request
+    if (context.mBeaconActive ? context.mBeaconConsumed != 1 : context.mBeaconConsumed != 0) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
     if (context.mTradeActive && context.mTradeConsumed != context.mTradeRequired) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
@@ -1511,6 +1559,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
 
     if (outTrade != nullptr && context.mTradeActive)
         *outTrade = context.mTrade;
+
+    if (outBeacon != nullptr)
+        *outBeacon = context.mBeaconChoice;
 
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput

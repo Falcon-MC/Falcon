@@ -15,6 +15,8 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/MapItem.h"
 #include "World/Item/PackShooter.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/StonecutterBlock.h"
@@ -184,12 +186,16 @@ namespace {
                && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
     }
 
-    // the table's two slots live in the player inventory: nothing else gives them back
-    bool returnEnchantingItems(ServerPlayer &player) {
+    // the enchanting table's two slots and the beacon's payment live in the player inventory: nothing else gives
+    // them back
+    bool returnScreenItems(ServerPlayer &player) {
         bool returned = false;
-        for (const ContainerSlotType type:
-             {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
-            ItemStack *slot = player.getInventory().resolveSlot(type, 0);
+        const std::pair<ContainerSlotType, int> slots[] = {
+                {ContainerSlotType::EnchantingInput, 0},
+                {ContainerSlotType::EnchantingMaterial, 0},
+                {ContainerSlotType::BeaconPayment, PlayerInventory::BEACON_PAYMENT_NETWORK_SLOT}};
+        for (const auto &[type, index]: slots) {
+            ItemStack *slot = player.getInventory().resolveSlot(type, index);
             if (slot == nullptr || slot->isAir())
                 continue;
 
@@ -537,6 +543,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     if (trader != nullptr && trader->getEconomy().getTradingPlayer() != player.getUniqueId())
         trader = nullptr;
 
+    BeaconBlockActor *beacon = nullptr;
+    if (manager.isContainerOpen() && manager.getCurrentWindowType() == ContainerType::Beacon
+        && containerActorId == -1)
+        beacon = level.getBlockActors().find<BeaconBlockActor>(manager.getContainerPosition());
+
     for (const ItemStackRequest &request: packet.mRequests) {
         // nothing to run: the same answer as a request run on a copy of the inventory, without the copy
         if (request.mActions.empty() && !renumberedBundles && !leftContainer) {
@@ -556,6 +567,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         int32_t anvilLevelsConsumed = 0;
         bool anvilUsed = false;
         int32_t grindstoneXpCost = -1;
+        BeaconChoice beaconChoice;
         CartographyLock cartographyLock;
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
@@ -605,7 +617,13 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem, tradeOffers,
                 &trade, smithingOpen ? &owner.getCachedCraftingData() : nullptr,
                 player.getCodec() ? player.getCodec()->getProtocolVersion() : 0,
-                grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost);
+                grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
+                beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice);
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && beacon != nullptr && beaconChoice.mPaid) {
+            beacon->applyPayment(beaconChoice.mPrimary, beaconChoice.mSecondary);
+            BlockActionHandler::broadcastBlockActorData(owner, level, *beacon);
+        }
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && grindstoneXpCost >= 0) {
             const Vector3f at((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
@@ -1016,7 +1034,7 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
         manager.syncSlot(InventoryManager::InventoryId::Cursor, 0);
     }
 
-    if (returnEnchantingItems(player))
+    if (returnScreenItems(player))
         manager.syncAll();
 
     manager.onClientRemoveWindow(windowId);
@@ -1068,6 +1086,10 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
     if (!inventory.getStonecutterInput().isAir())
         returned.push_back(inventory.getStonecutterInput());
     inventory.setStonecutterInput(ItemStack::air());
+
+    if (!inventory.getBeaconPayment().isAir())
+        returned.push_back(inventory.getBeaconPayment());
+    inventory.setBeaconPayment(ItemStack::air());
 
     if (!inventory.getCursor().isAir())
         returned.push_back(inventory.getCursor());
