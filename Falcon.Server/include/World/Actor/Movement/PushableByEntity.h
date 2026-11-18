@@ -17,7 +17,9 @@ enum class PushMode : uint8_t {
     // kicks the actor away from what touched it
     Ball,
     // a boat's push: the two boxes part along the line between the centres
-    LegacyBoat
+    LegacyBoat,
+    // a minecart's push: the boat's, except that two minecarts on one line share their speed
+    LegacyMinecart
 };
 
 // a minecraft:pushable_by_entity preset

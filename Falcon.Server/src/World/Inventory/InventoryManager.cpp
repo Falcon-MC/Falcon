@@ -1412,8 +1412,9 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
 bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType type) {
     if (mPlayer == nullptr || mSender == nullptr || mOwner == nullptr)
         return false;
+    // the command block screen of a command block minecart has no slots
     Container *container = actor.getEntityContainer();
-    if (container == nullptr)
+    if (container == nullptr && type != ContainerType::CommandBlock)
         return false;
     if (mContainerWindowId != CONTAINER_ID_NONE)
         return mContainerActorId == actor.getUniqueId();
@@ -1436,7 +1437,8 @@ bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType typ
     open.mBlockPosition = mContainerPosition;
     open.mUniqueActorId = actor.getUniqueId();
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
-    _sendContentPackets(windowId, *container);
+    if (container != nullptr)
+        _sendContentPackets(windowId, *container);
 
     mOwner->getScriptEngine().onEntityContainerOpened(actor, *mPlayer);
     return true;
