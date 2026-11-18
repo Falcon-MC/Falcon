@@ -4,8 +4,6 @@
 #include "World/Level/Level.h"
 
 namespace {
-    const char *TAG_PRIMARY = "Primary";
-    const char *TAG_SECONDARY = "Secondary";
     const char *TAG_PAGE = "page";
     const char *TAG_TOTAL_PAGES = "totalPages";
     const char *TAG_HAS_BOOK = "hasBook";
@@ -43,19 +41,6 @@ Tag ContainerBlockActor::saveNbt() const {
 
 void ContainerBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mInventory.loadNbt(data, context);
-}
-
-Tag BeaconBlockActor::saveNbt() const {
-    Tag data = ContainerBlockActor::saveNbt();
-    data.putInt(TAG_PRIMARY, mPrimaryEffect);
-    data.putInt(TAG_SECONDARY, mSecondaryEffect);
-    return data;
-}
-
-void BeaconBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    ContainerBlockActor::loadNbt(data, context);
-    mPrimaryEffect = data.getInt(TAG_PRIMARY);
-    mSecondaryEffect = data.getInt(TAG_SECONDARY);
 }
 
 // nothing at all without a book, else the book and where it is open

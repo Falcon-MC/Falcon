@@ -28,6 +28,7 @@ public:
     static constexpr int GRINDSTONE_SIZE = 2;
     static constexpr int GRINDSTONE_FIRST_SLOT = 16;
     static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
+    static const int BEACON_PAYMENT_NETWORK_SLOT = 27;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
     // the body armor is saved right behind the four worn pieces
     static const int SAVED_BODY_SLOT = SAVED_SIZE;
@@ -122,6 +123,12 @@ public:
 
     void setStonecutterInput(ItemStack item);
 
+    const ItemStack &getBeaconPayment() const {
+        return mBeaconPayment;
+    }
+
+    void setBeaconPayment(ItemStack item);
+
     static int grindstoneIndex(ContainerSlotType container);
 
     const ItemStack &getGrindstoneItem(int index) const {
@@ -206,6 +213,7 @@ private:
     ItemStack mEnchantingInput;
     ItemStack mEnchantingMaterial;
     ItemStack mStonecutterInput;
+    ItemStack mBeaconPayment;
     int mSelectedSlot;
     int32_t mNextNetId;
 };

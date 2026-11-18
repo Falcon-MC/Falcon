@@ -3,6 +3,7 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
 #include "World/Level/Block/Actor/VaultBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"

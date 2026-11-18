@@ -117,11 +117,15 @@ void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t a
     instance.mId = effect;
     instance.mAmplifier = amplifier;
     instance.mDuration = durationTicks;
+    addEffect(actor, instance);
+}
 
+void ServerNetworkHandler::addEffect(Actor &actor, const MobEffectInstance &instance) {
     if (!actor.addEffect(instance) || !actor.isPlayer())
         return;
 
-    EffectAddAfterEvent event(static_cast<ServerPlayer &>(actor), (int32_t) effect, amplifier, durationTicks);
+    EffectAddAfterEvent event(static_cast<ServerPlayer &>(actor), (int32_t) instance.mId, instance.mAmplifier,
+                              instance.mDuration);
     mEventBus.after().mEffectAdd.emit(event);
 }
 

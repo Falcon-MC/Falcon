@@ -424,6 +424,8 @@ public:
 
     void addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks);
 
+    void addEffect(Actor &actor, const MobEffectInstance &instance);
+
     // the hunger, saturation and effects of a food item; false for anything else
     bool applyFood(ServerPlayer &player, const ItemStack &item);
 

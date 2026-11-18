@@ -162,26 +162,6 @@ private:
     std::shared_ptr<ItemDefinition> mBrewingIngredient;
 };
 
-class BeaconBlockActor final : public ContainerBlockActor {
-public:
-    static constexpr const char *BLOCK_ACTOR_ID = "Beacon";
-
-    static const int SIZE = 1;
-
-    BeaconBlockActor() : ContainerBlockActor(SIZE) {}
-
-    const char *getBlockActorId() const override {
-        return BLOCK_ACTOR_ID;
-    }
-
-    Tag saveNbt() const override;
-
-    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
-
-    int mPrimaryEffect = 0;
-    int mSecondaryEffect = 0;
-};
-
 class CrafterBlockActor final : public ContainerBlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Crafter";

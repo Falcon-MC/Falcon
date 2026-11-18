@@ -6,6 +6,7 @@
 FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/EnderChestBlockActor.h"
 #include "World/Level/Block/Actor/HopperBlockActor.h"
@@ -39,7 +40,7 @@ namespace {
             {ContainerBlockKind::Dropper, DropperBlockActor::BLOCK_ACTOR_ID, ContainerType::Dropper, true, true},
             {ContainerBlockKind::BrewingStand, BrewingStandBlockActor::BLOCK_ACTOR_ID, ContainerType::BrewingStand,
              true, true},
-            {ContainerBlockKind::Beacon, BeaconBlockActor::BLOCK_ACTOR_ID, ContainerType::Beacon, true, true},
+            {ContainerBlockKind::Beacon, BeaconBlockActor::BLOCK_ACTOR_ID, ContainerType::Beacon, true, false},
             {ContainerBlockKind::EnchantTable, EnchantTableBlockActor::BLOCK_ACTOR_ID, ContainerType::Enchantment, true,
              true},
             {ContainerBlockKind::Crafter, CrafterBlockActor::BLOCK_ACTOR_ID, ContainerType::Crafter, true, true},
