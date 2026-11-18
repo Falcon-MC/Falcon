@@ -532,6 +532,46 @@ namespace {
             packBrpak(context, output);
     }
 
+    std::vector<fs::path> componentsOf(const fs::path &path) {
+        std::vector<fs::path> components;
+        for (const fs::path &component: path) {
+            if (!component.empty())
+                components.push_back(component);
+        }
+        return components;
+    }
+
+    bool contains(const fs::path &outer, const fs::path &inner) {
+        const std::vector<fs::path> a = componentsOf(outer);
+        const std::vector<fs::path> b = componentsOf(inner);
+        return a.size() <= b.size() && std::equal(a.begin(), a.end(), b.begin());
+    }
+
+    // one is the other or lies inside it, once both are resolved: writing the output would delete the input
+    bool overlaps(const fs::path &source, const fs::path &target) {
+        std::error_code error;
+        const fs::path a = fs::weakly_canonical(source, error).lexically_normal();
+        const fs::path b = fs::weakly_canonical(target, error).lexically_normal();
+        return contains(a, b) || contains(b, a);
+    }
+
+    // the original is moved aside first and put back if the new pack can't take its place
+    bool replacePack(const fs::path &target, const fs::path &staging, const fs::path &backup) {
+        std::error_code error;
+        fs::remove_all(backup, error);
+        fs::rename(target, backup, error);
+        if (error)
+            return false;
+        fs::rename(staging, target, error);
+        if (error) {
+            std::error_code restore;
+            fs::rename(backup, target, restore);
+            return false;
+        }
+        fs::remove_all(backup, error);
+        return true;
+    }
+
     std::string statsJson(const Stats &stats, long long milliseconds) {
         std::string uuid;
         PackJson::Value value;
@@ -638,16 +678,19 @@ int PackOptimizer::run(const Config &config) {
         const auto start = std::chrono::steady_clock::now();
         Context context{config, mode, {}};
         if (inPlace) {
-            // staged under its own name, then swapped in once the whole pack is read
+            // staged under its own name, swapped in only once the whole pack went through
             const fs::path stagingRoot = output / STAGING_FOLDER;
             const fs::path staging = stagingRoot / name;
             fs::remove_all(staging, error);
             processPack(context, pack, staging);
-            fs::remove_all(target, error);
-            fs::rename(staging, target, error);
-            if (error)
+            if (!context.mFailed && !replacePack(target, staging, stagingRoot / (name + ".original")))
                 context.mFailed = true;
+            if (context.mFailed)
+                LOG_ERROR(LogAreaID::Resource, "PackOptimizer: pack '%s' left as it was", name.c_str());
             fs::remove_all(stagingRoot, error);
+        } else if (overlaps(pack, target)) {
+            LOG_ERROR(LogAreaID::Resource, "PackOptimizer: pack '%s' would be written over itself", name.c_str());
+            context.mFailed = true;
         } else {
             fs::remove_all(target, error);
             processPack(context, pack, target);

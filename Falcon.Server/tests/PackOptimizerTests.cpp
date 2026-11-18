@@ -203,6 +203,27 @@ namespace {
 
         config.mInputDirectory = (root / "missing").string();
         require(PackOptimizer::run(config) == 7, "missing input");
+
+        // the output of pack "in" would be the folder holding it
+        const fs::path nested = root / "overlap" / "in" / "in";
+        writeFile(nested / "manifest.json", "{\"header\":{}}");
+        config.mInputDirectory = (root / "overlap" / "in").string();
+        config.mOutputDirectory = (root / "overlap").string();
+        config.mUnpack = false;
+        require(PackOptimizer::run(config) == 7 && fs::exists(nested / "manifest.json"), "overlapping paths refused");
+
+        // in place, a pack that fails keeps its files: here a brpak entry pointing out of the pack
+        const fs::path failing = root / "inplace" / "p";
+        ZipWriter unsafe;
+        unsafe.addFile("ok.txt", "ok");
+        unsafe.addFile("../escape.txt", "x");
+        writeFile(failing / "p.brpak", unsafe.finish());
+        config.mInputDirectory = (root / "inplace").string();
+        config.mOutputDirectory = config.mInputDirectory;
+        config.mUnpack = true;
+        require(PackOptimizer::run(config) == 7 && fs::exists(failing / "p.brpak") && !fs::exists(failing / "ok.txt")
+                        && !fs::exists(root / "inplace" / "escape.txt"),
+                "failed pack left as it was");
         fs::remove_all(root);
     }
 }
