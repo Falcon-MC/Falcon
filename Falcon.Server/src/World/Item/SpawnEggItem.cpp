@@ -71,6 +71,15 @@ FALCON_REGISTER_ITEM_CUSTOM(
 
 SpawnEggItem::SpawnEggItem(const Item &base) : Item(base) {}
 
+std::string SpawnEggItem::spawnedActorOf(const std::string &itemIdentifier) {
+    if (itemIdentifier.size() <= SPAWN_EGG_SUFFIX.size()
+        || itemIdentifier.compare(itemIdentifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(),
+                                  SPAWN_EGG_SUFFIX)
+                   != 0)
+        return std::string();
+    return resolveSpawnedActor(itemIdentifier.substr(0, itemIdentifier.size() - SPAWN_EGG_SUFFIX.size()));
+}
+
 bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                                 const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) clickPosition;
@@ -78,14 +87,9 @@ bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     if (item.mDefinition == nullptr)
         return false;
 
-    const std::string &identifier = item.mDefinition->getIdentifier();
-    if (identifier.size() <= SPAWN_EGG_SUFFIX.size()
-        || identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX)
-                   != 0)
+    const std::string entityIdentifier = spawnedActorOf(item.mDefinition->getIdentifier());
+    if (entityIdentifier.empty())
         return false;
-
-    const std::string entityIdentifier = resolveSpawnedActor(
-            identifier.substr(0, identifier.size() - SPAWN_EGG_SUFFIX.size()));
 
     // an egg used on a spawner sets its mob instead of spawning one
     Level &level = owner.getLevelFor(player);

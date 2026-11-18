@@ -1,5 +1,7 @@
 #include "World/Level/Block/Systems/PistonSystem.h"
 
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -19,7 +21,9 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <optional>
 #include <unordered_set>
+#include <vector>
 
 namespace {
     const char *PISTON = "minecraft:piston";
@@ -151,6 +155,48 @@ namespace {
         const Vector3i offset = RedstoneFace::offset(face);
         return Vector3i(position.x + offset.x * distance, position.y + offset.y * distance,
                         position.z + offset.z * distance);
+    }
+
+    const char *const PUSHABLE_BY_BLOCK = "minecraft:pushable_by_block";
+
+    // mobs with minecraft:pushable_by_block in the cells the moving blocks and the arm head enter go one block
+    // along; the game slides them over the two ticks of the move
+    void pushMobs(ServerNetworkHandler &owner, Level &level, const Vector3i &piston, const std::vector<Vector3i> &moved,
+                  const std::optional<Vector3i> &armHead, int direction) {
+        std::vector<AxisAlignedBB> cells;
+        cells.reserve(moved.size() + 1);
+        for (const Vector3i &source: moved) {
+            const Vector3i target = relative(source, direction);
+            cells.emplace_back((float) target.x, (float) target.y, (float) target.z, (float) target.x + 1.0f,
+                               (float) target.y + 1.0f, (float) target.z + 1.0f);
+        }
+        if (armHead.has_value())
+            cells.emplace_back((float) armHead->x, (float) armHead->y, (float) armHead->z, (float) armHead->x + 1.0f,
+                               (float) armHead->y + 1.0f, (float) armHead->z + 1.0f);
+        if (cells.empty())
+            return;
+
+        const Vector3i offset = RedstoneFace::offset(direction);
+        const Vector3f center((float) piston.x + 0.5f, (float) piston.y + 0.5f, (float) piston.z + 0.5f);
+        std::vector<MobActor *> pushed;
+        owner.forEachActorNear(center, (float) PistonSystem::MOVE_BLOCK_LIMIT + 3.0f, [&](ServerActor &actor) {
+            MobActor *mob = dynamic_cast<MobActor *>(&actor);
+            if (mob == nullptr || !mob->isAlive() || &owner.getLevelFor(*mob) != &level
+                || mob->getComponent(PUSHABLE_BY_BLOCK) == nullptr)
+                return;
+            const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*mob);
+            for (const AxisAlignedBB &cell: cells) {
+                if (box.intersectsWith(cell)) {
+                    pushed.push_back(mob);
+                    return;
+                }
+            }
+        });
+        for (MobActor *mob: pushed) {
+            const Vector3f &position = mob->getPosition();
+            mob->teleport(Vector3f(position.x + (float) offset.x, position.y + (float) offset.y,
+                                   position.z + (float) offset.z));
+        }
     }
 
     int faceAxis(int face) {
@@ -450,6 +496,8 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     for (size_t index = toMove.size(); index > 0; --index)
         level.setBlock(toMove[index - 1], BlockState(AIR), false);
 
+    pushMobs(owner, level, position, toMove, extending ? std::optional<Vector3i>(armPosition) : std::nullopt,
+             moveDirection);
     gPendingMoves[&level].push_back(
             PendingMove{position, toMove, std::move(moved), std::move(movedActors), moveDirection});
     BlockActionHandler::broadcastBlockActorData(owner, level, arm);

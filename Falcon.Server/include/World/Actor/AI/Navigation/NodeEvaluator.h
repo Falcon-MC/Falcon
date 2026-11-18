@@ -45,6 +45,12 @@ public:
 
     int32_t extraCost(int32_t x, int32_t feetY, int32_t z);
 
+    // minecraft:preferred_path's jump cost; 0 without it
+    int32_t jumpCost() const;
+
+    // one block of walk in the search's cost units
+    static constexpr int32_t BLOCK_COST = 10;
+
     bool hasBarrier(const Vector3f &from, const Vector3f &to);
 
 private:
