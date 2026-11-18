@@ -13,7 +13,6 @@ using namespace BlockQuery;
 namespace {
     const char *HANGING = "hanging";
     const char *THICKNESS = "dripstone_thickness";
-    const int32_t MAX_TIP_SEARCH = 7;
     const int32_t THICKNESS_REFRESH_DEPTH = 4;
 
     Vector3i offset(const Vector3i &position, int32_t dy) {
@@ -35,11 +34,12 @@ bool SpeleothemBlock::pointsTowards(const BlockState &state, bool hanging) const
     return state.mName == getIdentifier() && isHanging(state) == hanging;
 }
 
-bool SpeleothemBlock::findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip) const {
+bool SpeleothemBlock::findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip,
+                              int32_t maxSearch) const {
     const int32_t step = hanging ? -1 : 1;
     Vector3i current = root;
 
-    for (int32_t index = 0; index < MAX_TIP_SEARCH; ++index) {
+    for (int32_t index = 0; index < maxSearch; ++index) {
         const BlockState state = stateAt(level, current);
         if (!pointsTowards(state, hanging))
             return false;

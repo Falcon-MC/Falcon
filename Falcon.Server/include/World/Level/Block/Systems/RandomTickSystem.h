@@ -14,4 +14,7 @@ public:
     static int getBlockLight(Level &level, const Vector3i &position);
 
     static int nextInt(int bound);
+
+    // in [0, 1)
+    static float nextFloat();
 };

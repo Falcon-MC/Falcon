@@ -14,7 +14,10 @@ protected:
 
     bool pointsTowards(const BlockState &state, bool hanging) const;
 
-    bool findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip) const;
+    static constexpr int32_t MAX_TIP_SEARCH = 7;
+
+    bool findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip,
+                 int32_t maxSearch = MAX_TIP_SEARCH) const;
 
     bool canTipGrow(Level &level, const Vector3i &tip, bool hanging) const;
 
