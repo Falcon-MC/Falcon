@@ -262,6 +262,8 @@ namespace {
     const float COMPOSTER_DEFAULT_USE_MIN = 100.0f;
     const float COMPOSTER_DEFAULT_USE_MAX = 200.0f;
     const float COMPOSTER_DEFAULT_INTERACTIONS = 1.0f;
+    const float COMPOSTER_DEFAULT_ITEMS_PER_USE = 20.0f;
+    const float COMPOSTER_DEFAULT_MIN_ITEMS = 10.0f;
 
     // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s
     const int32_t TARGET_SCAN_INTERVAL = 10;
@@ -1223,8 +1225,13 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         composting.mUseBlockMax = (int32_t) numberOf(component, "use_block_max", COMPOSTER_DEFAULT_USE_MAX);
         composting.mBlockInteractionMax = (int32_t) numberOf(component, "block_interaction_max",
                                                              COMPOSTER_DEFAULT_INTERACTIONS);
+        composting.mItemsPerUseMax =
+                (int32_t) numberOf(component, "items_per_use_max", COMPOSTER_DEFAULT_ITEMS_PER_USE);
+        composting.mMinItemCount = (int32_t) numberOf(component, "min_item_count", COMPOSTER_DEFAULT_MIN_ITEMS);
         const json::Value *canEmpty = component.get("can_empty_composter");
         composting.mCanEmpty = canEmpty == nullptr || canEmpty->boolean(true);
+        const json::Value *canFill = component.get("can_fill_composter");
+        composting.mCanFill = canFill == nullptr || canFill->boolean(true);
         return std::make_unique<WorkComposterGoal>(workSettings(mob, component), composting);
     }
 

@@ -1,5 +1,6 @@
 #include "World/Level/Block/Actor/HopperBlockActor.h"
 
+#include "World/Level/Block/ComposterBlock.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "World/Actor/ServerActor.h"
@@ -314,6 +315,20 @@ bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {
     if (targetContainer != nullptr)
         return moveOne(mInventory, fullRange(mInventory), *targetContainer,
                        pushRange(*targetActor, *targetContainer, facing == FACE_DOWN), &level, mPosition, true);
+
+    // a composter below takes the first slot it composts, one item at a time
+    const BlockState *below = facing == FACE_DOWN ? level.peekBlockPtr(target.x, target.y, target.z) : nullptr;
+    if (below != nullptr && ComposterBlock::matches(below->mName) && level.getOwner() != nullptr) {
+        for (int slot = 0; slot < mInventory.getContainerSize(); ++slot) {
+            ItemStack item = mInventory.getContainerItem(slot);
+            if (item.isAir() || !ComposterBlock::addItem(*level.getOwner(), level, target, item))
+                continue;
+            --item.mCount;
+            mInventory.setContainerItem(slot, item.mCount <= 0 ? ItemStack::air() : std::move(item));
+            return true;
+        }
+        return false;
+    }
 
     // a minecart with a container in front takes the items when no block container is there
     Container *minecart = actorContainerAt(level, target);
