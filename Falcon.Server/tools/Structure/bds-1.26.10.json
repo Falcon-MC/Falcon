@@ -11800,6 +11800,31 @@
       "old": "Falcon.Server/src/World/Village/VillageManager.cpp",
       "path": "Falcon.Server/src/World/Village/VillageManager.cpp",
       "sha256": "fc25bfd7208444aa9f7252c81b057d43120d97e477c161129fa9c245d464c3ed"
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/MineshaftFeature.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/MineshaftFeature.h",
+      "sha256": "253d7b5ad8baf30615f4602fb7a6cc531f24d39fc33f09553c948a6b95f52488"
+    },
+    {
+      "old": "Falcon.Server/include/World/Level/LevelGen/Structure/MineshaftStructure.h",
+      "path": "Falcon.Server/include/World/Level/LevelGen/Structure/MineshaftStructure.h",
+      "sha256": "9e1c11a64de264f0528a1cde5f3616e717233ab0d2433a87ab38747ba7060219"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftFeature.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftFeature.cpp",
+      "sha256": "e889302112883f19f1297a3fa962cb9e786be8938e9fc9637a60aae97fa49610"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftPieces.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftPieces.cpp",
+      "sha256": "4ae7686f1ac1014e05133abd583827835bbac21958704b3b4a6160f25b816b9f"
+    },
+    {
+      "old": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftStructure.cpp",
+      "path": "Falcon.Server/src/World/Level/LevelGen/Structure/MineshaftStructure.cpp",
+      "sha256": "ba52b91aa8e6b90fe9761df745b72eb1fbb789b79c880a613f73665bd11e81e6"
     }
   ]
 }

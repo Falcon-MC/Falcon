@@ -10,6 +10,8 @@
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
 
+#include <utility>
+
 namespace {
     // the chest takes its direction as a data value: its old facing_direction, renamed cardinal_direction by the
     // 1.20.40 upgrade schema (2 north, 3 south, 4 west, 5 east)
@@ -27,8 +29,9 @@ namespace {
     }
 }
 
-StructurePieceWriter::StructurePieceWriter(Level &level, LevelChunk &chunk, const StructurePiece &piece)
-        : mLevel(level), mChunk(chunk), mPiece(piece) {}
+StructurePieceWriter::StructurePieceWriter(Level &level, LevelChunk &chunk, const StructurePiece &piece,
+                                           ReplaceBlock replaceBlock)
+        : mLevel(level), mChunk(chunk), mPiece(piece), mReplaceBlock(std::move(replaceBlock)) {}
 
 bool StructurePieceWriter::inChunk(int32_t x, int32_t y, int32_t z) const {
     const int32_t blockY = mPiece.worldY(y);
@@ -43,8 +46,14 @@ const BlockState *StructurePieceWriter::getBlock(int32_t x, int32_t y, int32_t z
 }
 
 void StructurePieceWriter::placeBlock(const BlockState &state, int32_t x, int32_t y, int32_t z) {
-    if (inChunk(x, y, z))
-        mChunk.setBlock(mPiece.worldX(x, z) & 15, mPiece.worldY(y), mPiece.worldZ(x, z) & 15, state);
+    if (!inChunk(x, y, z))
+        return;
+
+    const int32_t localX = mPiece.worldX(x, z) & 15;
+    const int32_t blockY = mPiece.worldY(y);
+    const int32_t localZ = mPiece.worldZ(x, z) & 15;
+    if (!mReplaceBlock || mReplaceBlock(mChunk.getBlock(localX, blockY, localZ)))
+        mChunk.setBlock(localX, blockY, localZ, state);
 }
 
 void StructurePieceWriter::generateBox(int32_t minX, int32_t minY, int32_t minZ, int32_t maxX, int32_t maxY,
