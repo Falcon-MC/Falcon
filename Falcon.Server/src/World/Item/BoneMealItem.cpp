@@ -174,7 +174,8 @@ bool BoneMealItem::fertilize(ServerNetworkHandler &owner, Level &level, const Ve
         return applyToGrass(owner, level, position);
     if (NyliumBlock::matches(state.mName))
         return applyToNylium(owner, level, position, state);
-    return false;
+    const Block *block = VanillaBlocks::fromState(state);
+    return block != nullptr && block->onFertilized(owner, level, position, state);
 }
 
 bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,

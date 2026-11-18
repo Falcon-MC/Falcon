@@ -320,6 +320,16 @@ public:
         (void) state;
     }
 
+    // bone meal on this block; false: it takes none and the bone meal is kept
+    virtual bool onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
     // the block's own dispense for its item; false drops it as a dropper does
     virtual bool dispense(const DispenseSource &source) const {
         (void) source;
