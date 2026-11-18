@@ -15,6 +15,8 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/LevelGen/Structure/EndCityFeature.h"
+#include "World/Level/LevelGen/Structure/EndCityStructure.h"
 #include "World/Level/LevelGen/Structure/JigsawPlacer.h"
 #include "World/Level/LevelGen/Structure/MineshaftStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
@@ -32,6 +34,7 @@
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 
+#include <algorithm>
 #include <array>
 #include <initializer_list>
 #include <map>
@@ -466,6 +469,33 @@ namespace {
 }
 
 namespace {
+    void checkEndCity() {
+        const auto generator = DimensionFactory::createGenerator(DimensionType::TheEnd, 42);
+        const StructureFeature *cities = StructureFeature::get("end_city");
+        require(cities != nullptr, "End cities are not registered");
+        require(cities->isStartChunk(*generator, -37, 63), "The seed 42 end city start differs from BDS");
+        std::mt19937 turnRandom = EndCityFeature::createCityRandom(-37, 63);
+        const auto turns = (int32_t) (turnRandom() & 3);
+        const int32_t y = EndCityFeature::getBaseY(*generator, -37, 63, turns);
+        require(turns == 3 && y == 60, "The seed 42 end city pose differs from BDS");
+
+        std::mt19937 random = cities->createStartRandom(generator->getSeed(), -37, 63);
+        const auto pieces = EndCityStructure::plan(-37 * 16 + 8, y, 63 * 16 + 8, turns, random);
+        const auto ship = std::find_if(pieces.begin(), pieces.end(),
+                                       [](const EndCityStructure::Piece &piece) { return piece.mTemplate == "ship"; });
+        require(pieces.size() == 33 && ship != pieces.end() && ship->x == -670 && ship->y == 107 && ship->z == 1018
+                        && ship->mQuarterTurns == 3,
+                "The seed 42 end city layout differs from BDS");
+
+        BlockState out;
+        StructureTemplate::PaletteEntry glass{"minecraft:stained_glass", {{"color", "magenta"}}};
+        require(StructureBlockTable::translate(glass, 0, out) && out.mName == "minecraft:magenta_stained_glass",
+                "Old stained glass lost its color");
+        StructureTemplate::PaletteEntry rod{"minecraft:end_rod", {{"facing", "east"}}};
+        require(StructureBlockTable::translate(rod, 0, out) && out.mStates.getInt("facing_direction", -1) == 4,
+                "A lying end rod faces the wrong side");
+    }
+
     void checkMansionStart() {
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const StructureFeature *mansions = StructureFeature::get("mansion");
@@ -853,6 +883,7 @@ int main() {
         checkOceanRuins();
         checkPillagerOutposts();
         checkMansionStart();
+        checkEndCity();
         checkMineshaftStarts();
         checkRuinedPortals();
         checkScatteredPieces();

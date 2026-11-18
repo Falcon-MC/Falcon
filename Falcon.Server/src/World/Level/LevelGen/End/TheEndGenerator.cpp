@@ -3,6 +3,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/End/Biome/TheEndBiomeSource.h"
 #include "World/Level/LevelGen/End/Feature/TheEndFeatureBuilder.h"
+#include "World/Level/LevelGen/Structure/EndCityStructure.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
 
@@ -186,5 +187,7 @@ void TheEndGenerator::generate(LevelChunk &chunk) const {
 }
 
 void TheEndGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
+    // structures go first: the game post processes them before any feature runs
+    EndCityStructure::place(*this, level, chunk);
     TheEndFeatureBuilder::apply(level, chunk, *mNoiseHolder, overflow);
 }

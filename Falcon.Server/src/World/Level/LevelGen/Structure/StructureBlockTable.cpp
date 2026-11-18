@@ -544,6 +544,16 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         return true;
     }
 
+    if (name == "minecraft:end_rod") {
+        // a lying rod keeps the side it grows from, the opposite of the file's facing
+        const std::string facing = property(entry, "facing");
+        states.putInt("facing_direction", facing == "up" || facing == "down"
+                                                  ? sixFacing(facing, quarterTurns)
+                                                  : facingDirection(rotatedFacing(entry, quarterTurns + 2)));
+        out = BlockState(name, states);
+        return true;
+    }
+
     if (name == "minecraft:ladder" || name == "minecraft:wall_sign") {
         states.putInt("facing_direction", facingDirection(rotatedFacing(entry, quarterTurns)));
         out = BlockState(name, states);
@@ -684,11 +694,14 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         return true;
     }
 
-    if (name == "minecraft:carpet" || name == "minecraft:wool") {
+    if (name == "minecraft:carpet" || name == "minecraft:wool" || name == "minecraft:stained_glass") {
         std::string color = property(entry, "color");
         if (color == "silver")
             color = "light_gray";
-        const std::string dyed = "minecraft:" + color + (name == "minecraft:carpet" ? "_carpet" : "_wool");
+        const std::string dyed = "minecraft:" + color
+                                 + (name == "minecraft:carpet" ? "_carpet"
+                                    : name == "minecraft:wool" ? "_wool"
+                                                               : "_stained_glass");
         if (BlockPaletteRegistry::getInstance().getDefaultStates(dyed) != nullptr) {
             out = BlockState(dyed);
             return true;
@@ -716,9 +729,10 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
     }
 
     if (name == "minecraft:brewing_stand") {
-        // measured: the bottle of the file lands in the first slot, whichever slot it names
-        states.putByte("brewing_stand_slot_a_bit", property(entry, "has_bottle_1") == "true" ? 1 : 0);
-        states.putByte("brewing_stand_slot_b_bit", property(entry, "has_bottle_0") == "true" ? 1 : 0);
+        // measured on the igloo and the end ship: the first two bottles of the file both land in the first slot
+        const bool first = property(entry, "has_bottle_0") == "true" || property(entry, "has_bottle_1") == "true";
+        states.putByte("brewing_stand_slot_a_bit", first ? 1 : 0);
+        states.putByte("brewing_stand_slot_b_bit", 0);
         states.putByte("brewing_stand_slot_c_bit", property(entry, "has_bottle_2") == "true" ? 1 : 0);
         out = BlockState(name, states);
         return true;
