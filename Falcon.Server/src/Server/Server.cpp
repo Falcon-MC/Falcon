@@ -5,6 +5,7 @@
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "Core/Debug/FileLogEndPoint.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Resources/PackOptimizer.h"
 #include "Server/ServerHost.h"
 #include "Server/ServerTelemetry.h"
 #include "Server/SetupWizard.h"
@@ -205,16 +206,27 @@ void startServer(const ServerSettings &settings) {
 
 int main(int argc, char **argv) {
     ServerSettings settings;
+    std::string packOptimizerConfig;
 
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
 
-        if (argument == "--no-wizard")
+        if (argument.rfind(PackOptimizer::ARGUMENT, 0) == 0)
+            packOptimizerConfig = argument.substr(std::string(PackOptimizer::ARGUMENT).size());
+        else if (argument == "--no-wizard")
             settings.runSetupWizard = false;
         else if (argument == "--accept-license")
             settings.acceptLicense = true;
         else if (argument.rfind("--language=", 0) == 0)
             settings.language = argument.substr(std::string("--language=").size());
+    }
+
+    // the game runs the optimizer instead of the server and exits with its code
+    if (!packOptimizerConfig.empty()) {
+        setupServerLogging();
+        const int code = PackOptimizer::run(packOptimizerConfig);
+        BedrockLog::shutdown();
+        return code;
     }
 
     startServer(settings);
