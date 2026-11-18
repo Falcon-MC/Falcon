@@ -15,6 +15,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
 #include "World/Level/LevelGen/Structure/EndCityFeature.h"
 #include "World/Level/LevelGen/Structure/EndCityStructure.h"
 #include "World/Level/LevelGen/Structure/JigsawPlacer.h"
@@ -496,6 +497,18 @@ namespace {
                 "A lying end rod faces the wrong side");
     }
 
+    // the fill the game adds near a buried stronghold piece: full inside, falling to nothing six blocks out
+    void checkStrongholdBury() {
+        TerrainBeard beard;
+        beard.addBuriedBox(0, 0, {0, 10, 0, 4, 14, 4});
+        beard.addBuriedBox(0, 0, {100, 10, 100, 104, 14, 104});
+        require(beard.buried(2, 12, 2) == 1.0f, "A buried piece does not fill its own box");
+        require(beard.buried(7, 12, 2) == 0.5f, "A buried piece fills three blocks out wrongly");
+        require(beard.buried(10, 12, 2) == 0.0f, "A buried piece fills six blocks out");
+        require(beard.buried(2, 20, 2) == 0.5f, "A buried piece fills six blocks above wrongly");
+        require(beard.getMinY() == -2 && beard.getMaxY() == 25, "A buried piece reaches the wrong cells");
+    }
+
     void checkMansionStart() {
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const StructureFeature *mansions = StructureFeature::get("mansion");
@@ -894,6 +907,7 @@ int main() {
         checkMaterials();
         checkOceanRuins();
         checkPillagerOutposts();
+        checkStrongholdBury();
         checkMansionStart();
         checkEndCity();
         checkMineshaftStarts();
