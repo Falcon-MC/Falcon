@@ -2,11 +2,15 @@
 
 #include "World/Actor/Mob/Hostile/HostileActor.h"
 
+#include <cstdint>
+
 class ElderGuardianActor : public HostileActor {
 public:
     static constexpr const char *IDENTIFIER = "minecraft:elder_guardian";
 
     using HostileActor::HostileActor;
+
+    void tick(ServerNetworkHandler &owner) override;
 
     ActorSize getSize() const override {
         return ActorSize{1.99f, 1.99f};
@@ -24,4 +28,10 @@ public:
     bool syncsTargetData() const override {
         return false;
     }
+
+private:
+    // every minute the curse reaches the players around: mining fatigue and the ghost on their screen
+    void _curse(ServerNetworkHandler &owner);
+
+    uint32_t mTicks = 0;
 };

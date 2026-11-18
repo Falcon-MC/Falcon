@@ -10,6 +10,7 @@
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
 #include "World/Level/LevelGen/Structure/JungleTempleStructure.h"
 #include "World/Level/LevelGen/Structure/MansionStructure.h"
+#include "World/Level/LevelGen/Structure/MonumentStructure.h"
 #include "World/Level/LevelGen/Structure/MineshaftStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
@@ -141,6 +142,8 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     DesertPyramidStructure::place(*this, level, chunk);
     JungleTempleStructure::place(*this, level, chunk);
     BuriedTreasureStructure::place(*this, level, chunk);
+    // created after the buried treasure and before the ocean ruins and shipwrecks in createGenerator
+    MonumentStructure::place(*this, level, chunk);
     ShipwreckStructure::place(*this, level, chunk);
     OceanRuinStructure::place(*this, level, chunk);
     PillagerOutpostStructure::place(*this, level, chunk);
