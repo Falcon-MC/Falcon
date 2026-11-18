@@ -9,6 +9,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Actor/JukeboxBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/ButtonBlock.h"
 #include "World/Level/Block/CauldronBlock.h"

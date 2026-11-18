@@ -23,6 +23,12 @@ public:
         return canHold(item);
     }
 
+    // whether a hopper may take the item out of the slot
+    virtual bool canTakeFromSlot(int slot) const {
+        (void) slot;
+        return true;
+    }
+
     // a disabled slot takes nothing, from players or hoppers alike
     virtual bool isSlotDisabled(int slot) const {
         (void) slot;

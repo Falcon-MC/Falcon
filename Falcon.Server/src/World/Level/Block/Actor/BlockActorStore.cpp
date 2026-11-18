@@ -22,6 +22,7 @@
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/Actor/HopperBlockActor.h"
+#include "World/Level/Block/Actor/JukeboxBlockActor.h"
 #include "World/Level/Block/Actor/ItemFrameBlockActor.h"
 #include "World/Level/Block/Actor/LodestoneBlockActor.h"
 #include "World/Level/Block/Actor/MobSpawnerBlockActor.h"

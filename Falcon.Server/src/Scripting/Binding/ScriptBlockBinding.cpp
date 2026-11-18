@@ -12,6 +12,7 @@
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/Actor/JukeboxBlockActor.h"
 #include "World/Level/Block/Actor/DataDrivenBlockActor.h"
 #include "World/Level/Block/Actor/StoredActor.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
@@ -1161,12 +1162,6 @@ namespace {
 
     JukeboxBlockActor *jukeboxAt(const BlockAt &at);
 
-    std::string recordSound(const ItemStack &record);
-
-    void playAt(const BlockAt &at, JukeboxBlockActor &jukebox);
-
-    void stopAt(const BlockAt &at);
-
     JukeboxBlockActor *jukeboxAt(const BlockAt &at) {
         return at.mLevel->getBlockActors().find<JukeboxBlockActor>(at.mPosition);
     }
@@ -1176,7 +1171,7 @@ namespace {
         JukeboxBlockActor *jukebox = jukeboxAt(at);
         if (jukebox == nullptr)
             return JS_UNDEFINED;
-        return at.mApi->makeItem(jukebox->getContainer()->getContainerItem(0));
+        return at.mApi->makeItem(jukebox->getRecord());
     }
 
     JSValue recordSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -1194,40 +1189,24 @@ namespace {
         JukeboxBlockActor *jukebox = jukeboxAt(at);
         if (jukebox == nullptr)
             return JS_UNDEFINED;
-        if (!stack.isAir() && recordSound(stack).empty())
+        if (!stack.isAir() && JukeboxBlockActor::findSong(stack) == nullptr)
             return at.mApi->throwError("Error", "Item is not a record.");
-        stopAt(at);
-        jukebox->getContainer()->setContainerItem(0, stack);
-        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
         // the one-argument overload plays; the other stores !startPlaying
-        if (argc < 2 || JS_IsUndefined(argv[1]) || JS_ToBool(ctx, argv[1]) == 1)
-            playAt(at, *jukebox);
+        const bool play = argc < 2 || JS_IsUndefined(argv[1]) || JS_ToBool(ctx, argv[1]) == 1;
+        jukebox->stop(at.mApi->host());
+        jukebox->setRecord(stack, play);
+        if (play)
+            jukebox->play(at.mApi->host());
+        else
+            BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
         return JS_UNDEFINED;
     }
 
     JSValue recordEject(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         JukeboxBlockActor *jukebox = jukeboxAt(at);
-        if (jukebox == nullptr)
-            return JS_UNDEFINED;
-        const ItemStack record = jukebox->getContainer()->getContainerItem(0);
-        if (record.isAir() || record.mDefinition == nullptr)
-            return JS_UNDEFINED;
-        stopAt(at);
-        jukebox->getContainer()->setContainerItem(0, ItemStack::air());
-        // up, north, south, east, west, down, the first free block takes the record
-        static const int SIDES[6][3] = {{0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {1, 0, 0}, {-1, 0, 0}, {0, -1, 0}};
-        Vector3i target(at.mPosition.x, at.mPosition.y + 1, at.mPosition.z);
-        for (const int *side: SIDES) {
-            const Vector3i candidate(at.mPosition.x + side[0], at.mPosition.y + side[1], at.mPosition.z + side[2]);
-            if (at.mLevel->getBlockState(candidate.x, candidate.y, candidate.z).mName == BlockNames::AIR) {
-                target = candidate;
-                break;
-            }
-        }
-        ItemActorHandler::dropItem(at.mApi->host(), *at.mLevel, ItemActorHandler::randomPopPosition(target), record,
-                                   ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
-        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
+        if (jukebox != nullptr && !jukebox->getRecord().isAir())
+            jukebox->eject(at.mApi->host());
         return JS_UNDEFINED;
     }
 
@@ -1256,67 +1235,23 @@ namespace {
         return JS_NewBool(ctx, PrecipitationSystem::canHoldSnow(*at.mLevel, at.mPosition));
     }
 
-    // the record sound events of the 26.60 strings, record.<disc>
-    const char *const RECORDS[] = {"11",        "13",           "5",
-                                   "blocks",    "bounce",       "cat",
-                                   "chirp",     "creator",      "creator_music_box",
-                                   "far",       "lava_chicken", "mall",
-                                   "mellohi",   "otherside",    "pigstep",
-                                   "precipice", "relic",        "stal",
-                                   "strad",     "tears",        "wait",
-                                   "ward"};
-
-    std::string recordSound(const ItemStack &record) {
-        if (record.isAir() || record.mDefinition == nullptr)
-            return std::string();
-        const std::string &identifier = record.mDefinition->getIdentifier();
-        const std::string prefix = "minecraft:music_disc_";
-        if (identifier.compare(0, prefix.size(), prefix) != 0)
-            return std::string();
-        const std::string disc = identifier.substr(prefix.size());
-        for (const char *known: RECORDS) {
-            if (disc == known)
-                return "record." + disc;
-        }
-        return std::string();
-    }
-
     bool isPlayingAt(const BlockAt &at) {
         const JukeboxBlockActor *jukebox = jukeboxAt(at);
         return jukebox != nullptr && jukebox->isPlaying();
     }
 
-    Vector3f centerOf(const BlockAt &at) {
-        return Vector3f((float) at.mPosition.x + 0.5f, (float) at.mPosition.y + 0.5f, (float) at.mPosition.z + 0.5f);
-    }
-
-    void playAt(const BlockAt &at, JukeboxBlockActor &jukebox) {
-        const std::string sound = recordSound(jukebox.getContainer()->getContainerItem(0));
-        if (sound.empty())
-            return;
-        at.mApi->host().playBlockSound(*at.mLevel, sound, centerOf(at), at.state().getHash());
-        jukebox.setPlaying(true);
-        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, jukebox);
-    }
-
-    // no sound event: the game only raises FinishedRecording, the client stops the disc
-    void stopAt(const BlockAt &at) {
-        JukeboxBlockActor *jukebox = jukeboxAt(at);
-        if (jukebox == nullptr || !jukebox->isPlaying())
-            return;
-        jukebox->setPlaying(false);
-        BlockActionHandler::broadcastBlockActorData(at.mApi->host(), *at.mLevel, *jukebox);
-    }
-
     JSValue recordPlay(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const BlockAt at = blockAt(ctx, thisVal);
         if (JukeboxBlockActor *jukebox = jukeboxAt(at))
-            playAt(at, *jukebox);
+            jukebox->play(at.mApi->host());
         return JS_UNDEFINED;
     }
 
     JSValue recordPause(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        stopAt(blockAt(ctx, thisVal));
+        const BlockAt at = blockAt(ctx, thisVal);
+        JukeboxBlockActor *jukebox = jukeboxAt(at);
+        if (jukebox != nullptr && jukebox->isPlaying())
+            jukebox->stop(at.mApi->host());
         return JS_UNDEFINED;
     }
 

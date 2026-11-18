@@ -26,7 +26,6 @@ enum class ContainerBlockKind {
     Lectern,
     ChiseledBookshelf,
     DecoratedPot,
-    Jukebox,
     Shelf
 };
 

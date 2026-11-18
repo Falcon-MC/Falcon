@@ -282,38 +282,6 @@ private:
     Tag mSherds;
 };
 
-class JukeboxBlockActor final : public ContainerBlockActor {
-public:
-    static constexpr const char *BLOCK_ACTOR_ID = "Jukebox";
-
-    static const int SIZE = 1;
-
-    JukeboxBlockActor() : ContainerBlockActor(SIZE) {}
-
-    const char *getBlockActorId() const override {
-        return BLOCK_ACTOR_ID;
-    }
-
-    Tag saveNbt() const override;
-
-    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
-
-    Tag getSpawnCompound() const override;
-
-    bool isPlaying() const {
-        return !mFinishedRecording;
-    }
-
-    void setPlaying(bool playing) {
-        mFinishedRecording = !playing;
-        mTicksPlaying = 0;
-    }
-
-private:
-    bool mFinishedRecording = true;
-    int mTicksPlaying = 0;
-};
-
 class LecternBlockActor final : public ContainerBlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Lectern";

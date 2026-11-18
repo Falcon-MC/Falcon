@@ -223,7 +223,7 @@ namespace {
                  const Vector3i &hopper, bool pushing) {
         for (int slot = fromRange.mFirst; slot < fromRange.mLast; ++slot) {
             const ItemStack &source = from.getContainerItem(slot);
-            if (source.isAir() || source.mCount <= 0)
+            if (source.isAir() || source.mCount <= 0 || !from.canTakeFromSlot(slot))
                 continue;
             if (!allowedByPlugins(level, hopper, source, pushing))
                 return false;
