@@ -84,6 +84,9 @@ private:
 
     bool _isSampleOpen(const Vector3f &position);
 
+    // minecraft:preferred_path's cost of the block under the feet
+    int32_t _groundCost(int32_t x, int32_t feetY, int32_t z) const;
+
     Level *mLevel = nullptr;
     const Actor *mActor = nullptr;
     const PathOptions *mOptions = nullptr;

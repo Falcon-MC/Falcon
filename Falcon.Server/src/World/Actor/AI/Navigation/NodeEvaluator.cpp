@@ -163,17 +163,20 @@ int32_t NodeEvaluator::extraCost(int32_t x, int32_t feetY, int32_t z) {
     if (((feet | ground) & Damaging) != 0)
         cost += HAZARD_EXTRA_COST;
 
-    if (mOptions->mHasPreferredPath) {
-        const BlockState *state = mLevel->peekBlockPtr(x, feetY - 1, z);
-        float blockCost = mOptions->mDefaultBlockCost;
-        if (state != nullptr) {
-            const auto listed = mOptions->mBlockCosts.find(state->mName);
-            if (listed != mOptions->mBlockCosts.end())
-                blockCost = listed->second;
-        }
-        cost += (int32_t) (blockCost * (float) BLOCK_COST);
-    }
+    if (mOptions->mHasPreferredPath)
+        cost += _groundCost(x, feetY, z);
     return cost;
+}
+
+int32_t NodeEvaluator::_groundCost(int32_t x, int32_t feetY, int32_t z) const {
+    const BlockState *state = mLevel->peekBlockPtr(x, feetY - 1, z);
+    float blockCost = mOptions->mDefaultBlockCost;
+    if (state != nullptr) {
+        const auto listed = mOptions->mBlockCosts.find(state->mName);
+        if (listed != mOptions->mBlockCosts.end())
+            blockCost = listed->second;
+    }
+    return (int32_t) (blockCost * (float) BLOCK_COST);
 }
 
 int32_t NodeEvaluator::jumpCost() const {
@@ -190,9 +193,21 @@ bool NodeEvaluator::hasBarrier(const Vector3f &from, const Vector3f &to) {
     const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
     const int32_t samples = std::max(1, (int32_t) std::ceil(distance * BARRIER_SAMPLES_PER_BLOCK));
 
+    // a shortcut must not cross ground costlier than both ends: it would leave the preferred path
+    const bool keepsGround = mOptions->mHasPreferredPath && !mOptions->isVolumetric();
+    const int32_t allowed = keepsGround ? std::max(_groundCost((int32_t) std::floor(from.x), (int32_t) std::floor(from.y),
+                                                               (int32_t) std::floor(from.z)),
+                                                   _groundCost((int32_t) std::floor(to.x), (int32_t) std::floor(to.y),
+                                                               (int32_t) std::floor(to.z)))
+                                        : 0;
+
     for (int32_t i = 0; i <= samples; ++i) {
         const float progress = (float) i / (float) samples;
-        if (!_isSampleOpen(Vector3f(from.x + dx * progress, from.y + dy * progress, from.z + dz * progress)))
+        const Vector3f sample(from.x + dx * progress, from.y + dy * progress, from.z + dz * progress);
+        if (!_isSampleOpen(sample))
+            return true;
+        if (keepsGround && _groundCost((int32_t) std::floor(sample.x), (int32_t) std::floor(sample.y),
+                                       (int32_t) std::floor(sample.z)) > allowed)
             return true;
     }
     return false;

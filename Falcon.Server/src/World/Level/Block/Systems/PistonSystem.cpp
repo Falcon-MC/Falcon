@@ -1,6 +1,7 @@
 #include "World/Level/Block/Systems/PistonSystem.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/ActorCollisionSystem.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Block.h"
@@ -192,10 +193,14 @@ namespace {
                 }
             }
         });
+        const Vector3f delta((float) offset.x, (float) offset.y, (float) offset.z);
         for (MobActor *mob: pushed) {
+            // moved blocks are air until the move lands: only the blocks past them stop the mob
+            AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*mob);
+            const ActorMoveResult result = ActorCollisionSystem::move(level, box, delta, 0.0f, mob->isOnGround(), mob);
             const Vector3f &position = mob->getPosition();
-            mob->teleport(Vector3f(position.x + (float) offset.x, position.y + (float) offset.y,
-                                   position.z + (float) offset.z));
+            mob->teleport(Vector3f(position.x + result.mMoved.x, position.y + result.mMoved.y,
+                                   position.z + result.mMoved.z));
         }
     }
 
