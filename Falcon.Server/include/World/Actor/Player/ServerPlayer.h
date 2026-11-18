@@ -16,6 +16,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Map/MapRequestQueue.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Inventory/RecipeUnlocking.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/NetworkIdentifier.h"
 #include "Network/PacketSender.h"
@@ -692,6 +693,14 @@ public:
         mEffectsNetworkReady = ready;
     }
 
+    PlayerRecipeUnlocks &getRecipeUnlocks() {
+        return mRecipeUnlocks;
+    }
+
+    const PlayerRecipeUnlocks &getRecipeUnlocks() const {
+        return mRecipeUnlocks;
+    }
+
     PlayerBossBars &getBossBars() {
         return mBossBars;
     }
@@ -1358,6 +1367,7 @@ private:
     bool mEffectsNetworkReady = false;
     PlayerRaidState mRaidState;
     PlayerBossBars mBossBars;
+    PlayerRecipeUnlocks mRecipeUnlocks;
     bool mHiddenHudElements[HUD_ELEMENT_COUNT] = {};
     uint32_t mInputLocks = 0;
     DebugHud mDebugHud;

@@ -42,6 +42,7 @@ namespace {
         std::vector<BrewingMixData> mPotionMixes;
         std::vector<BrewingMixData> mContainerMixes;
         std::deque<std::string> mStrings;
+        std::unordered_map<std::string, RecipeUnlockRequirement> mUnlocking;
         bool mLoaded = false;
 
         const char *store(const std::string &value) {
@@ -423,6 +424,47 @@ namespace {
         return value;
     }
 
+    void loadUnlockRequirement(RecipeStorage &storage, const json::Value &source) {
+        const json::Value *id = source.get("id");
+        const json::Value *data = source.get("unlockingRequirements");
+        if (id == nullptr || data == nullptr || data->mType != json::Value::Type::Object)
+            return;
+
+        RecipeUnlockRequirement requirement;
+        const json::Value *context = data->get("context");
+        requirement.mContext = (RecipeUnlockRequirement::Context) (context == nullptr ? 0 : context->integer(0));
+        const json::Value *items = data->get("items");
+        if (items != nullptr && items->mType == json::Value::Type::Array) {
+            for (const std::unique_ptr<json::Value> &item: items->mArray) {
+                const json::Value *type = item->get("type");
+                const json::Value *count = item->get("count");
+                RecipeIngredientEntry entry;
+                entry.mHasItem = true;
+                entry.mCount = count == nullptr ? 1 : count->integer(1);
+                if (type != nullptr && type->string() == "item_tag") {
+                    const json::Value *tag = item->get("itemTag");
+                    if (tag == nullptr)
+                        continue;
+                    entry.mType = RecipeIngredientType::ItemTag;
+                    entry.mItemTag = tag->string();
+                } else {
+                    const json::Value *itemId = item->get("itemId");
+                    if (itemId == nullptr)
+                        continue;
+                    const json::Value *aux = item->get("auxValue");
+                    entry.mItemId = itemId->string();
+                    int32_t suffixAux = -1;
+                    if (stripMetadataSuffix(entry.mItemId, suffixAux) && aux == nullptr)
+                        entry.mAuxValue = suffixAux;
+                    else
+                        entry.mAuxValue = aux == nullptr ? -1 : aux->integer(-1);
+                }
+                requirement.mItems.push_back(std::move(entry));
+            }
+        }
+        storage.mUnlocking[id->string()] = std::move(requirement);
+    }
+
     RecipeStorage &getStorage() {
         static RecipeStorage storage;
         if (storage.mLoaded)
@@ -441,6 +483,7 @@ namespace {
 
         const TagMap tags = loadTags();
         for (const std::unique_ptr<json::Value> &recipe: recipes->mArray) {
+            loadUnlockRequirement(storage, *recipe);
             const json::Value *type = recipe->get("type");
             const json::Value *block = recipe->get("block");
             if (type == nullptr || block == nullptr)
@@ -612,6 +655,16 @@ bool CraftingRecipeTable::isKnownBy(const std::string &recipeId, int32_t protoco
     }
 
     return found->second.count(recipeId.substr(0, recipeId.find('#'))) != 0;
+}
+
+std::string CraftingRecipeTable::baseRecipeId(const std::string &recipeId) {
+    return recipeId.substr(0, recipeId.find('#'));
+}
+
+const RecipeUnlockRequirement *CraftingRecipeTable::getUnlockRequirement(const std::string &recipeId) {
+    const RecipeStorage &storage = getStorage();
+    const auto found = storage.mUnlocking.find(baseRecipeId(recipeId));
+    return found == storage.mUnlocking.end() ? nullptr : &found->second;
 }
 
 const std::vector<std::string> &CraftingRecipeTable::getItemTags(const std::string &identifier) {

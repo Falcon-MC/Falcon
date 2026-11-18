@@ -592,7 +592,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 strayEnchanting = strayEnchanting || usesEnchantingTable(action);
         }
 
-        if (leftContainer || renumberedBundles || strayEnchanting
+        // with doLimitedCrafting a locked recipe does not craft
+        bool lockedRecipe = false;
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (action.mType == ItemStackRequestActionType::CraftRecipe
+                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
+                lockedRecipe = lockedRecipe || !RecipeUnlockSystem::mayCraft(owner, player, action.mRecipeNetworkId);
+        }
+
+        if (leftContainer || renumberedBundles || strayEnchanting || lockedRecipe
             || (creativeCraft && gameType != (int32_t) GameType::Creative)
             || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;

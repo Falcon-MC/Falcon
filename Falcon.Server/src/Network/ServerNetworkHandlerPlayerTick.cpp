@@ -153,6 +153,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     if (player.isSpawned())
         MapHandler::tickPlayer(*this, player);
 
+    RecipeUnlockSystem::tick(*this, player);
+
     if (player.isSpawned())
         FreezingSystem::tick(*this, player);
     const bool effectAttributesDirty = player.getEffects().consumeAttributesDirty();

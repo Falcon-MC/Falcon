@@ -1080,6 +1080,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
     saveTags(data);
+    mRecipeUnlocks.save(data);
 
     return data;
 }
@@ -1096,6 +1097,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
         setUniqueId(data.getLong("UniqueID"));
 
     loadTags(data);
+    mRecipeUnlocks.load(data);
 
     mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x), listValue(data, TAG_POS, 1, mPosition.y),
                          listValue(data, TAG_POS, 2, mPosition.z));
