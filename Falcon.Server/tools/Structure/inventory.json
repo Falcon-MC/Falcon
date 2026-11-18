@@ -1,11 +1,5 @@
 {
-  "reference": {
-    "product": "Bedrock Dedicated Server",
-    "version": "1.26.10",
-    "imagebase": "0x140000000"
-  },
   "scope": "File organization only. C++ class names, inheritance and gameplay are preserved.",
-  "limits": "Source paths are sparse assertion strings, not a complete source tree. Directories use PascalCase to satisfy Falcon rules; unverified child folders retain Falcon grouping. Type-name matches are not ABI or responsibility equivalence.",
   "baseline": "7387f7b0b39e192c014893d1187b66926a5b77e0",
   "files": [
     {
@@ -612,10 +606,7 @@
       "sha256": "846563e0d020ba08dd09def14b7c22fe10eaa9f09b7fe88ea14ae62e40a9bd75",
       "classes": [
         "Actor"
-      ],
-      "bds_type_names": {
-        "Actor": "0x14696d214"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Actor/ActorAttributes.h",
@@ -1685,10 +1676,7 @@
       "sha256": "8fa47c3f315bd0e061e2232037e77c886070d252a7c957e57c938198fdb2157f",
       "classes": [
         "PhysicsComponent"
-      ],
-      "bds_type_names": {
-        "PhysicsComponent": "0x1468b2994"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Actor/Movement/PlayerMovementSimulator.h",
@@ -1783,10 +1771,7 @@
       "sha256": "0e4ef0bebde6f0603d949d05b53365efd70ca14a05459b668c59c8545e3d9c76",
       "classes": [
         "ServerPlayer"
-      ],
-      "bds_type_names": {
-        "ServerPlayer": "0x1468c6410"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Actor/SizedActor.h",
@@ -1939,10 +1924,7 @@
         "BlockPlacementEntry",
         "BlockDrop",
         "Block"
-      ],
-      "bds_type_names": {
-        "Block": "0x146ad0050"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/BlockActor.h",
@@ -2047,10 +2029,7 @@
       "sha256": "71a954267e7472bc0ec163107670772a3b2fac73cdb35bccff27bfb7230af996",
       "classes": [
         "BlockSource"
-      ],
-      "bds_type_names": {
-        "BlockSource": "0x146abb170"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/BlockState.h",
@@ -2070,10 +2049,6 @@
       "old": "Falcon.Server/include/Block/BlockType.h",
       "path": "Falcon.Server/include/World/Level/Block/BlockType.h",
       "sha256": "59607198e4ae300069153c6e3fdcff1e0d7da9c3fdaf82fd9a94c8d6431d8ee6",
-      "bds_source": {
-        "path": "world/level/block/BlockType.cpp",
-        "address": "0x146abb1f0"
-      },
       "classes": []
     },
     {
@@ -3037,10 +3012,7 @@
       "sha256": "b26fc6072cd20959344df7105a6349e8039a1ab5d3c0a7fd5451a430f87739e3",
       "classes": [
         "BlockCollisionBoxDescription"
-      ],
-      "bds_type_names": {
-        "BlockCollisionBoxDescription": "0x146ad8ac4"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/Components/BlockComponentFactory.h",
@@ -3048,10 +3020,7 @@
       "sha256": "2d03b991b5f30d3cdf70785cb11d91da4a497215d3de2941beb02a9a3c6616ec",
       "classes": [
         "BlockComponentFactory"
-      ],
-      "bds_type_names": {
-        "BlockComponentFactory": "0x1472537d8"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/Components/BlockPlacementComponent.h",
@@ -3067,10 +3036,7 @@
       "sha256": "d6d353b0ed9ae84b82abd33cb9121b76899c485001a1942ac44b2a891ef2d180",
       "classes": [
         "BlockPlacementFilterDescription"
-      ],
-      "bds_type_names": {
-        "BlockPlacementFilterDescription": "0x146ad25a0"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/Components/CreativeContentTable.h",
@@ -3143,10 +3109,7 @@
       "sha256": "9d810ac76427d4dde39feffa4e82a7efc7a1ab397703c038caf926588cb59cad",
       "classes": [
         "BlockBreakSensorSystem"
-      ],
-      "bds_type_names": {
-        "BlockBreakSensorSystem": "0x146862de4"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/Systems/BlockChangeSystem.h",
@@ -3178,10 +3141,7 @@
       "sha256": "410eae05f761429f3229c043a107dfcbc6fd291d8c979ea2219220f6230d5b0a",
       "classes": [
         "CommandBlockSystem"
-      ],
-      "bds_type_names": {
-        "CommandBlockSystem": "0x146863bd4"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Block/Systems/CopperSystem.h",
@@ -3379,10 +3339,7 @@
       "sha256": "97b1b62068b74db93dd4746ee90ac06ac3cecda71b3631efcc52eb9fb712b628",
       "classes": [
         "CommandOrigin"
-      ],
-      "bds_type_names": {
-        "CommandOrigin": "0x1469b0d10"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Command/DamageCommand.h",
@@ -3946,16 +3903,9 @@
       "old": "Falcon.Server/include/Inventory/Container/ContainerManagerModel.h",
       "path": "Falcon.Server/include/World/Containers/Managers/Models/ContainerManagerModel.h",
       "sha256": "016645cce15424005535f91a425a2c3af3bfbbc212ca8b62cd34cbf0e07a704a",
-      "bds_source": {
-        "path": "world/containers/managers/models/ContainerManagerModel.cpp",
-        "address": "0x146a7d880"
-      },
       "classes": [
         "ContainerManagerModel"
-      ],
-      "bds_type_names": {
-        "ContainerManagerModel": "0x146a53db0"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Inventory/Container/ContainerScreenValidatorBase.h",
@@ -4039,10 +3989,7 @@
       "sha256": "1e6feabaef580ea99fbcbf9b428a97b88e2a331f8d9b6d231af6ca23d7c33ac8",
       "classes": [
         "ItemComponent"
-      ],
-      "bds_type_names": {
-        "ItemComponent": "0x146aadf34"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Item/Components/ItemComponentTypes.h",
@@ -4093,52 +4040,7 @@
         "UseAnimationItemComponent",
         "UseModifiersItemComponent",
         "WearableItemComponent"
-      ],
-      "bds_type_names": {
-        "AllowOffHandItemComponent": "0x146a8b5a0",
-        "ArmorItemComponent": "0x146a8b410",
-        "BundleInteractionItemComponent": "0x146a8b4d0",
-        "CanDestroyInCreativeItemComponent": "0x146a8b270",
-        "CompostableItemComponent": "0x146a8c300",
-        "CooldownItemComponent": "0x146a8b350",
-        "DamageItemComponent": "0x146a8b0f0",
-        "DiggerItemComponent": "0x146a8b1b0",
-        "DisplayNameItemComponent": "0x146a8c7c0",
-        "DurabilityItemComponent": "0x146a8c890",
-        "DyeableItemComponent": "0x146aac2d0",
-        "EnchantableItemComponent": "0x146a8bbf0",
-        "EntityPlacerItemComponent": "0x146a8bcc0",
-        "FireResistantItemComponent": "0x146a8c3d0",
-        "FoodItemComponent": "0x146aac034",
-        "FuelItemComponent": "0x146a8ba70",
-        "GlintItemComponent": "0x146a8bb30",
-        "HandEquippedItemComponent": "0x146a8b8d0",
-        "HoverTextColorItemComponent": "0x146a8b9a0",
-        "IconItemComponent": "0x146a8c950",
-        "KineticWeaponItemComponent": "0x146aac430",
-        "LiquidClippedItemComponent": "0x146a8b730",
-        "MaxStackSizeItemComponent": "0x146a8b800",
-        "PiercingWeaponItemComponent": "0x146aaf780",
-        "PlanterItemComponent": "0x146a8c180",
-        "ProjectileItemComponent": "0x146a8c240",
-        "RarityItemComponent": "0x146a8ddd0",
-        "RecordItemComponent": "0x146a8bff0",
-        "RenderOffsetsItemComponent": "0x146a8c0b0",
-        "RepairableItemComponent": "0x146a8bf30",
-        "ShooterItemComponent": "0x146aaf850",
-        "ShouldDespawnItemComponent": "0x146a8bd90",
-        "StackedByDataItemComponent": "0x146a8be60",
-        "StorageItemComponent": "0x146a8de90",
-        "StorageWeightLimitItemComponent": "0x146a8dc20",
-        "StorageWeightModifierItemComponent": "0x146a8dcf0",
-        "SwingDurationItemComponent": "0x146a8db50",
-        "SwingSoundsItemComponent": "0x146aa9b90",
-        "TagsItemComponent": "0x146a8c640",
-        "ThrowableItemComponent": "0x146a8c700",
-        "UseAnimationItemComponent": "0x146a8c4a0",
-        "UseModifiersItemComponent": "0x146a8c570",
-        "WearableItemComponent": "0x146a8b670"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Item/Components/ItemComponents.h",
@@ -4224,10 +4126,7 @@
       "classes": [
         "ItemData",
         "ItemDataTable"
-      ],
-      "bds_type_names": {
-        "ItemData": "0x1468caaf4"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Item/ItemDurability.h",
@@ -4616,10 +4515,7 @@
       "sha256": "01f30b88618c2aabf467ef0904c70be9343ae9389ad14c864c7044dcbf3edd3d",
       "classes": [
         "BiomeRegistry"
-      ],
-      "bds_type_names": {
-        "BiomeRegistry": "0x146abd3c0"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/BlockState.h",
@@ -4673,16 +4569,9 @@
       "old": "Falcon.Server/include/Level/Dimension.h",
       "path": "Falcon.Server/include/World/Level/Dimension/Dimension.h",
       "sha256": "e4dd4fdb87f87bdd3e599d0cae38b0c596025da72ddf77d46f63985f845c73f0",
-      "bds_source": {
-        "path": "world/level/dimension/Dimension.cpp",
-        "address": "0x146abdee0"
-      },
       "classes": [
         "Dimension"
-      ],
-      "bds_type_names": {
-        "Dimension": "0x1468df4d0"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/Explosion.h",
@@ -4705,10 +4594,7 @@
       "classes": [
         "GameRules",
         "Rule"
-      ],
-      "bds_type_names": {
-        "GameRules": "0x14693a9a4"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/GeneratedBlockChange.h",
@@ -5780,10 +5666,7 @@
       "sha256": "1fe27ccdd78f7f5bd0f1ededee5c3e1c19ee0de1ce488cc1c9b6002fb06115ec",
       "classes": [
         "IRandom"
-      ],
-      "bds_type_names": {
-        "IRandom": "0x146aea500"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/Generator/Random/LinearCongruentialGenerator.h",
@@ -5814,32 +5697,18 @@
       "old": "Falcon.Server/include/Level/Level.h",
       "path": "Falcon.Server/include/World/Level/Level.h",
       "sha256": "f11203f7b4881d4dc7690653ae7b3e51c35e8a938820fddaa9506bed643ab2f2",
-      "bds_source": {
-        "path": "world/level/Level.cpp",
-        "address": "0x146ab3838"
-      },
       "classes": [
         "Level",
         "ChunkPosition"
-      ],
-      "bds_type_names": {
-        "Level": "0x14684f890"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/LevelChunk.h",
       "path": "Falcon.Server/include/World/Level/Chunk/LevelChunk.h",
       "sha256": "58ce55b86311a19667f972cbe8b493165a50028d1202ea00549cb994cf458813",
-      "bds_source": {
-        "path": "world/level/chunk/LevelChunk.cpp",
-        "address": "0x146abd6e0"
-      },
       "classes": [
         "LevelChunk"
-      ],
-      "bds_type_names": {
-        "LevelChunk": "0x146888ed0"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/LevelStorage.h",
@@ -5847,10 +5716,7 @@
       "sha256": "d6596d252ea1b70b399fbda7a6fd7dc5a788dffe01d8be06767bea3397ad31b3",
       "classes": [
         "LevelStorage"
-      ],
-      "bds_type_names": {
-        "LevelStorage": "0x146ab4480"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Level/LightSystem.h",
@@ -5904,10 +5770,6 @@
       "old": "Falcon.Server/include/Level/SubChunk.h",
       "path": "Falcon.Server/include/World/Level/Chunk/SubChunk.h",
       "sha256": "eb44f0e22b4f9a906845eebe9d35e7d593eb2f77b0296a102f5837e14d0408cf",
-      "bds_source": {
-        "path": "world/level/chunk/SubChunk.cpp",
-        "address": "0x146ad00b0"
-      },
       "classes": [
         "SubChunk"
       ]
@@ -6026,10 +5888,6 @@
       "old": "Falcon.Server/include/Network/Handler/ServerNetworkHandler.h",
       "path": "Falcon.Server/include/Network/ServerNetworkHandler.h",
       "sha256": "3b35cf9c6d508e38db3f8dcd899863c857b5c547616713ee4feb477d8c0555ec",
-      "bds_source": {
-        "path": "network/ServerNetworkHandler.cpp",
-        "address": "0x1468c6300"
-      },
       "classes": [
         "QueuedActorCommand",
         "ServerNetworkHandler",
@@ -6375,17 +6233,10 @@
       "old": "Falcon.Server/include/Server/ResourcePackManager.h",
       "path": "Falcon.Server/include/Resources/ResourcePackManager.h",
       "sha256": "c0b35e0f3cf3d29aa29b7d2331e0ae984cdd0f70810eeb9ebf7fa1b7e249b5ec",
-      "bds_source": {
-        "path": "resources/ResourcePackManager.cpp",
-        "address": "0x146933590"
-      },
       "classes": [
         "ResourcePack",
         "ResourcePackManager"
-      ],
-      "bds_type_names": {
-        "ResourcePack": "0x146932820"
-      }
+      ]
     },
     {
       "old": "Falcon.Server/include/Server/ServerHost.h",
@@ -8682,11 +8533,7 @@
     {
       "old": "Falcon.Server/src/Inventory/Container/ContainerManagerModel.cpp",
       "path": "Falcon.Server/src/World/Containers/Managers/Models/ContainerManagerModel.cpp",
-      "sha256": "8ebd005721d054688b71a38d26deab262091a30067922a0bf411927a831882ed",
-      "bds_source": {
-        "path": "world/containers/managers/models/ContainerManagerModel.cpp",
-        "address": "0x146a7d880"
-      }
+      "sha256": "8ebd005721d054688b71a38d26deab262091a30067922a0bf411927a831882ed"
     },
     {
       "old": "Falcon.Server/src/Inventory/Container/ContainerScreenValidatorBase.cpp",
@@ -9661,11 +9508,7 @@
     {
       "old": "Falcon.Server/src/Level/Level.cpp",
       "path": "Falcon.Server/src/World/Level/Level.cpp",
-      "sha256": "691ed7eb760c557941a52546a4634ed0c81f4854e9a215ca4dab0e7eabe784c3",
-      "bds_source": {
-        "path": "world/level/Level.cpp",
-        "address": "0x146ab3838"
-      }
+      "sha256": "691ed7eb760c557941a52546a4634ed0c81f4854e9a215ca4dab0e7eabe784c3"
     },
     {
       "old": "Falcon.Server/src/Level/LevelBlockUpdates.cpp",
@@ -9675,11 +9518,7 @@
     {
       "old": "Falcon.Server/src/Level/LevelChunk.cpp",
       "path": "Falcon.Server/src/World/Level/Chunk/LevelChunk.cpp",
-      "sha256": "572a0a7b1c2e3194e0e66a5940de51b5f277067be9e88e709e17627974eae324",
-      "bds_source": {
-        "path": "world/level/chunk/LevelChunk.cpp",
-        "address": "0x146abd6e0"
-      }
+      "sha256": "572a0a7b1c2e3194e0e66a5940de51b5f277067be9e88e709e17627974eae324"
     },
     {
       "old": "Falcon.Server/src/Level/LevelStorage.cpp",
@@ -9714,11 +9553,7 @@
     {
       "old": "Falcon.Server/src/Level/SubChunk.cpp",
       "path": "Falcon.Server/src/World/Level/Chunk/SubChunk.cpp",
-      "sha256": "641c3b577f59150c021fbd6e320cc73f5a827f5c41aabd43ddc1b25904eb2d65",
-      "bds_source": {
-        "path": "world/level/chunk/SubChunk.cpp",
-        "address": "0x146ad00b0"
-      }
+      "sha256": "641c3b577f59150c021fbd6e320cc73f5a827f5c41aabd43ddc1b25904eb2d65"
     },
     {
       "old": "Falcon.Server/src/Level/TickingAreaManager.cpp",
@@ -9788,11 +9623,7 @@
     {
       "old": "Falcon.Server/src/Network/Handler/ServerNetworkHandler.cpp",
       "path": "Falcon.Server/src/Network/ServerNetworkHandler.cpp",
-      "sha256": "50c73c1a68eeb67241a0c17f4dc5b10764707a77f29f736b0e04c65deb2515e2",
-      "bds_source": {
-        "path": "network/ServerNetworkHandler.cpp",
-        "address": "0x1468c6300"
-      }
+      "sha256": "50c73c1a68eeb67241a0c17f4dc5b10764707a77f29f736b0e04c65deb2515e2"
     },
     {
       "old": "Falcon.Server/src/Network/Handler/ServerNetworkHandlerActors.cpp",
@@ -10067,11 +9898,7 @@
     {
       "old": "Falcon.Server/src/Server/ResourcePackManager.cpp",
       "path": "Falcon.Server/src/Resources/ResourcePackManager.cpp",
-      "sha256": "df53d4a43936608466625cc668de33b6a97ca50f055935a33bcbc286f8644c93",
-      "bds_source": {
-        "path": "resources/ResourcePackManager.cpp",
-        "address": "0x146933590"
-      }
+      "sha256": "df53d4a43936608466625cc668de33b6a97ca50f055935a33bcbc286f8644c93"
     },
     {
       "old": "Falcon.Server/src/Server/ServerHost.cpp",
