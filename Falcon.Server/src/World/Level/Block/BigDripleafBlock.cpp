@@ -96,8 +96,8 @@ bool BigDripleafBlock::canGrowInto(const BlockState &state) {
            || state.mName == BlockNames::SMALL_DRIPLEAF_BLOCK;
 }
 
-void BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                     const std::string &direction) {
+bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const std::string &direction, const Vector3i *upperHalf) {
     const int32_t limit = RandomTickSystem::nextInt(4) + 2;
     int32_t height = 0;
     while (height < limit && position.y + height <= level.getMaxY()) {
@@ -113,15 +113,22 @@ void BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, 
     const BlockState head = withParts(base, true, Tilt::None);
     const BlockState stem = withParts(base, false, Tilt::None);
 
+    // a refused growth leaves the small dripleaf whole
+    if (height == 0 || !BlockChangeSystem::allows(level, position, head, BlockChangeCause::Grow))
+        return false;
+    if (upperHalf != nullptr)
+        level.setBlock(*upperHalf, BlockState(BlockNames::AIR), true);
+
     // each new leaf turns the one under it into a stem
     for (int32_t dy = 0; dy < height; ++dy) {
         const Vector3i at = offsetY(position, dy);
         if (!place(owner, level, at, head))
-            return;
+            return dy > 0;
         const Vector3i below = offsetY(at, -1);
         if (isDripleaf(level.peekBlockPtr(below.x, below.y, below.z)))
             level.setBlock(below, stem, true);
     }
+    return true;
 }
 
 // the top of the column must be a leaf, and the column must stand on soil
@@ -267,6 +274,8 @@ void BigDripleafBlock::setTilt(ServerNetworkHandler &owner, Level &level, const 
     // the neighbours hear of it, the leaf itself does not: power only acts on its next tick
     level.setBlock(position, withParts(state, true, tilt), false);
     level.updateAround(position);
+    // a projectile can tilt a leaf already counting down: its earlier deadline must not reset it
+    level.cancelUpdate(position);
     level.scheduleUpdate(position, tilt == Tilt::Full ? FULL_TICKS
                                    : tilt == Tilt::Partial ? PARTIAL_TICKS
                                                            : UNSTABLE_TICKS);

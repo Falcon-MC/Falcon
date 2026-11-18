@@ -29,9 +29,10 @@ public:
 
     static BlockState withParts(const BlockState &state, bool head, Tilt tilt);
 
-    // a column of 2 to 5 blocks where a small dripleaf stood, as far as the space above allows
-    static void growFromSmall(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const std::string &direction);
+    // a column of 2 to 5 blocks where a small dripleaf stood, as far as the space above allows;
+    // upperHalf is cleared only once the growth is allowed. false: nothing grew
+    static bool growFromSmall(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const std::string &direction, const Vector3i *upperHalf);
 
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 

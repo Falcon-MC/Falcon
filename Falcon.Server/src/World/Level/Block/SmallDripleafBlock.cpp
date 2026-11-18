@@ -38,9 +38,7 @@ bool SmallDripleafBlock::onFertilized(ServerNetworkHandler &owner, Level &level,
 
     const Vector3i upper(position.x, position.y + 1, position.z);
     const BlockState *above = level.peekBlockPtr(upper.x, upper.y, upper.z);
-    if (above != nullptr && above->mName == BlockNames::SMALL_DRIPLEAF_BLOCK)
-        level.setBlock(upper, BlockState(BlockNames::AIR), true);
-
-    BigDripleafBlock::growFromSmall(owner, level, position, state.mStates.getString(STATE_DIRECTION, "south"));
-    return true;
+    const bool hasUpper = above != nullptr && above->mName == BlockNames::SMALL_DRIPLEAF_BLOCK;
+    return BigDripleafBlock::growFromSmall(owner, level, position, state.mStates.getString(STATE_DIRECTION, "south"),
+                                           hasUpper ? &upper : nullptr);
 }
