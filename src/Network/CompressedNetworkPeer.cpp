@@ -12,7 +12,7 @@ namespace {
     const int RAW_DEFLATE_WINDOW_BITS = -15;
     const size_t MAX_DECOMPRESSED_SIZE = 8 * 1024 * 1024;
 
-    // sub_1404C8960: the game deflates a batch at level 7, raw, memory level 8, in one go
+    // the game deflates a batch at level 7, raw, memory level 8, in one go
     const int GAME_DEFLATE_LEVEL = 7;
     const int GAME_MEMORY_LEVEL = 8;
     // the first batches say enough, and a large one costs too much to deflate again
@@ -277,7 +277,7 @@ void CompressedNetworkPeer::_observe(CompressionAlgorithm algorithm, const char 
         return;
     mBatchTraits.mBatches++;
 
-    // sub_1404C8960: a batch shorter than the threshold goes out as it is
+    // the game sends a batch shorter than the threshold as it is
     if (batch.size() < mCompressionThreshold)
         mBatchTraits.mCompressedBelowThreshold++;
     if (algorithm != mAlgorithm)

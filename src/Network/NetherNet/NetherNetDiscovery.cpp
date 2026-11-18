@@ -355,7 +355,7 @@ namespace nethernet {
         }
     }
 
-    // sub_14204D520: the game lists any sender, private or not; this only gates offers without an identity
+    // the game lists any sender, private or not; this only gates offers without an identity
     bool DiscoveryListener::isLocalAddress(const void *from) {
         const struct sockaddr *address = (const struct sockaddr *) from;
         if (address->sa_family == AF_INET) {

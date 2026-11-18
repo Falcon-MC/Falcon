@@ -99,7 +99,7 @@ bool NetherNetInstance::host(const ConnectionDefinition &definition) {
         return false;
 
     // the game probes https://host and http://host beside the game port only when that port is 19132:
-    // sub_143A904D0; a refused extra port leaves the game port serving alone
+    // a refused extra port leaves the game port serving alone
     if (mExtraSignalingPort != 0 && mExtraSignalingPort != mSignaling.getBoundPort()) {
         mExtraSignaling.setStatusProvider(status);
         if (!mExtraSignaling.start(definition.mIPv4Address, mExtraSignalingPort, handler))

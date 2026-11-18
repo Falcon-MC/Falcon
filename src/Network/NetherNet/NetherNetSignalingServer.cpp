@@ -74,7 +74,7 @@ namespace nethernet {
 
         const size_t MAX_SDP_BODY_SIZE = 1 << 20;
         const size_t MAX_HEADER_SIZE = 16 * 1024;
-        // the game's own probe gives up after 3 s: sub_143A92EB0
+        // the game's own probe gives up after 3 s
         const int REQUEST_DEADLINE_MS = 5000;
         // the answer comes after the negotiation, it gets its own budget
         const int WRITE_DEADLINE_MS = 5000;
@@ -736,7 +736,7 @@ namespace nethernet {
 #endif
         disableNagle(socketDescriptor);
 
-        // https batch first, http only once every https probe ended: sub_143A92EB0; the first byte tells them apart
+        // https batch first, http only once every https probe ended, as the game probes; the first byte tells them apart
         char first = 0;
         for (;;) {
             const int peeked = (int) recv(socketDescriptor, &first, 1, MSG_PEEK);
