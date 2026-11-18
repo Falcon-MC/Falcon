@@ -28,10 +28,12 @@
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
+#include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
 #include "World/Actor/AI/Goal/LeapAtTargetGoal.h"
 #include "World/Actor/AI/Goal/LookAtEntityGoal.h"
 #include "World/Actor/AI/Goal/LookAtPlayerGoal.h"
+#include "World/Actor/AI/Goal/LookAtTradingPlayerGoal.h"
 #include "World/Actor/AI/Goal/MakeLoveGoal.h"
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 #include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
@@ -73,6 +75,7 @@
 #include "World/Actor/AI/Goal/TemptGoal.h"
 #include "World/Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "World/Actor/AI/Goal/TimerFlagGoal.h"
+#include "World/Actor/AI/Goal/TradeInterestGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
 #include "World/Actor/AI/Goal/WorkComposterGoal.h"
@@ -225,6 +228,16 @@ namespace {
     const float FERTILIZE_DEFAULT_COOLDOWN_SECONDS = 8.0f;
     // the wait after a stuck walk, which no field of the definition sets
     const int32_t FERTILIZE_GIVE_UP_TICKS = 160;
+    // the inspect_bookshelf definition defaults
+    const float BOOKSHELF_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float BOOKSHELF_DEFAULT_COUNT = 10.0f;
+    const float BOOKSHELF_DEFAULT_HEIGHT = 1.0f;
+    const int32_t BOOKSHELF_GIVE_UP_TICKS = 160;
+    // the trade_interest definition defaults
+    const float TRADE_INTEREST_DEFAULT_SECONDS = 45.0f;
+    const float TRADE_INTEREST_DEFAULT_REMOVE_SECONDS = 1.0f;
+    const float TRADE_INTEREST_DEFAULT_SWITCH_SECONDS = 2.0f;
+    const float TRADE_INTEREST_DEFAULT_COOLDOWN_SECONDS = 2.0f;
     // the work_composter definition defaults
     const float COMPOSTER_DEFAULT_USE_MIN = 100.0f;
     const float COMPOSTER_DEFAULT_USE_MAX = 200.0f;
@@ -1090,6 +1103,31 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "work")
         return std::make_unique<WorkGoal>(workSettings(mob, component));
+
+    if (behavior == "look_at_trading_player")
+        return std::make_unique<LookAtTradingPlayerGoal>();
+
+    if (behavior == "trade_interest") {
+        TradeInterestGoal::Settings settings;
+        settings.mRadius = numberOf(component, "within_radius", 0.0f);
+        settings.mInterestTicks = secondsAsTicks(component, "interest_time", TRADE_INTEREST_DEFAULT_SECONDS);
+        settings.mRemoveItemTicks = secondsAsTicks(component, "remove_item_time", TRADE_INTEREST_DEFAULT_REMOVE_SECONDS);
+        settings.mSwitchTicks = secondsAsTicks(component, "carried_item_switch_time",
+                                               TRADE_INTEREST_DEFAULT_SWITCH_SECONDS);
+        settings.mCooldownTicks = secondsAsTicks(component, "cooldown", TRADE_INTEREST_DEFAULT_COOLDOWN_SECONDS);
+        return std::make_unique<TradeInterestGoal>(settings);
+    }
+
+    if (behavior == "inspect_bookshelf") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", BOOKSHELF_DEFAULT_HEIGHT);
+        settings.mSearchCount = (int32_t) numberOf(component, "search_count", BOOKSHELF_DEFAULT_COUNT);
+        settings.mGoalRadius = numberOf(component, "goal_radius", BOOKSHELF_DEFAULT_GOAL_RADIUS);
+        settings.mGiveUpTicks = BOOKSHELF_GIVE_UP_TICKS;
+        return std::make_unique<InspectBookshelfGoal>(settings);
+    }
 
     if (behavior == "work_composter") {
         WorkComposterGoal::Composting composting;
