@@ -123,14 +123,22 @@ void RecipeUnlockSystem::_send(ServerNetworkHandler &owner, ServerPlayer &player
     owner.sendPacketTo(player.getNetworkIdentifier(), packet);
 }
 
+// every recipe the system unlocks comes from the index: each one counts
+bool RecipeUnlockSystem::_unlock(ServerPlayer &player, const std::string &recipeId) {
+    PlayerRecipeUnlocks &unlocks = player.getRecipeUnlocks();
+    if (!unlocks.unlock(recipeId))
+        return false;
+    ++unlocks.mKnownUnlocked;
+    return true;
+}
+
 void RecipeUnlockSystem::_unlockContext(ServerPlayer &player, const RecipeUnlockIndex &index, Context context,
                                         std::vector<std::string> &unlocked) {
-    PlayerRecipeUnlocks &unlocks = player.getRecipeUnlocks();
     for (const std::string &recipe: index.getRecipes(context)) {
-        if (unlocks.unlock(recipe))
+        if (_unlock(player, recipe))
             unlocked.push_back(recipe);
     }
-    unlocks.mUsedContexts |= contextBit(context);
+    player.getRecipeUnlocks().mUsedContexts |= contextBit(context);
 }
 
 // the game's order: the always-unlocked recipes once a session, then water, then a crowded inventory, then
@@ -142,6 +150,11 @@ void RecipeUnlockSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     const RecipeUnlockIndex &index = owner.getRecipeUnlockIndex();
     PlayerRecipeUnlocks &unlocks = player.getRecipeUnlocks();
     if (!unlocks.mSent) {
+        unlocks.mKnownUnlocked = 0;
+        for (const std::string &recipe: unlocks.getUnlocked()) {
+            if (index.isUnlockable(recipe))
+                ++unlocks.mKnownUnlocked;
+        }
         std::vector<std::string> ignored;
         _unlockContext(player, index, Context::AlwaysUnlocked, ignored);
         if (unlocks.getUnlockedCount() != 0) {
@@ -169,7 +182,7 @@ void RecipeUnlockSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player)
         anyChanged = true;
     }
 
-    if (unlocks.getUnlockedCount() >= index.getUnlockable().size())
+    if (unlocks.mKnownUnlocked >= index.getUnlockable().size())
         return;
     // with limited crafting, recipes only come from the command
     if (owner.getWorldFor(player).getOverworld().getGameRules().getBool("dolimitedcrafting"))
@@ -190,7 +203,7 @@ void RecipeUnlockSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player)
                 index.collectUnlockedBy(inventory.getItem(slot), candidates);
         }
         for (const std::string &recipe: candidates) {
-            if (unlocks.unlock(recipe))
+            if (_unlock(player, recipe))
                 unlocked.push_back(recipe);
         }
     }
@@ -200,7 +213,7 @@ void RecipeUnlockSystem::tick(ServerNetworkHandler &owner, ServerPlayer &player)
 }
 
 bool RecipeUnlockSystem::give(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &recipeId) {
-    if (!player.getRecipeUnlocks().unlock(recipeId))
+    if (!_unlock(player, recipeId))
         return false;
     _send(owner, player, (int32_t) Action::NewlyUnlocked, {recipeId});
     return true;
@@ -209,7 +222,7 @@ bool RecipeUnlockSystem::give(ServerNetworkHandler &owner, ServerPlayer &player,
 bool RecipeUnlockSystem::giveAll(ServerNetworkHandler &owner, ServerPlayer &player) {
     std::vector<std::string> unlocked;
     for (const std::string &recipe: owner.getRecipeUnlockIndex().getUnlockable()) {
-        if (player.getRecipeUnlocks().unlock(recipe))
+        if (_unlock(player, recipe))
             unlocked.push_back(recipe);
     }
     if (unlocked.empty())
@@ -219,8 +232,11 @@ bool RecipeUnlockSystem::giveAll(ServerNetworkHandler &owner, ServerPlayer &play
 }
 
 bool RecipeUnlockSystem::take(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &recipeId) {
-    if (!player.getRecipeUnlocks().lock(recipeId))
+    PlayerRecipeUnlocks &unlocks = player.getRecipeUnlocks();
+    if (!unlocks.lock(recipeId))
         return false;
+    if (owner.getRecipeUnlockIndex().isUnlockable(recipeId) && unlocks.mKnownUnlocked > 0)
+        --unlocks.mKnownUnlocked;
     _send(owner, player, (int32_t) Action::RemoveUnlocked, {recipeId});
     _afterTake(owner, player);
     return true;
@@ -230,6 +246,7 @@ bool RecipeUnlockSystem::takeAll(ServerNetworkHandler &owner, ServerPlayer &play
     if (player.getRecipeUnlocks().getUnlockedCount() == 0)
         return false;
     player.getRecipeUnlocks().lockAll();
+    player.getRecipeUnlocks().mKnownUnlocked = 0;
     _send(owner, player, (int32_t) Action::RemoveAll, {});
     _afterTake(owner, player);
     return true;

@@ -122,6 +122,32 @@ namespace {
         rules.setFromString("dolimitedcrafting", "false");
         require(RecipeUnlockSystem::mayCraft(server, player, lockedNetId), "unlimited crafting refused a recipe");
     }
+
+    // ids saved by a pack the server no longer has must not count towards a full book
+    void checkStaleIds(ServerNetworkHandler &server) {
+        const RecipeUnlockIndex &index = server.getRecipeUnlockIndex();
+        Tag saved = Tag::ofCompound();
+        Tag data = Tag::ofCompound();
+        Tag recipes = Tag::ofList(Tag::Type::String);
+        for (size_t stale = 0; stale < index.getUnlockable().size(); ++stale)
+            recipes.addToList(Tag::ofString("removed_pack:recipe_" + std::to_string(stale)));
+        data.put("unlocked_recipes", std::move(recipes));
+        saved.put(PlayerRecipeUnlocks::TAG, std::move(data));
+
+        const NetworkIdentifier id("stale", 5);
+        ServerPlayer &player = server.getPlayers().try_emplace(id, id, 4005).first->second;
+        player.setName("StaleRecipes");
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.moveToLevel(server.getWorlds().getDefault().getOverworld());
+        player.setPosition(Vector3f(12.5f, 100.0f, 12.5f));
+        player.getRecipeUnlocks().load(saved);
+
+        RecipeUnlockSystem::tick(server, player);
+        player.getInventory().setItem(0, item(server, "minecraft:stripped_acacia_log"));
+        RecipeUnlockSystem::tick(server, player);
+        require(player.getRecipeUnlocks().isUnlocked(STRIPPED_WOOD),
+                "stale saved ids stopped a current recipe from unlocking");
+    }
 }
 
 int main() {
@@ -131,6 +157,7 @@ int main() {
         level.insertChunk(LevelChunk(0, 0));
         checkTable(server);
         checkPlayer(server, level);
+        checkStaleIds(server);
     } catch (const std::exception &error) {
         std::clog << "Recipe unlocking regression failed: " << error.what() << '\n';
         return 1;

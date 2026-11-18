@@ -99,6 +99,8 @@ public:
     uint32_t mUsedContexts = 0;
     // the always-unlocked recipes go out with the first tick of a session
     bool mSent = false;
+    // unlocked recipes this server still has: a removed pack leaves its saved ids behind
+    size_t mKnownUnlocked = 0;
     // what each inventory slot held last tick: only a new item unlocks recipes
     std::array<std::pair<const ItemDefinition *, int32_t>, 36> mSeenSlots{};
 
@@ -133,4 +135,6 @@ private:
                                RecipeUnlockRequirement::Context context, std::vector<std::string> &unlocked);
 
     static void _afterTake(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    static bool _unlock(ServerPlayer &player, const std::string &recipeId);
 };
