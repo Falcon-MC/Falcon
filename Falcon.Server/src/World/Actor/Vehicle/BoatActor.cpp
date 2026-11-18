@@ -3,6 +3,7 @@
 #include "Core/Json/Json.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/CorrectPlayerMovePredictionPacket.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorDamageSource.h"
@@ -53,8 +54,7 @@ namespace {
     const char *const LEASHABLE_TO = "minecraft:leashable_to";
     const char *const PUSHABLE_BY_ENTITY = "minecraft:pushable_by_entity";
     const char *const LEAD_ITEM = "minecraft:lead";
-    // the farthest a held lead reaches to be tied to the boat: the default leash break distance
-    const float LEAD_TRANSFER_RADIUS = 12.0f;
+
 
     // minecraft:hurt_on_condition: lava, 4 a tick
     const float LAVA_DAMAGE = 4.0f;
@@ -63,6 +63,28 @@ namespace {
 
     // the momentum of the friction system on water and over it
     const float WATER_MOMENTUM = 0.9f;
+    // the move control stops once the boat stayed this long under water
+    const int32_t MAX_SUBMERGED_TICKS = 24;
+    // a paddle's force becomes this much speed; each paddle turns the boat by three times its push
+    const float PADDLE_SCALE = 0.01375f;
+    const float PADDLE_TURN = 3.0f;
+    const float PADDLE_TIME_WRAP = 1000.0f;
+    // a boat barely moving turns faster and creeps forward
+    const float STILL_SPEED_SQUARED = 0.010000001f;
+    const float STILL_TURN_BOOST = 1.6f;
+    const float TURN_SCALE = 10.0f;
+    // the paddle input: a fresh stroke is 3, a held one settles to 2.5, a released one halves away
+    const float STROKE_FORCE = 3.0f;
+    const float HELD_FORCE = 2.5f;
+    const float HELD_FADE = 0.05f;
+    const float ANALOG_EASE = 0.1f;
+    const float RELEASED_FADE = 0.5f;
+    const float RELEASED_STOP = 0.01f;
+    const int64_t STROKE_TICKS = 10;
+    // backing up paddles at this share of the forward strength
+    const float REVERSE_SCALE = -0.15f;
+    // how far the rider's own prediction may stray from the server's before the server corrects it
+    const float PREDICTION_TOLERANCE = 1.0f;
 
     const float HURT_SCALE = 10.0f;
     const float BREAK_DAMAGE = 40.0f;
@@ -202,7 +224,7 @@ Container *BoatActor::getEntityContainer() {
 bool BoatActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     if (mExpired)
         return false;
-    if (_takeLeads(owner, player) || _useLead(owner, player))
+    if (ActorLeash::tieHeldLeads(owner, player, *this) || _useLead(owner, player))
         return true;
     if (mChest != nullptr && player.getFlags().get(ActorFlag::Sneaking))
         return mChest->open(owner, player, *this);
@@ -217,21 +239,9 @@ const json::Value *BoatActor::getLeashableComponent() const {
     return components == nullptr ? nullptr : components->get(LEASHABLE);
 }
 
-bool BoatActor::_takeLeads(ServerNetworkHandler &owner, ServerPlayer &player) {
+const json::Value *BoatActor::getLeashableToComponent() const {
     const json::Value *components = componentsOf(getTypeId());
-    if (components == nullptr || components->get(LEASHABLE_TO) == nullptr)
-        return false;
-
-    std::vector<ServerActor *> led;
-    owner.forEachActorNear(player.getPosition(), LEAD_TRANSFER_RADIUS, [&](ServerActor &actor) {
-        ActorLeash *leash = actor.getActorLeash();
-        if (&actor != this && leash != nullptr && leash->getHolderId() == player.getUniqueId()
-            && actor.sharesLevelWith(player))
-            led.push_back(&actor);
-    });
-    for (ServerActor *actor: led)
-        actor->getActorLeash()->attach(owner, *actor, getUniqueId());
-    return !led.empty();
+    return components == nullptr ? nullptr : components->get(LEASHABLE_TO);
 }
 
 bool BoatActor::_useLead(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -261,7 +271,6 @@ Vector3f BoatActor::_push(ServerNetworkHandler &owner) {
         return total;
 
     const AxisAlignedBB self = ActorPushSystem::boundingBoxOf(*this);
-    const bool steered = _controller(owner) != nullptr;
     const auto pushBy = [&](Actor &pusher, float pusherWidth) {
         // riders and their vehicle never push each other; a sneaking pusher does not push
         if (pusher.getVehicleId() == getUniqueId() || pusher.getUniqueId() == getVehicleId()
@@ -304,7 +313,7 @@ Vector3f BoatActor::_push(ServerNetworkHandler &owner) {
         if (player.isSpawned() && !player.isDead() && !player.isSpectator() && player.sharesLevelWith(*this))
             pushBy(player, ActorClassRegistry::getSize("minecraft:player").mWidth);
     });
-    return steered ? Vector3f(0.0f, 0.0f, 0.0f) : total;
+    return total;
 }
 
 bool BoatActor::onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
@@ -370,29 +379,155 @@ void BoatActor::followController(ServerNetworkHandler &owner, ServerPlayer &play
         return;
 
     const float yaw = packet.mHasVehicleRotation ? packet.mVehicleRotationY : boat->getRotation().y;
-    if (!std::isfinite(yaw) || !std::isfinite(feetPosition.x) || !std::isfinite(feetPosition.y)
-        || !std::isfinite(feetPosition.z))
-        return;
+    const bool finite = std::isfinite(yaw) && std::isfinite(feetPosition.x) && std::isfinite(feetPosition.y)
+                        && std::isfinite(feetPosition.z);
 
-    const Vector3f seat = rotated(boat->getSeatOffset(0, boat->getPassengers().size()), yaw);
-    const Vector3f position(feetPosition.x - seat.x, feetPosition.y - seat.y, feetPosition.z - seat.z);
-    const Vector3f &current = boat->getPosition();
-    const float dx = position.x - current.x;
-    const float dy = position.y - current.y;
-    const float dz = position.z - current.z;
-    const float half = WIDTH * 0.5f - CONTROLLED_BOX_SHRINK;
-    const AxisAlignedBB box(position.x - half, position.y + CONTROLLED_BOX_SHRINK, position.z - half,
-                            position.x + half, position.y + HEIGHT - CONTROLLED_BOX_SHRINK, position.z + half);
-    if (dx * dx + dz * dz > MAX_CONTROLLED_HORIZONTAL * MAX_CONTROLLED_HORIZONTAL || dy < -MAX_CONTROLLED_FALL
-        || dy > MAX_CONTROLLED_RISE || collides(owner.getLevelFor(*boat), box, boat)) {
-        // the rider predicted a move the boat cannot make: put its boat back
-        owner.broadcastActorMove(*boat, true);
+    // the server runs the same input through the boat systems, then keeps the rider's own result when close
+    const Vector3f before = boat->getPosition();
+    boat->_readRider(packet);
+    boat->_paddle();
+    boat->_step(owner, true);
+    if (!finite) {
+        boat->_correct(owner, player, packet.mTick);
         return;
     }
 
-    boat->setMotion(Vector3f(dx, dy, dz));
-    boat->setPosition(position);
+    const Vector3f seat = rotated(boat->getSeatOffset(0, boat->getPassengers().size()), yaw);
+    const Vector3f predicted(feetPosition.x - seat.x, feetPosition.y - seat.y, feetPosition.z - seat.z);
+    const float dx = predicted.x - before.x;
+    const float dy = predicted.y - before.y;
+    const float dz = predicted.z - before.z;
+    const float half = WIDTH * 0.5f - CONTROLLED_BOX_SHRINK;
+    const AxisAlignedBB box(predicted.x - half, predicted.y + CONTROLLED_BOX_SHRINK, predicted.z - half,
+                            predicted.x + half, predicted.y + HEIGHT - CONTROLLED_BOX_SHRINK, predicted.z + half);
+    const Vector3f &simulated = boat->getPosition();
+    const float sx = predicted.x - simulated.x;
+    const float sy = predicted.y - simulated.y;
+    const float sz = predicted.z - simulated.z;
+    if (dx * dx + dz * dz > MAX_CONTROLLED_HORIZONTAL * MAX_CONTROLLED_HORIZONTAL || dy < -MAX_CONTROLLED_FALL
+        || dy > MAX_CONTROLLED_RISE || collides(owner.getLevelFor(*boat), box, boat)
+        || sx * sx + sy * sy + sz * sz > PREDICTION_TOLERANCE * PREDICTION_TOLERANCE) {
+        boat->_correct(owner, player, packet.mTick);
+        return;
+    }
+
+    boat->setPosition(predicted);
     boat->setRotation(Vector3f(boat->getRotation().x, yaw, yaw));
+}
+
+// the boat as the server ran it: the rider rewinds to it and replays its inputs from there
+void BoatActor::_correct(ServerNetworkHandler &owner, ServerPlayer &player, int64_t tick) {
+    CorrectPlayerMovePredictionPacket correction;
+    correction.mPredictionType = PredictionType::Vehicle;
+    correction.mPosition = getPosition();
+    correction.mPosition.y += getBaseOffset();
+    correction.mDelta = getMotion();
+    correction.mVehicleRotation = Vector2f(getRotation().x, getRotation().y);
+    correction.mHasVehicleAngularVelocity = true;
+    correction.mVehicleAngularVelocity = mAngularVelocity;
+    correction.mOnGround = isOnGround();
+    correction.mTick = (uint64_t) tick;
+    owner.getNetworkHandler().send(player.getNetworkIdentifier(), correction, owner.getCodecContext());
+}
+
+// the passenger paddle input: keyboard, gamepad and the touch stick steer by the move vector; the touch paddle
+// buttons press each paddle on its own
+void BoatActor::_readRider(const PlayerAuthInputPacket &packet) {
+    const bool left = packet.hasInputFlag((int32_t) PlayerAuthInputData::PaddleLeft);
+    const bool right = packet.hasInputFlag((int32_t) PlayerAuthInputData::PaddleRight);
+    mRider.mAnalog = packet.mInputMode != PlayerInputMode::Touch || !(left || right);
+    mRider.mPressed = {left, right};
+    mRider.mAnalogForce = {0.0f, 0.0f};
+    if (!mRider.mAnalog)
+        return;
+
+    const float forward = std::clamp(packet.mMotionY, -1.0f, 1.0f);
+    const float strafe = packet.mMotionX;
+    float magnitude = std::sqrt(forward * forward + strafe * strafe);
+    float turn = strafe;
+    if (forward < 0.0f) {
+        magnitude *= REVERSE_SCALE;
+        turn = -strafe;
+    }
+    const float leftShare = turn > 1.0f ? 0.0f : turn > 0.0f ? 1.0f - turn : 1.0f;
+    const float rightShare = turn > 0.0f ? 1.0f : turn > -1.0f ? turn + 1.0f : 1.0f;
+    mRider.mAnalogForce = {magnitude * leftShare, magnitude * rightShare};
+}
+
+// the vehicle paddle input: the force each paddle pushes with this tick
+void BoatActor::_paddle() {
+    for (size_t side = 0; side < mPaddles.size(); ++side) {
+        Paddle &paddle = mPaddles[side];
+        if (mRider.mAnalog) {
+            const float input = mRider.mAnalogForce[side];
+            const float stroke = STROKE_FORCE * input;
+            if (input == 0.0f) {
+                paddle.mForce = 0.0f;
+            } else if (mPaddleTick - paddle.mPressTick >= STROKE_TICKS) {
+                paddle.mForce = stroke;
+                paddle.mPressTick = mPaddleTick;
+            } else {
+                const float eased = std::max(0.0f, std::fabs(stroke) - ANALOG_EASE);
+                paddle.mForce = input < 0.0f ? -eased : eased;
+            }
+        } else if (mRider.mPressed[side]) {
+            if (paddle.mPressTick >= 0) {
+                paddle.mForce = mPaddleTick - paddle.mPressTick >= STROKE_TICKS
+                                        ? std::max(HELD_FORCE, paddle.mForce - HELD_FADE)
+                                        : STROKE_FORCE;
+            } else {
+                paddle.mForce = mPaddleTick - paddle.mReleaseTick < STROKE_TICKS
+                                        ? std::max(HELD_FORCE, paddle.mForce - HELD_FADE)
+                                        : STROKE_FORCE;
+                paddle.mTime = 0.0f;
+                paddle.mPressTick = mPaddleTick;
+            }
+        } else {
+            if (paddle.mPressTick >= 0) {
+                paddle.mReleaseTick = paddle.mPressTick;
+                paddle.mPressTick = -1;
+            }
+            paddle.mForce = paddle.mForce <= RELEASED_STOP ? 0.0f : paddle.mForce * RELEASED_FADE;
+        }
+    }
+    ++mPaddleTick;
+}
+
+// the move control: the paddles push the boat forward and turn it, left paddle to the right
+void BoatActor::_steer(Vector3f &motion, float momentum) {
+    if (mSubmergedTicks > MAX_SUBMERGED_TICKS)
+        return;
+
+    float forward = 0.0f;
+    float turn = 0.0f;
+    for (size_t side = 0; side < mPaddles.size(); ++side) {
+        Paddle &paddle = mPaddles[side];
+        const float push = paddle.mForce * PADDLE_SCALE;
+        if (push == 0.0f) {
+            paddle.mTime = 0.0f;
+            paddle.mPressTick = -1;
+            continue;
+        }
+        if (!mOutOfControl) {
+            forward += push;
+            turn += side == 0 ? PADDLE_TURN * push : -PADDLE_TURN * push;
+        }
+        paddle.mTime += push;
+        if (paddle.mTime > PADDLE_TIME_WRAP)
+            paddle.mTime -= PADDLE_TIME_WRAP;
+    }
+
+    if (motion.x * motion.x + motion.z * motion.z < STILL_SPEED_SQUARED && turn != 0.0f) {
+        forward *= momentum;
+        turn *= STILL_TURN_BOOST;
+    }
+    mAngularVelocity = (turn * TURN_SCALE + mAngularVelocity) * momentum;
+    const float yaw = getRotation().y + mAngularVelocity;
+    setRotation(Vector3f(getRotation().x, yaw, yaw));
+
+    const float heading = (90.0f - yaw) * DEGREES_TO_RADIANS;
+    motion.x = (motion.x + forward * std::sin(heading)) * momentum;
+    motion.z = (motion.z + forward * std::cos(heading)) * momentum;
 }
 
 void BoatActor::tick(ServerNetworkHandler &owner) {
@@ -454,24 +589,35 @@ void BoatActor::_pullInMobs(ServerNetworkHandler &owner) {
         RideSystem::mount(owner, *rider, *this, false);
 }
 
-// the boat friction system: water and its surface keep 0.9 of the speed, ground its block's friction, air all of it
-float BoatActor::_momentum(Level &level) const {
+// the boat friction system: water and its surface keep 0.9 of the speed, ground its block's friction, air all of
+// it; a boat out of water and off the ground cannot be steered
+float BoatActor::_friction(Level &level) {
     const Vector3f position = getPosition();
     const int32_t x = (int32_t) std::floor(position.x);
     const int32_t y = (int32_t) std::floor(position.y);
     const int32_t z = (int32_t) std::floor(position.z);
+    // the bubble column groups hold the boat out_of_control
+    const bool column = mWater == Water::ColumnUp || mWater == Water::ColumnDown;
 
     BuoyancySettings water;
     water.mEnabled = mWater != Water::Sunk;
-    if (BuoyancySystem::contact(level, position, water).floats())
+    const BuoyancyContact contact = BuoyancySystem::contact(level, position, water);
+    if (contact.mSurface || contact.mSubmerged) {
+        mSubmergedTicks = contact.mSurface ? 0 : mSubmergedTicks + 1;
+        mOutOfControl = column;
         return WATER_MOMENTUM;
+    }
 
+    mOutOfControl = true;
     const BlockState *at = level.peekBlockPtr(x, y, z);
     if (at != nullptr && at->mName != BlockNames::AIR) {
-        if (isWater(at))
+        if (isWater(at)) {
+            mOutOfControl = column;
             return WATER_MOMENTUM;
+        }
         if (!isOnGround())
             return 1.0f;
+        mOutOfControl = column;
         // a block without a shape at the boat's feet lends the friction of the one under it
         const AxisAlignedBB cell((float) x, (float) y, (float) z, (float) x + 1.0f, (float) y + 1.0f, (float) z + 1.0f);
         if (!collides(level, cell, this)) {
@@ -484,14 +630,18 @@ float BoatActor::_momentum(Level &level) const {
     const BlockState *below = level.peekBlockPtr(x, y - 1, z);
     if (below == nullptr)
         return 1.0f;
-    if (isOnGround())
+    if (isOnGround()) {
+        mOutOfControl = column;
         return Block(*below).getFrictionFactor();
-    return isWater(below) ? WATER_MOMENTUM : 1.0f;
+    }
+    if (!isWater(below))
+        return 1.0f;
+    mOutOfControl = column;
+    return WATER_MOMENTUM;
 }
 
 void BoatActor::tickMovement(ServerNetworkHandler &owner) {
-    const Vector3f push = _push(owner);
-    // a steering player predicts the boat: the server holds it where that player put it
+    // a steering player's inputs move the boat as they arrive
     if (ServerPlayer *controller = _controller(owner)) {
         RideSystem::syncPassengerPositions(owner, *this);
         if (needsMovementSync()) {
@@ -501,11 +651,28 @@ void BoatActor::tickMovement(ServerNetworkHandler &owner) {
         return;
     }
 
+    for (Paddle &paddle: mPaddles)
+        paddle.mForce = 0.0f;
+    _step(owner, false);
+    RideSystem::syncPassengerPositions(owner, *this);
+    if (needsMovementSync()) {
+        owner.broadcastActorMove(*this);
+        markMovementSynced();
+    }
+}
+
+void BoatActor::_step(ServerNetworkHandler &owner, bool steered) {
     Level &level = owner.getLevelFor(*this);
-    const float momentum = _momentum(level);
+    const Vector3f push = _push(owner);
     Vector3f motion = getMotion();
-    motion.x = (motion.x + push.x) * momentum;
-    motion.z = (motion.z + push.z) * momentum;
+    motion.x += push.x;
+    motion.z += push.z;
+    const float momentum = _friction(level);
+    motion.x *= momentum;
+    motion.z *= momentum;
+    mAngularVelocity *= momentum;
+    if (steered)
+        _steer(motion, momentum);
 
     AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*this);
     const ActorMoveResult result = ActorCollisionSystem::move(level, box, motion, 0.0f, isOnGround(), this);
@@ -537,12 +704,6 @@ void BoatActor::tickMovement(ServerNetworkHandler &owner) {
     setMotion(motion);
     if (buoyancy.mEnabled)
         setBuoyancyTimer(BuoyancySystem::advanceTimer(getBuoyancyTimer(), buoyancy, motion, waveRandom()));
-
-    RideSystem::syncPassengerPositions(owner, *this);
-    if (needsMovementSync()) {
-        owner.broadcastActorMove(*this);
-        markMovementSynced();
-    }
 }
 
 void BoatActor::fillSpawnMetadata(EntityDataMap &metadata) const {

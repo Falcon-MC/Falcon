@@ -16,10 +16,13 @@
 
 #include <cmath>
 #include <memory>
+#include <vector>
 
 namespace {
     const char *const TAG_LEASHER = "LeasherID";
     const char *const LEAD_ITEM = "minecraft:lead";
+    // how far from the player a held lead may be to move to a leashable_to actor: the default break distance
+    const float TIE_RADIUS = 12.0f;
 
     const int32_t LEASH_HOLDER_DATA_ID = 37;
 
@@ -98,6 +101,10 @@ void ActorLeash::attach(ServerNetworkHandler &owner, ServerActor &actor, int64_t
     mHolderId = holderUniqueId;
     Actor *holder = findHolder(owner, holderUniqueId);
     mHeldByActor = holder != nullptr && !holder->isPlayer();
+    const ServerActor *holderActor = dynamic_cast<const ServerActor *>(holder);
+    const json::Value *to = holderActor == nullptr ? nullptr : holderActor->getLeashableToComponent();
+    const json::Value *removal = to == nullptr ? nullptr : to->get("unleash_on_removal");
+    mKeptPastRemoval = removal != nullptr && !removal->boolean(true);
     _sync(owner, actor);
 
     const json::Value *leashable = actor.getLeashableComponent();
@@ -138,7 +145,7 @@ void ActorLeash::tick(ServerNetworkHandler &owner, ServerActor &actor) {
     Actor *holder = findHolder(owner, mHolderId);
     // an offline player keeps the leash: it reconnects when the player rejoins
     if (holder == nullptr) {
-        if (mHeldByActor)
+        if (mHeldByActor && !mKeptPastRemoval)
             detach(owner, actor, true);
         return;
     }
@@ -178,6 +185,23 @@ void ActorLeash::tick(ServerNetworkHandler &owner, ServerActor &actor) {
     }
 
     _pull(actor, *holder, preset, distance);
+}
+
+bool ActorLeash::tieHeldLeads(ServerNetworkHandler &owner, ServerPlayer &player, ServerActor &holder) {
+    if (holder.getLeashableToComponent() == nullptr)
+        return false;
+
+    std::vector<ServerActor *> led;
+    owner.forEachActorNear(player.getPosition(), TIE_RADIUS, [&](ServerActor &actor) {
+        const ActorLeash *leash = actor.getActorLeash();
+        if (&actor != &holder && leash != nullptr && leash->getHolderId() == player.getUniqueId()
+            && actor.sharesLevelWith(player))
+            led.push_back(&actor);
+    });
+    // a holder tied to the player keeps its own lead: it would hold itself
+    for (ServerActor *actor: led)
+        actor->getActorLeash()->attach(owner, *actor, holder.getUniqueId());
+    return !led.empty();
 }
 
 ActorLeash::Preset ActorLeash::_preset(ServerNetworkHandler &owner, ServerActor &actor, Actor &holder) const {

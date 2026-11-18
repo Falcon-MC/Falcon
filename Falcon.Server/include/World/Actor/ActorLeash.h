@@ -7,6 +7,7 @@
 class Actor;
 class ServerActor;
 class ServerNetworkHandler;
+class ServerPlayer;
 class Tag;
 class EntityDataMap;
 
@@ -23,6 +24,9 @@ public:
     }
 
     void attach(ServerNetworkHandler &owner, ServerActor &actor, int64_t holderUniqueId);
+
+    // minecraft:leashable_to: every lead the player holds nearby moves to the holder; false when there was none
+    static bool tieHeldLeads(ServerNetworkHandler &owner, ServerPlayer &player, ServerActor &holder);
 
     void detach(ServerNetworkHandler &owner, ServerActor &actor, bool dropLead);
 
@@ -52,7 +56,9 @@ private:
     void _sync(ServerNetworkHandler &owner, ServerActor &actor);
 
     int64_t mHolderId = 0;
-    // a player holder may be offline and keep the lead; an actor holder that is gone drops it
+    // a player holder may be offline and keep the lead; an actor holder that is gone drops it, unless its
+    // leashable_to keeps leads past its removal
     bool mHeldByActor = false;
+    bool mKeptPastRemoval = false;
     Vector3f mPathTarget;
 };

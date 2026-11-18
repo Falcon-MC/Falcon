@@ -440,6 +440,8 @@ public:
 
     const json::Value *getLeashableComponent() const override;
 
+    const json::Value *getLeashableToComponent() const override;
+
     MobAdmiration &getAdmiration() {
         return mAdmiration;
     }
@@ -671,6 +673,8 @@ private:
     bool _tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
     bool _tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+
+    bool _tryTieLeads(ServerNetworkHandler &owner, ServerPlayer &player);
 
     bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 

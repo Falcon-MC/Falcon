@@ -175,6 +175,11 @@ public:
         return nullptr;
     }
 
+    // minecraft:leashable_to: the leads a player holds can be tied to this actor
+    virtual const json::Value *getLeashableToComponent() const {
+        return nullptr;
+    }
+
     virtual int32_t getDeathDuration() const {
         return 25;
     }

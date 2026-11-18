@@ -1394,7 +1394,8 @@ void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::strin
 
 bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
-    if (_tryNameTag(owner, player, held) || _tryLeash(owner, player, held) || _tryInteract(owner, player)
+    if (_tryNameTag(owner, player, held) || _tryTieLeads(owner, player) || _tryLeash(owner, player, held)
+        || _tryInteract(owner, player)
         || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
         || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player)
         || _tryTrade(owner, player))
@@ -1468,6 +1469,14 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
 
 const json::Value *MobActor::getLeashableComponent() const {
     return getComponent(LEASHABLE_COMPONENT);
+}
+
+const json::Value *MobActor::getLeashableToComponent() const {
+    return getComponent("minecraft:leashable_to");
+}
+
+bool MobActor::_tryTieLeads(ServerNetworkHandler &owner, ServerPlayer &player) {
+    return ActorLeash::tieHeldLeads(owner, player, *this);
 }
 
 bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {

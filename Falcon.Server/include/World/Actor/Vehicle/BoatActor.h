@@ -5,6 +5,7 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Vehicle/VehicleChest.h"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -62,6 +63,8 @@ public:
         return &mLeash;
     }
 
+    const json::Value *getLeashableToComponent() const override;
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
     bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) override;
@@ -102,15 +105,35 @@ private:
 
     void _pullInMobs(ServerNetworkHandler &owner);
 
-    // leashable_to: the leads the player holds move to the boat
-    bool _takeLeads(ServerNetworkHandler &owner, ServerPlayer &player);
-
     bool _useLead(ServerNetworkHandler &owner, ServerPlayer &player);
 
     // the legacy_boat push of the pushers touching the boat; the pushed actors take their share at once
     Vector3f _push(ServerNetworkHandler &owner);
 
-    float _momentum(Level &level) const;
+    float _friction(Level &level);
+
+    void _step(ServerNetworkHandler &owner, bool steered);
+
+    void _readRider(const PlayerAuthInputPacket &packet);
+
+    void _paddle();
+
+    void _steer(Vector3f &motion, float momentum);
+
+    void _correct(ServerNetworkHandler &owner, ServerPlayer &player, int64_t tick);
+
+    struct Paddle {
+        int64_t mReleaseTick = -1;
+        int64_t mPressTick = -1;
+        float mTime = 0.0f;
+        float mForce = 0.0f;
+    };
+
+    struct RiderInput {
+        bool mAnalog = true;
+        std::array<bool, 2> mPressed{};
+        std::array<float, 2> mAnalogForce{};
+    };
 
     int32_t mVariant = 0;
     std::unique_ptr<VehicleChest> mChest;
@@ -122,4 +145,11 @@ private:
     int32_t mHurtDirection = 1;
     float mDamage = 0.0f;
     bool mExpired = false;
+    // left then right
+    std::array<Paddle, 2> mPaddles;
+    RiderInput mRider;
+    int64_t mPaddleTick = 0;
+    float mAngularVelocity = 0.0f;
+    bool mOutOfControl = true;
+    int32_t mSubmergedTicks = 0;
 };
