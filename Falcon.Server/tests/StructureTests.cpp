@@ -16,6 +16,7 @@
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
 #include "World/Level/LevelGen/Structure/JigsawPlacer.h"
+#include "World/Level/LevelGen/Structure/MineshaftStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
@@ -516,6 +517,30 @@ namespace {
         }
     }
 
+    void checkMineshaftStarts() {
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const StructureFeature *mineshaft = StructureFeature::get("mineshaft");
+        require(mineshaft && mineshaft->getBlockOffset() == 0, "Mineshafts must locate their chunk origin");
+        require(!mineshaft->isStartChunk(*generator, 0, 0), "A mineshaft starts at spawn");
+
+        const int32_t locateCases[][4] = {
+                {0, 0, -8, 20}, {600, 600, 28, 44}, {-600, -600, -40, -38},
+                {850, -430, 59, -28}, {-800, 500, -56, 26}};
+        for (const auto &coordinates: locateCases) {
+            StructureChunkPos start;
+            require(mineshaft->findNearest(*generator, coordinates[0], coordinates[1], start)
+                            && start.x == coordinates[2] && start.z == coordinates[3],
+                    "The seed 42 mineshaft start differs from BDS");
+        }
+
+        const auto plan = MineshaftStructure::plan(*generator, -8, 20);
+        require(plan && !plan->mMesa && plan->mPieces.size() > 1, "The seed 42 mineshaft does not branch");
+        const StructurePiece::Box room = plan->mPieces.front().getBox();
+        require(room.mMinX == -126 && room.mMinZ == 322 && room.mMinY == 2,
+                "The seed 42 mineshaft room is displaced");
+        require(!MineshaftStructure::plan(*generator, 0, 0), "A rejected start produced a mineshaft plan");
+    }
+
     void checkRuinedPortals() {
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const StructureFeature *portals = StructureFeature::get("ruined_portal");
@@ -828,6 +853,7 @@ int main() {
         checkOceanRuins();
         checkPillagerOutposts();
         checkMansionStart();
+        checkMineshaftStarts();
         checkRuinedPortals();
         checkScatteredPieces();
         checkStructureBounds();

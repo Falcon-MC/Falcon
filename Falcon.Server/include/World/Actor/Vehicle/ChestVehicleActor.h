@@ -27,6 +27,10 @@ public:
     void loadEquipment(const Tag &data, const PacketCodecContext &context) override;
 
 private:
+    void _unpackLoot(ServerNetworkHandler &owner);
+
+    std::string mLootTable;
+    int32_t mLootSeed = 0;
     SimpleContainerInventory mInventory;
     bool mMinecart;
 };
