@@ -165,7 +165,15 @@ namespace {
                 "out-of-reach request changed the smithing inventory");
 
         player.setPosition(Vector3f(2.5f, 100.0f, 3.5f));
+        level.setBlock(position, BlockState("minecraft:air"), false);
         incoming.mRequests.front().mRequestId = -3;
+        InventoryHandler::handleItemStackRequest(owner, id, player, incoming);
+        require(inventory.getItem(0).isAir() && inventory.getSmithingItem(0).mCount == 1
+                        && inventory.getSmithingItem(1).mCount == 2 && inventory.getSmithingItem(2).mCount == 3,
+                "request against a removed smithing table changed the inventory");
+
+        level.setBlock(position, block->toBlockState(), false);
+        incoming.mRequests.front().mRequestId = -5;
         InventoryHandler::handleItemStackRequest(owner, id, player, incoming);
         require(!inventory.getItem(0).isAir()
                         && inventory.getItem(0).mDefinition->getIdentifier() == "minecraft:netherite_sword"
