@@ -68,11 +68,13 @@ namespace {
         return result;
     }
 
-    int run(ServerNetworkHandler &owner, PlayerInventory &inventory, const ItemStackRequest &request, bool open = true) {
+    int run(ServerNetworkHandler &owner, PlayerInventory &inventory, const ItemStackRequest &request,
+            bool open = true) {
+        const auto *recipes = open ? &owner.getCachedCraftingData() : nullptr;
         return ItemStackRequestHandler::execute(
                 inventory, request, {}, owner.getRecipeOutputs(), owner.getRecipeSourceIndices(), false, false,
-                nullptr, nullptr, &owner.getCodecContext(), nullptr, 0, false, nullptr, false, nullptr, nullptr, nullptr,
-                nullptr, nullptr, nullptr, nullptr, nullptr, open ? &owner.getCachedCraftingData() : nullptr, 2225)
+                nullptr, nullptr, &owner.getCodecContext(), nullptr, 0, false, nullptr, false, nullptr, nullptr,
+                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, recipes, 2225)
                 .mResult;
     }
 
@@ -90,7 +92,7 @@ namespace {
         require(shared != nullptr, "login did not produce a crafting packet");
 
         ReadOnlyBinaryStream stream(shared->getPacket());
-        // This is a server-generated catalog. Give the test decoder room for the full recipe lists.
+        // allow full recipe lists from the trusted login catalog
         auto settings = stream.getEncodingSettings();
         settings.mMaxListSize = std::max({settings.mMaxListSize, catalog.mShapedRecipes.size(),
                                           catalog.mShapelessRecipes.size()});
@@ -210,7 +212,8 @@ namespace {
         const auto request = craft(recipe->mRecipeNetId, Slot::CreatedOutput);
         auto unpaid = request;
         unpaid.mActions.erase(unpaid.mActions.begin() + 3);
-        require(run(owner, inventory, unpaid) == ItemStackRequestHandler::RESULT_ERROR, "missing template was accepted");
+        require(run(owner, inventory, unpaid) == ItemStackRequestHandler::RESULT_ERROR,
+                "missing template was accepted");
         auto wrongSlot = request;
         wrongSlot.mActions[2].mSource.mSlot = 53;
         require(run(owner, inventory, wrongSlot) == ItemStackRequestHandler::RESULT_ERROR, "wrong slot was accepted");

@@ -19,6 +19,7 @@
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/StonecutterBlock.h"
 #include "World/Level/Block/SmithingTableBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "Protocol/Packets/PlayerEnchantOptionsPacket.h"
@@ -553,8 +554,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 && StonecutterBlock::matches(
                         level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
 
-        const bool smithingOpen = manager.isSmithingOpen() && SmithingTableBlock::matches(
-                level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
+        const bool smithingOpen = manager.isSmithingOpen() && VanillaBlocks::getAs<SmithingTableBlock>(
+                level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName) != nullptr;
 
         // creative only: the spectator shares the creative flag below but has no creative inventory
         bool creativeCraft = false;

@@ -1,13 +1,13 @@
 #include "World/Inventory/ItemStackRequestHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
-#include "World/Inventory/AnvilRepair.h"
-#include "World/Item/ArmorTrims.h"
 #include "Protocol/Packets/CraftingDataPacket.h"
+#include "World/Inventory/AnvilRepair.h"
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/CartographyRecipes.h"
 #include "World/Inventory/StonecutterRecipes.h"
 #include "World/Actor/Trade/MerchantOffers.h"
+#include "World/Item/ArmorTrims.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "World/Item/Components/ItemComponentTypes.h"
@@ -405,7 +405,8 @@ namespace {
             const auto &recipes = trim ? context.mSmithingRecipes->mSmithingTrimRecipes
                                        : context.mSmithingRecipes->mSmithingTransformRecipes;
             for (const auto &recipe: recipes) {
-                const auto &ingredient = index == 0 ? recipe.mInput : (index == 1 ? recipe.mAddition : recipe.mTemplate);
+                const auto &ingredient = index == 0 ? recipe.mInput
+                                                    : (index == 1 ? recipe.mAddition : recipe.mTemplate);
                 if (matchesSmithingIngredient(item, ingredient))
                     return true;
             }
@@ -925,7 +926,8 @@ namespace {
                     if (!applyArmorTrim(output, addition, pattern))
                         return false;
                 } else {
-                    output.mDefinition = context.mCodecContext->getItemDefinitions().getDefinition(recipe.mOutput.mRuntimeId);
+                    output.mDefinition = context.mCodecContext->getItemDefinitions().getDefinition(
+                            recipe.mOutput.mRuntimeId);
                     if (output.mDefinition == nullptr)
                         return false;
                 }
@@ -1270,7 +1272,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         bool creativeMode, int32_t *outEnchantLevelsConsumed, bool anvilOpen, int32_t *outAnvilLevelsConsumed,
         bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
         const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
-        const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes, int32_t clientProtocol) {
+        const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
+        int32_t clientProtocol) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;

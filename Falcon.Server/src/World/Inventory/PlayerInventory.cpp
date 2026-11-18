@@ -12,13 +12,15 @@ namespace {
 
 PlayerInventory::PlayerInventory()
         : mItems((size_t) CONTAINER_SIZE), mArmor((size_t) ARMOR_SIZE), mCrafting((size_t) CRAFTING_SIZE),
-          mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE), mAnvil((size_t) ANVIL_SIZE),
+          mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE),
+          mSmithing((size_t) SMITHING_SIZE), mAnvil((size_t) ANVIL_SIZE),
           mCartography((size_t) CARTOGRAPHY_SIZE), mTrade((size_t) TRADE_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
     mBodyArmor = ItemStack::air();
     mCursor = ItemStack::air();
-    for (ItemStack &item: mSmithing)
+    for (ItemStack &item: mSmithing) {
         item = ItemStack::air();
+    }
     mStonecutterInput = ItemStack::air();
 
     for (ItemStack &item: mItems) {

@@ -4,6 +4,7 @@
 #include "Core/NBT/NbtIo.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/ProtocolData.h"
+#include "Protocol/Types/CraftingRecipeEntry.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Item/ItemNetworkIdTable.h"
 

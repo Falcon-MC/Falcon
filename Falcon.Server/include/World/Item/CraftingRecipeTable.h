@@ -1,12 +1,13 @@
 #pragma once
 
 #include "Core/NBT/Tag.h"
-#include "Protocol/Types/CraftingRecipeEntry.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+struct SmithingRecipeEntry;
 
 struct CraftingIngredientData {
     const char *mItemId;
