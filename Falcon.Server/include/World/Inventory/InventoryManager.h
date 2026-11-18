@@ -81,6 +81,11 @@ public:
 
     bool isCartographyOpen() const;
 
+    bool onClientOpenGrindstone(const Vector3i &position);
+    bool isGrindstoneOpen() const;
+    bool isGrindstoneOpenIn(const Level &level) const;
+    void syncGrindstoneInputs();
+
     bool onClientOpenSmithing(const Vector3i &position);
     bool isSmithingOpen() const;
     void syncSmithingInputs();
@@ -311,6 +316,7 @@ private:
     int mAnvilWindowId = CONTAINER_ID_NONE;
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
+    const Level *mGrindstoneLevel = nullptr;
     CartographyLock mClientMapLock;
     int32_t mStonecutterSelectedRecipe = 0;
     int mContainerWindowId = CONTAINER_ID_NONE;

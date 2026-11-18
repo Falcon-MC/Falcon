@@ -19,6 +19,7 @@
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/StonecutterBlock.h"
 #include "World/Level/Block/SmithingTableBlock.h"
+#include "World/Level/Block/GrindstoneBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
@@ -45,6 +46,7 @@
 #include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
+#include <random>
 #include <string>
 #include <utility>
 
@@ -489,7 +491,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     InventoryManager &manager = player.getInventoryManager();
     Level &level = owner.getLevelFor(player);
-    const Vector3i &anvilPosition = manager.getAnvilPosition();
+    const Vector3i anvilPosition = manager.getAnvilPosition();
 
     Level &mapLevel = MapItem::getMapLevel(owner, player);
     CartographyRecipes::Maps cartographyMaps;
@@ -511,10 +513,18 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         return copyId;
     };
 
+    const bool grindstoneOpen = manager.isGrindstoneOpenIn(level) && GrindstoneBlock::matches(
+            level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
+    const bool leftGrindstone = manager.isGrindstoneOpen() && (!grindstoneOpen || !withinContainerReach(
+            player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                             (float) anvilPosition.z + 0.5f)));
+    if (leftGrindstone)
+        manager.onCurrentWindowRemove();
+
     const bool leftSmithing = manager.isSmithingOpen() && !withinContainerReach(
             player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
                              (float) anvilPosition.z + 0.5f));
-    const bool leftContainer = leftSmithing || hasLeftOpenContainer(owner, player);
+    const bool leftContainer = leftGrindstone || leftSmithing || hasLeftOpenContainer(owner, player);
 
     // the mount window fills the saddle and armor slots without an interaction: their events run after
     const int64_t containerActorId = manager.getContainerActorId();
@@ -545,6 +555,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         int32_t enchantLevelsConsumed = 0;
         int32_t anvilLevelsConsumed = 0;
         bool anvilUsed = false;
+        int32_t grindstoneXpCost = -1;
         CartographyLock cartographyLock;
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
@@ -593,7 +604,20 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
                 stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem, tradeOffers,
                 &trade, smithingOpen ? &owner.getCachedCraftingData() : nullptr,
-                player.getCodec() ? player.getCodec()->getProtocolVersion() : 0);
+                player.getCodec() ? player.getCodec()->getProtocolVersion() : 0,
+                grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost);
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && grindstoneXpCost >= 0) {
+            const Vector3f at((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                              (float) anvilPosition.z + 0.5f);
+            owner.playLevelSound(level, "block.grindstone.use", at);
+            if (grindstoneXpCost > 0) {
+                const int32_t minimum = (grindstoneXpCost + 1) / 2;
+                static thread_local std::mt19937 random(std::random_device{}());
+                const int32_t xp = minimum + std::uniform_int_distribution<int32_t>(0, minimum - 1)(random);
+                owner.spawnExperienceOrbs(level, at, xp);
+            }
+        }
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && trader != nullptr && trade.mOfferIndex >= 0)
             trader->getEconomy().onTrade(owner, *trader, trade.mOfferIndex, trade.mCrafts);
@@ -721,6 +745,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     if (needsResync) {
         owner._sendInventory(player);
         manager.syncSmithingInputs();
+        manager.syncGrindstoneInputs();
     }
     if (renumberedBundles) {
         manager.refreshOpenContainer(manager.getContainerPosition());
@@ -1031,6 +1056,13 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         if (!item.isAir())
             returned.push_back(item);
         inventory.setSmithingItem(index, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+        const ItemStack &item = inventory.getGrindstoneItem(index);
+        if (!item.isAir())
+            returned.push_back(item);
+        inventory.setGrindstoneItem(index, ItemStack::air());
     }
 
     if (!inventory.getStonecutterInput().isAir())

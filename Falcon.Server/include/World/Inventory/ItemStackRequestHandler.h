@@ -47,5 +47,5 @@ public:
             const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes = nullptr,
             ItemStack *outCraftedRecipeItem = nullptr, const MerchantOffers *tradeOffers = nullptr,
             TradeCraft *outTrade = nullptr, const CraftingDataPacket *smithingRecipes = nullptr,
-            int32_t clientProtocol = 0);
+            int32_t clientProtocol = 0, bool grindstoneOpen = false, int32_t *outGrindstoneXpCost = nullptr);
 };
