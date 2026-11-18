@@ -15,6 +15,13 @@ public:
     static const int CRAFTING_SIZE = 4;
     static const int CRAFTING_TABLE_SIZE = 9;
     static const int FURNACE_SIZE = 3;
+    static constexpr int SMITHING_FIRST_SLOT = 51;
+    static constexpr int SMITHING_SIZE = 3;
+    static int smithingIndex(ContainerSlotType container);
+
+    const ItemStack &getSmithingItem(int index) const { return mSmithing[(size_t) index]; }
+    void setSmithingItem(int index, ItemStack item);
+
     static const int ANVIL_SIZE = 2;
     static const int ANVIL_INPUT = 0;
     static const int ANVIL_MATERIAL = 1;
@@ -175,6 +182,7 @@ private:
     std::vector<ItemStack> mCrafting;
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
+    ItemStack mSmithing[SMITHING_SIZE];
     std::vector<ItemStack> mAnvil;
     std::vector<ItemStack> mCartography;
     std::vector<ItemStack> mTrade;

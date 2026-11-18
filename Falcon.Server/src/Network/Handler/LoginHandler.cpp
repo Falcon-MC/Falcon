@@ -1148,6 +1148,17 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         cached.mShapelessRecipes.push_back(std::move(entry));
     }
 
+    for (const bool trim: {false, true}) {
+        auto &target = trim ? cached.mSmithingTrimRecipes : cached.mSmithingTransformRecipes;
+        for (SmithingRecipeEntry entry: CraftingRecipeTable::getSmithingRecipes(trim)) {
+            if (disabled.contains(entry.mRecipeId))
+                continue;
+            entry.mRecipeNetId = furnaceRecipeNetId++;
+            owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = entry.mRecipeId;
+            target.push_back(std::move(entry));
+        }
+    }
+
     cached.mCleanRecipes = true;
 }
 
@@ -1171,6 +1182,12 @@ void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &p
                 crafting.mShapelessRecipes.erase(
                         std::remove_if(crafting.mShapelessRecipes.begin(), crafting.mShapelessRecipes.end(), unknown),
                         crafting.mShapelessRecipes.end());
+
+                const auto unknownSmithing = [&](const SmithingRecipeEntry &recipe) {
+                    return !CraftingRecipeTable::isKnownBy(recipe.mRecipeId, protocol);
+                };
+                std::erase_if(crafting.mSmithingTransformRecipes, unknownSmithing);
+                std::erase_if(crafting.mSmithingTrimRecipes, unknownSmithing);
 
                 BinaryStream stream;
                 crafting.writeWithHeader(stream, context);

@@ -18,6 +18,7 @@
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/StonecutterBlock.h"
+#include "World/Level/Block/SmithingTableBlock.h"
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
 #include "Protocol/Packets/PlayerEnchantOptionsPacket.h"
@@ -509,7 +510,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         return copyId;
     };
 
-    const bool leftContainer = hasLeftOpenContainer(owner, player);
+    const bool leftSmithing = manager.isSmithingOpen() && !withinContainerReach(
+            player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                             (float) anvilPosition.z + 0.5f));
+    const bool leftContainer = leftSmithing || hasLeftOpenContainer(owner, player);
 
     // the mount window fills the saddle and armor slots without an interaction: their events run after
     const int64_t containerActorId = manager.getContainerActorId();
@@ -549,6 +553,9 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 && StonecutterBlock::matches(
                         level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
 
+        const bool smithingOpen = manager.isSmithingOpen() && SmithingTableBlock::matches(
+                level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
+
         // creative only: the spectator shares the creative flag below but has no creative inventory
         bool creativeCraft = false;
         for (const ItemStackRequestAction &action: request.mActions)
@@ -584,7 +591,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 player.getExperience().getXpLevel(), creativeMode, &enchantLevelsConsumed, anvilOpen,
                 &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
                 stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem, tradeOffers,
-                &trade);
+                &trade, smithingOpen ? &owner.getCachedCraftingData() : nullptr,
+                player.getCodec() ? player.getCodec()->getProtocolVersion() : 0);
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && trader != nullptr && trade.mOfferIndex >= 0)
             trader->getEconomy().onTrade(owner, *trader, trade.mOfferIndex, trade.mCrafts);
@@ -628,10 +636,13 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             playBundleSounds(owner, player, request, true);
             if (!craftedRecipeItem.isAir()) {
                 const InventoryManager &invManager = player.getInventoryManager();
-                const Vector3i tablePosition = invManager.getCraftingTablePosition();
+                const Vector3i tablePosition = smithingOpen ? anvilPosition : invManager.getCraftingTablePosition();
+                if (smithingOpen)
+                    owner.playLevelSound(level, "smithing_table.use", Vector3f((float) tablePosition.x + 0.5f,
+                                         (float) tablePosition.y + 0.5f, (float) tablePosition.z + 0.5f));
                 owner.getScriptEngine().onPlayerCraftRecipe(
                         player, craftedRecipeItem,
-                        invManager.isCraftingTableOpen() ? &tablePosition : nullptr);
+                        smithingOpen || invManager.isCraftingTableOpen() ? &tablePosition : nullptr);
             }
         }
 
@@ -706,8 +717,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     owner.getNetworkHandler().send(id, response, owner.getCodecContext());
 
-    if (needsResync)
+    if (needsResync) {
         owner._sendInventory(player);
+        manager.syncSmithingInputs();
+    }
     if (renumberedBundles) {
         manager.refreshOpenContainer(manager.getContainerPosition());
         manager.refreshEntityContainer(manager.getContainerActorId());
@@ -1010,6 +1023,13 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         if (!inventory.getCartographyItem(slot).isAir())
             returned.push_back(inventory.getCartographyItem(slot));
         inventory.setCartographyItem(slot, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
+        const ItemStack &item = inventory.getSmithingItem(index);
+        if (!item.isAir())
+            returned.push_back(item);
+        inventory.setSmithingItem(index, ItemStack::air());
     }
 
     if (!inventory.getStonecutterInput().isAir())

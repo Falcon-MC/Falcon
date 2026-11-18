@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/NBT/Tag.h"
+#include "Protocol/Types/CraftingRecipeEntry.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -71,6 +72,8 @@ public:
 
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
+
+    static const std::vector<SmithingRecipeEntry> &getSmithingRecipes(bool trim);
 
     static const StonecutterRecipeData *getStonecutterRecipes();
     static size_t getStonecutterRecipeCount();

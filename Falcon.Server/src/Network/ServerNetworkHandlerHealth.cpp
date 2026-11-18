@@ -395,6 +395,13 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
         inventory.setCartographyItem(slot, ItemStack::air());
     }
 
+    for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
+        const ItemStack &item = inventory.getSmithingItem(index);
+        if (!item.isAir())
+            dropOnDeath(item);
+        inventory.setSmithingItem(index, ItemStack::air());
+    }
+
     dropOnDeath(inventory.getStonecutterInput());
     inventory.setStonecutterInput(ItemStack::air());
 
