@@ -1,7 +1,10 @@
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/SharedPacket.h"
 #include "Network/Handler/LoginHandler.h"
+#include "Network/Handler/InventoryHandler.h"
+#include "Protocol/Packets/ItemStackRequestPacket.h"
 #include "World/Level/Block/SmithingTableBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -76,16 +79,28 @@ namespace {
     void checkRecipes(ServerNetworkHandler &owner) {
         require(VanillaBlocks::getAs<SmithingTableBlock>("minecraft:smithing_table") != nullptr,
                 "the smithing table block was not registered");
-        BinaryStream buffer;
-        const auto &context = owner.getCodecContext();
+        const NetworkIdentifier id;
+        ServerPlayer player(id, 4001);
+        LoginHandler::sendCraftingData(owner, player);
+        const auto &context = owner.getCodecContext(id);
+        require(context.getCodec().getProtocolVersion() == 2225, "expected the Bedrock 26.60 codec");
         const auto &catalog = owner.getCachedCraftingData();
-        CraftingDataPacket smithingOnly;
-        smithingOnly.mSmithingTransformRecipes = catalog.mSmithingTransformRecipes;
-        smithingOnly.mSmithingTrimRecipes = catalog.mSmithingTrimRecipes;
-        smithingOnly.write(buffer, context);
-        ReadOnlyBinaryStream stream(buffer.getBuffer());
+        const auto &shared = owner.getSharedLoginPacket(
+                ServerNetworkHandler::SharedLoginPacket::CraftingData, context.getCodec().getProtocolVersion());
+        require(shared != nullptr, "login did not produce a crafting packet");
+
+        ReadOnlyBinaryStream stream(shared->getPacket());
+        // This is a server-generated catalog. Give the test decoder room for the full shaped recipe list.
+        auto settings = stream.getEncodingSettings();
+        settings.mMaxListSize = std::max(settings.mMaxListSize, catalog.mShapedRecipes.size());
+        stream.setEncodingSettings(settings);
+        require(stream.getUnsignedVarInt() == (uint32_t) CraftingDataPacket::ID,
+                "incorrect crafting data packet header");
         CraftingDataPacket packet;
         packet.read(stream, context);
+        require(stream.feof(), "crafting packet has unread bytes");
+        require(packet.mCleanRecipes && packet.mShapedRecipes.size() == catalog.mShapedRecipes.size(),
+                "the login catalog lost its shaped recipes");
         require(packet.mSmithingTransformRecipes.size() == 12 && packet.mSmithingTrimRecipes.size() == 1,
                 "vanilla smithing recipes did not reach crafting data");
         std::set<int32_t> ids;
@@ -127,14 +142,44 @@ namespace {
         inventory.setSmithingItem(0, makeItem(owner, "minecraft:diamond_sword", 1));
         inventory.setSmithingItem(1, makeItem(owner, "minecraft:netherite_ingot", 2));
         inventory.setSmithingItem(2, makeItem(owner, "minecraft:netherite_upgrade_smithing_template", 3));
+        const auto &recipes = owner.getCachedCraftingData().mSmithingTransformRecipes;
+        const auto recipe = std::find_if(recipes.begin(), recipes.end(), [](const auto &entry) {
+            return entry.mRecipeId == "minecraft:smithing_netherite_sword";
+        });
+        require(recipe != recipes.end(), "missing sword upgrade");
+        ItemStackRequestPacket outgoing;
+        auto request = craft(recipe->mRecipeNetId, Slot::CreatedOutput);
+        request.mRequestId = -1;
+        outgoing.mRequests.push_back(request);
+        BinaryStream buffer;
+        outgoing.write(buffer, owner.getCodecContext());
+        ReadOnlyBinaryStream stream(buffer.getBuffer());
+        ItemStackRequestPacket incoming;
+        incoming.read(stream, owner.getCodecContext());
+
+        player.setPosition(Vector3f(18.5f, 100.0f, 3.5f));
+        InventoryHandler::handleItemStackRequest(owner, id, player, incoming);
+        require(inventory.getItem(0).isAir() && inventory.getSmithingItem(0).mCount == 1
+                        && inventory.getSmithingItem(1).mCount == 2 && inventory.getSmithingItem(2).mCount == 3,
+                "out-of-reach request changed the smithing inventory");
+
+        player.setPosition(Vector3f(2.5f, 100.0f, 3.5f));
+        incoming.mRequests.front().mRequestId = -3;
+        InventoryHandler::handleItemStackRequest(owner, id, player, incoming);
+        require(!inventory.getItem(0).isAir()
+                        && inventory.getItem(0).mDefinition->getIdentifier() == "minecraft:netherite_sword"
+                        && inventory.getSmithingItem(0).isAir() && inventory.getSmithingItem(1).mCount == 1
+                        && inventory.getSmithingItem(2).mCount == 2,
+                "decoded smithing request did not deliver the result and charge the inputs");
+
         manager.closeAllWindows();
 
         int returned = 0;
         for (int index = 0; index < PlayerInventory::CONTAINER_SIZE; ++index)
             returned += inventory.getItem(index).mCount;
-        require(!manager.isSmithingOpen() && returned == 6 && inventory.getSmithingItem(0).isAir()
+        require(!manager.isSmithingOpen() && returned == 4 && inventory.getSmithingItem(0).isAir()
                         && inventory.getSmithingItem(1).isAir() && inventory.getSmithingItem(2).isAir(),
-                "closing the window did not return every ingredient");
+                "closing the window did not return the remaining ingredients");
     }
 
     void checkTransform(ServerNetworkHandler &owner) {
@@ -200,6 +245,7 @@ namespace {
 int main() {
     try {
         ServerNetworkHandler owner("Smithing", "", 1);
+        owner.getScriptEngine().bindHost(owner);
         LoginHandler::buildCraftingData(owner);
         checkRecipes(owner);
         checkTransform(owner);

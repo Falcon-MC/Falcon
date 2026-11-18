@@ -19,7 +19,9 @@ public:
     static constexpr int SMITHING_SIZE = 3;
     static int smithingIndex(ContainerSlotType container);
 
-    const ItemStack &getSmithingItem(int index) const { return mSmithing[(size_t) index]; }
+    const ItemStack &getSmithingItem(int index) const {
+        return mSmithing[(size_t) index];
+    }
     void setSmithingItem(int index, ItemStack item);
 
     static const int ANVIL_SIZE = 2;
