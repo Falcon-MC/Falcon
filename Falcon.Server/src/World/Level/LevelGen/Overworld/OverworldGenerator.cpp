@@ -9,6 +9,7 @@
 #include "World/Level/LevelGen/Structure/IglooStructure.h"
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
 #include "World/Level/LevelGen/Structure/JungleTempleStructure.h"
+#include "World/Level/LevelGen/Structure/MansionStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
 #include "World/Level/LevelGen/Structure/RuinedPortalStructure.h"
@@ -147,6 +148,7 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     VillageStructure::place(*this, level, chunk, overflow);
     // created right after the village in createGenerator
     StrongholdStructure::place(*this, level, chunk);
+    MansionStructure::place(*this, level, chunk);
     JigsawStructures::get().place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
