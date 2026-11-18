@@ -189,6 +189,19 @@ void PlayerInventory::setTradeItem(int slot, ItemStack item) {
     mTrade[(size_t) slot] = std::move(item);
 }
 
+int PlayerInventory::grindstoneIndex(ContainerSlotType container) {
+    switch (container) {
+        case ContainerSlotType::GrindstoneInput: return 0;
+        case ContainerSlotType::GrindstoneAdditional: return 1;
+        default: return -1;
+    }
+}
+
+void PlayerInventory::setGrindstoneItem(int index, ItemStack item) {
+    assignNetId(item);
+    mGrindstone[(size_t) index] = std::move(item);
+}
+
 int PlayerInventory::smithingIndex(ContainerSlotType container) {
     switch (container) {
         case ContainerSlotType::SmithingTableInput: return 0;
@@ -296,6 +309,12 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
         case ContainerSlotType::TradeIngredient2:
         case ContainerSlotType::Trade2Ingredient2:
             return &mTrade[1];
+
+        case ContainerSlotType::GrindstoneInput:
+        case ContainerSlotType::GrindstoneAdditional: {
+            const int index = grindstoneIndex(container);
+            return slot == GRINDSTONE_FIRST_SLOT + index ? &mGrindstone[(size_t) index] : nullptr;
+        }
 
         case ContainerSlotType::SmithingTableInput:
         case ContainerSlotType::SmithingTableMaterial:

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "World/Inventory/Container.h"
 #include "Protocol/Types/ContainerSlotType.h"
 
@@ -23,6 +25,8 @@ public:
     static const int CARTOGRAPHY_ADDITIONAL = 1;
     static const int TRADE_SIZE = 2;
     static const int SMITHING_SIZE = 3;
+    static constexpr int GRINDSTONE_SIZE = 2;
+    static constexpr int GRINDSTONE_FIRST_SLOT = 16;
     static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
     // the body armor is saved right behind the four worn pieces
@@ -118,6 +122,13 @@ public:
 
     void setStonecutterInput(ItemStack item);
 
+    static int grindstoneIndex(ContainerSlotType container);
+
+    const ItemStack &getGrindstoneItem(int index) const {
+        return mGrindstone[(size_t) index];
+    }
+    void setGrindstoneItem(int index, ItemStack item);
+
     static int smithingIndex(ContainerSlotType container);
 
     const ItemStack &getSmithingItem(int index) const {
@@ -185,6 +196,7 @@ private:
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
     std::vector<ItemStack> mSmithing;
+    std::array<ItemStack, GRINDSTONE_SIZE> mGrindstone{ItemStack::air(), ItemStack::air()};
     std::vector<ItemStack> mAnvil;
     std::vector<ItemStack> mCartography;
     std::vector<ItemStack> mTrade;

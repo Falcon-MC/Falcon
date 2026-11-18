@@ -1043,6 +1043,40 @@ bool InventoryManager::onClientOpenCartography(const Vector3i &position) {
     return _openWorkbench(ContainerType::Cartography, position);
 }
 
+bool InventoryManager::onClientOpenGrindstone(const Vector3i &position) {
+    if (mPlayer == nullptr || mOwner == nullptr)
+        return false;
+    const Level &level = mOwner->getLevelFor(*mPlayer);
+    if (isGrindstoneOpen() && !isGrindstoneOpenIn(level)) {
+        onCurrentWindowRemove();
+        return false;
+    }
+    if (!_openWorkbench(ContainerType::Grindstone, position))
+        return false;
+    mGrindstoneLevel = &level;
+    return true;
+}
+
+bool InventoryManager::isGrindstoneOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Grindstone;
+}
+
+bool InventoryManager::isGrindstoneOpenIn(const Level &level) const {
+    return isGrindstoneOpen() && mGrindstoneLevel == &level;
+}
+
+void InventoryManager::syncGrindstoneInputs() {
+    if (mPlayer == nullptr || mSender == nullptr || !isGrindstoneOpen())
+        return;
+    for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+        InventorySlotPacket packet;
+        packet.mContainerId = CONTAINER_ID_UI;
+        packet.mSlot = PlayerInventory::GRINDSTONE_FIRST_SLOT + index;
+        packet.mItem = mPlayer->getInventory().getGrindstoneItem(index);
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+    }
+}
+
 bool InventoryManager::onClientOpenSmithing(const Vector3i &position) {
     return _openWorkbench(ContainerType::SmithingTable, position);
 }
@@ -1153,6 +1187,17 @@ void InventoryManager::_closeAnvil() {
 
     mClientMapLock = CartographyLock();
     PlayerInventory &inventory = mPlayer->getInventory();
+    if (mAnvilWindowType == ContainerType::Grindstone) {
+        mGrindstoneLevel = nullptr;
+        for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+            ItemStack item = inventory.getGrindstoneItem(index);
+            if (item.isAir())
+                continue;
+            inventory.setGrindstoneItem(index, ItemStack::air());
+            _returnToInventory(std::move(item));
+        }
+        return;
+    }
     if (mAnvilWindowType == ContainerType::SmithingTable) {
         for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
             ItemStack item = inventory.getSmithingItem(index);

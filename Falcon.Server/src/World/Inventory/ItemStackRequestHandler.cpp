@@ -5,6 +5,7 @@
 #include "World/Inventory/AnvilRepair.h"
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/CartographyRecipes.h"
+#include "World/Inventory/GrindstoneRepair.h"
 #include "World/Inventory/StonecutterRecipes.h"
 #include "World/Actor/Trade/MerchantOffers.h"
 #include "World/Item/ArmorTrims.h"
@@ -77,6 +78,10 @@ namespace {
         int32_t mEnchantInputConsumed = 0;
         int32_t mEnchantMaterialConsumed = 0;
         const ItemStackRequest *mRequest = nullptr;
+        bool mGrindstoneOpen = false;
+        bool mGrindstoneActive = false;
+        int32_t mGrindstoneXpCost = 0;
+        std::array<bool, PlayerInventory::GRINDSTONE_SIZE> mGrindstoneOwed{};
         bool mAnvilOpen = false;
         bool mAnvilActive = false;
         int32_t mAnvilLevelsConsumed = 0;
@@ -217,6 +222,10 @@ namespace {
             }
             return &view->mContents[(size_t) slot];
         }
+        if (PlayerInventory::grindstoneIndex(container) >= 0 && !context.mGrindstoneOpen)
+            return nullptr;
+        if (container == ContainerSlotType::GrindstoneResult)
+            return context.mGrindstoneActive && slot == 50 ? &context.mCreatedOutput : nullptr;
         if (PlayerInventory::smithingIndex(container) >= 0 && context.mSmithingRecipes == nullptr)
             return nullptr;
         if (container == ContainerSlotType::SmithingTableResult)
@@ -456,6 +465,11 @@ namespace {
         ItemStack *destination = resolveSlot(inventory, context, action.mDestination.mContainerName,
                                              action.mDestination.mSlot);
 
+        if (context.mGrindstoneActive
+            && (destination == &context.mCreatedOutput
+                || PlayerInventory::grindstoneIndex(action.mDestination.mContainerName.mContainer) >= 0))
+            return false;
+
         if (context.mSmithingActive
             && (destination == &context.mCreatedOutput
                 || PlayerInventory::smithingIndex(action.mDestination.mContainerName.mContainer) >= 0))
@@ -534,7 +548,8 @@ namespace {
         ItemStack *destination = resolveSlot(inventory, context, action.mDestination.mContainerName,
                                              action.mDestination.mSlot);
 
-        if (context.mSmithingActive && (source == &context.mCreatedOutput || destination == &context.mCreatedOutput))
+        if ((context.mSmithingActive || context.mGrindstoneActive)
+            && (source == &context.mCreatedOutput || destination == &context.mCreatedOutput))
             return false;
 
         if (source == nullptr || destination == nullptr || source == destination) {
@@ -621,6 +636,18 @@ namespace {
             else if (container == ContainerSlotType::CartographyAdditional)
                 context.mCartographyAdditionalConsumed += action.mCount;
         }
+
+        if (action.mType == ItemStackRequestActionType::Consume) {
+            const int index = PlayerInventory::grindstoneIndex(action.mSource.mContainerName.mContainer);
+            if (index >= 0 || context.mGrindstoneActive) {
+                if (!context.mGrindstoneActive || index < 0 || action.mCount != 1
+                    || !context.mGrindstoneOwed[(size_t) index])
+                    return false;
+                context.mGrindstoneOwed[(size_t) index] = false;
+            }
+        }
+        if (context.mGrindstoneActive && source == &context.mCreatedOutput && !dropped)
+            return false;
 
         if (context.mSmithingActive && action.mType == ItemStackRequestActionType::Consume) {
             const int index = PlayerInventory::smithingIndex(action.mSource.mContainerName.mContainer);
@@ -724,6 +751,27 @@ namespace {
                 return &action.mResultItems.front();
         }
         return nullptr;
+    }
+
+    bool craftGrindstone(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        if (!context.mGrindstoneOpen || context.mCraftRecipeSeen || context.mCreatedOutputActive
+            || !context.mCreatedOutput.isAir() || context.mCodecContext == nullptr || action.mNumberOfRequestedCrafts != 1)
+            return false;
+
+        const ItemStack &input = inventory.getGrindstoneItem(0);
+        const ItemStack &additional = inventory.getGrindstoneItem(1);
+        GrindstoneResult result = GrindstoneRepair::createResult(
+                input, additional, context.mCodecContext->getItemDefinitions().getDefinition("minecraft:book"));
+        if (result.mItem.isAir() || action.mRepairCost != AnvilRepair::getRepairCost(result.mItem))
+            return false;
+
+        context.mCraftRecipeSeen = true;
+        context.mGrindstoneActive = true;
+        context.mGrindstoneOwed = {!input.isAir(), !additional.isAir()};
+        context.mGrindstoneXpCost = result.mExperienceCost;
+        context.mCreatedOutput = std::move(result.mItem);
+        context.mCreatedOutputActive = true;
+        return true;
     }
 
     // the anvil sends its typed name as a filter string and leaves crafting to the server: the result is
@@ -1113,14 +1161,15 @@ namespace {
                || container == ContainerSlotType::EnchantingMaterial || container == ContainerSlotType::AnvilInput
                || container == ContainerSlotType::AnvilMaterial || container == ContainerSlotType::CartographyInput
                || container == ContainerSlotType::CartographyAdditional
-               || container == ContainerSlotType::StonecutterInput || PlayerInventory::smithingIndex(container) >= 0;
+               || container == ContainerSlotType::StonecutterInput || PlayerInventory::smithingIndex(container) >= 0
+               || PlayerInventory::grindstoneIndex(container) >= 0;
     }
 
     // the result was made from what the input slots held: until it is paid, they only give to a consume, or
     // another item would pay for it and the real ingredients would stay
     bool rejectedByPendingCraft(const RequestContext &context, const ItemStackRequestAction &action) {
         if (!context.mCraftingActive && !context.mEnchantActive && !context.mAnvilActive && !context.mCartographyActive
-            && !context.mStonecutterActive && !context.mSmithingActive)
+            && !context.mStonecutterActive && !context.mSmithingActive && !context.mGrindstoneActive)
             return false;
 
         switch (action.mType) {
@@ -1143,6 +1192,20 @@ namespace {
 
     bool applyAction(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
+        if (context.mGrindstoneActive) {
+            switch (action.mType) {
+                case ItemStackRequestActionType::Take:
+                case ItemStackRequestActionType::Place:
+                case ItemStackRequestActionType::Consume:
+                case ItemStackRequestActionType::Drop:
+                case ItemStackRequestActionType::Create:
+                case ItemStackRequestActionType::CraftResultsDeprecated:
+                    break;
+                default:
+                    return false;
+            }
+        }
+
         if (rejectedByPendingCraft(context, action))
             return false;
 
@@ -1242,6 +1305,9 @@ namespace {
                     return craftStonecutter(inventory, context, action);
                 return craftRecipe(inventory, context, action, touched);
 
+            case ItemStackRequestActionType::CraftRepairAndDisenchant:
+                return craftGrindstone(inventory, context, action);
+
             case ItemStackRequestActionType::CraftRecipeOptional:
                 if (context.mCartographyMaps != nullptr)
                     return craftCartography(inventory, context, action);
@@ -1273,7 +1339,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         bool *outAnvilUsed, const CartographyRecipes::Maps *cartographyMaps, CartographyLock *outCartographyLock,
         const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
-        int32_t clientProtocol) {
+        int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1298,6 +1364,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mCreativeMode = creativeMode;
     context.mRequest = &request;
     context.mAnvilOpen = anvilOpen;
+    context.mGrindstoneOpen = grindstoneOpen;
     context.mCartographyMaps = cartographyMaps;
     context.mStonecutterRecipes = stonecutterRecipes;
     context.mSmithingRecipes = smithingRecipes;
@@ -1372,6 +1439,13 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         return entry;
     }
 
+    if (context.mGrindstoneActive
+        && std::any_of(context.mGrindstoneOwed.begin(), context.mGrindstoneOwed.end(), [](bool owed) { return owed; })) {
+        entry.mResult = RESULT_ERROR;
+        entry.mContainers.clear();
+        return entry;
+    }
+
     if (context.mTradeActive && context.mTradeConsumed != context.mTradeRequired) {
         entry.mResult = RESULT_ERROR;
         entry.mContainers.clear();
@@ -1426,6 +1500,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     if (outAnvilUsed != nullptr)
         *outAnvilUsed = context.mAnvilActive;
 
+    if (outGrindstoneXpCost != nullptr && context.mGrindstoneActive)
+        *outGrindstoneXpCost = context.mGrindstoneXpCost;
+
     if (outCraftedRecipeItem != nullptr && context.mCraftedRecipe)
         *outCraftedRecipeItem = context.mCraftedRecipeOutput;
 
@@ -1437,7 +1514,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
 
     for (const TouchedSlot &slot: touched) {
         if (slot.mContainerName.mContainer == ContainerSlotType::CreatedOutput
-            || slot.mContainerName.mContainer == ContainerSlotType::SmithingTableResult) {
+            || slot.mContainerName.mContainer == ContainerSlotType::SmithingTableResult
+            || slot.mContainerName.mContainer == ContainerSlotType::GrindstoneResult) {
             continue;
         }
 
