@@ -1,5 +1,7 @@
 #include "World/Actor/Player/ArmorProtection.h"
 
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Item/BodyArmor.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
 
@@ -14,9 +16,7 @@ float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount,
     const bool fallDamage = deathMessageKey == "death.fell.accident.generic";
     const bool explosionDamage = deathMessageKey == "death.attack.explosion";
     const bool projectileDamage = deathMessageKey == "death.attack.arrow";
-    const bool armorDamage = deathMessageKey != "death.attack.inFire" && deathMessageKey != "death.attack.drown"
-                             && !fallDamage && deathMessageKey != "death.attack.outOfWorld"
-                             && deathMessageKey != "death.attack.thorns" && deathMessageKey != "death.attack.suicide";
+    const bool armorDamage = isReducedByArmor(deathMessageKey);
 
     int armorPoints = 0;
     int enchantmentProtectionFactor = 0;
@@ -25,9 +25,7 @@ float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount,
         if (piece.isAir() || piece.mDefinition == nullptr)
             continue;
 
-        const ItemData *data = ItemDataTable::find(piece.mDefinition->getIdentifier());
-        if (data != nullptr)
-            armorPoints += data->mArmorPoints;
+        armorPoints += getPoints(piece);
 
         enchantmentProtectionFactor += _protectionFactor(ItemEnchantments::getLevel(piece, EnchantmentIds::PROTECTION),
                                                          0.75f);
@@ -59,6 +57,27 @@ float ArmorProtection::apply(const ItemStack *armor, size_t count, float amount,
     }
 
     return amount;
+}
+
+bool ArmorProtection::isReducedByArmor(const std::string &deathMessageKey) {
+    return deathMessageKey != "death.attack.inFire" && deathMessageKey != "death.attack.drown"
+           && deathMessageKey != "death.fell.accident.generic" && deathMessageKey != "death.attack.outOfWorld"
+           && deathMessageKey != "death.attack.thorns" && deathMessageKey != "death.attack.suicide";
+}
+
+int ArmorProtection::getPoints(const ItemStack &item) {
+    if (item.isAir() || item.mDefinition == nullptr)
+        return 0;
+
+    if (const BodyArmorData *body = BodyArmor::find(item))
+        return body->mPoints;
+
+    if (const CustomItemDefinition *custom =
+                CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier()))
+        return custom->mWearableSlot == ArmorSlot::None ? 0 : custom->mProtection;
+
+    const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
+    return data == nullptr ? 0 : data->mArmorPoints;
 }
 
 int ArmorProtection::_protectionFactor(int level, float modifier) {

@@ -46,6 +46,14 @@ public:
 };
 
 namespace {
+    // the game keeps a mover's horizontal velocity next to a missing chunk: fixtures need their neighbours
+    void loadChunksAround(Level &level, int32_t chunkX, int32_t chunkZ) {
+        for (int32_t x = chunkX - 1; x <= chunkX + 1; ++x) {
+            for (int32_t z = chunkZ - 1; z <= chunkZ + 1; ++z)
+                level.getChunk(x, z);
+        }
+    }
+
     void require(bool condition, const char *message) {
         if (!condition)
             throw std::runtime_error(message);
@@ -360,7 +368,7 @@ namespace {
         player.setFlying(true);
         player.setPosition(Vector3f(134.5f, 250.0f, 2.5f));
         Level &level = owner.getLevelFor(player);
-        level.getChunk(8, 0);
+        loadChunksAround(level, 8, 0);
         level.getBlockActors().loadChunk(8, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 20;
@@ -388,7 +396,7 @@ namespace {
         ServerPlayer immediate(id, 2002);
         ServerPlayer delayed(id, 2003);
         Level &level = owner.getLevelFor(immediate);
-        level.getChunk(2, 0);
+        loadChunksAround(level, 2, 0);
         level.getBlockActors().loadChunk(2, 0, {}, owner.getCodecContext());
         for (int x = 33; x <= 40; ++x)
             for (int y = 245; y <= 253; ++y)
@@ -421,7 +429,7 @@ namespace {
                 "Catchup used the server tick as the input tick");
     }
 
-    // jump 0x140EAFAF0, cooldown 0x140EB0DA0, ground/air travel and gravity
+    // jump, cooldown, ground/air travel and gravity
     void checkGroundJumpTrajectory() {
         for (bool strict: {false, true}) {
             ServerNetworkHandler owner("Ground trajectory regression", "", 1);
@@ -435,7 +443,7 @@ namespace {
             player.getAttributes() = ActorAttributes::createPlayerDefaults();
             Level &level = owner.getLevelFor(player);
             for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
-                level.getChunk(4, chunkZ);
+                loadChunksAround(level, 4, chunkZ);
                 level.getBlockActors().loadChunk(4, chunkZ, {}, owner.getCodecContext());
             }
             for (int x = 69; x <= 72; ++x)
@@ -507,7 +515,7 @@ namespace {
         player.getAttributes() = ActorAttributes::createPlayerDefaults();
         Level &level = owner.getLevelFor(player);
         for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
-            level.getChunk(4, chunkZ);
+            loadChunksAround(level, 4, chunkZ);
             level.getBlockActors().loadChunk(4, chunkZ, {}, owner.getCodecContext());
         }
         const float edgeZ = 10.0f;
@@ -584,7 +592,7 @@ namespace {
         ServerPlayer locator(id, 7000);
         Level &level = owner.getLevelFor(locator);
         for (int chunkZ = 0; chunkZ < 4; ++chunkZ) {
-            level.getChunk(6, chunkZ);
+            loadChunksAround(level, 6, chunkZ);
             level.getBlockActors().loadChunk(6, chunkZ, {}, owner.getCodecContext());
         }
         for (PlayerInputMode mode: {PlayerInputMode::Mouse, PlayerInputMode::Touch, PlayerInputMode::Gamepad}) {
@@ -730,7 +738,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 7360);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(10, 0);
+        loadChunksAround(level, 10, 0);
         level.getBlockActors().loadChunk(10, 0, {}, owner.getCodecContext());
         for (bool wet: {false, true}) {
             for (int x = 164; x <= 168; ++x)
@@ -777,7 +785,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer player(id, 7370);
         Level &level = owner.getLevelFor(player);
-        level.getChunk(11, 0);
+        loadChunksAround(level, 11, 0);
         level.getBlockActors().loadChunk(11, 0, {}, owner.getCodecContext());
         for (int x = 179; x <= 183; ++x)
             for (int y = 249; y <= 253; ++y)
@@ -881,7 +889,7 @@ namespace {
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
         player.getMovementValidator().onMovementEffect(100);
         Level &level = owner.getLevelFor(player);
-        level.getChunk(9, 0);
+        loadChunksAround(level, 9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 100;
@@ -940,7 +948,7 @@ namespace {
         // transition timing only; prediction feedback is tested separately
         player.getMovementValidator().onMovementEffect(100);
         Level &level = owner.getLevelFor(player);
-        level.getChunk(9, 0);
+        loadChunksAround(level, 9, 0);
         level.getBlockActors().loadChunk(9, 0, {}, owner.getCodecContext());
         PlayerAuthInputPacket packet;
         packet.mTick = 99;
@@ -949,10 +957,13 @@ namespace {
         packet.mPosition = Vector3f(150.5f, 251.62f, 2.5f);
         player.getMovementInputs().enqueue(packet);
         MovementInputProbe::step(owner, player, 1);
-        // the client's FlyTriggerActionSystem (26.60 sub_145E0FB40) only queues the ability change:
+        // the client's FlyTriggerActionSystem only queues the ability change:
         // the input carrying the toggle still travels with the old abilities
         require(player.isFlying() && std::fabs(player.getSimulatedVelocity().y - 0.09f) > 0.000002f,
                 "AuthInput StartFlying was not applied after the input that carries it");
+        // that input already rises with the fly control, then falls and drags as a walking move
+        require(std::fabs(player.getSimulatedVelocity().y - (0.15f - 0.08f) * 0.98f) < 0.000002f,
+                "The input that starts flight did not apply its vertical fly control");
         player.setPosition(Vector3f(150.5f, 250.0f, 2.5f));
         player.setSimulatedPosition(Vector3f(150.5f, 250.0f, 2.5f));
         player.setSimulatedVelocity(Vector3f());
@@ -1002,7 +1013,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 7100);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(7, 0);
+        loadChunksAround(level, 7, 0);
         level.getBlockActors().loadChunk(7, 0, {}, owner.getCodecContext());
         for (bool ceiling: {false, true}) {
             for (int x = 116; x <= 120; ++x)
@@ -1062,7 +1073,7 @@ namespace {
         ServerPlayer locator(id, 6000);
         Level &level = owner.getLevelFor(locator);
         for (int chunkZ = 0; chunkZ < 2; ++chunkZ) {
-            level.getChunk(5, chunkZ);
+            loadChunksAround(level, 5, chunkZ);
             level.getBlockActors().loadChunk(5, chunkZ, {}, owner.getCodecContext());
         }
         for (bool slab: {false, true}) {
@@ -1118,7 +1129,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 4000);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(4, 0);
+        loadChunksAround(level, 4, 0);
         level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
         for (int scenario = 0; scenario < 5; ++scenario) {
             const BlockState liquid(scenario == 2   ? "minecraft:water"
@@ -1280,7 +1291,7 @@ namespace {
             NetworkIdentifier id;
             ServerPlayer player(id, 4001);
             Level &level = owner.getLevelFor(player);
-            level.getChunk(4, 0);
+            loadChunksAround(level, 4, 0);
             level.getBlockActors().loadChunk(4, 0, {}, owner.getCodecContext());
             for (int x = 65; x <= 68; ++x)
                 for (int z = 1; z <= 4; ++z)
@@ -1319,8 +1330,8 @@ namespace {
         }
     }
 
-    // 1.26.10: ground 0x140E104A0, water 0x140F1E690/0x14103D110,
-    // levitation 0x14104F680, flight 0x14104F280/0x140F1D980, glide 0x140C66F70
+    // 1.26.10: ground, water,
+    // levitation, flight, glide
     void checkTravelPhysics() {
         ServerNetworkHandler owner("Travel regression", "", 1);
         const auto path = ServerPaths::getRoot() / "travel.properties";
@@ -1330,7 +1341,7 @@ namespace {
         NetworkIdentifier id;
         ServerPlayer locator(id, 3000);
         Level &level = owner.getLevelFor(locator);
-        level.getChunk(3, 0);
+        loadChunksAround(level, 3, 0);
         level.getBlockActors().loadChunk(3, 0, {}, owner.getCodecContext());
         int64_t nextId = 3001;
         const auto terrain = [&](const BlockState &floor, const BlockState &body) {
@@ -1446,7 +1457,7 @@ namespace {
         }
 
         terrain(stone, WaterBlock::source());
-        // LiquidPhysicsSystem 0x140FC98E0 contracts the sensing volume, independent of eye water
+        // LiquidPhysicsSystem contracts the sensing volume, independent of eye water
         const Vector3f shallowFeet(50.5f, 250.75f, 2.5f);
         for (int x = 49; x <= 52; ++x)
             for (int z = 1; z <= 4; ++z)
@@ -1489,7 +1500,7 @@ namespace {
         close(swimming->getSimulatedVelocity().y, 0.0f, "Persistent swimming state was lost");
         step(*swimming, {(int32_t) PlayerAuthInputData::StopSwimming});
         close(swimming->getSimulatedVelocity().y, -0.005f, "StopSwimming failed to restore sinking gravity");
-        // SwimControlSystem 0x140F4FB60 and MobJumpSystem 0x140EB1110
+        // SwimControlSystem and MobJumpSystem
         terrain(air, WaterBlock::source());
         const std::vector<int32_t> swimFlags{(int32_t) PlayerAuthInputData::StartSwimming};
         for (bool sprinting: {false, true}) {

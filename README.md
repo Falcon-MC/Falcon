@@ -10,17 +10,17 @@
 </p>
 
 <p align="center">
-	<a href="https://falcon-mc.github.io"><img src="https://img.shields.io/badge/website-falcon--mc.github.io-2ea44f" alt="Website"></a>
+	<a href="https://falcon-mc.com"><img src="https://img.shields.io/badge/website-falcon--mc.com-2ea44f" alt="Website"></a>
 	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 	<img src="https://img.shields.io/badge/minecraft-v1.26.70%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2259-blue" alt="Protocol">
-	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
+	<img src="https://img.shields.io/badge/language-C%2B%2B20-00599C" alt="C++20">
 	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
 </p>
 
 ## What is this?
 
-Falcon is a Minecraft: Bedrock Edition server written from scratch in C++17. Protocol, world storage,
+Falcon is a Minecraft: Bedrock Edition server written from scratch in C++20. Protocol, world storage,
 inventories, movement and gameplay are reimplemented by hand, with vanilla behavior as the reference.
 
 - **Native** - one self-contained executable, no runtime to install
@@ -30,10 +30,10 @@ inventories, movement and gameplay are reimplemented by hand, with vanilla behav
 
 ## Getting started
 
-Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases), check it
-against its `.sha256` file and run it. On the first start, a setup wizard writes `server.properties`.
+Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases) and run it.
+On the first start, a setup wizard writes `server.properties`.
 
-Every setting is described on the [website](https://falcon-mc.github.io).
+Every setting is described on the [website](https://falcon-mc.com).
 
 ## Supported versions
 
@@ -53,13 +53,13 @@ The API lives in [PluginAPI](https://github.com/Falcon-MC/PluginAPI), with a com
 
 ## Privacy
 
-To tell the game's client from unofficial ones, the server asks `api.falcon-mc.workers.dev` about each NetherNet
+To tell the game's client from unofficial ones, the server asks `api.falcon-mc.com` about each NetherNet
 connection. It sends no player name, identifier or address. `allow-unofficial-clients=true` turns this off.
 Telemetry is off unless you set `emit-server-telemetry=true`, and it names no server, world or player.
 
 ## Building
 
-You need CMake 3.16+, a C++17 compiler, zlib and OpenSSL. On Windows, use MSYS2 UCRT64.
+You need CMake 3.16+, a C++20 compiler, zlib and OpenSSL. On Windows, use MSYS2 UCRT64.
 
 ```
 cmake -B build -G Ninja

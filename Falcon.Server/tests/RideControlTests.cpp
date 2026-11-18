@@ -44,6 +44,7 @@ class RideControlProbe {
 public:
     static void components(MobActor &mob, const json::Value &definition) {
         mob.mComponents.clear();
+        mob.mRecentComponents.clear();
         for (const std::string &key: definition.mKeys)
             mob.mComponents[key] = definition.get(key);
         mob.mComponentsDirty = false;

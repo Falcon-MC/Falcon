@@ -8,11 +8,11 @@
 
 namespace {
 
-    // float constants written by sub_145C3E360
+    // float constants written by
     const float SKEW = 0.3660253882408142f;
     const float UNSKEW = 0.21132487058639526f;
 
-    // gradients copied from 0x14F279F40, only x and y are read in 2D
+    // gradients copied from the game, only x and y are read in 2D
     const float GRADIENTS[12][2] = {{1.0f, 1.0f}, {-1.0f, 1.0f}, {1.0f, -1.0f}, {-1.0f, -1.0f},
                                     {1.0f, 0.0f}, {-1.0f, 0.0f}, {1.0f, 0.0f},  {-1.0f, 0.0f},
                                     {0.0f, 1.0f}, {0.0f, -1.0f}, {0.0f, 1.0f},  {0.0f, -1.0f}};

@@ -4,6 +4,8 @@ falcon.commands.about.version=このサーバーは Falcon バージョン %1$s 
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (プロトコル %2$s)
 falcon.commands.about.build=ビルド %1$s、%2$s 構成
 
+falcon.commands.plugins.list=プラグイン (%1$s): %2$s
+
 falcon.commands.world.list=読み込まれたワールド (%1$s): %2$s
 falcon.commands.world.available=ディスク上のワールド: %1$s
 falcon.commands.world.created=ワールド %1$s を作成しました

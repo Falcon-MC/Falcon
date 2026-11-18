@@ -11,7 +11,13 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
+
+    bool hearsActorsInside() const override {
+        return true;
+    }
 
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;

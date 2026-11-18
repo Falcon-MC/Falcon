@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Level/Dimension/Dimension.h"
+
 #include <cstdint>
 #include <functional>
 #include <random>
@@ -36,21 +38,32 @@ public:
 
     const std::string &getName() const;
 
+    // the dimension the structure generates in, the one /locate searches
+    virtual DimensionType getDimension() const {
+        return DimensionType::Overworld;
+    }
+
     // the side of the square regions, in chunks, each holding one candidate start
     int32_t getSpacing() const {
         return mSpacing;
     }
 
-    StructureChunkPos getCandidate(int64_t seed, int32_t regionX, int32_t regionZ) const;
+    virtual StructureChunkPos getCandidate(int64_t seed, int32_t regionX, int32_t regionZ) const;
 
-    bool isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const;
+    virtual bool isStartChunk(const ChunkGenerator &generator, int32_t chunkX, int32_t chunkZ) const;
 
     // candidates inside the chunk box, x then z ascending, before the structure's checks: one draw per region
     std::vector<StructureChunkPos> getCandidatesIn(int64_t seed, int32_t minChunkX, int32_t minChunkZ,
                                                    int32_t maxChunkX, int32_t maxChunkZ) const;
 
+    // the block of the start chunk a search reports, on x and z
+    virtual int32_t getBlockOffset() const {
+        return 8;
+    }
+
     // the first valid start of the region rings around the block position, which is what /locate structure reports
-    bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ, StructureChunkPos &out) const;
+    virtual bool findNearest(const ChunkGenerator &generator, int32_t blockX, int32_t blockZ,
+                             StructureChunkPos &out) const;
 
     // the random a chunk post processes one structure type with, seeded anew for every type
     static std::mt19937 createPostProcessRandom(int64_t seed, int32_t chunkX, int32_t chunkZ);

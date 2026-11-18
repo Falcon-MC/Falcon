@@ -14,8 +14,7 @@ int32_t ChunkGenerator::getPreliminaryHeight(int32_t x, int32_t z) const {
     const int32_t minY = Dimension::getMinY(dimension);
     int32_t y = Dimension::getMaxY(dimension);
 
-    // only the nether skips its roof before looking for the surface (dimension vfunc +0xF0 in
-    // sub_14A2298E0, read by sub_1435B0910)
+    // only the nether skips its roof before looking for the surface
     if (dimension == DimensionType::Nether) {
         while (y > minY && chunk.getBlock(localX, y, localZ).getHash() != getAirHash())
             y--;

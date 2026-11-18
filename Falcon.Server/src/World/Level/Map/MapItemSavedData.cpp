@@ -11,7 +11,7 @@ namespace {
     // 0, 6, 13 and 16 follow players and are rebuilt every tick, so a save leaves them out
     const uint32_t UNSAVED_DECORATIONS = 0x12041;
 
-    // dword_1528F4AA4 and the following entries of the exploration table: their markers never turn
+    // the game and the following entries of the exploration table: their markers never turn
     const uint8_t FIXED_ROTATION_DECORATIONS[] = {15, 14, 4, 20, 21, 18, 19, 17, 22, 23, 24, 25, 26, 27, 28, 29};
 
     // not a game key: the game ignores it and keeps the map as a locked one
@@ -282,7 +282,7 @@ void MapItemSavedData::load(const Tag &tag) {
     mOrigin = Vector3i(tag.getInt("xCenter", 0), 0, tag.getInt("zCenter", 0));
     const int8_t storedScale = tag.getByte("scale", 0);
     mScale = std::min<int8_t>(std::max<int8_t>(storedScale, 0), MAX_SCALE);
-    // sub_1483EF430 only reports the mismatch; the largest scale has no parent
+    // the game only reports the mismatch; the largest scale has no parent
     if (mParentMapId != INVALID_ID && mScale == MAX_SCALE)
         mParentMapId = INVALID_ID;
 

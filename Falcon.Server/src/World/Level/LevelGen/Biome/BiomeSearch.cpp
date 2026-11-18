@@ -76,6 +76,29 @@ BiomeSearch::Result BiomeSearch::findNearest(const ChunkGenerator &generator, co
     return result;
 }
 
+BiomeSearch::Result BiomeSearch::findInBox(const ChunkGenerator &generator, const Vector3i &origin, int32_t biomeId,
+                                           const Vector3f &size) {
+    const DimensionType dimension = generator.getDimensionType();
+    const int32_t minY = Dimension::getMinY(dimension);
+    const int32_t topY = Dimension::getMaxY(dimension) + 1;
+    const int32_t halfX = (int32_t) (size.x * 0.5f);
+    const int32_t halfY = (int32_t) (size.y * 0.5f);
+    const int32_t halfZ = (int32_t) (size.z * 0.5f);
+    const Vector3i min(origin.x - halfX, clampToRange(origin.y - halfY, minY, topY), origin.z - halfZ);
+    const Vector3i max(origin.x + halfX, clampToRange(origin.y + halfY, minY, topY), origin.z + halfZ);
+    const Vector3i center(min.x + (max.x - min.x + 1) / 2, min.y + (max.y - min.y + 1) / 2,
+                          min.z + (max.z - min.z + 1) / 2);
+
+    Result result;
+    Vector3i found;
+    if (!_search(generator, biomeId, center, min, max, COARSE_STEP, found))
+        return result;
+    // the column's height, the noise terrain standing in for an unloaded chunk
+    result.mFound = true;
+    result.mPosition = Vector3i(found.x, generator.getPreliminaryHeight(found.x, found.z), found.z);
+    return result;
+}
+
 Vector3i BiomeSearch::findOpening(Level &level, const Vector3i &position, int32_t biomeId) {
     // near the floor the lowest levels are dropped: the search stays above it
     const int32_t belowFloor = std::min(0, position.y - level.getMinY() - 1 - OPENING_RANGE);
@@ -163,7 +186,7 @@ bool BiomeSearch::_searchGroup(const ChunkGenerator &generator, int32_t biomeId,
                               (clampToRange(center.z, min.z, max.z) - min.z) / step);
     const int32_t shells = std::max(countX - 1, std::max(countY - 1, countZ - 1));
 
-    // the game fills the whole group from the biome source first (vfunc +0x20, sub_147186360); each
+    // the game fills the whole group from the biome source first; each
     // cell lies on one shell only: sampling it when visited gives the same answer for less work
     for (int32_t shell = 0; shell <= shells; shell++) {
         for (int32_t x = centerCell.x - shell; x <= centerCell.x + shell; x++) {

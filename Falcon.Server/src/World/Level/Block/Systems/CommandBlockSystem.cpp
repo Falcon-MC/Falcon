@@ -29,15 +29,16 @@ namespace {
                 mSyncedRevisions;
     };
 
-    std::unordered_map<int32_t, CommandBlockState> gStates;
+    std::unordered_map<const Level *, CommandBlockState> gStates;
 
     CommandBlockState &stateOf(Level &level) {
-        return gStates[level.getDimensionId()];
+        return gStates[&level];
     }
 
     class CommandBlockOrigin final : public CommandOrigin {
     public:
-        explicit CommandBlockOrigin(const std::string &name) : mName(name) {}
+        CommandBlockOrigin(const std::string &name, Level &level, const Vector3i &position)
+                : mName(name), mLevel(level), mPosition(position) {}
 
         std::string getSenderName() const override {
             return mName;
@@ -70,12 +71,20 @@ namespace {
             return CommandPermission::Internal;
         }
 
+        bool getSourceBlock(Level *&level, Vector3i &position) override {
+            level = &mLevel;
+            position = mPosition;
+            return true;
+        }
+
         const std::string &getOutput() const {
             return mOutput;
         }
 
     private:
         std::string mName;
+        Level &mLevel;
+        Vector3i mPosition;
         std::string mOutput;
     };
 
@@ -179,7 +188,8 @@ namespace {
 
             if (actor.mConditionMet && (actor.isAuto() || actor.isPowered())) {
                 if (!actor.mCommand.empty() && rules.getBool("commandblocksenabled")) {
-                    CommandBlockOrigin origin(actor.mCustomName.empty() ? std::string("@") : actor.mCustomName);
+                    CommandBlockOrigin origin(actor.mCustomName.empty() ? std::string("@") : actor.mCustomName, level,
+                                              position);
                     const bool success = owner.getCommands().dispatch(origin, actor.mCommand);
                     actor.mSuccessCount = success ? 1 : 0;
 
@@ -208,6 +218,10 @@ namespace {
 
         return true;
     }
+}
+
+void CommandBlockSystem::forgetLevel(const Level &level) {
+    gStates.erase(&level);
 }
 
 int64_t CommandBlockSystem::packPosition(const Vector3i &position) {
@@ -254,7 +268,7 @@ void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, Serve
 
     // operator-only in the game, screen only in creative: both required, or a non-op creative player
     // runs commands at the internal permission level
-    if (!player.isOp() || player.getGameType() != (int32_t) GameType::Creative) {
+    if (!player.isOp() || !player.isCreative()) {
         LOG_INFO(LogAreaID::Server, "Rejected command block update from %s: missing permission",
                  player.getName().c_str());
         return;

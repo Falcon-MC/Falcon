@@ -19,6 +19,10 @@ void PlayerCommandOrigin::sendTranslation(const std::string &key, const std::vec
     mPlayer.sendTranslation(key, parameters);
 }
 
+void PlayerCommandOrigin::sendError(const std::string &message) {
+    mHandler.sendCommandOutput(mPlayer, mOrigin, message, false);
+}
+
 std::string PlayerCommandOrigin::getLocale() const {
     return mPlayer.getLocale();
 }

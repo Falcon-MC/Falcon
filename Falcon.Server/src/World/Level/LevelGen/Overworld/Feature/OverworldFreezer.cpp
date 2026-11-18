@@ -24,7 +24,7 @@ namespace {
         return state;
     }
 
-    // TopSnowBlock::mayPlace (sub_14B27CB10) on the block below; the block property flags it also rejects
+    // the snow placement test on the block below; the block property flags it also rejects
     // (0x10000050) have no counterpart here
     bool supportsSnow(const BlockState &below) {
         if (SnowLayerBlock::matches(below.mName))
@@ -51,7 +51,7 @@ void OverworldFreezer::apply(LevelChunk &chunk) {
                 continue;
 
             // a snowlogged plant stays under the snow in the second layer; covered_bit stays unset because the
-            // game's post-processing places the default snow layer (sub_14CDD4880)
+            // game's post-processing places the default snow layer
             const BlockState covered = chunk.getBlock(x, y, z);
             if (!DecorationSupport::isAir(covered))
                 chunk.setBlock(x, y, z, 1, covered);
@@ -61,7 +61,7 @@ void OverworldFreezer::apply(LevelChunk &chunk) {
 }
 
 int32_t OverworldFreezer::_topRainBlock(const LevelChunk &chunk, int32_t x, int32_t z) {
-    // LevelChunk::getTopRainBlockPos (sub_143868920): down from the highest non-empty section to the first block
+    // down from the highest non-empty section to the first block
     // stopping rain, in either layer
     int32_t top = LevelChunk::MIN_Y - 1;
     for (int32_t index = LevelChunk::SUB_CHUNK_COUNT - 1; index >= 0; index--) {
@@ -94,12 +94,11 @@ bool OverworldFreezer::_isCold(const LevelChunk &chunk, int32_t x, int32_t y, in
 }
 
 bool OverworldFreezer::_shouldFreeze(const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
-    // BlockSource::shouldFreeze (sub_145E28EE0) without the neighbour test, as the post-processing calls it
+    // the freeze test without the neighbour test, as the post-processing calls it
     return _isCold(chunk, x, y, z) && WaterBlock::isSource(chunk.getBlock(x, y, z));
 }
 
 bool OverworldFreezer::_shouldSnow(const LevelChunk &chunk, int32_t x, int32_t y, int32_t z) {
-    // BlockSource::shouldSnow (sub_145E28D40)
     if (!_isCold(chunk, x, y, z) || y - 1 < LevelChunk::MIN_Y)
         return false;
 

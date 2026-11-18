@@ -31,3 +31,7 @@ void EndGatewayBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, c
 
     blockActors.getOrCreate<EndGatewayBlockActor>(position).requestExit();
 }
+
+const char *EndGatewayBlock::getBlockActorId() const {
+    return EndGatewayBlockActor::BLOCK_ACTOR_ID;
+}

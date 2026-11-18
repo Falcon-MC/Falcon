@@ -8,6 +8,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -90,15 +91,13 @@ bool BlockContactSystem::touchInsideBlocks(ServerNetworkHandler &owner, Actor &a
                 if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
                     continue;
 
-                if (!level.isChunkResident(x >> 4, z >> 4))
-                    continue;
-
+                // null where no chunk is loaded
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                if (state == nullptr || state->mName == "minecraft:air")
+                if (state == nullptr || state->mName == BlockNames::AIR)
                     continue;
 
-                const Block *block = VanillaBlocks::fromIdentifier(state->mName);
-                if (block == nullptr)
+                const Block *block = VanillaBlocks::fromState(*state);
+                if (block == nullptr || !block->hearsActorsInside())
                     continue;
 
                 block->onActorInside(owner, actor, Vector3i(x, y, z), *state);
@@ -106,6 +105,8 @@ bool BlockContactSystem::touchInsideBlocks(ServerNetworkHandler &owner, Actor &a
                 if (&owner.getLevelFor(actor) != &level || !actor.isAlive())
                     return false;
 
+                if (!actor.isPlayer())
+                    continue;
                 const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor);
                 if (player != nullptr && player->isAwaitingDimensionAck())
                     return false;

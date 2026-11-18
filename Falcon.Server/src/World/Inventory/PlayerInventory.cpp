@@ -12,10 +12,16 @@ namespace {
 
 PlayerInventory::PlayerInventory()
         : mItems((size_t) CONTAINER_SIZE), mArmor((size_t) ARMOR_SIZE), mCrafting((size_t) CRAFTING_SIZE),
-          mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE), mAnvil((size_t) ANVIL_SIZE),
-          mCartography((size_t) CARTOGRAPHY_SIZE), mSelectedSlot(0), mNextNetId(1) {
+          mCraftingTable((size_t) CRAFTING_TABLE_SIZE), mFurnace((size_t) FURNACE_SIZE),
+          mSmithing((size_t) SMITHING_SIZE), mAnvil((size_t) ANVIL_SIZE),
+          mCartography((size_t) CARTOGRAPHY_SIZE), mTrade((size_t) TRADE_SIZE), mSelectedSlot(0), mNextNetId(1) {
     mOffhand = ItemStack::air();
+    mBodyArmor = ItemStack::air();
     mCursor = ItemStack::air();
+    for (ItemStack &item: mSmithing) {
+        item = ItemStack::air();
+    }
+    mStonecutterInput = ItemStack::air();
 
     for (ItemStack &item: mItems) {
         item = ItemStack::air();
@@ -42,6 +48,10 @@ PlayerInventory::PlayerInventory()
     }
 
     for (ItemStack &item: mCartography) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mTrade) {
         item = ItemStack::air();
     }
 }
@@ -163,9 +173,49 @@ void PlayerInventory::setCartographyItem(int slot, ItemStack item) {
     mCartography[(size_t) slot] = std::move(item);
 }
 
+const ItemStack &PlayerInventory::getTradeItem(int slot) const {
+    if (slot < 0 || slot >= TRADE_SIZE) {
+        return getEmptyItem();
+    }
+    return mTrade[(size_t) slot];
+}
+
+void PlayerInventory::setTradeItem(int slot, ItemStack item) {
+    if (slot < 0 || slot >= TRADE_SIZE) {
+        return;
+    }
+
+    assignNetId(item);
+    mTrade[(size_t) slot] = std::move(item);
+}
+
+int PlayerInventory::smithingIndex(ContainerSlotType container) {
+    switch (container) {
+        case ContainerSlotType::SmithingTableInput: return 0;
+        case ContainerSlotType::SmithingTableMaterial: return 1;
+        case ContainerSlotType::SmithingTableTemplate: return 2;
+        default: return -1;
+    }
+}
+
+void PlayerInventory::setSmithingItem(int index, ItemStack item) {
+    assignNetId(item);
+    mSmithing[(size_t) index] = std::move(item);
+}
+
+void PlayerInventory::setStonecutterInput(ItemStack item) {
+    assignNetId(item);
+    mStonecutterInput = std::move(item);
+}
+
 void PlayerInventory::setOffhand(ItemStack item) {
     assignNetId(item);
     mOffhand = std::move(item);
+}
+
+void PlayerInventory::setBodyArmor(ItemStack item) {
+    assignNetId(item);
+    mBodyArmor = std::move(item);
 }
 
 void PlayerInventory::setCursor(ItemStack item) {
@@ -237,6 +287,28 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
 
         case ContainerSlotType::CartographyAdditional:
             return &mCartography[(size_t) CARTOGRAPHY_ADDITIONAL];
+
+        // one slot each, shared by the old and the new trade screen: the slot number does not matter
+        case ContainerSlotType::TradeIngredient1:
+        case ContainerSlotType::Trade2Ingredient1:
+            return &mTrade[0];
+
+        case ContainerSlotType::TradeIngredient2:
+        case ContainerSlotType::Trade2Ingredient2:
+            return &mTrade[1];
+
+        case ContainerSlotType::SmithingTableInput:
+        case ContainerSlotType::SmithingTableMaterial:
+        case ContainerSlotType::SmithingTableTemplate: {
+            const int index = smithingIndex(container);
+            return slot == SMITHING_FIRST_SLOT + index ? &mSmithing[(size_t) index] : nullptr;
+        }
+
+        case ContainerSlotType::StonecutterInput:
+            if (slot != STONECUTTER_INPUT_NETWORK_SLOT) {
+                return nullptr;
+            }
+            return &mStonecutterInput;
 
         case ContainerSlotType::CraftingInput:
             if (slot >= CRAFTING_NETWORK_SLOT_FIRST && slot < CRAFTING_NETWORK_SLOT_FIRST + CRAFTING_SIZE) {
@@ -385,6 +457,7 @@ void PlayerInventory::clear() {
     }
 
     mOffhand = ItemStack::air();
+    mBodyArmor = ItemStack::air();
     mCursor = ItemStack::air();
 
     for (ItemStack &item: mCrafting) {
@@ -404,6 +477,10 @@ void PlayerInventory::clear() {
     }
 
     for (ItemStack &item: mCartography) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mTrade) {
         item = ItemStack::air();
     }
 }

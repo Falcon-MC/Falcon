@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Misc/ArmorStandActor.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Item/ArmorStandItem.h"
 #include "World/Actor/VanillaActorTable.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
@@ -10,6 +11,9 @@
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
+#include "World/Level/Block/Systems/FireSystem.h"
+#include "World/Level/Block/Systems/CommandBlockSystem.h"
+#include "World/Level/Block/OpenableBlock.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -19,12 +23,13 @@
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Inventory/ItemStackNbt.h"
-#include "World/Item/ItemData.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/ItemData.h"
+#include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemNetworkIdTable.h"
+#include "World/Item/PotionEffects.h"
 #include "World/Item/ThrowableItem.h"
 #include "World/Item/VanillaItems.h"
-#include "World/Item/PotionEffects.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -99,6 +104,50 @@ namespace {
         require(ServerNetworkHandler::getRequiredSleepers(3, 50) == 2, "required sleepers must round up");
         require(ServerNetworkHandler::getRequiredSleepers(4, 100) == 4, "everyone must sleep at 100 percent");
         require(ServerNetworkHandler::getRequiredSleepers(4, 0) == 1, "at least one sleeper is always required");
+    }
+
+    void mendingRepairsDamagedItems() {
+        ServerNetworkHandler owner("Mending regression", "", 1);
+        ServerPlayer player(NetworkIdentifier{}, 9300);
+        const auto enchanted = [](const char *identifier, int32_t damage) {
+            ItemStack item;
+            item.mDefinition = std::make_shared<ItemDefinition>(identifier, 1, false, Tag());
+            item.mCount = 1;
+            item.mDamage = damage;
+            ItemEnchantments::write(item, {{EnchantmentIds::MENDING, 1}});
+            return item;
+        };
+
+        player.getInventory().setItemInHand(enchanted("minecraft:diamond_sword", 0));
+        player.getInventory().setOffhand(enchanted("minecraft:diamond_pickaxe", 80));
+        require(owner.repairWithMending(player, 1) == 0, "an intact item consumed Mending XP");
+        require(player.getInventory().getOffhand().mDamage == 78, "Mending ignored a damaged item in the offhand");
+    }
+
+    void blockSystemStateIsPerWorld() {
+        ServerNetworkHandler owner("Block system state", "", 1);
+        World &firstWorld = owner.getWorlds().getDefault();
+        World &secondWorld = owner.getWorlds().add("state-isolation", 4, 1);
+        Level &first = firstWorld.getOverworld();
+        Level &second = secondWorld.getOverworld();
+        require(first.getDimensionId() == second.getDimensionId(), "test worlds do not share a dimension id");
+
+        const Vector3i position(8, 64, 8);
+        first.setBlockState(position.x, position.y, position.z, block("minecraft:fire"));
+        first.getGameRules().setFromString("dofiretick", "true");
+        FireSystem::scheduleUpdate(first, position, 1);
+        FireSystem::tick(owner, second);
+        FireSystem::tick(owner, first);
+        require(first.getBlockState(position.x, position.y, position.z).mName == "minecraft:air",
+                "another world's fire tick consumed this world's scheduled update");
+
+        CommandBlockSystem::getOrCreate(first, position);
+        require(CommandBlockSystem::find(second, position) == nullptr,
+                "a command block cache entry leaked into another world");
+
+        OpenableBlock::setManualOverride(first, position, true);
+        require(!OpenableBlock::hasManualOverride(second, position),
+                "a door override leaked into another world");
     }
 
     void freezing() {
@@ -479,6 +528,55 @@ namespace {
                             && fixture.at(9, 102, 8) == "minecraft:stone",
                     "a sticky piston that cannot pull its structure did not retract empty-handed");
         }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:pumpkin");
+            fixture.power(true);
+            size_t pumpkins = 0;
+            for (const std::unique_ptr<ItemActor> &dropped: fixture.mOwner.getItemEntities()) {
+                if (!dropped->isRemoved() && !dropped->getItem().isAir()
+                    && dropped->getItem().mDefinition->getIdentifier() == "minecraft:pumpkin")
+                    pumpkins++;
+            }
+            require(fixture.at(8, 101, 8) == "minecraft:piston_arm_collision" && pumpkins == 1,
+                    "a piston broke a pumpkin without dropping it");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:stone");
+            fixture.mLevel.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
+            PistonSystem::onRedstoneUpdate(fixture.mOwner, fixture.mLevel, fixture.mPiston,
+                                           fixture.mLevel.getBlockState(8, 100, 8));
+            // the arm takes the source at once, the pushed block waits for it at its destination
+            require(fixture.at(8, 102, 8) == "minecraft:air" && PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+                    "a pushed block did not wait for the arm");
+            PistonSystem::finishMoves(fixture.mOwner, fixture.mLevel);
+            require(fixture.at(8, 102, 8) == "minecraft:stone"
+                            && !PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+                    "finishing the moves did not place the pushed block");
+        }
+        {
+            PistonFixture fixture;
+            Level other("Other", 4, 1);
+            other.getChunk(0, 0);
+            for (int y = 95; y <= 120; ++y)
+                other.setBlockState(8, y, 8, BlockState("minecraft:air"));
+            BlockState piston = block("minecraft:piston");
+            piston.mStates.putInt("facing_direction", 1);
+            other.setBlockState(8, 100, 8, piston);
+            other.setBlockState(8, 101, 8, block("minecraft:stone"));
+            other.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
+            PistonSystem::onRedstoneUpdate(fixture.mOwner, other, fixture.mPiston, other.getBlockState(8, 100, 8));
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(fixture.mOwner, fixture.mLevel);
+            require(fixture.at(8, 102, 8) == "minecraft:air", "a piston move of one level ended in another");
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(fixture.mOwner, other);
+            require(other.getBlockState(8, 102, 8).mName == "minecraft:stone", "a piston move lost its level");
+            PistonSystem::forgetLevel(other);
+        }
     }
 
     void fallDamageReduction() {
@@ -508,6 +606,8 @@ int main() {
         freezing();
         armorStandExchange();
         sleepThreshold();
+        mendingRepairsDamagedItems();
+        blockSystemStateIsPerWorld();
         pistons();
         fallDamageReduction();
         std::cout << "26.60 migration and gameplay regressions passed\n";

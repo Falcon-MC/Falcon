@@ -16,7 +16,7 @@ namespace {
     constexpr int32_t MIN_CELL_Y = MIN_Y / 8;
     constexpr int32_t CELL_COUNT_Y = 40;
     constexpr int32_t SEA_LEVEL = OverworldGeneratorConstants::SEA_LEVEL;
-    // densities below this skip the caves and keep the default corner noises (sub_14CDEE380)
+    // densities below this skip the caves and keep the default corner noises
     constexpr float SKIP_DENSITY = -150.0f;
     constexpr float CAVE_SCALE = 128.0f;
     // floats 0x4108E1E5 and 0x4088E1E5: 684.412 / 80 and 684.412 / 160
@@ -52,7 +52,7 @@ namespace {
         return state;
     }
 
-    // vein types as the game builds them (sub_14CDB0800)
+    // vein types as the game builds them
     const VeinType &copperVein() {
         static const BlockState ore = VanillaBlocks::COPPER_ORE().toBlockState();
         static const BlockState raw = VanillaBlocks::RAW_COPPER_BLOCK().toBlockState();
@@ -142,7 +142,7 @@ OverworldTerrainFiller::OverworldTerrainFiller(const XoroshiroPositionalFactory 
                                                const OverworldClimate &climate)
         : mClimate(climate), mVeinFactory(forkedFactory(noiseFactory, "minecraft:ore")),
           mDeepslateFactory(forkedFactory(noiseFactory, "minecraft:depth_based_layer")), mAquiferNoises(noiseFactory) {
-    // one stream for the three stacks, in this order (sub_145C2AAB0)
+    // one stream for the three stacks, in this order
     XoroshiroRandom terrain = noiseFactory.hashOf("minecraft:terrain");
     mMinLimitNoise = createOctaves(terrain, 16);
     mMaxLimitNoise = createOctaves(terrain, 16);

@@ -21,6 +21,11 @@ public:
                                    const std::vector<ItemStack> &recipeOutputs,
                                    const std::vector<uint32_t> &recipeSourceIndices, CraftingRecipeMatch &match);
 
+    // the network id of the first recipe the grid makes, 0 for none
+    static int32_t findNetworkRecipe(const std::vector<ItemStack> &grid, int gridWidth,
+                                     const std::vector<ItemStack> &recipeOutputs,
+                                     const std::vector<uint32_t> &recipeSourceIndices);
+
     static ItemStack findResult(const std::vector<ItemStack> &grid, int gridWidth,
                                 const std::vector<ItemStack> &recipeOutputs,
                                 const std::vector<uint32_t> &recipeSourceIndices);

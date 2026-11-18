@@ -38,6 +38,10 @@ namespace {
 
 BowItem::BowItem(const Item &base) : Item(base) {}
 
+int32_t BowItem::getUseDuration() const {
+    return 72000;
+}
+
 bool BowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     (void) owner;
     (void) item;

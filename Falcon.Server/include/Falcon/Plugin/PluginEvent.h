@@ -64,4 +64,6 @@ struct PluginEvent {
     const std::string *mClientData = nullptr;
     uint32_t mFormId = 0;
     std::string mFormResponse;
+    bool mHasEffect = false;
+    FalconEffect mEffect{};
 };

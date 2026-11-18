@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/BlockNames.h"
 
 class LiquidView {
 public:
@@ -11,11 +12,11 @@ public:
     }
 
     bool isWater() const {
-        return mState.mName == "minecraft:water" || mState.mName == "minecraft:flowing_water";
+        return mState.mName == BlockNames::WATER || mState.mName == "minecraft:flowing_water";
     }
 
     bool isLava() const {
-        return mState.mName == "minecraft:lava" || mState.mName == "minecraft:flowing_lava";
+        return mState.mName == BlockNames::LAVA || mState.mName == "minecraft:flowing_lava";
     }
 
     bool isLiquid() const {

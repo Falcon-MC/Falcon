@@ -34,7 +34,7 @@
 #include <vector>
 
 namespace {
-    const int64_t DAY_LENGTH = 24000;
+    const int64_t DAY_LENGTH = Level::TICKS_PER_DAY;
     const int64_t DAYTIME_END = 12000;
     const float MAX_LIGHT = 15.0f;
     const char *const EFFECT_COMPONENT_PREFIX = "minecraft:effect.";
@@ -257,18 +257,6 @@ namespace {
     std::string itemIdentifier(const ItemStack &item) {
         return item.isAir() || item.mDefinition == nullptr ? std::string()
                                                            : std::string(item.mDefinition->getIdentifier());
-    }
-
-    bool isRainingOn(Level &level, const Vector3i &position) {
-        if (!level.isRaining() || position.y < level.getHeightAt(position.x, position.z))
-            return false;
-
-        LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
-        const ClimateAttributes *climate = chunk == nullptr
-                                                   ? nullptr
-                                                   : ClimateAttributes::getForBiome((int32_t) chunk->getBiomeAt(
-                                                             position.x & 15, position.y, position.z & 15));
-        return climate != nullptr && climate->mRain && !PrecipitationSystem::isCold(level, position);
     }
 
     float temperatureAt(Level &level, const Vector3i &position) {
@@ -673,6 +661,9 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "in_nether")
         return applyBoolean(target->getDimension() == DimensionType::Nether, value, op);
 
+    if (test == "in_overworld")
+        return applyBoolean(target->getDimension() == DimensionType::Overworld, value, op);
+
     if (test == "has_container_open") {
         const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(target);
         return applyBoolean(player != nullptr && player->getInventoryManager().isContainerOpen(), value, op);
@@ -886,7 +877,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         const LiquidContact contact = LiquidBlocksFetch::at(level, target->getPosition());
         bool result = test == "in_lava" ? contact.lava : contact.water;
         if (test != "in_lava")
-            result = result || isRainingOn(level, position);
+            result = result || PrecipitationSystem::isRainingOn(level, position);
         return applyBoolean(result, value, op);
     }
 
@@ -927,7 +918,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
         if (weather == "clear")
             result = !level.isRaining() || !exposed;
         else if (weather == "rain")
-            result = isRainingOn(level, position);
+            result = PrecipitationSystem::isRainingOn(level, position);
         else if (weather == "snow")
             result = level.isRaining() && exposed && cold;
         else if (weather == "precipitation")

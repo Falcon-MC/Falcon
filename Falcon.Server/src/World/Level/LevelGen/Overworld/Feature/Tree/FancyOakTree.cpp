@@ -3,6 +3,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Core/Math/MathConstants.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,7 +39,7 @@ bool FancyOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, i
         return false;
 
     const std::string &ground = manager.getBlockAt(origin.mX, origin.mY - 1, origin.mZ).mName;
-    if (ground != "minecraft:grass_block" && ground != "minecraft:dirt")
+    if (ground != BlockNames::GRASS_BLOCK && ground != BlockNames::DIRT)
         return false;
 
     const int32_t trunkHeight = floorToInt(height * TRUNK_SCALE);

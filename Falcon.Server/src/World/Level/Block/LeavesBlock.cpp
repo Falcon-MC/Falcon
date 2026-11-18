@@ -10,6 +10,7 @@ FALCON_REGISTER_BLOCK(LeavesBlock, 290);
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -119,7 +120,7 @@ void LeavesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
         return;
     }
 
-    if (!BlockChangeSystem::allows(level, position, BlockState("minecraft:air"), BlockChangeCause::Decay))
+    if (!BlockChangeSystem::allows(level, position, BlockState(BlockNames::AIR), BlockChangeCause::Decay))
         return;
 
     BlockActionHandler::destroyBlock(owner, level, position, state, true, ItemStack::air());

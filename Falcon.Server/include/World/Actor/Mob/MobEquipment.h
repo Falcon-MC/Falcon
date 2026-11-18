@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,11 @@ public:
 
     void equipFromTable(ServerNetworkHandler &owner, const MobActor &mob);
 
+    bool equipFromTable(ServerNetworkHandler &owner, const MobActor &mob, const std::string &path);
+    void setDropChanceOverride(float chance) {
+        mDropChanceOverride = chance;
+    }
+
     void sendTo(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &actor) const;
 
     // empty slots included: the client drops what it still shows
@@ -66,7 +72,14 @@ public:
 
     bool dropSlot(ServerNetworkHandler &owner, Level &level, const Vector3f &position, const std::string &slotName);
 
+    // the body slot included
     float absorbDamage(float amount, const ActorDamageSource &source) const;
+
+    // a quarter of the hit, at least one point, off every worn armor piece
+    void hurtArmor(ServerNetworkHandler &owner, const MobActor &mob, float amount, const ActorDamageSource &source);
+
+    // the durability one item of a slot gets back; false when the slot holds nothing damaged
+    bool repairSlot(int slot, int32_t amount);
 
     void saveNbt(Tag &data) const;
 
@@ -79,8 +92,11 @@ private:
 
     static float _dropChance(const MobActor &mob, int slot);
 
+    static bool _wearsOnHit(const ItemStack &item);
+
     static void _damageForDrop(ItemStack &item);
 
+    std::optional<float> mDropChanceOverride;
     std::array<ItemStack, SLOT_COUNT> mSlots;
     std::vector<ItemStack> mInventory;
 };

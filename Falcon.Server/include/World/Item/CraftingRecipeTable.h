@@ -1,9 +1,13 @@
 #pragma once
 
+#include "Core/NBT/Tag.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+struct SmithingRecipeEntry;
 
 struct CraftingIngredientData {
     const char *mItemId;
@@ -14,6 +18,8 @@ struct CraftingIngredientData {
 struct CraftingOutputData {
     const char *mItemId;
     int32_t mCount;
+    int32_t mDamage;
+    Tag mTag;
 };
 
 struct CraftingRecipeData {
@@ -30,9 +36,20 @@ struct CraftingRecipeData {
 
 struct FurnaceRecipeData {
     const char *mRecipeId;
+    const char *mBlockName;
     const char *mInputItemId;
     int32_t mInputAuxValue;
     int32_t mInputCount;
+    const char *mOutputItemId;
+    int32_t mOutputCount;
+    int32_t mPriority;
+};
+
+struct StonecutterRecipeData {
+    const char *mRecipeId;
+    const char *mUuid;
+    const char *mInputItemId;
+    int32_t mInputAuxValue;
     const char *mOutputItemId;
     int32_t mOutputCount;
     int32_t mPriority;
@@ -56,6 +73,11 @@ public:
 
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
+
+    static const std::vector<SmithingRecipeEntry> &getSmithingRecipes(bool trim);
+
+    static const StonecutterRecipeData *getStonecutterRecipes();
+    static size_t getStonecutterRecipeCount();
 
     static const FurnaceRecipeData *findCampfireRecipe(const std::string &inputId, int32_t inputMeta, bool soul);
 

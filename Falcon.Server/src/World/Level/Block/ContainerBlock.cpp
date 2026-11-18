@@ -20,6 +20,8 @@ FALCON_REGISTER_BLOCK(ContainerBlock, 50);
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 
 #include <utility>
 
@@ -59,12 +61,7 @@ namespace {
         return DEFINITIONS[0];
     }
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size())
-            return false;
-
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool kindOf(const std::string &identifier, ContainerBlockKind &outKind) {
         if (identifier == "minecraft:barrel") {
@@ -146,7 +143,7 @@ namespace {
         if (!campfire.addFood(held))
             return false;
 
-        if (player.getGameType() != (int32_t) GameType::Creative) {
+        if (!player.isCreative()) {
             --held.mCount;
             if (held.mCount <= 0)
                 held = ItemStack::air();
@@ -279,6 +276,13 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
         }
     }
 
+    // the pot item keeps its sherds in its tag
+    if (DecoratedPotBlockActor *pot = dynamic_cast<DecoratedPotBlockActor *>(created.get())) {
+        const Tag *sherds = usedItem.mTag.isCompound() ? usedItem.mTag.get("sherds") : nullptr;
+        if (sherds != nullptr && sherds->isList())
+            pot->setSherds(*sherds);
+    }
+
     blockActors.insert(std::move(created));
 }
 
@@ -390,4 +394,45 @@ uint8_t ContainerBlock::getLiquidBlockedFaces(const BlockState &state) const {
                      : direction == "west"  ? LiquidFace::DOWN
                                             : LiquidFace::UP;
     return (uint8_t) (1 << face);
+}
+
+// each class reads its container: Hopper, Dispenser, BrewingStand,
+// DecoratedPot and Barrel through ChestBlock
+int ContainerBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition == nullptr)
+        return -1;
+
+    switch (definition->mKind) {
+        case ContainerBlockKind::Barrel:
+        case ContainerBlockKind::Hopper:
+        case ContainerBlockKind::Dispenser:
+        case ContainerBlockKind::Dropper:
+        case ContainerBlockKind::BrewingStand:
+        case ContainerBlockKind::DecoratedPot:
+            return containerSignal(level, position);
+        default:
+            return -1;
+    }
+}
+
+// toggle_bit follows the power and locks the hopper
+void ContainerBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::Hopper)
+        return;
+
+    const bool powered = RedstoneSystem::isGettingPower(owner, level, position);
+    if ((state.mStates.getByte("toggle_bit", 0) != 0) == powered)
+        return;
+
+    Tag states = state.mStates;
+    states.putByte("toggle_bit", powered ? 1 : 0);
+    level.setBlock(position, BlockState(state.mName, states), false);
+}
+
+const char *ContainerBlock::getBlockActorId() const {
+    const ContainerBlockDefinition *definition = findDefinition(getIdentifier());
+    return definition == nullptr ? nullptr : definition->mBlockActorId;
 }

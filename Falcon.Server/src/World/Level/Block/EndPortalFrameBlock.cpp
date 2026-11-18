@@ -81,7 +81,7 @@ bool EndPortalFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &
 
     owner.playNamedSound(level, PlaySoundName::END_PORTAL_FRAME_FILL, centerOf(position), 1.0f, 1.0f);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
+    if (!player.isCreative()) {
         ItemStack updated = inventory.getItemInHand();
         updated.mCount -= 1;
 
@@ -161,4 +161,11 @@ bool EndPortalFrameBlock::tryCompletePortal(Level &level, const Vector3i &frameP
         owner->playNamedSound(level, PlaySoundName::END_PORTAL_SPAWN, centerOf(center), 1.0f, 1.0f);
 
     return true;
+}
+
+// EndPortalFrameBlock::getComparatorSignal
+int EndPortalFrameBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return stateFlag(state, "end_portal_eye_bit") != 0 ? 15 : 0;
 }

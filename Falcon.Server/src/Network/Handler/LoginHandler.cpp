@@ -30,6 +30,7 @@
 #include "Network/LoginChainVerifier.h"
 #include "World/Level/Storage/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
+#include "Core/Text/StringUtil.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
@@ -69,22 +70,31 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
 
-    // sub_14C703FD0: the definition the game gives every script dimension
+    // the definition the game gives every script dimension
     const int32_t CUSTOM_DIMENSION_GENERATOR = 5;
     const char *const CUSTOM_DIMENSION_BIOME = "minecraft:ocean";
     const int32_t CUSTOM_DIMENSION_CLOUD_HEIGHT = 128;
 
-    std::vector<ExperimentData> enabledExperiments() {
+    // Falcon's own toggles, then the ones the world's level.dat turns on
+    std::vector<ExperimentData> enabledExperiments(ServerNetworkHandler &owner) {
+        std::vector<std::string> names(std::begin(ENABLED_EXPERIMENTS), std::end(ENABLED_EXPERIMENTS));
+        for (const std::string &name: owner.getLevel().getExperiments()) {
+            if (std::find(names.begin(), names.end(), name) == names.end())
+                names.push_back(name);
+        }
+
         std::vector<ExperimentData> experiments;
-        for (const char *name: ENABLED_EXPERIMENTS) {
+        for (const std::string &name: names) {
             ExperimentData experiment;
             experiment.mName = name;
             experiment.mEnabled = true;
@@ -374,6 +384,32 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         }
     }
 
+    // one session per account: two would load the same save, and the last to leave would write over the other.
+    // this login is refused; a signed login of the same account also closes the older one, its save landing
+    // before the next attempt reads it. a name alone proves nothing: the session holding it stays
+    bool alreadyOnline = false;
+    const std::string loweredName = StringUtil::toLowerCase(player.getName());
+    for (auto &entry: owner.getPlayers()) {
+        const ServerPlayer &other = entry.second;
+        if (&other == &player || other.isSimulated() || other.getName().empty())
+            continue;
+
+        const bool sameAccount = !player.getXuid().empty() && other.getXuid() == player.getXuid();
+        if (!sameAccount && StringUtil::toLowerCase(other.getName()) != loweredName)
+            continue;
+
+        alreadyOnline = true;
+        if (sameAccount)
+            owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
+                              "disconnectionScreen.loggedinOtherLocation");
+    }
+    if (alreadyOnline) {
+        LOG_INFO(LogAreaID::Server, "Player %s logged in from another location", player.getName().c_str());
+        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, "disconnectionScreen.loggedinOtherLocation");
+        owner.erasePlayer(id);
+        return;
+    }
+
     // a gamertag can change hands: the save under it must be this account's before it is read or written
     if (!owner.getPlayerDataProvider().claimData(player.getName(), player.getXuid())) {
         LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
@@ -387,12 +423,19 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     ServerNetworkHandler::boundSkin(skin);
     player.setSkin(skin);
     player.setBuildPlatform(request.getBuildPlatform());
-    // sub_1404B9270 reads the flag as a JSON bool that defaults to true when the client leaves it out.
+    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
     player.setClientSideGenerationCompatible(
             ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
     player.setLocale(request.getLanguageCode());
+    ServerPlayer::ClientDevice &device = player.getClientDevice();
+    const std::string &clientData = request.getClientData();
+    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
+    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
+    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
+    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
+    player.readSyncedClientOptions(request.getClientData());
 
-    if (owner.getProperties().getNetworkEncryption()) {
+    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
         startEncryption(owner, id, player, verifier.getIdentityPublicKey());
         return;
     }
@@ -430,6 +473,20 @@ void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, co
 }
 
 void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
+    ScriptEngine &scripts = owner.getScriptEngine();
+    if (scripts.isHoldingJoin(id))
+        return;
+    // asyncPlayerJoin: the login goes on once every subscriber's promise settled
+    const bool held = scripts.holdPlayerJoin(player, [&owner, id]() {
+        const auto it = owner.getPlayers().find(id);
+        if (it != owner.getPlayers().end())
+            _finishLogin(owner, id, it->second);
+    });
+    if (!held)
+        _finishLogin(owner, id, player);
+}
+
+void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);
     player.setLoggedInTick(owner.getCurrentTick());
 
@@ -491,7 +548,7 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
             ResourcePackStackPacket stack;
             stack.mForcedToAccept = owner.getProperties().getTexturePackRequired();
             stack.mGameVersion = owner.getAnnouncement().mGameVersion;
-            stack.mExperiments = enabledExperiments();
+            stack.mExperiments = enabledExperiments(owner);
             stack.mExperimentsPreviouslyToggled = true;
 
             for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
@@ -527,7 +584,13 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     }
 
     const uint64_t offset = (uint64_t) packet.mChunkIndex * (uint64_t) RESOURCE_PACK_CHUNK_SIZE;
-    if (offset >= pack->mSize)
+    if (packet.mChunkIndex < 0 || offset >= pack->mSize)
+        return;
+
+    // each answer is a megabyte: a chunk goes out a few times per login at most
+    const auto requester = owner.getPlayers().find(id);
+    if (requester == owner.getPlayers().end()
+        || !requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
         return;
 
     const uint64_t remaining = pack->mSize - offset;
@@ -541,7 +604,7 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     chunk.mProgress = (int64_t) offset;
     chunk.mData = pack->mData.substr(offset, length);
     // packs are zips: deflate saves ~0.3% for ~30 ms per MiB on the main thread; the client asks for
-    // 100 chunks at once (sub_145AA6E40)
+    // 100 chunks at once
     chunk.mCompressible = Packet::Compressibility::Incompressible;
     owner.getNetworkHandler().send(id, chunk, owner.getCodecContext());
 }
@@ -555,8 +618,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     owner._loadPlayerData(player);
     if (owner.getProperties().getForceGameType())
         player.setGameType((int32_t) owner.getProperties().getGameType());
-    player.setHungerEnabled(player.getGameType() == (int32_t) GameType::Survival
-                            || player.getGameType() == (int32_t) GameType::Adventure);
+    player.setHungerEnabled(player.isSurvival()
+                            || player.isAdventure());
 
     Level &world = owner.getWorldFor(player).getOverworld();
     StartGamePacket startGame;
@@ -578,7 +641,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
-    // sub_1422AA6C0: only a client able to generate chunks is told the server leaves some to it.
+    // only a client able to generate chunks is told the server leaves some to it.
     startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled()
                                              && player.isClientSideGenerationCompatible();
     startGame.mDisablingCustomSkins = owner.getProperties().getDisableCustomSkins();
@@ -593,7 +656,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mEnchantmentSeed = 0;
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
-    startGame.mExperiments = enabledExperiments();
+    startGame.mExperiments = enabledExperiments(owner);
     startGame.mExperimentsPreviouslyToggled = true;
     startGame.mRewindHistorySize = 40;
 
@@ -620,7 +683,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
 
-    // sub_1422AA6C0: right after StartGame, only when there are definitions to send
+    // right after StartGame, only when there are definitions to send
     if (!Dimension::customDimensions().empty()) {
         DimensionDataPacket dimensions;
         for (const auto &entry: Dimension::customDimensions()) {
@@ -628,7 +691,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
             DimensionDefinition definition;
             definition.mId = entry.second;
             definition.mMinimumHeight = Dimension::getMinY(custom);
-            // sub_14295DD30: the second field is the height range, not the top
+            // the second field is the height range, not the top
             definition.mMaximumHeight = Dimension::getMaxY(custom) + 1 - Dimension::getMinY(custom);
             definition.mGeneratorType = CUSTOM_DIMENSION_GENERATOR;
             definition.mDimensionType = Dimension::toId(custom);
@@ -647,10 +710,13 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getInventoryManager().attach(&player, &owner);
 
     sendItemComponents(owner, player);
-    // sub_1422AA6C0: the clock registry follows the item registry
+    // the clock registry follows the item registry
     owner.getScriptEngine().sendWorldClocks(player);
+    owner.sendScoreboard(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
+    // the whole aim assist registry
+    owner.getScriptEngine().sendAimAssist(player);
     sendSharedLoginPacket(
             owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
             [](const PacketCodecContext &context) { return encodePacket(ArmorTrims::getPacket(), context); });
@@ -867,8 +933,11 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
     std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputsMutable();
     std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndicesMutable();
 
+    const std::unordered_set<std::string> &disabled = CustomContentRegistry::getInstance().getDisabledRecipes();
     for (size_t index = 0; index < CraftingRecipeTable::getRecipeCount(); ++index) {
         const CraftingRecipeData &source = recipes[index];
+        if (!disabled.empty() && disabled.count(source.mRecipeId) != 0)
+            continue;
 
         CraftingRecipeEntry entry;
         entry.mWidth = source.mWidth;
@@ -908,7 +977,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             RecipeOutputEntry parsedOutput;
             parsedOutput.mRuntimeId = networkEntry->mNetworkId;
             parsedOutput.mCount = output.mCount;
-            parsedOutput.mMeta = 0;
+            parsedOutput.mMeta = output.mDamage;
+            parsedOutput.mTag = output.mTag;
             parsedOutput.mIsShield = std::string(output.mItemId) == "minecraft:shield";
             const auto blockDefinition = owner.getBlockDefinitions().getDefinition(output.mItemId);
             parsedOutput.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
@@ -918,6 +988,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
                 resolvedOutput.mDefinition = owner.getItemDefinitions().getDefinition(output.mItemId);
                 resolvedOutput.mBlockDefinition = owner.getBlockDefinitions().getDefinition(output.mItemId);
                 resolvedOutput.mCount = output.mCount;
+                resolvedOutput.mDamage = output.mDamage;
+                resolvedOutput.mTag = output.mTag;
             }
         }
 
@@ -994,6 +1066,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
     for (const char *blockName: furnaceBlocks) {
         for (size_t index = 0; index < CraftingRecipeTable::getFurnaceRecipeCount(); ++index) {
             const FurnaceRecipeData &source = furnaceRecipes[index];
+            if (std::string(source.mBlockName) != blockName)
+                continue;
             const ItemNetworkIdEntry *inputNetwork = ItemNetworkIdTable::find(source.mInputItemId);
             const ItemNetworkIdEntry *outputNetwork = ItemNetworkIdTable::find(source.mOutputItemId);
             if (inputNetwork == nullptr || outputNetwork == nullptr) {
@@ -1039,6 +1113,52 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         cached.mMultiRecipes.push_back(multi);
     }
 
+    // after every other recipe: their network ids stay put
+    const StonecutterRecipeData *stonecutterRecipes = CraftingRecipeTable::getStonecutterRecipes();
+    std::unordered_map<int32_t, uint32_t> &stonecutterIndices = owner.getStonecutterRecipeIndicesMutable();
+    for (size_t index = 0; index < CraftingRecipeTable::getStonecutterRecipeCount(); ++index) {
+        const StonecutterRecipeData &source = stonecutterRecipes[index];
+        const ItemNetworkIdEntry *outputNetwork = ItemNetworkIdTable::find(source.mOutputItemId);
+        if (outputNetwork == nullptr)
+            continue;
+
+        CraftingRecipeEntry entry;
+        entry.mRecipeNetId = furnaceRecipeNetId++;
+        entry.mRecipeId = packRecipeId((uint32_t) entry.mRecipeNetId);
+        entry.mUuid = Uuid::fromString(source.mUuid);
+        entry.mBlockName = "stonecutter";
+        entry.mPriority = source.mPriority;
+
+        RecipeIngredientEntry input;
+        input.mHasItem = true;
+        input.mItemId = source.mInputItemId;
+        input.mAuxValue = source.mInputAuxValue < 0 ? 0x7fff : source.mInputAuxValue;
+        input.mCount = 1;
+        entry.mInputs.push_back(std::move(input));
+
+        RecipeOutputEntry output;
+        output.mRuntimeId = outputNetwork->mNetworkId;
+        output.mCount = source.mOutputCount;
+        const auto blockDefinition = owner.getBlockDefinitions().getDefinition(source.mOutputItemId);
+        output.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
+        entry.mOutputs.push_back(output);
+
+        owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+        stonecutterIndices[entry.mRecipeNetId] = (uint32_t) index;
+        cached.mShapelessRecipes.push_back(std::move(entry));
+    }
+
+    for (const bool trim: {false, true}) {
+        auto &target = trim ? cached.mSmithingTrimRecipes : cached.mSmithingTransformRecipes;
+        for (SmithingRecipeEntry entry: CraftingRecipeTable::getSmithingRecipes(trim)) {
+            if (disabled.contains(entry.mRecipeId))
+                continue;
+            entry.mRecipeNetId = furnaceRecipeNetId++;
+            owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = entry.mRecipeId;
+            target.push_back(std::move(entry));
+        }
+    }
+
     cached.mCleanRecipes = true;
 }
 
@@ -1062,6 +1182,12 @@ void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &p
                 crafting.mShapelessRecipes.erase(
                         std::remove_if(crafting.mShapelessRecipes.begin(), crafting.mShapelessRecipes.end(), unknown),
                         crafting.mShapelessRecipes.end());
+
+                const auto unknownSmithing = [&](const SmithingRecipeEntry &recipe) {
+                    return !CraftingRecipeTable::isKnownBy(recipe.mRecipeId, protocol);
+                };
+                std::erase_if(crafting.mSmithingTransformRecipes, unknownSmithing);
+                std::erase_if(crafting.mSmithingTrimRecipes, unknownSmithing);
 
                 BinaryStream stream;
                 crafting.writeWithHeader(stream, context);
@@ -1276,6 +1402,14 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
         data.mName = command->getName();
         data.mDescription = command->getDescription();
         data.mPermission = command->getRequiredPermission();
+        // <name>CommandAliases, the name then its aliases
+        if (!command->getAliases().empty()) {
+            data.mHasAliases = true;
+            data.mAliases.mName = command->getName() + "CommandAliases";
+            data.mAliases.mValues.push_back(command->getName());
+            for (const std::string &alias: command->getAliases())
+                data.mAliases.mValues.push_back(alias);
+        }
 
         data.mOverloads = command->getOverloads();
 
@@ -1297,39 +1431,38 @@ void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &pla
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {
-    PlayerListPacket::Entry newEntry(listUuidFor(player));
-    newEntry.mActorId = player.getUniqueId();
-    newEntry.mName = player.getName();
-    newEntry.mXuid = player.getXuid();
-    newEntry.mPlayFabId = player.getPlayFabId();
-    newEntry.mSkin = player.getSkin();
-    newEntry.mBuildPlatform = player.getBuildPlatform();
+    // an entry carries a skin: encoded once a player, not once a pair of players
+    const auto entryOf = [&owner](ServerPlayer &listed, const NetworkIdentifier &recipient) {
+        const PacketCodecContext &context = owner.getCodecContext(recipient);
+        std::shared_ptr<const SharedPacket> &cached =
+                listed.getListEntryPacket(context.getCodec().getProtocolVersion());
+        if (cached == nullptr) {
+            PlayerListPacket::Entry entry(listUuidFor(listed));
+            entry.mActorId = listed.getUniqueId();
+            entry.mName = listed.getName();
+            entry.mXuid = listed.getXuid();
+            entry.mPlayFabId = listed.getPlayFabId();
+            entry.mSkin = listed.getSkin();
+            entry.mBuildPlatform = listed.getBuildPlatform();
 
-    PlayerListPacket announce;
-    announce.mEntries.push_back(newEntry);
+            PlayerListPacket packet;
+            packet.mEntries.push_back(std::move(entry));
+            cached = std::make_shared<const SharedPacket>(encodePacket(packet, context));
+        }
+        return cached;
+    };
 
-    PlayerListPacket existing;
-
+    // name, platform and identifiers are final by now: what an earlier login of this session cached is stale
+    player.clearListEntryPackets();
     for (auto &entry: owner.getPlayers()) {
-        if (!entry.second.isSpawned() && &entry.second != &player)
+        ServerPlayer &other = entry.second;
+        if (!other.isSpawned() && &other != &player)
             continue;
 
-        owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), announce, owner.getCodecContext());
-
-        if (&entry.second != &player) {
-            PlayerListPacket::Entry existingEntry(listUuidFor(entry.second));
-            existingEntry.mActorId = entry.second.getUniqueId();
-            existingEntry.mName = entry.second.getName();
-            existingEntry.mXuid = entry.second.getXuid();
-            existingEntry.mPlayFabId = entry.second.getPlayFabId();
-            existingEntry.mSkin = entry.second.getSkin();
-            existingEntry.mBuildPlatform = entry.second.getBuildPlatform();
-            existing.mEntries.push_back(existingEntry);
-        }
+        owner.getNetworkHandler().sendShared(other.getNetworkIdentifier(), entryOf(player, other.getNetworkIdentifier()));
+        if (&other != &player)
+            owner.getNetworkHandler().sendShared(player.getNetworkIdentifier(), entryOf(other, player.getNetworkIdentifier()));
     }
-
-    if (!existing.mEntries.empty())
-        owner.getNetworkHandler().send(player.getNetworkIdentifier(), existing, owner.getCodecContext());
 }
 
 void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {

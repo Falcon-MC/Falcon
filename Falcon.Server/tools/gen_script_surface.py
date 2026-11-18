@@ -16,6 +16,12 @@ MODULES = {
     'server': ('minecraft-server-', 'server'),
     'server-ui': ('minecraft-server-ui-', 'ui'),
     'common': ('minecraft-common-', 'common'),
+    'server-graphics': ('minecraft-server-graphics-', 'graphics'),
+    'server-admin': ('minecraft-server-admin-', 'admin'),
+    'server-net': ('minecraft-server-net-', 'net'),
+    'debug-utilities': ('minecraft-debug-utilities-', 'debug'),
+    'server-gametest': ('minecraft-server-gametest-', 'gametest'),
+    'diagnostics': ('minecraft-diagnostics-', 'diagnostics'),
 }
 
 # classes, enums and constants the scripting layer binds; anything else stays out of the table
@@ -28,25 +34,73 @@ BOUND = {
         'EntityAttributeComponent', 'EntityHealthComponent', 'EntityTypeFamilyComponent',
         'EntityProjectileComponent', 'ItemComponent', 'ItemDurabilityComponent', 'ItemEnchantableComponent',
         'ItemCooldownComponent', 'ScreenDisplay', 'Camera', 'PlayerInputPermissions', 'LocatorBar', 'Scoreboard',
-        'ScoreboardObjective', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
+        'ScoreboardObjective', 'ScoreboardIdentity', 'ScoreboardScoreInfo',
+        'ScoreboardIdentityType', 'DisplaySlotId', 'ObjectiveSortOrder', 'TickingAreaManager', 'StartupEvent', 'ShutdownEvent', 'BlockComponentRegistry',
         'ItemComponentRegistry', 'CommandResult', 'BlockVolume', 'EntityWaypoint', 'EquipmentSlot', 'GameMode',
         'InputPermissionCategory', 'Direction', 'PlayerInventoryType', 'EntityComponentTypes',
         'ItemComponentTypes', 'BlockComponentTypes', 'BlockEvent', 'GameRules', 'SystemInfo', 'Difficulty',
         'TimeOfDay', 'MoonPhase', 'WeatherType', 'ScriptEventSource', 'GameRule', 'MemoryTier',
         'CustomComponentParameters', 'CustomComponentNameErrorReason', 'NamespaceNameErrorReason',
         'ItemUseOnEvent', 'ItemCompleteUseEvent', 'WorldClock', 'TimeMarker', 'WorldClockRegistry',
-        'DimensionRegistry',
-        'Effect', 'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause',
-        'EntityInitializationCause', 'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo',
-        'EntitySwingSource', 'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel',
-        'TickingArea', 'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
+        'DimensionRegistry', 'Effect',
+        'EffectType', 'EffectTypes', 'EntityType', 'EntityTypes', 'EntityDamageCause', 'EntityInitializationCause',
+        'EntityHealCause', 'InputButton', 'ButtonState', 'InputMode', 'InputInfo', 'EntitySwingSource',
+        'ContainerAccessSource', 'CommandPermissionLevel', 'PlayerPermissionLevel', 'TickingArea',
+        'TickingAreaError', 'TickingAreaErrorReason', 'EntityComponent', 'EntityBaseMovementComponent',
         'EntityNavigationComponent', 'EntityRideableComponent', 'EntityRidingComponent', 'PaletteColor',
-        'EntityHealSource',
+        'EntityHealSource', 'BlockVolumeBase', 'ListBlockVolume', 'BlockLocationIterator', 'BlockComponent',
+        'BlockInventoryComponent', 'BlockSignComponent', 'BlockPistonComponent', 'BlockFluidContainerComponent',
+        'BlockRedstoneProducerComponent', 'BlockMapColorComponent', 'BlockMovableComponent',
+        'BlockPrecipitationInteractionsComponent', 'BlockRecordPlayerComponent', 'BlockDynamicPropertiesComponent', 'BiomeType', 'BiomeTypes',
+        'Structure', 'StructureManager', 'BlockPistonState', 'BlockVolumeIntersection', 'FluidType', 'LiquidType',
+        'SignSide', 'StructureAnimationMode', 'StructureMirrorAxis', 'StructureRotation', 'StructureSaveMode',
+        'DyeColor', 'TintMethod', 'MovementType', 'StickyType', 'CloneMode',
+        'EntityHealSource', 'ItemBookComponent', 'ItemCompostableComponent', 'ItemDyeableComponent',
+        'ItemFoodComponent', 'ItemInventoryComponent', 'ItemPotionComponent', 'PlayerCursorInventoryComponent',
+        'EnchantmentType', 'EnchantmentTypes', 'EnchantmentSlot', 'ItemLockMode', 'PotionEffectType',
+        'PotionDeliveryType', 'Potions', 'BookErrorReason', 'ContainerRulesErrorReason',
+        'ItemBlockDynamicPropertiesComponent', 'CustomCommandRegistry', 'CustomCommandOrigin', 'CustomCommandSource',
+        'CustomCommandParamType', 'CustomCommandStatus', 'CustomCommandErrorReason',
+        'HudElement', 'HudVisibility', 'HudElementsCount', 'HudVisibilityCount',
+        'EasingType', 'CameraShakeType', 'EntityAttachPoint',
+        'Waypoint', 'LocationWaypoint', 'PlayerWaypoint', 'WaypointTexture', 'LocatorBarErrorReason',
+        'LootTableManager', 'LootTable', 'LootPool', 'LootPoolEntry', 'LootPoolTiers', 'LootItem',
+        'LootItemCondition', 'LootItemFunction', 'LootTableEntry', 'LootTableReference', 'EmptyLootItem',
+        'EnchantInfo', 'DamagedByEntityCondition', 'EnchantRandomEquipmentFunction', 'EnchantRandomlyFunction',
+        'EnchantWithLevelsFunction', 'EntityHasMarkVariantCondition', 'EntityHasVariantCondition',
+        'EntityKilledCondition', 'ExplorationMapFunction', 'ExplosionDecayFunction', 'FillContainerFunction',
+        'IsBabyCondition', 'KilledByEntityCondition', 'KilledByPlayerCondition', 'KilledByPlayerOrPetsCondition',
+        'LootingEnchantFunction', 'MatchToolCondition', 'PassengerOfEntityCondition', 'RandomAuxValueFunction',
+        'RandomBlockStateFunction', 'RandomChanceCondition', 'RandomChanceWithLootingCondition',
+        'RandomDifficultyChanceCondition', 'RandomDyeFunction', 'RandomRegionalDifficultyChanceCondition',
+        'SetArmorTrimFunction', 'SetBannerDetailsFunction', 'SetBookContentsFunction',
+        'SetDataFromColorIndexFunction', 'SetItemCountFunction', 'SetItemDamageFunction', 'SetItemDataFunction',
+        'SetItemLoreFunction', 'SetItemNameFunction', 'SetOminousBottleFunction', 'SetPotionFunction',
+        'SetSpawnEggFunction', 'SetStewEffectFunction', 'SmeltItemFunction', 'SpecificEnchantFunction',
+        'SoundInstance', 'SoundDurationInfo', 'SoundDefinition', 'SoundDefinitionRegistry', 'BlockInstrumentComponent',
+        'MolangVariableMap', 'TicksPerDay', 'TicksPerSecond', 'MoonPhaseCount', 'FluidContainer', 'HeldItemOption',
+        'LiquidSettings', 'PlayerSplitScreenSlot', 'PlatformType', 'GraphicsMode', 'ControlScheme', 'AimAssistTargetMode',
+        'AimAssistRegistry', 'AimAssistPreset', 'AimAssistPresetSettings', 'AimAssistCategory',
+        'AimAssistCategorySettings', 'PlayerAimAssist',
+        'Trigger', 'DimensionType',
+        'DimensionTypes', 'MinecraftDimensionTypes', 'ISerializable', 'BlockCustomComponentInstance',
+        'ItemCustomComponentInstance', 'ClientSystemInfo', 'Seat', 'FeedItem', 'FeedItemEffect',
+        'EntityDefinitionFeedItem', 'CatmullRomSpline', 'LinearSpline', 'FogSettings',
+        'FogSettingsError', 'PrimitiveShape', 'TextPrimitive', 'PrimitiveShapesManager',
+        'PlayerWaypointsMode', 'BlockBoundingBoxUtils', 'BannerPattern', 'CarryOverBlockEntityDataFunction', 'PoiBlockOccupancyFilter',
+        'PoiManager', 'PoiBlockManager', 'PoiBlockType', 'PoiBlockInstance',
+        'WatchdogTerminateReason', 'BlockRecipeProcessingComponent', 'BlockVibrationPropertiesComponent',
+        'BlockEntityStorageComponent', 'BlockEntityStorageInfo', 'BlockRecipeCraftingComponent',
+        'RecipeCraftingContext',
     },
-    'server-ui': {
-        'ActionFormData', 'MessageFormData', 'ModalFormData',
-    },
+    'server-ui': None,
     'common': None,
+    'server-graphics': None,
+    'server-admin': None,
+    'server-net': None,
+    'debug-utilities': None,
+    'server-gametest': None,
+    'diagnostics': None,
 }
 
 # every signal of these classes is subscribable; their signal and event classes join the bound set
@@ -69,10 +123,13 @@ def parse(path):
         exports[match.group(2)] = match.group(1)
 
     classes = {}
-    for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))? \{(.*?)\n\}', raw, re.S):
+    # BlockLocationIterator also implements Iterable<Vector3>
+    for match in re.finditer(r'\nexport class (\w+)(?: extends ([\w.]+))?(?: implements [^{\n]+)? \{(.*?)\n\}', raw,
+                             re.S):
         members = {}
+        # a reserved word is quoted as a member name: readonly 'type': ItemType
         for member in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)?\s*\n {4}((?:readonly |static |private )*)'
-                                  r'(\w+)\??(\(|:|<| =)([^;]*)', match.group(3), re.S):
+                                  r"'?(\w+)'?\??(\(|:|<| =)([^;]*)", match.group(3), re.S):
             doc = member.group(1) or ''
             modifiers = member.group(2)
             if 'private' in modifiers:
@@ -84,7 +141,7 @@ def parse(path):
                 early = 'early-execution-allowed' in tags or 'can be called in early-execution' in doc
                 blocked = 'no-restricted-execution' in tags or "can't be called in read-only mode" in doc
             else:
-                early = 'early-execution-readable' in tags
+                early = 'early-execution-readable' in tags or 'early-execution-editable' in tags
                 blocked = 'restricted-execution-read-only' in tags
             if 'static ' in modifiers:
                 name = 'static ' + name
@@ -92,7 +149,16 @@ def parse(path):
             previous = members.get(name)
             members[name] = (kind, early or (previous is not None and previous[1]),
                              blocked or (previous is not None and previous[2]), signature)
+        # no constructor declared at all: the implicit public one (MolangVariableMap, the splines)
+        if 'constructor(' not in match.group(3):
+            members['constructor'] = ('method', False, False, '')
         classes[match.group(1)] = (match.group(2), members)
+
+    # free functions carry their privileges in the doc right above them
+    functions = {}
+    for match in re.finditer(r'(/\*\*(?:(?!\*/).)*\*/)\s*\nexport function (\w+)', raw, re.S):
+        tags = set(re.findall(r'@privilege ([a-z-]+)', match.group(1)))
+        functions[match.group(2)] = ('early-execution-allowed' in tags, 'no-restricted-execution' in tags)
 
     enums = {}
     for match in re.finditer(r'\nexport enum (\w+) \{(.*?)\}', strip_comments(raw), re.S):
@@ -104,7 +170,7 @@ def parse(path):
                 # a reserved word is quoted as a key: void = 'void'
                 values.append((key.strip("'"), value.strip("'")))
         enums[match.group(1)] = values
-    return exports, classes, enums
+    return exports, classes, enums, functions
 
 
 def collect(root, prefix):
@@ -142,17 +208,20 @@ class Range:
 def main():
     root, output = sys.argv[1], sys.argv[2]
     entries = {}
+    # official names the scripting layer leaves out; the surface test holds each to a justified exception
+    unbound = {}
     signals = {}
     parents = {}
 
-    def entry(key):
-        if key not in entries:
-            entries[key] = Range()
-        return entries[key]
+    def entry(key, table=None):
+        table = entries if table is None else table
+        if key not in table:
+            table[key] = Range()
+        return table[key]
 
     bound_events = set()
     for version, path in collect(root, MODULES['server'][0]):
-        _, classes, _ = parse(path)
+        _, classes, _, _ = parse(path)
         for owner in SIGNAL_OWNERS:
             if owner not in classes:
                 continue
@@ -167,16 +236,28 @@ def main():
     for module, (prefix, short) in MODULES.items():
         bound = BOUND[module]
         for version, path in collect(root, prefix):
-            exports, classes, enums = parse(path)
+            exports, classes, enums, functions = parse(path)
             beta = bool(version_key(version)[3])
             for name, kind in exports.items():
                 is_error = kind == 'class' and name.endswith('Error')
                 # custom component hook payloads
                 payload = name in bound_events or re.match(r'(Block|Item)Component\w+Event$', name) is not None
                 component = name.startswith('Entity') and name.endswith('Component')
-                if bound is not None and name not in bound and not is_error and not payload and not component:
+                # 1.x signal base classes (IButtonPushAfterEventSignal): exported, never carried by a holder
+                signal_base = re.match(r'I[A-Z]\w*Signal$', name) is not None
+                if (bound is not None and name not in bound and not is_error and not payload and not component
+                        and not signal_base):
+                    entry('%s:%s' % (short, name), unbound).add(version)
+                    if kind == 'class' and name in classes:
+                        for member in classes[name][1]:
+                            entry('%s:%s.%s' % (short, name, member), unbound).add(version)
+                    if kind == 'enum':
+                        for key, value in enums.get(name, []):
+                            entry('%s:%s.%s=%s' % (short, name, key, value), unbound).add(version)
                     continue
                 entry('%s:%s' % (short, name)).add(version)
+                if kind == 'function' and name in functions:
+                    entries['%s:%s' % (short, name)].early, entries['%s:%s' % (short, name)].blocked = functions[name]
                 if kind == 'class' and name in classes:
                     parent, members = classes[name]
                     if parent is not None and (beta or name not in parents):
@@ -199,7 +280,7 @@ def main():
         if short != 'server':
             continue
         for version, path in collect(root, prefix):
-            _, classes, _ = parse(path)
+            _, classes, _, _ = parse(path)
             for name, (_, members) in classes.items():
                 subscribe = members.get('subscribe')
                 if name.endswith('Signal') and subscribe is not None:
@@ -231,6 +312,16 @@ def main():
         out.write('static const ScriptParentEntry SCRIPT_PARENTS[] = {\n')
         for name in sorted(parents):
             out.write('        {"%s", "%s"},\n' % (name, parents[name]))
+        out.write('};\n\n')
+        # stable names only: beta-only ones never reach a stable pack
+        out.write('// official stable names outside the bound set, first/last 1.x minor, first/last 2.x minor\n')
+        out.write('static const ScriptUnboundEntry SCRIPT_UNBOUND[] = {\n')
+        for key in sorted(unbound):
+            item = unbound[key]
+            if not item.first:
+                continue
+            out.write('        {"%s", %d, %d, %d, %d},\n' % (key, bound_minor(item, 1, 'first'), bound_minor(item, 1, 'last'),
+                                                       bound_minor(item, 2, 'first'), bound_minor(item, 2, 'last')))
         out.write('};\n')
 
 

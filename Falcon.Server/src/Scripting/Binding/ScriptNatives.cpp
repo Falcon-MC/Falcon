@@ -1,5 +1,8 @@
 #include "Scripting/Binding/ScriptNatives.h"
 
+#include <cmath>
+#include <cstdio>
+
 namespace ScriptValues {
     std::string toString(JSContext *ctx, JSValueConst value) {
         const char *chars = JS_ToCString(ctx, value);
@@ -212,8 +215,8 @@ namespace ScriptValues {
         return true;
     }
 
-    // recomputed from the whole collection on load: key + 1, then 8 for a double, 1 for a bool, length + 1 for a
-    // string, 12 for a vector (sub_143D41120)
+    // entity, world and item getters all read the collection total, recomputed on load: key + 1,
+    // then 8 for a double, 1 for a bool, length + 1 for a string, 12 for a vector
     int64_t dynamicPropertyByteCount(const std::unordered_map<std::string, DynamicPropertyValue> &store) {
         int64_t total = 0;
         for (const auto &entry: store) {
@@ -236,5 +239,13 @@ namespace ScriptValues {
             }
         }
         return total;
+    }
+
+    std::string boundText(double value) {
+        if (std::fabs((double) (int32_t) value - value) < 0.00001)
+            return std::to_string((int32_t) value);
+        char text[64];
+        std::snprintf(text, sizeof(text), "%.2f", value);
+        return text;
     }
 }

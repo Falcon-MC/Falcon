@@ -7,11 +7,12 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(LavaBlock, 325);
 
 bool LavaBlock::matches(const std::string &identifier) {
-    return identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
+    return identifier == BlockNames::LAVA || identifier == "minecraft:flowing_lava";
 }
 
 bool LavaBlock::isDynamic(const std::string &identifier) {
@@ -22,7 +23,7 @@ int32_t LavaBlock::getTickDelay(DimensionType dimension) const {
     return dimension == DimensionType::Nether ? 10 : 30;
 }
 
-// LiquidBlock on BlockRandomTickEvent sets fire too (sub_149C3DE80)
+// LiquidBlock on BlockRandomTickEvent sets fire too
 void LavaBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state) const {
     (void) owner;

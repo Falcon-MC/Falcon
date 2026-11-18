@@ -5,10 +5,39 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
 
 namespace {
+    // name[key=value,...]
+    bool parseState(const std::string &state, StructureTemplate::PaletteEntry &out) {
+        const size_t open = state.find('[');
+        out.mName = state.substr(0, open);
+        out.mProperties.clear();
+        if (open == std::string::npos)
+            return true;
+
+        const size_t close = state.find(']', open);
+        if (close == std::string::npos)
+            return false;
+
+        size_t start = open + 1;
+        while (start < close) {
+            size_t end = state.find(',', start);
+            if (end == std::string::npos || end > close)
+                end = close;
+            const size_t equals = state.find('=', start);
+            if (equals == std::string::npos || equals > end)
+                return false;
+            out.mProperties[state.substr(start, equals - start)] = state.substr(equals + 1, end - equals - 1);
+            start = end + 1;
+        }
+        return true;
+    }
+
     // clockwise order, seen from above
     const std::array<const char *, 4> CARDINALS = {"south", "west", "north", "east"};
 
@@ -99,6 +128,10 @@ namespace {
             out = BlockState(prefixed(species, "_planks"));
             return true;
         }
+        if (name == "minecraft:planks" && variant == "birch") {
+            out = BlockState("minecraft:birch_planks");
+            return true;
+        }
 
         if (name == "minecraft:fence" || name == "minecraft:dark_oak_fence") {
             out = BlockState(prefixed(species, "_fence"), states);
@@ -121,12 +154,13 @@ namespace {
             return true;
         }
 
-        if (name == "minecraft:stripped_oak_log") {
+        if (name == "minecraft:stripped_oak_log" || (name == "minecraft:log2" && variant == "dark_oak")) {
             std::string axis = property(entry, "axis");
             if ((quarterTurns & 1) != 0 && axis != "y")
                 axis = axis == "x" ? "z" : "x";
             states.putString("pillar_axis", axis);
-            out = BlockState("minecraft:stripped_" + species + "_log", states);
+            out = BlockState((name == "minecraft:log2" ? "minecraft:" : "minecraft:stripped_") + species + "_log",
+                             states);
             return true;
         }
 
@@ -170,10 +204,15 @@ namespace {
                 {"minecraft:terracotta", "minecraft:hardened_clay"},
                 {"minecraft:grass", "minecraft:short_grass"},
                 {"minecraft:melon", "minecraft:melon_block"},
+                {"minecraft:magma_block", "minecraft:magma"},
                 {"minecraft:cobblestone_stairs", "minecraft:stone_stairs"},
                 {"minecraft:oak_fence_gate", "minecraft:fence_gate"},
                 {"minecraft:oak_pressure_plate", "minecraft:wooden_pressure_plate"},
-                {"minecraft:attached_melon_stem", "minecraft:melon_stem"}};
+                {"minecraft:attached_melon_stem", "minecraft:melon_stem"},
+                {"minecraft:cobweb", "minecraft:web"},
+                {"minecraft:dead_bush", "minecraft:deadbush"},
+                {"minecraft:chain", "minecraft:iron_chain"},
+                {"minecraft:waxed_copper_block", "minecraft:waxed_copper"}};
         return names;
     }
 
@@ -183,8 +222,54 @@ namespace {
         // states the game recomputes from neighbours, reads from block layer 1, or does not carry
         if (key == "waterlogged" || key == "distance" || key == "snowy" || key == "persistent" || key == "stage"
             || key == "signal_fire" || key == "occupied" || key == "has_book" || key == "east" || key == "north"
-            || key == "south" || key == "west" || key == "up" || key == "variant" || key == "powered")
+            || key == "south" || key == "west" || key == "up" || key == "variant" || key == "powered"
+            || key == "cracked")
             return true;
+
+        static const std::unordered_map<std::string, std::string> BITS = {
+                {"ominous", "ominous"}, {"triggered", "triggered_bit"}, {"attached", "attached_bit"}};
+        const auto bit = BITS.find(key);
+        if (bit != BITS.end()) {
+            if (!states.contains(bit->second))
+                return false;
+            states.putByte(bit->second, value == "true" ? 1 : 0);
+            return true;
+        }
+
+        if (key == "enabled") {
+            if (!states.contains("toggle_bit"))
+                return false;
+            states.putByte("toggle_bit", value == "true" ? 0 : 1);
+            return true;
+        }
+
+        if (key == "candles") {
+            if (!states.contains("candles"))
+                return false;
+            states.putInt("candles", std::max(std::atoi(value.c_str()), 1) - 1);
+            return true;
+        }
+
+        if (key == "trial_spawner_state") {
+            static const std::array<const char *, 6> STATES = {"inactive",
+                                                               "waiting_for_players",
+                                                               "active",
+                                                               "waiting_for_reward_ejection",
+                                                               "ejecting_reward",
+                                                               "cooldown"};
+            const auto found = std::find(STATES.begin(), STATES.end(), value);
+            if (found == STATES.end() || !states.contains("trial_spawner_state"))
+                return false;
+            states.putInt("trial_spawner_state", (int32_t) (found - STATES.begin()));
+            return true;
+        }
+
+        if (key == "vault_state") {
+            if (!states.contains("vault_state"))
+                return false;
+            states.putString("vault_state", value);
+            return true;
+        }
 
         if (key == "axis") {
             if (!states.contains("pillar_axis"))
@@ -332,15 +417,91 @@ namespace {
         out = BlockState(name, states);
         return true;
     }
+
+    // oriented states the game reaches through paths not ported here: such a block is left out when mirrored
+    const std::array<const char *, 15> UNMIRRORED_STATES = {"facing_direction",
+                                                            "direction",
+                                                            "torch_facing_direction",
+                                                            "pillar_axis",
+                                                            "rail_direction",
+                                                            "lever_direction",
+                                                            "door_hinge_bit",
+                                                            "ground_sign_direction",
+                                                            "coral_direction",
+                                                            "minecraft:facing_direction",
+                                                            "minecraft:block_face",
+                                                            "orientation",
+                                                            "portal_axis",
+                                                            "multi_face_direction_bits",
+                                                            "brewing_stand_slot_a_bit"};
+
+    void swapProperties(std::map<std::string, std::string> &properties, const char *first, const char *second) {
+        const auto a = properties.find(first);
+        const auto b = properties.find(second);
+        const bool hasA = a != properties.end();
+        const bool hasB = b != properties.end();
+        const std::string valueA = hasA ? a->second : std::string();
+        const std::string valueB = hasB ? b->second : std::string();
+        properties.erase(first);
+        properties.erase(second);
+        if (hasA)
+            properties[second] = valueA;
+        if (hasB)
+            properties[first] = valueB;
+    }
 }
 
 bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns,
                                     BlockState &out) {
-    return translate(entry, quarterTurns, out, WoodSpecies());
+    return _translate(entry, quarterTurns, 0, out, WoodSpecies());
 }
 
 bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, BlockState &out,
                                     const WoodSpecies &wood) {
+    return _translate(entry, quarterTurns, 0, out, wood);
+}
+
+bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                                    BlockState &out) {
+    return translate(entry, quarterTurns, mirror, out, WoodSpecies());
+}
+
+bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                                    BlockState &out, const WoodSpecies &wood) {
+    if (mirror == 0)
+        return _translate(entry, quarterTurns, 0, out, wood);
+    // the game mirrors before it turns: a cardinal_direction outside doors, a weirdo_direction, the kept vine
+    // face and the connection sides; the coordinates only flip for 1 and 2
+    if (mirror != 1 && mirror != 2)
+        return false;
+
+    const char *first = mirror == 1 ? "north" : "east";
+    const char *second = mirror == 1 ? "south" : "west";
+    StructureTemplate::PaletteEntry mirrored = entry;
+    const auto facing = mirrored.mProperties.find("facing");
+    if (facing != mirrored.mProperties.end()) {
+        if (facing->second == first)
+            facing->second = second;
+        else if (facing->second == second)
+            facing->second = first;
+    }
+    // the vine picks its face from the file first
+    if (entry.mName != "minecraft:vine")
+        swapProperties(mirrored.mProperties, first, second);
+
+    if (!_translate(mirrored, quarterTurns, mirror, out, wood))
+        return false;
+    for (const char *state: UNMIRRORED_STATES) {
+        if (out.mStates.contains(state)
+            && !(entry.mName == "minecraft:log2" && std::string_view(state) == "pillar_axis")
+            && !(entry.mName == "minecraft:wall_banner" && std::string_view(state) == "facing_direction"))
+            return false;
+    }
+    return true;
+}
+
+bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entry, int32_t quarterTurns, int32_t mirror,
+                                     BlockState &out, const WoodSpecies &wood) {
     const std::string &name = entry.mName;
 
     if (translateWood(entry, quarterTurns, wood, out))
@@ -397,7 +558,7 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     if (name == "minecraft:torch") {
-        // standing by name (sub_1469994B0); a file facing is the flame side, the state the wall side
+        // standing by name; a file facing is the flame side, the state the wall side
         states.putString("torch_facing_direction", entry.mProperties.count("facing") == 0
                                                            ? std::string("top")
                                                            : rotatedFacing(entry, quarterTurns + 2));
@@ -425,7 +586,24 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         states.putInt("facing_direction", face == "floor"     ? 1
                                           : face == "ceiling" ? 0
                                                               : facingDirection(rotatedFacing(entry, quarterTurns)));
+        out = BlockState(name == "minecraft:oak_button" ? std::string("minecraft:wooden_button") : name, states);
+        return true;
+    }
+
+    if (name == "minecraft:decorated_pot") {
+        states.putInt("direction", (cardinalIndex(property(entry, "facing")) + quarterTurns) & 3);
         out = BlockState(name, states);
+        return true;
+    }
+
+    if (name == "minecraft:tripwire") {
+        const Tag *defaults = BlockPaletteRegistry::getInstance().getDefaultStates("minecraft:trip_wire");
+        if (defaults == nullptr)
+            return false;
+        states = *defaults;
+        states.putByte("attached_bit", property(entry, "attached") == "true" ? 1 : 0);
+        states.putByte("disarmed_bit", property(entry, "disarmed") == "true" ? 1 : 0);
+        out = BlockState("minecraft:trip_wire", states);
         return true;
     }
 
@@ -478,12 +656,25 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
-    if (name == "minecraft:spruce_stairs") {
+    if (name == "minecraft:spruce_stairs" || name == "minecraft:stone_stairs" || name == "minecraft:birch_stairs") {
         // the file keeps the corner the stairs had in the editor, the game saves them as plain stairs
         states.putString("minecraft:corner", "none");
         states.putByte("upside_down_bit", property(entry, "half") == "top" ? 1 : 0);
         states.putInt("weirdo_direction", weirdoDirection(rotatedFacing(entry, quarterTurns)));
         out = BlockState(name, states);
+        return true;
+    }
+
+    if (name == "minecraft:leaves2" && property(entry, "variant") == "dark_oak") {
+        states.putByte("persistent_bit", 0);
+        states.putByte("update_bit", 0);
+        out = BlockState("minecraft:dark_oak_leaves", states);
+        return true;
+    }
+
+    if (name == "minecraft:sapling" && property(entry, "type") == "dark_oak") {
+        states.putByte("age_bit", property(entry, "stage") == "1" ? 1 : 0);
+        out = BlockState("minecraft:dark_oak_sapling", states);
         return true;
     }
 
@@ -493,12 +684,30 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
-    if (name == "minecraft:carpet" && property(entry, "color") == "red") {
-        out = BlockState("minecraft:red_carpet");
-        return true;
+    if (name == "minecraft:carpet" || name == "minecraft:wool") {
+        std::string color = property(entry, "color");
+        if (color == "silver")
+            color = "light_gray";
+        const std::string dyed = "minecraft:" + color + (name == "minecraft:carpet" ? "_carpet" : "_wool");
+        if (BlockPaletteRegistry::getInstance().getDefaultStates(dyed) != nullptr) {
+            out = BlockState(dyed);
+            return true;
+        }
     }
 
-    if (name == "minecraft:cauldron") {
+    if (name == "minecraft:stone_slab") {
+        const std::string variant = property(entry, "variant");
+        if (variant == "cobblestone" || variant == "smoothstone") {
+            states.putString("minecraft:vertical_half", property(entry, "half"));
+            out = BlockState(variant == "smoothstone" ? "minecraft:smooth_stone_slab"
+                                                       : "minecraft:cobblestone_slab",
+                             states);
+            return true;
+        }
+    }
+
+    // an empty cauldron has no level: its default states
+    if (name == "minecraft:cauldron" && !property(entry, "level").empty()) {
         // the two-thirds level of the file is four sixths here
         states.putString("cauldron_liquid", "water");
         states.putInt("fill_level", std::stoi(property(entry, "level")) * 2);
@@ -521,9 +730,34 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
         return true;
     }
 
+    if (name == "minecraft:vine") {
+        // the game sets the bits of each true face in key order: the last one wins, up standing for all four
+        static const std::array<std::pair<const char *, int32_t>, 5> FACES = {
+                {{"east", 8}, {"north", 4}, {"south", 1}, {"up", 15}, {"west", 2}}};
+        int32_t bits = 0;
+        for (const std::pair<const char *, int32_t> &face: FACES) {
+            if (property(entry, face.first) == "true")
+                bits = face.second;
+        }
+        // the template transform keeps one face, south then north, east, west, north when none,
+        // and turns it clockwise: north, east, south, west
+        static const std::array<int32_t, 4> CLOCKWISE_BITS = {4, 8, 1, 2};
+        int32_t face = (bits & 1) != 0 ? 2 : (bits & 4) != 0 ? 0 : (bits & 8) != 0 ? 1 : (bits & 2) != 0 ? 3 : 0;
+        if ((mirror == 1 && (face & 1) == 0) || (mirror == 2 && (face & 1) != 0))
+            face ^= 2;
+        states.putInt("vine_direction_bits", CLOCKWISE_BITS[(size_t) ((face + quarterTurns) & 3)]);
+        out = BlockState(name, states);
+        return true;
+    }
+
     if (name == "minecraft:iron_bars") {
-        for (const char *side: {"east", "north", "south", "west"})
-            states.putByte(std::string("minecraft:connection_") + side, property(entry, side) == "true" ? 1 : 0);
+        // the sides turn with the template; written in palette key order
+        static const std::array<const char *, 4> CLOCKWISE = {"north", "east", "south", "west"};
+        for (const size_t side: {(size_t) 1, (size_t) 0, (size_t) 2, (size_t) 3}) {
+            const char *from = CLOCKWISE[(side + 4 - (size_t) (quarterTurns & 3)) & 3];
+            states.putByte(std::string("minecraft:connection_") + CLOCKWISE[side],
+                           property(entry, from) == "true" ? 1 : 0);
+        }
         out = BlockState(name, states);
         return true;
     }
@@ -591,4 +825,13 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     }
 
     return translateGeneric(entry, quarterTurns, out);
+}
+
+bool StructureBlockTable::translateFinalState(const std::string &state, int32_t quarterTurns, BlockState &out) {
+    StructureTemplate::PaletteEntry entry;
+    return parseState(state, entry) && translate(entry, quarterTurns, out);
+}
+
+int32_t StructureBlockTable::bannerType(const std::string &name) {
+    return name.find("illager_captain") != std::string::npos ? 1 : 0;
 }

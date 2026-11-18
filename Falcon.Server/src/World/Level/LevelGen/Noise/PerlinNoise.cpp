@@ -59,7 +59,7 @@ PerlinNoise::PerlinNoise(const XoroshiroPositionalFactory &factory, int32_t firs
     mMaxValue = _edgeValue(2.0);
 }
 
-// sub_145C2AF90 with its legacy mode
+// with its legacy mode
 PerlinNoise::PerlinNoise(std::mt19937 &random, int32_t firstOctave, const std::vector<double> &amplitudes)
         : mNoiseLevels(), mAmplitudes(amplitudes), mLowestFreqValueFactor(0.0), mMaxValue(0.0) {
     const int32_t octaves = static_cast<int32_t>(amplitudes.size());
@@ -88,7 +88,7 @@ void PerlinNoise::_skipOctave(IRandom &random) {
     random.setSeed(LinearCongruentialGenerator::skip262().nextSeed(random.getSeed()));
 }
 
-// per-octave factors kept in float like the game (sub_145C2AF90)
+// per-octave factors kept in float like the game
 void PerlinNoise::_computeOctaveFactors(int32_t firstOctave) {
     const int32_t octaves = static_cast<int32_t>(mAmplitudes.size());
     const float totalShare = static_cast<float>(static_cast<int32_t>(~(~0u << octaves)));
@@ -102,7 +102,7 @@ void PerlinNoise::_computeOctaveFactors(int32_t firstOctave) {
     }
 }
 
-// float sum, no coordinate wrapping (sub_145C2C790)
+// float sum, no coordinate wrapping
 float PerlinNoise::getValue(float x, float y, float z) const {
     float value = 0.0f;
 

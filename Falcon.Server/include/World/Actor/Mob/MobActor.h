@@ -20,11 +20,13 @@
 #include "World/Actor/Mob/Component/MobLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
+#include "World/Actor/Mob/Component/MobEconomy.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
 #include "World/Actor/Mob/MobEquipment.h"
 #include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Inventory/Container.h"
 #include "World/Level/Block/BlockState.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3i.h"
@@ -43,6 +45,10 @@ class ServerPlayer;
 
 class MobActor : public ServerActor {
 public:
+    // the share of the ageable duration one feed item takes off when its growth is left out: a feed_items entry
+    // starts at 0.1
+    static constexpr float DEFAULT_FEED_GROWTH = 0.1f;
+
     bool canFreeze() const override {
         return true;
     }
@@ -54,9 +60,21 @@ public:
 
     bool canStandOnPowderSnow() const override;
 
+    float getArmorKnockbackResistance() const override;
+
     virtual ActorCategory getCategory() const = 0;
 
     virtual bool preventsSleep() const {
+        return false;
+    }
+
+    // a zombie villager: its cure lowers the prices of the villager it becomes and of the villagers around
+    virtual bool curesIntoTrader() const {
+        return false;
+    }
+
+    // a villager reached by a nearby cure
+    virtual bool isNearbyCureTarget() const {
         return false;
     }
 
@@ -118,7 +136,7 @@ public:
 
     void applyDefaults(Difficulty difficulty);
 
-    // only a loaded actor runs its pending upgrades; any other cause takes the current version (sub_140B938D0)
+    // only a loaded actor runs its pending upgrades; any other cause takes the current version
     void upgradeDefinition(ServerNetworkHandler &owner, bool loaded);
 
     static int randomRange(int minimum, int maximum);
@@ -141,6 +159,17 @@ public:
         return mJumpControl;
     }
 
+    // spawnWithoutBehaviors stops every goal for good
+    void removeBehaviors(ServerNetworkHandler &owner);
+
+    bool hasBehaviorsRemoved() const {
+        return mBehaviorsRemoved;
+    }
+
+    MobExplode &getExplode() {
+        return mExplode;
+    }
+
     PathNavigation &getNavigation() {
         return mNavigation;
     }
@@ -157,6 +186,10 @@ public:
 
     float absorbDamage(float amount, const ActorDamageSource &source) const override {
         return mEquipment.absorbDamage(amount, source);
+    }
+
+    void hurtArmor(ServerNetworkHandler &owner, float amount, const ActorDamageSource &source) override {
+        mEquipment.hurtArmor(owner, *this, amount, source);
     }
 
     bool ignoresMovementSlowdown(const std::string &blockName) const override;
@@ -258,6 +291,15 @@ public:
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 
+    // a mob's sleeping state lives only in its flags
+    void setSleepingFlag(ServerNetworkHandler &owner, bool sleeping) {
+        _setFlag(owner, ActorFlag::Sleeping, sleeping);
+    }
+
+    void setWantsToWake(ServerNetworkHandler &owner, bool wants) {
+        _setFlag(owner, ActorFlag::WantsToWake, wants);
+    }
+
     bool isInLove() const {
         return mLoveTicks > 0;
     }
@@ -265,6 +307,16 @@ public:
     void finishBreeding(ServerNetworkHandler &owner);
 
     int32_t getVariant() const;
+
+    // air in ticks; a mob that never breathed yet holds its full supply
+    int32_t getAirSupply() const;
+
+    void setAirSupply(int32_t ticks);
+
+    int32_t getMaxAirSupply() const;
+
+    // the drowning damage hits once the air falls to this
+    static constexpr int32_t MIN_AIR_SUPPLY = -20;
 
     void setVariant(int32_t variant);
 
@@ -368,6 +420,8 @@ public:
 
     static Actor *findActor(ServerNetworkHandler &owner, uint64_t runtimeId);
 
+    void useSpawnEquipment(ServerNetworkHandler &owner, const std::string &table, float dropChance);
+
     MobEquipment &getEquipment() {
         return mEquipment;
     }
@@ -396,11 +450,32 @@ public:
         return mDweller;
     }
 
+    MobEconomy &getEconomy() {
+        return mEconomy;
+    }
+
+    const MobEconomy &getEconomy() const {
+        return mEconomy;
+    }
+
     MobAnger &getAnger() {
         return mAnger;
     }
 
+    // 0 without minecraft:inventory
     int getInventoryCapacity() const;
+
+    // a tamed mount with a horse container_type: its saddle, armor and chest slots
+    Container *getEntityContainer() override;
+
+    // the minecraft:inventory slots, the equippable body slot read from the worn body armor
+    Container &getInventoryContainer();
+
+    // the items of the equippable slots, by slot number, to compare after a window change
+    std::vector<ItemStack> getEquippableItems() const;
+
+    // runs on_equip and on_unequip of the slots that were filled or emptied since before
+    void onEquippableItemsChanged(ServerNetworkHandler &owner, const std::vector<ItemStack> &before, Actor *changer);
 
     std::vector<ItemStack> rollLoot(ServerNetworkHandler &owner, const std::string &path);
 
@@ -425,7 +500,7 @@ public:
     // the success of minecraft:tameable or minecraft:tamemount; false when untameable, tamed or cancelled
     bool tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *component, bool showEffects);
 
-    // tamed with no owner, as a script's EntityTameMountComponent.tame does (sub_143C9C590)
+    // tamed with no owner, as a script's EntityTameMountComponent.tame does
     bool tameWithoutOwner(ServerNetworkHandler &owner, const char *component, bool showEffects);
 
     float getJumpStrength() const;
@@ -456,6 +531,31 @@ protected:
     void tickControls(ServerNetworkHandler &owner);
 
 private:
+    // the minecraft:inventory slots of the mob's equipment, as a container the UI can show
+    class InventoryView : public Container {
+    public:
+        explicit InventoryView(MobActor &mob) : mMob(mob) {}
+
+        int getContainerSize() const override {
+            return mMob.getInventoryCapacity();
+        }
+
+        const ItemStack &getContainerItem(int slot) const override {
+            return mMob._equippableItem(slot);
+        }
+
+        void setContainerItem(int slot, ItemStack item) override {
+            mMob._setEquippableItem(slot, std::move(item));
+        }
+
+        bool canHoldInSlot(int slot, const ItemStack &item) const override {
+            return mMob._acceptsInEquippableSlot(slot, item);
+        }
+
+    private:
+        MobActor &mMob;
+    };
+
     friend class RideControlSystem;
     friend class RideControlProbe;
 
@@ -514,6 +614,8 @@ private:
 
     void _tickTimer(ServerNetworkHandler &owner);
 
+    void _tickScheduler(ServerNetworkHandler &owner);
+
     void _tickAttackCooldown(ServerNetworkHandler &owner);
 
     int _experienceReward(const char *key, const ServerPlayer *player) const;
@@ -544,6 +646,8 @@ private:
 
     void _transform(ServerNetworkHandler &owner, const json::Value &transformation);
 
+    void _passTradesTo(ServerNetworkHandler &owner, MobActor &into, bool keepLevel);
+
     void _fireComponentEvent(ServerNetworkHandler &owner, const char *component);
 
     void _setFlag(ServerNetworkHandler &owner, ActorFlag flag, bool value);
@@ -566,15 +670,25 @@ private:
 
     bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    bool _tryTrade(ServerNetworkHandler &owner, ServerPlayer &player);
+
     const json::Value *_seatFor(size_t index, size_t passengerCount) const;
 
     float _rolledValue(const json::Value *component, float &rolled, float fallback) const;
 
+    // by place in the definition's list: the game keeps the equippable items at the head of the inventory in
+    // that order, whatever "slot" says (the llama's only slot is numbered 1 and sits first)
     const json::Value *_equippableSlot(int32_t index) const;
 
+    // "slot" 1 is the body armor, the one worn and shown
+    bool _isBodySlot(int32_t index) const;
+
+    // the body slot when the equippable slot is the body one, else the minecraft:inventory slot
     const ItemStack &_equippableItem(int32_t index) const;
 
     void _setEquippableItem(int32_t index, ItemStack item);
+
+    bool _acceptsInEquippableSlot(int32_t index, const ItemStack &item) const;
 
     bool _equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName);
 
@@ -610,16 +724,22 @@ private:
     bool mSitting = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;
+    bool mBehaviorsRemoved = false;
     bool mBodyDirty = true;
     float mScale = 1.0f;
     bool mDefinitionStarted = false;
     bool mBorn = false;
     int32_t mActorVersion = 0;
     std::string mSpawnEvent;
+    // the mob a transformation replaces, until the new one's first event ran
+    MobActor *mTransformedFrom = nullptr;
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;
     int32_t mTimerTicks = 0;
+    const json::Value *mSchedulerComponent = nullptr;
+    // the scheduled event whose filters held last; -1 for none
+    int32_t mScheduledEvent = -1;
     const json::Value *mTransformationComponent = nullptr;
     int32_t mTransformationTicks = 0;
     bool mTransformed = false;
@@ -653,6 +773,14 @@ private:
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
     mutable std::string mComponentKey;
+    struct RecentComponent {
+        const char *mAddress;
+        std::string mName;
+        const json::Value *mValue;
+    };
+    static constexpr size_t MAX_RECENT_COMPONENTS = 64;
+    // emptied with the components: a group added or removed changes what a name finds
+    mutable std::vector<RecentComponent> mRecentComponents;
     mutable SensorComponents mSensorComponents;
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
@@ -667,6 +795,8 @@ private:
     JumpControl mJumpControl;
     BodyControl mBodyControl;
     MobEquipment mEquipment;
+    MobEconomy mEconomy;
+    InventoryView mInventoryView{*this};
     MobEntitySpawner mEntitySpawner;
     std::vector<int32_t> mEntitySensorCooldowns;
     int32_t mTemper = 0;

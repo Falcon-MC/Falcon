@@ -10,11 +10,19 @@
 #include <utility>
 
 #include <pthread.h>
+#ifdef __APPLE__
+#include <pthread/qos.h>
+#endif
 #include <sched.h>
 
 namespace {
     // lower quarter of the scheduling range: generation and storage never starve the tick thread
     void lowerCurrentThreadPriority() {
+#ifdef __APPLE__
+        // the scheduler picks cores by class there: this one leaves the fast cores to the tick and the network
+        if (pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0) == 0)
+            return;
+#endif
         sched_param parameters;
         int policy = 0;
 
@@ -340,12 +348,8 @@ void ChunkWorker::_finishChunk(std::unique_ptr<LevelChunk> chunk, size_t sourceI
             saved.insert(saved.end(), blockActors.begin(), blockActors.end());
             mStorage.saveBlockEntities(result.mX, result.mZ, saved);
         }
-
-        if (!entities.empty() && mStorage.isOpen()) {
-            std::vector<Tag> saved = mStorage.loadEntities(result.mX, result.mZ);
-            saved.insert(saved.end(), entities.begin(), entities.end());
-            mStorage.saveEntities(result.mX, result.mZ, saved);
-        }
+        result.mBlockActors = std::move(blockActors);
+        result.mEntities = std::move(entities);
     } else {
         applySpilled();
     }

@@ -69,6 +69,10 @@ public:
         return mServices;
     }
 
+    const std::vector<std::unique_ptr<LoadedPlugin>> &getPlugins() const {
+        return mPlugins;
+    }
+
     bool hasSubscribers(FalconEventType type) const {
         return type < MAX_EVENT_TYPES && mSubscribedTypes.test(type);
     }

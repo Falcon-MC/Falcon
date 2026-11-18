@@ -6,6 +6,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 
@@ -13,7 +14,7 @@ FALCON_REGISTER_ACTOR(ExperienceOrbActor, "minecraft:xp_orb");
 
 namespace {
     const float PLAYER_HEIGHT = 1.8f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const int32_t MAX_AGE = 6000;
     const float ATTRACT_RANGE_SQUARED = 64.0f;
     const float ATTRACT_DIVISOR = 8.0f;
@@ -40,14 +41,13 @@ void ExperienceOrbActor::tick(ServerNetworkHandler &owner) {
 
     ServerPlayer *closest = nullptr;
     float closestDistanceSquared = ATTRACT_RANGE_SQUARED;
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(position, std::sqrt(ATTRACT_RANGE_SQUARED), [&](ServerPlayer &player) {
         if (!player.isSpawned() || player.isDead())
-            continue;
-        if (player.getGameType() == (int32_t) GameType::Spectator)
-            continue;
+            return;
+        if (player.isSpectator())
+            return;
         if (!player.sharesLevelWith(*this))
-            continue;
+            return;
 
         const Vector3f playerPosition = player.getPosition();
         const float dx = playerPosition.x - position.x;
@@ -58,7 +58,7 @@ void ExperienceOrbActor::tick(ServerNetworkHandler &owner) {
             closest = &player;
             closestDistanceSquared = distanceSquared;
         }
-    }
+    });
 
     if (closest != nullptr && getPickupDelay() <= 0 && _tryPickup(owner, *closest)) {
         mExpired = true;

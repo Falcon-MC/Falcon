@@ -12,7 +12,7 @@ class LevelChunk;
 class OverworldClimate;
 class TerrainBeard;
 
-// stone, deepslate, ore veins and aquifer fluids from densities at cell corners (sub_14CDEE380, sub_14CDF0330)
+// stone, deepslate, ore veins and aquifer fluids from densities at cell corners
 class OverworldTerrainFiller {
 public:
     OverworldTerrainFiller(const XoroshiroPositionalFactory &noiseFactory, const OverworldClimate &climate);
@@ -22,7 +22,7 @@ public:
 
     // heightMap is indexed (x << 4) | z and receives the highest non-air y of each column
     // beard: density of the structure pieces near the chunk, left out for the preliminary heights as the
-    // game does (sub_14CDF0330, seventh argument)
+    // game does
     void fill(LevelChunk &chunk, int32_t *heightMap, OverworldAquifer &aquifer,
               const TerrainBeard *beard = nullptr) const;
 

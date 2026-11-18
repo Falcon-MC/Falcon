@@ -10,6 +10,9 @@
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
+
+#include <random>
 
 namespace {
     const int PRECIPITATION_CHANCE = 16;
@@ -44,10 +47,13 @@ void PrecipitationSystem::tick(ServerNetworkHandler &owner, Level &level) {
     if (!level.hasSkyLight())
         return;
 
-    for (const int64_t column: level.getActiveColumns()) {
-        if (RandomTickSystem::nextInt(PRECIPITATION_CHANCE) != 0)
-            continue;
-
+    // one column in PRECIPITATION_CHANCE: the gap to the next one is drawn at once, the same odds
+    // without a roll a column
+    static std::mt19937 random(std::random_device{}());
+    std::geometric_distribution<size_t> gap(1.0 / (double) PRECIPITATION_CHANCE);
+    const std::vector<int64_t> &columns = level.getActiveColumnOrder();
+    for (size_t index = gap(random); index < columns.size(); index += 1 + gap(random)) {
+        const int64_t column = columns[index];
         const int32_t chunkX = (int32_t) (column >> 32);
         const int32_t chunkZ = (int32_t) (column & 0xffffffff);
         if (level.peekChunkPtr(chunkX, chunkZ) == nullptr)
@@ -55,6 +61,17 @@ void PrecipitationSystem::tick(ServerNetworkHandler &owner, Level &level) {
 
         tickColumn(level, (chunkX << 4) + RandomTickSystem::nextInt(16), (chunkZ << 4) + RandomTickSystem::nextInt(16));
     }
+}
+
+bool PrecipitationSystem::isRainingOn(Level &level, const Vector3i &position) {
+    if (!level.isRaining() || position.y < level.getHeightAt(position.x, position.z))
+        return false;
+
+    LevelChunk *chunk = level.peekChunkPtr(position.x >> 4, position.z >> 4);
+    const ClimateAttributes *climate = chunk == nullptr ? nullptr
+                                                        : ClimateAttributes::getForBiome((int32_t) chunk->getBiomeAt(
+                                                                  position.x & 15, position.y, position.z & 15));
+    return climate != nullptr && climate->mRain && !isCold(level, position);
 }
 
 bool PrecipitationSystem::isCold(Level &level, const Vector3i &position) {
@@ -80,7 +97,7 @@ void PrecipitationSystem::tickColumn(Level &level, int32_t x, int32_t z) {
         const BlockState *state = level.peekBlockPtr(x, surface, z);
         if (state == nullptr)
             return;
-        if (state->mName != "minecraft:air")
+        if (state->mName != BlockNames::AIR)
             break;
         --surface;
     }
@@ -126,10 +143,13 @@ bool PrecipitationSystem::shouldSnow(Level &level, const Vector3i &position) {
         return false;
 
     const BlockState *state = stateAt(level, position);
-    if (state == nullptr || state->mName != "minecraft:air")
+    if (state == nullptr || state->mName != BlockNames::AIR)
         return false;
 
-    const Vector3i below(position.x, position.y - 1, position.z);
+    return canHoldSnow(level, Vector3i(position.x, position.y - 1, position.z));
+}
+
+bool PrecipitationSystem::canHoldSnow(Level &level, const Vector3i &below) {
     const BlockState *support = stateAt(level, below);
     if (support == nullptr || IceBlock::matches(support->mName) || support->mName == "minecraft:packed_ice")
         return false;

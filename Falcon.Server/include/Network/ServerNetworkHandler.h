@@ -6,6 +6,7 @@
 #include "World/Level/TickingAreaManager.h"
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
+#include "World/Scores/Scoreboard.h"
 #include "Network/ChunkPacketCache.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/RakPeerHelper.h"
@@ -13,6 +14,7 @@
 #include "Network/ClientProbe.h"
 #include "Network/PingedCompatibleServer.h"
 #include "Protocol/NetworkPacketHandler.h"
+#include "Protocol/Types/DataStoreTypes.h"
 #include "Protocol/Types/DisconnectReason.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Types/BlockDefinitionRegistry.h"
@@ -85,10 +87,33 @@ class ServerNetworkHandler : public NetworkHandler::Listener,
                              public RakPeerHelper::IPSupportInterface,
                              public PacketSender {
 public:
-    using ModalFormCallback = std::function<void(ServerPlayer &, const std::string &, bool)>;
+    enum class ModalFormOutcome { Answered, UserClosed, UserBusy, PlayerQuit };
+    // the response is empty unless answered
+    using ModalFormCallback = std::function<void(ServerPlayer &, const std::string &, ModalFormOutcome)>;
+
+    // the screen-closed reasons in packet order, then the player leaving
+    enum class DataDrivenScreenOutcome {
+        ProgrammaticClose,
+        ProgrammaticCloseAll,
+        ClientCanceled,
+        UserBusy,
+        InvalidForm,
+        PlayerLeft,
+    };
+
+    struct DataDrivenScreenCallbacks {
+        // a client write the store accepted: the path inside the property and the value it now holds
+        std::function<void(const std::string &, const DataStoreScalar &)> mOnWrite;
+        std::function<void(DataDrivenScreenOutcome)> mOnClose;
+    };
 
     ServerNetworkHandler(const std::string &serverName, const std::string &subName, int maxPlayers,
                          TransportLayer transport = TransportLayer::NetherNet);
+
+    // the last tick ran with the simulation paused
+    bool isSimulationPaused() const {
+        return mSimulationPaused;
+    }
 
     bool isTransportReady() const {
         return mNetworkHandler != nullptr;
@@ -106,6 +131,8 @@ public:
     void pumpLoginEvents();
 
     void setMotd(const std::string &serverName, const std::string &subName);
+
+    std::string getMotd() const;
 
     void setProtocolVersion(int protocolVersion, const std::string &gameVersion);
 
@@ -212,7 +239,7 @@ public:
 
     World *loadWorld(const std::string &name, bool create, int64_t seed);
 
-    // refuses the default world and worlds still holding players
+    // refuses the default world and worlds still holding players; the world goes with the next main thread tasks
     bool unloadWorld(const std::string &name, std::string &error);
 
     static int64_t randomSeed();
@@ -278,6 +305,63 @@ public:
         }
     }
 
+    // every player by chunk, rebuilt at most once per tick and when one joins: positions can lag one tick;
+    // callers check exact distances, levels and spawn state
+    template <typename Visitor>
+    void forEachPlayerNear(const Vector3f &position, float radius, Visitor &&visit) {
+        const float reach = radius + ACTOR_INDEX_MARGIN;
+        _forEachPlayerInChunks((int32_t) std::floor(position.x - reach) >> 4, (int32_t) std::floor(position.x + reach) >> 4,
+                               (int32_t) std::floor(position.z - reach) >> 4, (int32_t) std::floor(position.z + reach) >> 4,
+                               visit);
+    }
+
+    template <typename Visitor>
+    void forEachPlayerAroundChunk(int32_t chunkX, int32_t chunkZ, int32_t radius, Visitor &&visit) {
+        _forEachPlayerInChunks(chunkX - radius, chunkX + radius, chunkZ - radius, chunkZ + radius, visit);
+    }
+
+    ServerPlayer *getPlayerByRuntimeId(uint64_t runtimeId);
+
+    // to the players who have this one on screen: what a player wears or holds means nothing to the others
+    void sendToPlayerViewers(const ServerPlayer &player, const Packet &packet, bool includeSelf);
+
+    // the few actors others stand on, from the index of the tick
+    template <typename Visitor>
+    void forEachCollidableActor(Visitor &&visit) {
+        if (mActorIndexWalks == 0)
+            _refreshActorIndex();
+        for (size_t index = 0; index < mCollidableActors.size(); ++index)
+            visit(*mCollidableActors[index]);
+    }
+
+    // half the width of the widest actor, as each reports it, from the index of the tick
+    float getWidestActorHalfWidth() {
+        if (mActorIndexWalks == 0)
+            _refreshActorIndex();
+        return mActorIndexWidestBox;
+    }
+
+    // changes whenever an actor joins or leaves: a cached list of actors is stale past it
+    uint64_t getActorSetSerial() const {
+        return mActorSetSerial;
+    }
+
+    // an actor joining or leaving while the explosions of the tick run; a leaver is only an address by then
+    struct ActorChange {
+        ServerActor *mActor;
+        Vector3f mPosition;
+        bool mJoined;
+    };
+
+    // the changes since the explosions of the tick began, in order; null when they are not being listed
+    const std::vector<ActorChange> *getActorChanges() const {
+        return mJoinedTracked ? &mActorChanges : nullptr;
+    }
+
+    // during the actor pass the explosion waits for its end, where the explosions of the tick share their lookups
+    void explodeAfterActors(Level &level, const Vector3f &center, double size, const ServerActor &source,
+                            bool fromTnt);
+
     ServerActor *spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                             const std::function<void(ServerActor &)> &configure = nullptr);
 
@@ -299,6 +383,10 @@ public:
 
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                  float verticalOffset = 0.0f);
+
+    // no shooter: the definition's power and uncertainty_base aim it along direction
+    ServerActor *spawnDispensedProjectile(Level &level, const std::string &identifier, const Vector3f &position,
+                                          const Vector3f &direction);
 
     bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
 
@@ -371,6 +459,8 @@ public:
 
     void refreshContainerViewers(const Vector3i &position, const ServerPlayer *except = nullptr);
 
+    void refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except = nullptr);
+
     void sendActorsTo(ServerPlayer &player);
 
     void broadcastActorRemove(ServerActor &actor);
@@ -433,6 +523,10 @@ public:
 
     void spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position);
 
+    // molangJson: a serialized MolangVariableMap, sent as is; viewer: only that player sees it
+    void spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position,
+                             const std::string *molangJson, ServerPlayer *viewer);
+
     void playLevelSound(Level &level, const std::string &sound, const Vector3f &position,
                         const std::string &actorType = ":", int32_t extraData = -1);
 
@@ -468,22 +562,36 @@ public:
 
     void clearPlayerCamera(ServerPlayer &player);
 
-    void displayScoreboardObjective(const std::string &slot, const std::string &objectiveId,
-                                    const std::string &displayName);
+    Scoreboard &getScoreboard() {
+        return mScoreboard;
+    }
 
-    void clearScoreboardDisplay(const std::string &slot);
+    void loadScoreboard();
 
-    void setScoreboardScore(const std::string &objectiveId, const std::string &participant, int32_t score);
+    void saveScoreboard(bool checked);
 
-    void removeScoreboardScore(const std::string &objectiveId, const std::string &participant);
+    // the display slots, their scores and the player identities, for a player joining
+    void sendScoreboard(ServerPlayer &player);
 
-    void removeScoreboardObjective(const std::string &objectiveId);
+    // a player's name, an entity's name tag or the fake player's own name; script: no offline placeholder
+    std::string getScoreboardName(const ScoreboardIdentity &identity, bool script = false);
+
+    // the online player or loaded entity of an identity; null for a fake player
+    Actor *findScoreboardActor(const ScoreboardIdentity &identity);
+
+    // null while the actor has no score
+    const ScoreboardIdentity *findScoreboardIdentity(const Actor &actor) const;
+
+    int64_t createScoreboardIdentity(const Actor &actor);
 
     void syncPlayerAttributes(ServerPlayer &player);
 
     void tickActors();
 
     void loadActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ);
+
+    // stored actor tags brought to life, those already alive in `level` skipped
+    void spawnStoredActors(Level &level, const std::vector<Tag> &entities);
 
     void saveActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ, bool cull);
 
@@ -493,11 +601,17 @@ public:
 
     void saveAllActors();
 
+    // actors of `level` outside `loadedColumns`, added to their chunk's stored actors
+    void saveStrayActors(Level &level, const std::unordered_set<int64_t> &loadedColumns);
+
     void autoSave(bool wait = false);
 
     bool syncActorPersistence(Level &level, const std::vector<int64_t> &activeColumns);
 
     void emitItemUse(ServerPlayer &player);
+
+    // ticks left before the held item's use completes, 0 once it could
+    int32_t getItemUseTicksLeft(const ServerPlayer &player) const;
 
     std::unordered_map<std::string, DynamicPropertyValue> &getWorldDynamicProperties() {
         return mWorldDynamicProperties;
@@ -517,6 +631,19 @@ public:
 
     int64_t allocateActorUniqueId();
 
+    // gametest: a player with no client, fed inputs by the server; nothing is sent to it
+    ServerPlayer &spawnSimulatedPlayer(const std::string &name, Level &level, const Vector3f &position, float yaw,
+                                       int32_t gameType);
+
+    // leaves at the next safe point of the tick, as a closed connection would
+    void removeSimulatedPlayer(const NetworkIdentifier &id);
+
+    // pick block: selects the stack in the hotbar, swaps it in from the inventory, or puts it there in creative
+    void pickItem(ServerPlayer &player, ItemStack item, int hotbarSlot);
+
+    // a simulated player's dead: the respawn a client asks for
+    void respawnSimulatedPlayer(ServerPlayer &player);
+
 
     BlockDefinitionRegistry &getBlockDefinitions() {
         return mBlockDefinitions;
@@ -534,6 +661,9 @@ public:
     const PacketCodecContext &getCodecContext(const NetworkIdentifier &id);
 
     ServerPlayer *getPlayerByName(const std::string &name);
+
+    // the whole name, any case: for commands that grant or take away rights, never a prefix
+    ServerPlayer *getPlayerByExactName(const std::string &name);
 
     // keeps what a skin carries beside its image within the limits a skin change is held to
     static void boundSkin(SerializedSkin &skin);
@@ -613,7 +743,8 @@ public:
 
     void kickNotAllowListedPlayers();
 
-    void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message);
+    void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message,
+                           bool success = true);
 
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &key,
                            const std::vector<std::string> &parameters);
@@ -632,6 +763,9 @@ public:
 
     // saves it and sends it to every spawned player
     void changeDifficulty(Difficulty difficulty);
+
+    // stored as allow-cheats and sent to every player
+    void setCommandsEnabled(bool enabled);
 
     // overworld levels only; saves level.dat and sends it to every spawned player
     void changeWorldSpawn(Level &level, const Vector3i &spawn);
@@ -653,6 +787,9 @@ public:
     void _consumeHeldItem(ServerPlayer &player);
 
     void _tickItemUse(ServerPlayer &player);
+
+    // false when the held slot or item changed since the use started: the use is then stopped
+    bool _keepItemUse(ServerPlayer &player);
 
     void _completeItemUse(ServerPlayer &player, int32_t itemId);
 
@@ -685,6 +822,16 @@ public:
         return mRecipeSourceIndices;
     }
 
+    // recipe network id to CraftingRecipeTable::getStonecutterRecipes index
+    const std::unordered_map<int32_t, uint32_t> &getStonecutterRecipeIndices() {
+        _buildCraftingData();
+        return mStonecutterRecipeIndices;
+    }
+
+    std::unordered_map<int32_t, uint32_t> &getStonecutterRecipeIndicesMutable() {
+        return mStonecutterRecipeIndices;
+    }
+
     // custom recipes absent
     std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() {
         return mVanillaRecipeIds;
@@ -711,12 +858,38 @@ public:
         return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
     }
 
+    void _refreshPlayerIndex();
+
+    template <typename Visitor>
+    void _forEachPlayerInChunks(int32_t minX, int32_t maxX, int32_t minZ, int32_t maxZ, Visitor &&visit) {
+        // a walk nested in a visitor keeps the index: a refresh clears the outer walk's buckets
+        if (mPlayerIndexWalks == 0)
+            _refreshPlayerIndex();
+        ++mPlayerIndexWalks;
+        for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
+                const auto bucket = mPlayerIndex.find(_actorIndexKey(chunkX, chunkZ));
+                if (bucket == mPlayerIndex.end())
+                    continue;
+
+                // by position: a visitor may make a player leave, which takes it out of its bucket
+                for (size_t index = 0; index < bucket->second.size(); ++index)
+                    visit(*bucket->second[index]);
+            }
+        }
+        --mPlayerIndexWalks;
+    }
+
     void _refreshActorIndex();
+
+    void _flushExplosions();
 
     // only players the actor was spawned for; others get the state with the spawn
     void _sendToViewers(const ServerActor &actor, const Packet &packet);
 
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
+
+    void _unloadWorldNow(uint32_t id, const std::string &name);
 
     void _unregisterActor(int64_t uniqueId);
 
@@ -758,6 +931,9 @@ public:
     void _validateServerboundPackets() const;
 
     void _rejectBadPacket(const NetworkIdentifier &id, const std::string &reason);
+
+    // asks the attestation service once about a client that has been playing for a while
+    void _inspectSession(ServerPlayer &player);
 
     ResourcePackManager &getResourcePacks() {
         return mResourcePacks;
@@ -823,9 +999,20 @@ public:
 
     void sendModalForm(ServerPlayer &player, uint32_t formId, const std::string &formData,
                        ModalFormCallback callback = {});
+    void closeAllForms(ServerPlayer &player);
+
+    // the screen binds to propertyPrefix + id in the minecraft store; writable lists the paths the client may set.
+    // returns the form id, 0 when the player is not spawned
+    int32_t showDataDrivenScreen(ServerPlayer &player, const std::string &screenId, const std::string &propertyPrefix,
+                                 DataStoreChangeValue value, std::vector<std::string> writable,
+                                 DataDrivenScreenCallbacks callbacks);
+    void updateDataDrivenScreen(ServerPlayer &player, int32_t formId, DataStoreChangeValue value,
+                                std::vector<std::string> writable);
+    void closeDataDrivenScreen(ServerPlayer &player, int32_t formId);
 
 private:
     friend class MovementInputProbe;
+    friend class ServerTickProbe;
 
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
 
@@ -868,6 +1055,8 @@ private:
 
     void handle(const NetworkIdentifier &id, const MapCreateLockedCopyPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const ServerboundStonecutterSetRecipePacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const SubChunkRequestPacket &packet) override;
 
     void handle(const NetworkIdentifier &id, const RequestAbilityPacket &packet) override;
@@ -904,7 +1093,36 @@ private:
 
     void handle(const NetworkIdentifier &id, const PlayerToggleArmorVisibilityRequestPacket &packet) override;
 
+    void handle(const NetworkIdentifier &id, const AnimatePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const LevelSoundEventPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const SetDefaultGameTypePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const SetDifficultyPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const RequestPermissionsPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const BookEditPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const LecternUpdatePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const PositionTrackingDBClientRequestPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const PlayerToggleCrafterSlotRequestPacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const UpdateClientOptionsPacket &packet) override;
+
     void handle(const NetworkIdentifier &id, const ModalFormResponsePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const ServerboundDataStorePacket &packet) override;
+
+    void handle(const NetworkIdentifier &id, const ServerboundDataDrivenScreenClosedPacket &packet) override;
+
+    void _sendDataStoreChange(const NetworkIdentifier &id, const std::string &property, int32_t updateCount,
+                              const DataStoreChangeValue &value);
+
+    void _endDataDrivenScreens(const NetworkIdentifier &id, DataDrivenScreenOutcome outcome);
 
     void handle(const NetworkIdentifier &id, const PlayerSkinPacket &packet) override;
 
@@ -927,6 +1145,9 @@ private:
 
     void _savePlayerData(const ServerPlayer &player, bool checked = false);
 
+    // the containers the player opened since the last save, written before the player itself
+    void _saveTouchedContainers(ServerPlayer &player);
+
     void _handleVoidDamage(ServerPlayer &player);
 
     void _handleSuffocationDamage(ServerPlayer &player);
@@ -944,6 +1165,8 @@ private:
 
     void _tickSleep();
 
+    bool _isStorageWriteStalled();
+
     void _tickSleep(World &world);
 
     void _tickWeather(World &world);
@@ -953,6 +1176,8 @@ private:
     void _tickPlayer(ServerPlayer &player);
 
     void _registerCommands();
+
+    void _bindScoreboard();
 
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
@@ -1011,6 +1236,7 @@ private:
     std::vector<ItemStack> mRecipeOutputs;
     std::vector<uint32_t> mRecipeSourceIndices;
     std::unordered_map<int32_t, std::string> mVanillaRecipeIds;
+    std::unordered_map<int32_t, uint32_t> mStonecutterRecipeIndices;
     std::vector<int32_t> mCreativeSourceIndices;
     PlayerDataProvider mPlayerData;
     OpList mOps;
@@ -1018,11 +1244,15 @@ private:
     BanList mBanList;
     BanList mIpBanList;
     bool mAutoSaveEnabled = true;
+    // tick an auto-save fell due on, -1 when none waits
+    int64_t mAutoSaveDueTick = -1;
     bool mPluginsEnabled = true;
     bool mStopRequested = false;
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;
+    // the name and player limit are read by the transport threads answering status queries
+    mutable std::mutex mAnnouncementMutex;
     int mMaxPlayers;
     bool mIsListening;
     bool mSimulationPaused = false;
@@ -1035,6 +1265,30 @@ private:
     std::unordered_map<int64_t, std::vector<ServerActor *>> mActorIndex;
     bool mActorIndexDirty = true;
     int32_t mActorIndexWalks = 0;
+    // half width of the widest indexed actor, for queries that must reach a box and not only its position
+    float mActorIndexWidestHalf = 0.0f;
+    float mActorIndexWidestBox = 0.0f;
+    std::vector<ServerActor *> mCollidableActors;
+    std::unordered_map<int64_t, std::vector<ServerPlayer *>> mPlayerIndex;
+    std::unordered_map<uint64_t, ServerPlayer *> mPlayersByRuntimeId;
+    bool mPlayerIndexDirty = true;
+    int32_t mPlayerIndexWalks = 0;
+    uint64_t mActorSetSerial = 0;
+
+    struct PendingExplosion {
+        Level *mLevel;
+        Vector3f mCenter;
+        double mSize;
+        int64_t mSourceId;
+        bool mFromTnt;
+    };
+    std::vector<PendingExplosion> mPendingExplosions;
+    std::chrono::steady_clock::time_point mTickStarted;
+    bool mLastTickLate = false;
+    int32_t mPackHoldTicks = 0;
+    bool mJoinedTracked = false;
+    std::vector<ActorChange> mActorChanges;
+    bool mTickingActors = false;
     std::unordered_map<uint64_t, int64_t> mActorUniqueIdsByRuntimeId;
     std::unordered_set<int64_t> mVehiclesWithPendingPassengers;
     uint32_t mActorUniqueIdCounter = 0;
@@ -1050,6 +1304,11 @@ private:
         int64_t mDeadline;
     };
     std::vector<PendingRemoval> mPendingRemovals;
+
+    void _tickSimulatedPlayer(ServerPlayer &player);
+    void _removeSimulatedPlayers();
+    unsigned long long mSimulatedPlayerCount = 0;
+    std::vector<NetworkIdentifier> mSimulatedRemovals;
 
     struct LingeringCloud {
         int32_t mPotionId;
@@ -1070,10 +1329,24 @@ private:
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
     std::vector<int64_t> mDetachedActors;
     std::unordered_map<std::string, DynamicPropertyValue> mWorldDynamicProperties;
-    std::unordered_map<std::string, int64_t> mScoreboardIds;
-    int64_t mNextScoreboardId = 1;
+    Scoreboard mScoreboard;
+    bool mScoreboardUnreadable = false;
+    bool mWorldDynamicPropertiesUnreadable = false;
     std::unordered_map<NetworkIdentifier, std::unordered_map<uint32_t, ModalFormCallback>, NetworkIdentifier::Hasher>
             mModalFormCallbacks;
+
+    struct DataDrivenScreen {
+        std::string mProperty;
+        DataStoreChangeValue mValue;
+        int32_t mUpdateCount = 0;
+        std::unordered_map<std::string, int32_t> mPathUpdateCounts;
+        std::unordered_set<std::string> mWritable;
+        DataDrivenScreenCallbacks mCallbacks;
+    };
+
+    std::unordered_map<NetworkIdentifier, std::unordered_map<int32_t, DataDrivenScreen>, NetworkIdentifier::Hasher>
+            mDataDrivenScreens;
+    int32_t mNextDataDrivenScreenId = 1;
     std::vector<std::unique_ptr<ItemActor>> mItemEntities;
     uint64_t mNextRuntimeId;
     int64_t mCurrentTick = 0;

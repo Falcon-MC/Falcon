@@ -33,4 +33,6 @@ public:
                     const BlockState &state) const override;
 
     int getLightEmission(const BlockState &state, int dataEmission) const override;
+
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 };

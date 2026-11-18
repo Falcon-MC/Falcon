@@ -24,10 +24,10 @@ namespace {
         return open ? LevelSoundEvent::DOOR_OPEN : LevelSoundEvent::DOOR_CLOSE;
     }
 
-    std::unordered_map<int32_t, std::unordered_set<int64_t>> gManualOverrides;
+    std::unordered_map<const Level *, std::unordered_set<int64_t>> gManualOverrides;
 
     std::unordered_set<int64_t> &manualOverridesOf(Level &level) {
-        return gManualOverrides[level.getDimensionId()];
+        return gManualOverrides[&level];
     }
 }
 
@@ -55,6 +55,10 @@ void OpenableBlock::setManualOverride(Level &level, const Vector3i &position, bo
         manualOverridesOf(level).insert(RedstoneSystem::packPosition(position));
     else
         manualOverridesOf(level).erase(RedstoneSystem::packPosition(position));
+}
+
+void OpenableBlock::forgetLevel(const Level &level) {
+    gManualOverrides.erase(&level);
 }
 
 bool OpenableBlock::toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

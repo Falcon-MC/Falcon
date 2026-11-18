@@ -29,6 +29,15 @@ struct ScriptParentEntry {
     const char *mParent;
 };
 
+// an official stable name the scripting layer does not bind
+struct ScriptUnboundEntry {
+    const char *mName;
+    uint8_t mFirst1;
+    uint8_t mLast1;
+    uint8_t mFirst2;
+    uint8_t mLast2;
+};
+
 // what one module version declares, from the official definitions; names are "Class", "Class.member" and
 // "Enum.Key=value"
 class ScriptSurface {
@@ -47,6 +56,9 @@ public:
 
     // every Error subclass the version exports
     std::vector<std::string> errorClasses() const;
+
+    // every top-level export the version declares
+    std::vector<std::string> exports() const;
 
     static const ScriptSignalEntry *findSignal(const std::string &property);
 

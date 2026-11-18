@@ -16,6 +16,7 @@ namespace {
     const float PUSH_STRENGTH = 0.2f * 0.32f;
     // wide enough for the widest box (ender dragon) to reach the pushed actor
     const float PUSH_SEARCH_RADIUS = 16.0f;
+    const float PUSH_SEARCH_MARGIN = 0.5f;
     const float UNSET = -std::numeric_limits<float>::infinity();
 
     AxisAlignedBB boxAround(const Vector3f &position, float width, float height) {
@@ -69,7 +70,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
         const PushableByEntityPreset *preset = presets == nullptr
                                                        ? nullptr
                                                        : PushableByEntity::findPreset(owner, *mob, *presets, pusher);
-        // sub_143A0AF90: push_mode none leaves without pushing
+        // push_mode none leaves without pushing
         if (preset != nullptr && preset->mMode == PushMode::None)
             return;
 
@@ -96,7 +97,13 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
     // box test before the virtual checks: getPhysics() on a mob resolves several definition components,
     // keep it out of the pair loop
-    owner.forEachActorNear(actor.getPosition(), PUSH_SEARCH_RADIUS, [&](const ServerActor &other) {
+    // no farther than a pusher can touch from: its own half width past this box, or the ball reach
+    const float selfReach = std::max(std::max(self.mMaxX - self.mMinX, self.mMaxZ - self.mMinZ) * 0.5f
+                                             + std::max(std::fabs(motion.x), std::fabs(motion.z)),
+                                     reach);
+    const float searchRadius = std::min(PUSH_SEARCH_RADIUS,
+                                        selfReach + owner.getWidestActorHalfWidth() + PUSH_SEARCH_MARGIN);
+    owner.forEachActorNear(actor.getPosition(), searchRadius, [&](const ServerActor &other) {
         if (&other == &actor || other.isProjectile() || !other.sharesLevelWith(actor))
             return;
 
@@ -108,18 +115,18 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
         pushBy(other, box, width, other.getMotion());
     });
 
-    for (auto &entry: owner.getPlayers()) {
-        const ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(actor.getPosition(), selfReach + PLAYER_WIDTH + PUSH_SEARCH_MARGIN,
+                            [&](const ServerPlayer &player) {
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(actor)
-            || player.getGameType() == (int32_t) GameType::Spectator)
-            continue;
+            || player.isSpectator())
+            return;
 
         const AxisAlignedBB box = boxAround(player.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
         if (!inContact(player, box, PLAYER_WIDTH))
-            continue;
+            return;
 
         pushBy(player, box, PLAYER_WIDTH, player.getMotion());
-    }
+    });
 
     if (!touched)
         return kick;
@@ -135,7 +142,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
 void ActorPushSystem::_playKickSound(ServerNetworkHandler &owner, ServerActor &actor,
                                      const PushableByEntityPreset &preset, const Vector3f &kick) {
-    // sub_143A0AF90: the sound has its own cooldown and needs a strong enough kick
+    // the sound has its own cooldown and needs a strong enough kick
     if (!preset.mPlaySound)
         return;
 

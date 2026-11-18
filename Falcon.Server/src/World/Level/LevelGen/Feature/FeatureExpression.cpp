@@ -148,7 +148,7 @@ private:
         return name;
     }
 
-    // between two numbers the game folds the bounds when it compiles the call (sub_1416A29C0, opcodes 0x21 and
+    // between two numbers the game folds the bounds when it compiles the call (opcodes 0x21 and
     // 0x22): rounds the draw differently from the call between two expressions
     int32_t _random(Operation operation, int32_t first, int32_t second) {
         const int32_t index = _node(operation, first, second);
@@ -324,7 +324,7 @@ float FeatureExpression::_evaluate(int32_t index, const Context &context) const 
 }
 
 float FeatureExpression::_random(const Node &node, const Context &context) const {
-    // sub_1416E2C00 between two numbers, sub_1416E2F30 between two expressions evaluated before the draw
+    // folded between two numbers, evaluated before the draw between two expressions
     if (node.mFolded)
         return context.random() * (node.mSecondValue - node.mValue) + node.mValue;
 
@@ -335,7 +335,7 @@ float FeatureExpression::_random(const Node &node, const Context &context) const
 }
 
 float FeatureExpression::_randomInteger(const Node &node, const Context &context) const {
-    // sub_1416E3270 and sub_1416E3580: the upper bound pushed just under the next integer so it can be floored to
+    // the upper bound pushed just under the next integer so it can be floored to
     float low = node.mValue;
     float high = node.mSecondValue;
     if (!node.mFolded) {

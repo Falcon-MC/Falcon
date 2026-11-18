@@ -9,11 +9,11 @@
 
 class Block;
 
-// one queue per chunk, as LevelChunk keeps two BlockTickingQueues (+0x130, +0x138; sub_14381AE20, sub_14381B7E0);
+// one queue per chunk, as LevelChunk keeps two BlockTickingQueues;
 // entries are never merged: a block may hold several pending ticks
 class BlockTickingQueue {
 public:
-    // the first queue reads the level tick; the second advances by randomTickSpeed each tick (sub_143854100)
+    // the first queue reads the level tick; the second advances by randomTickSpeed each tick
     explicit BlockTickingQueue(bool randomClock = false) : mRandomClock(randomClock) {}
 
     struct Entry {
@@ -32,14 +32,14 @@ public:
     // `block` is the block the tick fires for: it runs only if that block is still there
     void add(const Vector3i &position, const Block *block, int32_t delay, int32_t priority = 0);
 
-    // the check neighborChanged makes before adding (sub_149C3DEA0): same block, same due tick
+    // the check neighborChanged makes before adding: same block, same due tick
     bool isPending(const Vector3i &position, const Block *block, int32_t delay) const;
 
-    // any tick for the position, whatever its block: a scan of the chunk's heap (sub_1432CCA10)
+    // any tick for the position, whatever its block: a scan of the chunk's heap
     bool hasTickAt(const Vector3i &position) const;
 
     // one chunk's turn in a level tick, columns taken in z then x order; `handler(position, block)` per tick
-    // due, at most 100; false when none ran (sub_14381B7E0)
+    // due, at most 100; false when none ran
     template <typename Handler, typename Loaded>
     bool tickColumn(int64_t levelTick, int64_t column, Handler &&handler, Loaded &&isLoaded);
 

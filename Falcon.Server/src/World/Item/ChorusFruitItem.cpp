@@ -10,6 +10,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -101,7 +102,8 @@ bool ChorusFruitItem::findTeleportPosition(ServerNetworkHandler &owner, ServerPl
 void ChorusFruitItem::onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     (void) item;
     Vector3f destination;
-    if (!findTeleportPosition(owner, player, destination))
+    if (!findTeleportPosition(owner, player, destination)
+        || !PluginEvents::teleport(player, destination, "chorus_fruit"))
         return;
 
     Level &level = owner.getLevelFor(player);

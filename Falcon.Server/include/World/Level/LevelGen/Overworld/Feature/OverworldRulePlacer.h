@@ -12,7 +12,7 @@ class BlockManager;
 class LevelChunk;
 class OverworldClimate;
 
-// the feature rules whose feature is ported, scattered and shaped like the game's feature rules (sub_14A22D800)
+// the feature rules whose feature is ported, scattered and shaped like the game's feature rules
 class OverworldRulePlacer {
 public:
     // true when apply places this rule: the feature builder skips it

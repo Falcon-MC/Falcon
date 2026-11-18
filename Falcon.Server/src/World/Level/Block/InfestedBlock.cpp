@@ -5,6 +5,7 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(InfestedBlock, 185);
 
@@ -53,7 +54,7 @@ BlockState InfestedBlock::hostStateOf(const BlockState &state) const {
 }
 
 void InfestedBlock::release(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
-    level.setBlock(position, BlockState("minecraft:air"), true);
+    level.setBlock(position, BlockState(BlockNames::AIR), true);
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
     ServerActor *silverfish = owner.spawnActor(level, SilverfishActor::IDENTIFIER, center);

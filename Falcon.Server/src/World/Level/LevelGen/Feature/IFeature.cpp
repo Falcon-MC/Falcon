@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cstring>
 
@@ -47,7 +48,7 @@ bool IFeature::isSupportDirt(const BlockState &state) {
 }
 
 bool IFeature::isSupportGrass(const BlockState &state) {
-    return state.mName == "minecraft:grass_block";
+    return state.mName == BlockNames::GRASS_BLOCK;
 }
 
 void IFeature::queueObject(const BlockManager &object) {

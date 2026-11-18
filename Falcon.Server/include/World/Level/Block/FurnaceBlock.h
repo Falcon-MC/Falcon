@@ -18,6 +18,8 @@ public:
 
     static bool matches(const BlockState &state);
     static bool matches(const std::string &identifier);
+
+    const char *getBlockActorId() const override;
     static FurnaceKind kind(const BlockState &state);
     static ContainerType containerType(const BlockState &state);
 
@@ -29,6 +31,8 @@ public:
 
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
+
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 
     int getFuelTime() const {
         return 0;

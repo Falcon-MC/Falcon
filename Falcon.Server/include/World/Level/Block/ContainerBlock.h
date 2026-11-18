@@ -44,6 +44,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     static const ContainerBlockDefinition *findDefinition(const std::string &identifier);
 
     static bool isShulkerBoxItem(const ItemStack &item);
@@ -64,4 +66,9 @@ public:
     void writeDropContents(Level &level, const Vector3i &position, ItemStack &item) const override;
 
     uint8_t getLiquidBlockedFaces(const BlockState &state) const override;
+
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
 };

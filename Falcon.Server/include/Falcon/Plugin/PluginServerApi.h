@@ -27,4 +27,20 @@ public:
     static void fillServices(FalconServerApi &api);
 
     static void fillMaps(FalconServerApi &api);
+
+    static void fillEffects(FalconServerApi &api);
+
+    static void fillScoreboard(FalconServerApi &api);
+
+    static void fillContainers(FalconServerApi &api);
+
+    static void fillData(FalconServerApi &api);
+
+    static void fillCommands(FalconServerApi &api);
+
+    static void fillWorldQueries(FalconServerApi &api);
+
+    static void fillActors(FalconServerApi &api);
+
+    static void fillAdmin(FalconServerApi &api);
 };

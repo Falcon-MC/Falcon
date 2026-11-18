@@ -13,7 +13,7 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    // the column one higher over a water source; false when nothing grew (sub_1435B5770)
+    // the column one higher over a water source; false when nothing grew
     static bool growAbove(LiquidPhysicsSystem &ticks, const Vector3i &position);
 
     bool usesBlockTicks() const override {

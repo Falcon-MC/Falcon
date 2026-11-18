@@ -15,10 +15,10 @@ class Village;
 // Bad Omen -> Raid Omen in a village, the raid it starts when removed, the raid boss bar; main thread only
 class PlayerRaidState {
 public:
-    // sub_14355FB10: only the floored position of the first application is kept
+    // only the floored position of the first application is kept
     void onRaidOmenAdded(const Vector3i &position);
 
-    // sub_14355FD20: raid asked for on the next tick (minecraft:trigger_raid)
+    // raid asked for on the next tick (minecraft:trigger_raid)
     void onRaidOmenRemoved() {
         mTriggerPending = true;
     }

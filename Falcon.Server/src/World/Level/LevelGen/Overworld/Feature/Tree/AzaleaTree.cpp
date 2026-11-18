@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 bool AzaleaTree::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     const int32_t i = random.nextInt(2) + 2;
@@ -60,7 +61,7 @@ void AzaleaTree::setDirtAt(BlockManager &manager, int32_t x, int32_t y, int32_t 
 void AzaleaTree::_placeLogAt(BlockManager &manager, int32_t x, int32_t y, int32_t z) {
     const std::string identifier = manager.getBlockAt(x, y, z).mName;
 
-    if (identifier == "minecraft:air" || identifier == "minecraft:azalea_leaves"
+    if (identifier == BlockNames::AIR || identifier == "minecraft:azalea_leaves"
         || identifier == "minecraft:azalea_leaves_flowered")
         manager.setBlockStateAt(x, y, z, withPillarAxis(VanillaBlocks::OAK_LOG().toBlockState(), "y"));
 }
@@ -68,7 +69,7 @@ void AzaleaTree::_placeLogAt(BlockManager &manager, int32_t x, int32_t y, int32_
 void AzaleaTree::_placeLeafAt(BlockManager &manager, int32_t x, int32_t y, int32_t z, IRandom &random) {
     const std::string identifier = manager.getBlockAt(x, y, z).mName;
 
-    if (identifier == "minecraft:air") {
+    if (identifier == BlockNames::AIR) {
         if (random.nextInt(3) == 1)
             manager.setBlockStateAt(x, y, z, VanillaBlocks::AZALEA_LEAVES_FLOWERED().toBlockState());
         else

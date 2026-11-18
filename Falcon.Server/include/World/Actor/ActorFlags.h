@@ -45,8 +45,10 @@ enum class ActorFlag : int {
     BlockedUsingShield = 74,
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
+    // a player asked a sleeping villager to get up
+    WantsToWake = 77,
     FacingTargetToRangeAttack = 88,
-    // read by Player.isEmoting (sub_14D53E890)
+    // read by Player.isEmoting
     Emoting = 92,
     Celebrating = 93,
     Admiring = 94,
@@ -70,9 +72,9 @@ enum class ActorFlag : int {
 
 class ActorFlags {
 public:
-    // the three flag words: data ids 0, 92 and 139 (sub_142C6F4D0)
+    // the three flag words: data ids 0, 92 and 139
     static const int32_t FLAGS_DATA_ID = 0;
-    // sub_142C6F4D0: the flag words go out as data 0, 92 and 139
+    // the flag words go out as data 0, 92 and 139
     static const int32_t FLAGS_2_DATA_ID = 92;
     static const int32_t FLAGS_3_DATA_ID = 139;
     static const int32_t VARIANT_DATA_ID = 2;
@@ -84,6 +86,7 @@ public:
     static const int32_t MARK_VARIANT_DATA_ID = 43;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
     static const int32_t BED_POSITION_DATA_ID = 28;
+    static const int32_t BED_ENTER_POSITION_DATA_ID = 133;
     static const int32_t FUSE_LENGTH_DATA_ID = 55;
     static const int32_t AIR_SUPPLY_DATA_ID = 7;
     static const int32_t AIR_SUPPLY_MAX_DATA_ID = 42;

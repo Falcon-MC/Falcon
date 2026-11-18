@@ -2,6 +2,8 @@
 #include <functional>
 
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/GameRules.h"
@@ -10,12 +12,28 @@
 #include "World/Level/WorldManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlaySoundPacket.h"
+#include "Protocol/Packets/ScriptMessagePacket.h"
 #include "Scripting/ScriptEngine.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace ScriptValues;
 
@@ -80,9 +98,48 @@ namespace {
         return JS_FALSE;
     }
 
-    // TODO: the game derives the tier from device memory; thresholds unverified, High for now
-    JSValue systemInfoGetMemoryTier(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, 3);
+    // the server tier: total physical memory up to
+    // 1.5, 2, 4 and 8 GiB, above is SuperHigh; the platform reads ullTotalPhys
+    int32_t memoryTierOf(uint64_t bytes) {
+        const uint64_t gib = 1024ull * 1024ull * 1024ull;
+        if (bytes <= gib * 3 / 2)
+            return 0;
+        if (bytes <= gib * 2)
+            return 1;
+        if (bytes <= gib * 4)
+            return 2;
+        if (bytes <= gib * 8)
+            return 3;
+        return 4;
+    }
+
+    uint64_t physicalMemory() {
+#if defined(_WIN32)
+        MEMORYSTATUSEX status;
+        status.dwLength = sizeof(status);
+        return GlobalMemoryStatusEx(&status) ? (uint64_t) status.ullTotalPhys : 0;
+#elif defined(__APPLE__)
+        uint64_t bytes = 0;
+        size_t size = sizeof(bytes);
+        return sysctlbyname("hw.memsize", &bytes, &size, nullptr, 0) == 0 ? bytes : 0;
+#else
+        const long pages = sysconf(_SC_PHYS_PAGES);
+        const long pageSize = sysconf(_SC_PAGE_SIZE);
+        return pages > 0 && pageSize > 0 ? (uint64_t) pages * (uint64_t) pageSize : 0;
+#endif
+    }
+
+    // the server's own tier, or the client's on a ClientSystemInfo
+    JSValue systemInfoGetMemoryTier(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (const ScriptPlayerPart *part = api->native<ScriptPlayerPart>(thisVal)) {
+            ServerPlayer *player = api->resolvePlayerByHandle(part->mHandle);
+            if (player == nullptr)
+                return api->throwError("InvalidEntityError", "The player has left.");
+            return JS_NewInt32(ctx, player->getClientDevice().mMemoryTier);
+        }
+        static const int32_t tier = memoryTierOf(physicalMemory());
+        return JS_NewInt32(ctx, tier);
     }
 
     JSValue systemWaitTicks(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -204,6 +261,50 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    // PlayerWaypointsMode in its registration order: Off is 0, Everyone 1
+    JSValue gameRulesGetPlayerWaypoints(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        const GameRules::Rule *rule = defaultWorld(ctx).getOverworld().getGameRules().find("playerwaypoints");
+        if (rule == nullptr)
+            return JS_UNDEFINED;
+        return string(ctx, rule->mIntValue == 0 ? "Off" : "Everyone");
+    }
+
+    JSValue gameRulesSetPlayerWaypoints(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        const std::string mode = argc >= 1 && JS_IsString(argv[0]) ? toString(ctx, argv[0]) : std::string();
+        if (mode != "Off" && mode != "Everyone")
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        World &world = defaultWorld(ctx);
+        ScriptApi::fromContext(ctx)->host().changeGameRule(world, "playerwaypoints", mode == "Off" ? "0" : "1");
+        return JS_UNDEFINED;
+    }
+
+    JSValue worldGetAllowCheats(JSContext *ctx, JSValueConst, int, JSValueConst *) {
+        return JS_NewBool(ctx, ScriptApi::fromContext(ctx)->host().getProperties().getAllowCheats());
+    }
+
+    // the level's commands flag; the clients learn it from a set commands enabled packet
+    JSValue worldSetAllowCheats(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsBool(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptApi::fromContext(ctx)->host().setCommandsEnabled(JS_ToBool(ctx, argv[0]) == 1);
+        return JS_UNDEFINED;
+    }
+
+    // the level's packet sender carries a script message packet to every client
+    JSValue worldBroadcastClientMessage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 2 || !JS_IsString(argv[0]) || !JS_IsString(argv[1]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptMessagePacket packet;
+        packet.mChannel = toString(ctx, argv[0]);
+        packet.mMessage = toString(ctx, argv[1]);
+        ServerNetworkHandler &host = ScriptApi::fromContext(ctx)->host();
+        for (auto &entry: host.getPlayers()) {
+            if (entry.second.isSpawned())
+                host.sendPacketTo(entry.second.getNetworkIdentifier(), packet);
+        }
+        return JS_UNDEFINED;
+    }
+
     JSValue worldGetIsHardcore(JSContext *, JSValueConst, int, JSValueConst *) {
         return JS_FALSE;
     }
@@ -220,17 +321,19 @@ namespace {
             case 1:
                 return JS_NewInt64(ctx, level.getDayTime());
             case 2:
-                return JS_NewInt64(ctx, level.getTime() / 24000);
+                return JS_NewInt64(ctx, level.getTime() / Level::TICKS_PER_DAY);
             default:
                 // MoonPhase counts from the full moon, one phase a day
-                return JS_NewInt32(ctx, (int32_t) ((level.getTime() / 24000) % 8));
+                return JS_NewInt32(ctx, (int32_t) ((level.getTime() / Level::TICKS_PER_DAY) % 8));
         }
     }
 
     JSValue worldSetTime(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         double time = 0.0;
-        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &time, argv[0]) != 0 || !std::isfinite(time))
+        // the tick count is an int64: a time it cannot hold fails the conversion
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &time, argv[0]) != 0 || !std::isfinite(time)
+            || time < -9223372036854775808.0 || time >= 9223372036854775808.0)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         World &world = defaultWorld(ctx);
@@ -238,10 +341,10 @@ namespace {
         if (magic == 0) {
             level.setTime((int64_t) time);
         } else {
-            if (time < 0.0 || time > 24000.0)
+            if (time < 0.0 || time > (double) Level::TICKS_PER_DAY)
                 return api->throwError("Error", "");
             // keeps the day count: only the time of day moves
-            level.setTime(level.getTime() / 24000 * 24000 + (int64_t) time);
+            level.setTime(level.getTime() / Level::TICKS_PER_DAY * Level::TICKS_PER_DAY + (int64_t) time);
         }
         api->host().broadcastWorldTime(world);
         return JS_UNDEFINED;
@@ -314,6 +417,31 @@ namespace {
             JS_SetPropertyStr(ctx, settings, setting.mName.c_str(), value);
         }
         return settings;
+    }
+
+    // the 1.x World.playSound: every player hears it, whatever their dimension, and no
+    // SoundInstance tracks it
+    JSValue worldPlaySound(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        double x = 0.0, y = 0.0, z = 0.0;
+        if (argc < 2 || !JS_IsString(argv[0]) || !readVector3(ctx, argv[1], x, y, z))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptSoundOptions options;
+        JSValue refused = api->readSoundOptions(argc >= 3 ? argv[2] : JS_UNDEFINED, options, false);
+        if (JS_IsException(refused))
+            return refused;
+
+        PlaySoundPacket packet;
+        packet.mSound = toString(ctx, argv[0]);
+        packet.mPosition = Vector3f((float) x, (float) y, (float) z);
+        packet.mVolume = (float) options.mVolume;
+        packet.mPitch = (float) options.mPitch;
+        packet.mLoopCount = options.mLoopCount;
+        for (auto &entry: api->host().getPlayers()) {
+            if (entry.second.isSpawned())
+                api->host().sendPacketTo(entry.first, packet);
+        }
+        return JS_UNDEFINED;
     }
 
     JSValue worldSendMessage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -433,26 +561,29 @@ namespace {
         return string(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)));
     }
 
-    JSValue blockGetIsAir(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == "minecraft:air");
+    // BlockType lives in the data bootstrap: the object BlockTypes.get hands out
+    JSValue blockGetType(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        for (const auto &entry: api->moduleExports("@minecraft/server")) {
+            if (entry.first != "BlockTypes")
+                continue;
+            JSValue get = JS_GetPropertyStr(ctx, entry.second, "get");
+            JSValue id = string(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)));
+            JSValue type = JS_Call(ctx, get, entry.second, 1, &id);
+            JS_FreeValue(ctx, id);
+            JS_FreeValue(ctx, get);
+            return type;
+        }
+        return JS_UNDEFINED;
     }
 
-    JSValue blockGetPermutation(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return ScriptApi::fromContext(ctx)->makePermutation(blockIdentifier(ctx, *blockOf(ctx, thisVal)));
+    JSValue blockGetIsAir(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == BlockNames::AIR);
     }
 
     JSValue blockGetIsValid(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         const ScriptBlockRef *block = blockOf(ctx, thisVal);
         return JS_NewBool(ctx, blockLevel(ctx, *block).peekBlockPtr(block->mX, block->mY, block->mZ) != nullptr);
-    }
-
-    JSValue blockMatches(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        std::string target = toString(ctx, argv[0]);
-        if (target.find(':') == std::string::npos)
-            target = "minecraft:" + target;
-        return JS_NewBool(ctx, blockIdentifier(ctx, *blockOf(ctx, thisVal)) == target);
     }
 
     JSValue blockGetLocation(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -513,12 +644,38 @@ namespace {
         return identifier;
     }
 
+    // a block written or an entity spawned by a script: in the world's height, in a loaded chunk (the game
+    // throws instead of generating the column)
+    JSValue writableAt(ScriptApi &api, Level &level, const Vector3i &position) {
+        if (position.y < level.getMinY() || position.y > level.getMaxY())
+            return api.throwError("LocationOutOfWorldBoundariesError", "");
+        if (level.peekChunkPtr(position.x >> 4, position.z >> 4) == nullptr)
+            return api.throwError("LocationInUnloadedChunkError", "");
+        return JS_UNDEFINED;
+    }
+
+    bool inIntRange(double value) {
+        return std::isfinite(value) && value >= (double) INT32_MIN && value < (double) INT32_MAX + 1.0;
+    }
+
+    bool readPosition(JSContext *ctx, JSValueConst value, double &x, double &y, double &z, Vector3i &block) {
+        if (!readVector3(ctx, value, x, y, z) || !inIntRange(x) || !inIntRange(y) || !inIntRange(z))
+            return false;
+        block = Vector3i((int32_t) std::floor(x), (int32_t) std::floor(y), (int32_t) std::floor(z));
+        return true;
+    }
+
     JSValue blockSetType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         const ScriptBlockRef *block = blockOf(ctx, thisVal);
         if (argc < 1)
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        ScriptApi::fromContext(ctx)->setBlockType(blockLevel(ctx, *block), block->mX, block->mY, block->mZ,
-                                                  typeIdentifier(ctx, argv[0]));
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const std::string type = typeIdentifier(ctx, argv[0]);
+        Level &level = blockLevel(ctx, *block);
+        JSValue refused = writableAt(*api, level, Vector3i(block->mX, block->mY, block->mZ));
+        if (JS_IsException(refused))
+            return refused;
+        api->setBlockType(level, block->mX, block->mY, block->mZ, type);
         return JS_UNDEFINED;
     }
 
@@ -529,188 +686,14 @@ namespace {
 
         ScriptApi *api = ScriptApi::fromContext(ctx);
         BlockState state;
-        if (api->readPermutation(argv[0], state))
-            api->setBlock(blockLevel(ctx, *block), block->mX, block->mY, block->mZ, state);
-        return JS_UNDEFINED;
-    }
-
-    // TODO: volume and waypoint behaviour, the constructor arguments only for now
-    JSValue blockVolumeConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        JSValue object = ScriptApi::fromContext(ctx)->makeInstance("BlockVolume", new ScriptNative());
-        if (argc >= 1)
-            JS_SetPropertyStr(ctx, object, "from", JS_DupValue(ctx, argv[0]));
-        if (argc >= 2)
-            JS_SetPropertyStr(ctx, object, "to", JS_DupValue(ctx, argv[1]));
-        return object;
-    }
-
-    JSValue entityWaypointConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        JSValue object = ScriptApi::fromContext(ctx)->makeInstance("EntityWaypoint", new ScriptNative());
-        if (argc >= 1)
-            JS_SetPropertyStr(ctx, object, "entity", JS_DupValue(ctx, argv[0]));
-        if (argc >= 2)
-            JS_SetPropertyStr(ctx, object, "textureSelector", JS_DupValue(ctx, argv[1]));
-        if (argc >= 3)
-            JS_SetPropertyStr(ctx, object, "entityRules", JS_DupValue(ctx, argv[2]));
-        return object;
-    }
-
-    ScriptItemData *itemOf(JSContext *ctx, JSValueConst thisVal) {
-        const ScriptItemRef *ref = ScriptApi::fromContext(ctx)->native<ScriptItemRef>(thisVal);
-        return ref == nullptr ? nullptr : ref->mItem.get();
-    }
-
-    JSValue itemStackConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc < 1)
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-
-        std::string typeId = typeIdentifier(ctx, argv[0]);
-        if (typeId.empty())
-            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        if (typeId.find(':') == std::string::npos)
-            typeId = "minecraft:" + typeId;
-
-        int32_t amount = 1;
-        if (argc >= 2 && !JS_IsUndefined(argv[1]))
-            JS_ToInt32(ctx, &amount, argv[1]);
-        return api->makeItemStack(typeId, amount < 1 ? 1 : amount);
-    }
-
-    JSValue itemStackGetTypeId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return string(ctx, itemOf(ctx, thisVal)->mTypeId);
-    }
-
-    JSValue itemStackGetAmount(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, itemOf(ctx, thisVal)->mAmount);
-    }
-
-    JSValue itemStackSetAmount(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        int32_t amount = 1;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &amount, argv[0]);
-        itemOf(ctx, thisVal)->mAmount = amount;
-        return JS_UNDEFINED;
-    }
-
-    JSValue itemStackGetDynamicProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
+        if (!api->readPermutation(argv[0], state))
             return JS_UNDEFINED;
-        return dynamicPropertyGet(ctx, itemOf(ctx, thisVal)->mDynamicProperties, toString(ctx, argv[0]));
-    }
-
-    JSValue itemStackSetDynamicProperty(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc >= 1)
-            dynamicPropertySet(ctx, itemOf(ctx, thisVal)->mDynamicProperties, toString(ctx, argv[0]),
-                               argc >= 2 ? argv[1] : JS_UNDEFINED);
+        Level &level = blockLevel(ctx, *block);
+        JSValue refused = writableAt(*api, level, Vector3i(block->mX, block->mY, block->mZ));
+        if (JS_IsException(refused))
+            return refused;
+        api->setBlock(level, block->mX, block->mY, block->mZ, state);
         return JS_UNDEFINED;
-    }
-
-    JSValue itemStackGetDynamicPropertyIds(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return dynamicPropertyIds(ctx, itemOf(ctx, thisVal)->mDynamicProperties);
-    }
-
-    JSValue itemStackGetTags(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        JSValue tags = JS_NewArray(ctx);
-        uint32_t index = 0;
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(itemOf(ctx, thisVal)->mTypeId))
-            JS_SetPropertyUint32(ctx, tags, index++, string(ctx, tag));
-        return tags;
-    }
-
-    JSValue itemStackHasTag(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        const std::string wanted = toString(ctx, argv[0]);
-        for (const std::string &tag: CraftingRecipeTable::getItemTags(itemOf(ctx, thisVal)->mTypeId)) {
-            if (tag == wanted)
-                return JS_TRUE;
-        }
-        return JS_FALSE;
-    }
-
-    // the item components a stack of this type carries; getComponent and hasComponent both answer from here
-    JSValue makeItemComponent(JSContext *ctx, JSValueConst thisVal, const std::string &requested) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        const ScriptItemRef *item = api->native<ScriptItemRef>(thisVal);
-        const std::string id = requested.find(':') == std::string::npos ? "minecraft:" + requested : requested;
-        const CustomItemDefinition *definition = CustomContentRegistry::getInstance().findItem(item->mItem->mTypeId);
-
-        const char *className = nullptr;
-        if (id == "minecraft:durability" && definition != nullptr && definition->mMaxDurability > 0)
-            className = "ItemDurabilityComponent";
-        else if (id == "minecraft:enchantable")
-            className = "ItemEnchantableComponent";
-        else if (id == "minecraft:cooldown" && definition != nullptr
-                 && (definition->mCooldownTicks > 0 || !definition->mCooldownCategory.empty()))
-            className = "ItemCooldownComponent";
-        if (className == nullptr)
-            return JS_UNDEFINED;
-
-        ScriptItemRef *component = new ScriptItemRef();
-        component->mItem = item->mItem;
-        component->mComponentId = id;
-        return api->makeInstance(className, component);
-    }
-
-    JSValue itemStackGetComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_UNDEFINED;
-        return makeItemComponent(ctx, thisVal, toString(ctx, argv[0]));
-    }
-
-    JSValue itemStackHasComponent(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        if (argc < 1)
-            return JS_FALSE;
-        JSValue component = makeItemComponent(ctx, thisVal, toString(ctx, argv[0]));
-        const bool has = !JS_IsUndefined(component);
-        JS_FreeValue(ctx, component);
-        return JS_NewBool(ctx, has);
-    }
-
-    const CustomItemDefinition *componentDefinition(JSContext *ctx, JSValueConst thisVal) {
-        return CustomContentRegistry::getInstance().findItem(itemOf(ctx, thisVal)->mTypeId);
-    }
-
-    JSValue durabilityGetDamage(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        return JS_NewInt32(ctx, itemOf(ctx, thisVal)->mDamage);
-    }
-
-    JSValue durabilitySetDamage(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
-        int32_t value = 0;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &value, argv[0]);
-        itemOf(ctx, thisVal)->mDamage = value < 0 ? 0 : value;
-        return JS_UNDEFINED;
-    }
-
-    JSValue durabilityGetMax(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return JS_NewInt32(ctx, definition == nullptr ? 0 : definition->mMaxDurability);
-    }
-
-    // TODO: the game's unbreaking chance range, a plain 1 / (level + 1) for now
-    JSValue durabilityGetDamageChance(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        int32_t unbreaking = 0;
-        if (argc >= 1)
-            JS_ToInt32(ctx, &unbreaking, argv[0]);
-        if (unbreaking < 0)
-            unbreaking = 0;
-        return JS_NewInt32(ctx, (int32_t) (100.0 / (double) (unbreaking + 1) + 0.5));
-    }
-
-    JSValue enchantableGetEnchantment(JSContext *, JSValueConst, int, JSValueConst *) {
-        return JS_UNDEFINED;
-    }
-
-    JSValue cooldownGetTicks(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return JS_NewInt32(ctx, definition == nullptr ? 0 : definition->mCooldownTicks);
-    }
-
-    JSValue cooldownGetCategory(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
-        const CustomItemDefinition *definition = componentDefinition(ctx, thisVal);
-        return string(ctx, definition == nullptr ? std::string() : definition->mCooldownCategory);
     }
 
     JSValue dimensionGetId(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -744,24 +727,22 @@ namespace {
     JSValue dimensionSetBlockType(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         double x = 0.0, y = 0.0, z = 0.0;
-        if (argc < 2 || !readVector3(ctx, argv[0], x, y, z))
+        Vector3i position;
+        if (argc < 2 || !readPosition(ctx, argv[0], x, y, z, position))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
+        const std::string type = typeIdentifier(ctx, argv[1]);
         Level &level = api->levelOf(thisVal);
-        const int32_t blockY = (int32_t) std::floor(y);
-        if (blockY < level.getMinY() || blockY > level.getMaxY())
-            return api->throwError("LocationOutOfWorldBoundariesError", "");
-        api->setBlockType(level, (int32_t) std::floor(x), blockY, (int32_t) std::floor(z),
-                          typeIdentifier(ctx, argv[1]));
+        JSValue refused = writableAt(*api, level, position);
+        if (JS_IsException(refused))
+            return refused;
+        api->setBlockType(level, position.x, position.y, position.z, type);
         return JS_UNDEFINED;
     }
 
-    JSValue dimensionRunCommand(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue dimensionRunCommand(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        const int32_t success = api->runCommandAsConsole(argc >= 1 ? toString(ctx, argv[0]) : std::string());
-        JSValue result = api->makeInstance("CommandResult", new ScriptNative());
-        JS_DefinePropertyValueStr(ctx, result, "successCount", JS_NewInt32(ctx, success), JS_PROP_ENUMERABLE);
-        return result;
+        return api->runCommand(api->levelOf(thisVal), nullptr, argc >= 1 ? toString(ctx, argv[0]) : std::string());
     }
 
     JSValue dimensionGetPlayers(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -772,13 +753,22 @@ namespace {
     JSValue dimensionSpawnEntity(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         double x = 0.0, y = 0.0, z = 0.0;
-        if (argc < 2 || !readVector3(ctx, argv[1], x, y, z))
+        Vector3i position;
+        if (argc < 2 || !readPosition(ctx, argv[1], x, y, z, position))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        ServerActor *actor = api->host().spawnActor(api->levelOf(thisVal), typeIdentifier(ctx, argv[0]),
-                                                    Vector3f((float) x, (float) y, (float) z));
+        const std::string type = typeIdentifier(ctx, argv[0]);
+        Level &level = api->levelOf(thisVal);
+        JSValue refused = writableAt(*api, level, position);
+        if (JS_IsException(refused))
+            return refused;
+        ServerActor *actor = api->host().spawnActor(level, type, Vector3f((float) x, (float) y, (float) z));
+        // the game's messages by failure: only the peaceful refusal and the fallback reach here
         if (actor == nullptr)
-            return api->throwError("EntitySpawnError", "");
+            return api->throwError("EntitySpawnError",
+                                   api->host().getProperties().getDifficulty() == Difficulty::Peaceful
+                                           ? "Attempting to spawn a hostile mob in a peaceful world."
+                                           : "Could not spawn Entity");
         return api->makeActor(*actor);
     }
 
@@ -786,12 +776,20 @@ namespace {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptItemRef *item = argc >= 1 ? api->native<ScriptItemRef>(argv[0]) : nullptr;
         double x = 0.0, y = 0.0, z = 0.0;
-        if (item == nullptr || argc < 2 || !readVector3(ctx, argv[1], x, y, z))
+        Vector3i position;
+        if (item == nullptr || argc < 2 || !readPosition(ctx, argv[1], x, y, z, position))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        JSValue refused = writableAt(*api, api->levelOf(thisVal), position);
+        if (JS_IsException(refused))
+            return refused;
 
-        api->host().spawnItemActor(api->levelOf(thisVal), item->mItem->mTypeId, item->mItem->mAmount,
-                                   Vector3f((float) x, (float) y, (float) z));
-        return JS_UNDEFINED;
+        ItemStack stack;
+        if (!api->toItemStack(*item->mItem, stack))
+            return JS_UNDEFINED;
+        ItemActor *spawned = ItemActorHandler::dropItem(
+                api->host(), api->levelOf(thisVal), Vector3f((float) x, (float) y, (float) z), stack,
+                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
+        return spawned == nullptr ? JS_UNDEFINED : api->makeEntity(*spawned);
     }
 
     JSValue dimensionSpawnParticle(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -800,8 +798,13 @@ namespace {
         if (argc < 2 || !readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
+        std::string molang;
+        bool hasMolang = false;
+        if (!api->readMolang(argc >= 3 ? argv[2] : JS_UNDEFINED, molang, hasMolang))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         api->host().spawnParticleEffect(api->levelOf(thisVal), toString(ctx, argv[0]),
-                                        Vector3f((float) x, (float) y, (float) z));
+                                        Vector3f((float) x, (float) y, (float) z), hasMolang ? &molang : nullptr,
+                                        nullptr);
         return JS_UNDEFINED;
     }
 
@@ -811,23 +814,12 @@ namespace {
         if (argc < 2 || !readVector3(ctx, argv[1], x, y, z))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
-        float volume = 1.0f;
-        float pitch = 1.0f;
-        if (argc >= 3 && JS_IsObject(argv[2])) {
-            JSValue volumeValue = JS_GetPropertyStr(ctx, argv[2], "volume");
-            JSValue pitchValue = JS_GetPropertyStr(ctx, argv[2], "pitch");
-            double parsed = 1.0;
-            if (!JS_IsUndefined(volumeValue) && JS_ToFloat64(ctx, &parsed, volumeValue) == 0)
-                volume = (float) parsed;
-            if (!JS_IsUndefined(pitchValue) && JS_ToFloat64(ctx, &parsed, pitchValue) == 0)
-                pitch = (float) parsed;
-            JS_FreeValue(ctx, volumeValue);
-            JS_FreeValue(ctx, pitchValue);
-        }
-
-        api->host().playNamedSound(api->levelOf(thisVal), toString(ctx, argv[0]),
-                                   Vector3f((float) x, (float) y, (float) z), volume, pitch);
-        return JS_UNDEFINED;
+        ScriptSoundOptions options;
+        JSValue refused = api->readSoundOptions(argc >= 3 ? argv[2] : JS_UNDEFINED, options, true);
+        if (JS_IsException(refused))
+            return refused;
+        return api->playSound(api->levelOf(thisVal), nullptr, toString(ctx, argv[0]),
+                              Vector3f((float) x, (float) y, (float) z), options);
     }
 
     JSValue dimensionGetEntities(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -908,32 +900,61 @@ namespace {
         return api.throwError("TickingAreaError", "", fields);
     }
 
+    // TickingAreaOptions; false for a conversion failure
+    bool readTickingArea(ScriptApi &api, JSValueConst options, TickingArea &area) {
+        JSContext *ctx = api.context();
+        JSValue dimension = JS_GetPropertyStr(ctx, options, "dimension");
+        JSValue from = JS_GetPropertyStr(ctx, options, "from");
+        JSValue to = JS_GetPropertyStr(ctx, options, "to");
+        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
+        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
+                           && readVector3(ctx, to, tx, ty, tz) && inIntRange(fx) && inIntRange(fy)
+                           && inIntRange(fz) && inIntRange(tx) && inIntRange(ty) && inIntRange(tz);
+        if (valid) {
+            area = TickingArea::box(
+                    Vector3i((int32_t) std::floor(fx), (int32_t) std::floor(fy), (int32_t) std::floor(fz)),
+                    Vector3i((int32_t) std::floor(tx), (int32_t) std::floor(ty), (int32_t) std::floor(tz)));
+            area.mDimension = api.levelOf(dimension).getDimensionType();
+        }
+        JS_FreeValue(ctx, dimension);
+        JS_FreeValue(ctx, from);
+        JS_FreeValue(ctx, to);
+        return valid;
+    }
+
+    int64_t scriptChunkCount(ScriptApi &api) {
+        int64_t count = 0;
+        for (const std::string &name: api.tickingAreaNames()) {
+            if (const TickingArea *area = findArea(api, name))
+                count += area->getChunkCount();
+        }
+        return count;
+    }
+
+    // the TickingAreaErrorReason refusing the area, null when it fits
+    const char *capacityError(ScriptApi &api, const TickingArea &area) {
+        if (area.getSideChunks() > TickingAreaManager::MAX_SIDE_CHUNKS)
+            return "SideLengthExceeded";
+        if (scriptChunkCount(api) + area.getChunkCount() > TickingAreaManager::MAX_SCRIPT_CHUNKS)
+            return "OverChunkLimit";
+        return nullptr;
+    }
+
     JSValue tickingCreate(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         if (argc < 2 || !JS_IsObject(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
 
         const std::string name = toString(ctx, argv[0]);
-        JSValue dimension = JS_GetPropertyStr(ctx, argv[1], "dimension");
-        JSValue from = JS_GetPropertyStr(ctx, argv[1], "from");
-        JSValue to = JS_GetPropertyStr(ctx, argv[1], "to");
-        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
-        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
-                           && readVector3(ctx, to, tx, ty, tz);
-        const DimensionType type = valid ? api.levelOf(dimension).getDimensionType() : DimensionType::Overworld;
-        JS_FreeValue(ctx, dimension);
-        JS_FreeValue(ctx, from);
-        JS_FreeValue(ctx, to);
-        if (!valid)
+        TickingArea area;
+        if (!readTickingArea(api, argv[1], area))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         if (findArea(api, name) != nullptr)
             return tickingAreaError(api, "IdentifierAlreadyExists");
+        if (const char *refused = capacityError(api, area))
+            return tickingAreaError(api, refused);
 
-        TickingArea area = TickingArea::box(
-                Vector3i((int32_t) std::floor(fx), (int32_t) std::floor(fy), (int32_t) std::floor(fz)),
-                Vector3i((int32_t) std::floor(tx), (int32_t) std::floor(ty), (int32_t) std::floor(tz)));
         area.mName = name;
-        area.mDimension = type;
         worldOfPack(api).getTickingAreas().add(worldOfPack(api), area);
         api.tickingAreaNames().push_back(name);
 
@@ -991,38 +1012,22 @@ namespace {
     }
 
     JSValue tickingChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        ScriptApi &api = *ScriptApi::fromContext(ctx);
-        int32_t count = 0;
-        for (const std::string &name: api.tickingAreaNames()) {
-            const TickingArea *area = findArea(api, name);
-            if (area != nullptr)
-                count += (int32_t) area->getColumns().size();
-        }
-        return JS_NewInt32(ctx, count);
+        return JS_NewInt64(ctx, scriptChunkCount(*ScriptApi::fromContext(ctx)));
     }
 
-    // the limit is an optional<int> the level gets at creation; empty: -1 and every area fits (sub_14C3A58D0,
-    // sub_14C2BBDD0). falcon sets no limit
+    // the limit is an optional<int> the level gets at creation, -1 when unset
     JSValue tickingMaxChunkCount(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        return JS_NewInt32(ctx, -1);
+        return JS_NewInt64(ctx, TickingAreaManager::MAX_SCRIPT_CHUNKS);
     }
 
     JSValue tickingHasCapacity(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi &api = *ScriptApi::fromContext(ctx);
         if (argc < 1 || !JS_IsObject(argv[0]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        JSValue dimension = JS_GetPropertyStr(ctx, argv[0], "dimension");
-        JSValue from = JS_GetPropertyStr(ctx, argv[0], "from");
-        JSValue to = JS_GetPropertyStr(ctx, argv[0], "to");
-        double fx = 0, fy = 0, fz = 0, tx = 0, ty = 0, tz = 0;
-        const bool valid = api.native<ScriptDimensionRef>(dimension) != nullptr && readVector3(ctx, from, fx, fy, fz)
-                           && readVector3(ctx, to, tx, ty, tz);
-        JS_FreeValue(ctx, dimension);
-        JS_FreeValue(ctx, from);
-        JS_FreeValue(ctx, to);
-        if (!valid)
+        TickingArea area;
+        if (!readTickingArea(api, argv[0], area))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
-        return JS_NewBool(ctx, true);
+        return JS_NewBool(ctx, capacityError(api, area) == nullptr);
     }
 }
 
@@ -1173,6 +1178,7 @@ void ScriptApi::_bindSystem() {
 void ScriptApi::_bindWorld() {
     JSValue world = defineClass("World");
     method(world, "World", "sendMessage", worldSendMessage, 1);
+    method(world, "World", "playSound", worldPlaySound, 3);
     method(world, "World", "getAllPlayers", worldGetAllPlayers, 0);
     method(world, "World", "getDimension", worldGetDimension, 1);
     method(world, "World", "getEntity", worldGetEntity, 1);
@@ -1187,6 +1193,8 @@ void ScriptApi::_bindWorld() {
     propertyMagic(world, "World", "tickingAreaManager", holderGetter, 5);
     propertyMagic(world, "World", "gameRules", holderGetter, 6);
     property(world, "World", "isHardcore", worldGetIsHardcore);
+    property(world, "World", "allowCheats", worldGetAllowCheats, worldSetAllowCheats);
+    method(world, "World", "broadcastClientMessage", worldBroadcastClientMessage, 2);
     property(world, "World", "seed", worldGetSeed);
     methodMagic(world, "World", "getAbsoluteTime", worldGetTime, 0, 0);
     methodMagic(world, "World", "getTimeOfDay", worldGetTime, 0, 1);
@@ -1207,6 +1215,7 @@ void ScriptApi::_bindWorld() {
         JSValue rules = defineClass("GameRules");
         for (int i = 0; i < (int) (sizeof(GAME_RULES) / sizeof(GAME_RULES[0])); ++i)
             propertyMagic(rules, "GameRules", GAME_RULES[i], gameRulesGet, i, gameRulesSet);
+        property(rules, "GameRules", "playerWaypoints", gameRulesGetPlayerWaypoints, gameRulesSetPlayerWaypoints);
         mGameRules = makeInstance("GameRules", new ScriptNative());
     }
 
@@ -1226,7 +1235,6 @@ void ScriptApi::_bindBlock() {
     methodMagic(block, "Block", "south", blockOffset, 1, 3);
     methodMagic(block, "Block", "east", blockOffset, 1, 4);
     methodMagic(block, "Block", "west", blockOffset, 1, 5);
-    method(block, "Block", "matches", blockMatches, 2);
     property(block, "Block", "location", blockGetLocation);
     property(block, "Block", "dimension", blockGetDimension);
     property(block, "Block", "isValid", blockGetIsValid);
@@ -1234,36 +1242,10 @@ void ScriptApi::_bindBlock() {
     propertyMagic(block, "Block", "y", blockGetCoord, 1);
     propertyMagic(block, "Block", "z", blockGetCoord, 2);
     property(block, "Block", "typeId", blockGetTypeId);
+    property(block, "Block", "type", blockGetType);
     property(block, "Block", "isAir", blockGetIsAir);
-    property(block, "Block", "permutation", blockGetPermutation);
 
-    defineClass("BlockVolume", blockVolumeConstructor, 2);
-    defineClass("EntityWaypoint", entityWaypointConstructor, 3);
-}
-
-void ScriptApi::_bindItemStack() {
-    JSValue item = defineClass("ItemStack", itemStackConstructor, 2);
-    property(item, "ItemStack", "typeId", itemStackGetTypeId);
-    property(item, "ItemStack", "amount", itemStackGetAmount, itemStackSetAmount);
-    method(item, "ItemStack", "getDynamicProperty", itemStackGetDynamicProperty, 1);
-    method(item, "ItemStack", "setDynamicProperty", itemStackSetDynamicProperty, 2);
-    method(item, "ItemStack", "getDynamicPropertyIds", itemStackGetDynamicPropertyIds, 0);
-    method(item, "ItemStack", "getComponent", itemStackGetComponent, 1);
-    method(item, "ItemStack", "hasComponent", itemStackHasComponent, 1);
-    method(item, "ItemStack", "getTags", itemStackGetTags, 0);
-    method(item, "ItemStack", "hasTag", itemStackHasTag, 1);
-
-    JSValue durability = defineClass("ItemDurabilityComponent");
-    property(durability, "ItemDurabilityComponent", "damage", durabilityGetDamage, durabilitySetDamage);
-    property(durability, "ItemDurabilityComponent", "maxDurability", durabilityGetMax);
-    method(durability, "ItemDurabilityComponent", "getDamageChance", durabilityGetDamageChance, 1);
-
-    JSValue enchantable = defineClass("ItemEnchantableComponent");
-    method(enchantable, "ItemEnchantableComponent", "getEnchantment", enchantableGetEnchantment, 1);
-
-    JSValue cooldown = defineClass("ItemCooldownComponent");
-    property(cooldown, "ItemCooldownComponent", "cooldownTicks", cooldownGetTicks);
-    property(cooldown, "ItemCooldownComponent", "cooldownCategory", cooldownGetCategory);
+    _bindBlockSurface();
 }
 
 void ScriptApi::_bindDimension() {
@@ -1278,4 +1260,6 @@ void ScriptApi::_bindDimension() {
     method(dimension, "Dimension", "spawnParticle", dimensionSpawnParticle, 3);
     method(dimension, "Dimension", "playSound", dimensionPlaySound, 3);
     method(dimension, "Dimension", "getEntities", dimensionGetEntities, 1);
+    _bindDimensionSurface();
+    _bindPoi();
 }

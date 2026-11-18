@@ -36,31 +36,30 @@ public:
 
     static bool isFilledMap(const ItemStack &item);
 
-    // sub_141AE3940; -1 for an item without a map
+    // -1 for an item without a map
     static int64_t getMapId(const ItemStack &item);
 
-    // sub_141AE3A10: a locked map turns the item into the locked kind
+    // a locked map turns the item into the locked kind
     static void setMapId(ItemStack &item, const MapItemSavedData &data);
 
     static bool displaysPlayers(const ItemStack &item);
 
-    // sub_141AE31C0; true when the item changed and its slot needs a resync
+    // true when the item changed and its slot needs a resync
     static bool inventoryTick(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack &item, bool selected);
 
-    // MapItemSavedData::tickCarriedBy (sub_1483EF870)
     static void tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data, const ItemStack *item);
 
-    // sub_1483EFCF0: refreshes every tracked decoration and drops those of actors gone
+    // refreshes every tracked decoration and drops those of actors gone
     static void updateTrackedDecorations(ServerNetworkHandler &owner, World &world, MapItemSavedData &data);
 
-    // sub_1483F0C40; false when the tracked actor or block no longer shows on the map
+    // false when the tracked actor or block no longer shows on the map
     static bool updateTrackedDecoration(ServerNetworkHandler &owner, World &world, MapItemSavedData &data,
                                         MapItemTrackingInfo &tracking);
 
-    // sub_1483F1560: whether the player carries a map with this id in the inventory or offhand
+    // whether the player carries a map with this id in the inventory or offhand
     static bool isHoldingMap(const ServerPlayer &player, int64_t mapId);
 
-    // sub_142935230 for map positions: false between the End and another dimension
+    // for map positions: false between the End and another dimension
     static bool convertPosition(float &x, float &z, int32_t from, int32_t to);
 
     // the world level holding every map of the player's world

@@ -84,18 +84,17 @@ Actor *FollowMobGoal::_findLeader(ServerNetworkHandler &owner, const MobActor &m
     Actor *nearest = nullptr;
     float nearestDistance = mSearchRange * mSearchRange;
 
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.getGameType() == (int32_t) GameType::Spectator
+    owner.forEachPlayerNear(mob.getPosition(), mSearchRange, [&](ServerPlayer &player) {
+        if (!player.isSpawned() || player.isSpectator()
             || !_accepts(owner, mob, player))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(player);
         if (distance <= nearestDistance) {
             nearest = &player;
             nearestDistance = distance;
         }
-    }
+    });
 
     owner.forEachActorNear(mob.getPosition(), mSearchRange, [&](ServerActor &candidate) {
         if (dynamic_cast<MobActor *>(&candidate) == nullptr || !_accepts(owner, mob, candidate))

@@ -5,7 +5,7 @@
 
 class LevelChunk;
 
-// the nether_cave_carver_feature every nether biome places in its pregeneration_pass (vtable 0x14F2F6870)
+// the nether_cave_carver_feature every nether biome places in its pregeneration_pass
 class NetherCarvers {
 public:
     explicit NetherCarvers(int64_t seed);

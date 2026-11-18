@@ -5,7 +5,7 @@
 #include <array>
 #include <cstdint>
 
-// octave of the blended terrain noise, sampled over a whole lattice (sub_145C35BD0, sub_145C2A210)
+// octave of the blended terrain noise, sampled over a whole lattice
 class LatticeNoise {
 public:
     explicit LatticeNoise(XoroshiroRandom &random);

@@ -8,6 +8,8 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Storage/FalconDataVersion.h"
 
+#include <atomic>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -27,6 +29,27 @@
 #include <leveldb/write_batch.h>
 #include <leveldb/filter_policy.h>
 #include <leveldb/cache.h>
+
+namespace {
+    std::atomic<uint64_t> gWriteCount{0};
+
+    // every write counted: AutoCompaction waits for a quiet disk
+    leveldb::Status dbWrite(leveldb::DB &db, const leveldb::WriteOptions &options, leveldb::WriteBatch *batch) {
+        gWriteCount.fetch_add(1, std::memory_order_relaxed);
+        return db.Write(options, batch);
+    }
+
+    leveldb::Status dbPut(leveldb::DB &db, const leveldb::WriteOptions &options, const leveldb::Slice &key,
+                          const leveldb::Slice &value) {
+        gWriteCount.fetch_add(1, std::memory_order_relaxed);
+        return db.Put(options, key, value);
+    }
+
+    leveldb::Status dbDelete(leveldb::DB &db, const leveldb::WriteOptions &options, const leveldb::Slice &key) {
+        gWriteCount.fetch_add(1, std::memory_order_relaxed);
+        return db.Delete(options, key);
+    }
+}
 
 namespace {
     const char *WEATHER_KEY = "weather";
@@ -289,10 +312,35 @@ void LevelStorage::close() {
     if (mDb == nullptr)
         return;
 
+    commitBatch();
     mDb.reset();
     mDecompressAllocator.reset();
     mBlockCache.reset();
     mFilterPolicy.reset();
+}
+
+void LevelStorage::beginBatch() {
+    if (mDb == nullptr || mBatch != nullptr)
+        return;
+
+    mBatch = std::make_shared<leveldb::WriteBatch>();
+    mBatchThread.store(std::this_thread::get_id(), std::memory_order_relaxed);
+}
+
+bool LevelStorage::commitBatch() {
+    if (mBatch == nullptr || !_isBatching())
+        return true;
+
+    mBatchThread.store(std::thread::id(), std::memory_order_relaxed);
+    const std::shared_ptr<leveldb::WriteBatch> batch = std::move(mBatch);
+    mBatch.reset();
+    if (mDb == nullptr || batch->ApproximateSize() == 0)
+        return true;
+
+    const leveldb::Status status = dbWrite(*mDb, leveldb::WriteOptions(), batch.get());
+    if (!status.ok())
+        LOG_WARN(LogAreaID::Server, "Could not save the entities of the loaded chunks: %s", status.ToString().c_str());
+    return _recordWrite(status.ok());
 }
 
 leveldb::ReadOptions LevelStorage::_readOptions() const {
@@ -301,11 +349,35 @@ leveldb::ReadOptions LevelStorage::_readOptions() const {
     return options;
 }
 
-void LevelStorage::compact() {
+std::function<void()> LevelStorage::compactionTask() const {
     if (mDb == nullptr)
-        return;
+        return std::function<void()>();
 
-    mDb->CompactRange(nullptr, nullptr);
+    // the database options point at the filter policy and the cache: destroyed after it, members go in reverse
+    struct Held {
+        std::shared_ptr<const leveldb::FilterPolicy> mFilterPolicy;
+        std::shared_ptr<leveldb::Cache> mBlockCache;
+        std::shared_ptr<leveldb::DecompressAllocator> mDecompressAllocator;
+        std::shared_ptr<leveldb::DB> mDb;
+    };
+    const std::shared_ptr<Held> held =
+            std::make_shared<Held>(Held{mFilterPolicy, mBlockCache, mDecompressAllocator, mDb});
+    return [held]() { held->mDb->CompactRange(nullptr, nullptr); };
+}
+
+bool LevelStorage::isWriteStalled() const {
+    if (mDb == nullptr)
+        return false;
+
+    // leveldb slows writes down from 8 level-0 files and stops them at 12
+    static const int WRITE_SLOWDOWN_LEVEL0_FILES = 8;
+    std::string files;
+    return mDb->GetProperty("leveldb.num-files-at-level0", &files)
+           && std::atoi(files.c_str()) >= WRITE_SLOWDOWN_LEVEL0_FILES;
+}
+
+uint64_t LevelStorage::getWriteCount() {
+    return gWriteCount.load(std::memory_order_relaxed);
 }
 
 bool LevelStorage::saveChunk(const LevelChunk &chunk) {
@@ -334,6 +406,16 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
         batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks));
     else
         batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), chunk.getRandomTicks());
+    // written while an event waits, deleted otherwise
+    if (chunk.getNamedTicks().empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks), chunk.getNamedTicks());
+    const std::string structures = chunk.getStructureBounds().save();
+    if (structures.empty())
+        batch.Delete(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::StructureBounds));
+    else
+        batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::StructureBounds), structures);
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const SubChunk &subChunk = chunk.getSubChunk(i);
@@ -353,7 +435,7 @@ bool LevelStorage::saveChunk(const LevelChunk &chunk) {
     heightAndBiomes.put(chunk.encodeBiomesPersistent(_firstBiomeSection(), _biomeSectionCount()));
     batch.Put(_makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::Data3D), heightAndBiomes.getBuffer());
 
-    const leveldb::Status status = mDb->Write(leveldb::WriteOptions(), &batch);
+    const leveldb::Status status = dbWrite(*mDb, leveldb::WriteOptions(), &batch);
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save chunk %d %d: %s", chunk.getX(), chunk.getZ(),
@@ -394,7 +476,6 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         return false;
 
     bool loadedAny = false;
-    bool replacedUnknown = false;
 
     for (int i = 0; i < LevelChunk::SUB_CHUNK_COUNT; i++) {
         const int8_t subY = (int8_t) (LevelChunk::LOWEST_SUB_CHUNK_Y + i);
@@ -407,7 +488,7 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
         stream.setEncodingSettings(_storageEncodingSettings());
 
         try {
-            if (chunk.getSubChunk(i).readPersistent(stream, &replacedUnknown))
+            if (chunk.getSubChunk(i).readPersistent(stream))
                 loadedAny = true;
         } catch (const BinaryDataException &exception) {
             LOG_WARN(LogAreaID::Server, "Malformed sub chunk %d %d %d: %s", chunk.getX(), chunk.getZ(), (int) subY,
@@ -446,6 +527,15 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::RandomTicks), &randomTicks).ok())
         chunk.setRandomTicks(std::move(randomTicks));
 
+    std::string namedTicks;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::NamedTicks), &namedTicks).ok())
+        chunk.setNamedTicks(std::move(namedTicks));
+
+    std::string structures;
+    if (mDb->Get(_readOptions(), _makeKey(chunk.getX(), chunk.getZ(), LevelDbTag::StructureBounds), &structures).ok()
+        && !chunk.getStructureBounds().load(structures))
+        LOG_WARN(LogAreaID::Server, "Malformed structure bounds for chunk %d %d", chunk.getX(), chunk.getZ());
+
     // no version: written by the game, never migrated
     std::string dataVersion;
     if (mDb->Get(_readOptions(), _makeDataVersionKey(chunk.getX(), chunk.getZ()), &dataVersion).ok()
@@ -457,8 +547,6 @@ bool LevelStorage::loadChunk(LevelChunk &chunk) {
     }
 
     chunk.clearDirty();
-    if (replacedUnknown)
-        chunk.markDirty();
     return loadedAny;
 }
 
@@ -521,7 +609,7 @@ bool LevelStorage::mergePendingBlockChanges(int32_t chunkX, int32_t chunkZ,
         stream.putUnsignedVarInt(paletteIndex[change.mState]);
     }
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), _makePendingChangesKey(chunkX, chunkZ),
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), _makePendingChangesKey(chunkX, chunkZ),
                                             stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
@@ -621,7 +709,7 @@ bool LevelStorage::erasePendingBlockChanges(int32_t chunkX, int32_t chunkZ) {
     if (mDb == nullptr)
         return false;
 
-    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), _makePendingChangesKey(chunkX, chunkZ));
+    const leveldb::Status status = dbDelete(*mDb, leveldb::WriteOptions(), _makePendingChangesKey(chunkX, chunkZ));
     return _recordWrite(status.ok() || status.IsNotFound());
 }
 
@@ -671,8 +759,59 @@ bool LevelStorage::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vecto
 
     batch.Put(_makeActorDigestKey(chunkX, chunkZ), digest);
     batch.Delete(_makeKey(chunkX, chunkZ, LevelDbTag::LegacyEntities));
+    if (_isBatching()) {
+        mBatch->Append(batch);
+        return true;
+    }
 
-    const leveldb::Status status = mDb->Write(leveldb::WriteOptions(), &batch);
+    const leveldb::Status status = dbWrite(*mDb, leveldb::WriteOptions(), &batch);
+    if (!status.ok()) {
+        _recordWrite(false);
+        LOG_WARN(LogAreaID::Server, "Could not save entities for chunk %d %d: %s", chunkX, chunkZ,
+                 status.ToString().c_str());
+        return false;
+    }
+
+    return true;
+}
+
+bool LevelStorage::appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
+    if (mDb == nullptr)
+        return false;
+
+    const std::string digestKey = _makeActorDigestKey(chunkX, chunkZ);
+    std::string digest;
+    const leveldb::Status read = mDb->Get(_readOptions(), digestKey, &digest);
+    if (!read.ok() && !read.IsNotFound()) {
+        _recordWrite(false);
+        LOG_WARN(LogAreaID::Server, "Could not read the entities of chunk %d %d: %s", chunkX, chunkZ,
+                 read.ToString().c_str());
+        return false;
+    }
+
+    leveldb::WriteBatch batch;
+    for (const Tag &entity: entities) {
+        if (!entity.contains(ACTOR_UNIQUE_ID_TAG)) {
+            LOG_WARN(LogAreaID::Server, "Skipped an entity without a unique id in chunk %d %d", chunkX, chunkZ);
+            continue;
+        }
+
+        const std::string storageId = _makeActorStorageId(entity.getLong(ACTOR_UNIQUE_ID_TAG));
+        BinaryStream stream;
+        NbtIo::writeTag(stream, entity, NbtVariant::LittleEndian);
+        batch.Put(ACTOR_PREFIX + storageId, stream.getBuffer());
+
+        bool listed = false;
+        for (size_t offset = 0; offset + ACTOR_STORAGE_ID_SIZE <= digest.size() && !listed;
+             offset += ACTOR_STORAGE_ID_SIZE)
+            listed = digest.compare(offset, ACTOR_STORAGE_ID_SIZE, storageId) == 0;
+        if (!listed)
+            digest += storageId;
+    }
+
+    batch.Put(digestKey, digest);
+
+    const leveldb::Status status = dbWrite(*mDb, leveldb::WriteOptions(), &batch);
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save entities for chunk %d %d: %s", chunkX, chunkZ,
@@ -687,7 +826,8 @@ bool LevelStorage::eraseEntity(int64_t uniqueId) {
     if (mDb == nullptr)
         return false;
 
-    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), ACTOR_PREFIX + _makeActorStorageId(uniqueId));
+    const leveldb::Status status =
+            dbDelete(*mDb, leveldb::WriteOptions(), ACTOR_PREFIX + _makeActorStorageId(uniqueId));
     return _recordWrite(status.ok() || status.IsNotFound());
 }
 
@@ -746,8 +886,21 @@ bool LevelStorage::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::
 
     const std::string key = _makeKey(chunkX, chunkZ, LevelDbTag::BlockEntities);
 
+    if (_isBatching()) {
+        if (blockEntities.empty()) {
+            mBatch->Delete(key);
+            return true;
+        }
+
+        BinaryStream stream;
+        for (const Tag &blockEntity: blockEntities)
+            NbtIo::writeTag(stream, blockEntity, NbtVariant::LittleEndian);
+        mBatch->Put(key, stream.getBuffer());
+        return true;
+    }
+
     if (blockEntities.empty()) {
-        const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), key);
+        const leveldb::Status status = dbDelete(*mDb, leveldb::WriteOptions(), key);
         return _recordWrite(status.ok() || status.IsNotFound());
     }
 
@@ -755,7 +908,7 @@ bool LevelStorage::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::
     for (const Tag &blockEntity: blockEntities)
         NbtIo::writeTag(stream, blockEntity, NbtVariant::LittleEndian);
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), key, stream.getBuffer());
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), key, stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save block entities for chunk %d %d: %s", chunkX, chunkZ,
@@ -804,7 +957,7 @@ bool LevelStorage::saveWeather(bool raining, int32_t rainTime, bool thundering, 
     BinaryStream stream;
     NbtIo::writeTag(stream, weather, NbtVariant::LittleEndian);
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), WEATHER_KEY, stream.getBuffer());
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), WEATHER_KEY, stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save weather: %s", status.ToString().c_str());
@@ -845,7 +998,7 @@ bool LevelStorage::saveTickingArea(const std::string &id, const Tag &area) {
     BinaryStream stream;
     NbtIo::writeTag(stream, area, NbtVariant::LittleEndian);
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), TICKING_AREA_PREFIX + id, stream.getBuffer());
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), TICKING_AREA_PREFIX + id, stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save ticking area %s: %s", id.c_str(), status.ToString().c_str());
@@ -855,11 +1008,48 @@ bool LevelStorage::saveTickingArea(const std::string &id, const Tag &area) {
     return true;
 }
 
+std::vector<std::pair<std::string, Tag>> LevelStorage::loadSavedDataWithPrefix(const std::string &prefix) {
+    std::vector<std::pair<std::string, Tag>> entries;
+    if (mDb == nullptr)
+        return entries;
+
+    std::unique_ptr<leveldb::Iterator> iterator(mDb->NewIterator(_readOptions()));
+    for (iterator->Seek(prefix); iterator->Valid(); iterator->Next()) {
+        const std::string key = iterator->key().ToString();
+        if (key.compare(0, prefix.size(), prefix) != 0)
+            break;
+
+        ReadOnlyBinaryStream stream(iterator->value().ToString());
+        try {
+            entries.emplace_back(key.substr(prefix.size()), NbtIo::readTag(stream, NbtVariant::LittleEndian));
+        } catch (const std::exception &exception) {
+            LOG_WARN(LogAreaID::Server, "Malformed %s: %s", key.c_str(), exception.what());
+        }
+    }
+    return entries;
+}
+
+bool LevelStorage::hasSavedData(const std::string &key) {
+    if (mDb == nullptr)
+        return false;
+
+    std::string raw;
+    return mDb->Get(_readOptions(), key, &raw).ok();
+}
+
+bool LevelStorage::eraseSavedData(const std::string &key) {
+    if (mDb == nullptr)
+        return false;
+
+    const leveldb::Status status = dbDelete(*mDb, leveldb::WriteOptions(), key);
+    return _recordWrite(status.ok() || status.IsNotFound());
+}
+
 bool LevelStorage::eraseTickingArea(const std::string &id) {
     if (mDb == nullptr)
         return false;
 
-    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), TICKING_AREA_PREFIX + id);
+    const leveldb::Status status = dbDelete(*mDb, leveldb::WriteOptions(), TICKING_AREA_PREFIX + id);
     return _recordWrite(status.ok() || status.IsNotFound());
 }
 
@@ -914,7 +1104,7 @@ bool LevelStorage::saveMapData(int64_t mapId, const Tag &data) {
     BinaryStream stream;
     NbtIo::writeTag(stream, data, NbtVariant::LittleEndian);
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), MAP_PREFIX + std::to_string(mapId),
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), MAP_PREFIX + std::to_string(mapId),
                                             stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
@@ -929,7 +1119,7 @@ bool LevelStorage::eraseMapData(int64_t mapId) {
     if (mDb == nullptr)
         return false;
 
-    const leveldb::Status status = mDb->Delete(leveldb::WriteOptions(), MAP_PREFIX + std::to_string(mapId));
+    const leveldb::Status status = dbDelete(*mDb, leveldb::WriteOptions(), MAP_PREFIX + std::to_string(mapId));
     return _recordWrite(status.ok() || status.IsNotFound());
 }
 
@@ -940,7 +1130,7 @@ bool LevelStorage::saveGameRules(const Tag &rules) {
     BinaryStream stream;
     NbtIo::writeTag(stream, rules, NbtVariant::LittleEndian);
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), GAME_RULES_KEY, stream.getBuffer());
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), GAME_RULES_KEY, stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save game rules: %s", status.ToString().c_str());
@@ -963,7 +1153,7 @@ bool LevelStorage::saveSavedData(const std::string &key, const Tag &data, bool w
     BinaryStream stream;
     NbtIo::writeTag(stream, root, NbtVariant::LittleEndian);
 
-    const leveldb::Status status = mDb->Put(leveldb::WriteOptions(), key, stream.getBuffer());
+    const leveldb::Status status = dbPut(*mDb, leveldb::WriteOptions(), key, stream.getBuffer());
     if (!status.ok()) {
         _recordWrite(false);
         LOG_WARN(LogAreaID::Server, "Could not save %s: %s", key.c_str(), status.ToString().c_str());
@@ -1025,7 +1215,7 @@ bool LevelStorage::_recordWrite(bool success) const {
 }
 
 void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ,
-                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time,
+                                 int32_t gameType, int32_t difficulty, int64_t seed, int64_t time, int64_t worldTick,
                                  bool bonusChestEnabled, bool bonusChestSpawned, int64_t worldStartCount) const {
     if (mPath.empty())
         return;
@@ -1048,6 +1238,7 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     data.putInt("SpawnZ", spawnZ);
     data.putLong("RandomSeed", seed);
     data.putLong("Time", time);
+    data.putLong("currentTick", worldTick);
     data.putInt("StorageVersion", 10);
     data.putInt("NetworkVersion", 2259);
     data.putByte("bonusChestEnabled", bonusChestEnabled ? 1 : 0);
@@ -1068,17 +1259,27 @@ void LevelStorage::writeLevelDat(const std::string &levelName, int32_t spawnX, i
     file.putLInt((uint32_t) payload.size());
     file.put(payload);
 
-    std::ofstream out((root / "level.dat").string(), std::ios::binary);
-    if (!out.is_open()) {
-        _recordWrite(false);
-        LOG_WARN(LogAreaID::Server, "Could not write level.dat for %s", levelName.c_str());
-        return;
+    // written beside it, then renamed over it: a crash mid-write keeps the seed and the start count
+    const std::filesystem::path pending = root / "level.dat.tmp";
+    bool written = false;
+    {
+        std::ofstream out(pending.string(), std::ios::binary);
+        if (!out.is_open()) {
+            _recordWrite(false);
+            LOG_WARN(LogAreaID::Server, "Could not write level.dat for %s", levelName.c_str());
+            return;
+        }
+
+        const std::string bytes = file.getBuffer();
+        out.write(bytes.data(), (std::streamsize) bytes.size());
+        out.flush();
+        written = out.good();
     }
 
-    const std::string bytes = file.getBuffer();
-    out.write(bytes.data(), (std::streamsize) bytes.size());
-    out.flush();
-    if (!_recordWrite(out.good()))
+    std::error_code error;
+    if (written)
+        std::filesystem::rename(pending, root / "level.dat", error);
+    if (!_recordWrite(written && !error))
         LOG_WARN(LogAreaID::Server, "Could not finish writing level.dat for %s", levelName.c_str());
 }
 

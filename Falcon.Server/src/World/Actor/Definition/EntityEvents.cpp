@@ -88,7 +88,7 @@ int32_t EntityEvents::upgrade(ServerNetworkHandler &owner, MobActor &mob, int32_
     if (upgrades == nullptr || !upgrades->isArray())
         return 0;
 
-    // upgrade_to must run 1, 2, 3...: any gap or duplicate drops the whole list (sub_1436D0080)
+    // upgrade_to must run 1, 2, 3...: any gap or duplicate drops the whole list
     std::vector<std::pair<int32_t, std::string>> entries;
     for (const std::unique_ptr<json::Value> &entry: upgrades->mArray) {
         const json::Value *to = entry->get("upgrade_to");
@@ -103,7 +103,7 @@ int32_t EntityEvents::upgrade(ServerNetworkHandler &owner, MobActor &mob, int32_
             return 0;
     }
 
-    // sub_140B938D0: the events from the saved version on, then the version jumps to the count
+    // the events from the saved version on, then the version jumps to the count
     for (size_t index = (size_t) std::max(version, 0); index < entries.size(); ++index) {
         Modifiers modifiers;
         if (_fire(owner, mob, entries[index].second, 0, nullptr, modifiers))

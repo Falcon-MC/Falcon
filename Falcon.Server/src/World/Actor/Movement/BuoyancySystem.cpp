@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -57,8 +58,8 @@ BuoyancySettings BuoyancySystem::read(const json::Value *component) {
         settings.mWater = false;
         for (const std::unique_ptr<json::Value> &liquid: liquids->mArray) {
             const std::string &name = liquid->string();
-            settings.mWater = settings.mWater || name == "minecraft:water" || name == "minecraft:flowing_water";
-            settings.mLava = settings.mLava || name == "minecraft:lava" || name == "minecraft:flowing_lava";
+            settings.mWater = settings.mWater || name == BlockNames::WATER || name == "minecraft:flowing_water";
+            settings.mLava = settings.mLava || name == BlockNames::LAVA || name == "minecraft:flowing_lava";
         }
     }
     return settings;
@@ -90,7 +91,6 @@ bool BuoyancySystem::_isFloatLiquid(const BuoyancySettings &settings, const Bloc
 
 double BuoyancySystem::advanceTimer(double timer, const BuoyancySettings &settings, const Vector3f &velocity,
                                     std::mt19937 &random) {
-    // sub_14695ACE0
     if (settings.mMovement == BuoyancyMovement::Bobbing)
         return timer + 1.0;
 
@@ -102,7 +102,7 @@ double BuoyancySystem::advanceTimer(double timer, const BuoyancySettings &settin
 
 float BuoyancySystem::floatVelocity(float velocityY, float positionY, double timer, const BuoyancySettings &settings,
                                     const BuoyancyContact &contact, bool leashed) {
-    // sub_146959470: under the surface the lift is full and the waves do not count
+    // under the surface the lift is full and the waves do not count
     float buoyancy = 1.0f;
     float wave = 0.0f;
     if (contact.mSurface) {

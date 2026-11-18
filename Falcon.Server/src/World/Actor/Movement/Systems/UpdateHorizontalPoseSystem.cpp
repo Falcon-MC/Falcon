@@ -12,7 +12,7 @@ using namespace MovementPhysics;
 namespace MovementPhysics {
 
     bool fits(Level &level, const Vector3f &feet, float height) {
-        // PlayerBoundingBoxStateUpdateSystem (0x140F97340) insets fit probes by 0.01
+        // PlayerBoundingBoxStateUpdateSystem insets fit probes by 0.01
         return !collides(level, boxAt(feet, height).expand(-0.01f, -0.01f, -0.01f));
     }
 
@@ -68,7 +68,7 @@ void UpdateHorizontalPoseSystem::tick(PlayerMovementContext &context) {
     // the client stops swimming once out of water: a StartSwimming outside it isn't trusted
     if (abilities.swimming && !LiquidBlocksFetch::at(context.level, state.start, true, PLAYER_HEIGHT).water)
         abilities.swimming = false;
-    // PlayerBoundingBoxStateUpdateSystem, SneakTriggerIntentSystem (0x140F97340/0x140E77100): horizontal pose
+    // PlayerBoundingBoxStateUpdateSystem, SneakTriggerIntentSystem: horizontal pose
     // kept when neither standing nor crouching fits
     if (!abilities.flying && !abilities.gliding && !fits(context.level, state.start, PLAYER_HEIGHT)) {
         if (!fits(context.level, state.start, PLAYER_SNEAKING_HEIGHT)

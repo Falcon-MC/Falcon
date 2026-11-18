@@ -35,13 +35,23 @@ public:
         return false;
     }
 
-    // sub_14A23ADA0: falling blocks and actors with can_stand_on_powder_snow or leather boots
+    // falling blocks and actors with can_stand_on_powder_snow or leather boots
     virtual bool canStandOnPowderSnow() const {
         return false;
     }
 
-    // sub_14B27C5D0: item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
+    // added to the knockback resistance attribute by the armor worn
+    virtual float getArmorKnockbackResistance() const {
+        return 0.0f;
+    }
+
+    // item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
     virtual bool collidesAtSnowLayerLook() const {
+        return false;
+    }
+
+    // ActorType bit 0x80000: every minecart, the actors detector rails sense
+    virtual bool isMinecart() const {
         return false;
     }
 
@@ -296,7 +306,7 @@ public:
 
     bool isAlive() const;
 
-    // sub_145E14260 freezes mobs only, players included
+    // the game freezes mobs only, players included
     virtual bool canFreeze() const {
         return false;
     }
@@ -529,7 +539,7 @@ protected:
     Vector3f mRotation;
     Vector3f mMotion;
     ActorFlags mFlags;
-    // data 140, defined at 64 for every actor (sub_140B91370)
+    // data 140, defined at 64 for every actor
     float mNameplateRenderDistance = 64.0f;
     ActorAttributes mAttributes;
     bool mOnGround = false;

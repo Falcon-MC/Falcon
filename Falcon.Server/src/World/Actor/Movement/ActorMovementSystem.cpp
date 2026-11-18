@@ -27,7 +27,7 @@ namespace {
     const float CLIMB_SPEED = 0.2f;
     const float SPEED_PROBE_DEPTH = 0.5f;
     const float GROUND_PROBE_DEPTH = 1.0f;
-    // MobMovementFriction::Air runs with the friction of no block
+    // the air friction runs with the friction of no block
     const float NO_BLOCK_FRICTION = 1.0f;
     const float DEFAULT_BLOCK_FRICTION = 0.6f;
 }
@@ -138,7 +138,7 @@ float ActorMovementSystem::_applyRestitution(Level &level, ServerActor &actor, c
     // ApplyRestitutionSystem adds onto the velocity the collision zeroed
     const Vector3f current = actor.getMotion();
     actor.setMotion(Vector3f(current.x + restitution.x, current.y + restitution.y, current.z + restitution.z));
-    // RequestGravityCorrectionSystem sub_1484CD7B0: only a vertical bounce after a real move is corrected
+    // RequestGravityCorrectionSystem: only a vertical bounce after a real move is corrected
     if (std::fabs(restitution.y) <= RestitutionSystem::EPSILON
         || std::fabs(result.mMoved.y) <= RestitutionSystem::EPSILON)
         return physics.mGravity;

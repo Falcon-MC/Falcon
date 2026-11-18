@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <random>
 
-// one octave of the game's legacy perlin noise, float from start to end (sub_145C2A210)
+// one octave of the game's legacy perlin noise, float from start to end
 class TheEndImprovedNoise {
 public:
     explicit TheEndImprovedNoise(std::mt19937 &random);

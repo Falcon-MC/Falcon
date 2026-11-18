@@ -7,7 +7,9 @@
 #include "World/Level/Storage/BlockStateUpgrades.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Core/NBT/NbtIo.h"
+#include "World/Level/Block/BlockNames.h"
 
+#include <deque>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -54,6 +56,9 @@ namespace {
 
     // shared across chunk workers: lazy cached fields filled before publishing
     const BlockState *internState(const BlockState &state) {
+        // an unknown block's state already lives for the process; a copy would lose its stored tag
+        if (state.getPreserved() != nullptr)
+            return &state;
         static std::mutex mutex;
         static std::unordered_set<BlockState, InternedStateHash> states;
 
@@ -85,12 +90,39 @@ namespace {
     // asked for every section of every ticked chunk each tick: address first, the length check rejects
     // almost every other name
     bool isAir(const BlockState *state, const BlockState *air) {
-        return state == air || (state->mName.size() == 13 && state->mName == "minecraft:air");
+        return state == air || (state->mName.size() == 13 && state->mName == BlockNames::AIR);
     }
 
     const BlockState *airState() {
-        static const BlockState *air = internState(BlockState("minecraft:air"));
+        static const BlockState *air = internState(BlockState(BlockNames::AIR));
         return air;
+    }
+
+    // one per distinct stored tag, kept for the process: palettes and packed chunks hold its address
+    const BlockState *unknownState(const Tag &stored) {
+        struct Preserved {
+            explicit Preserved(const Tag &tag) : mTag(tag), mState(BlockNames::INFO_UPDATE) {}
+
+            Tag mTag;
+            BlockState mState;
+        };
+        static std::mutex mutex;
+        static std::deque<Preserved> preserved;
+        static std::unordered_map<std::string, std::vector<const Preserved *>> byName;
+
+        std::lock_guard<std::mutex> lock(mutex);
+        std::vector<const Preserved *> &candidates = byName[stored.getString("name")];
+        for (const Preserved *candidate: candidates) {
+            if (candidate->mTag == stored)
+                return &candidate->mState;
+        }
+        preserved.emplace_back(stored);
+        Preserved &entry = preserved.back();
+        entry.mState.preserve(&entry.mTag);
+        entry.mState.getHash();
+        BlockLightProperties::packed(entry.mState);
+        candidates.push_back(&entry);
+        return &entry.mState;
     }
 }
 
@@ -470,7 +502,7 @@ void SubChunk::writePersistent(BinaryStream &stream) const {
 }
 
 bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const BlockState *> &palette,
-                            PaletteIndices &blocks, bool *replacedUnknown) {
+                            PaletteIndices &blocks) {
     const unsigned char header = stream.getByte();
     const int bitsPerBlock = header >> 1;
     if (bitsPerBlock < 0 || bitsPerBlock > 16)
@@ -519,12 +551,12 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const Bloc
         const std::string &name = stored.getName();
         const Tag *states = &stored.getStates();
 
+        // kept as read, like the game keeps an unknown block type: a pack missing for one start loses nothing
         if (VanillaBlocks::fromIdentifier(name) == nullptr
             && !CustomContentRegistry::getInstance().isCustomBlock(name)) {
-            LOG_WARN(LogAreaID::Level, "Replaced unknown block %s with air while loading chunk data", name.c_str());
-            palette.push_back(airState());
-            if (replacedUnknown != nullptr)
-                *replacedUnknown = true;
+            LOG_WARN(LogAreaID::Level, "Kept unknown block %s as %s while loading chunk data", name.c_str(),
+                     BlockNames::INFO_UPDATE);
+            palette.push_back(unknownState(tag));
             continue;
         }
 
@@ -539,7 +571,7 @@ bool SubChunk::_readStorage(ReadOnlyBinaryStream &stream, std::vector<const Bloc
     return true;
 }
 
-bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknown) {
+bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream) {
     const unsigned char version = stream.getByte();
     const unsigned char layers = stream.getByte();
 
@@ -550,7 +582,7 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
         return false;
 
     _forgetPaletteQueries();
-    if (!_readStorage(stream, mPalette, mBlocks, replacedUnknown))
+    if (!_readStorage(stream, mPalette, mBlocks))
         return false;
 
     if (mPalette.size() == 1)
@@ -562,12 +594,12 @@ bool SubChunk::readPersistent(ReadOnlyBinaryStream &stream, bool *replacedUnknow
     if (layers >= 2) {
         std::vector<const BlockState *> palette;
         PaletteIndices blocks;
-        if (!_readStorage(stream, palette, blocks, replacedUnknown))
+        if (!_readStorage(stream, palette, blocks))
             return false;
 
         bool hasContent = false;
         for (int i = 0; i < BLOCK_COUNT; i++) {
-            if (palette[blocks[i]]->mName != "minecraft:air") {
+            if (palette[blocks[i]]->mName != BlockNames::AIR) {
                 hasContent = true;
                 break;
             }

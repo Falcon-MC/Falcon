@@ -38,12 +38,12 @@ bool LeverBlock::canSurvive(Level &level, const Vector3i &position, const BlockS
     return canPlaceAt(level, position, _attachedFace(state));
 }
 
-// only the block it hangs on is watched: a lever set where nothing holds it stays (sub_149C39350)
+// only the block it hangs on is watched: a lever set where nothing holds it stays
 bool LeverBlock::watchesNeighbour(const Vector3i &position, const BlockState &state, const Vector3i *changed) const {
     return changed != nullptr && *changed == BlockSupport::supportOf(position, _attachedFace(state));
 }
 
-// the survival check runs on a tick one later (sub_149C383D0)
+// the survival check runs on a tick one later
 void LeverBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) const {
     (void) owner;
@@ -62,6 +62,9 @@ bool LeverBlock::isSignalSource() const {
 
 bool LeverBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                             const BlockState &state) const {
-    RedstoneSystem::onLeverActivated(owner, owner.getLevelFor(player), position, state);
+    Level &level = owner.getLevelFor(player);
+    RedstoneSystem::onLeverActivated(owner, level, position, state);
+    const BlockState toggled = level.getBlockState(position.x, position.y, position.z);
+    owner.getScriptEngine().onLeverAction(level, position, toggled.mStates.getBool("open_bit", false), player);
     return true;
 }

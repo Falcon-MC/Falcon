@@ -31,6 +31,9 @@ public:
     // quarter turns clockwise seen from above, about the template origin
     static void rotate(int32_t quarterTurns, int32_t &x, int32_t &z);
 
+    // the template settings' mirror, applied before the turn: 1 flips z, 2 flips x, 3 neither
+    static void mirror(int32_t mirror, int32_t &x, int32_t &z);
+
     int32_t getSizeX() const;
 
     int32_t getSizeY() const;
@@ -43,6 +46,7 @@ public:
 
 private:
     bool _read(const Tag &root);
+    bool _readBedrockMobPiece(const Tag &root);
 
     int32_t mSizeX = 0;
     int32_t mSizeY = 0;

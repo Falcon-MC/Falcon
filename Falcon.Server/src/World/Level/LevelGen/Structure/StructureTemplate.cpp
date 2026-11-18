@@ -81,24 +81,27 @@ std::shared_ptr<const StructureTemplate> StructureTemplate::load(const std::stri
         return nullptr;
 
     const std::string compressed((const char *) entry->second.mData, entry->second.mSize);
-    std::string decompressed;
-    if (!Gzip::decompress(compressed, decompressed)) {
+    const bool bedrockMobPiece = path.starts_with("bastion/mobs/") && path.ends_with(".mcstructure");
+    std::string payload;
+    if (bedrockMobPiece) {
+        payload = compressed;
+    } else if (!Gzip::decompress(compressed, payload)) {
         LOG_WARN(LogAreaID::Server, "Failed to decompress structure template %s", path.c_str());
         return nullptr;
     }
 
-    ReadOnlyBinaryStream stream(decompressed);
+    ReadOnlyBinaryStream stream(payload);
     stream.setEncodingSettings(templateEncodingSettings());
     Tag root;
     try {
-        root = NbtIo::readTag(stream, NbtVariant::BigEndian);
+        root = NbtIo::readTag(stream, bedrockMobPiece ? NbtVariant::LittleEndian : NbtVariant::BigEndian);
     } catch (const std::exception &exception) {
         LOG_WARN(LogAreaID::Server, "Failed to parse structure template %s: %s", path.c_str(), exception.what());
         return nullptr;
     }
 
     auto result = std::make_shared<StructureTemplate>();
-    if (!result->_read(root)) {
+    if (!(bedrockMobPiece ? result->_readBedrockMobPiece(root) : result->_read(root))) {
         LOG_WARN(LogAreaID::Server, "Structure template %s is incomplete", path.c_str());
         return nullptr;
     }
@@ -113,6 +116,13 @@ void StructureTemplate::rotate(int32_t quarterTurns, int32_t &x, int32_t &z) {
         x = -z;
         z = oldX;
     }
+}
+
+void StructureTemplate::mirror(int32_t mirror, int32_t &x, int32_t &z) {
+    if (mirror == 1)
+        z = -z;
+    else if (mirror == 2)
+        x = -x;
 }
 
 int32_t StructureTemplate::getSizeX() const {
@@ -183,5 +193,79 @@ bool StructureTemplate::_read(const Tag &root) {
         mBlocks.push_back(std::move(entry));
     }
 
+    return true;
+}
+
+bool StructureTemplate::_readBedrockMobPiece(const Tag &root) {
+    const Tag *size = root.get("size");
+    const Tag *structure = root.get("structure");
+    if (root.getInt("format_version") != 1 || size == nullptr || !size->isList() || structure == nullptr)
+        return false;
+
+    const auto &dimensions = size->getList();
+    if (dimensions.size() != 3 || dimensions[0].asInt() != 1 || dimensions[2].asInt() != 1)
+        return false;
+
+    const Tag *layers = structure->get("block_indices");
+    const Tag *palettes = structure->get("palette");
+    const Tag *palette = palettes != nullptr ? palettes->get("default") : nullptr;
+    const Tag *states = palette != nullptr ? palette->get("block_palette") : nullptr;
+    const Tag *positions = palette != nullptr ? palette->get("block_position_data") : nullptr;
+    if (layers == nullptr || !layers->isList() || states == nullptr || !states->isList() || positions == nullptr)
+        return false;
+
+    const int32_t height = dimensions[1].asInt();
+    const auto &indices = layers->getList();
+    if (height <= 0 || indices.size() != 2 || !indices[0].isList() || !indices[1].isList())
+        return false;
+
+    const auto &primary = indices[0].getList();
+    const auto &secondary = indices[1].getList();
+    if (primary.size() != (size_t) height || secondary.size() != primary.size())
+        return false;
+
+    for (const Tag &state: states->getList()) {
+        PaletteEntry entry;
+        entry.mName = state.getString("name");
+        if (entry.mName == "minecraft:jigsaw") {
+            const Tag *properties = state.get("states");
+            if (properties == nullptr || properties->getInt("facing_direction", -1) != 0
+                || properties->getInt("rotation", -1) != 3)
+                return false;
+            entry.mProperties["orientation"] = "down_east";
+        } else if (entry.mName != "minecraft:air") {
+            return false;
+        }
+        mPalette.push_back(std::move(entry));
+    }
+
+    int32_t connectors = 0;
+    for (int32_t y = 0; y < height; ++y) {
+        const int32_t index = primary[(size_t) y].asInt();
+        if (secondary[(size_t) y].asInt() != -1 || index < -1 || index >= (int32_t) mPalette.size())
+            return false;
+        if (index == -1)
+            continue;
+
+        BlockEntry block;
+        block.y = y;
+        block.mPaletteIndex = index;
+        if (const Tag *position = positions->get(std::to_string(y))) {
+            if (const Tag *data = position->get("block_entity_data"))
+                block.mData = *data;
+        }
+        if (mPalette[(size_t) index].mName == "minecraft:jigsaw") {
+            if (++connectors != 1 || block.mData.getString("name").empty()
+                || block.mData.getString("target_pool") != "minecraft:empty")
+                return false;
+        }
+        mBlocks.push_back(std::move(block));
+    }
+    if (connectors != 1)
+        return false;
+
+    mSizeX = 1;
+    mSizeY = height;
+    mSizeZ = 1;
     return true;
 }

@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Actor/ActorFlags.h"
+#include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BedBlock.h"
 #include "World/Level/Level.h"
@@ -10,10 +11,13 @@
 #include <cmath>
 
 namespace {
-    const int64_t DAY_LENGTH_TICKS = 24000;
+    const int64_t DAY_LENGTH_TICKS = Level::TICKS_PER_DAY;
+
+    // BedBlock::use: network position of a sleeper above the bed's block position
+    const float BED_SLEEP_HEIGHT = 0.90625f;
 
     bool countsForSleep(const ServerPlayer &player, const Level &level) {
-        return player.isSpawned() && player.isIn(level) && player.getGameType() != (int32_t) GameType::Spectator;
+        return player.isSpawned() && player.isIn(level) && !player.isSpectator();
     }
 }
 
@@ -35,7 +39,8 @@ bool ServerNetworkHandler::sleepOn(ServerPlayer &player, const Vector3i &head) {
     player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(),
                          getWorldFor(player).getName());
     player.getFlags().set(ActorFlag::Sleeping, true);
-    player.teleport(*this, Vector3f((float) head.x + 0.5f, (float) head.y + 0.5f, (float) head.z + 0.5f));
+    const float feetY = (float) head.y + BED_SLEEP_HEIGHT - MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET;
+    player.teleport(*this, Vector3f((float) head.x + 0.5f, feetY, (float) head.z + 0.5f));
     BedBlock::setOccupied(*this, getLevelFor(player), head, true);
     _sendEntityData(player);
 
@@ -73,6 +78,18 @@ void ServerNetworkHandler::stopSleep(ServerPlayer &player) {
     wakeUp.mRuntimeActorId = player.getRuntimeId();
     wakeUp.mAction = AnimatePacket::Action::WakeUp;
     mNetworkHandler->send(player.getNetworkIdentifier(), wakeUp, mCodecContext);
+
+    // the client stands itself up the same way on the wake up
+    Level &level = getLevelFor(player);
+    Vector3i standUp = head;
+    const BlockState bedState = level.getBlockState(head.x, head.y, head.z);
+    if (BedBlock::matches(bedState.mName)) {
+        standUp = Vector3i(head.x, head.y + 1, head.z);
+        Vector3i found;
+        if (BedBlock::findStandUpPosition(level, head, player.getBedEnterPosition(), found))
+            standUp = found;
+    }
+    player.teleport(*this, Vector3f((float) standUp.x + 0.5f, (float) standUp.y + 0.1f, (float) standUp.z + 0.5f));
 }
 
 void ServerNetworkHandler::wakeSleepersAt(const Vector3i &head) {

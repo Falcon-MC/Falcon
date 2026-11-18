@@ -21,7 +21,12 @@ public:
     static const int CARTOGRAPHY_SIZE = 2;
     static const int CARTOGRAPHY_INPUT = 0;
     static const int CARTOGRAPHY_ADDITIONAL = 1;
+    static const int TRADE_SIZE = 2;
+    static const int SMITHING_SIZE = 3;
+    static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
+    // the body armor is saved right behind the four worn pieces
+    static const int SAVED_BODY_SLOT = SAVED_SIZE;
 
     static const int CONTAINER_ID_INVENTORY = 0;
     static const int CONTAINER_ID_OFFHAND = 119;
@@ -31,6 +36,7 @@ public:
     static const int OFFHAND_NETWORK_SLOT = 1;
     static const int CRAFTING_NETWORK_SLOT_FIRST = 28;
     static const int CRAFTING_TABLE_NETWORK_SLOT_FIRST = 32;
+    static const int SMITHING_FIRST_SLOT = 51;
 
     static const int ARMOR_HEAD = 0;
     static const int ARMOR_TORSO = 1;
@@ -101,11 +107,36 @@ public:
 
     void setCartographyItem(int slot, ItemStack item);
 
+    // the two wanted items of the trade screen
+    const ItemStack &getTradeItem(int slot) const;
+
+    void setTradeItem(int slot, ItemStack item);
+
+    const ItemStack &getStonecutterInput() const {
+        return mStonecutterInput;
+    }
+
+    void setStonecutterInput(ItemStack item);
+
+    static int smithingIndex(ContainerSlotType container);
+
+    const ItemStack &getSmithingItem(int index) const {
+        return mSmithing[(size_t) index];
+    }
+    void setSmithingItem(int index, ItemStack item);
+
     const ItemStack &getOffhand() const {
         return mOffhand;
     }
 
     void setOffhand(ItemStack item);
+
+    // no screen shows it: commands and scripts fill it, as on any mob
+    const ItemStack &getBodyArmor() const {
+        return mBodyArmor;
+    }
+
+    void setBodyArmor(ItemStack item);
 
     const ItemStack &getCursor() const {
         return mCursor;
@@ -153,12 +184,16 @@ private:
     std::vector<ItemStack> mCrafting;
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
+    std::vector<ItemStack> mSmithing;
     std::vector<ItemStack> mAnvil;
     std::vector<ItemStack> mCartography;
+    std::vector<ItemStack> mTrade;
     ItemStack mOffhand;
+    ItemStack mBodyArmor;
     ItemStack mCursor;
     ItemStack mEnchantingInput;
     ItemStack mEnchantingMaterial;
+    ItemStack mStonecutterInput;
     int mSelectedSlot;
     int32_t mNextNetId;
 };

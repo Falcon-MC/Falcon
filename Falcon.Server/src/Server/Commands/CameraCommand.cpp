@@ -206,8 +206,10 @@ bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string
         CameraInstructionPacket packet;
         packet.mHasClear = true;
         packet.mClear = true;
-        for (ServerPlayer *target: targets)
+        for (ServerPlayer *target: targets) {
             mHandler.getNetworkHandler().send(target->getNetworkIdentifier(), packet, mHandler.getCodecContext());
+            target->recordCamera(packet);
+        }
         return true;
     }
 
@@ -220,8 +222,10 @@ bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string
         CameraInstructionPacket packet;
         packet.mHasFadeInstruction = true;
         packet.mFadeInstruction = fade;
-        for (ServerPlayer *target: targets)
+        for (ServerPlayer *target: targets) {
             mHandler.getNetworkHandler().send(target->getNetworkIdentifier(), packet, mHandler.getCodecContext());
+            target->recordCamera(packet);
+        }
         return true;
     }
 
@@ -237,6 +241,7 @@ bool CameraCommand::execute(CommandOrigin &sender, const std::vector<std::string
             packet.mHasSetInstruction = true;
             packet.mSetInstruction = set;
             mHandler.getNetworkHandler().send(target->getNetworkIdentifier(), packet, mHandler.getCodecContext());
+            target->recordCamera(packet);
             sentAny = true;
         }
         return sentAny;

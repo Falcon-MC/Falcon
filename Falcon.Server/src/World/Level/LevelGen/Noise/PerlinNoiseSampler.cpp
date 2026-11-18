@@ -27,7 +27,7 @@ namespace {
 
 }
 
-// drawn as doubles, stored as floats (sub_145C2AF90)
+// drawn as doubles, stored as floats
 PerlinNoiseSampler::PerlinNoiseSampler(IRandom &rand)
         : Noise(rand), mOriginXFloat(static_cast<float>(mOriginX)), mOriginYFloat(static_cast<float>(mOriginY)),
           mOriginZFloat(static_cast<float>(mOriginZ)) {}
@@ -124,7 +124,7 @@ double PerlinNoiseSampler::_sample(int32_t sectionX, int32_t sectionY, int32_t s
     return y0 + fadeZ * (y1 - y0);
 }
 
-// sub_145C2C790, sub_145C2CA80: float in the game's order; built with -ffp-contract=off
+// float in the game's order; built with -ffp-contract=off
 float PerlinNoiseSampler::sampleFloat(float x, float y, float z) const {
     const float offsetX = x + mOriginXFloat;
     const float offsetY = y + mOriginYFloat;

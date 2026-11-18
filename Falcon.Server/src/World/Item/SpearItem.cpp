@@ -15,6 +15,7 @@ FALCON_REGISTER_ITEM(SpearItem, 80);
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,14 +25,13 @@ namespace {
     const float MINIMUM_SPEED = 0.13f;
     const float MINIMUM_LUNGE_FOOD = 6.0f;
     const float BASE_LUNGE_EXHAUST = 4.0f;
-    const int32_t STAB_COOLDOWN_TICKS = 20;
     const int32_t SWEEP_INTERVAL_TICKS = 5;
     const float MAX_STAB_DISTANCE = 5.0f;
     const float MINIMUM_AIM_DOT = 0.866f;
     const float SWEEP_REACH = 1.5f;
     const float SWEEP_EXPAND_HORIZONTAL = 1.5f;
     const float SWEEP_EXPAND_VERTICAL = 1.0f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
 
@@ -121,8 +121,8 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
         ServerPlayer &candidate = entry.second;
         if (&candidate == &player || !candidate.isSpawned() || candidate.isDead())
             continue;
-        if (candidate.getGameType() == (int32_t) GameType::Creative
-            || candidate.getGameType() == (int32_t) GameType::Spectator)
+        if (candidate.isCreative()
+            || candidate.isSpectator())
             continue;
 
         consider(candidate, PLAYER_WIDTH, PLAYER_HEIGHT);
@@ -182,8 +182,8 @@ Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &pla
         ServerPlayer &candidate = entry.second;
         if (&candidate == &player || !candidate.isSpawned() || candidate.isDead())
             continue;
-        if (candidate.getGameType() == (int32_t) GameType::Creative
-            || candidate.getGameType() == (int32_t) GameType::Spectator)
+        if (candidate.isCreative()
+            || candidate.isSpectator())
             continue;
 
         consider(candidate, PLAYER_WIDTH, PLAYER_HEIGHT);
@@ -271,7 +271,7 @@ void SpearItem::stab(ServerNetworkHandler &owner, ServerPlayer &player, const It
     if (player.hasItemCooldown(item, owner.getCurrentTick()))
         return;
 
-    player.startItemCooldown(item, owner.getCurrentTick(), STAB_COOLDOWN_TICKS);
+    player.startItemCooldown(item, owner.getCurrentTick());
     applyLunge(owner, player, item);
 
     Level &level = owner.getLevelFor(player);

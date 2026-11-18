@@ -37,7 +37,7 @@ void MagmaBlock::onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vecto
     owner.hurtActor(actor, HOT_FLOOR_DAMAGE, "death.attack.hotFloor");
 }
 
-// sub_149C46240: water changing just above asks for a column two ticks later on the second queue; the snow and
+// water changing just above asks for a column two ticks later on the second queue; the snow and
 // ice melting branch is not ported
 void MagmaBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
                                         const Vector3i &changed) const {
@@ -48,7 +48,6 @@ void MagmaBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector
     ticks.queueRandomTick(position, this, 2);
 }
 
-// sub_149C45C40
 void MagmaBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
     (void) state;
     BubbleColumnBlock::growAbove(ticks, position);

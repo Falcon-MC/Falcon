@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-// climate and terrain shape per quart column, like the game's noise cache (sub_14CDED4D0)
+// climate and terrain shape per quart column, like the game's noise cache
 class OverworldClimate {
 public:
     struct Column {
@@ -28,7 +28,7 @@ public:
 
     Column sampleColumn(int32_t quartX, int32_t quartZ) const;
 
-    // highest cell bottom whose initial density is solid, NO_SURFACE when none (sub_14CDEF730)
+    // highest cell bottom whose initial density is solid, NO_SURFACE when none
     int32_t preliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const;
 
     // terrain constant included

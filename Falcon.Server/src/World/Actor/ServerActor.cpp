@@ -240,8 +240,10 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
         source->recordAttacked(getRuntimeId(), owner.getCurrentTick());
 
     const float rawAmount = amount;
-    if (damageSource.mApplyArmor)
+    if (damageSource.mApplyArmor) {
+        hurtArmor(owner, amount, damageSource);
         amount = absorbDamage(amount, damageSource);
+    }
 
     if (onHurt(owner, amount, source))
         return true;
@@ -320,6 +322,20 @@ int32_t ServerActor::getIntProperty(const std::string &name, int32_t fallback) c
 float ServerActor::getFloatProperty(const std::string &name, float fallback) const {
     const auto it = mFloatProperties.find(name);
     return it == mFloatProperties.end() ? fallback : it->second;
+}
+
+const ProjectileComponent &ServerActor::getProjectileComponent() const {
+    if (!mProjectileComponentRead) {
+        if (!ProjectileComponent::find(mIdentifier, mDefinition, mProjectileComponent))
+            mProjectileComponent = _undefinedProjectileComponent();
+        mProjectileComponentRead = true;
+    }
+    return mProjectileComponent;
+}
+
+ProjectileComponent &ServerActor::getProjectileComponent() {
+    static_cast<const ServerActor &>(*this).getProjectileComponent();
+    return mProjectileComponent;
 }
 
 const std::vector<ActorPropertyDescription> *ServerActor::getPropertySchema() const {

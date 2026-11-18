@@ -88,7 +88,7 @@ namespace {
         return std::sqrt(motion.x * motion.x + motion.y * motion.y + motion.z * motion.z);
     }
 
-    // 60 tick interval: the first shot lands on tick 62 and the next 61 ticks later (sub_14D429E10)
+    // 60 tick interval: the first shot lands on tick 62 and the next 61 ticks later
     void attackTimeline() {
         Field field;
         MobActor &skeleton = field.spawn("minecraft:skeleton", Vector3f(0.5f, 64.0f, 0.5f));

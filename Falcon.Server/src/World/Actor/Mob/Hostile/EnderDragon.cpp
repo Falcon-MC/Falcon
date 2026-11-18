@@ -12,6 +12,8 @@
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -56,18 +58,18 @@ namespace {
     const char *const ON_DEATH_TRIGGER = "minecraft:on_death";
     const char *const ON_TAKEOFF_TRIGGER = "minecraft:on_start_takeoff";
 
-    // sub_14ACCE300: each node lists its neighbours as a bit mask over the 24 nodes
+    // each node lists its neighbours as a bit mask over the 24 nodes
     const uint32_t NODE_ADJACENCY[EnderDragon::NODE_COUNT] = {6146,    8197,    8202,     16404,    32808,    32848,
                                                               65696,   131392,  131712,   263424,   526848,   525313,
                                                               1581057, 3166214, 2138120,  6373424,  4358208,  12910976,
                                                               9044480, 9706496, 15216640, 13688832, 11763712, 8257536};
 
-    // the half sizes of the head, neck, body, three tail parts and two wings (sub_14ACC9AC0)
+    // the half sizes of the head, neck, body, three tail parts and two wings
     const float PART_SIZES[(size_t) EnderDragon::Part::Count][2] = {{1.0f, 1.0f}, {3.0f, 3.0f}, {5.0f, 3.0f},
                                                                     {2.0f, 2.0f}, {2.0f, 2.0f}, {2.0f, 2.0f},
                                                                     {4.0f, 3.0f}, {4.0f, 3.0f}};
 
-    // blocks the dragon cannot fly through (sub_14ACCCD70)
+    // blocks the dragon cannot fly through
     const char *const IMMUNE_BLOCKS[] = {"minecraft:bedrock",
                                          "minecraft:obsidian",
                                          "minecraft:crying_obsidian",
@@ -88,12 +90,7 @@ namespace {
                                          "minecraft:structure_block",
                                          "minecraft:jigsaw"};
 
-    float wrapDegrees(float degrees) {
-        float wrapped = std::fmod(degrees + 180.0f, 360.0f);
-        if (wrapped < 0.0f)
-            wrapped += 360.0f;
-        return wrapped - 180.0f;
-    }
+    using VectorMath::wrapDegrees;
 
     float clampf(float value, float minimum, float maximum) {
         return std::max(minimum, std::min(maximum, value));
@@ -109,7 +106,7 @@ namespace {
     }
 
     bool passesThrough(const std::string &name) {
-        return name == "minecraft:air" || name == "minecraft:structure_void" || name == "minecraft:fire"
+        return name == BlockNames::AIR || name == "minecraft:structure_void" || name == "minecraft:fire"
                || name == "minecraft:soul_fire";
     }
 
@@ -261,7 +258,7 @@ Vector3f EnderDragon::getPartCenter(Part part) const {
 int32_t EnderDragon::getPortalY(Level &level) {
     for (int32_t y = level.getMaxY(); y >= level.getMinY(); --y) {
         const BlockState *state = level.peekBlockPtr(0, y, 0);
-        if (state != nullptr && state->mName != "minecraft:air")
+        if (state != nullptr && state->mName != BlockNames::AIR)
             return y + 1;
     }
 
@@ -343,7 +340,7 @@ bool EnderDragon::_ensureNodes(ServerNetworkHandler &owner) {
             [&level](int32_t x, int32_t z) {
                 for (int32_t y = level.getMaxY(); y >= level.getMinY(); --y) {
                     const BlockState *state = level.peekBlockPtr(x, y, z);
-                    if (state != nullptr && state->mName != "minecraft:air")
+                    if (state != nullptr && state->mName != BlockNames::AIR)
                         return y + 1;
                 }
                 return level.getMinY();
@@ -454,7 +451,7 @@ void EnderDragon::tick(ServerNetworkHandler &owner) {
 }
 
 EnderDragon::LatencyPosition EnderDragon::_getLatencyPosition(int32_t offset) const {
-    // sub_14ACCC560 reads the slot before the offset one, its yaw kept next to the newer slot's
+    // the game reads the slot before the offset one, its yaw kept next to the newer slot's
     const int32_t newer = (mPositionPointer - offset) & 63;
     const int32_t older = (mPositionPointer - offset - 1) & 63;
     const LatencyPosition &base = mPositions[(size_t) newer];
@@ -550,7 +547,7 @@ void EnderDragon::_steer(ServerNetworkHandler &owner) {
     const float alignment = std::max(
             0.0f, (facing.x * toTarget.x + facing.y * toTarget.y + facing.z * toTarget.z + 0.5f) / 1.5f);
 
-    // sub_14ACCA850: a goal without its own turn speed turns at min(speed, 40) / speed
+    // a goal without its own turn speed turns at min(speed, 40) / speed
     const float speed = std::sqrt(motion.z * motion.z + motion.x * motion.x) + 1.0f;
     float rate = std::min(speed, 40.0f);
     if (mTurnSpeed != 0.0f)
@@ -719,7 +716,7 @@ void EnderDragon::_tickParts(ServerNetworkHandler &owner, Level &level) {
                  position.z + (yawCos * 1.5f + tailCos * length) * pitchCos);
     }
 
-    // sub_14ACCA850 stops at the first part that hits a wall
+    // the game stops at the first part that hits a wall
     mInWall = _breakBlocks(owner, level, mParts[(size_t) Part::Head])
               || _breakBlocks(owner, level, mParts[(size_t) Part::Neck])
               || _breakBlocks(owner, level, mParts[(size_t) Part::Body]);
@@ -872,7 +869,7 @@ bool EnderDragon::senseDamage(ServerNetworkHandler &owner, float &amount, const 
     if (!HostileActor::senseDamage(owner, amount, source))
         return false;
 
-    // sub_14ACCD880: an arrow bounces off the sitting dragon and only catches fire
+    // an arrow bounces off the sitting dragon and only catches fire
     if (isSitting() && source.mProjectile) {
         if (source.mDamager != nullptr) {
             source.mDamager->setFireTicks(100);
@@ -934,7 +931,7 @@ void EnderDragon::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     if (isDead())
         return;
 
-    // a dragon killed outright, as by /kill, leaves at once and ends the fight (sub_14ACCD880)
+    // a dragon killed outright, as by /kill, leaves at once and ends the fight
     if (!mDeathRequested) {
         _clearBossBar(owner);
         _notifyFight(owner);

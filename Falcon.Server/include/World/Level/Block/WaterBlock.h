@@ -13,7 +13,7 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    // flowing_*: turns still on its queued tick (sub_149C43290)
+    // flowing_*: turns still on its queued tick
     static bool isDynamic(const std::string &identifier);
 
     static BlockState source();

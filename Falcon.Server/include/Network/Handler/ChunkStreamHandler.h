@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -20,6 +21,8 @@ struct ChunkStreamState {
     std::vector<int64_t> mReadyToSend;
     int64_t mLastLoaderChunk = INT64_MAX;
     uint64_t mSendTick = UINT64_MAX;
+    // tick the send queue is looked at again: a pass that found every chunk still generating waits a few
+    uint64_t mLoadRetryTick = 0;
     unsigned mSendsThisTick = 0;
     int32_t mComparatorChunkX = 0;
     int32_t mComparatorChunkZ = 0;
@@ -29,7 +32,7 @@ struct ChunkStreamState {
     // so streaming further marks chunks as sent that the client never keeps.
     int32_t mRadius = 0;
 
-    // Client side generation only (NetworkChunkPublisher, sub_14255F580 and sub_1425606A0).
+    // Client side generation only.
     ClientSideGeneration::SavedChunkList mSavedChunks;
     // Chunks in the radius the server leaves to the client. They are sent anyway once something else on the
     // server builds them, and decided again whenever the view moves.
@@ -68,7 +71,7 @@ public:
     static void invalidateChunk(ServerPlayer &player, int64_t hash);
 
     /**
-     * Whether a NetworkChunkPublisherUpdatePacket is due under client side generation (sub_14255F580): never within
+     * Whether a NetworkChunkPublisherUpdatePacket is due under client side generation: never within
      * PUBLISHER_DELAY_NANOSECONDS of the last chunk sent since the previous update, and then when the player moved
      * far enough, the radius changed or chunks wait to be listed.
      */
@@ -82,8 +85,12 @@ public:
     static void dropPendingChunks(ChunkStreamState &state);
 
     // actors and players a client hears about: 57 chunks around its own, not the streamed view
-    // sub_14292F0B0 adds the offsets of sub_1430054F0 to the viewer chunk (sub_142FD2AF0)
+    // the offsets around the viewer chunk
     static bool isInActorRange(const Vector3f &viewer, const Vector3f &position);
+
+    // the streamed view covers the block, 46 blocks of margin
+    //  against the publisher view of
+    static bool isPositionRelevant(ServerPlayer &player, const Level &level, const Vector3i &position);
 
     static int64_t packChunk(int32_t chunkX, int32_t chunkZ);
 

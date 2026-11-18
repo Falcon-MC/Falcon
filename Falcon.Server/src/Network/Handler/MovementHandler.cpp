@@ -27,6 +27,7 @@
 #include "Scripting/ScriptEngine.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -63,7 +64,7 @@ namespace {
     }
 
     void freezeWaterUnderfoot(Level &level, const ServerPlayer &player, const Vector3f &feetPosition) {
-        if (player.getGameType() == (int32_t) GameType::Spectator)
+        if (player.isSpectator())
             return;
 
         const int32_t frostWalker = ItemEnchantments::getLevel(
@@ -80,11 +81,14 @@ namespace {
 
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
             for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
-                const BlockState water = level.getBlockState(x, y, z);
-                if (water.mName != "minecraft:water" || water.mStates.getInt("liquid_depth", 0) != 0)
+                // a column not loaded is unknown, never read through: that would generate it here
+                const BlockState *water = level.peekBlockPtr(x, y, z);
+                if (water == nullptr || water->mName != BlockNames::WATER
+                    || water->mStates.getInt("liquid_depth", 0) != 0)
                     continue;
 
-                if (level.getBlockState(x, y + 1, z).mName != "minecraft:air")
+                const BlockState *above = level.peekBlockPtr(x, y + 1, z);
+                if (above == nullptr || above->mName != BlockNames::AIR)
                     continue;
 
                 Tag states = Tag::ofCompound();
@@ -97,7 +101,7 @@ namespace {
         }
     }
 
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const float PLAYER_HALF_WIDTH = 0.3f;
     const float PLAYER_HEIGHT = 1.8f;
     const float GROUND_PROBE_DEPTH = 0.5f;
@@ -158,6 +162,22 @@ namespace {
         return false;
     }
 
+    // every column the player's box touches is in memory
+    bool columnsResident(const Level &level, const Vector3f &feetPosition) {
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH) >> 4;
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH) >> 4;
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH) >> 4;
+
+        for (int32_t chunkX = minX; chunkX <= maxX; ++chunkX) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; ++chunkZ) {
+                if (!level.isChunkResident(chunkX, chunkZ))
+                    return false;
+            }
+        }
+        return true;
+    }
+
     bool applyLandingBehavior(ServerNetworkHandler &owner, ServerPlayer &player, const Block &support,
                               float downwardVelocity) {
         if (!support.onEntityLand(player, downwardVelocity))
@@ -192,7 +212,7 @@ bool MovementHandler::checkGroundState(Level &level, const Vector3f &previousFee
                                        const Actor *actor) {
     if (checkGroundState(level, feetPosition, actor))
         return true;
-    // Y resolves before X/Z (sub_147B42620): a move sliding off an edge lands on the column it left
+    // Y resolves before X/Z: a move sliding off an edge lands on the column it left
     return feetPosition.y <= previousFeet.y
            && checkGroundState(level, Vector3f(previousFeet.x, feetPosition.y, previousFeet.z), actor);
 }
@@ -215,8 +235,12 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     player.setPosition(feetPosition);
 
-    const bool wasOnGround = player.isOnGround();
     Level &level = owner.getLevelFor(player);
+    // an unloaded column is unknown, not air: the probes below would generate it on the tick thread
+    if (!columnsResident(level, feetPosition))
+        return;
+
+    const bool wasOnGround = player.isOnGround();
     // keep the collision result: a proximity probe can report ground mid-jump or above shallow water
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
                                                       : checkGroundState(level, previous, feetPosition, &player);
@@ -274,7 +298,7 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     WaterMoveSystem::tick(player, contact);
     LavaResetFallDistanceSystem::tick(player, contact);
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     const bool fireResistance = player.hasEffect(MobEffectId::FireResistance);
     if (contact.lava || fireContact.fire)
         ignitePlayer(player);
@@ -409,6 +433,7 @@ static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const
             scripts.onPlayerInputModeChange(player, previousMode, inputModeName(mode));
     }
 
+    state.mTouchOnlyHotbar = packet.hasInputFlag((int32_t) PlayerAuthInputData::HotbarOnlyTouch);
     state.mMoveX = packet.mRawMoveVectorX;
     state.mMoveY = packet.mRawMoveVectorY;
     state.mJumping = packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping);
@@ -504,6 +529,10 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
                    || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
             BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
             player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::StartItemUseOn) {
+            owner.getScriptEngine().onItemStartUseOn(player, action.mBlockPosition, action.mFace);
+        } else if (action.mAction == PlayerActionType::StopItemUseOn) {
+            owner.getScriptEngine().onItemStopUseOn(player, action.mBlockPosition);
         }
     }
     if (packet.mHasItemUseTransaction) {
@@ -585,7 +614,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     }
     recordInput(owner, player, packet);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
-        // sprint changes the movement attribute too (0x140F4D3F0); client-requested: no validation reset
+        // sprint changes the movement attribute too; client-requested: no validation reset
         owner._sendAttributes(player, false);
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
     }

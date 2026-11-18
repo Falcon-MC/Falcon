@@ -6,6 +6,7 @@
 #include "Network/Connector.h"
 #include "Network/EncryptedNetworkPeer.h"
 #include "Network/SharedPacket.h"
+#include "Protocol/MinecraftPacketIds.h"
 #include "Server/Profiler.h"
 
 #include <atomic>
@@ -130,6 +131,9 @@ public:
 
     using OutboundFilter = std::function<bool(const NetworkIdentifier &, std::string &)>;
 
+    // every send from the game thread, before encoding; false drops it for all its recipients
+    using SendHook = std::function<bool(const std::vector<NetworkIdentifier> &, MinecraftPacketIds)>;
+
     // nullptr: keep the caller's context
     using ContextResolver = std::function<const PacketCodecContext *(const NetworkIdentifier &)>;
 
@@ -183,6 +187,12 @@ public:
     // needed before the connection settings change
     void flush(const NetworkIdentifier &id);
 
+    // between the two, what the calling thread sends waits, in order, and reaches the io threads in one go:
+    // thousands of small packets of one pass then take the queue lock once
+    void cork();
+
+    void uncork();
+
     void enableCompression(const NetworkIdentifier &id, CompressedNetworkPeer::CompressionAlgorithm algorithm,
                            unsigned short threshold);
 
@@ -198,6 +208,9 @@ public:
     // the transport's average round trip in milliseconds, refreshed about once a second; -1 when unknown
     int getAveragePing(const NetworkIdentifier &id) const;
 
+    // how the client compressed its first batches, refreshed about once a second; false when unknown
+    bool getBatchTraits(const NetworkIdentifier &id, CompressedNetworkPeer::BatchTraits &outTraits) const;
+
     Connector &getConnector() {
         return *mConnectors.front();
     }
@@ -210,12 +223,21 @@ public:
 
     void setOutboundFilter(OutboundFilter filter);
 
+    void setSendHook(SendHook hook);
+
     // callers keep passing the server's context whatever version the client speaks
     void setContextResolver(ContextResolver resolver);
 
     void addListener(Listener *listener);
 
     void removeListener(Listener *listener);
+
+    // a session served in process (a gametest simulated player): nothing sent to it leaves the server
+    void addLocalSession(const NetworkIdentifier &id);
+
+    void removeLocalSession(const NetworkIdentifier &id);
+
+    bool isLocalSession(const NetworkIdentifier &id) const;
 
 private:
     bool onValidateIncomingConnection(const NetworkIdentifier &id) override;
@@ -238,12 +260,20 @@ private:
         // written by the shard's io thread, read by the game thread
         mutable std::mutex mPingMutex;
         std::unordered_map<NetworkIdentifier, int, NetworkIdentifier::Hasher> mPings;
+        std::unordered_map<NetworkIdentifier, CompressedNetworkPeer::BatchTraits, NetworkIdentifier::Hasher>
+                mBatchTraits;
         std::chrono::steady_clock::time_point mPingRefresh;
     };
 
     Shard &_shardFor(const NetworkIdentifier &id);
 
     void _pushOutbound(OutboundCommand command);
+
+    void _queueData(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,
+                    Compressibility compressibility);
+
+    // false: the hook dropped the packet these bytes start with
+    bool _allowRaw(const std::vector<NetworkIdentifier> &ids, const std::string &data);
 
     void _trackPending(OutboundCommand &command);
 
@@ -267,13 +297,20 @@ private:
     Profiler *mProfiler = nullptr;
     std::vector<std::unique_ptr<Connector>> mConnectors;
     std::vector<std::unique_ptr<Shard>> mShards;
+    std::atomic<bool> mCorked{false};
+    std::thread::id mCorkThread;
+    std::vector<std::vector<OutboundCommand>> mCorkedCommands;
     // only the control pump touches it
     std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mLive;
     // dropped by a shard on server request; the control pump closes them in their connector
     TaskQueue<NetworkIdentifier> mServerClosed;
     std::vector<Listener *> mListeners;
     OutboundFilter mOutboundFilter;
+    SendHook mSendHook;
     ContextResolver mContextResolver;
+    mutable std::mutex mLocalSessionsMutex;
+    std::unordered_set<NetworkIdentifier, NetworkIdentifier::Hasher> mLocalSessions;
+    std::atomic<size_t> mLocalSessionCount{0};
 
     TaskQueue<InboundEvent> mInbound;
     // held back by runEventsFor; a connection with one held keeps all its later events behind it

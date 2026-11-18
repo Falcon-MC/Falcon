@@ -1,4 +1,5 @@
 #include "World/Actor/Mob/MobActor.h"
+#include "Protocol/Packets/UpdateTradePacket.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/AI/Goal/BehaviorGoals.h"
@@ -28,6 +29,7 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Item/ItemProperties.h"
 
 #include <algorithm>
 #include <cmath>
@@ -52,6 +54,11 @@ namespace {
 
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
     const char *const BORN_EVENT = "minecraft:entity_born";
+    const char *const TRANSFORMED_EVENT = "minecraft:entity_transformed";
+    // the villagers a cure reaches: a box 16 blocks out on every axis
+    const float CURE_REACH = 16.0f;
+    const int32_t CURE_VILLAGE_SEARCH = 1000;
+    const int32_t CURE_STANDING = 5;
     const char *const TAG_COMPONENT_GROUPS = "ComponentGroups";
     const char *const TAG_DEFINITIONS = "definitions";
     const std::string DEFINITION_ADDED_PREFIX = "+";
@@ -66,11 +73,11 @@ namespace {
     const int32_t LOVE_TICKS = 600;
     const int32_t BREED_COOLDOWN_TICKS = 6000;
     const float DEFAULT_AGEABLE_SECONDS = 1200.0f;
-    const float DEFAULT_FEED_GROWTH = 0.1f;
     const int32_t TICKS_PER_SECOND = 20;
     const char *const LOOT_TABLE_PREFIX = "loot_tables/";
     const int64_t OWNER_SYNC_INTERVAL = 20;
     const char *const TIMER_COMPONENT = "minecraft:timer";
+    const char *const SCHEDULER_COMPONENT = "minecraft:scheduler";
     const char *const ATTACK_COOLDOWN_COMPONENT = "minecraft:attack_cooldown";
     const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
@@ -91,7 +98,7 @@ namespace {
     const float DEFAULT_AIR_SECONDS = 15.0f;
     const float EYE_HEIGHT_RATIO = 0.85f;
     const int32_t AIR_REFILL_PER_TICK = 5;
-    const int32_t DROWNING_AIR = -20;
+    const int32_t DROWNING_AIR = MobActor::MIN_AIR_SUPPLY;
     const float DROWNING_DAMAGE = 2.0f;
     const float FLOP_HORIZONTAL = 0.05f;
     const float FLOP_VERTICAL = 0.4f;
@@ -128,7 +135,7 @@ namespace {
         float mDefault;
     };
 
-    // ranges and defaults registered by sub_142C374F0
+    // ranges and defaults registered by
     const MovementAttribute MOVEMENT_ATTRIBUTES[] = {
             {"minecraft:friction_modifier", "minecraft:friction_modifier", 0.0f, 256.0f, 1.0f},
             {"minecraft:bounciness", "minecraft:bounciness", 0.0f, 1.0f, 0.0f},
@@ -137,6 +144,9 @@ namespace {
     const char *const ZOMBIE_PIGMAN = "minecraft:zombie_pigman";
     const char *const EQUIPPABLE_COMPONENT = "minecraft:equippable";
     const int32_t EQUIPPABLE_BODY_SLOT = 1;
+    // bounds the slots a pack lists
+    const int32_t MAX_EQUIPPABLE_SLOTS = 64;
+    const int32_t DEFAULT_INVENTORY_SIZE = 5;
     const char *const ENTITY_SENSOR_COMPONENT = "minecraft:entity_sensor";
     const char *const TARGET_NEARBY_SENSOR_COMPONENT = "minecraft:target_nearby_sensor";
     const char *const HURT_ON_CONDITION_COMPONENT = "minecraft:hurt_on_condition";
@@ -153,10 +163,11 @@ namespace {
     const float DEFAULT_JUMP_POWER = 0.42f;
     const double SIGHT_STEP = 0.25;
     const float SIGHT_EYE_RATIO = 0.85f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float ENTITY_SENSOR_DEFAULT_RANGE = 10.0f;
     const char *const RIDEABLE_COMPONENT = "minecraft:rideable";
     const char *const ADD_RIDER_COMPONENT = "minecraft:addrider";
+    const char *const TRADE_RESUPPLY_COMPONENT = "minecraft:trade_resupply";
     const char *const TAMEMOUNT_COMPONENT = "minecraft:tamemount";
     const char *const JUMP_STRENGTH_COMPONENT = "minecraft:horse.jump_strength";
     const char *const DISMOUNT_ON_TOP_CENTER = "on_top_center";
@@ -277,6 +288,14 @@ namespace {
     }
 }
 
+float MobActor::getArmorKnockbackResistance() const {
+    float resistance = 0.0f;
+    // the body slot counts: netherite horse and nautilus armor resist like a netherite piece
+    for (int slot = MobEquipment::HEAD; slot <= MobEquipment::BODY; ++slot)
+        resistance += ItemProperties::getArmorKnockbackResistance(getEquipment().getSlot(slot));
+    return resistance;
+}
+
 bool MobActor::canStandOnPowderSnow() const {
     if (getComponent("minecraft:can_stand_on_powder_snow") != nullptr)
         return true;
@@ -295,9 +314,21 @@ void MobActor::startDefinition(ServerNetworkHandler &owner) {
         const json::Value *components = definition->get("components");
         if (components != nullptr)
             mAddRider.queue(components->get(ADD_RIDER_COMPONENT));
-        fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
+        // a transformation names the mob it came from as the other of its event
+        if (mSpawnEvent.empty() && mTransformedFrom != nullptr)
+            fireEvent(owner, TRANSFORMED_EVENT, mTransformedFrom);
+        else
+            fireEvent(owner, !mSpawnEvent.empty() ? mSpawnEvent : mBorn ? BORN_EVENT : SPAWNED_EVENT);
+        mTransformedFrom = nullptr;
         if (!mEquipmentInherited)
             mEquipment.equipFromTable(owner, *this);
+    }
+}
+
+void MobActor::useSpawnEquipment(ServerNetworkHandler &owner, const std::string &table, float dropChance) {
+    if (mEquipment.equipFromTable(owner, *this, table)) {
+        mEquipmentInherited = true;
+        mEquipment.setDropChanceOverride(dropChance);
     }
 }
 
@@ -332,6 +363,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
         return;
     _tickSpellEffects();
     _tickTimer(owner);
+    _tickScheduler(owner);
     _tickAttackCooldown(owner);
     _tickBreathing(owner);
     _tickFlopping(owner);
@@ -364,6 +396,11 @@ void MobActor::tickDeath(ServerNetworkHandler &owner) {
         _tickTransformation(owner);
 }
 
+void MobActor::removeBehaviors(ServerNetworkHandler &owner) {
+    mBehaviorsRemoved = true;
+    mGoalSelector.clear(owner, *this);
+}
+
 void MobActor::_registerGoals(ServerNetworkHandler &owner) {
     mGoalsDirty = false;
     const bool sameGroups = mGoalGroups.size() == mComponentGroups.size()
@@ -377,9 +414,11 @@ void MobActor::_registerGoals(ServerNetworkHandler &owner) {
     mNavigation.setOptions(std::move(options));
 
     mGoalSelector.clear(owner, *this);
-    registerGoals(mGoalSelector);
-    if (mGoalSelector.isEmpty())
-        BehaviorGoals::build(*this, mGoalSelector);
+    if (!mBehaviorsRemoved) {
+        registerGoals(mGoalSelector);
+        if (mGoalSelector.isEmpty())
+            BehaviorGoals::build(*this, mGoalSelector);
+    }
 
     mGoalsRegistered = true;
     mGoalsDirty = false;
@@ -533,19 +572,19 @@ int32_t MobActor::_countSensedEntities(ServerNetworkHandler &owner, const json::
     };
 
     int32_t count = 0;
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && inRange(entry.second) && passesFilters(entry.second))
+    owner.forEachPlayerNear(center, horizontal, [&](ServerPlayer &player) {
+        if (player.isSpawned() && inRange(player) && passesFilters(player))
             count++;
-    }
+    });
 
     if (playersOnly)
         return count;
 
-    for (auto &entry: owner.getActors()) {
-        if (inRange(*entry.second) && dynamic_cast<MobActor *>(entry.second.get()) != nullptr
-            && passesFilters(*entry.second))
+    // the index holds every actor around: the exact range is checked on each
+    owner.forEachActorNear(center, horizontal, [&](ServerActor &actor) {
+        if (inRange(actor) && dynamic_cast<MobActor *>(&actor) != nullptr && passesFilters(actor))
             count++;
-    }
+    });
     return count;
 }
 
@@ -616,19 +655,20 @@ void MobActor::_tickInactivity(ServerNetworkHandler &owner) {
     }
 
     const Vector3f position = getPosition();
-    for (auto &entry: owner.getPlayers()) {
-        const ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || !player.sharesLevelWith(*this))
-            continue;
+    bool watched = false;
+    owner.forEachPlayerNear(position, std::sqrt(INACTIVITY_PLAYER_RANGE_SQUARED), [&](const ServerPlayer &player) {
+        if (watched || !player.isSpawned() || !player.sharesLevelWith(*this))
+            return;
 
         const Vector3f other = player.getPosition();
         const float dx = other.x - position.x;
         const float dy = other.y - position.y;
         const float dz = other.z - position.z;
-        if (dx * dx + dy * dy + dz * dz <= INACTIVITY_PLAYER_RANGE_SQUARED) {
-            mInactivityTicks = 0;
-            return;
-        }
+        watched = dx * dx + dy * dy + dz * dz <= INACTIVITY_PLAYER_RANGE_SQUARED;
+    });
+    if (watched) {
+        mInactivityTicks = 0;
+        return;
     }
     mInactivityTicks++;
 }
@@ -822,6 +862,39 @@ void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
 }
 
+void MobActor::_tickScheduler(ServerNetworkHandler &owner) {
+    const json::Value *scheduler = getComponent(SCHEDULER_COMPONENT);
+    if (scheduler != mSchedulerComponent) {
+        mSchedulerComponent = scheduler;
+        mScheduledEvent = -1;
+    }
+
+    const json::Value *events = scheduler == nullptr ? nullptr : scheduler->get("scheduled_events");
+    if (events == nullptr || !events->isArray())
+        return;
+
+    const auto holds = [this, &owner](const json::Value &entry) {
+        const json::Value *filters = entry.get("filters");
+        return filters == nullptr || EntityFilter::test(*filters, owner, *this);
+    };
+
+    // nothing fires while the last event's filters still hold: it runs once per change of slot
+    const int32_t count = (int32_t) events->mArray.size();
+    if (mScheduledEvent >= 0 && mScheduledEvent < count && holds(*events->mArray[(size_t) mScheduledEvent]))
+        return;
+
+    mScheduledEvent = -1;
+    for (int32_t index = 0; index < count; ++index) {
+        const json::Value &entry = *events->mArray[(size_t) index];
+        if (!holds(entry))
+            continue;
+
+        mScheduledEvent = index;
+        EntityEvents::fireTrigger(owner, *this, &entry);
+        return;
+    }
+}
+
 void MobActor::_tickAttackCooldown(ServerNetworkHandler &owner) {
     const json::Value *cooldown = getComponent(ATTACK_COOLDOWN_COMPONENT);
     if (cooldown != mAttackCooldownComponent) {
@@ -843,6 +916,18 @@ void MobActor::_tickAttackCooldown(ServerNetworkHandler &owner) {
         return;
 
     EntityEvents::fireTrigger(owner, *this, cooldown->get("attack_cooldown_complete_event"));
+}
+
+int32_t MobActor::getAirSupply() const {
+    return mAirSupply == UNSET_AIR_SUPPLY ? getMaxAirSupply() : mAirSupply;
+}
+
+void MobActor::setAirSupply(int32_t ticks) {
+    mAirSupply = ticks;
+}
+
+int32_t MobActor::getMaxAirSupply() const {
+    return secondsToTicks(numberIn(getComponent(BREATHABLE_COMPONENT), "total_supply", DEFAULT_AIR_SECONDS));
 }
 
 void MobActor::_tickBreathing(ServerNetworkHandler &owner) {
@@ -977,7 +1062,7 @@ ServerPlayer *MobActor::getOwner(ServerNetworkHandler &owner) const {
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (isOwnedBy(player) && player.isSpawned() && !player.isDead() && player.sharesLevelWith(*this)
-            && player.getGameType() != (int32_t) GameType::Spectator)
+            && !player.isSpectator())
             return &player;
     }
     return nullptr;
@@ -1050,8 +1135,68 @@ const PushableByEntityPresets &MobActor::getPushPresets() const {
     return mPushPresets;
 }
 
+// mount windows and their saddle, armor and chest slots are not checked against the game
+Container *MobActor::getEntityContainer() {
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    const json::Value *type = inventory == nullptr ? nullptr : inventory->get("container_type");
+    if (type == nullptr || type->mType != json::Value::Type::String || type->mString != "horse" || !isTamed()
+        || getInventoryCapacity() <= 0)
+        return nullptr;
+    mEquipment.ensureInventorySize(getInventoryCapacity());
+    return &mInventoryView;
+}
+
 int MobActor::getInventoryCapacity() const {
-    return (int) numberIn(getComponent(INVENTORY_COMPONENT), "inventory_size", 0.0f);
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    if (inventory == nullptr)
+        return 0;
+    // the game reads an inventory without inventory_size as 5 slots: the nautilus and the camel have one
+    return (int) numberIn(inventory, "inventory_size", (float) DEFAULT_INVENTORY_SIZE);
+}
+
+Container &MobActor::getInventoryContainer() {
+    mEquipment.ensureInventorySize(getInventoryCapacity());
+    return mInventoryView;
+}
+
+std::vector<ItemStack> MobActor::getEquippableItems() const {
+    std::vector<ItemStack> items;
+    const json::Value *equippable = getComponent(EQUIPPABLE_COMPONENT);
+    const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
+    if (slots == nullptr || !slots->isArray())
+        return items;
+
+    const size_t count = std::min(slots->mArray.size(), (size_t) MAX_EQUIPPABLE_SLOTS);
+    for (size_t index = 0; index < count; ++index)
+        items.push_back(_equippableItem((int32_t) index));
+    return items;
+}
+
+void MobActor::onEquippableItemsChanged(ServerNetworkHandler &owner, const std::vector<ItemStack> &before,
+                                        Actor *changer) {
+    const std::vector<ItemStack> after = getEquippableItems();
+    bool changed = false;
+    for (size_t index = 0; index < after.size(); ++index) {
+        const ItemStack &previous = index < before.size() ? before[index] : PlayerInventory::getEmptyItem();
+        const ItemStack &current = after[index];
+        const bool same = previous.isAir() ? current.isAir()
+                                           : !current.isAir()
+                                                     && previous.mDefinition->getIdentifier()
+                                                                == current.mDefinition->getIdentifier()
+                                                     && previous.mDamage == current.mDamage
+                                                     && previous.mTag == current.mTag;
+        if (same)
+            continue;
+
+        changed = true;
+        const json::Value *slot = _equippableSlot((int32_t) index);
+        if (slot == nullptr || previous.isAir() == current.isAir())
+            continue;
+        EntityEvents::fireTrigger(owner, *this, slot->get(current.isAir() ? "on_unequip" : "on_equip"), changer);
+    }
+
+    if (changed)
+        mEquipment.broadcast(owner, *this);
 }
 
 void MobActor::_tickTransformation(ServerNetworkHandler &owner) {
@@ -1156,6 +1301,7 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
             return;
 
         mob->mSpawnEvent = spawnEvent;
+        mob->mTransformedFrom = this;
         if (preserveEquipment) {
             mob->mEquipment = mEquipment;
             mob->mEquipmentInherited = true;
@@ -1167,6 +1313,11 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
     if (result == nullptr) {
         mTransformationTicks = transformationTicks(transformation);
         return;
+    }
+
+    if (MobActor *mob = dynamic_cast<MobActor *>(result)) {
+        mob->startDefinition(owner);
+        _passTradesTo(owner, *mob, flagIn(transformation, "keep_level"));
     }
 
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TRANSFORM)) {
@@ -1189,6 +1340,47 @@ void MobActor::_transform(ServerNetworkHandler &owner, const json::Value &transf
     mTransformed = true;
 }
 
+void MobActor::_passTradesTo(ServerNetworkHandler &owner, MobActor &into, bool keepLevel) {
+    if (keepLevel) {
+        into.mEconomy.inheritLevel(mEconomy);
+        if (MobEconomy::isTrader(into))
+            into.mEconomy.syncTier();
+    }
+    into.mEconomy.inheritOffers(owner, into, mEconomy, *this);
+
+    if (!curesIntoTrader())
+        return;
+
+    // the cure is good news for the whole village: every player it knows gains standing
+    const Vector3f &curedAt = getPosition();
+    const Vector3i block((int32_t) std::floor(curedAt.x), (int32_t) std::floor(curedAt.y), (int32_t) std::floor(curedAt.z));
+    if (const std::shared_ptr<Village> village =
+                owner.getLevelFor(*this).getVillageManager().getClosestVillage(block, CURE_VILLAGE_SEARCH))
+        village->changeAllStandings(CURE_STANDING);
+
+    if (!MobEconomy::isTrader(into))
+        return;
+
+    into.mEconomy.applyCure(into);
+    const Vector3f centre = into.getPosition();
+    // the box reaches 16 blocks on every axis: the radius covers its corners
+    owner.forEachActorNear(centre, CURE_REACH * std::sqrt(3.0f), [&](ServerActor &actor) {
+        MobActor *villager = dynamic_cast<MobActor *>(&actor);
+        if (villager == nullptr || !villager->isNearbyCureTarget() || !villager->sharesLevelWith(into)
+            || !MobEconomy::isTrader(*villager))
+            return;
+        const Vector3f &position = villager->getPosition();
+        if (std::fabs(position.x - centre.x) > CURE_REACH || std::fabs(position.y - centre.y) > CURE_REACH
+            || std::fabs(position.z - centre.z) > CURE_REACH)
+            return;
+        villager->mEconomy.applyNearbyCure(*villager);
+    });
+
+    EntityDataMap metadata;
+    into.mEconomy.appendMetadata(metadata);
+    owner.sendActorMetadata(into, metadata);
+}
+
 void MobActor::playDefinitionSound(ServerNetworkHandler &owner, const std::string &sound) {
     if (sound.empty())
         return;
@@ -1204,10 +1396,29 @@ bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryNameTag(owner, player, held) || _tryLeash(owner, player, held) || _tryInteract(owner, player)
         || _tryTame(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
-        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player))
+        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player)
+        || _tryTrade(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
+}
+
+bool MobActor::_tryTrade(ServerNetworkHandler &owner, ServerPlayer &player) {
+    const json::Value *component = getComponent(MobEconomy::COMPONENT);
+    if (component == nullptr)
+        return false;
+    const json::Value *showScreen = component->get("show_trade_screen");
+    if ((showScreen != nullptr && !showScreen->boolean(true)) || !mEconomy.canTradeWith(owner, *this, player))
+        return false;
+
+    UpdateTradePacket packet;
+    if (!mEconomy.startTrading(owner, *this, player, packet))
+        return false;
+    if (!player.getInventoryManager().openTrade(getUniqueId(), packet)) {
+        mEconomy.stopTrading(owner, *this);
+        return false;
+    }
+    return true;
 }
 
 bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
@@ -1226,6 +1437,7 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     if (name.empty())
         return false;
 
+    const std::string previous = getNameTag();
     setNameTag(name);
     owner.sendActorNameTag(*this);
     _setFlag(owner, ActorFlag::CanShowName, true);
@@ -1250,6 +1462,7 @@ bool MobActor::_tryNameTag(ServerNetworkHandler &owner, ServerPlayer &player, co
     EntityEvents::fireTrigger(owner, *this, trigger, &player);
 
     player.consumeOneHeldItem();
+    owner.getScriptEngine().onPlayerUseNameTag(player, *this, name, previous);
     return true;
 }
 
@@ -1261,7 +1474,7 @@ bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, cons
         if (mLeash.getHolderId() != player.getUniqueId())
             return false;
 
-        mLeash.detach(owner, *this, player.getGameType() != (int32_t) GameType::Creative);
+        mLeash.detach(owner, *this, !player.isCreative());
         return true;
     }
 
@@ -1506,9 +1719,22 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
         if (hurtItem > 0)
             owner.damagePlayerHeldItem(player, hurtItem);
 
+        const json::Value *repair = interaction->get("repair_entity_item");
+        const json::Value *repairSlot = repair == nullptr ? nullptr : repair->get("slot");
+        if (repairSlot != nullptr
+            && mEquipment.repairSlot(MobEquipment::slotIndexOf(repairSlot->string()),
+                                     (int32_t) numberIn(repair, "amount", 0.0f)))
+            mEquipment.broadcast(owner, *this);
+
         const json::Value *useItem = interaction->get("use_item");
         if (equipSlot == nullptr && useItem != nullptr && useItem->boolean(false))
             player.consumeOneHeldItem();
+
+        const float healthAmount = numberIn(interaction, "health_amount", 0.0f);
+        if (healthAmount > 0.0f) {
+            heal(healthAmount);
+            owner.syncActorAttributes(*this);
+        }
 
         const json::Value *transform = interaction->get("transform_to_item");
         if (transform != nullptr && transform->isString()) {
@@ -1550,15 +1776,15 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
 const json::Value *MobActor::_equippableSlot(int32_t index) const {
     const json::Value *equippable = getComponent(EQUIPPABLE_COMPONENT);
     const json::Value *slots = equippable == nullptr ? nullptr : equippable->get("slots");
-    if (slots == nullptr || !slots->isArray())
+    if (slots == nullptr || !slots->isArray() || index < 0 || (size_t) index >= slots->mArray.size())
         return nullptr;
+    return slots->mArray[(size_t) index].get();
+}
 
-    for (const std::unique_ptr<json::Value> &slot: slots->mArray) {
-        const json::Value *number = slot->get("slot");
-        if (number != nullptr && number->integer(-1) == index)
-            return slot.get();
-    }
-    return nullptr;
+bool MobActor::_isBodySlot(int32_t index) const {
+    const json::Value *slot = _equippableSlot(index);
+    const json::Value *number = slot == nullptr ? nullptr : slot->get("slot");
+    return number != nullptr && number->integer(-1) == EQUIPPABLE_BODY_SLOT;
 }
 
 bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &slotName) {
@@ -1595,16 +1821,22 @@ bool MobActor::_equipFromHand(ServerNetworkHandler &owner, ServerPlayer &player,
 }
 
 const ItemStack &MobActor::_equippableItem(int32_t index) const {
-    if (index == EQUIPPABLE_BODY_SLOT)
+    if (_isBodySlot(index))
         return mEquipment.getSlot(MobEquipment::BODY);
     return mEquipment.getInventoryItem(index);
 }
 
 void MobActor::_setEquippableItem(int32_t index, ItemStack item) {
-    if (index == EQUIPPABLE_BODY_SLOT)
+    if (_isBodySlot(index))
         mEquipment.setSlot(MobEquipment::BODY, std::move(item));
     else
         mEquipment.setInventoryItem(index, std::move(item));
+}
+
+bool MobActor::_acceptsInEquippableSlot(int32_t index, const ItemStack &item) const {
+    const json::Value *slot = _equippableSlot(index);
+    const json::Value *accepted = slot == nullptr ? nullptr : slot->get("accepted_items");
+    return accepted == nullptr || BehaviorItems(accepted).contains(item);
 }
 
 void MobActor::_dropEquipmentSlot(ServerNetworkHandler &owner, const std::string &slotName, float yOffset) {
@@ -1730,6 +1962,17 @@ bool MobActor::tameTo(ServerNetworkHandler &owner, Actor &tamer, const char *com
     const json::Value *settings = getComponent(component);
     if (settings == nullptr || isTamed() || owner.getScriptEngine().beforeEntityTamed(*this, tamer))
         return false;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_TAME)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_TAME;
+        event.mCancellable = true;
+        event.mEntity = this;
+        event.mTarget = &tamer;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&tamer);
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return false;
+    }
 
     mOwnerId = tamer.getUniqueId();
     mLegacyOwnerName.clear();
@@ -1917,7 +2160,7 @@ ActorSize MobActor::definitionSize(const ActorSize &fallback) const {
 }
 
 bool MobActor::_syncMovementAttributes() {
-    // sub_142C731B0: the three attributes behind MovementAttributesComponent, client synced
+    // the three attributes behind MovementAttributesComponent, client synced
     bool changed = false;
     for (const MovementAttribute &attribute: MOVEMENT_ATTRIBUTES) {
         const json::Value *component = getComponent(attribute.mComponent);
@@ -1966,6 +2209,9 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
         entry.mByteValue = (int8_t) numberIn(color, "value", 0.0f);
         metadata.mEntries.push_back(entry);
     }
+
+    if (MobEconomy::isTrader(*this))
+        mEconomy.appendMetadata(metadata);
 
     if (mOwnerId != NO_OWNER) {
         EntityDataEntry entry;
@@ -2038,6 +2284,7 @@ const json::Value *MobActor::getDefinition() const {
 
 void MobActor::_rebuildComponents() const {
     mComponents.clear();
+    mRecentComponents.clear();
     mComponentsDirty = false;
     mSensorComponentsStale = true;
     mDefinitionPhysicsStale = true;
@@ -2091,9 +2338,22 @@ const json::Value *MobActor::getComponent(const std::string &name) const {
     return found == components.end() ? nullptr : found->second;
 }
 
+// the tick asks for the same few names from the same literals: their address finds the answer again, and the
+// text is still compared, since a caller may pass a buffer it reuses
 const json::Value *MobActor::getComponent(const char *name) const {
+    if (mComponentsDirty)
+        _rebuildComponents();
+
+    for (const RecentComponent &recent: mRecentComponents) {
+        if (recent.mAddress == name && recent.mName == name)
+            return recent.mValue;
+    }
+
     mComponentKey.assign(name);
-    return getComponent(mComponentKey);
+    const json::Value *value = getComponent(mComponentKey);
+    if (mRecentComponents.size() < MAX_RECENT_COMPONENTS)
+        mRecentComponents.push_back({name, mComponentKey, value});
+    return value;
 }
 
 bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
@@ -2116,7 +2376,7 @@ bool MobActor::burnsInDaylight() const {
     return getComponent(BURNS_IN_DAYLIGHT_COMPONENT) != nullptr;
 }
 
-// anything in protection_slot (the head by default) blocks the fire and is not worn: sub_14CE80670
+// anything in protection_slot (the head by default) blocks the fire and is not worn
 bool MobActor::shieldFromSunlight() const {
     const json::Value *component = getComponent(BURNS_IN_DAYLIGHT_COMPONENT);
     const json::Value *slotName = component == nullptr ? nullptr : component->get("protection_slot");
@@ -2176,6 +2436,9 @@ void MobActor::addComponentGroup(const std::string &group) {
     const json::Value *added = groups == nullptr ? nullptr : groups->get(group);
     if (added != nullptr)
         mAddRider.queue(added->get(ADD_RIDER_COMPONENT));
+    // the game restocks once per added minecraft:trade_resupply; the schedule removes the group again
+    if (added != nullptr && added->get(TRADE_RESUPPLY_COMPONENT) != nullptr)
+        mEconomy.resupply();
 }
 
 void MobActor::removeComponentGroup(const std::string &group) {
@@ -2230,8 +2493,16 @@ float MobActor::getAttackDamage(Difficulty difficulty) const {
     if (damage == nullptr)
         return 0.0f;
 
-    if (damage->isArray() && damage->mArray.size() == 2)
-        return (float) randomRange(damage->mArray[0]->integer(0), damage->mArray[1]->integer(0));
+    if (damage->isArray() && damage->mArray.size() == 2) {
+        // the game swaps a reversed array, never a reversed object
+        const int minimum = damage->mArray[0]->integer(0);
+        const int maximum = damage->mArray[1]->integer(0);
+        return (float) randomRange(std::min(minimum, maximum), std::max(minimum, maximum));
+    }
+
+    if (damage->isObject())
+        return (float) randomRange((int) numberIn(damage, "range_min", 0.0f),
+                                   (int) numberIn(damage, "range_max", 0.0f));
 
     return (float) damage->number(0.0);
 }
@@ -2245,7 +2516,7 @@ Tag MobActor::saveNbt() const {
         definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + group));
     data.put(TAG_DEFINITIONS, Tag::ofList(Tag::Type::String, std::move(definitions)));
     data.putInt(TAG_AGE, mAgeTicks);
-    // written only when set (sub_140BB77E0)
+    // written only when set
     if (mActorVersion != 0)
         data.putInt(TAG_ACTOR_VERSION, mActorVersion);
     data.putInt(TAG_BREED_COOLDOWN, mBreedCooldown);
@@ -2280,6 +2551,10 @@ Tag MobActor::saveNbt() const {
     }
     if (mHasCarriedBlock)
         data.put(TAG_CARRIED_BLOCK, mCarriedBlock.toNbt());
+    const bool trader = MobEconomy::isTrader(*this);
+    if (trader)
+        mEconomy.saveNbt(data);
+    mEconomy.savePersistingNbt(data, trader);
     mEquipment.saveNbt(data);
     mEntitySpawner.saveNbt(data);
     mLeash.saveNbt(data);
@@ -2302,6 +2577,7 @@ void MobActor::loadNbt(const Tag &data) {
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
+    mEconomy.loadNbt(data);
     if (data.contains(TAG_AIR))
         mAirSupply = data.getShort(TAG_AIR, 0);
     mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, attributeIn(data, "minecraft:movement", -1.0f));
@@ -2355,6 +2631,7 @@ void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mHurtCount++;
     mAdmiration.abort(owner, *this);
     mAnger.onHurt(owner, *this, attacker != this ? attacker : nullptr);
+    mDweller.onHurt(owner, *this, attacker != this ? attacker : nullptr);
 }
 
 bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
@@ -2438,11 +2715,7 @@ float MobActor::distanceSquaredTo(const Actor &other) const {
 }
 
 ServerPlayer *MobActor::findPlayer(ServerNetworkHandler &owner, uint64_t runtimeId) {
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.getRuntimeId() == runtimeId)
-            return &entry.second;
-    }
-    return nullptr;
+    return owner.getPlayerByRuntimeId(runtimeId);
 }
 
 void MobActor::tickControls(ServerNetworkHandler &owner) {
@@ -2486,8 +2759,8 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
         return;
 
     // only the transformation the fatal hit's damage sensor added (villager_v2 become_zombie) carries on:
-    // the game keeps ticking transformations of a dying actor until Actor::remove flags it (+649,
-    // sub_140BA3460; checked in sub_14773B730 and sub_147C27700); one from another source dies with it
+    // the game keeps ticking transformations of a dying actor until it is flagged removed;
+    // one from another source dies with it
     const std::string transformation = transformationTarget(getComponent(TRANSFORMATION_COMPONENT));
     mConvertsOnDeath = !transformation.empty() && transformation == mHitTransformation;
     mHitTransformation.clear();

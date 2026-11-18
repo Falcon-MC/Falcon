@@ -19,4 +19,11 @@ public:
     int getExperienceDrop() const override {
         return 0;
     }
+
+    bool isNearbyCureTarget() const override {
+        return true;
+    }
+
+    // a sleeping villager is only woken up
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
 };

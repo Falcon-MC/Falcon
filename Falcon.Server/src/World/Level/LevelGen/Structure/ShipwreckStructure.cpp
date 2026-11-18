@@ -13,6 +13,7 @@
 #include "World/Level/LevelGen/Structure/StructureMarkers.h"
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/StructureTemplate.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <array>
 #include <map>
@@ -254,7 +255,7 @@ std::vector<ShipwreckStructure::PlacedBlock> ShipwreckStructure::build(const Chu
         block.z = z;
         block.y = originY + entry.y;
         // the game keeps the sea out of nothing: below sea level the empty blocks of a piece are water
-        if (block.y < SEA_LEVEL && block.mState.mName == "minecraft:air")
+        if (block.y < SEA_LEVEL && block.mState.mName == BlockNames::AIR)
             block.mState = water;
         block.mChest = entry.mData.getString("id", std::string()) == "minecraft:chest";
         if (block.mChest) {

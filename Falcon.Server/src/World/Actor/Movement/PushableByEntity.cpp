@@ -66,7 +66,6 @@ void PushableByEntityPresets::refresh(const json::Value *component) {
 const PushableByEntityPreset *PushableByEntity::findPreset(ServerNetworkHandler &owner, const MobActor &self,
                                                            const PushableByEntityPresets &presets,
                                                            const Actor &pusher) {
-    // sub_143A0B900
     for (const PushableByEntityPreset &preset: presets.mPresets) {
         if (preset.mFilters == nullptr || EntityFilter::test(*preset.mFilters, owner, self, &pusher))
             return &preset;
@@ -75,14 +74,12 @@ const PushableByEntityPreset *PushableByEntity::findPreset(ServerNetworkHandler 
 }
 
 bool PushableByEntity::inReach(const PushableByEntityPreset &preset, float offsetX, float offsetZ, float pusherWidth) {
-    // sub_143A0AF90
     const float distance = std::sqrt(offsetX * offsetX + offsetZ * offsetZ);
     return preset.mMinDistance <= distance && distance - pusherWidth * 0.5f <= preset.mMaxDistance;
 }
 
 Vector3f PushableByEntity::kick(const PushableByEntityPreset &preset, float offsetX, float offsetZ, float pusherSpeed,
                                 bool selfOnGround) {
-    // sub_143A0C040
     float speed = pusherSpeed * preset.mKickSpeedScale;
     speed = speed > preset.mMaxKickSpeed ? preset.mMaxKickSpeed : std::max(speed, preset.mMinKickSpeed);
 

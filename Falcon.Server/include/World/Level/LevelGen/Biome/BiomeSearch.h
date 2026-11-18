@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 
 #include <cstdint>
@@ -18,17 +19,19 @@ public:
         Vector3i mPosition;
     };
 
-    // sub_14BE9F0B0
     static Result findNearest(const ChunkGenerator &generator, const Vector3i &origin, int32_t biomeId);
 
-    // sub_14A229EC0
+    // Dimension.findClosestBiome: one pass of 64 over the box of the given size around the origin,
+    // the found column's surface for y
+    static Result findInBox(const ChunkGenerator &generator, const Vector3i &origin, int32_t biomeId,
+                            const Vector3f &size);
+
     static Vector3i findOpening(Level &level, const Vector3i &position, int32_t biomeId);
 
     // loads the chunks findOpening reads around the position, main thread only
     static void loadOpeningArea(Level &level, const Vector3i &position);
 
 private:
-    // sub_14A228EB0
     static bool _search(const ChunkGenerator &generator, int32_t biomeId, const Vector3i &center, Vector3i min,
                         Vector3i max, int32_t step, Vector3i &found);
 

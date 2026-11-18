@@ -9,6 +9,8 @@
 #include "World/Village/VillageManager.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/OnScreenTextureAnimationPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "Core/NBT/Tag.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +22,7 @@ namespace {
     const char *const RAID_HORN_SOUND = "raid.horn";
     const char *const START_CELEBRATING_EVENT = "minecraft:start_celebrating";
     const char *const RAID_EXPIRED_EVENT = "minecraft:raid_expired";
-    const int32_t HERO_DURATION_TICKS = 48000; // 0x1439f4f59
+    const int32_t HERO_DURATION_TICKS = 48000;
     const float NO_POSITION = std::numeric_limits<float>::max();
 
     // the level's closest player searches, as squared distances: 128 and 1024 blocks
@@ -74,17 +76,12 @@ namespace {
         return std::uniform_real_distribution<float>(0.0f, 1.0f)(raidRandom());
     }
 
-    // the level random's nextInt: the raw 32 bit draw modulo the bound, 0 for a bound of 0 (0x140391F20)
+    // the level random's nextInt: the raw 32 bit draw modulo the bound, 0 for a bound of 0
     uint32_t nextInt(uint32_t bound) {
         return bound == 0 ? 0 : (uint32_t) raidRandom()() % bound;
     }
 
-    float distanceSquared(const Vector3f &a, const Vector3f &b) {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        const float dz = a.z - b.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
     ServerPlayer *closestPlayer(ServerNetworkHandler &owner, Level &level, const Vector3f &position, float range) {
         ServerPlayer *closest = nullptr;
@@ -122,7 +119,7 @@ namespace {
                && !BlockShape::hasCollision(*body) && !BlockShape::hasCollision(*head);
     }
 
-    // sub_1439CE4F0: a random column around the origin, scanned down and up for ground; result: the air block above
+    // a random column around the origin, scanned down and up for ground; result: the air block above
     bool findStandingPosition(Level &level, const Vector3f &origin, int32_t attempts, int32_t horizontalRange,
                               int32_t verticalRange, Vector3f &result) {
         const int32_t originX = (int32_t) std::floor(origin.x);
@@ -170,7 +167,7 @@ namespace {
         return false;
     }
 
-    // sub_1439D8D80: a random point on the village box edge, pushed along the direction from the centre; fromEdge:
+    // a random point on the village box edge, pushed along the direction from the centre; fromEdge:
     // distance further out from the edge, else distance * scale from the floored centre
     bool findSpawnAroundVillage(ServerNetworkHandler &owner, Level &level, const Village &village, float distance,
                                 float scale, bool onHeightmap, bool fromEdge, Vector3f &result) {
@@ -218,8 +215,8 @@ namespace {
             const float z = fromEdge ? dz * scale + directionZ * distance : directionZ * distance * scale;
             Vector3f candidate(x + origin.x, origin.y, z + origin.z);
 
-            // the game takes its block source from the closest player within 64 blocks, else within 1024
-            // (sub_1439D88C0): only whether one exists matters here
+            // the game takes its block source from the closest player within 64 blocks, else within 1024:
+            // only whether one exists matters here
             if (closestPlayer(owner, level, candidate, FAR_PLAYER_RANGE) == nullptr)
                 continue;
 
@@ -243,7 +240,7 @@ namespace {
         return false;
     }
 
-    // spawn search, second strategy (0x1439f44ae): the player in the village box grown by 16 farthest from the
+    // spawn search, second strategy: the player in the village box grown by 16 farthest from the
     // centre, then a point 32 to 48 blocks from them, away from the village
     bool findSpawnBeyondFarthestPlayer(ServerNetworkHandler &owner, Level &level, const Village &village,
                                        Vector3f &result) {
@@ -302,13 +299,13 @@ namespace {
         return false;
     }
 
-    // sub_1439DF120: the horn is played through the closest player within 1024 blocks, and not at all without one
+    // the horn is played through the closest player within 1024 blocks, and not at all without one
     void soundHorn(ServerNetworkHandler &owner, Level &level, const Vector3f &position) {
         if (closestPlayer(owner, level, position, FAR_PLAYER_RANGE) != nullptr)
             owner.playLevelSound(level, RAID_HORN_SOUND, position);
     }
 
-    // Spawner::spawnMobGroup (BedrockSpawner vtable 0x14F1887F0 + 0x80, sub_1432C1140) for a raid group: members
+    // a raid group: members
     // spawn one block above the floored position, scattered when the area is loaded; herd event once all spawned
     std::vector<int64_t> spawnRaidGroup(ServerNetworkHandler &owner, Level &level, uint8_t wave,
                                         const Vector3f &position, bool scatter) {
@@ -317,7 +314,7 @@ namespace {
             return spawned;
 
         for (const RaidGroupMember &member: RAID_GROUPS[wave]) {
-            // squaring the roll biases the herd towards its minimum size (0x1432C1E8F)
+            // squaring the roll biases the herd towards its minimum size
             const float roll = nextFloat();
             const int32_t count = member.mMinSize
                                   + (int32_t) std::round((float) (member.mMaxSize - member.mMinSize) * (roll * roll));
@@ -347,7 +344,7 @@ namespace {
         return spawned;
     }
 
-    // sub_1439D88C0 lets the group scatter only when the chunks within the radius are loaded
+    // the game lets the group scatter only when the chunks within the radius are loaded
     bool isAreaLoaded(Level &level, const Vector3f &position, int32_t radius) {
         const int32_t minX = (int32_t) std::floor(position.x - (float) radius) >> 4;
         const int32_t maxX = (int32_t) std::floor(position.x + (float) radius) >> 4;
@@ -362,7 +359,7 @@ namespace {
         return true;
     }
 
-    // Village::_createRaid lambda (0x1439F3760): the village is lost without beds or inhabitants
+    // the village is lost without beds or inhabitants
     bool isVillageLost(const Village &village) {
         return village.countBeds() == 0 || village.getInhabitantCount() == 0;
     }
@@ -404,7 +401,9 @@ void Raid::tick(ServerNetworkHandler &owner, Level &level, Village &village, int
                 break;
 
             if (!mRaiders.empty()) {
-                mTotalHealth = _sumRaiderHealth(owner);
+                mWaveRaiders = (uint8_t) mRaiders.size();
+                if (mHealthProgress)
+                    mTotalHealth = _sumRaiderHealth(owner);
                 mSpawnFailures = 0;
                 _onWaveSpawned(owner, level);
                 mState = State::Ongoing;
@@ -415,7 +414,7 @@ void Raid::tick(ServerNetworkHandler &owner, Level &level, Village &village, int
             _resetStateTimers();
             break;
         case State::Ongoing: {
-            // a raider stays valid while the village counts it as a hostile dweller (0x1439F3870)
+            // a raider stays valid while the village counts it as a hostile dweller
             for (auto it = mRaiders.begin(); it != mRaiders.end();) {
                 if (village.hasDweller(DwellerRole::Hostile, *it)) {
                     ++it;
@@ -487,11 +486,65 @@ float Raid::getProgress(ServerNetworkHandler &owner) const {
         case State::Victory:
         case State::Ended:
         case State::Removed:
+            if (!mHealthProgress) {
+                if (mWaveRaiders == 0)
+                    return 0.0f;
+                return std::min(1.0f, std::max(0.0f, (float) mRaiders.size() / (float) mWaveRaiders));
+            }
             if (mTotalHealth <= 0.0f)
                 return 0.0f;
             return std::min(1.0f, std::max(0.0f, _sumRaiderHealth(owner) / mTotalHealth));
     }
     return 0.0f;
+}
+
+Tag Raid::save() const {
+    Tag raid = Tag::ofCompound();
+    raid.putInt("State", (int32_t) mState);
+    raid.putInt("Status", (int32_t) mResult);
+    raid.putByte("GroupNum", (int8_t) mCurrentWave);
+    raid.putByte("NumGroups", (int8_t) mWaveCount);
+    raid.putLong("GameTick", mLastTick);
+    raid.putLong("Ticks", mTicksInState);
+    raid.putFloat("SpawnX", mSpawnPosition.x);
+    raid.putFloat("SpawnY", mSpawnPosition.y);
+    raid.putFloat("SpawnZ", mSpawnPosition.z);
+
+    Tag raiders = Tag::ofList(Tag::Type::Long);
+    for (int64_t id: mRaiders)
+        raiders.addToList(Tag::ofLong(id));
+    raid.put("Raiders", std::move(raiders));
+
+    raid.putByte("NumRaiders", (int8_t) mWaveRaiders);
+    raid.putFloat("TotalMaxHealth", mTotalHealth);
+    raid.putByte("SpawnFails", (int8_t) mSpawnFailures);
+    return raid;
+}
+
+void Raid::restore(const Tag &raid, int64_t delta) {
+    const int32_t state = raid.getInt("State");
+    const int32_t result = raid.getInt("Status");
+    mState = state >= (int32_t) State::Cooldown && state <= (int32_t) State::Removed ? (State) state : State::Removed;
+    mResult = result >= (int32_t) Result::None && result <= (int32_t) Result::Defeat ? (Result) result : Result::None;
+    mCurrentWave = (uint8_t) raid.getByte("GroupNum");
+    mWaveCount = (uint8_t) raid.getByte("NumGroups");
+    mLastTick = raid.getLong("GameTick") + delta;
+    mTicksInState = raid.getLong("Ticks");
+    mSpawnPosition = Vector3f(raid.getFloat("SpawnX"), raid.getFloat("SpawnY"), raid.getFloat("SpawnZ"));
+
+    mRaiders.clear();
+    const Tag *raiders = raid.get("Raiders");
+    if (raiders != nullptr && raiders->isList()) {
+        for (const Tag &raider: raiders->getList()) {
+            if (raider.getType() == Tag::Type::Long)
+                mRaiders.insert(raider.asLong());
+        }
+    }
+
+    mWaveRaiders = (uint8_t) raid.getByte("NumRaiders");
+    mTotalHealth = raid.getFloat("TotalMaxHealth");
+    mHealthProgress = mTotalHealth > 0.0f;
+    mSpawnFailures = (uint8_t) raid.getByte("SpawnFails");
 }
 
 void Raid::_resetStateTimers() {
@@ -501,7 +554,7 @@ void Raid::_resetStateTimers() {
 }
 
 float Raid::_sumRaiderHealth(ServerNetworkHandler &owner) const {
-    // each raider counts its health truncated to an int (0x1439F51B0)
+    // each raider counts its health truncated to an int
     float total = 0.0f;
     for (int64_t id: mRaiders) {
         if (const MobActor *mob = VillageManager::findMob(owner, id))
@@ -512,7 +565,7 @@ float Raid::_sumRaiderHealth(ServerNetworkHandler &owner) const {
 
 bool Raid::_findSpawn(ServerNetworkHandler &owner, Level &level, const Village &village, int64_t elapsed,
                       Vector3f &position) const {
-    // one strategy per tick; after the sixth the raid gives up (0x1439F43C0)
+    // one strategy per tick; after the sixth the raid gives up
     switch (elapsed) {
         case 0:
             return findSpawnAroundVillage(owner, level, village, 16.0f, 1.0f, false, true, position);
@@ -533,7 +586,7 @@ bool Raid::_findSpawn(ServerNetworkHandler &owner, Level &level, const Village &
 }
 
 bool Raid::_spawnWave(ServerNetworkHandler &owner, Level &level, Village &village, int64_t elapsed) {
-    // Village::_spawnRaidGroup (0x1439F3A10): the group spawns on the first tick, and the second binds every raider
+    // the group spawns on the first tick, and the second binds every raider
     // and the first rider of each to the village
     if (elapsed == 1) {
         std::vector<int64_t> riders;
@@ -574,7 +627,7 @@ void Raid::_onWaveSpawned(ServerNetworkHandler &owner, Level &level) const {
 }
 
 void Raid::_onVictory(ServerNetworkHandler &owner, Level &level, const Village &village) const {
-    // the hero animation is shown to everyone in the raid area, rewarded or not (0x1439F4BB0)
+    // the hero animation is shown to everyone in the raid area, rewarded or not
     OnScreenTextureAnimationPacket animation;
     animation.mEffectId = (uint32_t) MobEffectId::VillageHero;
     for (auto &entry: owner.getPlayers()) {

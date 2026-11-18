@@ -6,6 +6,9 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/ItemStackNbt.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Item/BodyArmor.h"
+#include "World/Item/ItemData.h"
+#include "World/Item/ItemDurability.h"
 #include "World/Item/Item.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
@@ -15,6 +18,7 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/MobArmorEquipmentPacket.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MobEquipmentPacket.h"
 
 #include <algorithm>
@@ -145,9 +149,13 @@ void MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &m
     if (path == nullptr)
         return;
 
-    const LootTable *table = LootTableRegistry::getInstance().get(path->string());
+    equipFromTable(owner, mob, path->string());
+}
+
+bool MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &mob, const std::string &path) {
+    const LootTable *table = LootTableRegistry::getInstance().get(path);
     if (table == nullptr)
-        return;
+        return false;
 
     Level &level = owner.getLevelFor(mob);
     LootContext context(equipmentRandom());
@@ -167,6 +175,7 @@ void MobEquipment::equipFromTable(ServerNetworkHandler &owner, const MobActor &m
 
     if (equipped)
         broadcast(owner, mob);
+    return true;
 }
 
 int MobEquipment::_slotFor(const ItemStack &item) const {
@@ -268,7 +277,9 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
         if (item.isAir())
             continue;
 
-        const float chance = slot == BODY ? 1.0f : _dropChance(mob, slot);
+        if (mDropChanceOverride.has_value() && *mDropChanceOverride <= 0.0f)
+            continue;
+        const float chance = mDropChanceOverride.value_or(slot == BODY ? 1.0f : _dropChance(mob, slot));
         const bool guaranteed = chance >= 1.0f;
         if (!guaranteed && !killedByPlayer)
             continue;
@@ -284,7 +295,7 @@ void MobEquipment::dropOnDeath(ServerNetworkHandler &owner, Level &level, const 
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
-    // a private inventory (villager_v2) stays with the body; flag parsed by sub_1437ABF50
+    // a private inventory (villager_v2) stays with the body; flag parsed by
     const json::Value *inventory = mob.getComponent("minecraft:inventory");
     const json::Value *hidden = inventory == nullptr ? nullptr : inventory->get("private");
     if (hidden != nullptr && hidden->boolean(false))
@@ -337,11 +348,63 @@ bool MobEquipment::dropSlot(ServerNetworkHandler &owner, Level &level, const Vec
 }
 
 float MobEquipment::absorbDamage(float amount, const ActorDamageSource &source) const {
-    return ArmorProtection::apply(&mSlots[HEAD], FEET - HEAD + 1, amount, source.mDeathMessageKey,
+    return ArmorProtection::apply(&mSlots[HEAD], BODY - HEAD + 1, amount, source.mDeathMessageKey,
                                   source.mArmorEfficiency);
 }
 
+bool MobEquipment::_wearsOnHit(const ItemStack &item) {
+    if (item.isAir() || item.mDefinition == nullptr)
+        return false;
+
+    if (const BodyArmorData *body = BodyArmor::find(item))
+        return body->mWearsOnHit;
+
+    const ItemData *data = ItemDataTable::find(item.mDefinition->getIdentifier());
+    return data != nullptr && data->mArmorSlot != ArmorSlot::None;
+}
+
+void MobEquipment::hurtArmor(ServerNetworkHandler &owner, const MobActor &mob, float amount,
+                             const ActorDamageSource &source) {
+    if (!ArmorProtection::isReducedByArmor(source.mDeathMessageKey))
+        return;
+
+    const int32_t wear = std::max(1, (int32_t) amount / 4);
+    bool changed = false;
+    for (int slot = HEAD; slot <= BODY; ++slot) {
+        ItemStack &item = mSlots[(size_t) slot];
+        if (!_wearsOnHit(item))
+            continue;
+
+        const BodyArmorData *body = BodyArmor::find(item);
+        const char *breakSound = body != nullptr && body->mBreakSound != nullptr ? body->mBreakSound
+                                                                                 : LevelSoundEvent::BREAK;
+        if (!ItemDurability::apply(nullptr, item, wear))
+            continue;
+
+        changed = true;
+        if (item.isAir())
+            owner.playLevelSound(owner.getLevelFor(mob), breakSound, mob.getPosition(), mob.getIdentifier());
+    }
+
+    if (changed)
+        broadcast(owner, mob);
+}
+
+bool MobEquipment::repairSlot(int slot, int32_t amount) {
+    if (slot < 0 || slot >= SLOT_COUNT || amount <= 0)
+        return false;
+
+    ItemStack &item = mSlots[(size_t) slot];
+    if (item.isAir() || item.mDamage <= 0)
+        return false;
+
+    item.mDamage = std::max(0, item.mDamage - amount);
+    return true;
+}
+
 void MobEquipment::saveNbt(Tag &data) const {
+    if (mDropChanceOverride.has_value())
+        data.putFloat("FalconEquipmentDropChance", *mDropChanceOverride);
     data.put(TAG_MAINHAND, singleItemList(mSlots[MAINHAND]));
     data.put(TAG_OFFHAND, singleItemList(mSlots[OFFHAND]));
 
@@ -360,6 +423,9 @@ void MobEquipment::saveNbt(Tag &data) const {
 }
 
 void MobEquipment::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    mDropChanceOverride.reset();
+    if (data.contains("FalconEquipmentDropChance", Tag::Type::Float))
+        mDropChanceOverride = data.getFloat("FalconEquipmentDropChance");
     for (ItemStack &item: mSlots)
         item = ItemStack::air();
 

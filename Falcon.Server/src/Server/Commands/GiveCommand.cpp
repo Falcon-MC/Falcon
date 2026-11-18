@@ -1,6 +1,7 @@
 #include "Server/Commands/GiveCommand.h"
 
 #include "Server/Commands/CommandEnums.h"
+#include "Server/Commands/CommandItems.h"
 #include "World/Item/Item.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
@@ -123,6 +124,13 @@ bool GiveCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         stack.mBlockDefinition = mHandler.getBlockDefinitions().getDefinition(item.getIdentifier());
         stack.mCount = count;
         stack.mDamage = data;
+        CommandItems::applyData(stack, data);
+
+        std::string error;
+        if (!CommandItems::prepareFor(mHandler, *target, stack, error)) {
+            sender.sendTranslation(error, {});
+            break;
+        }
 
         std::vector<int> touchedSlots;
         const int remaining = target->getInventory().addItemPartial(stack, touchedSlots);

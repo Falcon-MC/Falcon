@@ -1,19 +1,22 @@
 name: CI
 
+# not on pull requests: they are merged without waiting for it, so a run per pull request only filled
+# the queue ahead of dev's. A branch can still be built by hand with workflow_dispatch
 on:
   push:
     branches:
       - main
       - dev
-  pull_request:
   workflow_dispatch:
   repository_dispatch:
     types:
       - upstream-updated
 
+# the run in progress is left to finish and only the newest waiting one is kept: with cancelling, a burst
+# of merges meant no run of dev ever reached its end
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

@@ -9,9 +9,14 @@ namespace ScriptBootstraps {
     // (native) => { BlockPermutation, BlockType, BlockTypes, BlockStates, ItemType, ItemTypes, installJobs }
     const char *data();
 
-    // (native) => { ActionFormData, MessageFormData, ModalFormData }
+    // (native) => { BlockVolumeBase, BlockVolume, ListBlockVolume, BlockLocationIterator }
+    const char *volumes();
+
+    // (native: showForm, closeAllForms, errors) => the classic form classes, responses and uiManager
     const char *ui();
 
-    // (native) => { Scoreboard, ScoreboardObjective, TickingAreaManager, scoreboard, tickingAreaManager }
-    const char *world();
+    // (native: send, isBiome, isPlayer, errors) => the four biome setting classes and their getters
+    const char *graphics();
+    // (native: definition, ItemTypes, isItemStack, from*) => the loot classes and their LootTableManager, manager
+    const char *loot();
 }

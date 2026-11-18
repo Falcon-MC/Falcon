@@ -16,9 +16,15 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/BehaviorPackManager.h"
 #include "Scripting/Binding/ScriptApi.h"
+#include "Scripting/Binding/ScriptNatives.h"
+#include "Scripting/Binding/ScriptNetBinding.h"
+#include "Scripting/Binding/ScriptRayQueries.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Storage/Loot/LootTableRegistry.h"
+#include "World/Actor/Trade/TradeTableRegistry.h"
 #include "Protocol/Packets/SyncWorldClocksPacket.h"
+#include "Server/ServerPaths.h"
 
 #include <chrono>
 #include <cmath>
@@ -225,11 +231,12 @@ namespace {
 }
 
 int _scriptInterruptHandler(JSRuntime *, void *opaque) {
-    const ScriptEngine *engine = (const ScriptEngine *) opaque;
-    if (engine == nullptr)
+    ScriptEngine *engine = (ScriptEngine *) opaque;
+    if (engine == nullptr || nowMs() <= engine->mExecutionDeadlineMs)
         return 0;
 
-    return nowMs() > engine->mExecutionDeadlineMs ? 1 : 0;
+    engine->_noteHang();
+    return 1;
 }
 
 ScriptEngine::ScriptEngine() : mRuntime(nullptr), mWatchdogMs(DEFAULT_WATCHDOG_MS), mExecutionDeadlineMs(0) {
@@ -254,6 +261,8 @@ ScriptEngine::ScriptEngine() : mRuntime(nullptr), mWatchdogMs(DEFAULT_WATCHDOG_M
 }
 
 ScriptEngine::~ScriptEngine() {
+    if (mHost != nullptr && mHost->isTransportReady())
+        mHost->getNetworkHandler().setSendHook(nullptr);
     MobEffectManager::setAddFilter(nullptr);
     MobEffectManager::setAddListener(nullptr);
     Actor::setHealHooks(nullptr, nullptr);
@@ -275,6 +284,8 @@ void ScriptEngine::bindHost(ServerNetworkHandler &host) {
         return;
 
     mHost = &host;
+    mGameTests.bindHost(host);
+    mPackConfigs.load(ServerPaths::file("config"));
     MobEffectManager::setAddFilter(
             [this](Actor &actor, MobEffectInstance &effect) { return !beforeEffectAdd(actor, effect); });
     MobEffectManager::setAddListener(
@@ -388,8 +399,69 @@ void ScriptEngine::sendWorldClocks(ServerPlayer &player) {
     mHost->getNetworkHandler().send(player.getNetworkIdentifier(), packet, mHost->getCodecContext());
 }
 
+void ScriptEngine::broadcastAimAssist(const CameraAimAssistPresetsPacket &packet) {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    for (auto &entry: mHost->getPlayers()) {
+        if (entry.second.isSpawned())
+            mHost->getNetworkHandler().send(entry.first, packet, mHost->getCodecContext());
+    }
+}
+
+void ScriptEngine::sendAimAssist(ServerPlayer &player) {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    mHost->getNetworkHandler().send(player.getNetworkIdentifier(), mAimAssist.makePacket(), mHost->getCodecContext());
+}
+
 void ScriptEngine::_arm() {
+    _dispatchWatchdog();
+    ++mArmSerial;
     mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+}
+
+void ScriptEngine::_noteHang() {
+    if (mDispatchingWatchdog || mHangSerial == mArmSerial || mApis.empty())
+        return;
+    mHangSerial = mArmSerial;
+
+    // every pack's code is named under its own root; bootstrap frames carry no such name
+    JSContext *ctx = mApis.front()->context();
+    for (int level = 0;; ++level) {
+        const JSAtom atom = JS_GetScriptOrModuleName(ctx, level);
+        if (atom == JS_ATOM_NULL)
+            return;
+        const char *name = JS_AtomToCString(ctx, atom);
+        JS_FreeAtom(ctx, atom);
+        if (name == nullptr)
+            return;
+        const std::string file(name);
+        JS_FreeCString(ctx, name);
+        for (const std::unique_ptr<ScriptApi> &api: mApis) {
+            const std::string root = api->packRoot() + "/";
+            if (file.compare(0, root.size(), root) == 0) {
+                mHungApi = api.get();
+                return;
+            }
+        }
+    }
+}
+
+void ScriptEngine::_dispatchWatchdog() {
+    if (mHungApi == nullptr || mDispatchingWatchdog)
+        return;
+    const ScriptApi *hung = mHungApi;
+    mHungApi = nullptr;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (api.get() != hung)
+            continue;
+        mDispatchingWatchdog = true;
+        mExecutionDeadlineMs = nowMs() + mWatchdogMs;
+        api->watchdogTerminate("Hang");
+        _pumpJobs();
+        mDispatchingWatchdog = false;
+        return;
+    }
 }
 
 void ScriptEngine::_installConsole(JSContext *context) {
@@ -407,7 +479,14 @@ void ScriptEngine::_installConsole(JSContext *context) {
 
 size_t ScriptEngine::loadPacks(const std::vector<BehaviorPack> &packs) {
     size_t loaded = 0;
+    // the game reads sound definitions from the end of the pack stack and keeps the first: the last pack wins
+    for (auto pack = packs.rbegin(); pack != packs.rend(); ++pack)
+        mSounds.addPack(pack->mPath);
     for (const BehaviorPack &pack: packs) {
+        // structures, loot and trade tables come from every pack, scripted or not
+        mStructures.addPack(pack.mPath);
+        LootTableRegistry::getInstance().addPack(pack.mPath);
+        TradeTableRegistry::getInstance().addPack(pack.mPath);
         if (pack.hasScript() && _loadPack(pack))
             loaded++;
     }
@@ -425,10 +504,30 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
         return false;
     }
 
+    // the module permission filter of the plugin manager
+    const ScriptPackConfig &config = mPackConfigs.get(pack.mScriptModuleUuid);
+    for (const ScriptModuleVersion &module: modules.getModules()) {
+        if (!config.allowsModule(module.mName)) {
+            LOG_ERROR(LogAreaID::Script,
+                      "Plugin [%s] - requesting dependency on module [%s] but it is not configured to use it.",
+                      pack.mName.c_str(), module.mName.c_str());
+            return false;
+        }
+    }
+
     for (const ScriptModuleVersion &module: modules.getModules()) {
         if (!module.mImplemented)
             LOG_WARN(LogAreaID::Script, "[%s] module [%s] is not available on this server: importing it fails",
                      pack.mName.c_str(), module.mName.c_str());
+    }
+
+    // the entry stays inside its pack, like the modules it imports
+    std::string entryPath = pack.scriptPath();
+    std::replace(entryPath.begin(), entryPath.end(), '\\', '/');
+    const std::string packRoot = canonicalPath(pack.mPath) + "/";
+    if (canonicalPath(entryPath).compare(0, packRoot.size(), packRoot) != 0) {
+        LOG_ERROR(LogAreaID::Script, "Script entry of %s is outside its pack", pack.mName.c_str());
+        return false;
     }
 
     const std::string source = readFile(pack.scriptPath());
@@ -447,6 +546,9 @@ bool ScriptEngine::_loadPack(const BehaviorPack &pack) {
     std::unique_ptr<ScriptApi> api(
             new ScriptApi(context, *mHost, mPlayers, mNativeClassId, pack.mName, canonicalPath(pack.mPath), modules));
     api->setPackSettings(pack.mSettings);
+    api->setScriptModuleUuid(pack.mScriptModuleUuid);
+    api->setScriptModuleVersion(pack.mScriptModuleVersion);
+    api->setPackUuid(pack.mUuid);
     _arm();
     api->install();
 
@@ -496,6 +598,7 @@ void ScriptEngine::startup() {
 }
 
 void ScriptEngine::shutdown() {
+    mGameTests.stopAll();
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
         api->shutdown();
@@ -516,6 +619,7 @@ void ScriptEngine::_pumpJobs() {
             break;
         }
     }
+    _dispatchWatchdog();
 }
 
 template <typename Fill>
@@ -536,10 +640,11 @@ bool ScriptEngine::_emit(const char *key, const char *signal, bool cancellable, 
     return cancellable && cancelled;
 }
 
-void ScriptEngine::onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z) {
+void ScriptEngine::onProjectileHitBlock(ServerActor &projectile, int32_t x, int32_t y, int32_t z, const Vector3f &from,
+                                        const Vector3f &to) {
     for (std::unique_ptr<ScriptApi> &api: mApis) {
         _arm();
-        api->emitProjectileHitBlock(projectile, x, y, z);
+        api->emitProjectileHitBlock(projectile, x, y, z, from, to);
         _pumpJobs();
     }
 }
@@ -601,9 +706,12 @@ void ScriptEngine::onEntityHitBlock(Actor &damagingEntity, const Vector3i &posit
     _emit("after.entityHitBlock", "WorldAfterEvents.entityHitBlock", false, [&](ScriptApi &api, JSValue event) {
         JSContext *ctx = api.context();
         JS_SetPropertyStr(ctx, event, "damagingEntity", api.makeEntity(damagingEntity));
-        JS_SetPropertyStr(ctx, event, "hitBlock",
-                          api.makeBlock(api.host().getLevelFor(damagingEntity), position.x, position.y, position.z));
+        Level &level = api.host().getLevelFor(damagingEntity);
+        JS_SetPropertyStr(ctx, event, "hitBlock", api.makeBlock(level, position.x, position.y, position.z));
         JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
+        if (api.surface().has("EntityHitBlockAfterEvent.hitBlockPermutation"))
+            JS_SetPropertyStr(ctx, event, "hitBlockPermutation",
+                              api.makePermutation(level.getBlockState(position.x, position.y, position.z)));
     });
 }
 
@@ -614,22 +722,75 @@ void ScriptEngine::onEntityHitEntity(Actor &damagingEntity, Actor &hitEntity) {
     });
 }
 
+namespace {
+    // ItemFilter.includeTypes by type id, ItemType or name; a missing filter matches
+    bool itemPassesFilter(JSContext *ctx, JSValueConst itemFilter, const ItemStack &item) {
+        JSValue types = JS_IsObject(itemFilter) ? JS_GetPropertyStr(ctx, itemFilter, "includeTypes") : JS_UNDEFINED;
+        bool accepted = true;
+        if (JS_IsArray(types) && item.mDefinition != nullptr) {
+            uint32_t length = 0;
+            JSValue lengthValue = JS_GetPropertyStr(ctx, types, "length");
+            JS_ToUint32(ctx, &length, lengthValue);
+            JS_FreeValue(ctx, lengthValue);
+            bool found = false;
+            for (uint32_t index = 0; index < length && !found; ++index) {
+                JSValue type = JS_GetPropertyUint32(ctx, types, index);
+                JSValue id = JS_IsObject(type) ? JS_GetPropertyStr(ctx, type, "id") : JS_DupValue(ctx, type);
+                std::string name = toString(ctx, id);
+                if (name.find(':') == std::string::npos)
+                    name = "minecraft:" + name;
+                found = name == item.mDefinition->getIdentifier();
+                JS_FreeValue(ctx, id);
+                JS_FreeValue(ctx, type);
+            }
+            accepted = found;
+        }
+        JS_FreeValue(ctx, types);
+        return accepted;
+    }
+
+    // EntityItemPickupEventOptions and EntityItemDropEventOptions: entityFilter on the entity, itemFilter on the item
+    bool acceptsEntityItem(JSContext *ctx, JSValueConst options, JSValueConst entity, const ItemStack &item) {
+        JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
+        bool accepted = ScriptApi::entityMatches(ctx, entity, entityFilter);
+        JS_FreeValue(ctx, entityFilter);
+        JSValue itemFilter = JS_GetPropertyStr(ctx, options, "itemFilter");
+        accepted = accepted && itemPassesFilter(ctx, itemFilter, item);
+        JS_FreeValue(ctx, itemFilter);
+        return accepted;
+    }
+}
+
 void ScriptEngine::onEntityItemDrop(Actor &entity, ItemActor *dropped) {
-    _emit("after.entityItemDrop", "WorldAfterEvents.entityItemDrop", false, [&](ScriptApi &api, JSValue event) {
-        JSContext *ctx = api.context();
-        JS_SetPropertyStr(ctx, event, "entity", api.makeEntity(entity));
+    const ItemStack item = dropped != nullptr ? dropped->getItem() : ItemStack();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("after.entityItemDrop"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldAfterEvents.entityItemDrop");
+        JSValue dropper = api->makeEntity(entity);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, dropper));
         JSValue items = JS_NewArray(ctx);
         if (dropped != nullptr)
-            JS_SetPropertyUint32(ctx, items, 0, api.makeEntity(*dropped));
+            JS_SetPropertyUint32(ctx, items, 0, api->makeEntity(*dropped));
         JS_SetPropertyStr(ctx, event, "items", items);
-    });
+        api->emitFiltered("after.entityItemDrop", event,
+                          [&](JSValueConst options) { return acceptsEntityItem(ctx, options, dropper, item); });
+        JS_FreeValue(ctx, dropper);
+        _pumpJobs();
+    }
 }
 
 void ScriptEngine::onPlayerInteractWithBlock(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
                                              int32_t face, const Vector3f &clickPosition) {
     _emit("after.playerInteractWithBlock", "WorldAfterEvents.playerInteractWithBlock", false,
           [&](ScriptApi &api, JSValue event) { fillBlockInteraction(api, event, player, position, face); });
+    onCustomBlockUse(player, blockId, position, face, clickPosition);
+}
 
+void ScriptEngine::onCustomBlockUse(ServerPlayer &player, const std::string &blockId, const Vector3i &position,
+                                    int32_t face, const Vector3f &clickPosition) {
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(blockId);
     if (block == nullptr)
         return;
@@ -687,7 +848,7 @@ void ScriptEngine::createCustomDimensions() {
     if (mHost == nullptr)
         return;
 
-    // sub_14382A4C0: DimensionNameIdTable keeps each custom name's id across restarts
+    // DimensionNameIdTable keeps each custom name's id across restarts
     Level &overworld = mHost->getWorlds().getDefault().getOverworld();
     Tag table;
     if (!overworld.loadSavedData("DimensionNameIdTable", table, false))
@@ -716,6 +877,23 @@ bool ScriptEngine::isCustomComponentRegistered(bool blocks, const std::string &n
             return true;
     }
     return false;
+}
+
+const std::vector<std::string> *ScriptEngine::findCommandEnum(const std::string &name) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        const std::vector<std::string> *values = api->findCommandEnum(name);
+        if (values != nullptr)
+            return values;
+    }
+    return nullptr;
+}
+
+void ScriptEngine::runGuarded(const std::function<void()> &call) {
+    if (mGuardDepth++ == 0)
+        _arm();
+    call();
+    if (--mGuardDepth == 0)
+        _pumpJobs();
 }
 
 void ScriptEngine::_scheduleBlockTick(Level &level, const std::string &blockId, const Vector3i &position) {
@@ -748,6 +926,53 @@ void ScriptEngine::onCustomBlockRandomTick(Level &level, const std::string &bloc
 
     _fireComponent(true, usesAt(*block, level, position), "onRandomTick", "BlockComponentRandomTickEvent",
                    [&](ScriptApi &api, JSValue event) { api.fillBlockEvent(event, level, position); });
+}
+
+// every pack's onNamedTick sees the event; isName answers only for the one that scheduled it
+void ScriptEngine::onCustomBlockNamedTick(Level &level, const Vector3i &position, const BlockState &state,
+                                          const std::string &eventNamespace, const std::string &eventName) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(state.mName);
+    if (block == nullptr)
+        return;
+
+    const std::vector<CustomComponentUse> uses = CustomContentRegistry::componentsFor(*block, state.mStates);
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->surface().has("BlockComponentNamedTickEvent") || !api->handlesHook(true, uses, "onNamedTick"))
+            continue;
+
+        _arm();
+        ScriptNamedTickEvent *data = new ScriptNamedTickEvent();
+        data->mNamespace = eventNamespace;
+        data->mEventName = eventName;
+        JSValue event = api->makeInstance("BlockComponentNamedTickEvent", data);
+        api->fillBlockEvent(event, level, position);
+        api->fireComponents(true, uses, "onNamedTick", event);
+        JS_FreeValue(api->context(), event);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onCustomBlockNeighborChanged(Level &level, const Vector3i &position, const BlockState &state,
+                                                const std::vector<NeighborChangeQueue::Change> &changes) {
+    const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(state.mName);
+    if (block == nullptr)
+        return;
+
+    const std::vector<CustomComponentUse> uses = CustomContentRegistry::componentsFor(*block, state.mStates);
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->surface().has("BlockComponentNeighborChangedAfterEvent")
+            || !api->handlesHook(true, uses, "onNeighborChanged"))
+            continue;
+
+        _arm();
+        ScriptNeighborChangedEvent *data = new ScriptNeighborChangedEvent();
+        data->mChanges = changes;
+        JSValue event = api->makeInstance("BlockComponentNeighborChangedAfterEvent", data);
+        api->fillBlockEvent(event, level, position);
+        api->fireComponents(true, uses, "onNeighborChanged", event);
+        JS_FreeValue(api->context(), event);
+        _pumpJobs();
+    }
 }
 
 void ScriptEngine::onCustomBlockStep(Actor &actor, const Level &level, const std::string &blockId,
@@ -783,6 +1008,10 @@ void ScriptEngine::onCustomBlockFallOn(Actor &actor, Level &level, const std::st
                        JS_SetPropertyStr(api.context(), event, "fallDistance",
                                          JS_NewFloat64(api.context(), fallDistance));
                    });
+}
+
+void ScriptEngine::forgetLevel(const Level &level) {
+    mRedstonePower.erase(&level);
 }
 
 void ScriptEngine::onCustomBlockRedstone(Level &level, const std::string &blockId, const Vector3i &position,
@@ -851,8 +1080,26 @@ bool ScriptEngine::beforeCustomBlockPlace(ServerPlayer &player, Level &level, co
     return cancelled;
 }
 
+bool ScriptEngine::beforePlayerPlaceBlock(ServerPlayer &player, Level &level, const Vector3i &position, int32_t face,
+                                          const Vector3f &faceLocation, const BlockState &placed) {
+    return _emit("before.playerPlaceBlock", "WorldBeforeEvents.playerPlaceBlock", true,
+                 [&](ScriptApi &api, JSValue event) {
+                     JSContext *ctx = api.context();
+                     api.fillBlockEvent(event, level, position);
+                     JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+                     JS_SetPropertyStr(ctx, event, "face", JS_NewString(ctx, directionName(face)));
+                     JS_SetPropertyStr(ctx, event, "faceLocation",
+                                       vector3(ctx, faceLocation.x, faceLocation.y, faceLocation.z));
+                     JS_SetPropertyStr(ctx, event, "permutationToPlace", api.makePermutation(placed));
+                 });
+}
+
 void ScriptEngine::onCustomBlockPlaced(Level &level, const Vector3i &position, const BlockState &placed,
                                        const BlockState &previous) {
+    // a new block starts without the power the one it replaced last saw
+    const auto powers = mRedstonePower.find(&level);
+    if (powers != mRedstonePower.end())
+        powers->second.erase(RedstoneSystem::packPosition(position));
     const CustomBlockDefinition *block = CustomContentRegistry::getInstance().findBlock(placed.mName);
     if (block == nullptr)
         return;
@@ -913,25 +1160,294 @@ void ScriptEngine::onItemUse(ServerPlayer &player) {
                    });
 }
 
-void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used) {
+namespace {
+    // EntityContainerAccessEventOptions: entityFilter on the container, accessSourceFilter on who opened it
+    bool acceptsContainerAccess(JSContext *ctx, JSValueConst options, JSValueConst container, JSValueConst source) {
+        JSValue entityFilter = JS_GetPropertyStr(ctx, options, "entityFilter");
+        bool accepted = ScriptApi::entityMatches(ctx, container, entityFilter);
+        JS_FreeValue(ctx, entityFilter);
+        JSValue sourceFilter = JS_GetPropertyStr(ctx, options, "accessSourceFilter");
+        if (accepted && JS_IsObject(sourceFilter)) {
+            JSValue filter = JS_GetPropertyStr(ctx, sourceFilter, "entityFilter");
+            accepted = ScriptApi::entityMatches(ctx, source, filter);
+            JS_FreeValue(ctx, filter);
+        }
+        JS_FreeValue(ctx, sourceFilter);
+        return accepted;
+    }
+}
+
+void ScriptEngine::_emitContainerAccess(const char *key, const char *signal, const char *sourceField, Actor &container,
+                                        Actor &source) {
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers(key))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent(signal);
+        JSValue entity = api->makeEntity(container);
+        JSValue opener = api->makeEntity(source);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
+        JSValue access = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, access, "entity", JS_DupValue(ctx, opener));
+        JS_SetPropertyStr(ctx, event, sourceField, access);
+        api->emitFiltered(key, event,
+                          [&](JSValueConst options) { return acceptsContainerAccess(ctx, options, entity, opener); });
+        JS_FreeValue(ctx, opener);
+        JS_FreeValue(ctx, entity);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onEntityContainerOpened(Actor &container, Actor &source) {
+    _emitContainerAccess("after.entityContainerOpened", "WorldAfterEvents.entityContainerOpened", "openSource",
+                         container, source);
+}
+
+void ScriptEngine::onEntityContainerClosed(Actor &container, Actor &source) {
+    _emitContainerAccess("after.entityContainerClosed", "WorldAfterEvents.entityContainerClosed", "closeSource",
+                         container, source);
+}
+
+namespace {
+    bool blockMatches(JSContext *ctx, JSValueConst options, const BlockState &state) {
+        JSValue filter = JS_GetPropertyStr(ctx, options, "blockFilter");
+        const bool accepted = !JS_IsObject(filter) || ScriptRayQueries::blockPassesFilter(ctx, state, filter);
+        JS_FreeValue(ctx, filter);
+        return accepted;
+    }
+
+    // BlockContainerAccessEventOptions: blockFilter on the container, accessSourceFilter on who opened it
+    bool acceptsBlockContainerAccess(JSContext *ctx, JSValueConst options, const BlockState &state,
+                                     JSValueConst source) {
+        if (!blockMatches(ctx, options, state))
+            return false;
+        JSValue sourceFilter = JS_GetPropertyStr(ctx, options, "accessSourceFilter");
+        bool accepted = true;
+        if (JS_IsObject(sourceFilter)) {
+            JSValue filter = JS_GetPropertyStr(ctx, sourceFilter, "entityFilter");
+            accepted = ScriptApi::entityMatches(ctx, source, filter);
+            JS_FreeValue(ctx, filter);
+        }
+        JS_FreeValue(ctx, sourceFilter);
+        return accepted;
+    }
+
+    // PlayerBreakingBlockEventOptions
+    bool acceptsBreakingBlock(JSContext *ctx, JSValueConst options, const BlockState &state, JSValueConst player) {
+        if (!blockMatches(ctx, options, state))
+            return false;
+        JSValue filter = JS_GetPropertyStr(ctx, options, "playerFilter");
+        const bool accepted = ScriptApi::entityMatches(ctx, player, filter);
+        JS_FreeValue(ctx, filter);
+        return accepted;
+    }
+}
+
+void ScriptEngine::_emitBlockContainerAccess(const char *key, const char *signal, const char *sourceField,
+                                             Level &level, const Vector3i &position, Actor &source) {
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers(key))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent(signal);
+        JS_SetPropertyStr(ctx, event, "block", api->makeBlock(level, position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "dimension", api->makeDimension(level));
+        JSValue opener = api->makeEntity(source);
+        JSValue access = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, access, "entity", JS_DupValue(ctx, opener));
+        JS_SetPropertyStr(ctx, event, sourceField, access);
+        api->emitFiltered(key, event, [&](JSValueConst options) {
+            return acceptsBlockContainerAccess(ctx, options, state, opener);
+        });
+        JS_FreeValue(ctx, opener);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onBlockContainerOpened(Level &level, const Vector3i &position, Actor &source) {
+    _emitBlockContainerAccess("after.blockContainerOpened", "WorldAfterEvents.blockContainerOpened", "openSource",
+                              level, position, source);
+}
+
+void ScriptEngine::onBlockContainerClosed(Level &level, const Vector3i &position, Actor &source) {
+    _emitBlockContainerAccess("after.blockContainerClosed", "WorldAfterEvents.blockContainerClosed", "closeSource",
+                              level, position, source);
+}
+
+void ScriptEngine::_emitBreakingBlock(const char *key, const char *signal, ServerPlayer &player,
+                                      const Vector3i &position, int32_t face, const double *progress) {
+    if (mHost == nullptr)
+        return;
+    Level &level = mHost->getLevelFor(player);
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    const ItemStack held = player.getInventory().getItemInHand();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers(key))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent(signal);
+        JS_SetPropertyStr(ctx, event, "block", api->makeBlock(level, position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "dimension", api->makeDimension(level));
+        JS_SetPropertyStr(ctx, event, "blockPermutation", api->makePermutation(state));
+        JS_SetPropertyStr(ctx, event, "face", JS_NewString(ctx, directionName(face)));
+        if (!held.isAir())
+            JS_SetPropertyStr(ctx, event, "heldItemStack", api->makeItem(held));
+        if (progress != nullptr)
+            JS_SetPropertyStr(ctx, event, "breakProgress", JS_NewFloat64(ctx, *progress));
+        JSValue source = api->makePlayer(player);
+        JS_SetPropertyStr(ctx, event, "player", JS_DupValue(ctx, source));
+        api->emitFiltered(key, event,
+                          [&](JSValueConst options) { return acceptsBreakingBlock(ctx, options, state, source); });
+        JS_FreeValue(ctx, source);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onPlayerStartBreakingBlock(ServerPlayer &player, const Vector3i &position, int32_t face) {
+    _emitBreakingBlock("after.playerStartBreakingBlock", "WorldAfterEvents.playerStartBreakingBlock", player,
+                       position, face, nullptr);
+}
+
+void ScriptEngine::onPlayerCancelBreakingBlock(ServerPlayer &player, const Vector3i &position, int32_t face,
+                                               double progress) {
+    const double clamped = std::min(std::max(progress, 0.0), 1.0);
+    _emitBreakingBlock("after.playerCancelBreakingBlock", "WorldAfterEvents.playerCancelBreakingBlock", player,
+                       position, face, &clamped);
+}
+
+void ScriptEngine::onItemStartUseOn(ServerPlayer &player, const Vector3i &position, int32_t face) {
+    _emit("after.itemStartUseOn", "WorldAfterEvents.itemStartUseOn", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        const ItemStack held = player.getInventory().getItemInHand();
+        JS_SetPropertyStr(ctx, event, "block",
+                          api.makeBlock(api.host().getLevelFor(player), position.x, position.y, position.z));
+        JS_SetPropertyStr(ctx, event, "blockFace", JS_NewString(ctx, directionName(face)));
+        if (!held.isAir())
+            JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onItemStopUseOn(ServerPlayer &player, const Vector3i &position) {
+    _emit("after.itemStopUseOn", "WorldAfterEvents.itemStopUseOn", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        const ItemStack held = player.getInventory().getItemInHand();
+        JS_SetPropertyStr(ctx, event, "block",
+                          api.makeBlock(api.host().getLevelFor(player), position.x, position.y, position.z));
+        if (!held.isAir())
+            JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onSoundCompleted(const std::string &soundInstanceId) {
+    _emit("after.soundCompleted", "WorldAfterEvents.soundCompleted", false, [&](ScriptApi &api, JSValue event) {
+        JS_SetPropertyStr(api.context(), event, "soundInstanceId", JS_NewString(api.context(), soundInstanceId.c_str()));
+    });
+}
+
+void ScriptEngine::onPlayerInputPermissionCategoryChange(ServerPlayer &player, int32_t category, bool enabled) {
+    _emit("after.playerInputPermissionCategoryChange", "WorldAfterEvents.playerInputPermissionCategoryChange", false,
+          [&](ScriptApi &api, JSValue event) {
+              JSContext *ctx = api.context();
+              JS_SetPropertyStr(ctx, event, "category", JS_NewInt32(ctx, category));
+              JS_SetPropertyStr(ctx, event, "enabled", JS_NewBool(ctx, enabled));
+              JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+          });
+}
+
+void ScriptEngine::onItemStartUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {
+    if (used.isAir())
+        return;
+    _emit("after.itemStartUse", "WorldAfterEvents.itemStartUse", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration));
+    });
+}
+
+void ScriptEngine::onItemStopUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration, bool released) {
+    const auto fill = [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration < 0 ? 0 : useDuration));
+    };
+    if (released)
+        _emit("after.itemReleaseUse", "WorldAfterEvents.itemReleaseUse", false, fill);
+    _emit("after.itemStopUse", "WorldAfterEvents.itemStopUse", false, fill);
+}
+
+bool ScriptEngine::beforeEntityItemPickup(Actor &collector, Actor &item, const ItemStack &picked) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.entityItemPickup"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.entityItemPickup");
+        JSValue entity = api->makeEntity(collector);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
+        JS_SetPropertyStr(ctx, event, "item", api->makeEntity(item));
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        cancelled = api->emitFiltered("before.entityItemPickup", event, [&](JSValueConst options) {
+            return acceptsEntityItem(ctx, options, entity, picked);
+        }) || cancelled;
+        JS_FreeValue(ctx, entity);
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onEntityItemPickup(Actor &collector, const ItemStack &picked) {
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("after.entityItemPickup"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldAfterEvents.entityItemPickup");
+        JSValue entity = api->makeEntity(collector);
+        JS_SetPropertyStr(ctx, event, "entity", JS_DupValue(ctx, entity));
+        JSValue items = JS_NewArray(ctx);
+        JS_SetPropertyUint32(ctx, items, 0, api->makeItem(picked));
+        JS_SetPropertyStr(ctx, event, "items", items);
+        api->emitFiltered("after.entityItemPickup", event,
+                          [&](JSValueConst options) { return acceptsEntityItem(ctx, options, entity, picked); });
+        JS_FreeValue(ctx, entity);
+        _pumpJobs();
+    }
+}
+
+void ScriptEngine::onItemCompleteUse(ServerPlayer &player, const ItemStack &used, int32_t useDuration) {
     if (used.isAir() || used.mDefinition == nullptr)
         return;
+    // ScriptDeferredEventCoordinator flushes item custom components before world after events
     const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
-    if (item == nullptr)
-        return;
-
-    const auto fill = [&](ScriptApi &api, JSValue event) {
-        JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
-        JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
-    };
-    _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent", fill);
+    if (item != nullptr) {
+        _fireComponent(false, item->mCustomComponents, "onCompleteUse", "ItemComponentCompleteUseEvent",
+                       [&](ScriptApi &api, JSValue event) {
+                           JS_SetPropertyStr(api.context(), event, "source", api.makePlayer(player));
+                           JS_SetPropertyStr(api.context(), event, "itemStack", api.makeItem(used));
+                       });
+    }
+    _emit("after.itemCompleteUse", "WorldAfterEvents.itemCompleteUse", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(used));
+        JS_SetPropertyStr(ctx, event, "source", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "useDuration", JS_NewInt32(ctx, useDuration));
+    });
 }
 
 void ScriptEngine::onItemConsume(ServerPlayer &player, const ItemStack &used) {
     if (used.isAir() || used.mDefinition == nullptr)
         return;
     const CustomItemDefinition *item = CustomContentRegistry::getInstance().findItem(used.mDefinition->getIdentifier());
-    // the game subscribes onConsume to the food component's signal only (sub_14A7F6070)
+    // the game subscribes onConsume to the food component's signal only
     if (item == nullptr || !item->mIsFood)
         return;
 
@@ -1103,6 +1619,32 @@ bool ScriptEngine::beforePlayerInteractWithEntity(ServerPlayer &player, Actor &t
                  });
 }
 
+bool ScriptEngine::beforePlayerItemAttackEntity(ServerPlayer &player, Actor &target, const Vector3f *aim) {
+    return _emit("before.playerItemAttackEntity", "WorldBeforeEvents.playerItemAttackEntity", true,
+                 [&](ScriptApi &api, JSValue event) {
+                     JSContext *ctx = api.context();
+                     JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+                     JS_SetPropertyStr(ctx, event, "target", api.makeEntity(target));
+                     const ItemStack &held = player.getInventory().getItemInHand();
+                     if (!held.isAir() && held.mDefinition != nullptr)
+                         JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(held));
+                     if (aim != nullptr)
+                         JS_SetPropertyStr(ctx, event, "aimDirection", vector3(ctx, aim->x, aim->y, aim->z));
+                 });
+}
+
+void ScriptEngine::onPlayerUseNameTag(ServerPlayer &player, Actor &named, const std::string &newName,
+                                      const std::string &previousName) {
+    _emit("after.playerUseNameTag", "WorldAfterEvents.playerUseNameTag", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "entityNamed", api.makeEntity(named));
+        JS_SetPropertyStr(ctx, event, "newName", JS_NewString(ctx, newName.c_str()));
+        if (!previousName.empty())
+            JS_SetPropertyStr(ctx, event, "previousName", JS_NewString(ctx, previousName.c_str()));
+    });
+}
+
 bool ScriptEngine::beforeItemUse(ServerPlayer &player) {
     const ItemStack &held = player.getInventory().getItemInHand();
     if (held.isAir() || held.mDefinition == nullptr)
@@ -1123,6 +1665,18 @@ void ScriptEngine::onPlayerInteractWithEntity(ServerPlayer &player, Actor &targe
               JS_SetPropertyStr(ctx, event, "beforeItemStack", api.makeItem(before));
               JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(player.getInventory().getItemInHand()));
           });
+}
+
+void ScriptEngine::onPlayerCraftRecipe(ServerPlayer &player, const ItemStack &crafted, const Vector3i *blockPosition) {
+    Level &level = mHost->getLevelFor(player);
+    _emit("after.playerCraftRecipe", "WorldAfterEvents.playerCraftRecipe", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+        JS_SetPropertyStr(ctx, event, "itemStack", api.makeItem(crafted));
+        if (blockPosition != nullptr)
+            JS_SetPropertyStr(ctx, event, "block",
+                              api.makeBlock(level, blockPosition->x, blockPosition->y, blockPosition->z));
+    });
 }
 
 void ScriptEngine::onEntitySneak(Actor &entity, bool started) {
@@ -1409,7 +1963,7 @@ void ScriptEngine::tick(int64_t currentTick) {
     for (const auto &event: queued)
         emitScriptEvent(event.first, event.second);
 
-    // sub_145D0A460: every clock stands still without the daylight cycle
+    // every clock stands still without the daylight cycle
     if (mHost == nullptr || mHost->getWorlds().getDefault().getOverworld().getGameRules().getBool("dodaylightcycle"))
         mClocks.tick();
     if (currentTick - mLastClockSync >= WorldClockSystem::SYNC_INTERVAL_TICKS) {
@@ -1424,4 +1978,333 @@ void ScriptEngine::tick(int64_t currentTick) {
         api->tick(currentTick);
     }
     _pumpJobs();
+    // after the packs ticked their running tests
+    _arm();
+    mGameTests.tick();
+    _pumpJobs();
+}
+
+namespace {
+    // getImpactedBlocks and setImpactedBlocks of the explosion events share the holder's blocks array
+    JSValue impactedGet(JSContext *ctx, JSValueConst, int, JSValueConst *, int, JSValue *data) {
+        JSValue blocks = JS_GetPropertyStr(ctx, data[0], "blocks");
+        JSAtom slice = JS_NewAtom(ctx, "slice");
+        JSValue copy = JS_Invoke(ctx, blocks, slice, 0, nullptr);
+        JS_FreeAtom(ctx, slice);
+        JS_FreeValue(ctx, blocks);
+        return copy;
+    }
+
+    JSValue impactedSet(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int, JSValue *data) {
+        if (argc < 1 || !JS_IsArray(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        JS_SetPropertyStr(ctx, data[0], "blocks", JS_DupValue(ctx, argv[0]));
+        return JS_UNDEFINED;
+    }
+
+    JSValue blockArray(ScriptApi &api, const Level &level, const std::vector<Vector3i> &blocks) {
+        JSContext *ctx = api.context();
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const Vector3i &position: blocks)
+            JS_SetPropertyUint32(ctx, array, index++, api.makeBlock(level, position.x, position.y, position.z));
+        return array;
+    }
+
+    void fillExplosion(ScriptApi &api, JSValue event, Level &level, const ServerActor *source,
+                       const std::vector<Vector3i> &blocks, JSValue holder, bool settable) {
+        JSContext *ctx = api.context();
+        JS_SetPropertyStr(ctx, event, "dimension", api.makeDimension(level));
+        if (source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeActor(*const_cast<ServerActor *>(source)));
+        JS_SetPropertyStr(ctx, holder, "blocks", blockArray(api, level, blocks));
+        JS_SetPropertyStr(ctx, event, "getImpactedBlocks", JS_NewCFunctionData(ctx, impactedGet, 0, 0, 1, &holder));
+        if (settable)
+            JS_SetPropertyStr(ctx, event, "setImpactedBlocks", JS_NewCFunctionData(ctx, impactedSet, 1, 0, 1, &holder));
+    }
+}
+
+bool ScriptEngine::hasSubscribers(const char *event) const {
+    for (const std::unique_ptr<ScriptApi> &api: mApis) {
+        if (api->hasSubscribers(event))
+            return true;
+    }
+    return false;
+}
+
+bool ScriptEngine::beforeExplosion(Level &level, const ServerActor *source, std::vector<Vector3i> &blocks) {
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->hasSubscribers("before.explosion"))
+            continue;
+        _arm();
+        JSContext *ctx = api->context();
+        JSValue event = api->makeEvent("WorldBeforeEvents.explosion");
+        JSValue holder = JS_NewObject(ctx);
+        fillExplosion(*api, event, level, source, blocks, holder, true);
+        JS_SetPropertyStr(ctx, event, "cancel", JS_FALSE);
+        cancelled = api->emit("before.explosion", event) || cancelled;
+
+        // the blocks the subscribers left, the order they gave
+        JSValue chosen = JS_GetPropertyStr(ctx, holder, "blocks");
+        uint32_t length = 0;
+        JSValue lengthValue = JS_GetPropertyStr(ctx, chosen, "length");
+        JS_ToUint32(ctx, &length, lengthValue);
+        JS_FreeValue(ctx, lengthValue);
+        std::vector<Vector3i> kept;
+        for (uint32_t index = 0; index < length; ++index) {
+            JSValue block = JS_GetPropertyUint32(ctx, chosen, index);
+            const ScriptBlockRef *ref = api->native<ScriptBlockRef>(block);
+            if (ref != nullptr && ref->mWorldId == level.getWorldId() && ref->mDimension == level.getDimensionType())
+                kept.emplace_back(ref->mX, ref->mY, ref->mZ);
+            JS_FreeValue(ctx, block);
+        }
+        JS_FreeValue(ctx, chosen);
+        JS_FreeValue(ctx, holder);
+        blocks = kept;
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::onExplosion(Level &level, const ServerActor *source, const std::vector<Vector3i> &blocks) {
+    _emit("after.explosion", "WorldAfterEvents.explosion", false, [&](ScriptApi &api, JSValue event) {
+        JSValue holder = JS_NewObject(api.context());
+        fillExplosion(api, event, level, source, blocks, holder, false);
+        JS_FreeValue(api.context(), holder);
+    });
+}
+
+void ScriptEngine::onBlockExplode(Level &level, const Vector3i &position, const BlockState &exploded,
+                                  const ServerActor *source) {
+    _emit("after.blockExplode", "WorldAfterEvents.blockExplode", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "explodedBlockPermutation", api.makePermutation(exploded));
+        if (source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeActor(*const_cast<ServerActor *>(source)));
+    });
+}
+
+void ScriptEngine::onPistonActivate(Level &level, const Vector3i &position, bool expanding) {
+    _emit("after.pistonActivate", "WorldAfterEvents.pistonActivate", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "isExpanding", JS_NewBool(ctx, expanding));
+        JS_SetPropertyStr(ctx, event, "piston", api.makeBlockComponent(level, position, "minecraft:piston"));
+    });
+}
+
+void ScriptEngine::onButtonPush(Level &level, const Vector3i &position, Actor *source) {
+    _emit("after.buttonPush", "WorldAfterEvents.buttonPush", false, [&](ScriptApi &api, JSValue event) {
+        api.fillBlockEvent(event, level, position);
+        if (source != nullptr)
+            JS_SetPropertyStr(api.context(), event, "source", api.makeEntity(*source));
+    });
+}
+
+void ScriptEngine::onLeverAction(Level &level, const Vector3i &position, bool powered, ServerPlayer &player) {
+    _emit("after.leverAction", "WorldAfterEvents.leverAction", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "isPowered", JS_NewBool(ctx, powered));
+        JS_SetPropertyStr(ctx, event, "player", api.makePlayer(player));
+    });
+}
+
+void ScriptEngine::onPressurePlate(Level &level, const Vector3i &position, int32_t previousPower, int32_t power,
+                                   Actor *source) {
+    const bool push = previousPower == 0 && power > 0;
+    if (!push && !(previousPower > 0 && power == 0))
+        return;
+    const char *key = push ? "after.pressurePlatePush" : "after.pressurePlatePop";
+    const char *signal = push ? "WorldAfterEvents.pressurePlatePush" : "WorldAfterEvents.pressurePlatePop";
+    _emit(key, signal, false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "previousRedstonePower", JS_NewInt32(ctx, previousPower));
+        JS_SetPropertyStr(ctx, event, "redstonePower", JS_NewInt32(ctx, power));
+        if (push && source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*source));
+    });
+}
+
+void ScriptEngine::onTripWireTrip(Level &level, const Vector3i &position, bool powered,
+                                  const std::vector<Actor *> &sources) {
+    _emit("after.tripWireTrip", "WorldAfterEvents.tripWireTrip", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "isPowered", JS_NewBool(ctx, powered));
+        JSValue list = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (Actor *source: sources)
+            JS_SetPropertyUint32(ctx, list, index++, api.makeEntity(*source));
+        JS_SetPropertyStr(ctx, event, "sources", list);
+    });
+}
+
+void ScriptEngine::onTargetBlockHit(Level &level, const Vector3i &position, const Vector3f &hitVector,
+                                    int32_t previousPower, int32_t power, Actor *source) {
+    _emit("after.targetBlockHit", "WorldAfterEvents.targetBlockHit", false, [&](ScriptApi &api, JSValue event) {
+        JSContext *ctx = api.context();
+        api.fillBlockEvent(event, level, position);
+        JS_SetPropertyStr(ctx, event, "hitVector", vector3(ctx, hitVector.x, hitVector.y, hitVector.z));
+        JS_SetPropertyStr(ctx, event, "previousRedstonePower", JS_NewInt32(ctx, previousPower));
+        JS_SetPropertyStr(ctx, event, "redstonePower", JS_NewInt32(ctx, power));
+        if (source != nullptr)
+            JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*source));
+    });
+}
+
+bool ScriptEngine::holdPlayerJoin(ServerPlayer &player, std::function<void()> done) {
+    if (mHost == nullptr)
+        return false;
+    bool subscribed = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis)
+        subscribed = api->hasJoinSubscribers() || subscribed;
+    if (!subscribed)
+        return false;
+    // a paused world lets the join through untouched
+    if (mHost->isSimulationPaused()) {
+        LOG_ERROR(LogAreaID::Script, "Joins cannot be processed by scripting when the world is paused. Disable pause "
+                                     "when using AsyncPlayerJoinBeforeEvent.");
+        return false;
+    }
+
+    const uint32_t token = mNextJoinToken++;
+    PendingJoin &join = mPendingJoins[token];
+    join.mId = player.getNetworkIdentifier();
+    join.mDone = std::move(done);
+    // counted before the first emit: a callback that settles at once must not finish the join early
+    join.mOutstanding = 1;
+    // the playfab id of the identity component, what Player.persistentId reads too
+    // a subscriber may refuse the player while it is called: the player is erased, keep copies
+    const std::string persistentId = player.getPlayFabId();
+    const std::string name = player.getName();
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        _arm();
+        const bool emitted = api->emitPlayerJoin(token, name, persistentId);
+        auto pending = mPendingJoins.find(token);
+        if (pending != mPendingJoins.end() && emitted)
+            pending->second.mOutstanding++;
+        _pumpJobs();
+        if (mPendingJoins.find(token) == mPendingJoins.end())
+            return true;
+    }
+    const auto pending = mPendingJoins.find(token);
+    if (pending->second.mOutstanding == 1) {
+        mPendingJoins.erase(pending);
+        return false;
+    }
+    settleJoin(token, false);
+    return true;
+}
+
+bool ScriptEngine::isHoldingJoin(const NetworkIdentifier &id) const {
+    for (const auto &entry: mPendingJoins) {
+        if (entry.second.mId == id)
+            return true;
+    }
+    return false;
+}
+
+bool ScriptEngine::isJoinPending(uint32_t token) const {
+    const auto it = mPendingJoins.find(token);
+    return it != mPendingJoins.end() && !it->second.mRefused && mHost != nullptr
+           && mHost->getPlayers().find(it->second.mId) != mHost->getPlayers().end();
+}
+
+void ScriptEngine::_refuseJoin(PendingJoin &join, const std::string &reason) {
+    join.mRefused = true;
+    if (mHost->getPlayers().find(join.mId) == mHost->getPlayers().end())
+        return;
+    mHost->_disconnect(join.mId, DisconnectReason::NotAllowed,
+                       reason.empty() ? std::string("disconnectionScreen.noReason") : reason);
+    mHost->erasePlayer(join.mId);
+}
+
+bool ScriptEngine::decideJoin(uint32_t token, bool refuse, const std::string &reason) {
+    if (!isJoinPending(token))
+        return false;
+    if (refuse) {
+        // the other packs' promises no longer matter
+        _refuseJoin(mPendingJoins[token], reason);
+        mPendingJoins.erase(token);
+    }
+    return true;
+}
+
+void ScriptEngine::settleJoin(uint32_t token, bool rejected) {
+    const auto it = mPendingJoins.find(token);
+    if (it == mPendingJoins.end())
+        return;
+    PendingJoin &join = it->second;
+    if (rejected) {
+        if (isJoinPending(token))
+            _refuseJoin(join, std::string());
+        mPendingJoins.erase(it);
+        return;
+    }
+    if (--join.mOutstanding > 0)
+        return;
+
+    const bool proceed = isJoinPending(token);
+    std::function<void()> done = std::move(join.mDone);
+    mPendingJoins.erase(it);
+    if (proceed && done)
+        done();
+}
+
+bool ScriptEngine::beforePacketReceive(const NetworkIdentifier &id, MinecraftPacketIds packetId, size_t size) {
+    const char *name = ScriptNetBinding::packetName(packetId);
+    if (name == nullptr || mHost == nullptr)
+        return false;
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->wantsPacketReceive())
+            continue;
+        const auto player = mHost->getPlayers().find(id);
+        _arm();
+        cancelled = api->emitPacketReceive(name, size, player == mHost->getPlayers().end() ? nullptr : &player->second)
+                    || cancelled;
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+bool ScriptEngine::beforePacketSend(const std::vector<NetworkIdentifier> &recipients, MinecraftPacketIds packetId) {
+    const char *name = ScriptNetBinding::packetName(packetId);
+    if (name == nullptr || mHost == nullptr)
+        return false;
+    std::vector<ServerPlayer *> players;
+    players.reserve(recipients.size());
+    for (const NetworkIdentifier &id: recipients) {
+        const auto player = mHost->getPlayers().find(id);
+        players.push_back(player == mHost->getPlayers().end() ? nullptr : &player->second);
+    }
+    bool cancelled = false;
+    for (std::unique_ptr<ScriptApi> &api: mApis) {
+        if (!api->wantsPacketSend())
+            continue;
+        _arm();
+        cancelled = api->emitPacketSend(name, players) || cancelled;
+        _pumpJobs();
+    }
+    return cancelled;
+}
+
+void ScriptEngine::updatePacketHooks() {
+    if (mHost == nullptr || !mHost->isTransportReady())
+        return;
+    bool wanted = false;
+    for (const std::unique_ptr<ScriptApi> &api: mApis)
+        wanted = wanted || api->wantsPacketSend();
+    if (!wanted) {
+        mHost->getNetworkHandler().setSendHook(nullptr);
+        return;
+    }
+    mHost->getNetworkHandler().setSendHook(
+            [this](const std::vector<NetworkIdentifier> &recipients, MinecraftPacketIds packetId) {
+                return !beforePacketSend(recipients, packetId);
+            });
 }

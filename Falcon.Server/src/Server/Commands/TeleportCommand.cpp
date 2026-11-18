@@ -2,6 +2,7 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cerrno>
 #include <cmath>
@@ -79,10 +80,13 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
 
     ServerPlayer &target = *targets.front();
     for (ServerPlayer *victim: victims) {
+        Vector3f destination = target.getPosition();
+        if (!PluginEvents::teleport(*victim, destination, "command"))
+            continue;
         if (!victim->sharesLevelWith(target))
-            mHandler.changePlayerLevel(*victim, mHandler.getLevelFor(target), target.getPosition());
+            mHandler.changePlayerLevel(*victim, mHandler.getLevelFor(target), destination);
         else
-            victim->teleport(mHandler, target.getPosition());
+            victim->teleport(mHandler, destination);
 
         sender.sendTranslation("commands.tp.success", {victim->getName(), target.getName()});
     }
@@ -99,6 +103,8 @@ bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vecto
             return false;
         }
 
+        if (!PluginEvents::teleport(*victim, destination, "command"))
+            continue;
         victim->teleport(mHandler, destination);
         sender.sendTranslation("commands.tp.success.coordinates",
                                {victim->getName(), formatCoordinate(destination.x), formatCoordinate(destination.y),

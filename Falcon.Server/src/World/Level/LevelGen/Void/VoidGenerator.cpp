@@ -5,7 +5,7 @@
 #include "Protocol/BlockStateHasher.h"
 
 namespace {
-    // sub_14C703FD0: a script dimension's default biome is minecraft:ocean
+    // a script dimension's default biome is minecraft:ocean
     const int32_t VOID_BIOME = BiomeIds::OCEAN;
 }
 

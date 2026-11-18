@@ -26,6 +26,7 @@
 #include "Protocol/Packets/RespawnPacket.h"
 #include "Protocol/Packets/SetHealthPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -35,7 +36,7 @@
 #include <vector>
 
 namespace {
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const float BED_HEIGHT = 0.5625f;
     const float THROW_SPEED = 0.3f;
     const int THROW_PICKUP_DELAY = 40;
@@ -268,7 +269,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     if (!keepInventory) {
         _dropInventoryOnDeath(player);
 
-        if (player.getGameType() != (int32_t) GameType::Creative) {
+        if (!player.isCreative()) {
             const int droppedExperience = player.getExperience().getXpDropAmount();
             if (droppedExperience > 0)
                 spawnExperienceOrbs(getLevelFor(player), player.getPosition(), droppedExperience);
@@ -373,6 +374,10 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     const bool keepOffhand = ItemProperties::keepsOnDeath(offhand);
     if (!keepOffhand)
         dropOnDeath(offhand);
+    const ItemStack bodyArmor = inventory.getBodyArmor();
+    const bool keepBodyArmor = ItemProperties::keepsOnDeath(bodyArmor);
+    if (!keepBodyArmor)
+        dropOnDeath(bodyArmor);
     dropOnDeath(inventory.getCursor());
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_SIZE; ++slot)
@@ -380,6 +385,36 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
 
     for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot)
         dropOnDeath(inventory.getCraftingTableItem(slot));
+
+    // clear() leaves the anvil, cartography, stonecutter and enchanting slots alone
+    for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
+        dropOnDeath(inventory.getAnvilItem(slot));
+        inventory.setAnvilItem(slot, ItemStack::air());
+    }
+
+    for (int slot = 0; slot < PlayerInventory::CARTOGRAPHY_SIZE; ++slot) {
+        dropOnDeath(inventory.getCartographyItem(slot));
+        inventory.setCartographyItem(slot, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
+        const ItemStack &item = inventory.getSmithingItem(index);
+        if (!item.isAir())
+            dropOnDeath(item);
+        inventory.setSmithingItem(index, ItemStack::air());
+    }
+
+    dropOnDeath(inventory.getStonecutterInput());
+    inventory.setStonecutterInput(ItemStack::air());
+
+    for (const ContainerSlotType type: {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
+        ItemStack *slot = inventory.resolveSlot(type, 0);
+        if (slot == nullptr)
+            continue;
+
+        dropOnDeath(*slot);
+        *slot = ItemStack::air();
+    }
 
     inventory.clear();
     inventory.setSelectedSlot(0);
@@ -390,6 +425,8 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
         inventory.setArmor(slot, std::move(item));
     if (keepOffhand)
         inventory.setOffhand(offhand);
+    if (keepBodyArmor)
+        inventory.setBodyArmor(bodyArmor);
 
     _sendInventory(player);
 }
@@ -403,7 +440,7 @@ Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *
     if (!player.hasSpawnPoint() || player.getSpawnWorld() != world.getName())
         return overworld.getSpawnPositionForPlayer();
 
-    // a /spawnpoint spawn has no block to check (sub_1402BF690 needs one)
+    // a /spawnpoint spawn has no block to check
     if (!player.hasSpawnBlock()) {
         destination = &world.getLevel(player.getSpawnDimension());
         const Vector3i stand = player.getSpawnStandPosition();
@@ -420,7 +457,7 @@ Vector3f ServerNetworkHandler::_respawnPositionFor(ServerPlayer &player, Level *
             return *respawn;
         }
 
-        // sub_1402D44A0: the message follows the spawn dimension
+        // the message follows the spawn dimension
         player.clearSpawnPoint();
         player.sendTranslation("§7%tile.respawn_anchor.notValid", {});
         return overworld.getSpawnPositionForPlayer();

@@ -15,6 +15,8 @@ public:
 
     bool saveData(const std::string &name, const Tag &data) const;
 
+    bool removeData(const std::string &name) const;
+
     // xuid a save was written for, kept inside it
     static constexpr const char *TAG_OWNER_XUID = "FalconOwnerXuid";
 

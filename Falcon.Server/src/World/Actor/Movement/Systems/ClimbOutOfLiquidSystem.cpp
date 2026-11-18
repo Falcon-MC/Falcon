@@ -11,7 +11,7 @@ void ClimbOutOfLiquidSystem::tick(PlayerMovementContext &context) {
         return;
 
     const auto &state = context.state;
-    // 0x14103CD10 probes from the moved box with post-drag velocity and this input's rise
+    // the game probes from the moved box with post-drag velocity and this input's rise
     const float lift = 0.6f - (state.simulated.y - state.start.y) + state.velocity.y;
     const AxisAlignedBB probe = context.travel.box.offset(state.velocity.x, lift, state.velocity.z);
     if (MovementPhysics::collides(context.level, probe, &context.player))

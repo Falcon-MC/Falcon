@@ -6,6 +6,7 @@
 #include "World/Actor/Mob/Hostile/EnderDragon.h"
 #include "World/Item/ItemData.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <cctype>
@@ -87,6 +88,8 @@ const char *getMobEffectName(MobEffectId id) {
             return "village_hero";
         case MobEffectId::Darkness:
             return "darkness";
+        case MobEffectId::TrialOmen:
+            return "trial_omen";
         case MobEffectId::Weaving:
             return "weaving";
         case MobEffectId::RaidOmen:
@@ -170,7 +173,7 @@ void InstantDamageMobEffect::tick(Actor &actor, const MobEffectInstance &instanc
 
 void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
-    if (player == nullptr || player->getGameType() == (int32_t) GameType::Spectator)
+    if (player == nullptr || player->isSpectator())
         return;
 
     const Vector3f &position = player->getPosition();
@@ -178,10 +181,10 @@ void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
                                                     (int32_t) std::floor(position.z)));
 }
 
-// any removal asks for the raid, milk and death included: the game does not check for expiry (sub_14355FD20)
+// any removal asks for the raid, milk and death included: the game does not check for expiry
 void RaidOmenMobEffect::onRemove(Actor &actor, const MobEffectInstance &) const {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
-    if (player != nullptr && player->getGameType() != (int32_t) GameType::Spectator)
+    if (player != nullptr && !player->isSpectator())
         player->getRaidState().onRaidOmenRemoved();
 }
 
@@ -300,6 +303,29 @@ void MobEffectManager::emit(const MobEffectInstance &instance, MobEffectEvent ev
         mEventCallback(instance, eventType);
 }
 
+namespace {
+    // FALCON_EVENT_ENTITY_EFFECT_ADD once the effect would apply; false when a plugin refuses it
+    bool allowedByPlugins(Actor &actor, const MobEffectInstance &instance) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_EFFECT_ADD);
+        if (plugins == nullptr)
+            return true;
+
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_EFFECT_ADD;
+        event.mCancellable = true;
+        event.mEntity = &actor;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&actor);
+        event.mHasEffect = true;
+        event.mEffect.type = (FalconEffectType) instance.mId;
+        event.mEffect.duration = instance.mInfinite ? FALCON_EFFECT_INFINITE : instance.mDuration;
+        event.mEffect.amplifier = instance.mAmplifier;
+        event.mEffect.showParticles = instance.mParticles ? 1 : 0;
+        event.mEffect.ambient = instance.mAmbient ? 1 : 0;
+        plugins->dispatch(event);
+        return !event.mCancelled;
+    }
+}
+
 bool MobEffectManager::add(const MobEffectInstance &input) {
     if (input.mId == MobEffectId::Freezing && FreezingMobEffect::isImmune(mActor))
         return false;
@@ -320,6 +346,8 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
             || (instance.mAmplifier == existing->second.mAmplifier && !instance.mInfinite
                 && instance.mDuration <= existing->second.mDuration))
             return false;
+        if (!allowedByPlugins(mActor, instance))
+            return false;
         const MobEffectInstance previous = existing->second;
         existing->second = instance;
         effect(instance.mId).onRefresh(mActor, previous, instance);
@@ -330,6 +358,8 @@ bool MobEffectManager::add(const MobEffectInstance &input) {
         return true;
     }
 
+    if (!allowedByPlugins(mActor, instance))
+        return false;
     mEffects.emplace(key, instance);
     effect(instance.mId).onAdd(mActor, instance);
     refreshDerivedAttributes();
@@ -428,7 +458,7 @@ void MobEffectManager::setMovementSpeedBonus(float bonus) {
     refreshDerivedAttributes();
 }
 
-// sub_145E14260: climbs 1/140 a tick, thaws 1/70 a tick
+// climbs 1/140 a tick, thaws 1/70 a tick
 float MobEffectManager::advanceFreezing(bool rising) {
     if (!rising) {
         mFreezingDamageTicks = 0;

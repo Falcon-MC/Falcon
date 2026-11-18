@@ -20,7 +20,7 @@ void EndermiteActor::tick(ServerNetworkHandler &owner) {
 }
 
 bool EndermiteActor::advanceLifetime() {
-    // a named endermite stops ageing but still leaves once past the limit; sub_14ACD3110
+    // a named endermite stops ageing but still leaves once past the limit
     const bool named = getComponent(NAMEABLE_COMPONENT) != nullptr && !getNameTag().empty();
     if (!named)
         ++mLifetime;
@@ -35,6 +35,5 @@ Tag EndermiteActor::saveNbt() const {
 
 void EndermiteActor::loadNbt(const Tag &data) {
     HostileActor::loadNbt(data);
-    // sub_14ACD3870
     mLifetime = data.getInt(TAG_LIFETIME, 0);
 }

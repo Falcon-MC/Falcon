@@ -8,6 +8,7 @@
 #include "World/Actor/AI/Goal/BehaviorItems.h"
 #include "World/Actor/AI/Goal/BreakDoorGoal.h"
 #include "World/Actor/AI/Goal/BreedGoal.h"
+#include "World/Actor/AI/Goal/DefendVillageTargetGoal.h"
 #include "World/Actor/AI/Goal/DragonGoals.h"
 #include "World/Actor/AI/Goal/CelebrateGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
@@ -30,12 +31,17 @@
 #include "World/Actor/AI/Goal/LookAtEntityGoal.h"
 #include "World/Actor/AI/Goal/LookAtPlayerGoal.h"
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
+#include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
+#include "World/Actor/AI/Goal/MoveThroughVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveToWaterGoal.h"
+#include "World/Actor/AI/Goal/MoveTowardsDwellingRestrictionGoal.h"
 #include "World/Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
+#include "World/Actor/AI/Goal/MoveTowardsTargetGoal.h"
 #include "World/Actor/AI/Goal/NearestAttackableTargetGoal.h"
+#include "World/Actor/AI/Goal/OfferFlowerGoal.h"
 #include "World/Actor/AI/Goal/OpenDoorGoal.h"
 #include "World/Actor/AI/Goal/OwnerTargetGoal.h"
 #include "World/Actor/AI/Goal/PanicGoal.h"
@@ -50,6 +56,7 @@
 #include "World/Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "World/Actor/AI/Goal/SilverfishGoals.h"
 #include "World/Actor/AI/Goal/SitGoal.h"
+#include "World/Actor/AI/Goal/SleepGoal.h"
 #include "World/Actor/AI/Goal/SlimeGoals.h"
 #include "World/Actor/AI/Goal/SquidMovementGoal.h"
 #include "World/Actor/AI/Goal/StompAttackGoal.h"
@@ -62,6 +69,8 @@
 #include "World/Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "World/Actor/AI/Goal/TimerFlagGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
+#include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
+#include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 
@@ -75,6 +84,8 @@
 
 namespace {
     const char *const BEHAVIOR_PREFIX = "minecraft:behavior.";
+    // the goal's own starting reach
+    const float TRADE_DEFAULT_MAX_DISTANCE = 8.0f;
 
     const int32_t WATER_RETRIES = 10;
 
@@ -90,6 +101,9 @@ namespace {
     const int32_t TICKS_PER_SECOND = 20;
     const float MELEE_ATTACK_RANGE_SQUARED = 2.5f;
     const float MELEE_NO_ATTACK = -1.0f;
+    // the melee box attack definition defaults
+    const float MELEE_BOX_DEFAULT_HORIZONTAL_REACH = 0.8f;
+    const float MELEE_BOX_DEFAULT_FOV = 90.0f;
 
     const float TEMPT_DEFAULT_RANGE = 10.0f;
     const float TEMPT_DEFAULT_STOP_DISTANCE = 2.5f;
@@ -103,6 +117,9 @@ namespace {
     const float EAT_DEFAULT_SECONDS = 1.8f;
     const float FOLLOW_OWNER_START = 10.0f;
     const float FOLLOW_OWNER_STOP = 2.0f;
+
+    const float WORK_DEFAULT_SPEED = 0.5f;
+    const float SLEEP_DEFAULT_Y_OFFSET = 1.0f;
 
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
@@ -159,15 +176,20 @@ namespace {
     const float TAKE_DEFAULT_MAX_XZ = 1.0f;
     const float TAKE_DEFAULT_MIN_Y = 0.0f;
     const float TAKE_DEFAULT_MAX_Y = 2.0f;
-    // the comprehensive goal definition defaults (sub_147C0AC20)
+    // the comprehensive goal definition defaults
     const float MOVE_TO_VILLAGE_DEFAULT_RADIUS = 0.5f;
-    // the celebrate definition defaults (sub_147685170, xmmword_14F30CC20), sound 286
+    // the celebrate definition defaults, sound 286
     const char *const CELEBRATE_DEFAULT_SOUND = "celebrate";
     const float CELEBRATE_DEFAULT_SOUND_MIN = 2.0f;
     const float CELEBRATE_DEFAULT_SOUND_MAX = 7.0f;
     const float CELEBRATE_DEFAULT_JUMP_MIN = 1.0f;
     const float CELEBRATE_DEFAULT_JUMP_MAX = 3.5f;
     const float CELEBRATE_DEFAULT_DURATION = 30.0f;
+    const float DEFEND_VILLAGE_DEFAULT_CHANCE = 0.05f;
+    // the offer flower definition defaults
+    const float OFFER_FLOWER_DEFAULT_CHANCE = 0.000125f;
+    const float OFFER_FLOWER_DEFAULT_SECONDS = 20.0f;
+    const Vector3f OFFER_FLOWER_DEFAULT_AREA(6.0f, 2.0f, 6.0f);
     const float STOMP_DEFAULT_RANGE_MULTIPLIER = 2.0f;
     const float STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER = 2.0f;
 
@@ -176,7 +198,7 @@ namespace {
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
 
-    // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s (sub_147C0B710)
+    // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s
     const int32_t TARGET_SCAN_INTERVAL = 10;
     const float TARGET_FORGET_DEFAULT_SECONDS = 3.0f;
 
@@ -315,7 +337,7 @@ namespace {
         return value != nullptr && value->boolean(false);
     }
 
-    // seconds truncate to ticks and an unset interval reads as 0: sub_14D4170A0
+    // seconds truncate to ticks and an unset interval reads as 0
     int32_t truncatedTicks(float seconds) {
         return std::max(0, (int32_t) (seconds * TICKS_PER_SECOND));
     }
@@ -615,15 +637,30 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                 targetRange(mob, component), targetEntries(component),
                 (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL), targetSight(component));
 
+    if (behavior == "defend_village_target") {
+        std::vector<std::shared_ptr<json::Value>> filters;
+        for (NearestAttackableTargetGoal::Entry &entry: targetEntries(component))
+            filters.push_back(std::move(entry.mFilters));
+        return std::make_unique<DefendVillageTargetGoal>(
+                numberOf(component, "attack_chance", DEFEND_VILLAGE_DEFAULT_CHANCE), followRange(mob),
+                std::move(filters));
+    }
+
     if (behavior == "owner_hurt_by_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurtBy);
 
     if (behavior == "owner_hurt_target")
         return std::make_unique<OwnerTargetGoal>(OwnerTargetGoal::Mode::OwnerHurt);
 
-    if (behavior == "melee_attack" || behavior == "melee_box_attack")
+    if (behavior == "melee_attack")
         return std::make_unique<MeleeAttackGoal>(speed, followRange(mob), meleeCoolDown(component),
                                                  attackReachSquared(mob));
+
+    if (behavior == "melee_box_attack")
+        return std::make_unique<MeleeBoxAttackGoal>(
+                speed, followRange(mob), meleeCoolDown(component),
+                numberOf(component, "horizontal_reach", MELEE_BOX_DEFAULT_HORIZONTAL_REACH),
+                numberOf(component, "melee_fov", MELEE_BOX_DEFAULT_FOV));
 
     if (behavior == "stomp_attack") {
         const float stompMultiplier = numberOf(component, "stomp_range_multiplier", STOMP_DEFAULT_RANGE_MULTIPLIER);
@@ -940,8 +977,8 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     }
 
     if (behavior == "move_to_village") {
-        // sub_147534DC0 drops the cooldown's fraction of a second before converting to ticks; search_range only
-        // seeds the closest-village search (sub_1439EA7F0), which takes its first candidate regardless
+        // the game drops the cooldown's fraction of a second before converting to ticks; search_range only
+        // seeds the closest-village search, which takes its first candidate regardless
         MoveToVillageGoal::Settings settings;
         settings.mSpeed = speed;
         settings.mCooldownTicks = TICKS_PER_SECOND * (int64_t) std::fabs(numberOf(component, "cooldown_time", 0.0f));
@@ -970,6 +1007,58 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "random_hover" || behavior == "random_fly")
         return std::make_unique<RandomHoverGoal>(hoverSettings(mob, component, speed));
+
+    if (behavior == "move_towards_target")
+        return std::make_unique<MoveTowardsTargetGoal>(speed, numberOf(component, "within_radius", 0.0f));
+
+    if (behavior == "move_through_village")
+        return std::make_unique<MoveThroughVillageGoal>(speed, isFlagSet(component, "only_at_night"));
+
+    if (behavior == "move_towards_dwelling_restriction")
+        return std::make_unique<MoveTowardsDwellingRestrictionGoal>(speed);
+
+    if (behavior == "offer_flower") {
+        OfferFlowerGoal::Settings settings;
+        settings.mChanceToStart = numberOf(component, "chance_to_start", OFFER_FLOWER_DEFAULT_CHANCE);
+        settings.mDurationTicks = (int32_t) (numberOf(component, "max_offer_flower_duration",
+                                                      OFFER_FLOWER_DEFAULT_SECONDS)
+                                             * TICKS_PER_SECOND);
+        const json::Value *area = component.get("search_area");
+        settings.mSearchArea = area != nullptr && area->isArray() && area->mArray.size() >= 3
+                                       ? vectorOf(component, "search_area")
+                                       : OFFER_FLOWER_DEFAULT_AREA;
+        settings.mFilters = cloneOf(component.get("filters"));
+        return std::make_unique<OfferFlowerGoal>(std::move(settings));
+    }
+
+    if (behavior == "trade_with_player") {
+        const json::Value *filters = component.get("filters");
+        return std::make_unique<TradeWithPlayerGoal>(
+                filters == nullptr ? nullptr : std::shared_ptr<json::Value>(filters->clone()),
+                numberOf(component, "max_distance_from_player", TRADE_DEFAULT_MAX_DISTANCE));
+    }
+
+    if (behavior == "work") {
+        WorkGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", WORK_DEFAULT_SPEED);
+        settings.mActiveTicks = (int32_t) numberOf(component, "active_time", 0.0f);
+        settings.mCanWorkInRain = isFlagSet(component, "can_work_in_rain");
+        settings.mRainToleranceTicks = (int32_t) numberOf(component, "work_in_rain_tolerance", -1.0f);
+        settings.mCooldownTicks = (int32_t) numberOf(component, "goal_cooldown", 0.0f);
+        settings.mSoundDelayMin = (int32_t) numberOf(component, "sound_delay_min", 0.0f);
+        settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
+        settings.mOnArrival = cloneOf(component.get("on_arrival"));
+        return std::make_unique<WorkGoal>(std::move(settings));
+    }
+
+    if (behavior == "sleep") {
+        SleepGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mYOffset = numberOf(component, "sleep_y_offset", SLEEP_DEFAULT_Y_OFFSET);
+        settings.mCanSleepWhileRiding = isFlagSet(component, "can_sleep_while_riding");
+        settings.mTimeoutTicks = (int32_t) numberOf(component, "timeout_cooldown", 0.0f);
+        return std::make_unique<SleepGoal>(settings);
+    }
 
     if (behavior == "move_towards_home_restriction")
         return std::make_unique<MoveTowardsHomeRestrictionGoal>(speed, homeRadius(mob));

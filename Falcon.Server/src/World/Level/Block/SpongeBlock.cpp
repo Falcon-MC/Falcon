@@ -39,7 +39,7 @@ bool SpongeBlock::_isWet(const BlockState &state) {
     return state.mName == wetSponge().mName;
 }
 
-// sub_148F994D0: a wet sponge dries in an ultrawarm dimension, a dry one absorbs at once anywhere else
+// a wet sponge dries in an ultrawarm dimension, a dry one absorbs at once anywhere else
 void SpongeBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
     Level &level = ticks.getLevel();
     if (level.getDimensionType() != DimensionType::Nether) {
@@ -56,7 +56,7 @@ void SpongeBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &positi
                 Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f), 0);
 }
 
-// sub_148F9A1C0: a dry sponge absorbs on a tick one later
+// a dry sponge absorbs on a tick one later
 void SpongeBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
                                          const Vector3i &changed) const {
     (void) changed;
@@ -64,12 +64,11 @@ void SpongeBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vecto
         ticks.queueTick(position, this, 1);
 }
 
-// sub_148F99AD0
 void SpongeBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
     _tryAbsorb(ticks, position, state);
 }
 
-// sub_148F99FB0: a sponge that took water turns wet and ticks once more
+// a sponge that took water turns wet and ticks once more
 void SpongeBlock::_tryAbsorb(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
     if (_isWet(state) || !_absorb(ticks, position))
         return;
@@ -77,7 +76,7 @@ void SpongeBlock::_tryAbsorb(LiquidPhysicsSystem &ticks, const Vector3i &positio
     ticks.queueTick(position, VanillaBlocks::fromState(ticks.stateAt(position)), 1);
 }
 
-// sub_148F9A380: breadth first from the sponge, six shuffled faces a step, 64 blocks at most
+// breadth first from the sponge, six shuffled faces a step, 64 blocks at most
 bool SpongeBlock::_absorb(LiquidPhysicsSystem &ticks, const Vector3i &origin) {
     static const BlockState air;
     Level &level = ticks.getLevel();
@@ -94,7 +93,7 @@ bool SpongeBlock::_absorb(LiquidPhysicsSystem &ticks, const Vector3i &origin) {
         if (!visited.insert(key).second)
             continue;
 
-        // Facing order down, up, north, south, west, east, then swaps drawn from the level random (sub_143532490)
+        // Facing order down, up, north, south, west, east, then swaps drawn from the level random
         Vector3i faces[6] = {Vector3i(at.x, at.y - 1, at.z), Vector3i(at.x, at.y + 1, at.z),
                              Vector3i(at.x, at.y, at.z - 1), Vector3i(at.x, at.y, at.z + 1),
                              Vector3i(at.x - 1, at.y, at.z), Vector3i(at.x + 1, at.y, at.z)};

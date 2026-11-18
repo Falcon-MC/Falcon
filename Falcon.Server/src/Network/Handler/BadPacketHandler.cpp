@@ -73,7 +73,7 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
 
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
         if (action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock
-            && player.getGameType() != (int32_t) GameType::Creative) {
+            && !player.isCreative()) {
             outReason = "creative destroy outside creative";
             return true;
         }
@@ -123,7 +123,7 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const ItemStackRequestPacke
     for (const ItemStackRequest &request: packet.mRequests) {
         for (const ItemStackRequestAction &action: request.mActions) {
             if (action.mType == ItemStackRequestActionType::CraftCreative
-                && player.getGameType() != (int32_t) GameType::Creative) {
+                && !player.isCreative()) {
                 outReason = "creative craft outside creative";
                 return true;
             }

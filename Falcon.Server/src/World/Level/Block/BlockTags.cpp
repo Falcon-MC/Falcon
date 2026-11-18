@@ -5,6 +5,7 @@
 #include "Core/Json/Json.h"
 #include "World/Level/Block/BlockState.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <unordered_map>
@@ -41,11 +42,34 @@ namespace {
     }
 }
 
+namespace {
+    const Table &table() {
+        static const Table loaded = load();
+        return loaded;
+    }
+}
+
 bool BlockTags::has(const BlockState &state, const std::string &tag) {
-    static const Table table = load();
+    const Table &table = ::table();
     const auto byState = table.mTagsByState.find(state.getHash());
     if (byState != table.mTagsByState.end())
         return byState->second.count(tag) != 0;
     const auto byTag = table.mBlocksByTag.find(tag);
     return byTag != table.mBlocksByTag.end() && byTag->second.count(state.mName) != 0;
+}
+
+std::vector<std::string> BlockTags::all(const BlockState &state) {
+    const Table &table = ::table();
+    std::vector<std::string> tags;
+    const auto byState = table.mTagsByState.find(state.getHash());
+    if (byState != table.mTagsByState.end()) {
+        tags.assign(byState->second.begin(), byState->second.end());
+    } else {
+        for (const auto &entry: table.mBlocksByTag) {
+            if (entry.second.count(state.mName) != 0)
+                tags.push_back(entry.first);
+        }
+    }
+    std::sort(tags.begin(), tags.end());
+    return tags;
 }

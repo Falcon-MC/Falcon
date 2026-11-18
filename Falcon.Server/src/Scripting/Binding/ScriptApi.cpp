@@ -3,9 +3,6 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
-#include "Server/Commands/CommandMap.h"
-#include "Server/Commands/ServerCommandOrigin.h"
-#include "Server/Commands/PlayerCommandOrigin.h"
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "Core/Event/EventBus.h"
@@ -18,6 +15,10 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/BlockStateHasher.h"
+#include "Protocol/Packets/GraphicsOverrideParameterPacket.h"
+#include "Scripting/Binding/ScriptAdminBinding.h"
+#include "Scripting/Binding/ScriptNetBinding.h"
+#include "Scripting/Net/ScriptNetService.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
 
 #include <algorithm>
@@ -79,7 +80,8 @@ namespace {
     }
 
     bool acceptsComponent(const ScriptNative *native) {
-        return accepts<ScriptEntityPart>(native) || accepts<ScriptPlayerPart>(native) || accepts<ScriptItemRef>(native);
+        return accepts<ScriptEntityPart>(native) || accepts<ScriptPlayerPart>(native) || accepts<ScriptItemRef>(native)
+               || accepts<ScriptBlockPart>(native);
     }
 
     bool acceptsAny(const ScriptNative *) {
@@ -107,22 +109,47 @@ namespace {
             return accepts<ScriptDimensionRef>;
         if (cls == "Component")
             return acceptsComponent;
+        if (cls == "EnchantmentType" || cls == "PotionEffectType" || cls == "PotionDeliveryType")
+            return accepts<ScriptNamedRef>;
         if (cls == "ItemStack" || cls.compare(0, 4, "Item") == 0)
             return accepts<ScriptItemRef>;
-        if (cls == "ScreenDisplay" || cls == "Camera" || cls == "PlayerInputPermissions" || cls == "LocatorBar"
-            || cls == "Container" || cls == "ContainerSlot" || cls == "EntityInventoryComponent"
-            || cls == "EntityEquippableComponent")
+        if (cls == "Container" || cls == "ContainerSlot" || cls == "EntityInventoryComponent"
+            || cls == "EntityEquippableComponent" || cls == "EntityEnderInventoryComponent"
+            || cls == "PlayerCursorInventoryComponent")
+            return accepts<ScriptContainerRef>;
+        if (cls == "ScreenDisplay" || cls == "Camera" || cls == "PlayerInputPermissions" || cls == "LocatorBar")
             return accepts<ScriptPlayerPart>;
         if (cls == "EntityComponent")
             return acceptsComponent;
+        if (cls.compare(0, 5, "Block") == 0 && hasSuffix(cls, "Component"))
+            return accepts<ScriptBlockPart>;
+        if (cls == "Structure")
+            return accepts<ScriptStructureRef>;
+        if (cls == "BiomeType")
+            return accepts<ScriptNamedRef>;
         if (cls.compare(0, 6, "Entity") == 0 && hasSuffix(cls, "Component"))
             return accepts<ScriptEntityPart>;
         if (cls == "Effect")
             return accepts<ScriptEffectRef>;
-        if (cls == "EffectType" || cls == "EntityType" || cls == "EntityHealSource")
+        if (cls == "EffectType" || cls == "EntityType" || cls == "EntityHealSource" || cls == "Trigger"
+            || cls == "DimensionType")
             return accepts<ScriptNamedRef>;
+        if (cls == "MolangVariableMap")
+            return accepts<ScriptMolangMap>;
+        if (cls == "BlockCustomComponentInstance")
+            return accepts<ScriptBlockPart>;
+        if (cls == "BlockComponentNamedTickEvent")
+            return accepts<ScriptNamedTickEvent>;
+        if (cls == "BlockComponentNeighborChangedAfterEvent")
+            return accepts<ScriptNeighborChangedEvent>;
         if (cls == "InputInfo")
             return accepts<ScriptInputInfoRef>;
+        if (hasSuffix(cls, "Waypoint"))
+            return accepts<ScriptWaypointRef>;
+        if (cls == "SoundInstance" || cls == "SoundDurationInfo")
+            return accepts<ScriptSoundRef>;
+        if (cls == "SoundDefinition")
+            return accepts<ScriptSoundDefinitionRef>;
         return acceptsAny;
     }
 
@@ -156,6 +183,23 @@ namespace {
             const std::string member = binding.mName.substr(binding.mName.rfind(':') + 1);
             if (api->resolveEntity(*ref) == nullptr && member != "isValid")
                 return api->throwInvalidEntity(bindingAction(binding.mKind), member, *ref);
+        }
+
+        // Component members stay readable on a dead component, as isValid reports it
+        ScriptItemRef *item = binding.mStatic ? nullptr : api->native<ScriptItemRef>(thisVal);
+        if (item != nullptr && item->mWeak && binding.mName.compare(0, 11, "Component::") != 0) {
+            std::shared_ptr<ScriptItemData> stack = item->mStack.lock();
+            if (stack == nullptr) {
+                const std::string member = binding.mName.substr(binding.mName.rfind(':') + 1);
+                return api->throwInvalidItemStack(bindingAction(binding.mKind), member, item->mStackTypeId);
+            }
+            std::shared_ptr<ScriptItemData> placeholder = std::move(item->mItem);
+            item->mItem = std::move(stack);
+            JSValue result = binding.mMagicFunction != nullptr
+                                     ? binding.mMagicFunction(ctx, thisVal, argc, argv, binding.mMagic)
+                                     : binding.mFunction(ctx, thisVal, argc, argv);
+            item->mItem = std::move(placeholder);
+            return result;
         }
 
         if (binding.mMagicFunction != nullptr)
@@ -196,6 +240,9 @@ namespace {
             JS_FreeValue(ctx, clock);
             JS_FreeValue(ctx, marker);
         }
+        // options the emitting side reads back per callback
+        if (ScriptApi::keepsSubscribeOptions(signal->mKey) && argc >= 2 && JS_IsObject(argv[1]))
+            api->keepSubscribeOptions(argv[0], argv[1]);
         return JS_DupValue(ctx, argv[0]);
     }
 
@@ -213,6 +260,27 @@ namespace {
         if (registry == nullptr || argc < 2 || !JS_IsString(argv[0]) || !JS_IsObject(argv[1]))
             return JS_ThrowTypeError(ctx, "Native type conversion failed.");
         return api->registerCustomComponent(registry->mBlocks, toString(ctx, argv[0]), argv[1]);
+    }
+
+    JSValue triggerConstructor(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ScriptNamedRef *ref = new ScriptNamedRef();
+        ref->mName = toString(ctx, argv[0]);
+        return ScriptApi::fromContext(ctx)->makeInstance("Trigger", ref);
+    }
+
+    JSValue triggerGetEventName(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        const ScriptNamedRef *ref = ScriptApi::fromContext(ctx)->native<ScriptNamedRef>(thisVal);
+        return ref == nullptr ? JS_UNDEFINED : string(ctx, ref->mName);
+    }
+
+    JSValue triggerSetEventName(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ScriptNamedRef *ref = ScriptApi::fromContext(ctx)->native<ScriptNamedRef>(thisVal);
+        if (ref == nullptr || argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        ref->mName = toString(ctx, argv[0]);
+        return JS_UNDEFINED;
     }
 
     JSValue registryRegisterDimension(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
@@ -268,44 +336,143 @@ namespace {
         return api->showForm(argv[0], toString(ctx, argv[1]));
     }
 
-    JSValue scoreboardSetScore(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue uiCloseAllForms(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc < 3)
-            return JS_UNDEFINED;
-        int32_t score = 0;
-        JS_ToInt32(ctx, &score, argv[2]);
-        api->host().setScoreboardScore(toString(ctx, argv[0]), toString(ctx, argv[1]), score);
+        if (argc >= 1)
+            api->closeAllForms(argv[0]);
         return JS_UNDEFINED;
     }
 
-    JSValue scoreboardRemoveScore(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue uiShowScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc >= 2)
-            api->host().removeScoreboardScore(toString(ctx, argv[0]), toString(ctx, argv[1]));
+        if (argc < 7)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->showScreen(argv[0], toString(ctx, argv[1]), toString(ctx, argv[2]), argv[3], argv[4], argv[5],
+                               argv[6]);
+    }
+
+    JSValue uiUpdateScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t formId = 0;
+        if (argc < 4 || JS_ToInt32(ctx, &formId, argv[1]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->updateScreen(argv[0], formId, argv[2], argv[3]);
+    }
+
+    JSValue uiCloseScreen(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        int32_t formId = 0;
+        if (argc >= 2 && JS_ToInt32(ctx, &formId, argv[1]) == 0)
+            api->closeScreen(argv[0], formId);
         return JS_UNDEFINED;
     }
 
-    JSValue scoreboardDisplay(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    JSValue uiHas(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && api->uiSurface().has(toString(ctx, argv[0])));
+    }
+
+    // a bootstrap class carries every version's methods: drop the ones this module version lacks
+    void pruneMembers(JSContext *ctx, JSValueConst cls, const std::string &name, const ScriptSurface &surface) {
+        JSValue prototype = JS_GetPropertyStr(ctx, cls, "prototype");
+        JSPropertyEnum *members = nullptr;
+        uint32_t count = 0;
+        if (JS_IsObject(prototype)
+            && JS_GetOwnPropertyNames(ctx, &members, &count, prototype, JS_GPN_STRING_MASK) == 0) {
+            for (uint32_t index = 0; index < count; ++index) {
+                const char *member = JS_AtomToCString(ctx, members[index].atom);
+                if (member != nullptr && std::strcmp(member, "constructor") != 0 && !surface.has(name + "." + member))
+                    JS_DeleteProperty(ctx, prototype, members[index].atom, 0);
+                if (member != nullptr)
+                    JS_FreeCString(ctx, member);
+            }
+            JS_FreePropertyEnum(ctx, members, count);
+        }
+        JS_FreeValue(ctx, prototype);
+    }
+
+    JSValue uiFilterText(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         if (argc < 2)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        return api->filterText(argv[0], toString(ctx, argv[1]));
+    }
+
+    JSValue graphicsIsBiome(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        return JS_NewBool(ctx, argc >= 1 && JS_IsObject(argv[0]) && api->native<ScriptNamedRef>(argv[0]) != nullptr);
+    }
+
+    float floatAt(JSContext *ctx, JSValueConst array, uint32_t index) {
+        JSValue value = JS_GetPropertyUint32(ctx, array, index);
+        double number = 0.0;
+        JS_ToFloat64(ctx, &number, value);
+        JS_FreeValue(ctx, value);
+        return (float) number;
+    }
+
+    // (biome, player | undefined, parameter, reset, mode, data): mode 0 keyframes [[time, [x, y, z]]...],
+    // 1 a float, 2 a vector; a player override goes to that player only, a biome one to everyone
+    JSValue graphicsSend(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        if (argc < 6)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const ScriptNamedRef *biome = api->native<ScriptNamedRef>(argv[0]);
+        int32_t parameter = 0, mode = 0;
+        if (biome == nullptr || JS_ToInt32(ctx, &parameter, argv[2]) != 0 || JS_ToInt32(ctx, &mode, argv[4]) != 0)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+
+        GraphicsOverrideParameterPacket packet;
+        packet.mBiomeIdentifier = biome->mName;
+        packet.mParameterType = (GraphicsOverrideParameterType) parameter;
+        packet.mReset = JS_ToBool(ctx, argv[3]) == 1;
+        ServerPlayer *target = nullptr;
+        if (!JS_IsUndefined(argv[1])) {
+            target = api->resolvePlayer(argv[1]);
+            if (target == nullptr)
+                return JS_UNDEFINED;
+            packet.mHasPlayerIdentifier = true;
+            packet.mPlayerIdentifier = target->getName();
+        }
+        if (!packet.mReset && mode == 1) {
+            packet.mHasFloatValue = true;
+            packet.mFloatValue = floatAt(ctx, argv[5], 0);
+        } else if (!packet.mReset && mode == 2) {
+            packet.mHasVec3Value = true;
+            packet.mVec3Value = Vector3f(floatAt(ctx, argv[5], 0), floatAt(ctx, argv[5], 1), floatAt(ctx, argv[5], 2));
+        } else if (!packet.mReset) {
+            JSValue length = JS_GetPropertyStr(ctx, argv[5], "length");
+            uint32_t count = 0;
+            JS_ToUint32(ctx, &count, length);
+            JS_FreeValue(ctx, length);
+            for (uint32_t index = 0; index < count; ++index) {
+                JSValue frame = JS_GetPropertyUint32(ctx, argv[5], index);
+                JSValue value = JS_GetPropertyUint32(ctx, frame, 1);
+                GraphicsOverrideValueEntry entry;
+                entry.mKey = floatAt(ctx, frame, 0);
+                entry.mValue = Vector3f(floatAt(ctx, value, 0), floatAt(ctx, value, 1), floatAt(ctx, value, 2));
+                packet.mValues.push_back(entry);
+                JS_FreeValue(ctx, value);
+                JS_FreeValue(ctx, frame);
+            }
+        }
+
+        ServerNetworkHandler &host = api->host();
+        if (target != nullptr) {
+            host.getNetworkHandler().send(target->getNetworkIdentifier(), packet, host.getCodecContext());
             return JS_UNDEFINED;
-        const std::string displayName = argc >= 3 ? toString(ctx, argv[2]) : std::string();
-        api->host().displayScoreboardObjective(toString(ctx, argv[0]), toString(ctx, argv[1]), displayName);
+        }
+        for (auto &entry: host.getPlayers()) {
+            if (entry.second.isSpawned())
+                host.getNetworkHandler().send(entry.first, packet, host.getCodecContext());
+        }
         return JS_UNDEFINED;
     }
 
-    JSValue scoreboardClearDisplay(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+    // true for a player still on the server: DDUI constructors and show() throw for any other
+    JSValue uiIsPlayer(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc >= 1)
-            api->host().clearScoreboardDisplay(toString(ctx, argv[0]));
-        return JS_UNDEFINED;
-    }
-
-    JSValue scoreboardRemoveObjective(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
-        ScriptApi *api = ScriptApi::fromContext(ctx);
-        if (argc >= 1)
-            api->host().removeScoreboardObjective(toString(ctx, argv[0]));
-        return JS_UNDEFINED;
+        return JS_NewBool(ctx, argc >= 1 && api->resolvePlayer(argv[0]) != nullptr);
     }
 
     JSValue runBootstrap(JSContext *ctx, const std::string &pack, const char *source, const char *name,
@@ -327,13 +494,21 @@ namespace {
         return result;
     }
 
+    // whether the pack's server version declares a name: bootstraps drop the members it lacks
+    JSValue surfaceHas(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
+        return JS_NewBool(ctx, argc >= 1 && ScriptApi::fromContext(ctx)->surface().has(toString(ctx, argv[0])));
+    }
+
     void addFunction(JSContext *ctx, JSValue object, const char *name, JSCFunction *function, int length) {
         JS_SetPropertyStr(ctx, object, name, JS_NewCFunction(ctx, function, name, length));
     }
 
     int moduleInit(JSContext *ctx, JSModuleDef *module);
 
-    const char *const SERVER_ENUMS[] = {"EntityDamageCause",
+    const char *const SERVER_ENUMS[] = {"DisplaySlotId",
+                                        "ObjectiveSortOrder",
+                                        "ScoreboardIdentityType",
+                                        "EntityDamageCause",
                                         "EntityInitializationCause",
                                         "EntityHealCause",
                                         "EntitySwingSource",
@@ -355,12 +530,51 @@ namespace {
                                         "Difficulty",
                                         "TimeOfDay",
                                         "MoonPhase",
+                                        "HudElement",
+                                        "HudVisibility",
+                                        "EasingType",
+                                        "CameraShakeType",
+                                        "EntityAttachPoint",
+                                        "WaypointTexture",
+                                        "LocatorBarErrorReason",
                                         "WeatherType",
                                         "ScriptEventSource",
                                         "GameRule",
                                         "MemoryTier",
+                                        "HeldItemOption",
+                                        "LiquidSettings",
+                                        "PlayerSplitScreenSlot",
+                                        "PlatformType",
+                                        "GraphicsMode",
+                                        "ControlScheme",
+                                        "AimAssistTargetMode",
                                         "CustomComponentNameErrorReason",
-                                        "NamespaceNameErrorReason"};
+                                        "NamespaceNameErrorReason",
+                                        "EnchantmentSlot",
+                                        "ItemLockMode",
+                                        "BookErrorReason",
+                                        "ContainerRulesErrorReason",
+                                        "CustomCommandErrorReason",
+                                        "CustomCommandParamType",
+                                        "CustomCommandSource",
+                                        "CustomCommandStatus",
+                                        "BlockPistonState",
+                                        "BlockVolumeIntersection",
+                                        "FluidType",
+                                        "LiquidType",
+                                        "SignSide",
+                                        "StructureAnimationMode",
+                                        "StructureMirrorAxis",
+                                        "StructureRotation",
+                                        "StructureSaveMode",
+                                        "DyeColor",
+                                        "TintMethod",
+                                        "MovementType",
+                                        "StickyType",
+                                        "CloneMode",
+                                        "PlayerWaypointsMode",
+                                        "PoiBlockOccupancyFilter",
+                                        "WatchdogTerminateReason"};
 
     const char *const CUSTOM_COMPONENT_CLASSES[] = {"CustomComponentParameters",
                                                     "BlockComponentBlockBreakEvent",
@@ -391,6 +605,17 @@ namespace {
             {"ItemDurabilityComponent", "minecraft:durability"},
             {"ItemEnchantableComponent", "minecraft:enchantable"},
             {"ItemCooldownComponent", "minecraft:cooldown"},
+            {"ItemBookComponent", "minecraft:book"},
+            {"ItemCompostableComponent", "minecraft:compostable"},
+            {"ItemDyeableComponent", "minecraft:dyeable"},
+            {"ItemFoodComponent", "minecraft:food"},
+            {"ItemInventoryComponent", "minecraft:inventory"},
+            {"ItemPotionComponent", "minecraft:potion"},
+            {"ItemBlockDynamicPropertiesComponent", "minecraft:block_actor_dynamic_properties"},
+            {"EntityInventoryComponent", "minecraft:inventory"},
+            {"EntityEquippableComponent", "minecraft:equippable"},
+            {"EntityEnderInventoryComponent", "minecraft:ender_inventory"},
+            {"PlayerCursorInventoryComponent", "minecraft:cursor_inventory"},
     };
 
     bool isNumber(const std::string &text) {
@@ -408,8 +633,15 @@ namespace {
         if (found != nullptr)
             return *found;
 
-        // ui and common follow the server's major when a pack does not pin them
+        // every server version depends on common ^1.x: an unpinned common is the newest 1.x of 1.26.60, 1.3
         ScriptModuleVersion fallback;
+        if (std::strcmp(name, "@minecraft/common") == 0) {
+            fallback.mTrack = ScriptApiTrack::Stable1;
+            fallback.mMinor = 3;
+            return fallback;
+        }
+
+        // ui follows the server's major when a pack does not pin it
         const ScriptModuleVersion *server = modules.find("@minecraft/server");
         if (server != nullptr)
             fallback.mTrack = server->mTrack;
@@ -425,18 +657,29 @@ ScriptApi::ScriptApi(JSContext *context, ServerNetworkHandler &host, PlayerHandl
           mTrack(moduleOrDefault(mModules, "@minecraft/server").mTrack),
           mSurface("@minecraft/server", moduleOrDefault(mModules, "@minecraft/server")),
           mUiSurface("@minecraft/server-ui", moduleOrDefault(mModules, "@minecraft/server-ui")),
-          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")), mScheduler(context),
-          mPlayers(players) {
+          mCommonSurface("@minecraft/common", moduleOrDefault(mModules, "@minecraft/common")),
+          mGraphicsSurface("@minecraft/server-graphics", moduleOrDefault(mModules, "@minecraft/server-graphics")),
+          mAdminSurface("@minecraft/server-admin", moduleOrDefault(mModules, "@minecraft/server-admin")),
+          mNetSurface("@minecraft/server-net", moduleOrDefault(mModules, "@minecraft/server-net")),
+          mDebugSurface("@minecraft/debug-utilities", moduleOrDefault(mModules, "@minecraft/debug-utilities")),
+          mDiagnosticsSurface("@minecraft/diagnostics", moduleOrDefault(mModules, "@minecraft/diagnostics")),
+          mGameTestSurface("@minecraft/server-gametest", moduleOrDefault(mModules, "@minecraft/server-gametest")),
+          mScheduler(context), mPlayers(players) {
     JS_SetContextOpaque(mContext, this);
 }
 
 ScriptApi::~ScriptApi() {
     mScheduler.clearAll();
+    unregisterCustomCommands();
+    mTickJobs.clear();
+    JS_FreeValue(mContext, mDebugTick);
 
     for (auto &entry: mSubscribers) {
         for (JSValue callback: entry.second)
             JS_FreeValue(mContext, callback);
     }
+    for (auto &entry: mSubscribeOptions)
+        JS_FreeValue(mContext, entry.second);
     for (auto &entry: mBlockComponents)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mItemComponents)
@@ -447,27 +690,65 @@ ScriptApi::~ScriptApi() {
         JS_FreeValue(mContext, pending.mResolve);
         JS_FreeValue(mContext, pending.mReject);
     }
+    for (PendingFilteredText &pending: mPendingFilteredTexts) {
+        JS_FreeValue(mContext, pending.mResolve);
+        JS_FreeValue(mContext, pending.mValue);
+    }
     for (auto &entry: mActorObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mPlayerObjects)
         JS_FreeValue(mContext, entry.second);
     for (auto &entry: mDimensionObjects)
         JS_FreeValue(mContext, entry.second);
+    for (auto &bar: mLocatorBars) {
+        for (LocatorEntry &entry: bar.second)
+            JS_FreeValue(mContext, entry.mObject);
+    }
     for (auto &entry: mClockObjects)
         JS_FreeValue(mContext, entry.second);
-    for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports}) {
+    JS_FreeValue(mContext, mAdminHooks);
+    JS_FreeValue(mContext, mGameTestHooks);
+    JS_FreeValue(mContext, mSimulatedPlayerPrototype);
+    JS_FreeValue(mContext, mNetHooks);
+    JS_FreeValue(mContext, mSecretOf);
+    for (auto *exports: {&mServerExports, &mUiExports, &mCommonExports, &mGraphicsExports, &mAdminExports, &mNetExports,
+                         &mDebugExports, &mGameTestExports, &mDiagnosticsExports}) {
         for (auto &entry: *exports)
             JS_FreeValue(mContext, entry.second);
     }
+    for (QueuedCommand &command: mQueuedCommands)
+        _freeQueuedCommand(command);
     for (auto &entry: mClasses) {
         JS_FreeValue(mContext, entry.second.mConstructor);
         JS_FreeValue(mContext, entry.second.mPrototype);
     }
 
-    for (JSValue value: {mWorld, mSystem, mAfterEvents, mBeforeEvents, mSystemAfterEvents, mSystemBeforeEvents,
-                         mScoreboard, mTickingAreas, mGameRules, mSystemInfo, mErrors, mBlockRegistry, mItemRegistry,
-                         mClockRegistry, mDimensionRegistry})
+    for (JSValue value: {mWorld,
+                         mSystem,
+                         mAfterEvents,
+                         mBeforeEvents,
+                         mSystemAfterEvents,
+                         mSystemBeforeEvents,
+                         mScoreboard,
+                         mTickingAreas,
+                         mGameRules,
+                         mSystemInfo,
+                         mErrors,
+                         mBlockRegistry,
+                         mItemRegistry,
+                         mClockRegistry,
+                         mDimensionRegistry,
+                         mStructureManager,
+                         mListVolume,
+                         mCommandRegistry,
+                         mLootTableManager,
+                         mSoundDefinitionRegistry,
+                         mPrimitiveShapes})
         JS_FreeValue(mContext, value);
+}
+
+void ScriptApi::logPendingException(const std::string &where) {
+    logException(mContext, mPackName, where);
 }
 
 ScriptApi *ScriptApi::fromContext(JSContext *ctx) {
@@ -660,6 +941,9 @@ JSValue ScriptApi::makeInstance(const std::string &className, ScriptNative *data
         prototype = defineClass(className);
 
     JSValue object = JS_NewObjectProtoClass(mContext, prototype, mNativeClassId);
+    data->mHandleCounts = mHandleCounts;
+    data->mHandleCount = &(*mHandleCounts)[className];
+    ++*data->mHandleCount;
     JS_SetOpaque(object, data);
     return object;
 }
@@ -702,6 +986,27 @@ JSValue ScriptApi::throwInvalidEntity(const char *action, const std::string &mem
     if (JS_IsException(error))
         return JS_EXCEPTION;
     return JS_Throw(mContext, error);
+}
+
+JSValue ScriptApi::throwInvalidItemStack(const char *action, const std::string &member, const std::string &typeId) {
+    const std::string message = std::string("Failed to ") + action + " '" + member
+                                + "' due to the ItemStack being invalid (has the ItemStack been removed?).";
+    JSValue itemType = JS_UNDEFINED;
+    for (const auto &entry: mServerExports) {
+        if (entry.first != "ItemTypes")
+            continue;
+        JSValue get = JS_GetPropertyStr(mContext, entry.second, "get");
+        JSValue id = string(mContext, typeId);
+        itemType = JS_Call(mContext, get, entry.second, 1, &id);
+        JS_FreeValue(mContext, id);
+        JS_FreeValue(mContext, get);
+        if (JS_IsException(itemType))
+            return JS_EXCEPTION;
+        break;
+    }
+    JSValue fields = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, fields, "itemType", itemType);
+    return throwError("InvalidItemStackError", message, fields);
 }
 
 ServerPlayer *ScriptApi::resolvePlayerByHandle(uint32_t handle) {
@@ -767,7 +1072,16 @@ JSValue ScriptApi::makePlayer(ServerPlayer &player) {
     ref->mId = handle;
     ref->mEntityId = std::to_string(player.getUniqueId());
     ref->mTypeId = "minecraft:player";
-    JSValue object = makeInstance("Player", ref);
+    JSValue object = JS_UNDEFINED;
+    if (player.isSimulated() && JS_IsObject(mSimulatedPlayerPrototype)) {
+        object = JS_NewObjectProtoClass(mContext, mSimulatedPlayerPrototype, mNativeClassId);
+        ref->mHandleCounts = mHandleCounts;
+        ref->mHandleCount = &(*mHandleCounts)["SimulatedPlayer"];
+        ++*ref->mHandleCount;
+        JS_SetOpaque(object, ref);
+    } else {
+        object = makeInstance("Player", ref);
+    }
     mPlayerObjects[handle] = JS_DupValue(mContext, object);
     return object;
 }
@@ -819,6 +1133,12 @@ void ScriptApi::forgetEntity(uint64_t runtimeId) {
 
 void ScriptApi::forgetPlayer(ServerPlayer &player) {
     const uint32_t handle = mPlayers.acquire(player.getNetworkIdentifier());
+    const auto bar = mLocatorBars.find(handle);
+    if (bar != mLocatorBars.end()) {
+        for (LocatorEntry &entry: bar->second)
+            JS_FreeValue(mContext, entry.mObject);
+        mLocatorBars.erase(bar);
+    }
     const auto it = mPlayerObjects.find(handle);
     if (it == mPlayerObjects.end())
         return;
@@ -873,27 +1193,30 @@ JSValue ScriptApi::makeItemStack(const std::string &typeId, int32_t amount) {
 JSValue ScriptApi::makeItem(const ItemStack &item) {
     if (item.isAir() || item.mDefinition == nullptr)
         return JS_UNDEFINED;
-    return makeItemStack(item.mDefinition->getIdentifier(), item.mCount);
+    JSValue jsItem = makeItemStack(item.mDefinition->getIdentifier(), item.mCount);
+    readItemStack(item, *native<ScriptItemRef>(jsItem)->mItem);
+    return jsItem;
+}
+
+void ScriptApi::readItemStack(const ItemStack &item, ScriptItemData &data) {
+    data.mTypeId = item.mDefinition == nullptr ? std::string() : item.mDefinition->getIdentifier();
+    data.mAmount = item.mCount;
+    data.mDamage = item.mDamage;
+    data.mCanPlaceOn = item.mCanPlace;
+    data.mCanDestroy = item.mCanBreak;
+    data.mDynamicProperties.clear();
+    data.mTag = item.mTag.isCompound() ? item.mTag : Tag::ofCompound();
+    if (const Tag *dynamicProperties = data.mTag.get("DynamicProperties")) {
+        deserializeDynamicProperties(*dynamicProperties, data.mDynamicProperties);
+        data.mTag.remove("DynamicProperties");
+    }
 }
 
 JSValue ScriptApi::makeHeldItemStack(ServerPlayer &player, const std::string &identifier) {
     const ItemStack &stack = player.getInventory().getItemInHand();
-
-    std::string typeId = identifier;
-    int32_t count = 1;
-    const Tag *dynamicProperties = nullptr;
-    if (!stack.isAir() && stack.mDefinition != nullptr) {
-        typeId = stack.mDefinition->getIdentifier();
-        count = stack.mCount;
-        if (stack.mTag.isCompound())
-            dynamicProperties = stack.mTag.get("DynamicProperties");
-    }
-
-    JSValue jsItem = makeItemStack(typeId, count);
-    const ScriptItemRef *ref = native<ScriptItemRef>(jsItem);
-    if (dynamicProperties != nullptr && ref != nullptr)
-        deserializeDynamicProperties(*dynamicProperties, ref->mItem->mDynamicProperties);
-    return jsItem;
+    if (!stack.isAir() && stack.mDefinition != nullptr)
+        return makeItem(stack);
+    return makeItemStack(identifier, 1);
 }
 
 bool ScriptApi::toItemStack(const ScriptItemData &data, ItemStack &stack) {
@@ -910,6 +1233,13 @@ bool ScriptApi::toItemStack(const ScriptItemData &data, ItemStack &stack) {
     stack.mBlockDefinition = mHost.getBlockDefinitions().getDefinition(item.getIdentifier());
     stack.mCount = data.mAmount < 1 ? 1 : data.mAmount;
     stack.mDamage = data.mDamage;
+    stack.mCanPlace = data.mCanPlaceOn;
+    stack.mCanBreak = data.mCanDestroy;
+    Tag tag = data.mTag.isCompound() ? data.mTag : Tag::ofCompound();
+    if (!data.mDynamicProperties.empty())
+        tag.put("DynamicProperties", serializeDynamicProperties(data.mDynamicProperties));
+    if (!tag.getKeys().empty())
+        stack.mTag = std::move(tag);
     return true;
 }
 
@@ -957,28 +1287,6 @@ bool ScriptApi::setBlock(Level &level, int32_t x, int32_t y, int32_t z, const Bl
     return true;
 }
 
-int32_t ScriptApi::runCommandAsPlayer(ServerPlayer &player, const std::string &commandLine) {
-    CommandOriginData origin;
-    origin.mOrigin = CommandOriginType::Scripting;
-    origin.mPlayerId = (int64_t) player.getRuntimeId();
-
-    PlayerCommandOrigin sender(mHost, player, origin);
-    std::string line = commandLine;
-    if (!line.empty() && line[0] == '/')
-        line.erase(0, 1);
-
-    return mHost.getCommands().dispatch(sender, line) ? 1 : 0;
-}
-
-int32_t ScriptApi::runCommandAsConsole(const std::string &commandLine) {
-    ServerCommandOrigin sender(&mHost);
-    std::string line = commandLine;
-    if (!line.empty() && line[0] == '/')
-        line.erase(0, 1);
-
-    return mHost.getCommands().dispatch(sender, line) ? 1 : 0;
-}
-
 void ScriptApi::addSubscriber(const std::string &key, JSValue callback) {
     mSubscribers[key].push_back(callback);
 }
@@ -993,6 +1301,11 @@ void ScriptApi::removeSubscriber(const std::string &key, JSValueConst callback) 
         if (JS_VALUE_GET_PTR(*entry) == JS_VALUE_GET_PTR(callback)) {
             if (key == SCRIPT_EVENT_KEY)
                 mScriptEventNamespaces.erase(JS_VALUE_GET_PTR(callback));
+            const auto options = mSubscribeOptions.find(JS_VALUE_GET_PTR(callback));
+            if (options != mSubscribeOptions.end()) {
+                JS_FreeValue(mContext, options->second);
+                mSubscribeOptions.erase(options);
+            }
             JS_FreeValue(mContext, *entry);
             list.erase(entry);
             return;
@@ -1020,6 +1333,29 @@ bool ScriptApi::emitClockEvent(const std::string &key, JSValue eventObject, cons
     const bool cancelled = emit(key, eventObject);
     mEmitClock.clear();
     mEmitMarker.clear();
+    return cancelled;
+}
+
+bool ScriptApi::keepsSubscribeOptions(const std::string &key) {
+    return key == "after.playerInventoryItemChange" || key == "after.entityItemPickup"
+           || key == "before.entityItemPickup" || key == "after.entityContainerOpened"
+           || key == "after.entityContainerClosed" || key == "after.blockContainerOpened"
+           || key == "after.blockContainerClosed" || key == "after.playerStartBreakingBlock"
+           || key == "after.playerCancelBreakingBlock" || key == "after.entityItemDrop" || _readsEventOptions(key);
+}
+
+void ScriptApi::keepSubscribeOptions(JSValueConst callback, JSValueConst options) {
+    JSValue &kept = mSubscribeOptions[JS_VALUE_GET_PTR(callback)];
+    JS_FreeValue(mContext, kept);
+    kept = JS_DupValue(mContext, options);
+}
+
+bool ScriptApi::emitFiltered(const std::string &key, JSValue eventObject,
+                             const std::function<bool(JSValueConst options)> &accepts) {
+    const std::function<bool(JSValueConst)> *previous = mEmitAccepts;
+    mEmitAccepts = &accepts;
+    const bool cancelled = emit(key, eventObject);
+    mEmitAccepts = previous;
     return cancelled;
 }
 
@@ -1068,18 +1404,31 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
         eventNamespace = text.substr(0, text.find(':'));
     }
 
-    const std::vector<JSValue> snapshot = it->second;
+    // a handler may unsubscribe itself or a later one: each keeps its own reference until the loop ends
+    std::vector<JSValue> snapshot;
+    snapshot.reserve(it->second.size());
+    for (JSValue callback: it->second)
+        snapshot.push_back(JS_DupValue(mContext, callback));
     for (JSValue callback: snapshot) {
         if (filtered && !_acceptsScriptEvent(callback, eventNamespace))
             continue;
         if (!mEmitClock.empty() && !_acceptsClockEvent(callback))
             continue;
+        const auto options = mSubscribeOptions.find(JS_VALUE_GET_PTR(callback));
+        if (options != mSubscribeOptions.end()) {
+            const bool accepted = mEmitAccepts != nullptr ? (*mEmitAccepts)(options->second)
+                                                          : _acceptsEventOptions(key, options->second, eventObject);
+            if (!accepted)
+                continue;
+        }
 
         JSValue result = JS_Call(mContext, callback, JS_UNDEFINED, 1, &eventObject);
         if (JS_IsException(result))
             logException(mContext, mPackName, "event handler (" + key + ")");
         JS_FreeValue(mContext, result);
     }
+    for (JSValue callback: snapshot)
+        JS_FreeValue(mContext, callback);
 
     mPrivilege = previous;
 
@@ -1091,7 +1440,7 @@ bool ScriptApi::emit(const std::string &key, JSValue eventObject) {
 }
 
 JSValue ScriptApi::registerCustomComponent(bool blocks, const std::string &name, JSValueConst handlers) {
-    // sub_14B4F5CB0: only the startup event's registries accept components
+    // only the startup event's registries accept components
     if (!mRegistrationOpen)
         return throwError("CustomComponentInvalidRegistryError",
                           "Cannot register custom component outside of the ModuleStartup event.");
@@ -1127,7 +1476,6 @@ JSValue ScriptApi::registerCustomComponent(bool blocks, const std::string &name,
 }
 
 JSValue ScriptApi::registerCustomDimension(const std::string &name) {
-    // sub_14C846B40
     if (!mRegistrationOpen)
         return throwError("CustomDimensionInvalidRegistryError",
                           "Cannot register custom dimension '" + name + "' outside of StartupEvent.");
@@ -1144,7 +1492,7 @@ JSValue ScriptApi::registerCustomDimension(const std::string &name) {
         return throwError("NamespaceNameError", "", fields);
     }
 
-    // sub_142CA2AF0, sub_1403ED180: one colon, no space, tab, cr or lf
+    // one colon, no space, tab, cr or lf
     if (name.find(':', colon + 1) != std::string::npos || name.find_first_of(" \t\n\r") != std::string::npos)
         return throwError("CustomDimensionNameError", "Custom dimension '" + name + "' has invalid characters.");
 
@@ -1191,6 +1539,31 @@ void ScriptApi::fillBlockEvent(JSValueConst event, const Level &level, const Vec
     JS_SetPropertyStr(mContext, event, "dimension", makeDimension(level));
 }
 
+JSValue ScriptApi::makeComponentParameters(const std::string &paramsJson) {
+    JSValue params = JS_UNDEFINED;
+    if (!paramsJson.empty()) {
+        params = JS_ParseJSON(mContext, paramsJson.c_str(), paramsJson.size(), "<params>");
+        if (JS_IsException(params)) {
+            JS_FreeValue(mContext, JS_GetException(mContext));
+            params = JS_UNDEFINED;
+        }
+    }
+    JSValue parameters = makeInstance("CustomComponentParameters", new ScriptNative());
+    JS_DefinePropertyValueStr(mContext, parameters, "params", params, JS_PROP_ENUMERABLE);
+    return parameters;
+}
+
+const CustomComponentUse *ScriptApi::customItemComponent(const std::string &typeId, const std::string &id) const {
+    const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(typeId);
+    if (custom == nullptr)
+        return nullptr;
+    for (const CustomComponentUse &use: custom->mCustomComponents) {
+        if (use.mName == id)
+            return &use;
+    }
+    return nullptr;
+}
+
 void ScriptApi::fireComponents(bool blocks, const std::vector<CustomComponentUse> &uses, const char *hook,
                                JSValueConst event) {
     std::unordered_map<std::string, JSValue> &registry = blocks ? mBlockComponents : mItemComponents;
@@ -1208,16 +1581,7 @@ void ScriptApi::fireComponents(bool blocks, const std::vector<CustomComponentUse
 
         JSValue args[2] = {JS_DupValue(mContext, event), JS_UNDEFINED};
         if (withParams) {
-            JSValue params = JS_UNDEFINED;
-            if (!use.mParams.empty()) {
-                params = JS_ParseJSON(mContext, use.mParams.c_str(), use.mParams.size(), "<params>");
-                if (JS_IsException(params)) {
-                    JS_FreeValue(mContext, JS_GetException(mContext));
-                    params = JS_UNDEFINED;
-                }
-            }
-            args[1] = makeInstance("CustomComponentParameters", new ScriptNative());
-            JS_DefinePropertyValueStr(mContext, args[1], "params", params, JS_PROP_ENUMERABLE);
+            args[1] = makeComponentParameters(use.mParams);
         }
 
         JSValue result = JS_Call(mContext, function, handler->second, withParams ? 2 : 1, args);
@@ -1256,6 +1620,8 @@ void ScriptApi::startup() {
             JS_SetPropertyStr(mContext, event, "worldClockRegistry", JS_DupValue(mContext, mClockRegistry));
         if (!JS_IsUndefined(mDimensionRegistry))
             JS_SetPropertyStr(mContext, event, "dimensionRegistry", JS_DupValue(mContext, mDimensionRegistry));
+        if (!JS_IsUndefined(mCommandRegistry))
+            JS_SetPropertyStr(mContext, event, "customCommandRegistry", JS_DupValue(mContext, mCommandRegistry));
         emit("system.before.startup", event);
     }
     mRegistrationOpen = false;
@@ -1267,8 +1633,22 @@ void ScriptApi::worldLoad() {
         emit("after.worldLoad", makeEvent("WorldAfterEvents.worldLoad"));
 }
 
+void ScriptApi::watchdogTerminate(const char *reason) {
+    if (!hasSubscribers("system.before.watchdogTerminate"))
+        return;
+    JSValue event = makeEvent("SystemBeforeEvents.watchdogTerminate");
+    JS_SetPropertyStr(mContext, event, "terminateReason", JS_NewString(mContext, reason));
+    JS_SetPropertyStr(mContext, event, "cancel", JS_FALSE);
+    emit("system.before.watchdogTerminate", event);
+}
+
 void ScriptApi::shutdown() {
     emit("system.before.shutdown", makeEvent("SystemBeforeEvents.shutdown"));
+    std::vector<uint32_t> pending;
+    for (const auto &entry: mFormResolvers)
+        pending.push_back(entry.first);
+    for (uint32_t formId: pending)
+        _resolveForm(formId, std::string(), "ServerShutdown");
 }
 
 JSValue ScriptApi::_makeSignalHolder(const char *className, const char *signalOwner, const char *keyPrefix) {
@@ -1304,6 +1684,22 @@ void ScriptApi::_bindEvents() {
         mSystemAfterEvents = _makeSignalHolder("SystemAfterEvents", "SystemAfterEvents", "system.after.");
     if (mSurface.has("System.beforeEvents"))
         mSystemBeforeEvents = _makeSignalHolder("SystemBeforeEvents", "SystemBeforeEvents", "system.before.");
+
+    // some versions export signal and event classes no holder carries (1.3 IButtonPushAfterEventSignal, 1.8
+    // EffectAddAfterEvent): still classes a script can import and test against
+    for (const std::string &name: mSurface.exports()) {
+        const bool signal = hasSuffix(name, "Signal");
+        if (!signal && !hasSuffix(name, "Event"))
+            continue;
+        JSValue prototype = defineClass(name);
+        if (!signal)
+            continue;
+        for (const char *member: {"subscribe", "unsubscribe"}) {
+            if (mSurface.has(name + "." + member))
+                signalMethod(prototype, name.c_str(), member,
+                             std::strcmp(member, "subscribe") == 0 ? signalSubscribe : signalUnsubscribe);
+        }
+    }
 }
 
 void ScriptApi::_bindRegistries() {
@@ -1328,6 +1724,21 @@ void ScriptApi::_bindRegistries() {
         if (mSurface.has(name))
             defineClass(name);
     }
+    if (mSurface.has("Trigger")) {
+        JSValue trigger = defineClass("Trigger", triggerConstructor, 1);
+        property(trigger, "Trigger", "eventName", triggerGetEventName, triggerSetEventName);
+    }
+    // the typings fix the fill levels: 0 to 6
+    if (mSurface.has("FluidContainer")) {
+        defineClass("FluidContainer");
+        JSValue fluid = constructorOf("FluidContainer");
+        if (mSurface.has("FluidContainer.static maxFillLevel"))
+            JS_DefinePropertyValueStr(mContext, fluid, "maxFillLevel", JS_NewInt32(mContext, 6), JS_PROP_ENUMERABLE);
+        if (mSurface.has("FluidContainer.static minFillLevel"))
+            JS_DefinePropertyValueStr(mContext, fluid, "minFillLevel", JS_NewInt32(mContext, 0), JS_PROP_ENUMERABLE);
+    }
+    if (mSurface.has("ISerializable"))
+        defineClass("ISerializable");
     if (mSurface.has("StartupEvent"))
         defineClass("StartupEvent");
     if (mSurface.has("ShutdownEvent"))
@@ -1337,9 +1748,28 @@ void ScriptApi::_bindRegistries() {
 void ScriptApi::_installBootstraps() {
     const std::vector<std::string> commonErrors = mCommonSurface.errorClasses();
     const std::vector<std::string> serverErrors = mSurface.errorClasses();
+    const std::vector<std::string> uiErrors = mModules.find("@minecraft/server-ui") != nullptr
+                                                      ? mUiSurface.errorClasses()
+                                                      : std::vector<std::string>();
+    const std::vector<std::string> adminErrors = mModules.find("@minecraft/server-admin") != nullptr
+                                                         ? mAdminSurface.errorClasses()
+                                                         : std::vector<std::string>();
+    const std::vector<std::string> netErrors = mModules.find("@minecraft/server-net") != nullptr
+                                                       ? mNetSurface.errorClasses()
+                                                       : std::vector<std::string>();
+    const std::vector<std::string> debugErrors = mModules.find("@minecraft/debug-utilities") != nullptr
+                                                         ? mDebugSurface.errorClasses()
+                                                         : std::vector<std::string>();
+    const std::vector<std::string> gameTestErrors = mModules.find("@minecraft/server-gametest") != nullptr
+                                                            ? mGameTestSurface.errorClasses()
+                                                            : std::vector<std::string>();
+    const std::vector<std::string> diagnosticsErrors = mModules.find("@minecraft/diagnostics") != nullptr
+                                                               ? mDiagnosticsSurface.errorClasses()
+                                                               : std::vector<std::string>();
     JSValue names = JS_NewArray(mContext);
     uint32_t count = 0;
-    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors}) {
+    for (const std::vector<std::string> *list: {&commonErrors, &serverErrors, &uiErrors, &adminErrors, &netErrors,
+                                                &debugErrors, &gameTestErrors, &diagnosticsErrors}) {
         for (const std::string &error: *list)
             JS_SetPropertyUint32(mContext, names, count++, string(mContext, error));
     }
@@ -1350,12 +1780,28 @@ void ScriptApi::_installBootstraps() {
         mCommonExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     for (const std::string &error: serverErrors)
         mServerExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: uiErrors)
+        mUiExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: adminErrors)
+        mAdminExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: netErrors)
+        mNetExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: debugErrors)
+        mDebugExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: gameTestErrors)
+        mGameTestExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
+    for (const std::string &error: diagnosticsErrors)
+        mDiagnosticsExports.emplace_back(error, JS_GetPropertyStr(mContext, classes, error.c_str()));
     JS_FreeValue(mContext, classes);
 
     JSValue data = JS_NewObject(mContext);
     addFunction(mContext, data, "blockNames", paletteBlockNames, 0);
     addFunction(mContext, data, "permutations", palettePermutations, 1);
     addFunction(mContext, data, "itemTypeNames", itemTypeNames, 0);
+    addFunction(mContext, data, "blockInfo", ScriptBlockData::blockInfo(), 2);
+    addFunction(mContext, data, "permutationItem", ScriptBlockData::permutationItem(), 3);
+    addFunction(mContext, data, "itemLocalizationKey", ScriptItemTypeData::localizationKey(), 1);
+    addFunction(mContext, data, "has", surfaceHas, 1);
     JSValue dataExports = runBootstrap(mContext, mPackName, ScriptBootstraps::data(), "<data>", data);
     for (const char *name:
          {"BlockPermutation", "BlockType", "BlockTypes", "BlockStateType", "BlockStates", "ItemType", "ItemTypes"}) {
@@ -1368,33 +1814,128 @@ void ScriptApi::_installBootstraps() {
         JS_FreeValue(mContext, result);
     }
     JS_FreeValue(mContext, installJobs);
-    JS_FreeValue(mContext, dataExports);
 
-    JSValue world = JS_NewObject(mContext);
-    addFunction(mContext, world, "setScore", scoreboardSetScore, 3);
-    addFunction(mContext, world, "removeScore", scoreboardRemoveScore, 2);
-    addFunction(mContext, world, "display", scoreboardDisplay, 3);
-    addFunction(mContext, world, "clearDisplay", scoreboardClearDisplay, 1);
-    addFunction(mContext, world, "removeObjective", scoreboardRemoveObjective, 1);
-    JSValue worldExports = runBootstrap(mContext, mPackName, ScriptBootstraps::world(), "<world>", world);
-    for (const char *name: {"Scoreboard", "ScoreboardObjective"}) {
-        if (mSurface.has(name))
-            mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, worldExports, name));
+    JSValue lootExports = runBootstrap(mContext, mPackName, ScriptBootstraps::loot(), "<loot>",
+                                       _lootNatives(JS_GetPropertyStr(mContext, dataExports, "ItemTypes")));
+    JS_FreeValue(mContext, dataExports);
+    JSPropertyEnum *lootNames = nullptr;
+    uint32_t lootCount = 0;
+    if (JS_IsObject(lootExports)
+        && JS_GetOwnPropertyNames(mContext, &lootNames, &lootCount, lootExports, JS_GPN_STRING_MASK) == 0) {
+        for (uint32_t index = 0; index < lootCount; ++index) {
+            const char *name = JS_AtomToCString(mContext, lootNames[index].atom);
+            if (name != nullptr && mSurface.has(name))
+                mServerExports.emplace_back(name, JS_GetProperty(mContext, lootExports, lootNames[index].atom));
+            if (name != nullptr)
+                JS_FreeCString(mContext, name);
+        }
+        JS_FreePropertyEnum(mContext, lootNames, lootCount);
     }
-    mScoreboard = JS_GetPropertyStr(mContext, worldExports, "scoreboard");
-    JS_FreeValue(mContext, worldExports);
+    mLootTableManager = JS_GetPropertyStr(mContext, lootExports, "manager");
+    JS_FreeValue(mContext, lootExports);
+    _bindLootTableManager();
+
+    JSValue volumes = JS_NewObject(mContext);
+    JS_SetPropertyStr(mContext, volumes, "error", JS_GetPropertyStr(mContext, mErrors, "make"));
+    addFunction(mContext, volumes, "has", surfaceHas, 1);
+    JSValue volumeExports = runBootstrap(mContext, mPackName, ScriptBootstraps::volumes(), "<volumes>", volumes);
+    for (const char *name: {"BlockVolumeBase", "BlockVolume", "ListBlockVolume", "BlockLocationIterator"}) {
+        if (mSurface.has(name))
+            mServerExports.emplace_back(name, JS_GetPropertyStr(mContext, volumeExports, name));
+    }
+    mListVolume = JS_GetPropertyStr(mContext, volumeExports, "ListBlockVolume");
+    JS_FreeValue(mContext, volumeExports);
+
+
+    if (mModules.find("@minecraft/server-graphics") != nullptr) {
+        JSValue graphics = JS_NewObject(mContext);
+        addFunction(mContext, graphics, "send", graphicsSend, 6);
+        addFunction(mContext, graphics, "isBiome", graphicsIsBiome, 1);
+        addFunction(mContext, graphics, "isPlayer", uiIsPlayer, 1);
+        JS_SetPropertyStr(mContext, graphics, "errors", JS_DupValue(mContext, mErrors));
+        JSValue graphicsExports =
+                runBootstrap(mContext, mPackName, ScriptBootstraps::graphics(), "<graphics>", graphics);
+        for (const char *name: {"BiomeAtmospherics", "BiomeColorGrading", "BiomeLighting", "BiomeWater",
+                                "getBiomeAtmospherics", "getBiomeColorGrading", "getBiomeLighting", "getBiomeWater",
+                                "getPlayerAtmospherics", "getPlayerColorGrading", "getPlayerLighting",
+                                "getPlayerWater"}) {
+            if (mGraphicsSurface.has(name))
+                mGraphicsExports.emplace_back(name, JS_GetPropertyStr(mContext, graphicsExports, name));
+        }
+        JS_FreeValue(mContext, graphicsExports);
+    }
+
+    if (mModules.find("@minecraft/server-admin") != nullptr) {
+        JSValue adminExports = ScriptAdminBinding::install(*this);
+        for (const char *name: ScriptAdminBinding::exportNames()) {
+            if (mAdminSurface.has(name))
+                mAdminExports.emplace_back(name, JS_GetPropertyStr(mContext, adminExports, name));
+        }
+        mAdminHooks = JS_GetPropertyStr(mContext, adminExports, "hooks");
+        mSecretOf = JS_GetPropertyStr(mContext, mAdminHooks, "secretOf");
+        JS_FreeValue(mContext, adminExports);
+    }
+
+    // the server's PrimitiveShapesManager draws through the debug shape stream
+    if (mModules.find("@minecraft/debug-utilities") != nullptr || mSurface.has("PrimitiveShapesManager"))
+        _installDebugUtilities();
+
+    if (mModules.find("@minecraft/server-gametest") != nullptr)
+        _installGameTest();
+    if (mModules.find("@minecraft/diagnostics") != nullptr)
+        _installDiagnostics();
+    if (mModules.find("@minecraft/server-net") != nullptr) {
+        mNetConfig = mHost.getScriptEngine().packConfigs().get(mScriptModuleUuid).netConfig();
+        JSValue secretOf =
+                JS_IsObject(mAdminHooks) ? JS_GetPropertyStr(mContext, mAdminHooks, "secretOf") : JS_UNDEFINED;
+        JSValue netExports = ScriptNetBinding::install(*this, secretOf);
+        JS_FreeValue(mContext, secretOf);
+        for (const char *name: ScriptNetBinding::exportNames()) {
+            if (mNetSurface.has(name))
+                mNetExports.emplace_back(name, JS_GetPropertyStr(mContext, netExports, name));
+        }
+        mNetHooks = JS_GetPropertyStr(mContext, netExports, "hooks");
+        JS_FreeValue(mContext, netExports);
+    }
 
     if (mModules.find("@minecraft/server-ui") == nullptr)
         return;
 
     JSValue ui = JS_NewObject(mContext);
     addFunction(mContext, ui, "showForm", uiShowForm, 2);
+    addFunction(mContext, ui, "closeAllForms", uiCloseAllForms, 1);
+    addFunction(mContext, ui, "showScreen", uiShowScreen, 7);
+    addFunction(mContext, ui, "updateScreen", uiUpdateScreen, 4);
+    addFunction(mContext, ui, "closeScreen", uiCloseScreen, 2);
+    addFunction(mContext, ui, "isPlayer", uiIsPlayer, 1);
+    addFunction(mContext, ui, "filterText", uiFilterText, 2);
+    addFunction(mContext, ui, "has", uiHas, 1);
+    JS_SetPropertyStr(mContext, ui, "errors", JS_DupValue(mContext, mErrors));
     JSValue uiExports = runBootstrap(mContext, mPackName, ScriptBootstraps::ui(), "<ui>", ui);
-    for (const char *name: {"ActionFormData", "MessageFormData", "ModalFormData"}) {
-        if (mUiSurface.has(name))
-            mUiExports.emplace_back(name, JS_GetPropertyStr(mContext, uiExports, name));
+    for (const char *name:
+         {"ActionFormData", "MessageFormData", "ModalFormData", "FormResponse", "ActionFormResponse",
+          "MessageFormResponse", "ModalFormResponse", "UIManager", "uiManager", "CustomForm", "MessageBox",
+          "ObservableBoolean", "ObservableNumber", "ObservableString", "ObservableUIRawMessage"}) {
+        if (!mUiSurface.has(name))
+            continue;
+        JSValue exported = JS_GetPropertyStr(mContext, uiExports, name);
+        if (JS_IsFunction(mContext, exported))
+            pruneMembers(mContext, exported, name, mUiSurface);
+        mUiExports.emplace_back(name, exported);
     }
     JS_FreeValue(mContext, uiExports);
+
+    for (const char *name: {"FormCancelationReason", "FormRejectReason", "FormVisibilityErrorReason",
+                            "TextFilteringError", "DataDrivenScreenClosedReason"}) {
+        if (!mUiSurface.has(name))
+            continue;
+
+        JSValue object = JS_NewObject(mContext);
+        for (const auto &value: mUiSurface.enumValues(name))
+            JS_DefinePropertyValueStr(mContext, object, value.first.c_str(), string(mContext, value.second),
+                                      JS_PROP_ENUMERABLE);
+        mUiExports.emplace_back(name, object);
+    }
 }
 
 void ScriptApi::_defineEnums() {
@@ -1411,6 +1952,15 @@ void ScriptApi::_defineEnums() {
         mServerExports.emplace_back(name, object);
     }
 
+    // the typings declare these as plain constants, with these values
+    for (const auto &constant: {std::make_pair("HudElementsCount", ServerPlayer::HUD_ELEMENT_COUNT),
+                                std::make_pair("HudVisibilityCount", 2),
+                                std::make_pair("TicksPerDay", (int) Level::TICKS_PER_DAY),
+                                std::make_pair("TicksPerSecond", 20), std::make_pair("MoonPhaseCount", 8)}) {
+        if (mSurface.has(constant.first))
+            mServerExports.emplace_back(constant.first, JS_NewInt32(mContext, constant.second));
+    }
+
     if (mCommonSurface.has("InvalidArgumentErrorType")) {
         JSValue object = JS_NewObject(mContext);
         for (const auto &value: mCommonSurface.enumValues("InvalidArgumentErrorType"))
@@ -1425,6 +1975,9 @@ void ScriptApi::_defineEnums() {
     // EntityComponentTypes.Health is EntityHealthComponent.componentId
     for (const auto &value: mSurface.enumValues("EntityComponentTypes"))
         components.emplace_back("Entity" + value.first + "Component", value.second);
+    // BlockComponentTypes.Sign is BlockSignComponent.componentId
+    for (const auto &value: mSurface.enumValues("BlockComponentTypes"))
+        components.emplace_back("Block" + value.first + "Component", value.second);
     for (const auto &component: components) {
         JSValue constructor = constructorOf(component.first);
         if (!JS_IsUndefined(constructor) && mSurface.has(component.first + ".static componentId"))
@@ -1436,6 +1989,18 @@ void ScriptApi::_defineEnums() {
 const std::vector<std::pair<std::string, JSValue>> &ScriptApi::moduleExports(const std::string &module) const {
     if (module == "@minecraft/server-ui")
         return mUiExports;
+    if (module == "@minecraft/server-graphics")
+        return mGraphicsExports;
+    if (module == "@minecraft/server-admin")
+        return mAdminExports;
+    if (module == "@minecraft/server-net")
+        return mNetExports;
+    if (module == "@minecraft/debug-utilities")
+        return mDebugExports;
+    if (module == "@minecraft/server-gametest")
+        return mGameTestExports;
+    if (module == "@minecraft/diagnostics")
+        return mDiagnosticsExports;
     if (module == "@minecraft/common")
         return mCommonExports;
     return mServerExports;
@@ -1471,4 +2036,94 @@ namespace {
             JS_SetModuleExport(ctx, module, entry.first.c_str(), JS_DupValue(ctx, entry.second));
         return 0;
     }
+}
+
+bool ScriptApi::hasJoinSubscribers() {
+    if (!JS_IsObject(mAdminHooks))
+        return false;
+    JSValue has = JS_GetPropertyStr(mContext, mAdminHooks, "hasJoin");
+    JSValue result = JS_Call(mContext, has, mAdminHooks, 0, nullptr);
+    JS_FreeValue(mContext, has);
+    const bool subscribed = !JS_IsException(result) && JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return subscribed;
+}
+
+bool ScriptApi::emitPlayerJoin(uint32_t token, const std::string &name, const std::string &persistentId) {
+    if (!JS_IsObject(mAdminHooks))
+        return false;
+    JSValue emit = JS_GetPropertyStr(mContext, mAdminHooks, "emitJoin");
+    JSValue args[3] = {JS_NewUint32(mContext, token), JS_NewString(mContext, name.c_str()),
+                       JS_NewString(mContext, persistentId.c_str())};
+    JSValue result = JS_Call(mContext, emit, mAdminHooks, 3, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
+    JS_FreeValue(mContext, emit);
+    if (JS_IsException(result)) {
+        logPendingException("asyncPlayerJoin");
+        return false;
+    }
+    const bool emitted = JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return emitted;
+}
+
+ScriptNetService &ScriptApi::netService() {
+    if (mNetService == nullptr)
+        mNetService = std::make_unique<ScriptNetService>();
+    return *mNetService;
+}
+
+JSValue ScriptApi::makeOpaque(ScriptNative *data) {
+    JSValue object = JS_NewObjectClass(mContext, (int) mNativeClassId);
+    JS_SetOpaque(object, data);
+    return object;
+}
+
+bool ScriptApi::emitPacketReceive(const char *packetId, size_t size, ServerPlayer *sender) {
+    if (!mWantsPacketReceive || !JS_IsObject(mNetHooks))
+        return false;
+    // the closures run restricted, like every before event
+    const ScriptPrivilege previous = mPrivilege;
+    mPrivilege = ScriptPrivilege::Restricted;
+    JSValue emit = JS_GetPropertyStr(mContext, mNetHooks, "emitReceive");
+    JSValue args[3] = {JS_NewString(mContext, packetId), JS_NewFloat64(mContext, (double) size),
+                       sender == nullptr ? JS_UNDEFINED : makePlayer(*sender)};
+    JSValue result = JS_Call(mContext, emit, mNetHooks, 3, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
+    JS_FreeValue(mContext, emit);
+    mPrivilege = previous;
+    if (JS_IsException(result)) {
+        logPendingException("packetReceive");
+        return false;
+    }
+    const bool cancelled = JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return cancelled;
+}
+
+bool ScriptApi::emitPacketSend(const char *packetId, const std::vector<ServerPlayer *> &recipients) {
+    if (!mWantsPacketSend || !JS_IsObject(mNetHooks))
+        return false;
+    const ScriptPrivilege previous = mPrivilege;
+    mPrivilege = ScriptPrivilege::Restricted;
+    JSValue emit = JS_GetPropertyStr(mContext, mNetHooks, "emitSend");
+    JSValue list = JS_NewArray(mContext);
+    for (size_t index = 0; index < recipients.size(); ++index)
+        JS_SetPropertyUint32(mContext, list, (uint32_t) index,
+                             recipients[index] == nullptr ? JS_UNDEFINED : makePlayer(*recipients[index]));
+    JSValue args[2] = {JS_NewString(mContext, packetId), list};
+    JSValue result = JS_Call(mContext, emit, mNetHooks, 2, args);
+    for (JSValue arg: args)
+        JS_FreeValue(mContext, arg);
+    JS_FreeValue(mContext, emit);
+    mPrivilege = previous;
+    if (JS_IsException(result)) {
+        logPendingException("packetSend");
+        return false;
+    }
+    const bool cancelled = JS_ToBool(mContext, result) == 1;
+    JS_FreeValue(mContext, result);
+    return cancelled;
 }

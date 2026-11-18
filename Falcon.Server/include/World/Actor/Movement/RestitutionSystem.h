@@ -11,7 +11,7 @@ public:
 
     static constexpr float EPSILON = 0.00000011920929f;
 
-    // ComputeRestitutionSystem: velocity is the one the move started with; the early exits of sub_1484C9200 on
+    // ComputeRestitutionSystem: velocity is the one the move started with; the game's early exits on
     // two engine components (+136 of the 152-byte one, bit 2 of the 24-byte one) have no Falcon counterpart
     static Vector3f compute(const Vector3f &velocity, const ActorMoveResult &result, float bounciness);
 

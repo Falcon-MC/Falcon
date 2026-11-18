@@ -47,7 +47,7 @@ public:
         std::string mResponse;
     };
 
-    WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel);
+    WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel, uint64_t diskLimit = 0);
 
     ~WasmPlugin();
 
@@ -56,6 +56,14 @@ public:
     WasmPlugin &operator=(const WasmPlugin &) = delete;
 
     bool instantiate(const wasmtime_linker_t &linker, const wasmtime_module_t &module, std::string &error);
+
+    // whether the plugin may write in its data folder: false while it holds more than its disk limit
+    bool canWriteFiles() const {
+        return mFilesWritable;
+    }
+
+    // the bytes in the data folder, against the limit; switches writing off above it and back on below
+    void checkDisk(bool now = false);
 
     LoadedPlugin &getPlugin() {
         return mPlugin;
@@ -149,6 +157,11 @@ private:
 
     void _fault(const std::string &reason);
 
+    // WASI with the data folder as its only directory, writable or not, and stdout and stderr into the log
+    bool _configureFiles(bool writable, std::string &error);
+
+    static ptrdiff_t _output(void *data, const unsigned char *bytes, size_t length);
+
     bool _checkedExport(const wasmtime_instance_t &instance, const char *name, const char *signature,
                         wasmtime_func_t &out, bool &found, std::string &error);
 
@@ -156,6 +169,10 @@ private:
     wasmtime_store_t *mStore;
     wasmtime_context_t *mContext;
     uint64_t mFuel;
+    uint64_t mDiskLimit;
+    bool mFilesWritable = true;
+    int64_t mLastDiskCheck = 0;
+    std::string mOutput;
     int mDepth = 0;
     int mFuelScopes = 0;
 
@@ -310,6 +327,9 @@ private:
 };
 
 namespace WasmImports {
+    // newest first; a module built for an older version only misses the functions added since
+    inline constexpr const char *PACKAGE_VERSIONS[] = {"1.0.6", "1.0.5"};
+
     struct Definition {
         const char *mInterface;
         const char *mName;

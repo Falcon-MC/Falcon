@@ -7,6 +7,7 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/IceCavesSupport.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <climits>
@@ -70,7 +71,7 @@ namespace {
     }
 
     bool isEndpoint(const BlockState &state) {
-        return state.mName == "minecraft:calcite" || state.mName == "minecraft:stone"
+        return state.mName == "minecraft:calcite" || state.mName == BlockNames::STONE
                || state.mName == "minecraft:deepslate" || state == IceCavesSupport::packedIceState()
                || IceCavesSupport::isLava(state);
     }

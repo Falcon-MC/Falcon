@@ -19,24 +19,6 @@ namespace {
     const char *const NAME_TAG = "Name";
     const char *const LORE_TAG = "Lore";
 
-    FalconItem *copyOf(const ItemStack &stack) {
-        ItemStack *copy = new ItemStack(stack);
-        copy->mUsingNetId = false;
-        copy->mNetId = 0;
-        return toHandle(copy);
-    }
-
-    ItemStack valueOf(FalconItem *handle) {
-        if (handle == nullptr)
-            return ItemStack::air();
-        ItemStack copy = *item(handle);
-        copy.mUsingNetId = false;
-        copy.mNetId = 0;
-        if (copy.isAir() || copy.mCount <= 0)
-            return ItemStack::air();
-        return copy;
-    }
-
     const Tag *displayOf(const ItemStack &stack) {
         if (!stack.mTag.isCompound())
             return nullptr;

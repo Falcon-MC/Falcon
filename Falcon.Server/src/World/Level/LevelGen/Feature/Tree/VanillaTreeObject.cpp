@@ -5,6 +5,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
 
@@ -88,7 +89,7 @@ bool VanillaTreeObject::canBeReplaced(const BlockState &state) {
 }
 
 bool VanillaTreeObject::isAir(const BlockState &state) {
-    return state.mName == "minecraft:air";
+    return state.mName == BlockNames::AIR;
 }
 
 BlockState VanillaTreeObject::withPillarAxis(BlockState state, const char *axis) {
@@ -125,6 +126,6 @@ void VanillaTreeObject::addVinesAroundLog(BlockManager &manager, int32_t x, int3
 }
 
 void VanillaTreeObject::_addVine(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t meta) {
-    if (manager.getBlockAt(x, y, z).mName == "minecraft:air")
+    if (manager.getBlockAt(x, y, z).mName == BlockNames::AIR)
         manager.setBlockStateAt(x, y, z, getVineState(meta));
 }

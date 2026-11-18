@@ -19,7 +19,7 @@ namespace {
         return quotient;
     }
 
-    // sub_14381FD00: a ticking area keeps the chunks whose distance to its centre is at most half its width,
+    // a ticking area keeps the chunks whose distance to its centre is at most half its width,
     // plus the neighbourhood margin. The width is the chunk count along x only.
     bool isKeptByTickingArea(const ClientSideGeneration::TickingAreaBounds &area, int32_t chunkX, int32_t chunkZ) {
         const int32_t width = area.mMaxChunkX - area.mMinChunkX + 1;
@@ -31,7 +31,7 @@ namespace {
         return dx * dx + dz * dz <= (int64_t) halfWidth * halfWidth + 36;
     }
 
-    // sub_14381FD00: the part of the decision that does not touch storage.
+    // the part of the decision that does not touch storage.
     bool isKeptByPlayersOrAreas(int32_t chunkX, int32_t chunkZ, const ClientSideGeneration::BuildContext &context) {
         // Without any player the game keeps everything on the server.
         if (context.mPlayerCount == 0)
@@ -55,7 +55,7 @@ namespace {
 }
 
 float ClientSideGeneration::computeServerBuildRatio(int32_t serverViewDistance, int32_t clientMaxRadius) {
-    // sub_14102BCD0 reads the server view distance through a byte getter (sub_141030B00) and the client radius
+    // the game reads the server view distance through a byte getter and the client radius
     // from the byte RequestChunkRadiusPacket carries.
     const uint8_t serverRadius = (uint8_t) serverViewDistance;
     const uint8_t clientRadius = (uint8_t) clientMaxRadius;

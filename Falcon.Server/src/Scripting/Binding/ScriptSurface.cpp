@@ -21,6 +21,18 @@ namespace {
             return "ui:";
         if (module == "@minecraft/common")
             return "common:";
+        if (module == "@minecraft/server-graphics")
+            return "graphics:";
+        if (module == "@minecraft/server-admin")
+            return "admin:";
+        if (module == "@minecraft/server-net")
+            return "net:";
+        if (module == "@minecraft/debug-utilities")
+            return "debug:";
+        if (module == "@minecraft/server-gametest")
+            return "gametest:";
+        if (module == "@minecraft/diagnostics")
+            return "diagnostics:";
         return "server:";
     }
 }
@@ -85,6 +97,19 @@ std::vector<std::string> ScriptSurface::errorClasses() const {
         const std::string name = entry.mName + mPrefix.size();
         const char *parent = findParent(name);
         if (name.find('.') == std::string::npos && parent != nullptr && std::strcmp(parent, "Error") == 0 && has(name))
+            names.push_back(name);
+    }
+    return names;
+}
+
+std::vector<std::string> ScriptSurface::exports() const {
+    std::vector<std::string> names;
+    for (const ScriptSurfaceEntry &entry: SCRIPT_SURFACE) {
+        if (std::strncmp(entry.mName, mPrefix.c_str(), mPrefix.size()) != 0)
+            continue;
+
+        const std::string name = entry.mName + mPrefix.size();
+        if (name.find('.') == std::string::npos && has(name))
             names.push_back(name);
     }
     return names;

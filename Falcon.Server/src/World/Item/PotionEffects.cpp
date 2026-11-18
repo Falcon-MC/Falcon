@@ -60,6 +60,16 @@ namespace {
                                         "long_freezing"};
 }
 
+const char *getPotionName(int32_t potionId) {
+    if (potionId < 0 || potionId >= getPotionCount())
+        return nullptr;
+    return POTION_NAMES[potionId];
+}
+
+int32_t getPotionCount() {
+    return (int32_t) (sizeof(POTION_NAMES) / sizeof(POTION_NAMES[0]));
+}
+
 int32_t findPotionId(const std::string &name) {
     const std::string key = name.rfind("minecraft:", 0) == 0 ? name.substr(10) : name;
     const int32_t count = (int32_t) (sizeof(POTION_NAMES) / sizeof(POTION_NAMES[0]));

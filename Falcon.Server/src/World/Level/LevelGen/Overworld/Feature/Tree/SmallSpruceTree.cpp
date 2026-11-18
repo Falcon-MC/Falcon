@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -13,7 +14,7 @@ bool SmallSpruceTree::generate(BlockManager &manager, IRandom &random, int32_t x
         return false;
 
     const std::string ground = manager.getBlockAt(x, y - 1, z).mName;
-    if (ground != "minecraft:grass_block" && ground != "minecraft:dirt" && ground != "minecraft:podzol")
+    if (ground != BlockNames::GRASS_BLOCK && ground != BlockNames::DIRT && ground != "minecraft:podzol")
         return false;
 
     if (!_placeTreeOfHeight(manager, x, y, z, height))
@@ -85,6 +86,6 @@ void SmallSpruceTree::_placeLogAt(BlockManager &manager, int32_t x, int32_t y, i
 
 void SmallSpruceTree::_placeLeafAt(BlockManager &manager, int32_t x, int32_t y, int32_t z) {
     const std::string identifier = manager.getBlockAt(x, y, z).mName;
-    if (identifier == "minecraft:air" || identifier == "minecraft:snow_layer" || identifier == "minecraft:vine")
+    if (identifier == BlockNames::AIR || identifier == "minecraft:snow_layer" || identifier == "minecraft:vine")
         manager.setBlockStateAt(x, y, z, VanillaBlocks::SPRUCE_LEAVES().toBlockState());
 }

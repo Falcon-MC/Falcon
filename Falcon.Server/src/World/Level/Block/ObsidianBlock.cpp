@@ -7,8 +7,10 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <string>
+#include <vector>
 
 FALCON_REGISTER_BLOCK(ObsidianBlock, 8);
 
@@ -17,6 +19,23 @@ using namespace PortalHelpers;
 namespace {
     bool isObsidianAt(Level &level, int32_t x, int32_t y, int32_t z) {
         return identifierAt(level, x, y, z) == OBSIDIAN_IDENTIFIER;
+    }
+
+    // FALCON_EVENT_PORTAL_CREATE with the blocks the portal would fill; false when a plugin refuses it
+    bool allowedByPlugins(Level &level, const std::vector<Vector3i> &blocks) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PORTAL_CREATE);
+        if (plugins == nullptr)
+            return true;
+
+        // a copy: the portal fills the frame it found, whatever a plugin writes in the list
+        std::vector<Vector3i> shown = blocks;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PORTAL_CREATE;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mBlocks = &shown;
+        plugins->dispatch(event);
+        return !event.mCancelled;
     }
 }
 
@@ -167,12 +186,17 @@ bool ObsidianBlock::lightPortalAtBase(Level &level, const Vector3i &position, Se
             }
         }
 
-        const BlockState portal = makePortalState("x");
+        std::vector<Vector3i> blocks;
         for (int32_t height = 0; height < innerHeight; ++height) {
-            for (int32_t width = 0; width < innerWidth; ++width) {
-                writeBlock(level, Vector3i(scanX - width, scanY + height, scanZ), portal, owner);
-            }
+            for (int32_t width = 0; width < innerWidth; ++width)
+                blocks.emplace_back(scanX - width, scanY + height, scanZ);
         }
+        if (!allowedByPlugins(level, blocks))
+            return false;
+
+        const BlockState portal = makePortalState("x");
+        for (const Vector3i &block: blocks)
+            writeBlock(level, block, portal, owner);
 
         if (owner != nullptr)
             owner->playLevelSound(level, LevelSoundEvent::FIRE_IGNITE, centerOf(position));
@@ -251,12 +275,17 @@ bool ObsidianBlock::lightPortalAtBase(Level &level, const Vector3i &position, Se
             }
         }
 
-        const BlockState portal = makePortalState("z");
+        std::vector<Vector3i> blocks;
         for (int32_t height = 0; height < innerHeight; ++height) {
-            for (int32_t width = 0; width < innerWidth; ++width) {
-                writeBlock(level, Vector3i(scanX, scanY + height, scanZ - width), portal, owner);
-            }
+            for (int32_t width = 0; width < innerWidth; ++width)
+                blocks.emplace_back(scanX, scanY + height, scanZ - width);
         }
+        if (!allowedByPlugins(level, blocks))
+            return false;
+
+        const BlockState portal = makePortalState("z");
+        for (const Vector3i &block: blocks)
+            writeBlock(level, block, portal, owner);
 
         if (owner != nullptr)
             owner->playLevelSound(level, LevelSoundEvent::FIRE_IGNITE, centerOf(position));

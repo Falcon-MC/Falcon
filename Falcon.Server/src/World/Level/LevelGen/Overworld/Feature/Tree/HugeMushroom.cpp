@@ -3,6 +3,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/Tree/VanillaTreeObject.h"
+#include "World/Level/Block/BlockNames.h"
 
 HugeMushroom::HugeMushroom() : mMushroomType(MushroomType::RANDOM) {}
 
@@ -49,7 +50,7 @@ bool HugeMushroom::generate(BlockManager &manager, IRandom &random, int32_t x, i
         return false;
 
     const std::string ground = manager.getBlockAt(x, y - 1, z).mName;
-    if (ground != "minecraft:dirt" && ground != "minecraft:grass_block" && ground != "minecraft:mycelium")
+    if (ground != BlockNames::DIRT && ground != BlockNames::GRASS_BLOCK && ground != "minecraft:mycelium")
         return false;
 
     int32_t k2 = y + i;

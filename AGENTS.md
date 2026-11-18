@@ -12,7 +12,7 @@ where the two disagree, CONTRIBUTING.md wins.
 Falcon is a Minecraft: Bedrock Edition server written from scratch in C++. It is not derived from any other
 server: the protocol, storage, gameplay and networking are implemented in this organisation's repositories.
 
-- **Language:** C++17. Do not use newer language features.
+- **Language:** C++20. Do not use newer language features.
 - **Build system:** CMake with Ninja, dependencies pulled with `FetchContent`.
 - **Platforms:** Windows (MSYS2 UCRT64, gcc), Linux (gcc) and macOS (clang), all built by CI.
 - **License:** LGPL-3.0.
@@ -61,7 +61,7 @@ Falcon.Server/
     Resources/                  Resource packs and pack dependencies
     Scripting/                  JavaScript scripting API for behavior packs
     Falcon/                     Falcon-specific embedding and plugin implementation
-  structure/                    BDS 1.26.10 layout evidence and relocation inventory
+  structure/                    source layout notes and relocation inventory
 ```
 
 The network transport, protocol packets, NBT and Bedrock data files live in separate `Falcon-MC`
@@ -129,8 +129,10 @@ nothing, delete it.
 - **Tone:** fragments, lowercase, no final period. No filler (`so`, `which`, `that`, `in order to`): join the
   parts with `:` or `;`. One line, two at most; longer only for a real trap: binary format, protocol order, race.
 - **Keep:** the reason for a value or an order, what the game or protocol does that the code copies, traps
-  for the next change, short game references (`// sub_14ACCD880`, `// ClientInstance::_tickBuildAction`),
-  binary and network formats field by field.
+  for the next change, binary and network formats field by field.
+- **No game symbols:** never name a function of the game or give one of its addresses (`sub_14C9123C0`,
+  `0x14F2F8890`, `CrafterBlock::tick`). Say what the game does in plain words: `// the game retracts a sticky
+  piston first`.
 - **Drop:** narration, history, commented-out code, names of other servers or clients, authors, dates,
   tickets, apologies and hedging.
 - **TODO** only for a real gap, on one line: `// TODO: catmullrom keyframes, linear for now`.

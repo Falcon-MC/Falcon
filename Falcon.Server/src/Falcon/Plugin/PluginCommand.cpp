@@ -2,6 +2,8 @@
 
 #include "Core/Debug/BedrockLog.h"
 
+#include <utility>
+
 namespace {
     std::string orEmpty(const char *value) {
         return value == nullptr ? std::string() : std::string(value);
@@ -35,4 +37,12 @@ bool PluginCommand::execute(CommandOrigin &sender, const std::vector<std::string
 
 CommandPermission PluginCommand::getRequiredPermission() const {
     return mPermission;
+}
+
+std::vector<CommandOverloadData> PluginCommand::getOverloads() const {
+    return mOverloads.empty() ? Command::getOverloads() : mOverloads;
+}
+
+void PluginCommand::addOverload(CommandOverloadData overload) {
+    mOverloads.push_back(std::move(overload));
 }

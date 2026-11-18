@@ -19,10 +19,9 @@
 #include <stdexcept>
 
 namespace {
-    // LevelEvent::SoundFizz
     constexpr int32_t SOUND_FIZZ = 1004;
 
-    // the four sides in the order LiquidBlock::_tick walks them for spreading and slope search, with the face
+    // the four sides in the order the game walks them for spreading and slope search, with the face
     // liquid enters the neighbour through
     struct Side {
         int32_t x;
@@ -121,7 +120,7 @@ LiquidProperties LiquidPhysicsSystem::_liquidPropertiesAt(const Vector3i &positi
     return layer1.isLiquid() ? layer1 : layer0;
 }
 
-// BlockSource::getLiquidBlock: layer 0 unless water sits on layer 1
+// layer 0 unless water sits on layer 1
 LiquidPhysicsSystem::Liquid LiquidPhysicsSystem::_liquidAt(const Vector3i &position) {
     const BlockState &layer0 = _stateAt(position);
     const LiquidProperties properties0 = LiquidProperties::of(layer0);
@@ -135,7 +134,7 @@ LiquidPhysicsSystem::Liquid LiquidPhysicsSystem::_liquidAt(const Vector3i &posit
     return Liquid{&layer0, properties0, 0};
 }
 
-// sub_149C40140: -1 for anything but this liquid
+// -1 for anything but this liquid
 int LiquidPhysicsSystem::_depth(const Vector3i &position, LiquidMaterial material) {
     const LiquidProperties liquid = _liquidPropertiesAt(position);
     return liquid.material == material ? liquid.depth : -1;
@@ -216,7 +215,7 @@ void LiquidPhysicsSystem::onBlockChanged(const Vector3i &position, int layer, co
             placed->onTickPlace(*this, position, current);
     }
 
-    // BlockSource::_blockChanged: neighbours hear of writes made with flag 1 (sub_1432CEDE0)
+    // neighbours hear of writes made with flag 1
     if (notify)
         _updateNeighbors(position);
     mNotify = requested;
@@ -227,7 +226,6 @@ void LiquidPhysicsSystem::updateNeighbours(const Vector3i &position) {
     _updateNeighbors(position);
 }
 
-// BlockSource::updateNeighborsAt (sub_1432D2940)
 void LiquidPhysicsSystem::_updateNeighbors(const Vector3i &position) {
     _neighborChanged(offset(position, -1, 0, 0), position);
     _neighborChanged(offset(position, 1, 0, 0), position);
@@ -237,7 +235,7 @@ void LiquidPhysicsSystem::_updateNeighbors(const Vector3i &position) {
     _neighborChanged(offset(position, 0, -1, 0), position);
 }
 
-// sub_1432D21E0: the block, then the one on layer 1
+// the block, then the one on layer 1
 void LiquidPhysicsSystem::_neighborChanged(const Vector3i &position, const Vector3i &changed) {
     if (position.y < mLevel.getMinY() || position.y > mLevel.getMaxY() || !_isLoaded(position))
         return;
@@ -254,7 +252,7 @@ void LiquidPhysicsSystem::_neighborChanged(const Vector3i &position, const Vecto
     }
 }
 
-// LiquidBlock::neighborChanged (sub_149C3DEA0), LiquidBlockDynamic's (sub_149C3E0E0)
+// LiquidBlockDynamic's
 void LiquidPhysicsSystem::_liquidNeighborChanged(const Vector3i &position, const BlockState &state) {
     const Block *self = _blockOf(state);
     _solidifyAround(position, self);
@@ -271,7 +269,7 @@ void LiquidPhysicsSystem::_liquidNeighborChanged(const Vector3i &position, const
         mTicks.add(position, self, delay);
 }
 
-// LiquidBlockBase and LiquidBlockDynamic on BlockPlaceEvent (sub_149C40D30, sub_149C42D00)
+// LiquidBlockBase and LiquidBlockDynamic on BlockPlaceEvent
 void LiquidPhysicsSystem::_onPlace(const Vector3i &position, const LiquidProperties &placed) {
     const Liquid liquid = _liquidAt(position);
     const Block *self = _blockOf(*liquid.state);
@@ -292,7 +290,7 @@ void LiquidPhysicsSystem::_solidifyAround(const Vector3i &position, const Block 
     _solidify(position, offset(position, 0, 1, 0), self);
 }
 
-// sub_149C41E60 queues the check while one runs; sub_149C42400 acts only for the lava instance that asked
+// the game queues the check while one runs; the game acts only for the lava instance that asked
 void LiquidPhysicsSystem::_solidify(const Vector3i &position, const Vector3i &neighbor, const Block *self) {
     if (mSolidifying) {
         mDeferredSolidify.push_back(SolidifyCheck{position, neighbor, self});
@@ -333,7 +331,7 @@ void LiquidPhysicsSystem::_solidify(const Vector3i &position, const Vector3i &ne
     mSolidifying = false;
 }
 
-// sub_149C3FF00: the sound only, the particles are client side
+// the sound only, the particles are client side
 void LiquidPhysicsSystem::_fizz(const Vector3i &position) {
     ServerNetworkHandler *owner = mLevel.getOwner();
     if (owner == nullptr)
@@ -363,8 +361,8 @@ void LiquidPhysicsSystem::queueRandomTick(const Vector3i &position, const Block 
     mRandomTicks.add(position, block, delay);
 }
 
-// LevelChunk::tick (sub_143854100): the first queue, then the second on its own clock, chunk by chunk
-// no early out when nothing is queued: every ticked chunk's clock advances each tick (sub_14381B7E0)
+// the first queue, then the second on its own clock, chunk by chunk
+// no early out when nothing is queued: every ticked chunk's clock advances each tick
 void LiquidPhysicsSystem::tick(int64_t levelTick, const std::vector<int64_t> &columns) {
     const Scope scope(*this);
     const auto loaded = [this](int32_t chunkX, int32_t chunkZ) { return _chunkAt(chunkX, chunkZ) != nullptr; };
@@ -379,7 +377,7 @@ void LiquidPhysicsSystem::tick(int64_t levelTick, const std::vector<int64_t> &co
     mRandomTicks.endTick();
 }
 
-// the tick fires for the block it was queued with, on either layer (sub_14381B7E0, sub_143166CE0)
+// the tick fires for the block it was queued with, on either layer
 void LiquidPhysicsSystem::_onTick(const Vector3i &position, const Block *block) {
     for (int layer = 0; layer < 2; ++layer) {
         const BlockState &state = _stateAt(position, layer);
@@ -388,7 +386,7 @@ void LiquidPhysicsSystem::_onTick(const Vector3i &position, const Block *block) 
 
         const LiquidProperties properties = LiquidProperties::of(state);
         if (properties.isLiquid()) {
-            // LiquidBlockDynamic on BlockQueuedTickEvent (sub_149C43290)
+            // LiquidBlockDynamic on BlockQueuedTickEvent
             if (properties.dynamic)
                 _write(position, layer, _stillState(properties.material, properties.depth), false);
             _tickLiquid(position, properties.material);
@@ -398,7 +396,7 @@ void LiquidPhysicsSystem::_onTick(const Vector3i &position, const Block *block) 
     }
 }
 
-// LiquidBlock::_isLiquidBlocking (sub_149C40280); `face` is the one liquid enters `target` through
+// `face` is the one liquid enters `target` through
 bool LiquidPhysicsSystem::_isLiquidBlocking(const Vector3i &target, const Vector3i &from, int face) {
     const LiquidProperties blocker = _propertiesAt(target);
     if (_liquidPropertiesAt(from).material == LiquidMaterial::Lava)
@@ -408,7 +406,7 @@ bool LiquidPhysicsSystem::_isLiquidBlocking(const Vector3i &target, const Vector
     return (_propertiesAt(from).blockedFaces >> LiquidFace::opposite(face) & 1) != 0;
 }
 
-// Block::spawnResources of a block water washes away
+// the drops of a block water washes away
 void LiquidPhysicsSystem::_popResources(const Vector3i &position, const BlockState &state) {
     ServerNetworkHandler *owner = mLevel.getOwner();
     if (owner == nullptr || !mLevel.getGameRules().getBool("dotiledrops"))
@@ -417,7 +415,6 @@ void LiquidPhysicsSystem::_popResources(const Vector3i &position, const BlockSta
     _forgetChunks();
 }
 
-// LiquidBlock::_trySpreadTo (sub_149C3F9B0)
 void LiquidPhysicsSystem::_trySpreadTo(LiquidMaterial self, const Vector3i &target, int depth, const Vector3i &from,
                                        int face) {
     if (target.y < mLevel.getMinY() || target.y > mLevel.getMaxY() || !_isLoaded(target))
@@ -455,7 +452,7 @@ void LiquidPhysicsSystem::_trySpreadTo(LiquidMaterial self, const Vector3i &targ
     mTicks.add(target, _stillBlock(self), getTickDelay(self));
 }
 
-// LiquidBlock::_getSlopeDistance (sub_149C40440); `from` is the side index walked in, never walked back
+// `from` is the side index walked in, never walked back
 int LiquidPhysicsSystem::_slopeDistance(LiquidMaterial self, const Vector3i &position, int pass, int from) {
     // pure while the search runs: walks meeting at a block with the same pass and side share the answer
     const int32_t dx = position.x - mSearchOrigin.x + SEARCH_RADIUS;
@@ -500,7 +497,6 @@ int LiquidPhysicsSystem::_searchSlope(LiquidMaterial self, const Vector3i &posit
     return cost;
 }
 
-// LiquidBlock::_tick (sub_149C3E1F0)
 void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial self) {
     static const BlockState obsidian("minecraft:obsidian");
     static const BlockState stone("minecraft:stone");
@@ -668,7 +664,7 @@ void LiquidPhysicsSystem::normalizeWaterlogged(const Vector3i &position) {
         _write(position, 0, water, false);
         return;
     }
-    // a column's water moves to layer 1 under a water block for an instant (sub_1435B5770)
+    // a column's water moves to layer 1 under a water block for an instant
     if (!layer0.containsWater && layer0.material != LiquidMaterial::Water)
         _write(position, 1, air(), false);
 }
@@ -734,7 +730,7 @@ void LiquidPhysicsSystem::_loadRecord(BlockTickingQueue &queue, int32_t chunkX, 
     queue.loadColumn(chunkX, chunkZ, root.getInt("currentTick"), entries);
 }
 
-// PendingTicks (sub_14381D090, sub_14381C610) and RandomTicks, the same record for the second queue
+// PendingTicks and RandomTicks, the same record for the second queue
 void LiquidPhysicsSystem::loadPendingTicks(LevelChunk &chunk) {
     _loadRecord(mTicks, chunk.getX(), chunk.getZ(), chunk.getPendingTicks());
     _loadRecord(mRandomTicks, chunk.getX(), chunk.getZ(), chunk.getRandomTicks());

@@ -10,5 +10,13 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     PistonMoveReaction getPistonMoveReaction() const override;
+
+    bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                    const BlockState &state) const override;
+
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 };

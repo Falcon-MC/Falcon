@@ -8,13 +8,14 @@ FALCON_REGISTER_BLOCK(AnvilBlock, 10);
 #include "World/Level/Block/Systems/FallingBlockSystem.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <random>
 
 namespace {
     const float DAMAGE_CHANCE = 0.12f;
 
-    // sub_14A231EA0 LevelEvents: 1021 after every use, 1020 when the anvil breaks
+    // LevelEvents: 1021 after every use, 1020 when the anvil breaks
     const int32_t LEVEL_EVENT_ANVIL_USED = 1021;
     const int32_t LEVEL_EVENT_ANVIL_BROKEN = 1020;
 
@@ -59,7 +60,7 @@ void AnvilBlock::onUsed(ServerNetworkHandler &owner, Level &level, const Vector3
 
     const std::string next = FallingBlockSystem::getNextAnvilDamage(state.mName);
     if (next.empty()) {
-        level.setBlock(position, BlockState("minecraft:air"), true);
+        level.setBlock(position, BlockState(BlockNames::AIR), true);
         owner.broadcastLevelEvent(level, LEVEL_EVENT_ANVIL_BROKEN, eventPosition, 0);
         return;
     }

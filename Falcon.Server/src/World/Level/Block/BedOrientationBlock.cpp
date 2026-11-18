@@ -75,3 +75,7 @@ std::vector<Vector3i> BedOrientationBlock::getAffectedBlocks(Level &level, const
                                                              const BlockState &state) const {
     return BedBlock::otherPiece(level, position, state);
 }
+
+const char *BedOrientationBlock::getBlockActorId() const {
+    return BedBlockActor::BLOCK_ACTOR_ID;
+}

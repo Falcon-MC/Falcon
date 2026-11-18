@@ -8,15 +8,15 @@
 #include <vector>
 
 namespace {
-    // dimension +204, set to 63 by the overworld dimension (5 in flat worlds, sub_14717BC50)
+    // dimension +204, set to 63 by the overworld dimension
     constexpr int32_t SEA_LEVEL = 63;
-    // 17 for worlds of 1.18 and later, 1 before (version 1.18.0 at qword_1528D9DD0)
+    // 17 for worlds of 1.18 and later, 1 before
     constexpr int32_t COOLING_START = SEA_LEVEL + 17;
-    // the column noise is scaled by 8, 4 before 1.18 (sub_145D3C5D0)
+    // the column noise is scaled by 8, 4 before 1.18
     constexpr float COLUMN_NOISE_SCALE = 8.0f;
 
     // octaves seeded by the game's Mersenne twister Random, each sampled at half the frequency of the last and
-    // weighted by the inverse (sub_145C2D720)
+    // weighted by the inverse
     class OctaveNoise {
     public:
         OctaveNoise(uint32_t seed, int32_t octaves) {
@@ -44,7 +44,7 @@ namespace {
         return biomeId == BiomeIds::FROZEN_OCEAN || biomeId == BiomeIds::DEEP_FROZEN_OCEAN;
     }
 
-    // the chunk keeps it per column as a signed byte in eighths (sub_145D3C5D0)
+    // the chunk keeps it per column as a signed byte in eighths
     float columnNoise(int32_t x, int32_t z, bool rounded) {
         static const OctaveNoise noise(1234, 1);
         const float value = noise.getValue(static_cast<float>(x) * 0.125f, static_cast<float>(z) * 0.125f);

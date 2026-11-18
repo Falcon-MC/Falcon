@@ -22,6 +22,12 @@ public:
 
     void tick(ServerNetworkHandler &owner, Level &level);
 
+    static int32_t countPopulationActors(ServerNetworkHandler &owner, Level &level);
+
+    // the mobs a herd could be drawn from at the spot, in roll order; empty when no mob fits there
+    std::vector<std::string> candidatesAt(Level &level, const Vector3i &position, bool surface, int32_t difficulty,
+                                          const std::vector<Vector3f> &players);
+
 private:
     struct Counts {
         int32_t mPools[2][POOL_COUNT] = {};
@@ -44,15 +50,23 @@ private:
         float mPlayerDistance = 0.0f;
     };
 
+    struct Candidate {
+        const SpawnRule *mRule;
+        const SpawnCondition *mCondition;
+    };
+
+    void _collectCandidates(Level &level, const SpawnSite &site, int32_t difficulty,
+                            std::vector<Candidate> &candidates, int32_t &totalWeight);
+
     void _despawn(ServerNetworkHandler &owner, Level &level, const std::vector<Vector3f> &players);
 
     void _tickChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, int32_t difficulty,
-                    int32_t mobCount, const std::vector<Vector3f> &players);
+                    int32_t &mobCount, const std::vector<Vector3f> &players);
 
     void _count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts);
 
     void _spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
-                       int32_t mobCount, Counts &counts);
+                       int32_t &mobCount, Counts &counts);
 
     bool _makeSite(Level &level, const Vector3i &position, const std::vector<Vector3f> &players, bool surface,
                    SpawnSite &site);
@@ -65,6 +79,23 @@ private:
 
     float _nextFloat();
 
+    // the living actors of the level being ticked, listed once and again only when an actor joins or leaves
+    struct Counted {
+        int64_t mId;
+        int32_t mChunkX;
+        int32_t mChunkZ;
+        int32_t mPool;
+        const char *mIdentifier;
+    };
+
+    void _census(ServerNetworkHandler &owner, Level &level);
+
+    std::vector<Counted> mCensus;
+    const Level *mCensusLevel = nullptr;
+    uint64_t mCensusSerial = 0;
+    int64_t mCensusTick = -1;
     std::unordered_set<int64_t> mSurfaceMobs;
     std::mt19937 mRandom{std::random_device{}()};
+
+    friend struct NaturalSpawnerTestAccess;
 };

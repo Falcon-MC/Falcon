@@ -43,7 +43,7 @@ public:
 
     static bool hasTag(int32_t biomeId, const std::string &tag);
 
-    // chunkGenData.villageType: 0 desert, 1 snowy, 2 savanna, 3 taiga; plains when absent (sub_14699DDC0)
+    // chunkGenData.villageType: 0 desert, 1 snowy, 2 savanna, 3 taiga; plains when absent
     static int32_t getVillageType(int32_t biomeId);
 
     // every biome as the game sends it to clients; names and tags index getDefinitionStrings()

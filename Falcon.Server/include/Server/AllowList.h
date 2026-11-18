@@ -13,7 +13,8 @@ class AllowList {
 public:
     explicit AllowList(const std::string &path);
 
-    void reload();
+    // false when the file exists but does not parse
+    bool reload();
 
     bool isAllowed(const std::string &name, const std::string &xuid);
 
@@ -28,6 +29,19 @@ public:
     }
 
     std::vector<std::string> getNames() const;
+
+    const std::vector<AllowListEntry> &getEntries() const {
+        return mEntries;
+    }
+
+    bool contains(const std::string &name, const std::string &xuid);
+
+    // false when an entry for that name or xuid exists
+    bool addEntry(const std::string &name, const std::string &xuid, bool ignoresPlayerLimit);
+
+    bool removeEntry(const std::string &name, const std::string &xuid);
+
+    void clear();
 
 private:
     std::vector<AllowListEntry>::iterator _findByName(const std::string &name);

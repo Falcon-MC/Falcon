@@ -1,9 +1,14 @@
 #include "Scripting/Binding/ScriptRaycast.h"
 
+#include "World/Actor/Movement/MovementConstants.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
+
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/LiquidBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,7 +43,7 @@ namespace ScriptRaycast {
         void boxesOf(Level &level, const BlockState &state, int32_t x, int32_t y, int32_t z,
                      const BlockOptions &options, std::vector<AxisAlignedBB> &boxes) {
             boxes.clear();
-            if (state.mName == "minecraft:air")
+            if (state.mName == BlockNames::AIR)
                 return;
             if (isLiquid(state)) {
                 if (options.mIncludeLiquids)
@@ -148,4 +153,20 @@ namespace ScriptRaycast {
             *enteredAxis = entered;
         return enter;
     }
+}
+
+ActorSize ScriptRaycast::actorSize(const Actor &actor) {
+    if (const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor)) {
+        const ActorFlags &flags = player->getFlags();
+        float height = MovementPhysics::PLAYER_HEIGHT;
+        if (flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling))
+            height = MovementPhysics::PLAYER_CRAWLING_HEIGHT;
+        else if (flags.get(ActorFlag::Sneaking))
+            height = MovementPhysics::PLAYER_SNEAKING_HEIGHT;
+        return ActorSize{MovementPhysics::PLAYER_WIDTH, height};
+    }
+    if (const ServerActor *entity = dynamic_cast<const ServerActor *>(&actor))
+        return entity->getSize();
+    // the item entity's setSize(0.25, 0.25)
+    return ActorSize{0.25f, 0.25f};
 }

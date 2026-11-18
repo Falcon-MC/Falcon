@@ -16,6 +16,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     static bool isGlow(const std::string &identifier);
 
     static std::unique_ptr<BlockActor> createBlockActor(const std::string &identifier);

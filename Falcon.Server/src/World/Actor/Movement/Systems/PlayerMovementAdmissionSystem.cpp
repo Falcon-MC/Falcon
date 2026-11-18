@@ -28,7 +28,8 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
                                     : 0.0f;
         context.player.getEffects().setMovementSpeedBonus(bonus);
     }
-    if (!context.owner.getProperties().getMovementSimulation()) {
+    // a simulated player has no client position to fall back on: the server always simulates it
+    if (!context.player.isSimulated() && !context.owner.getProperties().getMovementSimulation()) {
         context.player.clearMovementSimulation();
         return false;
     }

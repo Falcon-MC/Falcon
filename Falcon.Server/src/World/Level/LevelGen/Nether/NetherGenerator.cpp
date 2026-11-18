@@ -4,9 +4,13 @@
 #include "World/Level/LevelGen/Nether/Biome/VanillaNetherBiomeSource.h"
 #include "World/Level/LevelGen/Nether/Feature/NetherFeatureBuilder.h"
 #include "World/Level/LevelGen/Nether/NetherCarvers.h"
+#include "World/Level/LevelGen/Nether/NetherStructures.h"
 #include "World/Level/LevelGen/Nether/Surface/NetherSurfaceBuilder.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Protocol/BlockStateHasher.h"
+#include "World/Level/Block/BlockNames.h"
+#include "World/Level/LevelGen/Structure/NetherFortressStructure.h"
+#include "World/Level/LevelGen/Structure/RuinedPortalStructure.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +34,7 @@ namespace {
     }
 
     bool isAirState(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 }
 
@@ -44,13 +48,9 @@ NetherGenerator::NetherGenerator(int64_t seed) : mSeed(seed), mAirHash(BlockStat
 
     mCarvers = std::make_unique<NetherCarvers>(seed);
 
-    NetherNoiseHolder::setInstance(mNoiseHolder.get());
 }
 
-NetherGenerator::~NetherGenerator() {
-    if (NetherNoiseHolder::get() == mNoiseHolder.get())
-        NetherNoiseHolder::setInstance(nullptr);
-}
+NetherGenerator::~NetherGenerator() = default;
 
 int64_t NetherGenerator::chunkHash(int32_t chunkX, int32_t chunkZ) {
     return (int64_t) (((uint64_t) (uint32_t) chunkX << 32) | (uint64_t) (uint32_t) chunkZ);
@@ -61,6 +61,14 @@ int32_t NetherGenerator::pickBiome(int32_t x, int32_t y, int32_t z) const {
 }
 
 void NetherGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const {
+    decorateBeforePortal(level, chunk, overflow);
+    RuinedPortalStructure::place(*this, level, chunk);
+}
+
+void NetherGenerator::decorateBeforePortal(Level &level, LevelChunk &chunk,
+                                           std::vector<GeneratedBlockChange> *overflow) const {
+    NetherFortressStructure::place(*this, level, chunk);
+    NetherStructures::place(*this, level, chunk);
     NetherFeatureBuilder::apply(level, chunk, overflow);
 }
 

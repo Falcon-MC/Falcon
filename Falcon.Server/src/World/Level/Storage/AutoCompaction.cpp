@@ -2,13 +2,17 @@
 
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Level.h"
+#include "World/Level/Storage/LevelStorage.h"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -19,35 +23,77 @@ namespace {
     std::mutex gLevelsMutex;
     std::vector<Level *> gLevels;
 
+    // a whole-database compaction holds back the ones keeping level 0 small: any steady writing (terrain generated,
+    // chunks saved) ends with every writer, the tick's saves included, waiting behind it, minutes on a large world
+    const uint64_t QUIET_WRITES_PER_CHECK = 10;
+    const int QUIET_CHECK_SECONDS = 10;
+    const int QUIET_CHECKS = 6;
+
+    // true once stopped
+    bool waitOrStop(std::unique_lock<std::mutex> &lock, int seconds) {
+        return gSignal.wait_for(lock, std::chrono::seconds(seconds), []() { return !gRunning.load(); });
+    }
+
     void run(int intervalSeconds) {
         std::unique_lock<std::mutex> lock(gMutex);
+        if (waitOrStop(lock, intervalSeconds))
+            return;
 
-        while (gRunning.load()) {
-            if (gSignal.wait_for(lock, std::chrono::seconds(intervalSeconds), []() { return !gRunning.load(); }))
+        bool postponed = false;
+        int quietChecks = 0;
+        while (true) {
+            const uint64_t writesBefore = LevelStorage::getWriteCount();
+            if (waitOrStop(lock, QUIET_CHECK_SECONDS))
                 return;
+            if (LevelStorage::getWriteCount() - writesBefore > QUIET_WRITES_PER_CHECK) {
+                if (!postponed)
+                    LOG_INFO(LogAreaID::Server, "AutoCompaction postponed while the world is being written");
+                postponed = true;
+                quietChecks = 0;
+                continue;
+            }
+            if (++quietChecks < QUIET_CHECKS)
+                continue;
+            postponed = false;
+            quietChecks = 0;
+
+            std::vector<std::pair<std::string, std::function<void()>>> tasks;
+            {
+                std::lock_guard<std::mutex> levels(gLevelsMutex);
+                for (Level *level: gLevels) {
+                    if (level->isStorageOpen())
+                        tasks.emplace_back(level->getName(), level->storageCompactionTask());
+                }
+            }
 
             // released while compacting: stop() can signal without blocking behind a long compaction
             lock.unlock();
-            {
-                // whole pass: untrack() cannot return while the level it removes is compacting
-                std::lock_guard<std::mutex> levels(gLevelsMutex);
-                for (Level *level: gLevels) {
-                    if (!level->isStorageOpen())
-                        continue;
+            for (const auto &task: tasks) {
+                if (!gRunning.load())
+                    return;
+                if (!task.second)
+                    continue;
 
-                    LOG_INFO(LogAreaID::Server, "Running AutoCompaction on %s...", level->getName().c_str());
-                    level->compactStorage();
-                }
+                LOG_INFO(LogAreaID::Server, "Running AutoCompaction on %s...", task.first.c_str());
+                task.second();
             }
+            tasks.clear();
             lock.lock();
+
+            if (waitOrStop(lock, intervalSeconds))
+                return;
         }
     }
 }
 
 void AutoCompaction::start(int intervalSeconds) {
-    if (intervalSeconds <= 0 || gRunning.exchange(true))
+    if (intervalSeconds <= 0 || gRunning.load())
         return;
 
+    // a thread stopped with requestStop() may still be finishing its compaction
+    if (gThread.joinable())
+        gThread.join();
+    gRunning.store(true);
     gThread = std::thread(run, intervalSeconds);
 }
 
@@ -62,7 +108,7 @@ void AutoCompaction::untrack(Level &level) {
     gLevels.erase(std::remove(gLevels.begin(), gLevels.end(), &level), gLevels.end());
 }
 
-void AutoCompaction::stop() {
+void AutoCompaction::requestStop() {
     if (!gRunning.exchange(false))
         return;
 
@@ -72,7 +118,10 @@ void AutoCompaction::stop() {
         std::lock_guard<std::mutex> lock(gMutex);
     }
     gSignal.notify_all();
+}
 
+void AutoCompaction::stop() {
+    requestStop();
     if (gThread.joinable())
         gThread.join();
 }

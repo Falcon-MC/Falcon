@@ -112,7 +112,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
             {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
             {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
-            // 1.26.10 movement settings (0x1437F5420): -1 for both policy limits
+            // 1.26.10 movement settings: -1 for both policy limits
             {"player-tick-throttled-input-batch-size", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-tick-throttled-max-tick-credits", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-movement-action-direction-threshold", "0.85", PropertyKind::Float, 0, 0, nullptr},
@@ -130,6 +130,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"wasm-plugin-memory-mb", "64", PropertyKind::Int, 1, 4096, nullptr},
             {"wasm-plugin-fuel", "10000000", PropertyKind::Int, 1, UNBOUNDED, nullptr},
+            {"wasm-plugin-disk-mb", "64", PropertyKind::Int, 1, 65536, nullptr},
             {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"},
             // Falcon only: PEM chain and key for https on the signaling port; the game tries https before http
             {"signaling-certificate", "", PropertyKind::String, 0, 0, nullptr},

@@ -3,15 +3,100 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/LevelGen/Overworld/Feature/FeatureRandom.h"
 
+#include <algorithm>
+#include <cstdlib>
 #include <unordered_map>
 
 namespace {
     using Test = StructureProcessors::Test;
     using Rule = StructureProcessors::Rule;
 
-    // sub_14CCD0800, in registration order
+    // in registration order
     const std::unordered_map<std::string, std::vector<Rule>> &lists() {
         static const std::unordered_map<std::string, std::vector<Rule>> LISTS = {
+                {"minecraft:bastion_housing_units",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.0001f, nullptr, "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_hoglin_stable_generic",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.1f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.0001f, nullptr, "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_hoglin_stable_sidewall",
+                 {{Test::RandomBlockMatch, "minecraft:chiseled_polished_blackstone", 0.5f, nullptr,
+                   "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:gold_block", 0.1f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_treasure_room_roof",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.15f, nullptr,
+                   "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.3f, nullptr,
+                   "minecraft:blackstone", nullptr, 0}}},
+                {"minecraft:bastion_treasure_room_generic",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.35f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:chiseled_polished_blackstone", 0.1f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_treasure_room_highwall",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.01f, nullptr,
+                   "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.5f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.3f, nullptr,
+                   "minecraft:blackstone", nullptr, 0}}},
+                {"minecraft:bastion_treasure_room_highrampart",
+                 {{Test::RandomBlockMatch, "minecraft:gold_block", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::BlockMatch, "minecraft:polished_blackstone_bricks", 0.0f, nullptr,
+                   "minecraft:air", nullptr, 0, 100, 0.05f}}},
+                {"minecraft:bastion_treasure_room_bottomrampart",
+                 {{Test::RandomBlockMatch, "minecraft:magma", 0.75f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:cracked_polished_blackstone_bricks", 0.15f, nullptr,
+                   "minecraft:polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_bridge_rampart",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.4f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.0001f, nullptr,
+                   "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.0001f, nullptr, "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:gold_block", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_bridge_generic",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.0001f, nullptr, "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:gold_block", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_bridge_entrance_replacement",
+                 {{Test::RandomBlockMatch, "minecraft:chiseled_polished_blackstone", 0.5f, nullptr,
+                   "minecraft:air", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:gold_block", 0.6f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.01f, nullptr,
+                   "minecraft:gilded_blackstone", nullptr, 0}}},
+                {"minecraft:bastion_bridge_bridge",
+                 {{Test::RandomBlockMatch, "minecraft:polished_blackstone_bricks", 0.3f, nullptr,
+                   "minecraft:cracked_polished_blackstone_bricks", nullptr, 0},
+                  {Test::RandomBlockMatch, "minecraft:blackstone", 0.0001f, nullptr, "minecraft:air", nullptr, 0}}},
                 {"minecraft:cobblestone_building_low_decay",
                  {{Test::RandomBlockMatch, "minecraft:cobblestone", 0.1f, nullptr, "minecraft:mossy_cobblestone",
                    nullptr, 0}}},
@@ -243,7 +328,7 @@ namespace {
         return LISTS;
     }
 
-    // sub_1402FF250: no draw at or past the bounds
+    // no draw at or past the bounds
     bool chance(std::mt19937 &random, float probability) {
         if (probability <= 0.0f)
             return false;
@@ -286,7 +371,7 @@ const std::vector<StructureProcessors::Rule> &StructureProcessors::get(const std
 }
 
 BlockState StructureProcessors::apply(const std::vector<const Rule *> &rules, const BlockState &block,
-                                      const BlockState &world, std::mt19937 &random) {
+                                      const BlockState &world, std::mt19937 &random, int32_t relativeY) {
     BlockState current = block;
     for (const Rule *rule: rules) {
         if (!passes(rule->mInput, rule->mInputBlock, rule->mProbability, current, random))
@@ -294,6 +379,11 @@ BlockState StructureProcessors::apply(const std::vector<const Rule *> &rules, co
         if (rule->mLocationBlock != nullptr && world.mName != rule->mLocationBlock)
             continue;
 
+        if (rule->mVerticalRange > 0) {
+            const float fraction = std::min((float) std::abs(relativeY) / (float) rule->mVerticalRange, 1.0f);
+            if (FeatureRandom::nextFloat(random) > fraction * rule->mVerticalChance)
+                continue;
+        }
         current = output(*rule);
     }
     return current;

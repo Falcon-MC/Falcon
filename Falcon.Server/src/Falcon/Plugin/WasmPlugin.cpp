@@ -7,13 +7,17 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
 
+#include <chrono>
 #include <cstring>
+#include <filesystem>
 
 namespace {
     const char *const MEMORY_EXPORT = "memory";
     const char *const REALLOC_EXPORT = "cabi_realloc";
     const char *const INITIALIZE_EXPORT = "_initialize";
-    const char *const SERVICE_POST_RETURN_EXPORT = "cabi_post_falcon:plugin/plugin@1.0.5#on-service";
+    const char *const EXPORT_PREFIX = "falcon:plugin/plugin@";
+    const char *const POST_RETURN_PREFIX = "cabi_post_falcon:plugin/plugin@";
+    const char *const SERVICE_EXPORT = "on-service";
 
     // bounds the host memory a plugin can pin by never dropping its handles
     constexpr size_t MAX_HANDLES = 65536;
@@ -24,19 +28,19 @@ namespace {
     };
 
     const ExportDefinition EXPORTS[(size_t) WasmPlugin::Export::Count] = {
-            {"falcon:plugin/plugin@1.0.5#on-load", ":"},
-            {"falcon:plugin/plugin@1.0.5#on-enable", ":i"},
-            {"falcon:plugin/plugin@1.0.5#on-disable", ":"},
-            {"falcon:plugin/plugin@1.0.5#on-event", "I:"},
-            {"falcon:plugin/plugin@1.0.5#on-command", "iii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-task", "I:"},
-            {"falcon:plugin/plugin@1.0.5#on-service", "iiii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-item-use", "iIi:i"},
-            {"falcon:plugin/plugin@1.0.5#on-item-use-on-block", "iIiiiii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-block-interact", "iIiiii:i"},
-            {"falcon:plugin/plugin@1.0.5#on-block-break", "iIiii:"},
-            {"falcon:plugin/plugin@1.0.5#on-entity-tick", "iI:"},
-            {"falcon:plugin/plugin@1.0.5#on-entity-interact", "iII:i"},
+            {"on-load", ":"},
+            {"on-enable", ":i"},
+            {"on-disable", ":"},
+            {"on-event", "I:"},
+            {"on-command", "iii:i"},
+            {"on-task", "I:"},
+            {"on-service", "iiii:i"},
+            {"on-item-use", "iIi:i"},
+            {"on-item-use-on-block", "iIiiiii:i"},
+            {"on-block-interact", "iIiiii:i"},
+            {"on-block-break", "iIiii:"},
+            {"on-entity-tick", "iI:"},
+            {"on-entity-interact", "iII:i"},
     };
 
     char typeLetter(const wasm_valtype_t *type) {
@@ -121,9 +125,97 @@ namespace {
     }
 }
 
-WasmPlugin::WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel)
-        : mPlugin(plugin), mStore(store), mContext(wasmtime_store_context(store)), mFuel(fuel) {
+WasmPlugin::WasmPlugin(LoadedPlugin &plugin, wasmtime_store_t *store, uint64_t fuel, uint64_t diskLimit)
+        : mPlugin(plugin), mStore(store), mContext(wasmtime_store_context(store)), mFuel(fuel), mDiskLimit(diskLimit) {
     wasmtime_context_set_data(mContext, this);
+}
+
+namespace {
+    constexpr size_t MAX_OUTPUT_LINE = 1024;
+    constexpr int64_t DISK_CHECK_SECONDS = 5;
+    // a folder of very many files is not walked to the end on every check
+    constexpr size_t MAX_DISK_ENTRIES = 100000;
+
+    int64_t nowSeconds() {
+        return std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+}
+
+// a line at a time, so one printf does not make several log lines
+ptrdiff_t WasmPlugin::_output(void *data, const unsigned char *bytes, size_t length) {
+    auto *self = static_cast<WasmPlugin *>(data);
+    for (size_t index = 0; index < length; index++) {
+        const char c = (char) bytes[index];
+        if (c != '\n' && self->mOutput.size() < MAX_OUTPUT_LINE) {
+            if (c != '\r')
+                self->mOutput.push_back(c >= 0x20 || c == '\t' ? c : '?');
+            continue;
+        }
+        if (c != '\n')
+            continue;
+        LOG_INFO(LogAreaID::Server, "[%s] %s", self->mPlugin.mDescription.mName.c_str(), self->mOutput.c_str());
+        self->mOutput.clear();
+    }
+    return (ptrdiff_t) length;
+}
+
+bool WasmPlugin::_configureFiles(bool writable, std::string &error) {
+    wasi_config_t *config = wasi_config_new();
+    // no arguments, environment, network or standard input: only the data folder, at the root of the guest
+    if (!wasi_config_preopen_dir(config, mPlugin.mDataFolder.c_str(), "/", writable)) {
+        wasi_config_delete(config);
+        error = "its data folder " + mPlugin.mDataFolder + " cannot be opened";
+        return false;
+    }
+    wasi_config_set_stdout_custom(config, &_output, this, nullptr);
+    wasi_config_set_stderr_custom(config, &_output, this, nullptr);
+    wasmtime_error_t *failure = wasmtime_context_set_wasi(mContext, config);
+    if (failure != nullptr) {
+        error = messageOf(failure, nullptr);
+        return false;
+    }
+    mFilesWritable = writable;
+    return true;
+}
+
+void WasmPlugin::checkDisk(bool now) {
+    if (mDiskLimit == 0 || mPlugin.mDataFolder.empty())
+        return;
+    const int64_t seconds = nowSeconds();
+    if (!now && seconds - mLastDiskCheck < DISK_CHECK_SECONDS)
+        return;
+    mLastDiskCheck = seconds;
+
+    uint64_t used = 0;
+    size_t entries = 0;
+    std::error_code ignored;
+    for (auto it = std::filesystem::recursive_directory_iterator(mPlugin.mDataFolder,
+                                                                 std::filesystem::directory_options::none, ignored);
+         it != std::filesystem::recursive_directory_iterator() && entries < MAX_DISK_ENTRIES; it.increment(ignored)) {
+        entries++;
+        if (it->is_regular_file(ignored))
+            used += it->file_size(ignored);
+        if (ignored)
+            break;
+    }
+    const bool over = used > mDiskLimit || entries >= MAX_DISK_ENTRIES;
+    if (over == !mFilesWritable)
+        return;
+
+    std::string error;
+    if (!_configureFiles(!over, error)) {
+        LOG_ERROR(LogAreaID::Server, "[%s] Could not change access to the data folder: %s",
+                  mPlugin.mDescription.mName.c_str(), error.c_str());
+        return;
+    }
+    if (over)
+        LOG_WARN(LogAreaID::Server, "[%s] The data folder holds %llu MB, over the limit of %llu MB: the plugin can "
+                 "read its files but no longer write them", mPlugin.mDescription.mName.c_str(),
+                 (unsigned long long) (used >> 20), (unsigned long long) (mDiskLimit >> 20));
+    else
+        LOG_INFO(LogAreaID::Server, "[%s] The data folder is back under its limit: the plugin can write again",
+                 mPlugin.mDescription.mName.c_str());
 }
 
 WasmPlugin::~WasmPlugin() {
@@ -167,6 +259,9 @@ bool WasmPlugin::_checkedExport(const wasmtime_instance_t &instance, const char 
 }
 
 bool WasmPlugin::instantiate(const wasmtime_linker_t &linker, const wasmtime_module_t &module, std::string &error) {
+    if (!_configureFiles(true, error))
+        return false;
+
     // instantiation already consumes fuel; _initialize shares the budget
     wasmtime_error_t *failure = wasmtime_context_set_fuel(mContext, mFuel);
     if (failure != nullptr) {
@@ -190,15 +285,27 @@ bool WasmPlugin::instantiate(const wasmtime_linker_t &linker, const wasmtime_mod
     }
     mMemory = memory.of.memory;
 
+    // a module exports the callbacks of the one package version it was built against
+    auto versioned = [&](const char *prefix, const char *name, const char *signature, wasmtime_func_t &out,
+                         bool &found) {
+        for (const char *version: WasmImports::PACKAGE_VERSIONS) {
+            const std::string full = std::string(prefix) + version + "#" + name;
+            if (!_checkedExport(instance, full.c_str(), signature, out, found, error))
+                return false;
+            if (found)
+                return true;
+        }
+        return true;
+    };
+
     for (size_t index = 0; index < (size_t) Export::Count; index++) {
-        if (!_checkedExport(instance, EXPORTS[index].mName, EXPORTS[index].mSignature, mExports[index],
-                            mHasExport[index], error))
+        if (!versioned(EXPORT_PREFIX, EXPORTS[index].mName, EXPORTS[index].mSignature, mExports[index],
+                       mHasExport[index]))
             return false;
     }
 
     if (!_checkedExport(instance, REALLOC_EXPORT, "iiii:i", mRealloc, mHasRealloc, error)
-        || !_checkedExport(instance, SERVICE_POST_RETURN_EXPORT, "i:", mServicePostReturn, mHasServicePostReturn,
-                           error))
+        || !versioned(POST_RETURN_PREFIX, SERVICE_EXPORT, "i:", mServicePostReturn, mHasServicePostReturn))
         return false;
 
     wasmtime_func_t initialize;
@@ -259,6 +366,8 @@ bool WasmPlugin::call(Export which, wasmtime_val_raw_t *values, size_t count) {
     if (mFaulted || !hasExport(which))
         return false;
 
+    if (mDepth == 0)
+        checkDisk();
     FuelScope scope(*this);
     mDepth++;
     wasm_trap_t *trap = nullptr;

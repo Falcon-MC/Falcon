@@ -21,12 +21,25 @@ public:
 
     void tick(ServerNetworkHandler &owner) override;
 
+    void setFuse(int32_t fuse) {
+        mFuse = fuse;
+    }
+
+    // the box it moves with is the one blasts and blocks see
+    ActorSize getSize() const override {
+        return ActorSize{SIZE, SIZE};
+    }
+
     float getBaseOffset() const override {
         return BASE_OFFSET;
     }
 
     bool isInvulnerable() const override {
         return true;
+    }
+
+    bool isPushable() const override {
+        return false;
     }
 
     bool isExpired() const override {

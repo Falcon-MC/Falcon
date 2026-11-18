@@ -1,4 +1,5 @@
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 static_assert(LightStorage::SECTION_COUNT == LevelChunk::SUB_CHUNK_COUNT && LightStorage::MIN_Y == LevelChunk::MIN_Y,
               "LightStorage sections must match the chunk sub-chunks");
@@ -462,7 +463,7 @@ const std::vector<int32_t> &LevelChunk::getTopBlockHeights() const {
                     continue;
 
                 for (int localY = 15; localY >= 0; localY--) {
-                    if (subChunk.getBlock(x, localY, z).mName == "minecraft:air")
+                    if (subChunk.getBlock(x, localY, z).mName == BlockNames::AIR)
                         continue;
 
                     heights[slot] = baseY + localY;

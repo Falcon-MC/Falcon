@@ -6,7 +6,7 @@ class BlockState;
 
 enum class LiquidMaterial : uint8_t { None, Water, Lava };
 
-// what spreading water does to the block in its way (BlockType +186, sub_149C3F9B0)
+// what spreading water does to the block in its way
 enum class LiquidReaction : uint8_t {
     Broken,
     Popped,
@@ -38,7 +38,7 @@ struct LiquidProperties {
     uint8_t depth = 0;
     LiquidReaction reaction = LiquidReaction::Blocking;
     bool lavaBlocking = true;
-    // Material::isSolid: two water sources make a third on top of it
+    // two water sources make a third on top of it
     bool solid = true;
     bool containsWater = false;
     // faces liquid cannot cross (BlockType +185, stops_liquid_flowing_from_direction)

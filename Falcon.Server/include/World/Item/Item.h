@@ -14,6 +14,7 @@ class ServerNetworkHandler;
 class ServerPlayer;
 class ItemStack;
 class Actor;
+struct DispenseSource;
 struct Vector3f;
 struct Vector3i;
 
@@ -63,6 +64,12 @@ public:
         return false;
     }
 
+    // Item::dispense (vtable +0x2A8, 26.60): false drops the item as a dropper does
+    virtual bool dispense(const DispenseSource &source) const {
+        (void) source;
+        return false;
+    }
+
     // false: fall back to the block data's digger tool type and tier
     virtual bool getDestroySpeed(const std::string &blockIdentifier, float &speed) const {
         (void) blockIdentifier;
@@ -101,6 +108,11 @@ public:
         (void) item;
         (void) elapsedTicks;
         return false;
+    }
+
+    // 0: the item's minecraft:use_duration
+    virtual int32_t getUseDuration() const {
+        return 0;
     }
 
     virtual bool isConsumable() const {
@@ -206,6 +218,19 @@ public:
     int32_t getAttackDamage() const {
         const auto *component = mComponents.get<DamageItemComponent>();
         return component == nullptr ? mAttackDamage : component->getDamage();
+    }
+
+    // for an item whose armor comes from a pack rather than the item table
+    void setArmor(ArmorSlot slot, int32_t points) {
+        mArmorSlot = slot;
+        mArmorPoints = points;
+
+        auto &armor = mComponents.emplace<ArmorItemComponent>();
+        armor.mSlot = slot;
+        armor.mPoints = points;
+
+        auto &wearable = mComponents.emplace<WearableItemComponent>();
+        wearable.mSlot = slot;
     }
 
     ArmorSlot getArmorSlot() const {

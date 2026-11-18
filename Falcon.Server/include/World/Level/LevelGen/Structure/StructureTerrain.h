@@ -16,7 +16,7 @@ class TerrainCache;
 // read from the workers' cache when there is one
 class StructureTerrain {
 public:
-    explicit StructureTerrain(const ChunkGenerator &generator, TerrainCache *cache = nullptr);
+    explicit StructureTerrain(const ChunkGenerator &generator, TerrainCache *cache = nullptr, bool populated = false);
     ~StructureTerrain();
 
     int32_t getSolidHeight(int32_t x, int32_t z);
@@ -37,5 +37,6 @@ private:
 
     const ChunkGenerator &mGenerator;
     TerrainCache *mCache;
+    bool mPopulated;
     std::map<std::pair<int32_t, int32_t>, Chunk> mChunks;
 };

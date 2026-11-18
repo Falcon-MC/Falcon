@@ -45,15 +45,20 @@ Command *CommandMap::getCommand(const std::string &name) const {
     return it == mByName.end() ? nullptr : it->second;
 }
 
-std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
+std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts) {
     std::vector<std::string> tokens;
     std::string token;
     bool quoted = false;
     bool escaped = false;
     bool started = false;
     int selectorDepth = 0;
+    size_t start = 0;
 
-    for (char character: commandLine) {
+    for (size_t index = 0; index < commandLine.size(); index++) {
+        const char character = commandLine[index];
+        if (!started)
+            start = index;
+
         if (escaped) {
             token.push_back(character);
             escaped = false;
@@ -88,6 +93,8 @@ std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
 
             if (started) {
                 tokens.push_back(token);
+                if (starts != nullptr)
+                    starts->push_back(start);
                 token.clear();
                 started = false;
             }
@@ -98,8 +105,11 @@ std::vector<std::string> CommandMap::_tokenize(const std::string &commandLine) {
         started = true;
     }
 
-    if (started)
+    if (started) {
         tokens.push_back(token);
+        if (starts != nullptr)
+            starts->push_back(start);
+    }
 
     return tokens;
 }
@@ -132,7 +142,7 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
     if (!line.empty() && line[0] == '/')
         line.erase(0, 1);
 
-    std::vector<std::string> tokens = _tokenize(line);
+    std::vector<std::string> tokens = tokenize(line);
     if (tokens.empty())
         return false;
 

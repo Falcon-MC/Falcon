@@ -16,6 +16,7 @@ FALCON_REGISTER_ITEM_CUSTOM(
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -26,7 +27,7 @@ namespace {
     const float SMASH_HEAVY_DAMAGE = 16.0f;
     const float WIND_BURST_RADIUS = 2.5f;
     const float WIND_BURST_MAX_FALL = 7.5f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const char *WIND_BURST_PARTICLE = "minecraft:wind_explosion_emitter";
 
     float rise(const Actor &actor) {

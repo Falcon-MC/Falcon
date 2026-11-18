@@ -7,7 +7,7 @@
 class LevelChunk;
 class OverworldAquifer;
 
-// caves and canyons cut through a chunk once its surface is built (sub_14CDD16A0)
+// caves and canyons cut through a chunk once its surface is built
 class OverworldCarvers {
 public:
     explicit OverworldCarvers(int64_t seed);

@@ -20,6 +20,8 @@
 
 namespace {
     const double MIN_FOV_CHECK_DISTANCE = 4.0;
+    // a Falcon choice: generation takes longer than this many ticks
+    const int64_t LOAD_RETRY_TICKS = 4;
     const double MIN_FOV_CHECK_DISTANCE_SQUARED = MIN_FOV_CHECK_DISTANCE * MIN_FOV_CHECK_DISTANCE;
 
     int32_t streamRadius(const ChunkStreamState &state, const Level &level) {
@@ -90,13 +92,13 @@ namespace {
         return hash;
     }
 
-    // Client side generation from server.properties; every player of a level follows it (Level+1016, sub_1402C0030).
+    // Client side generation from server.properties; every player of a level follows it.
     bool isClientSideGeneration(const ServerNetworkHandler &owner) {
         return owner.getProperties().getClientSideChunkGenerationEnabled();
     }
 
     // A chunk the server holds with all eight neighbours decorated, without loading anything. It is what the
-    // publisher view takes as it is (generate mode 0, sub_1430014E0) even when the player view leaves it to
+    // publisher view takes as it is even when the player view leaves it to
     // the client, because another player or a ticking area made the server build it.
     bool isBuiltWithNeighbours(const Level &level, int32_t chunkX, int32_t chunkZ) {
         for (int32_t dx = -1; dx <= 1; ++dx) {
@@ -226,6 +228,7 @@ namespace {
         const std::unordered_set<int64_t> &sent = player.getSentChunks();
 
         state.mSendQueue.clear();
+        state.mLoadRetryTick = 0;
         for (const int64_t hash: state.mInRadius) {
             if (sent.find(hash) == sent.end())
                 state.mSendQueue.push_back(hash);
@@ -277,7 +280,8 @@ namespace {
 
     void loadQueuedChunks(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player,
                           int32_t attempts) {
-        if (state.mSendQueue.empty())
+        // chunk retries keep running while the world is paused
+        if (state.mSendQueue.empty() || owner.getChunkStreamTick() < state.mLoadRetryTick)
             return;
 
         Level &level = owner.getLevelFor(player);
@@ -285,6 +289,7 @@ namespace {
         BuildDecision decision(owner, player, level, streamRadius(state, level));
         std::vector<int64_t> requeue;
         int32_t tried = 0;
+        bool progressed = false;
 
         while (!state.mSendQueue.empty() && tried < attempts) {
             ++tried;
@@ -294,9 +299,10 @@ namespace {
             const int32_t chunkX = ChunkStreamHandler::unpackChunkX(hash);
             const int32_t chunkZ = ChunkStreamHandler::unpackChunkZ(hash);
 
-            // The view leaves the chunk to the client: nothing is loaded for it (sub_1430014E0, generate mode 1).
+            // The view leaves the chunk to the client: nothing is loaded for it.
             if (clientSideGeneration && !decision.isServerBuilt(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
+                progressed = true;
                 if (isBuiltWithNeighbours(level, chunkX, chunkZ))
                     pushQueue(state, state.mReadyToSend, hash);
                 else
@@ -306,10 +312,12 @@ namespace {
 
             if (level.isChunkPopulated(chunkX, chunkZ)) {
                 state.mLoading.erase(hash);
-                if (neighboursPopulated(level, chunkX, chunkZ))
+                if (neighboursPopulated(level, chunkX, chunkZ)) {
                     pushQueue(state, state.mReadyToSend, hash);
-                else
+                    progressed = true;
+                } else {
                     requeue.push_back(hash);
+                }
                 continue;
             }
 
@@ -329,6 +337,10 @@ namespace {
 
         for (const int64_t hash: requeue)
             pushQueue(state, state.mSendQueue, hash);
+
+        // every chunk tried is still generating: sorting the same ones again each tick buys nothing
+        if (!progressed)
+            state.mLoadRetryTick = owner.getChunkStreamTick() + LOAD_RETRY_TICKS;
     }
 
     LevelChunkPacket makeChunkPacket(Level &level, int32_t chunkX, int32_t chunkZ, const PacketCodecContext &context,
@@ -435,7 +447,7 @@ namespace {
             ++added;
             ++state.mSendsThisTick;
 
-            // sub_142561970: every chunk sent under client side generation is one the server built, and the
+            // every chunk sent under client side generation is one the server built, and the
             // client learns it from the next publisher update.
             if (clientSideGeneration) {
                 state.mSavedChunks.add(chunkX, chunkZ);
@@ -455,7 +467,7 @@ namespace {
                         (int32_t) std::floor(position.z));
     }
 
-    // sub_14255F580: the update carries the chunks sent since the previous one, then the view follows it.
+    // the update carries the chunks sent since the previous one, then the view follows it.
     void publishClientSideGeneration(ChunkStreamState &state, ServerNetworkHandler &owner, ServerPlayer &player) {
         Level &level = owner.getLevelFor(player);
         const int32_t radius = streamRadius(state, level);
@@ -544,6 +556,7 @@ bool ChunkStreamHandler::isPublisherUpdateDue(const ChunkStreamState &state, con
 
 void ChunkStreamHandler::dropPendingChunks(ChunkStreamState &state) {
     state.mSendQueue.clear();
+    state.mLoadRetryTick = 0;
     state.mLoading.clear();
     state.mReadyToSend.clear();
     state.mClientBuilt.clear();
@@ -563,6 +576,17 @@ int64_t ChunkStreamHandler::packChunk(int32_t chunkX, int32_t chunkZ) {
     return ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 }
 
+bool ChunkStreamHandler::isPositionRelevant(ServerPlayer &player, const Level &level, const Vector3i &position) {
+    const ChunkStreamState &state = player.getChunkStreamState();
+    if (state.mLastLoaderChunk == INT64_MAX || !player.isIn(level))
+        return false;
+    // the view centre is the corner of its chunk, its radius in blocks
+    const int64_t dx = (int64_t) position.x - 16 * (int64_t) unpackChunkX(state.mLastLoaderChunk);
+    const int64_t dz = (int64_t) position.z - 16 * (int64_t) unpackChunkZ(state.mLastLoaderChunk);
+    const int64_t reach = 16 * (int64_t) streamRadius(state, level) + 46;
+    return dx * dx + dz * dz < reach * reach;
+}
+
 int32_t ChunkStreamHandler::unpackChunkX(int64_t hash) {
     return (int32_t) (hash >> 32);
 }
@@ -578,7 +602,7 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
 
     const bool clientSideGeneration = isClientSideGeneration(owner);
     if (clientSideGeneration) {
-        // ServerPlayer::tick moves the publisher before sending its queue (sub_14102EC10).
+        // ServerPlayer::tick moves the publisher before sending its queue.
         publishClientSideGeneration(state, owner, player);
     } else {
         const int64_t loaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
@@ -619,12 +643,11 @@ void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlaye
     }
     state.mLastLoaderChunk = packChunk(state.mComparatorChunkX, state.mComparatorChunkZ);
 
-    // Shrinking the radius to 1 first drops every chunk sent around the old position; the
-    // radius is then widened to the teleport budget so the destination streams immediately
-    // instead of waiting for the next tick.
-    updateInRadiusChunks(state, 1, state.mComparatorChunkX, state.mComparatorChunkZ);
+    // the full view around the destination: a short hop keeps what the client holds, tick() only redoes
+    // this when the chunk changes; the destination's first chunks load now, not on the next tick
+    updateInRadiusChunks(state, streamRadius(state, owner.getLevelFor(player)), state.mComparatorChunkX,
+                         state.mComparatorChunkZ);
     removeOutOfRadiusChunks(state, owner, player);
-    updateInRadiusChunks(state, TELEPORT_LOAD_COUNT, state.mComparatorChunkX, state.mComparatorChunkZ);
 
     pruneLoadingQueueOutOfRadius(state);
     pruneQueueOutOfRadius(state, state.mReadyToSend, owner.getLevelFor(player), player.getRuntimeId());

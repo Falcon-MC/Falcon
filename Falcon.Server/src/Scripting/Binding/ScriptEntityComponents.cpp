@@ -2,6 +2,7 @@
 
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Misc/ItemActor.h"
+#include "World/Actor/Misc/NpcActor.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/RideSystem.h"
@@ -10,6 +11,8 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <cstring>
 
 using namespace ScriptValues;
@@ -27,6 +30,7 @@ namespace {
         Riding,
         Item,
         Tamed,
+        Npc,
     };
 
     struct ComponentClass {
@@ -48,6 +52,7 @@ namespace {
             {"minecraft:floats_in_liquid", "EntityFloatsInLiquidComponent", Backing::Definition},
             {"minecraft:flying_speed", "EntityFlyingSpeedComponent", Backing::Definition},
             {"minecraft:friction_modifier", "EntityFrictionModifierComponent", Backing::Definition},
+            {"minecraft:ground_offset", "EntityGroundOffsetComponent", Backing::Definition},
             {"minecraft:healable", "EntityHealableComponent", Backing::Definition},
             {"minecraft:health", "EntityHealthComponent", Backing::Attribute},
             {"minecraft:is_baby", "EntityIsBabyComponent", Backing::Definition},
@@ -83,6 +88,7 @@ namespace {
             {"minecraft:navigation.generic", "EntityNavigationGenericComponent", Backing::Definition},
             {"minecraft:navigation.hover", "EntityNavigationHoverComponent", Backing::Definition},
             {"minecraft:navigation.walk", "EntityNavigationWalkComponent", Backing::Definition},
+            {"minecraft:npc", "EntityNpcComponent", Backing::Npc},
             {"minecraft:onfire", "EntityOnFireComponent", Backing::OnFire},
             {"minecraft:player.exhaustion", "EntityExhaustionComponent", Backing::Attribute},
             {"minecraft:player.hunger", "EntityHungerComponent", Backing::Attribute},
@@ -171,6 +177,8 @@ namespace {
                 MobActor *mob = dynamic_cast<MobActor *>(&actor);
                 return definitionOf(actor, component.mId) != nullptr || (mob != nullptr && mob->isTamed());
             }
+            case Backing::Npc:
+                return dynamic_cast<NpcActor *>(&actor) != nullptr;
         }
         return false;
     }
@@ -241,6 +249,7 @@ namespace {
             {"EntityColor2Component", "value", "value"},
             {"EntityFlyingSpeedComponent", "value", "value"},
             {"EntityFrictionModifierComponent", "value", "value"},
+            {"EntityGroundOffsetComponent", "value", "value"},
             {"EntityHealableComponent", "forceUse", "force_use"},
             {"EntityLeashableComponent", "canBeStolen", "can_be_stolen"},
             {"EntityLeashableComponent", "hardDistance", "hard_distance"},
@@ -271,10 +280,6 @@ namespace {
             {"EntityNavigationComponent", "canWalk", "can_walk"},
             {"EntityNavigationComponent", "canWalkInLava", "can_walk_in_lava"},
             {"EntityNavigationComponent", "isAmphibious", "is_amphibious"},
-            {"EntityProjectileComponent", "airInertia", "inertia"},
-            {"EntityProjectileComponent", "gravity", "gravity"},
-            {"EntityProjectileComponent", "liquidInertia", "liquid_inertia"},
-            {"EntityProjectileComponent", "shouldBounceOnHit", "should_bounce"},
             {"EntityPushThroughComponent", "value", "value"},
             {"EntityRideableComponent", "controllingSeat", "controlling_seat"},
             {"EntityRideableComponent", "crouchingSkipInteract", "crouching_skip_interact"},
@@ -348,6 +353,195 @@ namespace {
         return permutationList(ctx, thisVal, "non_breathe_blocks");
     }
 
+    double numberField(const json::Value &object, const char *key, double fallback) {
+        const json::Value *value = object.get(key);
+        return value != nullptr && value->isNumber() ? value->mNumber : fallback;
+    }
+
+    // the records the game copies out of the component; their getters read the copy
+    struct RecordField {
+        const char *mClass;
+        const char *mProperty;
+        const char *mKey;
+        enum class Kind { Number, String, OptionalString, Vector } mKind;
+    };
+
+    const RecordField RECORD_FIELDS[] = {
+            {"Seat", "lockRiderRotation", "lock_rider_rotation", RecordField::Kind::Number},
+            {"Seat", "maxRiderCount", "max_rider_count", RecordField::Kind::Number},
+            {"Seat", "minRiderCount", "min_rider_count", RecordField::Kind::Number},
+            {"Seat", "position", "position", RecordField::Kind::Vector},
+            {"Seat", "seatRotation", "rotate_rider_by", RecordField::Kind::Number},
+            {"FeedItem", "healAmount", "heal_amount", RecordField::Kind::Number},
+            {"FeedItem", "item", "item", RecordField::Kind::String},
+            {"FeedItem", "resultItem", "result_item", RecordField::Kind::OptionalString},
+            {"FeedItemEffect", "amplifier", "amplifier", RecordField::Kind::Number},
+            {"FeedItemEffect", "chance", "chance", RecordField::Kind::Number},
+            {"FeedItemEffect", "duration", "duration", RecordField::Kind::Number},
+            {"FeedItemEffect", "name", "name", RecordField::Kind::String},
+            {"EntityDefinitionFeedItem", "growth", "growth", RecordField::Kind::Number},
+            {"EntityDefinitionFeedItem", "item", "item", RecordField::Kind::String},
+            {"EntityDefinitionFeedItem", "resultItem", "result_item", RecordField::Kind::OptionalString},
+    };
+
+    JSValue recordGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        const ScriptRecordRef *record = ScriptApi::fromContext(ctx)->native<ScriptRecordRef>(thisVal);
+        if (record == nullptr)
+            return JS_UNDEFINED;
+        const RecordField &field = RECORD_FIELDS[magic];
+        switch (field.mKind) {
+            case RecordField::Kind::Number: {
+                const auto it = record->mNumbers.find(field.mKey);
+                return JS_NewFloat64(ctx, it == record->mNumbers.end() ? 0.0 : it->second);
+            }
+            case RecordField::Kind::Vector:
+                return vector3(ctx, record->mVector[0], record->mVector[1], record->mVector[2]);
+            default: {
+                const auto it = record->mStrings.find(field.mKey);
+                if (it == record->mStrings.end())
+                    return field.mKind == RecordField::Kind::OptionalString ? JS_UNDEFINED : JS_NewString(ctx, "");
+                return string(ctx, it->second);
+            }
+        }
+    }
+
+    JSValue feedItemGetEffects(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ScriptApi *api = ScriptApi::fromContext(ctx);
+        const ScriptRecordRef *record = api->native<ScriptRecordRef>(thisVal);
+        JSValue array = JS_NewArray(ctx);
+        uint32_t index = 0;
+        for (const std::shared_ptr<ScriptRecordRef> &child:
+             record == nullptr ? std::vector<std::shared_ptr<ScriptRecordRef>>() : record->mChildren)
+            JS_SetPropertyUint32(ctx, array, index++, api->makeInstance("FeedItemEffect", new ScriptRecordRef(*child)));
+        return array;
+    }
+
+    ScriptRecordRef *recordOf(const json::Value &object, const char *const *numbers, const char *const *strings) {
+        ScriptRecordRef *record = new ScriptRecordRef();
+        for (; *numbers != nullptr; ++numbers) {
+            const json::Value *value = object.get(*numbers);
+            if (value != nullptr && value->isNumber())
+                record->mNumbers[*numbers] = value->mNumber;
+        }
+        for (; *strings != nullptr; ++strings) {
+            const json::Value *value = object.get(*strings);
+            if (value != nullptr && value->isString())
+                record->mStrings[*strings] = value->mString;
+        }
+        return record;
+    }
+
+    // SeatDescription defaults: lock_rider_rotation 181, the rest 0
+    JSValue rideableGetSeats(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        JSValue array = JS_NewArray(ctx);
+        const json::Value *seats = fieldOf(target, "seats");
+        if (seats == nullptr)
+            return array;
+        std::vector<const json::Value *> list;
+        if (seats->isArray()) {
+            for (const std::unique_ptr<json::Value> &seat: seats->mArray)
+                list.push_back(seat.get());
+        } else {
+            list.push_back(seats);
+        }
+        static const char *const NUMBERS[] = {"min_rider_count", "max_rider_count", "rotate_rider_by", nullptr};
+        static const char *const STRINGS[] = {nullptr};
+        uint32_t index = 0;
+        for (const json::Value *seat: list) {
+            if (!seat->isObject())
+                continue;
+            ScriptRecordRef *record = recordOf(*seat, NUMBERS, STRINGS);
+            record->mNumbers["lock_rider_rotation"] = numberField(*seat, "lock_rider_rotation", 181.0);
+            const json::Value *position = seat->get("position");
+            if (position != nullptr && position->isArray() && position->mArray.size() >= 3) {
+                for (int axis = 0; axis < 3; ++axis)
+                    record->mVector[axis] = (float) position->mArray[axis]->number(0.0);
+            }
+            JS_SetPropertyUint32(ctx, array, index++, target.mApi->makeInstance("Seat", record));
+        }
+        return array;
+    }
+
+    JSValue healableGetFeedItems(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        JSValue array = JS_NewArray(ctx);
+        const json::Value *items = fieldOf(target, "items");
+        if (items == nullptr || !items->isArray())
+            return array;
+        static const char *const NUMBERS[] = {"heal_amount", nullptr};
+        static const char *const STRINGS[] = {"item", "result_item", nullptr};
+        static const char *const EFFECT_NUMBERS[] = {"amplifier", "chance", "duration", nullptr};
+        static const char *const EFFECT_STRINGS[] = {"name", nullptr};
+        uint32_t index = 0;
+        for (const std::unique_ptr<json::Value> &item: items->mArray) {
+            if (!item->isObject())
+                continue;
+            ScriptRecordRef *record = recordOf(*item, NUMBERS, STRINGS);
+            const json::Value *effects = item->get("effects");
+            if (effects != nullptr && effects->isArray()) {
+                for (const std::unique_ptr<json::Value> &effect: effects->mArray) {
+                    if (effect->isObject())
+                        record->mChildren.emplace_back(recordOf(*effect, EFFECT_NUMBERS, EFFECT_STRINGS));
+                }
+            }
+            JS_SetPropertyUint32(ctx, array, index++, target.mApi->makeInstance("FeedItem", record));
+        }
+        return array;
+    }
+
+    // feed_items: a name or a list of names and {item, growth, result_item}; growth 0.1 when left out, as feeding uses
+    JSValue ageableGetFeedItems(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        JSValue array = JS_NewArray(ctx);
+        const json::Value *items = fieldOf(target, "feed_items");
+        if (items == nullptr)
+            return array;
+        std::vector<const json::Value *> list;
+        if (items->isArray()) {
+            for (const std::unique_ptr<json::Value> &item: items->mArray)
+                list.push_back(item.get());
+        } else {
+            list.push_back(items);
+        }
+        static const char *const NUMBERS[] = {nullptr};
+        static const char *const STRINGS[] = {"item", "result_item", nullptr};
+        uint32_t index = 0;
+        for (const json::Value *item: list) {
+            ScriptRecordRef *record = nullptr;
+            if (item->isString()) {
+                record = new ScriptRecordRef();
+                record->mStrings["item"] = item->mString;
+                record->mNumbers["growth"] = MobActor::DEFAULT_FEED_GROWTH;
+            } else if (item->isObject()) {
+                record = recordOf(*item, NUMBERS, STRINGS);
+                record->mNumbers["growth"] = numberField(*item, "growth", MobActor::DEFAULT_FEED_GROWTH);
+            } else {
+                continue;
+            }
+            JS_SetPropertyUint32(ctx, array, index++, target.mApi->makeInstance("EntityDefinitionFeedItem", record));
+        }
+        return array;
+    }
+
+    // the grow_up event as a Trigger
+    JSValue ageableGetGrowUp(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        const json::Value *growUp = fieldOf(target, "grow_up");
+        const json::Value *event = growUp == nullptr ? nullptr : growUp->get("event");
+        ScriptNamedRef *ref = new ScriptNamedRef();
+        ref->mName = event != nullptr && event->isString() ? event->mString : std::string();
+        return target.mApi->makeInstance("Trigger", ref);
+    }
+
     JSValue tameableGetTameItems(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -409,7 +603,8 @@ namespace {
     // false when the value is outside the attribute's range
     bool setAttribute(ComponentTarget &target, float value) {
         const AttributeData *attribute = attributeOf(*target.mActor, target.mPart->mComponentId);
-        if (attribute == nullptr || value < attribute->mMinimum || value > attribute->mMaximum)
+        // written so a NaN fails it too
+        if (attribute == nullptr || !(value >= attribute->mMinimum && value <= attribute->mMaximum))
             return false;
         target.mActor->getAttributes().set(target.mPart->mComponentId, value);
         syncAttributes(*target.mApi, *target.mActor);
@@ -473,6 +668,80 @@ namespace {
         if (!componentOf(ctx, thisVal, target))
             return JS_EXCEPTION;
         return JS_NewInt32(ctx, target.mActor->getFireTicks());
+    }
+
+    struct AirSupply {
+        int32_t mTicks = 0;
+        int32_t mMinTicks = 0;
+        int32_t mMaxTicks = 0;
+    };
+
+    // whole seconds in the definition; absent fields take the schema defaults
+    int32_t definitionSeconds(const ComponentTarget &target, const char *key, int32_t fallback) {
+        const json::Value *value = fieldOf(target, key);
+        return value != nullptr && value->isNumber() ? (int32_t) value->mNumber : fallback;
+    }
+
+    bool airSupplyOf(const ComponentTarget &target, AirSupply &air) {
+        air.mMinTicks = definitionSeconds(target, "suffocate_time", -20) * 20;
+        air.mMaxTicks = definitionSeconds(target, "total_supply", 15) * 20;
+        if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(target.mActor)) {
+            air.mTicks = player->getAirSupply();
+            return true;
+        }
+        MobActor *mob = dynamic_cast<MobActor *>(target.mActor);
+        if (mob == nullptr)
+            return false;
+        air.mTicks = mob->getAirSupply();
+        return true;
+    }
+
+    // whole seconds, truncated
+    JSValue breathableGetAirSupply(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        AirSupply air;
+        if (!airSupplyOf(target, air))
+            return target.mApi->throwError("Error", "Failed to call function 'getAirSupply'.");
+        return JS_NewInt32(ctx, (int16_t) air.mTicks / 20);
+    }
+
+    // seconds within [suffocation, total supply] in whole seconds, stored as ticks
+    JSValue breathableSetAirSupply(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        double number = 0.0;
+        if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToFloat64(ctx, &number, argv[0]) != 0 || !std::isfinite(number)
+            || number < INT16_MIN || number > INT16_MAX)
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        AirSupply air;
+        if (!airSupplyOf(target, air))
+            return target.mApi->throwError("Error", "Failed to call function 'setAirSupply'.");
+
+        const int16_t seconds = (int16_t) number;
+        const int32_t minimum = air.mMinTicks / 20;
+        const int32_t maximum = (int16_t) air.mMaxTicks / 20;
+        if (seconds < minimum || seconds > maximum) {
+            JSValue fields = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, fields, "minValue", JS_NewFloat64(ctx, minimum));
+            JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewFloat64(ctx, maximum));
+            JS_SetPropertyStr(ctx, fields, "value", JS_NewFloat64(ctx, seconds));
+            return target.mApi->throwError("PropertyOutOfBoundsError",
+                                           "Unsupported or out of bounds value set on Property: airSupply, Value: "
+                                                   + std::to_string(seconds) + ", Property bounds: ["
+                                                   + std::to_string(minimum) + ", " + std::to_string(maximum) + "]",
+                                           fields);
+        }
+
+        const int16_t wanted = (int16_t) (seconds * 20);
+        const int32_t ticks = wanted > air.mMaxTicks ? air.mMaxTicks : std::max<int32_t>(wanted, air.mMinTicks);
+        if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(target.mActor))
+            player->setAirSupply(ticks);
+        else
+            static_cast<MobActor *>(target.mActor)->setAirSupply(ticks);
+        return JS_UNDEFINED;
     }
 
     JSValue itemGetItemStack(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
@@ -673,6 +942,162 @@ namespace {
         return JS_UNDEFINED;
     }
 
+    enum class ProjectileField {
+        AirInertia,
+        CatchFireOnHurt,
+        CritParticles,
+        DestroyOnHurt,
+        Gravity,
+        HitEntitySound,
+        HitGroundSound,
+        HitParticle,
+        Lightning,
+        LiquidInertia,
+        OnFireTime,
+        ShouldBounce,
+        StopOnHit,
+    };
+
+    const char *const PROJECTILE_FIELDS[] = {"airInertia",
+                                             "catchFireOnHurt",
+                                             "critParticlesOnProjectileHurt",
+                                             "destroyOnProjectileHurt",
+                                             "gravity",
+                                             "hitEntitySound",
+                                             "hitGroundSound",
+                                             "hitParticle",
+                                             "lightningStrikeOnHit",
+                                             "liquidInertia",
+                                             "onFireTime",
+                                             "shouldBounceOnHit",
+                                             "stopOnHit"};
+
+    ProjectileComponent *projectileOf(const ComponentTarget &target) {
+        ServerActor *actor = dynamic_cast<ServerActor *>(target.mActor);
+        return actor == nullptr ? nullptr : &actor->getProjectileComponent();
+    }
+
+    // no sound and no particle read as undefined
+    JSValue optionalText(JSContext *ctx, const std::string &text) {
+        return text.empty() ? JS_UNDEFINED : string(ctx, text);
+    }
+
+    JSValue projectileGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        const ProjectileComponent *projectile = projectileOf(target);
+        if (projectile == nullptr)
+            return JS_UNDEFINED;
+        switch ((ProjectileField) magic) {
+            case ProjectileField::AirInertia:
+                return JS_NewFloat64(ctx, projectile->mInertia);
+            case ProjectileField::CatchFireOnHurt:
+                return JS_NewBool(ctx, projectile->mCatchFire);
+            case ProjectileField::CritParticles:
+                return JS_NewBool(ctx, projectile->mCritParticleOnHurt);
+            case ProjectileField::DestroyOnHurt:
+                return JS_NewBool(ctx, projectile->mDestroyOnHurt);
+            case ProjectileField::Gravity:
+                return JS_NewFloat64(ctx, projectile->mGravity);
+            case ProjectileField::HitEntitySound:
+                return optionalText(ctx, LevelSoundEventIds::nameOf(projectile->mHitSound));
+            case ProjectileField::HitGroundSound:
+                return optionalText(ctx, LevelSoundEventIds::nameOf(projectile->mHitGroundSound));
+            case ProjectileField::HitParticle:
+                // ParticleType 0 and a type without a name read as undefined
+                return optionalText(ctx, ProjectileComponent::particleName(projectile->mParticle));
+            case ProjectileField::Lightning:
+                return JS_NewBool(ctx, projectile->mLightning);
+            case ProjectileField::LiquidInertia:
+                return JS_NewFloat64(ctx, projectile->mLiquidInertia);
+            case ProjectileField::OnFireTime:
+                return JS_NewFloat64(ctx, projectile->mOnFireTime);
+            case ProjectileField::ShouldBounce:
+                // the getter tests the should_bounce byte
+                return JS_NewBool(ctx, projectile->mShouldBounce != ProjectileComponent::Bounce::No);
+            case ProjectileField::StopOnHit:
+                return JS_NewBool(ctx, projectile->mStopOnHurt);
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue projectileSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        ProjectileComponent *projectile = projectileOf(target);
+        const JSValueConst value = argc >= 1 ? argv[0] : JS_UNDEFINED;
+        const ProjectileField field = (ProjectileField) magic;
+        const bool text = field == ProjectileField::HitEntitySound || field == ProjectileField::HitGroundSound
+                          || field == ProjectileField::HitParticle;
+        const bool number = field == ProjectileField::AirInertia || field == ProjectileField::Gravity
+                            || field == ProjectileField::LiquidInertia || field == ProjectileField::OnFireTime;
+        if (text ? !JS_IsString(value) && !JS_IsUndefined(value) : number ? !JS_IsNumber(value) : !JS_IsBool(value))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        if (projectile == nullptr)
+            return JS_UNDEFINED;
+
+        double amount = 0.0;
+        if (number)
+            JS_ToFloat64(ctx, &amount, value);
+        const bool flag = JS_ToBool(ctx, value) == 1;
+        const std::string name = JS_IsString(value) ? toString(ctx, value) : std::string();
+        switch (field) {
+            case ProjectileField::AirInertia:
+                projectile->mInertia = (float) amount;
+                break;
+            case ProjectileField::CatchFireOnHurt:
+                projectile->mCatchFire = flag;
+                break;
+            case ProjectileField::CritParticles:
+                projectile->mCritParticleOnHurt = flag;
+                break;
+            case ProjectileField::DestroyOnHurt:
+                projectile->mDestroyOnHurt = flag;
+                break;
+            case ProjectileField::Gravity:
+                projectile->mGravity = (float) amount;
+                break;
+            case ProjectileField::HitEntitySound:
+            case ProjectileField::HitGroundSound: {
+                // undefined clears the sound; a name that maps to Undefined throws, "undefined" too
+                const int32_t sound = JS_IsUndefined(value) ? LevelSoundEventIds::UNDEFINED
+                                                            : LevelSoundEventIds::fromName(name);
+                if (sound == LevelSoundEventIds::UNDEFINED && !JS_IsUndefined(value))
+                    return target.mApi->throwError("InvalidArgumentError", "Invalid sound identifier.");
+                (field == ProjectileField::HitEntitySound ? projectile->mHitSound
+                                                          : projectile->mHitGroundSound) = sound;
+                break;
+            }
+            case ProjectileField::HitParticle: {
+                // undefined clears the particle, a name without a type throws
+                const int32_t type = JS_IsUndefined(value) ? 0 : ProjectileComponent::particleType(name);
+                if (type == 0 && !JS_IsUndefined(value))
+                    return target.mApi->throwError("InvalidArgumentError", "Invalid particle identifier.");
+                projectile->mParticle = type;
+                break;
+            }
+            case ProjectileField::Lightning:
+                projectile->mLightning = flag;
+                break;
+            case ProjectileField::LiquidInertia:
+                projectile->mLiquidInertia = (float) amount;
+                break;
+            case ProjectileField::OnFireTime:
+                projectile->mOnFireTime = (float) amount;
+                break;
+            case ProjectileField::ShouldBounce:
+                // the setter stores the boolean in the should_bounce byte
+                projectile->mShouldBounce = (ProjectileComponent::Bounce)(flag ? 1 : 0);
+                break;
+            case ProjectileField::StopOnHit:
+                projectile->mStopOnHurt = flag;
+                break;
+        }
+        return JS_UNDEFINED;
+    }
+
     JSValue projectileShoot(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
         ComponentTarget target;
         if (!componentOf(ctx, thisVal, target))
@@ -686,6 +1111,71 @@ namespace {
             actor->setProjectile(true);
             target.mApi->host().sendActorMotion(*actor);
         }
+        return JS_UNDEFINED;
+    }
+}
+
+namespace {
+    enum class NpcField { Name, DefaultScene, SkinIndex };
+
+    NpcActor *npcOf(JSContext *ctx, JSValueConst thisVal, ComponentTarget &target) {
+        if (!componentOf(ctx, thisVal, target))
+            return nullptr;
+        NpcActor *npc = dynamic_cast<NpcActor *>(target.mActor);
+        if (npc == nullptr)
+            target.mApi->throwError("InvalidEntityError", "Failed to get the component: the entity is invalid.");
+        return npc;
+    }
+
+    // ScriptNpcComponent getters: the raw text name, the scene, the skin
+    JSValue npcGet(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int magic) {
+        ComponentTarget target;
+        NpcActor *npc = npcOf(ctx, thisVal, target);
+        if (npc == nullptr)
+            return JS_EXCEPTION;
+        switch ((NpcField) magic) {
+            case NpcField::Name:
+                return string(ctx, npc->getRawName());
+            case NpcField::DefaultScene:
+                return string(ctx, npc->getSceneName());
+            case NpcField::SkinIndex:
+                return JS_NewInt32(ctx, npc->getSkinIndex());
+        }
+        return JS_UNDEFINED;
+    }
+
+    JSValue npcSet(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv, int magic) {
+        ComponentTarget target;
+        NpcActor *npc = npcOf(ctx, thisVal, target);
+        if (npc == nullptr)
+            return JS_EXCEPTION;
+        const NpcField field = (NpcField) magic;
+        if (field == NpcField::SkinIndex) {
+            int32_t index = 0;
+            if (argc < 1 || !JS_IsNumber(argv[0]) || JS_ToInt32(ctx, &index, argv[0]) != 0)
+                return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+            if (npc->setSkinIndex(&target.mApi->host(), index))
+                return JS_UNDEFINED;
+            // any refused index, the current one too, throws with the list bounds
+            const int32_t maxValue = (int32_t) npc->getSkins().size() - 1;
+            JSValue fields = JS_NewObject(ctx);
+            JS_SetPropertyStr(ctx, fields, "value", JS_NewInt32(ctx, index));
+            JS_SetPropertyStr(ctx, fields, "minValue", JS_NewInt32(ctx, 0));
+            JS_SetPropertyStr(ctx, fields, "maxValue", JS_NewInt32(ctx, maxValue));
+            return target.mApi->throwError("ArgumentOutOfBoundsError",
+                                           "Unsupported or out of bounds value passed to function argument [0]: "
+                                           "Invalid skin index, Value: "
+                                                   + std::to_string(index) + ", Argument bounds: [0, "
+                                                   + std::to_string(maxValue) + "]",
+                                           fields);
+        }
+        if (argc < 1 || !JS_IsString(argv[0]))
+            return JS_ThrowTypeError(ctx, "Native type conversion failed.");
+        const std::string text = toString(ctx, argv[0]);
+        if (field == NpcField::Name)
+            npc->setName(&target.mApi->host(), text);
+        else
+            npc->setSceneName(text);
         return JS_UNDEFINED;
     }
 }
@@ -726,8 +1216,13 @@ void ScriptApi::_bindEntityComponents() {
     methodMagic(attribute, "EntityAttributeComponent", "resetToMaxValue", attributeReset, 0, (int) AttributeField::Max);
     methodMagic(attribute, "EntityAttributeComponent", "resetToMinValue", attributeReset, 0, (int) AttributeField::Min);
 
-    for (const ComponentClass &component: COMPONENTS)
+    // the 1.x typings declare componentId before EntityComponentTypes lists the component
+    for (const ComponentClass &component: COMPONENTS) {
         defineClass(component.mClass);
+        if (mSurface.has(std::string(component.mClass) + ".static componentId"))
+            JS_DefinePropertyValueStr(mContext, constructorOf(component.mClass), "componentId",
+                                      string(mContext, component.mId), JS_PROP_ENUMERABLE);
+    }
 
     for (size_t i = 0; i < sizeof(FIELDS) / sizeof(FIELDS[0]); ++i) {
         const DefinitionField &field = FIELDS[i];
@@ -740,6 +1235,8 @@ void ScriptApi::_bindEntityComponents() {
            breathableGetBreatheBlocks, 0);
     method(prototypeOf("EntityBreathableComponent"), "EntityBreathableComponent", "getNonBreatheBlocks",
            breathableGetNonBreatheBlocks, 0);
+    property(prototypeOf("EntityBreathableComponent"), "EntityBreathableComponent", "airSupply",
+             breathableGetAirSupply, breathableSetAirSupply);
 
     JSValue family = prototypeOf("EntityTypeFamilyComponent");
     method(family, "EntityTypeFamilyComponent", "hasTypeFamily", typeFamilyHas, 1);
@@ -751,6 +1248,21 @@ void ScriptApi::_bindEntityComponents() {
 
     JSValue rideable = prototypeOf("EntityRideableComponent");
     method(rideable, "EntityRideableComponent", "getFamilyTypes", rideableGetFamilyTypes, 0);
+    method(rideable, "EntityRideableComponent", "getSeats", rideableGetSeats, 0);
+    method(prototypeOf("EntityHealableComponent"), "EntityHealableComponent", "getFeedItems", healableGetFeedItems, 0);
+    method(prototypeOf("EntityAgeableComponent"), "EntityAgeableComponent", "getFeedItems", ageableGetFeedItems, 0);
+    property(prototypeOf("EntityAgeableComponent"), "EntityAgeableComponent", "growUp", ageableGetGrowUp);
+    for (const char *record: {"Seat", "FeedItem", "FeedItemEffect", "EntityDefinitionFeedItem"}) {
+        if (mSurface.has(record))
+            defineClass(record);
+    }
+    for (size_t i = 0; i < sizeof(RECORD_FIELDS) / sizeof(RECORD_FIELDS[0]); ++i) {
+        const RecordField &field = RECORD_FIELDS[i];
+        if (!JS_IsUndefined(prototypeOf(field.mClass)))
+            propertyMagic(prototypeOf(field.mClass), field.mClass, field.mProperty, recordGet, (int) i);
+    }
+    if (!JS_IsUndefined(prototypeOf("FeedItem")))
+        method(prototypeOf("FeedItem"), "FeedItem", "getEffects", feedItemGetEffects, 0);
     method(rideable, "EntityRideableComponent", "getRiders", rideableGetRiders, 0);
     method(rideable, "EntityRideableComponent", "addRider", rideableAddRider, 1);
     method(rideable, "EntityRideableComponent", "ejectRider", rideableEjectRider, 1);
@@ -786,5 +1298,13 @@ void ScriptApi::_bindEntityComponents() {
 
     JSValue projectile = prototypeOf("EntityProjectileComponent");
     property(projectile, "EntityProjectileComponent", "owner", projectileGetOwner, projectileSetOwner);
+    for (size_t i = 0; i < sizeof(PROJECTILE_FIELDS) / sizeof(PROJECTILE_FIELDS[0]); ++i)
+        propertyMagic(projectile, "EntityProjectileComponent", PROJECTILE_FIELDS[i], projectileGet, (int) i,
+                      projectileSet);
     method(projectile, "EntityProjectileComponent", "shoot", projectileShoot, 2);
+
+    JSValue npc = prototypeOf("EntityNpcComponent");
+    propertyMagic(npc, "EntityNpcComponent", "name", npcGet, (int) NpcField::Name, npcSet);
+    propertyMagic(npc, "EntityNpcComponent", "defaultScene", npcGet, (int) NpcField::DefaultScene, npcSet);
+    propertyMagic(npc, "EntityNpcComponent", "skinIndex", npcGet, (int) NpcField::SkinIndex, npcSet);
 }

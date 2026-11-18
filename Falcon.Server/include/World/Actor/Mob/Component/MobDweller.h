@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 
+class Actor;
 class MobActor;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -14,6 +15,10 @@ class ServerPlayer;
 class MobDweller {
 public:
     void tick(ServerNetworkHandler &owner, MobActor &mob);
+
+    // an inhabitant or a defender hit by something makes it an aggressor of the village; a player hitting an
+    // inhabitant loses standing
+    void onHurt(ServerNetworkHandler &owner, const MobActor &mob, const Actor *attacker);
 
     // releases everything the dweller claimed; killing a hostile dweller of a raided village makes the killer a hero
     void onDeath(const MobActor &mob, const ServerPlayer *killer);

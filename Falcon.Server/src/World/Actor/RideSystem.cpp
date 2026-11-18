@@ -4,6 +4,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
 
@@ -127,6 +128,18 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
             return false;
     }
 
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_MOUNT)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_MOUNT;
+        event.mCancellable = true;
+        event.mEntity = &rider;
+        event.mTarget = &vehicle;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&rider);
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return false;
+    }
+
     if (rider.isRiding())
         dismount(owner, rider, riderInitiated);
 
@@ -149,6 +162,17 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
 
 void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderInitiated) {
     Actor *vehicle = resolve(owner, rider.getVehicleId());
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_DISMOUNT);
+    if (plugins != nullptr && vehicle != nullptr) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_DISMOUNT;
+        event.mEntity = &rider;
+        event.mTarget = vehicle;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&rider);
+        plugins->dispatch(event);
+        // a handler may have mounted the rider elsewhere or removed the vehicle
+        vehicle = resolve(owner, rider.getVehicleId());
+    }
 
     rider._setVehicleId(0);
     rider.getFlags().set(ActorFlag::Riding, false);

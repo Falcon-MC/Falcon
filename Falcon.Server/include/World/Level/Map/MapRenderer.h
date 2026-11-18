@@ -30,11 +30,11 @@ public:
     virtual bool hasCeiling() const = 0;
 };
 
-// MapItem::update (sub_141AE17C0): column by column, each pixel shaded against the one north of it
+// column by column, each pixel shaded against the one north of it
 namespace MapRenderer {
     void update(MapItemSavedData &data, MapRenderSource &source, const Vector3i &playerPosition);
 
-    // the brightness steps of sub_141AE17C0: low, normal and high
+    // the brightness steps: low, normal and high
     uint32_t shade(const float color[4], int32_t brightness);
 
     // the Nether ceiling pattern, true for the stone coloured pixels

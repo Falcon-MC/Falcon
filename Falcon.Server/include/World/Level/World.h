@@ -3,6 +3,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Dimension/EndDragonFight.h"
 #include "World/Level/Level.h"
+#include "World/Level/PositionTrackingDB.h"
 #include "World/Level/TickingAreaManager.h"
 
 #include <unordered_map>
@@ -20,6 +21,8 @@ class ServerNetworkHandler;
 class World {
 public:
     World(uint32_t id, const std::string &name, int viewDistance, int64_t seed);
+
+    ~World();
 
     World(const World &) = delete;
 
@@ -67,6 +70,10 @@ public:
         return *mDragonFight;
     }
 
+    PositionTrackingDB &getPositionTracking() {
+        return mPositionTracking;
+    }
+
     std::unordered_set<int64_t> &getActorLoadedChunks(DimensionType dimension) {
         return mActorLoadedChunks[Dimension::toId(dimension)];
     }
@@ -74,6 +81,8 @@ public:
     std::vector<int64_t> mActiveCenters;
     int mActiveTickDistance = -1;
     bool mActorPersistencePending = true;
+    // a ticking area came or went: the columns are built again even with every player where it was
+    bool mActiveColumnsStale = true;
     bool mEnoughPlayersSleeping = false;
 
 private:
@@ -92,5 +101,6 @@ private:
     // kept whole: fields the server ignores are written back unchanged
     Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
+    PositionTrackingDB mPositionTracking;
     std::unordered_map<int32_t, std::unordered_set<int64_t>> mActorLoadedChunks;
 };

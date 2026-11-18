@@ -19,6 +19,7 @@
 #include <chrono>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <random>
 #include <stdexcept>
@@ -54,6 +55,10 @@ public:
             change.mState = SubChunk::intern(BlockState("minecraft:diamond_block"));
             level.mIncomingChanges.push_back(std::move(change));
         }
+    }
+
+    static void storeGenerated(Level &level, ChunkLoadResult &result) {
+        level._storeGeneratedContent(result);
     }
 
     static void stagePending(Level &level, int32_t x, int32_t z, int count,
@@ -113,6 +118,20 @@ public:
         finishWrites(level);
         if (!level.mStorage.open(WorldManager::getWorldsDirectory(), level.getName(), level.getDimensionId()))
             throw std::runtime_error("Could not reopen pending-write fixture storage");
+    }
+};
+
+// runs the queued main thread tasks: the tests have no server loop
+class ServerTickProbe {
+public:
+    static void runMainThreadTasks(ServerNetworkHandler &owner) {
+        std::vector<std::function<void()>> tasks;
+        {
+            std::lock_guard<std::mutex> lock(owner.mMainThreadTaskMutex);
+            tasks.swap(owner.mMainThreadTasks);
+        }
+        for (const std::function<void()> &task: tasks)
+            task();
     }
 };
 
@@ -373,6 +392,18 @@ int main() {
                     "Nether context selected an overworld cow");
             require(handler.resolveTargets(nether, "@e[type=player]").empty(),
                     "Nether context selected an overworld player");
+            require(handler.resolveTargets(nether, "@a").size() == 1, "@a left out a player of another dimension");
+            World *other = handler.loadWorld("SelectorWorld", true, 1);
+            require(other != nullptr, "Could not load the second world");
+            ExecuteCommandOrigin elsewhere(origin, &player, Vector3f(), Vector3f(), &other->getOverworld());
+            require(handler.resolveTargets(elsewhere, "@a").empty() && handler.resolveTargets(elsewhere, "@r").empty(),
+                    "A command of another world selected this world's player");
+            std::string error;
+            require(handler.unloadWorld("SelectorWorld", error), "Could not unload the second world");
+            // torn down with the main thread tasks, never inside the call
+            require(handler.getWorlds().find("SelectorWorld") == other, "The world was torn down inside the call");
+            ServerTickProbe::runMainThreadTasks(handler);
+            require(handler.getWorlds().find("SelectorWorld") == nullptr, "The world was not unloaded after the tick");
         });
         check("quoted selector name", [&]() {
             require(handler.getCommands().dispatch(origin, "testfor @e[name=\"Bob, Junior\"]"),
@@ -384,11 +415,113 @@ int main() {
                     "Escaped quote in entity name was lost");
             cow->setNameTag("Bob, Junior");
         });
+        check("a decoration that lands on a loaded chunk joins its loaded actors", [&]() {
+            const int64_t column = ((int64_t) 41 << 32) | (uint32_t) 41;
+            std::unordered_set<int64_t> &loaded =
+                    handler.getWorldOf(level).getActorLoadedChunks(level.getDimensionType());
+            loaded.insert(column);
+            level.getBlockActors().loadChunk(41, 41, {}, handler.getCodecContext());
+
+            ChunkLoadResult result;
+            result.mX = 41;
+            result.mZ = 41;
+            Tag chest = Tag::ofCompound();
+            chest.putString("id", "Chest");
+            chest.putInt("x", 664);
+            chest.putInt("y", 70);
+            chest.putInt("z", 664);
+            result.mBlockActors.push_back(chest);
+            Tag position = Tag::ofList(Tag::Type::Float);
+            position.addToList(Tag::ofFloat(664.5f));
+            position.addToList(Tag::ofFloat(70.0f));
+            position.addToList(Tag::ofFloat(665.5f));
+            Tag pig = Tag::ofCompound();
+            pig.putString("identifier", "minecraft:pig");
+            pig.put("Pos", position);
+            result.mEntities.push_back(pig);
+            LevelPersistenceProbe::storeGenerated(level, result);
+
+            int64_t spawned = 0;
+            for (auto &entry: handler.getActors()) {
+                const Vector3f at = entry.second->getPosition();
+                if (entry.second->isIn(level) && at.x == 664.5f && at.z == 665.5f)
+                    spawned = entry.first;
+            }
+            bool stored = false;
+            for (const Tag &entity: level.loadEntities(41, 41))
+                stored = stored || (spawned != 0 && entity.getLong("UniqueID", 0) == spawned);
+            const bool chestLoaded = level.getBlockActors().find(Vector3i(664, 70, 664)) != nullptr;
+
+            if (spawned != 0)
+                handler.removeActor(spawned);
+            level.getBlockActors().unloadChunk(41, 41);
+            loaded.erase(column);
+            require(chestLoaded, "A generated chest did not join the loaded block actors");
+            require(spawned != 0, "A generated mob did not join the loaded actors");
+            require(stored, "A generated mob was not stored with its unique id");
+        });
+        check("rights commands take the whole player name", [&]() {
+            require(handler.getPlayerByName("Regression") == &player, "A name prefix no longer finds the player");
+            require(handler.getPlayerByExactName("regressionplayer") == &player,
+                    "The whole name in another case missed");
+            require(handler.getPlayerByExactName("Regression") == nullptr, "A name prefix found a player for rights");
+            handler.getCommands().dispatch(origin, "deop Regression");
+            require(player.isOp(), "Deop of a name prefix took the rights of another player");
+        });
         check("unavailable world", [&]() {
             LevelStorage locked;
             require(locked.open(WorldManager::getWorldsDirectory(), "Locked", 0), "Could not lock fixture world");
             require(handler.loadWorld("Locked", false, 1) == nullptr, "Locked world unexpectedly opened");
             require(handler.getWorlds().find("Locked") == nullptr, "Failed world remained registered");
+        });
+        check("entity saves of a whole pass are one database write", [&]() {
+            LevelStorage storage;
+            require(storage.open(WorldManager::getWorldsDirectory(), "Batched", 0), "Could not open batch fixture");
+            Tag cow = Tag::ofCompound();
+            cow.putString("identifier", "minecraft:cow");
+            cow.putLong("UniqueID", 987654321);
+            Tag chest = Tag::ofCompound();
+            chest.putString("id", "Chest");
+            chest.putInt("x", 32);
+            chest.putInt("y", 64);
+            chest.putInt("z", 32);
+
+            storage.beginBatch();
+            const uint64_t before = LevelStorage::getWriteCount();
+            require(storage.saveEntities(2, 2, {cow}), "A batched entity save failed");
+            require(storage.saveEntities(3, 2, {}), "A batched empty entity save failed");
+            require(storage.saveBlockEntities(2, 2, {chest}), "A batched block entity save failed");
+            require(storage.saveBlockEntities(3, 2, {}), "A batched empty block entity save failed");
+            require(LevelStorage::getWriteCount() == before, "A batched save wrote to the database before the commit");
+            require(storage.loadEntities(2, 2).empty(), "A batched entity was readable before the commit");
+            require(storage.commitBatch(), "The batch commit failed");
+            require(LevelStorage::getWriteCount() == before + 1, "The batch was not a single database write");
+
+            const std::vector<Tag> entities = storage.loadEntities(2, 2);
+            require(entities.size() == 1 && entities[0].getLong("UniqueID", 0) == 987654321,
+                    "The batched entity was not stored");
+            require(storage.loadBlockEntities(2, 2).size() == 1, "The batched block entity was not stored");
+            require(storage.saveEntities(2, 2, {cow}), "An entity save after the commit failed");
+            require(LevelStorage::getWriteCount() == before + 2, "A save after the commit stayed in the batch");
+        });
+        check("a compaction keeps its database open after the storage closes", [&]() {
+            std::function<void()> compaction;
+            {
+                LevelStorage storage;
+                require(storage.open(WorldManager::getWorldsDirectory(), "Compacted", 0),
+                        "Could not open compaction fixture");
+                require(storage.saveEntities(0, 0, {}), "Could not write compaction fixture");
+                compaction = storage.compactionTask();
+                require(static_cast<bool>(compaction), "An open storage gave no compaction");
+            }
+            LevelStorage reopened;
+            require(!reopened.open(WorldManager::getWorldsDirectory(), "Compacted", 0),
+                    "A pending compaction did not keep its database open");
+            compaction();
+            compaction = nullptr;
+            require(reopened.open(WorldManager::getWorldsDirectory(), "Compacted", 0),
+                    "The database stayed open after its compaction");
+            require(!static_cast<bool>(LevelStorage().compactionTask()), "A closed storage gave a compaction");
         });
         check("paused gameplay packets", [&]() {
             handler.executeConsoleCommand("time set 1000");
@@ -423,6 +556,23 @@ int main() {
                             "Pruning an invalidated chunk retained its loader");
             }
             player.getChunkStreamState() = ChunkStreamState();
+            level.unregisterAllChunkLoaders(player.getRuntimeId());
+            player.resetChunkStreaming();
+        });
+        check("a teleport streams the whole view and keeps the chunks still in it", [&]() {
+            auto &state = player.getChunkStreamState();
+            player.setPosition(Vector3f(0, 140, 0));
+            const int64_t kept = ChunkStreamHandler::packChunk(2, 0);
+            state.mInRadius.insert(kept);
+            player.getSentChunks().insert(kept);
+            level.registerChunkLoader(player.getRuntimeId(), 2, 0);
+            player.setPosition(Vector3f(8, 140, 8));
+            ChunkStreamHandler::handleTeleport(handler, player);
+            require(player.getSentChunks().count(kept) == 1, "A short teleport dropped a chunk still in view");
+            const auto afterTeleport = state.mInRadius;
+            ChunkStreamHandler::handleViewDistanceChange(handler, player);
+            require(state.mInRadius == afterTeleport, "A teleport did not stream the whole view distance");
+            state = ChunkStreamState();
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();
         });
@@ -698,6 +848,31 @@ int main() {
             require(LevelPersistenceProbe::savedBlock(level, 15, 147, 15, "minecraft:diamond_block"),
                     "Save completed before generation backlog reached storage");
         });
+        check("an actor outside the loaded columns is saved where it stands", [&]() {
+            const int64_t column = ((int64_t) 40 << 32) | (uint32_t) 40;
+            require(handler.getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(column) == 0,
+                    "The fixture column already has its actors loaded");
+            Tag stored = Tag::ofCompound();
+            stored.putString("identifier", "minecraft:sheep");
+            stored.putLong("UniqueID", 0x7fff00000001);
+            level.saveEntities(40, 40, {stored});
+
+            ServerActor *pig = handler.spawnActor(level, "minecraft:pig", Vector3f(648.5f, 100.0f, 648.5f));
+            require(pig != nullptr, "Could not spawn the stray pig");
+            const int64_t pigId = pig->getUniqueId();
+            handler.saveAllActors();
+            handler.saveAllActors();
+
+            size_t pigs = 0;
+            bool sheep = false;
+            for (const Tag &entity: level.loadEntities(40, 40)) {
+                pigs += entity.getLong("UniqueID", 0) == pigId ? 1 : 0;
+                sheep = sheep || entity.getLong("UniqueID", 0) == 0x7fff00000001;
+            }
+            handler.removeActor(pigId);
+            require(pigs == 1, "An actor outside the loaded columns was not saved once in its column");
+            require(sheep, "Saving a stray actor dropped the actors stored in its column");
+        });
         check("explicit save reports disk errors", [&]() {
             const auto metadata = root / "worlds" / "World" / "level.dat";
             std::filesystem::remove(metadata);
@@ -781,6 +956,45 @@ int main() {
                                     == section.getBlock(index >> 8, index & 15, (index >> 4) & 15).getHash(),
                             "Network section indices point at other blocks");
             }
+        });
+        check("an unknown block is played as info_update and saved back as read", [&]() {
+            Tag states = Tag::ofCompound();
+            states.putInt("test:stage", 3);
+            SubChunk original(0);
+            original.setBlock(2, 3, 4, BlockState("test:removed_pack_block", states));
+            original.setBlock(5, 6, 7, BlockState("minecraft:stone"));
+            BinaryStream written;
+            original.writePersistent(written);
+
+            ReadOnlyBinaryStream input(written.getBuffer());
+            SubChunk loaded(0);
+            require(loaded.readPersistent(input), "A section with an unknown block did not load");
+            require(loaded.getBlock(2, 3, 4).mName == "minecraft:info_update"
+                            && loaded.getBlock(5, 6, 7).mName == "minecraft:stone"
+                            && loaded.getBlock(0, 0, 0).mName == "minecraft:air",
+                    "The unknown block was not shown as info_update");
+            BinaryStream rewritten;
+            loaded.writePersistent(rewritten);
+            require(rewritten.getBuffer() == written.getBuffer(), "The unknown block was not saved back unchanged");
+
+            LevelChunk chunk(0, 0);
+            chunk.getSubChunk(4) = loaded;
+            chunk.pack();
+            BinaryStream unpacked;
+            chunk.getSubChunk(4).writePersistent(unpacked);
+            require(unpacked.getBuffer() == written.getBuffer(), "A packed chunk lost the unknown block");
+
+            SubChunk placed(0);
+            placed.setBlock(2, 3, 4, loaded.getBlock(2, 3, 4));
+            loaded.setBlock(8, 8, 8, BlockState("minecraft:info_update"));
+            BinaryStream mixed;
+            loaded.writePersistent(mixed);
+            ReadOnlyBinaryStream mixedInput(mixed.getBuffer());
+            SubChunk reread(0);
+            require(placed.getBlock(2, 3, 4).getPreserved() != nullptr && reread.readPersistent(mixedInput)
+                            && reread.getBlock(8, 8, 8).getPreserved() == nullptr
+                            && reread.getBlock(2, 3, 4).getPreserved() != nullptr,
+                    "A real info_update took the unknown block's place, or a moved one lost it");
         });
         check("a packed chunk unpacks to exactly the same storage", [&]() {
             const char *names[] = {"minecraft:stone", "minecraft:dirt", "minecraft:water", "minecraft:glowstone",

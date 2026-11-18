@@ -1,5 +1,8 @@
 #include "World/Level/Storage/Loot/LootFunction.h"
 
+#include "World/Item/ArrowItem.h"
+#include "World/Item/DyeableItems.h"
+#include "World/Level/LevelGen/Random/GameRandom.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ExplorationMaps.h"
 #include "World/Item/MapItem.h"
@@ -17,6 +20,21 @@ namespace {
     const int32_t OMINOUS_BANNER_TYPE = 1;
     const int32_t OMINOUS_BANNER_DATA = 15;
     const char *EMPTY_MAP = "minecraft:empty_map";
+
+    // the colors the game draws from, in its order: white, light gray, gray, black, brown, red, orange, yellow, lime,
+    // green, cyan, light blue, blue, purple, magenta, pink
+    const uint32_t DYE_COLORS[] = {0xF0F0F0, 0x9D9D97, 0x474F52, 0x1D1D21, 0x835432, 0xB02E26, 0xF9801D, 0xFED83D,
+                                   0x80C71F, 0x5E7C16, 0x169C9C, 0x3AB3DA, 0x3C44AA, 0x8932B8, 0xC74EBD, 0xF38BAA};
+    const int32_t DYE_COLOR_COUNT = 16;
+    const float SECOND_DYE_CHANCE = 0.3f;
+    const float THIRD_DYE_CHANCE = 0.2f;
+
+    void addDyeColor(std::mt19937 &random, float *sum) {
+        const uint32_t color = DYE_COLORS[GameRandom::nextInt(random, DYE_COLOR_COUNT)];
+        sum[0] += (float) ((color >> 16) & 0xFF) / 255.0f;
+        sum[1] += (float) ((color >> 8) & 0xFF) / 255.0f;
+        sum[2] += (float) (color & 0xFF) / 255.0f;
+    }
 
     uint64_t randomSeed(const LootContext &context) {
         return ((uint64_t) context.mRandom() << 32) | (uint64_t) context.mRandom();
@@ -77,6 +95,8 @@ std::unique_ptr<LootFunction> LootFunction::create(const json::Value &definition
         return std::make_unique<SpecificEnchantsFunction>(definition);
     if (name == "set_potion")
         return std::make_unique<SetPotionFunction>(definition);
+    if (name == "random_dye")
+        return std::make_unique<RandomDyeFunction>(definition);
 
     return nullptr;
 }
@@ -220,8 +240,10 @@ SetPotionFunction::SetPotionFunction(const json::Value &definition)
 
 void SetPotionFunction::apply(LootDrop &drop, const LootContext &context) const {
     (void) context;
-    if (mPotionId >= 0)
-        drop.mData = mPotionId;
+    if (mPotionId < 0)
+        return;
+    // a tipped arrow keeps the potion one past its id: 0 is the plain arrow
+    drop.mData = ArrowItem::matches(drop.mIdentifier) ? mPotionId + 1 : mPotionId;
 }
 
 ExplorationMapFunction::ExplorationMapFunction(const json::Value &definition)
@@ -239,8 +261,35 @@ void ExplorationMapFunction::apply(LootDrop &drop, const LootContext &context) c
         return;
     }
 
-    // sub_1418BC9A0 flags loot maps with map_regenerate: the first player to carry one searches from where he is
+    // the game flags loot maps with map_regenerate: the first player to carry one searches from where he is
     drop.mIdentifier = MapItem::IDENTIFIER;
     drop.mData = entry->mAux;
     drop.mExtraData.putByte(MapItem::TAG_REGENERATE, 1);
+}
+
+RandomDyeFunction::RandomDyeFunction(const json::Value &definition) : LootFunction(definition) {}
+
+void RandomDyeFunction::apply(LootDrop &drop, const LootContext &context) const {
+    if (!DyeableItems::takesColor(drop.mIdentifier))
+        return;
+
+    float sum[3] = {0.0f, 0.0f, 0.0f};
+    int32_t colors = 1;
+    addDyeColor(context.mRandom, sum);
+    if (GameRandom::nextFloat(context.mRandom) < SECOND_DYE_CHANCE) {
+        addDyeColor(context.mRandom, sum);
+        ++colors;
+    }
+    if (GameRandom::nextFloat(context.mRandom) < THIRD_DYE_CHANCE) {
+        addDyeColor(context.mRandom, sum);
+        ++colors;
+    }
+
+    // the mix is the mean color, each channel truncated to a byte, fully opaque
+    uint32_t argb = 0xFF000000u;
+    for (int32_t channel = 0; channel < 3; ++channel) {
+        const float value = std::clamp(sum[channel] / (float) colors, 0.0f, 1.0f);
+        argb |= (uint32_t) (value * 255.0f) << (16 - 8 * channel);
+    }
+    drop.mExtraData.putInt(DyeableItems::TAG_CUSTOM_COLOR, (int32_t) argb);
 }

@@ -23,7 +23,7 @@ void MobAddRider::spawnPending(ServerNetworkHandler &owner, MobActor &vehicle) {
     std::vector<const json::Value *> pending;
     pending.swap(mPending);
     for (const json::Value *component: pending) {
-        // sub_146AA0F60: the riders list wins, the legacy entity_type only counts when the list is empty
+        // the riders list wins, the legacy entity_type only counts when the list is empty
         const json::Value *riders = component->get("riders");
         if (riders != nullptr && riders->isArray() && !riders->mArray.empty()) {
             for (const std::unique_ptr<json::Value> &rider: riders->mArray)
@@ -39,7 +39,7 @@ void MobAddRider::spawnPending(ServerNetworkHandler &owner, MobActor &vehicle) {
 
 void MobAddRider::_spawnRider(ServerNetworkHandler &owner, MobActor &vehicle, const std::string &identifier,
                               const std::string &event) {
-    // sub_14313C9A0: the rider is created at the vehicle with the spawn event as its init event, then starts riding,
+    // the rider is created at the vehicle with the spawn event as its init event, then starts riding,
     // and is removed again when the vehicle does not take it
     if (identifier.empty())
         return;

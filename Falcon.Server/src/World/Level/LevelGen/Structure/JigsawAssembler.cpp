@@ -45,7 +45,7 @@ namespace {
         return element.mTemplate == nullptr ? nullptr : StructureTemplate::load(element.mTemplate);
     }
 
-    // *_abandoned_targets: rewritten as the template is read (sub_14CD6B070, sub_1469B3520)
+    // *_abandoned_targets: rewritten as the template is read
     std::string retargeted(const JigsawElementData &element, const std::string &pool) {
         static const char *STYLES[] = {"plains", "savanna", "snowy", "taiga", "desert"};
         static const char *KINDS[] = {"streets", "houses", "decor"};
@@ -234,7 +234,6 @@ bool JigsawAssembler::_tryPool(size_t pieceIndex, const Marker &marker, const Ji
 
             for (const Marker &candidate: candidates) {
                 // no joint in the village files: rollable, so a vertical pair never compares tops
-                // sub_143C7EB60, sub_145C262B0
                 if (candidate.mName != marker.mName || marker.mFacing != OPPOSITE[(size_t) candidate.mFacing])
                     continue;
 

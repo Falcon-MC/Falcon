@@ -7,6 +7,7 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -25,7 +26,7 @@ namespace {
     }
 
     bool isFreeAbove(Level &level, int32_t x, int32_t y, int32_t z) {
-        return level.getBlockState(x, y, z).mName == "minecraft:air" && level.isSolidAt(x, y - 1, z);
+        return level.getBlockState(x, y, z).mName == BlockNames::AIR && level.isSolidAt(x, y - 1, z);
     }
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "World/Level/Chunk/ChunkStructureBounds.h"
 #include "World/Level/Chunk/LightStorage.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Chunk/SubChunk.h"
@@ -224,6 +225,24 @@ public:
         mRandomTicks = std::move(record);
     }
 
+    // the script named ticks (tag 'z'); empty when none waits
+    const std::string &getNamedTicks() const {
+        return mNamedTicks;
+    }
+
+    void setNamedTicks(std::string record) {
+        mNamedTicks = std::move(record);
+    }
+
+    // the structures post processed into the chunk (tag 'w'); written by the decoration that populates it
+    ChunkStructureBounds &getStructureBounds() {
+        return mStructureBounds;
+    }
+
+    const ChunkStructureBounds &getStructureBounds() const {
+        return mStructureBounds;
+    }
+
     // saved by Falcon before data version 2: its flowing blocks are rewritten on load
     bool needsLiquidMigration() const {
         return mNeedsLiquidMigration;
@@ -252,6 +271,8 @@ private:
     bool mPopulated = false;
     std::string mPendingTicks;
     std::string mRandomTicks;
+    std::string mNamedTicks;
+    ChunkStructureBounds mStructureBounds;
     bool mNeedsLiquidMigration = false;
     uint64_t mBaseSequence = 0;
     uint64_t mDecorationSequence = 0;

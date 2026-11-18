@@ -132,16 +132,7 @@ bool ArmorStandItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
 
     owner.broadcastLevelEvent(level, ArmorStandActor::LEVEL_EVENT_PLACE, spawnPosition, 0);
 
-    if (gameType != (int32_t) GameType::Creative) {
-        ItemStack remaining = item;
-        remaining.mCount--;
-        if (remaining.mCount <= 0)
-            remaining = ItemStack::air();
-
-        PlayerInventory &inventory = player.getInventory();
-        inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
-    }
+    player.consumeOneHeldItem();
 
     return true;
 }

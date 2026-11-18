@@ -8,8 +8,10 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 #include <sys/stat.h>
 #include <zlib.h>
 
@@ -134,6 +136,14 @@ bool PlayerDataProvider::hasData(const std::string &name) const {
     return stat(_getPlayerDataPath(name).c_str(), &info) == 0;
 }
 
+bool PlayerDataProvider::removeData(const std::string &name) const {
+    if (!isSafeName(name))
+        return false;
+
+    std::error_code error;
+    return std::filesystem::remove(_getPlayerDataPath(name), error) && !error;
+}
+
 bool PlayerDataProvider::loadData(const std::string &name, Tag &outData) const {
     if (!isSafeName(name))
         return false;
@@ -209,11 +219,21 @@ bool PlayerDataProvider::saveData(const std::string &name, const Tag &data) cons
     if (!_gzipCompress(stream.getBuffer(), compressed))
         return false;
 
-    std::ofstream file(_getPlayerDataPath(name), std::ios::binary | std::ios::trunc);
-    if (!file.is_open())
-        return false;
+    // written beside the save, then renamed over it: a crash mid-write leaves the previous save whole
+    const std::string path = _getPlayerDataPath(name);
+    const std::string pending = path + ".tmp";
+    {
+        std::ofstream file(pending, std::ios::binary | std::ios::trunc);
+        if (!file.is_open())
+            return false;
 
-    file.write(compressed.data(), (std::streamsize) compressed.size());
-    file.flush();
-    return file.good();
+        file.write(compressed.data(), (std::streamsize) compressed.size());
+        file.flush();
+        if (!file.good())
+            return false;
+    }
+
+    std::error_code error;
+    std::filesystem::rename(pending, path, error);
+    return !error;
 }

@@ -11,6 +11,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -177,7 +178,7 @@ void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) 
     }
 
     const BlockState existing = level.getBlockState(position.x, position.y, position.z);
-    const bool blocked = existing.mName != "minecraft:air" && FallingBlockSystem::isTransparent(existing)
+    const bool blocked = existing.mName != BlockNames::AIR && FallingBlockSystem::isTransparent(existing)
                          && !BlockSupport::isReplaceable(existing);
 
     if (blocked) {
@@ -227,7 +228,7 @@ void FallingBlock::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &p
         const std::string next = FallingBlockSystem::getNextAnvilDamage(state.mName);
 
         if (next.empty())
-            FallingBlockSystem::setBlockState(owner, level, position, BlockState("minecraft:air"));
+            FallingBlockSystem::setBlockState(owner, level, position, BlockState(BlockNames::AIR));
         else
             FallingBlockSystem::setBlockState(owner, level, position, BlockState(next));
     }

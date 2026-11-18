@@ -24,7 +24,7 @@ bool FlintAndSteelItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &
     (void) item;
     (void) clickPosition;
 
-    if (player.getGameType() == (int32_t) GameType::Adventure)
+    if (player.isAdventure())
         return false;
 
     Level &level = owner.getLevelFor(player);

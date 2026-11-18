@@ -6,6 +6,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,12 +22,7 @@ namespace {
         return generator;
     }
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
     bool isAvoidablePlayer(const ServerPlayer &player) {
         const int32_t gameType = player.getGameType();
@@ -99,13 +95,13 @@ const Actor *AvoidMobTypeGoal::_findThreat(ServerNetworkHandler &owner, MobActor
         }
     };
 
-    for (auto &player: owner.getPlayers()) {
-        if (isAvoidablePlayer(player.second))
-            consider(player.second);
-    }
     float searchRadius = 0.0f;
     for (const Entry &option: mEntries)
         searchRadius = std::max(searchRadius, option.mMaxDistance);
+    owner.forEachPlayerNear(mob.getPosition(), searchRadius, [&](const ServerPlayer &player) {
+        if (isAvoidablePlayer(player))
+            consider(player);
+    });
     owner.forEachActorNear(mob.getPosition(), searchRadius, consider);
 
     return nearest;

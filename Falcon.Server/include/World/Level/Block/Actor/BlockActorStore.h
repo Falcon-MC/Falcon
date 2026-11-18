@@ -55,7 +55,7 @@ public:
 
     void tick(ServerNetworkHandler &owner);
 
-    std::vector<Tag> saveChunk(int32_t chunkX, int32_t chunkZ) const;
+    std::vector<Tag> saveChunk(int32_t chunkX, int32_t chunkZ);
 
     std::string encodeChunkNetwork(int32_t chunkX, int32_t chunkZ) const;
 
@@ -72,7 +72,29 @@ public:
     void loadChunk(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockActors,
                    const PacketCodecContext &context);
 
+    // stored block actors joining a chunk already loaded
+    void addLoaded(const std::vector<Tag> &blockActors, const PacketCodecContext &context);
+
+    // load a generated actor when possible, or keep its tag for the next chunk load
+    void keepGenerated(const Tag &data);
+
     static std::unique_ptr<BlockActor> create(const std::string &blockActorId);
+
+    // a block actor of no registered class lives as long as the block it was loaded with
+    void onBlockReplaced(const Vector3i &position);
+
+    template <typename Visitor>
+    void forEachInChunk(int32_t chunkX, int32_t chunkZ, Visitor &&visit) {
+        const std::unordered_set<int64_t> *positions = _positionsIn(chunkX, chunkZ);
+        if (positions == nullptr)
+            return;
+
+        for (const int64_t key: *positions) {
+            const auto found = mBlockActors.find(key);
+            if (found != mBlockActors.end())
+                visit(*found->second);
+        }
+    }
 
     template <typename T>
     std::vector<T *> findAll() {
@@ -86,7 +108,24 @@ public:
     }
 
 private:
+    void _loadOne(const Tag &data, const PacketCodecContext *context);
+    void _index(int64_t key);
+
+    // once neither kind is left at the position
+    void _unindex(int64_t key);
+
+    const std::unordered_set<int64_t> *_positionsIn(int32_t chunkX, int32_t chunkZ) const;
+
+    // kept as read and written back untouched: dropping it would wipe it from the world
+    struct UnknownBlockActor {
+        Tag mData;
+        std::string mBlock;
+    };
+
     Level *mLevel;
     std::unordered_map<int64_t, std::unique_ptr<BlockActor>> mBlockActors;
+    std::unordered_map<int64_t, UnknownBlockActor> mUnknownBlockActors;
+    // packed chunk -> packed positions holding either kind: per chunk work never walks the whole level
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> mChunkIndex;
     std::unordered_set<int64_t> mLoadedChunks;
 };

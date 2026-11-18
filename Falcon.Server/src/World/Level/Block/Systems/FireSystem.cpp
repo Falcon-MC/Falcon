@@ -16,6 +16,8 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <array>
@@ -39,10 +41,10 @@ namespace {
         std::map<int64_t, std::vector<ScheduledPosition>> mBuckets;
     };
 
-    std::unordered_map<int32_t, FireSchedule> gSchedules;
+    std::unordered_map<const Level *, FireSchedule> gSchedules;
 
     FireSchedule &scheduleOf(Level &level) {
-        return gSchedules[level.getDimensionId()];
+        return gSchedules[&level];
     }
 
     const char *UNBURNABLE_BLOCKS[] = {"minecraft:crimson_button",
@@ -91,12 +93,7 @@ namespace {
         return distribution(fireRandom());
     }
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size())
-            return false;
-
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool isChunkReady(Level &level, const Vector3i &position) {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
@@ -107,7 +104,7 @@ namespace {
 
     BlockState stateAt(Level &level, const Vector3i &position) {
         if (!isChunkReady(level, position))
-            return BlockState("minecraft:air");
+            return BlockState(BlockNames::AIR);
 
         return level.getBlockState(position.x, position.y, position.z);
     }
@@ -171,7 +168,7 @@ namespace {
 
     void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
         const BlockState previous = stateAt(level, position);
-        level.setBlock(position, BlockState("minecraft:air"), false);
+        level.setBlock(position, BlockState(BlockNames::AIR), false);
         level.onBlockBroken(position, previous);
     }
 
@@ -203,7 +200,7 @@ namespace {
     }
 
     int chanceOfNeighboursEncouragingFire(Level &level, const Vector3i &position) {
-        if (stateAt(level, position).mName != "minecraft:air")
+        if (stateAt(level, position).mName != BlockNames::AIR)
             return 0;
 
         int chance = 0;
@@ -257,14 +254,13 @@ namespace {
     // every player and actor each tick: peek, no state copy
     bool isFireAt(Level &level, const Vector3i &position) {
         const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
-        return state != nullptr && FireSystem::matches(state->mName);
+        // nearly every actor stands in air: no name to look up
+        return state != nullptr && state->mName != BlockNames::AIR && FireSystem::matches(state->mName);
     }
 
     void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
-        if (actor.isDead() || actor.isProjectile() || !actor.isIn(level))
-            return;
-
-        if (actor.hasEffect(MobEffectId::FireResistance))
+        // the block first: it rules out nearly every actor before anything is asked of the actor
+        if (!actor.isIn(level))
             return;
 
         const Vector3f position = actor.getPosition();
@@ -272,6 +268,9 @@ namespace {
                              (int32_t) std::floor(position.z));
 
         if (!isFireAt(level, block))
+            return;
+
+        if (actor.isDead() || actor.isProjectile() || actor.hasEffect(MobEffectId::FireResistance))
             return;
 
         actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
@@ -343,7 +342,7 @@ bool FireSystem::ignite(ServerNetworkHandler &owner, Level &level, const Vector3
     if (!isChunkReady(level, position))
         return false;
 
-    if (stateAt(level, position).mName != "minecraft:air")
+    if (stateAt(level, position).mName != BlockNames::AIR)
         return false;
 
     if (canLightPortal && ObsidianBlock::tryLightPortal(level, position, &owner))
@@ -520,4 +519,8 @@ void FireSystem::tick(ServerNetworkHandler &owner, Level &level) {
         if (actor != nullptr)
             touchActor(owner, level, *actor);
     }
+}
+
+void FireSystem::forgetLevel(const Level &level) {
+    gSchedules.erase(&level);
 }

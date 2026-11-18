@@ -55,6 +55,16 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
                   | ((uint32_t) context.contact.liquid.eyeSubmerged << 7);
     prediction.validator->trace().record(frame);
 
+    // a simulated player reports what the server simulates: nothing to reconcile or correct
+    if (context.player.isSimulated()) {
+        context.player.setSimulatedPosition(state.simulated);
+        context.player.setSimulatedOnGround(state.onGround);
+        context.player.setSimulatedVelocity(state.velocity);
+        *prediction.feetPosition = state.simulated;
+        context.player.setMotion(state.velocity);
+        return;
+    }
+
     const Vector3f reported = *prediction.feetPosition;
     // the exit moves the player itself; reconciling it would turn up to 15 blocks into velocity
     if (prediction.validator->stillSeated(state.start, reported)) {
@@ -90,7 +100,7 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
     const bool needsCorrection = prediction.validator->reconcile(
             acceptedPosition, *prediction.feetPosition, (uint64_t) input.getPacket().mTick,
             context.owner.getProperties().getPlayerPositionAcceptanceThreshold(), prediction.strict, &details);
-    // ReplayState (0x140E70E40) steers next tick's velocity toward acceptPos; this tick's position stays,
+    // ReplayState steers next tick's velocity toward acceptPos; this tick's position stays,
     // fine-threshold adoption included
     state.velocity.x += acceptedPosition.x - state.simulated.x;
     state.velocity.y += acceptedPosition.y - state.simulated.y;

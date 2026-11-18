@@ -14,6 +14,7 @@ FALCON_REGISTER_ITEM(MapItem, 100);
 #include "World/Level/World.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <unordered_map>
@@ -24,7 +25,7 @@ namespace {
     const float WHITE[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     const float NETHER_RED[4] = {1.0f, 0.0f, 0.0f, 1.0f};
     const float END_MAGENTA[4] = {1.0f, 0.0f, 1.0f, 1.0f};
-    // sub_1483F0C40 (qword_14F3557C0): frame facings 2 to 5 turn the marker by these degrees
+    // frame facings 2 to 5 turn the marker by these degrees
     const float FRAME_ROTATIONS[4] = {180.0f, 0.0f, 90.0f, 270.0f};
 
     class LevelMapSource final : public MapRenderSource {
@@ -84,23 +85,14 @@ namespace {
         }
 
     private:
-        static constexpr const char *AIR = "minecraft:air";
+        static constexpr const char *AIR = BlockNames::AIR;
 
         MapBiomeColors _colorsOf(uint32_t biomeId) {
             const auto cached = mCache.find(biomeId);
             if (cached != mCache.end())
                 return cached->second;
 
-            MapBiomeColors colors;
-            for (const BiomeDefinitionData &biome: mBiomes.getBiomes()) {
-                if (biome.mId != biomeId)
-                    continue;
-
-                colors.mTemperature = biome.mTemperature;
-                colors.mDownfall = biome.mDownfall;
-                colors.mWaterColor = (uint32_t) biome.mMapWaterColorArgb;
-                break;
-            }
+            const MapBiomeColors colors = MapColors::biomeColors(mBiomes, biomeId);
             mCache.emplace(biomeId, colors);
             return colors;
         }
@@ -240,7 +232,7 @@ bool MapItem::updateTrackedDecoration(ServerNetworkHandler &owner, World &world,
             MapDecorationType type = MapDecorationType::MarkerWhite;
             if (!holding
                 && (player->getFlags().get(ActorFlag::Invisible)
-                    || player->getGameType() == (int32_t) GameType::Spectator))
+                    || player->isSpectator()))
                 type = MapDecorationType::NoDraw;
 
             if (holding || dimension != mapDimension) {
@@ -268,7 +260,7 @@ void MapItem::updateTrackedDecorations(ServerNetworkHandler &owner, World &world
 }
 
 void MapItem::tickCarriedBy(ServerNetworkHandler &owner, World &world, MapItemSavedData &data, const ItemStack *item) {
-    // GameplayUserManager::_addTrackedMapPlayers: every player of the world follows the map
+    // every player of the world follows the map
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
         if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent || &owner.getWorldFor(player) != &world)

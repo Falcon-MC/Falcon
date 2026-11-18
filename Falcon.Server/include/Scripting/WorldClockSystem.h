@@ -25,7 +25,7 @@ struct WorldClock {
     bool mMarkersChecked = false;
 };
 
-// the reasons the game formats in sub_145D07980 and sub_145D07DD0
+// the reasons the game formats
 enum class WorldClockError {
     None,
     TooManyClocks,
@@ -45,7 +45,7 @@ public:
     static constexpr size_t MAX_CLOCKS = 256;
     static constexpr size_t MAX_MARKERS = 256;
     static constexpr size_t MAX_NAME_LENGTH = 128;
-    // sub_145E1A5C0: every clock's state goes to every client this often
+    // every clock's state goes to every client this often
     static constexpr int64_t SYNC_INTERVAL_TICKS = 256;
     static constexpr const char *STORAGE_KEY = "WorldClocks";
 
@@ -60,7 +60,7 @@ public:
         std::function<void(const WorldClock &, const WorldClockMarker &, bool added)> mMarkerChanged;
     };
 
-    // sub_140B49930, sub_145D09A00: the level's day time is the overworld clock
+    // the level's day time is the overworld clock
     struct LevelTime {
         std::function<int64_t()> mGet;
         std::function<void(int64_t)> mSet;
@@ -112,7 +112,7 @@ public:
     // every clock's state, as SyncState sends it
     void writeStates(SyncWorldClocksPacket &packet) const;
 
-    // sub_145D0B870: {clocks: [{Name, Time, IsPaused}]}; markers come from registration
+    // {clocks: [{Name, Time, IsPaused}]}; markers come from registration
     Tag save() const;
 
     // a clock registered later takes its saved state then

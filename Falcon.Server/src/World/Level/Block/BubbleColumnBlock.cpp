@@ -15,7 +15,7 @@ namespace {
         return dynamic_cast<const T *>(VanillaBlocks::fromState(state)) != nullptr;
     }
 
-    // sub_1435B5C60: soul sand lifts, a column passes its own drag on, anything else pulls down
+    // soul sand lifts, a column passes its own drag on, anything else pulls down
     bool dragOf(const BlockState &below) {
         if (is<SoulSandBlock>(below))
             return false;
@@ -67,7 +67,7 @@ bool BubbleColumnBlock::growAbove(LiquidPhysicsSystem &ticks, const Vector3i &po
     return true;
 }
 
-// sub_1435B4130: a tick one later, and no column stands without a water source on layer 1
+// a tick one later, and no column stands without a water source on layer 1
 void BubbleColumnBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                     const BlockState &state) const {
     (void) state;
@@ -77,7 +77,7 @@ void BubbleColumnBlock::onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &
         ticks.write(position, 0, BlockState());
 }
 
-// sub_14A431360: one tick for a change below, two otherwise, never merged
+// one tick for a change below, two otherwise, never merged
 void BubbleColumnBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                                const BlockState &state, const Vector3i &changed) const {
     (void) state;
@@ -85,7 +85,7 @@ void BubbleColumnBlock::onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const
     ticks.queueTick(position, this, below ? 1 : 2);
 }
 
-// sub_1435B46E0: gone without support, else one higher
+// gone without support, else one higher
 void BubbleColumnBlock::onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position,
                                      const BlockState &state) const {
     if (!_isSupported(ticks, position, state)) {

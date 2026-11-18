@@ -9,6 +9,7 @@
 #include "World/Level/Storage/BlockStateUpgrades.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <random>
@@ -16,7 +17,7 @@
 #include <utility>
 
 namespace {
-    const char *const AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *const GRIEFING_RULE = "mobgriefing";
     const float DEFAULT_CHANCE = 1.0f;
 

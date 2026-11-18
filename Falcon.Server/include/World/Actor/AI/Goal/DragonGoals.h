@@ -33,7 +33,7 @@ private:
     const char *mGroup;
 };
 
-// sub_14D1D0480: circles the island, decides when to land or chase a player
+// circles the island, decides when to land or chase a player
 class DragonHoldingPatternGoal final : public DragonGoal {
 public:
     DragonHoldingPatternGoal();
@@ -56,7 +56,7 @@ private:
     bool mClockwise = false;
 };
 
-// sub_14D1D2E50: fireball once it faces the target
+// fireball once it faces the target
 class DragonStrafePlayerGoal final : public DragonGoal {
 public:
     struct Settings {
@@ -95,7 +95,7 @@ private:
     int32_t mInView = 0;
 };
 
-// sub_14D1CEA20: dives at the nearest player once it leaves the portal to charge
+// dives at the nearest player once it leaves the portal to charge
 class DragonChargePlayerGoal final : public DragonGoal {
 public:
     struct Settings {
@@ -125,7 +125,7 @@ private:
     int32_t mTimer = 0;
 };
 
-// sub_14D1D1110: follows the nodes down to the exit portal
+// follows the nodes down to the exit portal
 class DragonLandingGoal final : public DragonGoal {
 public:
     DragonLandingGoal();
@@ -146,7 +146,7 @@ private:
     bool mFinalApproach = false;
 };
 
-// sub_14D1CF740: roars, then breathes dragon's breath in front of the portal
+// roars, then breathes dragon's breath in front of the portal
 class DragonFlamingGoal final : public DragonGoal {
 public:
     struct Settings {
@@ -180,7 +180,7 @@ private:
     int32_t mRoar = 0;
 };
 
-// sub_14D1D1B20, sub_14D1D2130: looks for a player to flame or charge
+// looks for a player to flame or charge
 class DragonScanningGoal final : public DragonGoal {
 public:
     DragonScanningGoal();
@@ -200,7 +200,7 @@ private:
     float mScanTime = 0.0f;
 };
 
-// sub_14D1D3B50: leaves toward the node it looks at
+// leaves toward the node it looks at
 class DragonTakeoffGoal final : public DragonGoal {
 public:
     DragonTakeoffGoal();
@@ -221,7 +221,7 @@ private:
     bool mFirstTick = false;
 };
 
-// sub_14D1CED00: flies back over the portal to die there
+// flies back over the portal to die there
 class DragonDeathGoal final : public DragonGoal {
 public:
     DragonDeathGoal();

@@ -52,7 +52,7 @@ public:
     // a tick for the liquid now at the position
     void schedule(const Vector3i &position, int64_t delay);
 
-    // FillCommand writes every block with flag 2, then updates the neighbours of each in turn (sub_14BE6B770);
+    // FillCommand writes every block with flag 2, then updates the neighbours of each in turn;
     // only the writes asked for go quiet, not what their place events write
     class QuietWrites {
     public:
@@ -72,7 +72,7 @@ public:
         bool mPrevious;
     };
 
-    // BlockSource::updateNeighborsAt for the liquid side of a block written quietly
+    // neighbour updates for the liquid side of a block written quietly
     void updateNeighbours(const Vector3i &position);
 
     // columns sorted by z, then x
@@ -141,7 +141,6 @@ public:
     bool allows(const Vector3i &position, const BlockState &state, BlockChangeCause cause,
                 const Vector3i *source = nullptr);
 
-    // BlockSource::addToTickingQueue (+0x130) and addToRandomTickingQueue (+0x138), sub_14381A930
     void queueTick(const Vector3i &position, const Block *block, int32_t delay);
     void queueRandomTick(const Vector3i &position, const Block *block, int32_t delay);
 
@@ -149,7 +148,7 @@ public:
         return mTicks.isPending(position, block, delay);
     }
 
-    // any tick in either queue for the position (sub_1432CCA10)
+    // any tick in either queue for the position
     bool hasTickAt(const Vector3i &position) const {
         return mTicks.hasTickAt(position) || mRandomTicks.hasTickAt(position);
     }
@@ -264,7 +263,7 @@ private:
     std::vector<LiquidChange> mChanges;
     bool mNotify = true;
     bool mQuiet = false;
-    // sub_149C41E60 defers solidify checks raised while one runs
+    // the game defers solidify checks raised while one runs
     bool mSolidifying = false;
     std::deque<SolidifyCheck> mDeferredSolidify;
 };

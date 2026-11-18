@@ -80,6 +80,8 @@ namespace {
             definition.mMaxStackSize = descriptor->maxStackSize > 64 ? 64 : (int32_t) descriptor->maxStackSize;
         definition.mMaxDurability = (int32_t) descriptor->maxDurability;
         definition.mHandEquipped = descriptor->handEquipped != 0;
+        // the descriptor has no field for it: plugin items keep going in the off hand
+        definition.mAllowOffHand = true;
 
         const CustomItemDefinition *stored = CustomContentRegistry::getInstance().registerItem(
                 definition, PluginApiHelpers::owner().getItemDefinitions());

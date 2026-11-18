@@ -16,7 +16,10 @@
 #include "World/Level/LevelGen/ChunkGenerator.h"
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "World/Level/GameRules.h"
+#include "World/Level/NamedTickQueue.h"
+#include "World/Level/NeighborChangeQueue.h"
 #include "World/Level/Storage/LevelStorage.h"
+#include "World/Village/PoiManager.h"
 #include "World/Village/VillageManager.h"
 
 #include <chrono>
@@ -31,6 +34,7 @@
 #include <vector>
 
 class Actor;
+class GameEvent;
 class Packet;
 class Particle;
 class ServerNetworkHandler;
@@ -41,6 +45,9 @@ class Level {
     friend class LevelPersistenceProbe;
 
 public:
+    // ticks in a day
+    static constexpr int64_t TICKS_PER_DAY = 24000;
+
     struct ChunkPosition {
         int32_t mX;
         int32_t mZ;
@@ -48,6 +55,8 @@ public:
 
     Level(const std::string &name, int viewDistance, int64_t seed = 0,
           DimensionType dimension = DimensionType::Overworld);
+
+    ~Level();
 
     Level &operator=(Level &&other) noexcept;
 
@@ -94,7 +103,7 @@ public:
     }
 
     int64_t getDayTime() const {
-        return mTime % 24000;
+        return mTime % TICKS_PER_DAY;
     }
 
     void setTime(int64_t time) {
@@ -109,12 +118,17 @@ public:
         return getDayTime() > 13184 && getDayTime() < 22800;
     }
 
+    int64_t getWorldTick() const {
+        return mWorldTick;
+    }
+
     void tickTime() {
+        ++mWorldTick;
         if (!mTimePaused && mGameRules.getBool("dodaylightcycle"))
             ++mTime;
     }
 
-    // sub_140B49930: the day is the minecraft:overworld clock, paused with it
+    // the day is the minecraft:overworld clock, paused with it
     void setTimePaused(bool paused) {
         mTimePaused = paused;
     }
@@ -153,6 +167,17 @@ public:
 
     void initializeWeather();
 
+    // each level moves 0.01 a tick toward its state, within [0, 1]
+    void tickWeatherLevels();
+
+    float getRainLevel() const {
+        return mRainLevel;
+    }
+
+    float getLightningLevel() const {
+        return mLightningLevel;
+    }
+
     void saveWeather();
 
     using PacketBroadcaster = std::function<void(Level &, const Vector3f &, const Packet &)>;
@@ -162,6 +187,10 @@ public:
     }
 
     void addParticle(const Particle &particle);
+
+    // listeners of the chunks within 16 blocks hear it now, each inside its own range
+    void postGameEvent(const GameEvent &event, const Vector3f &position, Actor *source = nullptr,
+                       const BlockState *block = nullptr);
 
     BlockActorStore &getBlockActors() {
         return mBlockActors;
@@ -213,8 +242,12 @@ public:
 
     void closeStorage();
 
-    void compactStorage() {
-        mStorage.compact();
+    std::function<void()> storageCompactionTask() const {
+        return mStorage.compactionTask();
+    }
+
+    bool isStorageWriteStalled() const {
+        return mStorage.isWriteStalled();
     }
 
     bool isStorageOpen() const {
@@ -222,6 +255,13 @@ public:
     }
 
     void saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
+
+    // the entity and block entity writes in between go to the database as one write (LevelStorage::beginBatch())
+    void beginStorageBatch();
+
+    bool commitStorageBatch();
+
+    void appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
 
     std::vector<Tag> loadEntities(int32_t chunkX, int32_t chunkZ);
 
@@ -240,6 +280,18 @@ public:
     bool saveSavedData(const std::string &key, const Tag &data, bool wrapped = true);
 
     bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
+
+    std::vector<std::pair<std::string, Tag>> loadSavedDataWithPrefix(const std::string &prefix) {
+        return mStorage.loadSavedDataWithPrefix(prefix);
+    }
+
+    bool eraseSavedData(const std::string &key) {
+        return mStorage.eraseSavedData(key);
+    }
+
+    bool hasSavedData(const std::string &key) {
+        return mStorage.hasSavedData(key);
+    }
 
     void saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities);
 
@@ -286,7 +338,7 @@ public:
     bool isChunkPopulated(int32_t chunkX, int32_t chunkZ) const;
 
     /**
-     * Whether storage holds the chunk (DBChunkStorage::isChunkSaved, sub_1406CAF60). The answers are cached as the
+     * Whether storage holds the chunk. The answers are cached as the
      * game does, until the cache fills or storage is reopened; a chunk queued for saving counts as saved.
      */
     bool isChunkSaved(int32_t chunkX, int32_t chunkZ);
@@ -297,7 +349,7 @@ public:
      */
     bool isNearStructure(const std::vector<const StructureFeature *> &features, int32_t chunkX, int32_t chunkZ);
 
-    // sub_14228D8A0; false for an unknown map
+    // false for an unknown map
     bool applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels);
 
     // the world's maps, kept on the overworld whose database stores them; written by the next saveAll
@@ -361,7 +413,7 @@ public:
 
     int32_t getHeightAt(int32_t x, int32_t z);
 
-    // BlockSource::getAboveTopSolidBlock without water or leaves (0x1432D1700, LevelChunk part sub_1438650A0);
+    // above the top solid block, without water or leaves;
     // Nether: skips the solid blocks at y first, a column under the ceiling finds the ground
     int32_t getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z);
 
@@ -406,9 +458,32 @@ public:
 
     std::vector<AxisAlignedBB> getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor = nullptr);
 
+    // told of every block set through the level, either layer, once it is in place; one watcher at a time,
+    // an empty one to stop
+    void setBlockWatcher(std::function<void(int32_t, int32_t, int32_t)> watcher) {
+        mBlockWatcher = std::move(watcher);
+    }
+
+    // between the two, a block change only notes its column, as the liquids of a tick do: the sky light of
+    // each is worked out once at the end, however many of its blocks changed. For a burst of changes nobody
+    // reads the light during
+    void beginSkyLightBatch();
+
+    void endSkyLightBatch();
+
+    // true when getCollisionBoxes would surely come back empty, asked of whole chunk sections: a long move
+    // through open sky or water is known free without walking its blocks. false tells nothing
+    bool isFreeOfColliders(const AxisAlignedBB &area, const Actor *actor = nullptr);
+
+    // actors others stand on like a block, the mover and its vehicle left out
+    void appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *actor, std::vector<AxisAlignedBB> &out);
+
     void setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash);
 
     void setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state);
+
+    // an actor stays only under a block carrying its type
+    void removeForeignBlockActor(const Vector3i &position, const BlockState &state);
 
     BlockState getBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer);
 
@@ -424,6 +499,10 @@ public:
 
     VillageManager &getVillageManager() {
         return mVillageManager;
+    }
+
+    PoiManager &getPoiManager() {
+        return mPoiManager;
     }
 
     void scheduleBlockUpdate(const Vector3i &position, int64_t delay = 1);
@@ -463,6 +542,11 @@ public:
 
     bool isColumnActive(int32_t chunkX, int32_t chunkZ) const;
 
+    // the same columns in rows of x, as a view source walks them
+    const std::vector<int64_t> &getActiveColumnOrder() const {
+        return mActiveColumnOrder;
+    }
+
     const std::unordered_set<int64_t> &getActiveColumns() const {
         return mActiveColumns;
     }
@@ -473,6 +557,21 @@ public:
 
     size_t getLastFluidProcessedCount() const {
         return mLiquidPhysics.getLastProcessedCount();
+    }
+
+    NamedTickQueue &getNamedTicks() {
+        return mNamedTicks;
+    }
+
+    // the experiments level.dat turns on, by toggle name
+    const std::vector<std::string> &getExperiments() const {
+        return mExperiments;
+    }
+
+    bool hasExperiment(const std::string &name) const;
+
+    void setExperiments(std::vector<std::string> experiments) {
+        mExperiments = std::move(experiments);
     }
 
     LiquidPhysicsSystem &getLiquidPhysics() {
@@ -526,6 +625,17 @@ private:
 
     void _syncPendingTicks(LevelChunk &chunk);
 
+    // the chunk's PendingTicks, RandomTicks and named tick records into the queues
+    void _loadPendingTicks(LevelChunk &chunk);
+
+    void _dropPendingTicks(int32_t chunkX, int32_t chunkZ);
+
+    void _tickNamedTicks();
+
+    void _recordNeighborChange(int32_t x, int32_t y, int32_t z, const BlockState &previous, const BlockState &current);
+
+    void _tickNeighborChanges();
+
     // sky columns relit once at the end of a liquid tick instead of once a write
     void _flushLightBatch();
 
@@ -557,6 +667,9 @@ private:
 
     void _queueCompletedSaves(int32_t chunkX, int32_t chunkZ);
 
+    // a chunk loaded for its block actors or actors before its decoration came back gets that decoration's
+    void _storeGeneratedContent(ChunkLoadResult &result);
+
     void _finishPendingChangeWrite(bool wait);
 
     size_t _generationBacklog() const {
@@ -586,11 +699,21 @@ private:
     TerrainCache *mTerrainCache = nullptr;
     LevelStorage mStorage;
     LiquidPhysicsSystem mLiquidPhysics;
+    NamedTickQueue mNamedTicks;
+    NeighborChangeQueue mNeighborChanges;
+    std::vector<std::string> mExperiments;
     int64_t mLiquidTick = 0;
     bool mBatchLight = false;
     std::unordered_set<int64_t> mBatchedLightColumns;
     VillageManager mVillageManager;
+    PoiManager mPoiManager;
+    int32_t mSkyLightBatches = 0;
+    std::function<void(int32_t, int32_t, int32_t)> mBlockWatcher;
     std::unordered_map<int64_t, LevelChunk> mChunks;
+    // a level going away takes its chunks with it: whoever remembers one has to forget it
+    struct ChunkMemoGuard {
+        ~ChunkMemoGuard();
+    } mChunkMemoGuard;
     static const size_t MAX_CHUNK_INSERTS_PER_TICK = 32;
     // drained results awaiting insertion; new requests wait at this many
     static const size_t MAX_COMPLETED_BACKLOG = 64;
@@ -661,10 +784,13 @@ private:
     std::future<std::vector<GeneratedBlockChange>> mPendingChangeWrite;
     std::unique_ptr<ChunkWorker> mChunkWorker;
     int64_t mTime = 0;
+    int64_t mWorldTick = 0;
     bool mTimePaused = false;
     bool mRaining = false;
     int32_t mRainTime = 0;
     bool mThundering = false;
+    float mRainLevel = 0.0f;
+    float mLightningLevel = 0.0f;
     int32_t mThunderTime = 0;
     int32_t mSkyLightSubtracted = 0;
     GameRules mGameRules;

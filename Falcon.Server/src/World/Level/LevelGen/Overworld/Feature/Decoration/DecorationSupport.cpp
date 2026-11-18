@@ -11,6 +11,7 @@
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace DecorationSupport {
 
@@ -40,7 +41,7 @@ namespace DecorationSupport {
     }
 
     bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 
     bool isTransparent(const BlockState &state) {
@@ -73,7 +74,7 @@ namespace DecorationSupport {
     }
 
     bool isGrass(const BlockState &state) {
-        return state.mName == "minecraft:grass_block";
+        return state.mName == BlockNames::GRASS_BLOCK;
     }
 
     bool canBeReplaced(const BlockState &state) {

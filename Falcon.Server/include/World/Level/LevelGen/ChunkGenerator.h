@@ -30,7 +30,7 @@ public:
     virtual int32_t pickBiome(int32_t x, int32_t y, int32_t z) const = 0;
 
     // y above the top solid or liquid block from terrain generation alone: what the game reads for an unloaded
-    // column (sub_14A2298E0); generates a throwaway chunk: any thread, but not cheap
+    // column; generates a throwaway chunk: any thread, but not cheap
     virtual int32_t getPreliminaryHeight(int32_t x, int32_t z) const;
 
     // y above the top solid block of the generated column, carvers included and liquids skipped: where the game

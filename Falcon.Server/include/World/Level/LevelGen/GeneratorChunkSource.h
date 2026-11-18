@@ -8,8 +8,11 @@
 #include <condition_variable>
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -18,7 +21,7 @@ class ChunkGenerator;
 class LevelChunk;
 
 // shared by every worker: chunks as the decorations left them, handed out as copies; the game decorates its live
-// chunks: reads what neighbours placed, writes into them at once (sub_1432CD550, sub_1432CE930)
+// chunks: reads what neighbours placed, writes into them at once
 class TerrainCache {
 public:
     static constexpr size_t MAX_CACHED_CHUNKS = 1024;
@@ -74,7 +77,7 @@ public:
 
     void setStoredLoader(StoredLoader loader);
 
-    // sub_145CEA040 locks the 3x3 too: two neighbours never decorate at once; waits instead of retrying later
+    // the game locks the 3x3 too: two neighbours never decorate at once; waits instead of retrying later
     std::unique_ptr<DecorationArea> lockArea(int32_t chunkX, int32_t chunkZ);
 
     // a decoration of this chunk is queued: neighbours of a later class wait for it
@@ -85,6 +88,14 @@ public:
     bool awaitsEarlierNeighbour(int32_t chunkX, int32_t chunkZ);
 
     void waitForDecoration(std::chrono::milliseconds timeout);
+
+    // a value the first decorated chunk of a structure start fixes for the whole start, as the game keeps it in the
+    // piece every chunk shares; in memory only, as in the game: temple starts and pieces are only ever built by
+    // createStart, never loaded, so the next session draws the value again
+    bool findStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t &value);
+
+    // keeps the value stored first for the start and returns it
+    int32_t storeStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t value);
 
 private:
     struct Entry {
@@ -127,12 +138,17 @@ private:
     std::condition_variable mReleased;
     std::unordered_map<int64_t, int32_t> mExpected;
     uint64_t mSequence = 0;
+
+    std::mutex mStartMutex;
+    std::map<std::tuple<std::string, int32_t, int32_t>, int32_t> mStartValues;
 };
 
 // per worker: a private scratch level holding a chunk and its neighbours, from the shared TerrainCache, while decorated
 class GeneratorChunkSource {
 public:
-    GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache);
+    using Decoration = std::function<void(Level &, LevelChunk &, std::vector<GeneratedBlockChange> *)>;
+
+    GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache, Decoration decoration = {});
 
     GeneratorChunkSource(const GeneratorChunkSource &) = delete;
 
@@ -155,4 +171,5 @@ private:
 
     Level mScratch;
     TerrainCache &mCache;
+    Decoration mDecoration;
 };

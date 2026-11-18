@@ -6,16 +6,12 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 namespace {
     const int32_t REPATH_INTERVAL = 10;
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 }
 
 PickupItemsGoal::PickupItemsGoal(float speed, float maxDistance, float goalRadius, int32_t hurtCooldownTicks,
@@ -108,8 +104,11 @@ void PickupItemsGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 void PickupItemsGoal::_pickUp(ServerNetworkHandler &owner, MobActor &mob, ItemActor &item) {
     ItemStack single = item.getItem();
     single.mCount = 1;
+    if (owner.getScriptEngine().beforeEntityItemPickup(mob, item, single))
+        return;
     if (!MobShareables::take(owner, mob, single))
         return;
+    owner.getScriptEngine().onEntityItemPickup(mob, single);
 
     ItemStack &remaining = item.getItem();
     remaining.mCount -= 1;

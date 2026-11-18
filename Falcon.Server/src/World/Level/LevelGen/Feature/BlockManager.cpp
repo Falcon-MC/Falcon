@@ -115,7 +115,7 @@ void BlockManager::applySubChunkUpdate() {
             mOverflowSink->push_back(change);
         }
 
-        // a staged neighbour takes it too: the next decorations read it (sub_1432CE930 writes at once)
+        // a staged neighbour takes it too: the next decorations read it
         LevelChunk *chunk = mLevel->peekChunkPtr(x >> 4, z >> 4);
         if (chunk == nullptr)
             continue;

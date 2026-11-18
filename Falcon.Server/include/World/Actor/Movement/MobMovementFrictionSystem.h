@@ -2,7 +2,7 @@
 
 #include "Core/Math/Vector3f.h"
 
-// MobMovementFriction::Ground and ::Air for actors with the friction and air drag modifier attributes
+// ground and air friction for actors with the friction and air drag modifier attributes
 class MobMovementFrictionSystem {
 public:
     // 1 - 0.91: the mob air drag

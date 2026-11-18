@@ -46,7 +46,8 @@ namespace {
         return false;
     }
 
-    const char *ATTRIBUTE_HEALTH = "minecraft:health";
+    // a string once, not one built at every question about the health
+    const std::string ATTRIBUTE_HEALTH = "minecraft:health";
     const char *ATTRIBUTE_HUNGER = "minecraft:player.hunger";
     const char *ATTRIBUTE_SATURATION = "minecraft:player.saturation";
     const char *ATTRIBUTE_EXHAUSTION = "minecraft:player.exhaustion";
@@ -195,8 +196,9 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     if (length <= 0.0f || force <= 0.0f)
         return;
 
-    // sub_1437DED50: a negative resistance pushes harder
-    const float base = force * std::max(1.0f - getAttributes().get("minecraft:knockback_resistance"), 0.0f);
+    // a negative resistance pushes harder
+    const float resistance = getAttributes().get("minecraft:knockback_resistance") + getArmorKnockbackResistance();
+    const float base = force * std::max(1.0f - resistance, 0.0f);
     if (base <= 0.0f)
         return;
 
@@ -307,6 +309,9 @@ void Actor::loadTags(const Tag &data) {
 }
 
 int64_t Actor::getVisibleEffectsData() const {
+    if (mEffects.getAll().empty())
+        return 0;
+
     std::map<int32_t, bool> visible;
     for (const auto &entry: mEffects.getAll()) {
         const MobEffectInstance &effect = entry.second;
@@ -522,6 +527,20 @@ float Actor::heal(float amount, HealCause cause) {
         return getHealth();
     if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
         return getHealth();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_HEAL)) {
+        static const char *const CAUSES[] = {"heal", "regeneration", "self_heal", "totem"};
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_HEAL;
+        event.mCancellable = true;
+        event.mEntity = this;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
+        event.mAmount = (double) amount;
+        event.mCause = CAUSES[(size_t) cause];
+        plugins->dispatch(event);
+        amount = (float) event.mAmount;
+        if (event.mCancelled || !(amount > 0.0f))
+            return getHealth();
+    }
     const float previous = getHealth();
     mAttributes.setClamped(ATTRIBUTE_HEALTH, previous + amount);
     _healthChanged(previous);

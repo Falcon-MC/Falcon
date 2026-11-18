@@ -13,8 +13,8 @@ void WaterDragSystem::tick(PlayerMovementContext &context) {
         return;
     state.velocity.y *= 0.8f;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);
-    // the game's LevitateSystem (client 26.60 sub_14336C200) tags the mob LevitateTravelFlagComponent;
-    // PlayerWaterGravity (sub_1433661B0, query sub_143366240) excludes it
+    // the game's LevitateSystem tags the mob LevitateTravelFlagComponent;
+    // PlayerWaterGravity excludes it
     if (levitation != nullptr) {
         state.velocity.y = state.velocity.y * 0.8f + 0.01f * (float) levitation->level();
         return;

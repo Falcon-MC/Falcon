@@ -13,4 +13,7 @@ public:
     bool isWornOnHead() const override {
         return true;
     }
+
+    void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
 };

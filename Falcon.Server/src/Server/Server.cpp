@@ -9,6 +9,12 @@
 #include "Server/ServerTelemetry.h"
 #include "Server/SetupWizard.h"
 
+#ifdef __APPLE__
+#include <pthread.h>
+#include <pthread/qos.h>
+#include <sched.h>
+#endif
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -147,8 +153,34 @@ void startServer(const ServerSettings &settings) {
     const std::chrono::nanoseconds catchupResetInterval(1000000000);
     std::chrono::steady_clock::time_point nextTick = std::chrono::steady_clock::now();
 
+    // an error out of a tick still ends with the shutdown save: players and the containers they used stay together
+#ifdef __APPLE__
+    // the tick thread ranks with the threads a user is waiting on: background work on the machine does not
+    // push it off its core in the middle of a tick
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    // a server started from a shell or a service is no application: the class alone leaves the thread at the
+    // default priority, where its own workers and every other process outrank it once it has run for a while
+    sched_param tickPriority;
+    int tickPolicy = 0;
+    if (pthread_getschedparam(pthread_self(), &tickPolicy, &tickPriority) == 0) {
+        tickPriority.sched_priority = sched_get_priority_max(tickPolicy);
+        pthread_setschedparam(pthread_self(), tickPolicy, &tickPriority);
+    }
+#endif
+
+    bool failed = false;
     while (gRunning.load() && !host.isStopRequested()) {
-        host.tick();
+        try {
+            host.tick();
+        } catch (const std::exception &error) {
+            LOG_ERROR(LogAreaID::Server, "The server stopped on an error: %s", error.what());
+            failed = true;
+            break;
+        } catch (...) {
+            LOG_ERROR(LogAreaID::Server, "The server stopped on an unknown error");
+            failed = true;
+            break;
+        }
 
         nextTick += tickInterval;
 
@@ -168,7 +200,7 @@ void startServer(const ServerSettings &settings) {
     // flushes stdin too: it hangs; worker and plugin host threads block destructors alike: _Exit skips them
     std::cout.flush();
     std::fflush(nullptr);
-    std::_Exit(0);
+    std::_Exit(failed ? 1 : 0);
 }
 
 int main(int argc, char **argv) {

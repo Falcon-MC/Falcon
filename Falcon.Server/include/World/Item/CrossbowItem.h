@@ -15,6 +15,8 @@ public:
 
     static void unloadHeld(ServerNetworkHandler &owner, MobActor &mob);
 
+    int32_t getUseDuration() const override;
+
     bool onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
 
     bool onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;

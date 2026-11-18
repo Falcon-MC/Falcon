@@ -69,6 +69,8 @@ namespace {
                                                  "server-authoritative-block-breaking-range-scalar=1.5\n"
                                                  "spawn-protection=0\n");
         owner.setProperties(authoritative);
+        // a break is refused in a column not in memory
+        owner.getLevelFor(player).getChunk(0, 0);
         require(BlockActionHandler::canBreakBlock(owner, player, outsideBase), "Mining range scalar was ignored");
         require(!BlockActionHandler::canBreakBlock(owner, player, outsideScaled),
                 "Scaled mining reach exceeded its bound");

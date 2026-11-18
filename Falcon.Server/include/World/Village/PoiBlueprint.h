@@ -14,9 +14,17 @@ struct PoiBlueprint {
     PoiType mType;
     uint64_t mCapacity;
     uint64_t mWeight;
+    // a mob is at the point within this distance, or touching the block's box grown by it
+    float mRadius = 0.0f;
+    bool mUseBoundingBox = false;
+    // played by a villager working there
+    std::string mSound;
 };
 
 class PoiBlueprints {
 public:
+    // the event a lost job site fires
+    static constexpr const char *BECOME_UNSKILLED = "minecraft:become_unskilled";
+
     static const PoiBlueprint *find(const std::string &identifier);
 };

@@ -5,6 +5,7 @@
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(IceBlock, 137);
 
@@ -24,7 +25,7 @@ void IceBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vec
     if (RandomTickSystem::getBlockLight(level, position) < MELT_LIGHT_LEVEL)
         return;
 
-    const BlockState melted = level.getDimensionType() == DimensionType::Nether ? BlockState("minecraft:air")
+    const BlockState melted = level.getDimensionType() == DimensionType::Nether ? BlockState(BlockNames::AIR)
                                                                                 : WaterBlock::source();
     BlockChangeSystem::change(level, position, melted, BlockChangeCause::Fade, true);
 }

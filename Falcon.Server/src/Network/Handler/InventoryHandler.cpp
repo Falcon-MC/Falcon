@@ -4,6 +4,8 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Item/ItemProperties.h"
 #include "World/Item/VanillaItems.h"
 #include "World/Inventory/CraftingManager.h"
 #include "World/Level/Block/Inventory/CraftingTableInventory.h"
@@ -13,8 +15,12 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/MapItem.h"
+#include "World/Item/PackShooter.h"
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
+#include "World/Level/Block/StonecutterBlock.h"
+#include "World/Level/Block/SmithingTableBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
 #include "World/Item/EnchantmentHelper.h"
@@ -25,6 +31,7 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
 #include "Protocol/Packets/InventoryTransactionPacket.h"
@@ -37,6 +44,7 @@
 #include "Protocol/Types/ContainerSlotType.h"
 #include "Protocol/Types/InventoryActionData.h"
 #include "Protocol/Types/InventorySource.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <string>
@@ -132,6 +140,65 @@ namespace {
 
         const ItemStack *item = inventory.resolveSlot(type, slot);
         return item == nullptr ? ItemStack::air() : *item;
+    }
+
+    // ServerPlayer::attackActor bounds a hit the same way
+    const float ENTITY_INTERACT_REACH = 8.0f;
+
+    // LecternHandler's widest reach, as a safety bound: reach is checked when a window opens, and a player
+    // who then leaves must not keep the container
+    const float OPEN_CONTAINER_REACH = 14.0f;
+
+    bool withinContainerReach(const ServerPlayer &player, const Vector3f &center) {
+        const Vector3f &from = player.getPosition();
+        const float dx = from.x - center.x, dy = from.y - center.y, dz = from.z - center.z;
+        return dx * dx + dy * dy + dz * dz <= OPEN_CONTAINER_REACH * OPEN_CONTAINER_REACH;
+    }
+
+    bool hasLeftOpenContainer(ServerNetworkHandler &owner, ServerPlayer &player) {
+        InventoryManager &manager = player.getInventoryManager();
+        if (!manager.isContainerOpen())
+            return false;
+
+        if (manager.getContainerActorId() != -1) {
+            const ServerActor *actor = owner.getActor(manager.getContainerActorId());
+            return actor != nullptr
+                   && (!actor->sharesLevelWith(player) || !withinContainerReach(player, actor->getPosition()));
+        }
+
+        const Vector3i &position = manager.getContainerPosition();
+        return !withinContainerReach(
+                player, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f));
+    }
+
+    bool isEnchantingSlot(ContainerSlotType type) {
+        return type == ContainerSlotType::EnchantingInput || type == ContainerSlotType::EnchantingMaterial;
+    }
+
+    bool usesEnchantingTable(const ItemStackRequestAction &action) {
+        if (isEnchantingSlot(action.mSource.mContainerName.mContainer)
+            || isEnchantingSlot(action.mDestination.mContainerName.mContainer))
+            return true;
+
+        return action.mType == ItemStackRequestActionType::CraftRecipe
+               && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
+    }
+
+    // the table's two slots live in the player inventory: nothing else gives them back
+    bool returnEnchantingItems(ServerPlayer &player) {
+        bool returned = false;
+        for (const ContainerSlotType type:
+             {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
+            ItemStack *slot = player.getInventory().resolveSlot(type, 0);
+            if (slot == nullptr || slot->isAir())
+                continue;
+
+            ItemStack item = *slot;
+            returnToInventory(player, item);
+            *slot = std::move(item);
+            returned = true;
+        }
+        return returned;
     }
 
     bool isCraft(const ItemStackRequestAction &action) {
@@ -307,7 +374,7 @@ void InventoryHandler::fillArmorEquipment(ServerNetworkHandler &owner, ServerPla
     packet.mChestplate = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_TORSO), shown);
     packet.mLeggings = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_LEGS), shown);
     packet.mBoots = shownArmorPiece(inventory.getArmor(PlayerInventory::ARMOR_FEET), shown);
-    packet.mBody = ItemStack::air();
+    packet.mBody = inventory.getBodyArmor();
 }
 
 void InventoryHandler::setArmorHidden(ServerNetworkHandler &owner, ServerPlayer &player, bool hidden) {
@@ -342,10 +409,7 @@ void InventoryHandler::sendArmorContent(ServerNetworkHandler &owner, ServerPlaye
     MobArmorEquipmentPacket equipment;
     fillArmorEquipment(owner, player, equipment);
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && &entry.second != &player)
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, false);
 }
 
 void InventoryHandler::sendOffhandContent(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -358,10 +422,7 @@ void InventoryHandler::sendOffhandContent(ServerNetworkHandler &owner, ServerPla
     equipment.mHotbarSlot = PlayerInventory::OFFHAND_NETWORK_SLOT;
     equipment.mContainerId = PlayerInventory::CONTAINER_ID_OFFHAND;
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned())
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, true);
 }
 
 void InventoryHandler::sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -377,10 +438,7 @@ void InventoryHandler::sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &p
     equipment.mHotbarSlot = selected;
     equipment.mContainerId = PlayerInventory::CONTAINER_ID_INVENTORY;
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && &entry.second != &player)
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, false);
 }
 
 void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -429,10 +487,7 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
     equipment.mHotbarSlot = inventory.getSelectedSlot();
     equipment.mContainerId = PlayerInventory::CONTAINER_ID_INVENTORY;
 
-    for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && &entry.second != &player)
-            owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), equipment, owner.getCodecContext());
-    }
+    owner.sendToPlayerViewers(player, equipment, false);
 }
 
 void InventoryHandler::handlePlayerHotbar(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -459,6 +514,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                               ServerPlayer &player, const ItemStackRequestPacket &packet) {
     PlayerInventory &inventory = player.getInventory();
     const ItemStack offhandBefore = inventory.getOffhand();
+    const ItemStack armorBefore[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
+                                                                inventory.getArmor(2), inventory.getArmor(3)};
 
     ItemStackResponsePacket response;
     bool needsResync = false;
@@ -479,6 +536,9 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         player.getInventoryManager().syncBundles();
     }
 
+    // the client named its bundles by the ids it knew: its requests wait for the new ones
+    const bool renumberedBundles = BundleInventory::separateBundleIds(inventory, openContainer);
+
     player.getInventoryManager().loadFurnaceView();
 
     InventoryManager &manager = player.getInventoryManager();
@@ -498,14 +558,39 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             && mapLevel.getMapData(requested.mCopyId) == nullptr)
             return requested.mCopyId;
 
-        // sub_142F64860 draws the id of the locked copy at random
+        // the game draws the id of the locked copy at random
         int64_t copyId = (int64_t) (uint32_t) MapItem::random()();
         while (copyId == MapItemSavedData::INVALID_ID || mapLevel.getMapData(copyId) != nullptr)
             copyId = (int64_t) (uint32_t) MapItem::random()();
         return copyId;
     };
 
+    const bool leftSmithing = manager.isSmithingOpen() && !withinContainerReach(
+            player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                             (float) anvilPosition.z + 0.5f));
+    const bool leftContainer = leftSmithing || hasLeftOpenContainer(owner, player);
+
+    // the mount window fills the saddle and armor slots without an interaction: their events run after
+    const int64_t containerActorId = manager.getContainerActorId();
+    MobActor *mount = dynamic_cast<MobActor *>(containerActorId == -1 ? nullptr : owner.getActor(containerActorId));
+    const std::vector<ItemStack> mountEquipment = mount == nullptr ? std::vector<ItemStack>()
+                                                                   : mount->getEquippableItems();
+
+    MobActor *trader = manager.isTradeOpen() ? dynamic_cast<MobActor *>(owner.getActor(manager.getTradeActorId()))
+                                             : nullptr;
+    if (trader != nullptr && trader->getEconomy().getTradingPlayer() != player.getUniqueId())
+        trader = nullptr;
+
     for (const ItemStackRequest &request: packet.mRequests) {
+        // nothing to run: the same answer as a request run on a copy of the inventory, without the copy
+        if (request.mActions.empty() && !renumberedBundles && !leftContainer) {
+            ItemStackResponseEntry done;
+            done.mRequestId = request.mRequestId;
+            done.mResult = ItemStackRequestHandler::RESULT_OK;
+            response.mEntries.push_back(std::move(done));
+            continue;
+        }
+
         const bool anvilOpen = manager.isAnvilOpen()
                                && AnvilBlock::matches(
                                        level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z));
@@ -518,13 +603,29 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
                                                 == CartographyTableBlock::IDENTIFIER;
+        const bool stonecutterOpen =
+                manager.isStonecutterOpen()
+                && StonecutterBlock::matches(
+                        level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
+
+        const bool smithingOpen = manager.isSmithingOpen() && VanillaBlocks::getAs<SmithingTableBlock>(
+                level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName) != nullptr;
 
         // creative only: the spectator shares the creative flag below but has no creative inventory
         bool creativeCraft = false;
         for (const ItemStackRequestAction &action: request.mActions)
             creativeCraft = creativeCraft || action.mType == ItemStackRequestActionType::CraftCreative;
 
-        if ((creativeCraft && gameType != (int32_t) GameType::Creative) || !allowRequest(owner, player, request)) {
+        // the enchanting slots exist only while the table's window is open
+        bool strayEnchanting = false;
+        if (!manager.isContainerOpen() || manager.getCurrentWindowType() != ContainerType::Enchantment) {
+            for (const ItemStackRequestAction &action: request.mActions)
+                strayEnchanting = strayEnchanting || usesEnchantingTable(action);
+        }
+
+        if (leftContainer || renumberedBundles || strayEnchanting
+            || (creativeCraft && gameType != (int32_t) GameType::Creative)
+            || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
             rejected.mRequestId = request.mRequestId;
             rejected.mResult = ItemStackRequestHandler::RESULT_ERROR;
@@ -533,12 +634,23 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             continue;
         }
 
+        ItemStack craftedRecipeItem = ItemStack::air();
+        TradeCraft trade;
+        MerchantOffers *tradeOffers = trader == nullptr ? nullptr : trader->getEconomy().getOffers(owner, *trader);
+        if (tradeOffers != nullptr)
+            tradeOffers->mUnlockedTier = trader->getEconomy().getTier();
         ItemStackResponseEntry entry = ItemStackRequestHandler::execute(
                 inventory, request, owner.getCreativeItems(), owner.getRecipeOutputs(), owner.getRecipeSourceIndices(),
                 player.getInventoryManager().isCraftingTableOpen(), player.getInventoryManager().isFurnaceOpen(),
                 player.getInventoryManager().getContainer(), &droppedItems, &owner.getCodecContext(), &bundles,
                 player.getExperience().getXpLevel(), creativeMode, &enchantLevelsConsumed, anvilOpen,
-                &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock);
+                &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
+                stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem, tradeOffers,
+                &trade, smithingOpen ? &owner.getCachedCraftingData() : nullptr,
+                player.getCodec() ? player.getCodec()->getProtocolVersion() : 0);
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && trader != nullptr && trade.mOfferIndex >= 0)
+            trader->getEconomy().onTrade(owner, *trader, trade.mOfferIndex, trade.mCrafts);
 
         // the copy waits for the request to hold: a rejected one would leave an orphan map behind
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK
@@ -561,6 +673,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 owner._sendAttributes(player);
             }
             AnvilBlock::onUsed(owner, level, anvilPosition, gameType == (int32_t) GameType::Creative);
+            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ANVIL_USE)) {
+                PluginEvent anvilEvent;
+                anvilEvent.mType = FALCON_EVENT_ANVIL_USE;
+                anvilEvent.mPlayer = &player;
+                anvilEvent.mLevel = &level;
+                anvilEvent.mBlockPosition = anvilPosition;
+                anvilEvent.mAmount = (double) anvilLevelsConsumed;
+                plugins->dispatch(anvilEvent);
+            }
         }
 
         if (entry.mResult != ItemStackRequestHandler::RESULT_OK) {
@@ -568,12 +689,23 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             playBundleSounds(owner, player, request, false);
         } else {
             playBundleSounds(owner, player, request, true);
+            if (!craftedRecipeItem.isAir()) {
+                const InventoryManager &invManager = player.getInventoryManager();
+                const Vector3i tablePosition = smithingOpen ? anvilPosition : invManager.getCraftingTablePosition();
+                if (smithingOpen)
+                    owner.playLevelSound(level, "smithing_table.use", Vector3f((float) tablePosition.x + 0.5f,
+                                         (float) tablePosition.y + 0.5f, (float) tablePosition.z + 0.5f));
+                owner.getScriptEngine().onPlayerCraftRecipe(
+                        player, craftedRecipeItem,
+                        smithingOpen || invManager.isCraftingTableOpen() ? &tablePosition : nullptr);
+            }
         }
 
         response.mEntries.push_back(std::move(entry));
     }
 
     player.getInventoryManager().storeFurnaceView(owner);
+    PluginEvents::armorChanged(player, armorBefore);
 
     for (const BundleSyncData &bundle: bundles) {
         const ItemStack *owned = inventory.resolveSlot(bundle.mOwnerContainer, bundle.mOwnerSlot);
@@ -627,7 +759,12 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         || offhandAfter.mDamage != offhandBefore.mDamage || !(offhandAfter.mTag == offhandBefore.mTag))
         sendOffhandContent(owner, player);
 
-    if (player.getInventoryManager().isContainerOpen())
+    if (mount != nullptr)
+        mount->onEquippableItemsChanged(owner, mountEquipment, &player);
+
+    if (player.getInventoryManager().getContainerActorId() != -1)
+        owner.refreshEntityContainerViewers(player.getInventoryManager().getContainerActorId(), &player);
+    else if (player.getInventoryManager().isContainerOpen())
         owner.refreshContainerViewers(player.getInventoryManager().getContainerPosition(), &player);
 
     if (response.mEntries.empty())
@@ -635,8 +772,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     owner.getNetworkHandler().send(id, response, owner.getCodecContext());
 
-    if (needsResync)
+    if (needsResync) {
         owner._sendInventory(player);
+        manager.syncSmithingInputs();
+    }
+    if (renumberedBundles) {
+        manager.refreshOpenContainer(manager.getContainerPosition());
+        manager.refreshEntityContainer(manager.getContainerActorId());
+        manager.syncBundles();
+    }
 }
 
 void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -661,6 +805,57 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
 }
 
+bool InventoryHandler::interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId,
+                                          const Vector3f &clickPosition) {
+    ServerActor *target = owner.getActorByRuntimeId(runtimeId);
+    // the click was predicted: the actor may be gone since
+    if (target == nullptr) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                              player.getInventory().getSelectedSlot());
+        return false;
+    }
+
+    // the id alone names any actor of the server: same level and within reach only
+    const Vector3f delta(target->getPosition().x - player.getPosition().x,
+                         target->getPosition().y - player.getPosition().y,
+                         target->getPosition().z - player.getPosition().z);
+    if (!target->sharesLevelWith(player)
+        || !(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z
+             <= ENTITY_INTERACT_REACH * ENTITY_INTERACT_REACH))
+        return false;
+
+    if (owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target))
+        return false;
+    target = owner.getActorByRuntimeId(runtimeId);
+    if (target == nullptr)
+        return false;
+
+    PluginEvent event;
+    event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
+    event.mCancellable = true;
+    event.mPlayer = &player;
+    event.mEntity = target;
+    PluginManager::getInstance().dispatch(event);
+    if (event.mCancelled)
+        return false;
+
+    target = owner.getActorByRuntimeId(runtimeId);
+    // a sneaking click opens a tamed mount's inventory instead of riding it
+    if (target != nullptr && dynamic_cast<MobActor *>(target) != nullptr && player.getFlags().get(ActorFlag::Sneaking)
+        && target->getEntityContainer() != nullptr
+        && player.getInventoryManager().openEntityContainer(*target, ContainerType::Horse))
+        return true;
+    if (target == nullptr)
+        return false;
+    const ItemStack before = player.getInventory().getItemInHand();
+    if (!target->onInteractAt(owner, player, clickPosition))
+        return false;
+    target = owner.getActorByRuntimeId(runtimeId);
+    if (target != nullptr)
+        owner.getScriptEngine().onPlayerInteractWithEntity(player, *target, before);
+    return true;
+}
+
 void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlayer &player,
                                          const InventoryTransactionPacket &packet) {
     if (packet.mTransactionType == InventoryTransactionType::ItemUseOnEntity) {
@@ -670,44 +865,12 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
         }
 
         if (packet.mActionType == 1 || packet.mActionType == 2) {
-            player.attackActor(owner, (uint64_t) packet.mRuntimeActorId);
+            player.attackActor(owner, (uint64_t) packet.mRuntimeActorId, &packet.mClickPosition);
             return;
         }
 
-        if (packet.mActionType == 0) {
-            ServerActor *target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-            // the click was predicted: the actor may be gone since
-            if (target == nullptr) {
-                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                                      player.getInventory().getSelectedSlot());
-                return;
-            }
-
-            if (!owner.getScriptEngine().beforePlayerInteractWithEntity(player, *target)) {
-                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                if (target == nullptr)
-                    return;
-
-                PluginEvent event;
-                event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
-                event.mCancellable = true;
-                event.mPlayer = &player;
-                event.mEntity = target;
-                PluginManager::getInstance().dispatch(event);
-                if (event.mCancelled)
-                    return;
-
-                target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                if (target != nullptr) {
-                    const ItemStack before = player.getInventory().getItemInHand();
-                    if (target->onInteractAt(owner, player, packet.mClickPosition)) {
-                        target = owner.getActorByRuntimeId((uint64_t) packet.mRuntimeActorId);
-                        if (target != nullptr)
-                            owner.getScriptEngine().onPlayerInteractWithEntity(player, *target, before);
-                    }
-                }
-            }
-        }
+        if (packet.mActionType == 0)
+            interactWithEntity(owner, player, (uint64_t) packet.mRuntimeActorId, packet.mClickPosition);
         return;
     }
 
@@ -736,15 +899,24 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     }
 
     if (packet.mTransactionType == InventoryTransactionType::ItemRelease) {
+        owner._keepItemUse(player);
         const bool wasUsing = player.getFlags().get(ActorFlag::UsingItem);
 
         const ItemStack &releasedItem = player.getInventory().getItemInHand();
         if (wasUsing && !releasedItem.isAir() && releasedItem.mDefinition != nullptr) {
             const Item *itemType = VanillaItems::fromIdentifier(releasedItem.mDefinition->getIdentifier());
             const int32_t elapsedTicks = (int32_t) (owner.getCurrentTick() - player.getItemUseStartTick());
-            if (itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks)) {
+            const ItemStack released = releasedItem;
+            const int32_t ticksLeft = owner.getItemUseTicksLeft(player);
+            const CustomItemDefinition *pack =
+                    itemType == nullptr
+                            ? CustomContentRegistry::getInstance().findItem(releasedItem.mDefinition->getIdentifier())
+                            : nullptr;
+            if ((itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks))
+                || (pack != nullptr && PackShooter::release(owner, player, *pack, elapsedTicks))) {
                 player.getFlags().set(ActorFlag::UsingItem, false);
                 owner._sendEntityData(player);
+                owner.getScriptEngine().onItemStopUse(player, released, ticksLeft, true);
                 return;
             }
         }
@@ -758,6 +930,8 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
                 player.setLastEarlyConsumableReleaseTick(owner.getCurrentTick());
                 player.getFlags().set(ActorFlag::UsingItem, false);
                 owner._sendEntityData(player);
+                owner.getScriptEngine().onItemStopUse(player, player.getInventory().getItemInHand(),
+                                                      owner.getItemUseTicksLeft(player), true);
             }
         }
         return;
@@ -790,6 +964,12 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     ItemStack *item = inventory.resolveSlot(ContainerSlotType::Inventory, sourceSlot);
     if (item == nullptr || item->isAir() || droppedCount > item->mCount)
         return;
+
+    // the item stack request path refuses to drop a locked item: this older path must too
+    if (ItemProperties::getLockMode(*item) != ItemLockMode::None) {
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
+        return;
+    }
 
     ItemStack thrown = *item;
     thrown.mCount = droppedCount;
@@ -865,6 +1045,9 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
         manager.syncSlot(InventoryManager::InventoryId::Cursor, 0);
     }
 
+    if (returnEnchantingItems(player))
+        manager.syncAll();
+
     manager.onClientRemoveWindow(windowId);
 }
 
@@ -897,9 +1080,29 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         inventory.setCartographyItem(slot, ItemStack::air());
     }
 
+    for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
+        const ItemStack &item = inventory.getSmithingItem(index);
+        if (!item.isAir())
+            returned.push_back(item);
+        inventory.setSmithingItem(index, ItemStack::air());
+    }
+
+    if (!inventory.getStonecutterInput().isAir())
+        returned.push_back(inventory.getStonecutterInput());
+    inventory.setStonecutterInput(ItemStack::air());
+
     if (!inventory.getCursor().isAir())
         returned.push_back(inventory.getCursor());
     inventory.setCursor(ItemStack::air());
+
+    for (const ContainerSlotType type: {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
+        ItemStack *slot = inventory.resolveSlot(type, 0);
+        if (slot == nullptr || slot->isAir())
+            continue;
+
+        returned.push_back(*slot);
+        *slot = ItemStack::air();
+    }
 
     for (ItemStack &item: returned) {
         returnToInventory(player, item);

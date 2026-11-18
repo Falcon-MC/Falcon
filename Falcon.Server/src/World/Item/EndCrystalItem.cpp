@@ -12,6 +12,7 @@
 #include "World/Level/World.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cstdlib>
 
@@ -69,7 +70,7 @@ bool EndCrystalItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     (void) face;
     (void) clickPosition;
 
-    if (player.getGameType() == (int32_t) GameType::Spectator)
+    if (player.isSpectator())
         return false;
 
     Level &level = owner.getLevelFor(player);
@@ -82,10 +83,10 @@ bool EndCrystalItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     if (above.y + 1 > level.getMaxY())
         return false;
 
-    if (level.getBlockState(above.x, above.y, above.z).mName != "minecraft:air")
+    if (level.getBlockState(above.x, above.y, above.z).mName != BlockNames::AIR)
         return false;
 
-    if (level.getBlockState(above.x, above.y + 1, above.z).mName != "minecraft:air")
+    if (level.getBlockState(above.x, above.y + 1, above.z).mName != BlockNames::AIR)
         return false;
 
     if (!isAreaFree(owner, level, above))
@@ -100,20 +101,11 @@ bool EndCrystalItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &pla
     const float yaw = (float) std::rand() / (float) RAND_MAX * FULL_TURN_DEGREES;
     crystal->setRotation(Vector3f(0.0f, yaw, 0.0f));
 
-    // a crystal placed in the End may complete the four respawning the dragon (0x1471853D0)
+    // a crystal placed in the End may complete the four respawning the dragon
     if (level.getDimensionType() == DimensionType::TheEnd)
         owner.getWorldFor(player).getDragonFight().tryRespawn(owner, level);
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
-        ItemStack remaining = item;
-        remaining.mCount--;
-        if (remaining.mCount <= 0)
-            remaining = ItemStack::air();
-
-        PlayerInventory &inventory = player.getInventory();
-        inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
-    }
+    player.consumeOneHeldItem();
 
     return true;
 }

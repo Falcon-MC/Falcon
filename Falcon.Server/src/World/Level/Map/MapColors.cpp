@@ -1,6 +1,9 @@
 #include "World/Level/Map/MapColors.h"
 
+#include "World/Level/Biome/BiomeRegistry.h"
+
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cstring>
@@ -1298,6 +1301,20 @@ uint32_t MapColors::tintColor(MapTintMethod tint, const MapBiomeColors &biome) {
     }
 }
 
+MapBiomeColors MapColors::biomeColors(const BiomeRegistry &registry, uint32_t biomeId) {
+    MapBiomeColors colors;
+    for (const BiomeDefinitionData &biome: registry.getBiomes()) {
+        if (biome.mId != biomeId)
+            continue;
+
+        colors.mTemperature = biome.mTemperature;
+        colors.mDownfall = biome.mDownfall;
+        colors.mWaterColor = (uint32_t) biome.mMapWaterColorArgb;
+        break;
+    }
+    return colors;
+}
+
 void MapColors::getColor(const BlockState &state, const MapBiomeColors &biome, float out[4]) {
     const Entry *entry = find(state.mName);
     if (entry == nullptr) {
@@ -1322,9 +1339,9 @@ void MapColors::getColor(const BlockState &state, const MapBiomeColors &biome, f
 }
 
 bool MapColors::isWater(const std::string &name) {
-    return name == "minecraft:water" || name == "minecraft:flowing_water";
+    return name == BlockNames::WATER || name == "minecraft:flowing_water";
 }
 
 bool MapColors::isLiquid(const std::string &name) {
-    return isWater(name) || name == "minecraft:lava" || name == "minecraft:flowing_lava";
+    return isWater(name) || name == BlockNames::LAVA || name == "minecraft:flowing_lava";
 }

@@ -4,9 +4,14 @@
 #include "Core/Math/Vector3i.h"
 #include "Core/NBT/Tag.h"
 #include "World/Inventory/Container.h"
+#include "World/Actor/DynamicPropertyValue.h"
+#include "World/Level/Block/Actor/BlockEntityStorage.h"
 
+#include <optional>
 #include <string>
+#include <unordered_map>
 
+class GameEventListener;
 class Level;
 class PacketCodecContext;
 class ServerNetworkHandler;
@@ -29,6 +34,15 @@ public:
 
     virtual Container *getContainer() {
         return nullptr;
+    }
+
+    // what the chunk's game events reach, as the game keeps a listener registry per chunk
+    virtual GameEventListener *getGameEventListener() {
+        return nullptr;
+    }
+
+    // the block went away with its actor, whatever removed it; never on a chunk unload
+    virtual void onRemoved() {
     }
 
     virtual bool tick(ServerNetworkHandler &owner) {
@@ -69,6 +83,25 @@ public:
 
     void unpackLoot(ServerNetworkHandler &owner);
 
+    void loadDynamicProperties(const Tag &data);
+
+    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() {
+        return mDynamicProperties;
+    }
+
+    // any block actor can carry one, data-driven blocks ask for it
+    BlockEntityStorage &enableEntityStorage() {
+        if (!mEntityStorage.has_value())
+            mEntityStorage.emplace();
+        return *mEntityStorage;
+    }
+
+    BlockEntityStorage *getEntityStorage() {
+        return mEntityStorage.has_value() ? &*mEntityStorage : nullptr;
+    }
+
+    void loadEntityStorage(const Tag &data);
+
 protected:
     Vector3i mPosition;
     Level *mLevel = nullptr;
@@ -77,4 +110,6 @@ private:
     BlockState mState;
     std::string mLootTable;
     int32_t mLootSeed = 0;
+    std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
+    std::optional<BlockEntityStorage> mEntityStorage;
 };

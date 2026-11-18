@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/Block/BlockState.h"
+#include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 
 #include <string>
@@ -23,11 +24,14 @@ public:
     static bool use(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state);
 
+    // where a sleeper stands up; previous is where they stood when lying down
+    static bool findStandUpPosition(Level &level, const Vector3i &bed, const Vector3f &previous, Vector3i &standUp);
+
     static std::vector<Vector3i> otherPiece(Level &level, const Vector3i &position, const BlockState &state);
 
     static void breakOtherHalf(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                const BlockState &state);
 
-private:
+    // the face the head piece points at
     static int headFace(const BlockState &state);
 };

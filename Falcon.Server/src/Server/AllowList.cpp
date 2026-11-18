@@ -13,13 +13,13 @@ AllowList::AllowList(const std::string &path) : mPath(path) {
     reload();
 }
 
-void AllowList::reload() {
+bool AllowList::reload() {
     mEntries.clear();
 
     std::ifstream file(mPath);
     if (!file.is_open()) {
         _save();
-        return;
+        return true;
     }
 
     std::stringstream buffer;
@@ -29,7 +29,7 @@ void AllowList::reload() {
     const std::unique_ptr<json::Value> root = json::parse(source);
     if (root == nullptr || root->mType != json::Value::Type::Array) {
         LOG_WARN(LogAreaID::Server, "Failed to parse %s", mPath.c_str());
-        return;
+        return false;
     }
 
     for (const std::unique_ptr<json::Value> &value: root->mArray) {
@@ -54,6 +54,7 @@ void AllowList::reload() {
 
         mEntries.push_back(entry);
     }
+    return true;
 }
 
 std::vector<AllowListEntry>::iterator AllowList::_findByName(const std::string &name) {
@@ -115,6 +116,38 @@ bool AllowList::remove(const std::string &name) {
     mEntries.erase(found);
     _save();
     return true;
+}
+
+bool AllowList::contains(const std::string &name, const std::string &xuid) {
+    return _findPlayer(name, xuid) != mEntries.end();
+}
+
+bool AllowList::addEntry(const std::string &name, const std::string &xuid, bool ignoresPlayerLimit) {
+    if ((!name.empty() && _findByName(name) != mEntries.end()) || (!xuid.empty() && contains(std::string(), xuid)))
+        return false;
+
+    AllowListEntry entry;
+    entry.mName = name;
+    entry.mXuid = xuid;
+    entry.mIgnoresPlayerLimit = ignoresPlayerLimit;
+    mEntries.push_back(entry);
+    _save();
+    return true;
+}
+
+bool AllowList::removeEntry(const std::string &name, const std::string &xuid) {
+    const auto found = _findPlayer(name, xuid);
+    if (found == mEntries.end())
+        return false;
+
+    mEntries.erase(found);
+    _save();
+    return true;
+}
+
+void AllowList::clear() {
+    mEntries.clear();
+    _save();
 }
 
 std::vector<std::string> AllowList::getNames() const {

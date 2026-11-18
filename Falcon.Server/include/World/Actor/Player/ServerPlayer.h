@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include "World/Actor/Actor.h"
+#include "World/Actor/Movement/BlockCollisionEngine.h"
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/Movement/PlayerMovementValidator.h"
 #include "World/Actor/Movement/Components/SwimAmountComponent.h"
@@ -28,14 +29,19 @@
 #include "Server/Debug/DebugHud.h"
 #include "World/Actor/Player/PlayerBossBars.h"
 #include "World/Actor/Player/PlayerRaidState.h"
+#include "World/Actor/Player/SimulatedPlayerController.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 
+class CameraInstructionPacket;
+class SharedPacket;
 class ServerNetworkHandler;
 
 class ServerPlayer : public Actor {
@@ -45,6 +51,8 @@ public:
     }
 
     bool canStandOnPowderSnow() const override;
+
+    float getArmorKnockbackResistance() const override;
 
     // world the player was saved in; one player data file is shared by every world
     static constexpr const char *TAG_LEVEL = "Level";
@@ -78,6 +86,19 @@ public:
         return mId;
     }
 
+    // a gametest simulated player: no client behind it, the server writes its inputs
+    bool isSimulated() const {
+        return mSimulated != nullptr;
+    }
+
+    void makeSimulated() {
+        mSimulated = std::make_shared<SimulatedPlayerController>();
+    }
+
+    SimulatedPlayerController *getSimulatedController() {
+        return mSimulated.get();
+    }
+
     LoginState getLoginState() const {
         return mLoginState;
     }
@@ -92,6 +113,19 @@ public:
 
     void setLoggedInTick(int64_t tick) {
         mLoggedInTick = tick;
+    }
+
+    bool isSessionInspected() const {
+        return mSessionInspected;
+    }
+
+    // false once a resource pack chunk went out as often as one login may ask for it
+    bool countPackChunkRequest(const std::string &pack, int32_t index) {
+        return ++mPackChunkRequests[pack + ':' + std::to_string(index)] <= MAX_PACK_CHUNK_REQUESTS;
+    }
+
+    void setSessionInspected() {
+        mSessionInspected = true;
     }
 
     // chosen from the announced version, fixed for the session
@@ -149,6 +183,21 @@ public:
 
     void setSkin(const SerializedSkin &skin) {
         mSkin = skin;
+        mListEntryPackets.clear();
+    }
+
+    // this player's list entry as a packet, one per protocol version: encoded once, sent to every joiner
+    std::shared_ptr<const SharedPacket> &getListEntryPacket(int protocolVersion) {
+        for (auto &entry: mListEntryPackets) {
+            if (entry.first == protocolVersion)
+                return entry.second;
+        }
+        mListEntryPackets.emplace_back(protocolVersion, nullptr);
+        return mListEntryPackets.back().second;
+    }
+
+    void clearListEntryPackets() {
+        mListEntryPackets.clear();
     }
 
     int getBuildPlatform() const {
@@ -159,13 +208,30 @@ public:
         mBuildPlatform = platform;
     }
 
-    // CompatibleWithClientSideChunkGen from the login client data (sub_1422AA4E0, ServerPlayer+3576).
+    // CompatibleWithClientSideChunkGen from the login client data.
     bool isClientSideGenerationCompatible() const {
         return mClientSideGenerationCompatible;
     }
 
     void setClientSideGenerationCompatible(bool compatible) {
         mClientSideGenerationCompatible = compatible;
+    }
+
+    // the text filtering half of SyncedClientOptionsComponent, from the login client data
+    void readSyncedClientOptions(const std::string &clientData);
+
+    // SyncedClientOptionsComponent+24: FilterProfanity at login, then UpdateClientOptionsPacket
+    bool isProfanityFilterEnabled() const {
+        return mProfanityFilterEnabled;
+    }
+
+    void setProfanityFilterEnabled(bool enabled) {
+        mProfanityFilterEnabled = enabled;
+    }
+
+    // SyncedClientOptionsComponent+16: TextFilteringDebugTimeoutMilliSeconds, 0 when the client sent none
+    int getTextFilteringDebugTimeout() const {
+        return mTextFilteringDebugTimeout;
     }
 
     // The share of its view the server builds for this player (ClientSideGeneration::computeServerBuildRatio).
@@ -177,7 +243,7 @@ public:
         mServerBuildRatio = ratio;
     }
 
-    // Player+0xBC0, which EmptyMapItem::use numbers its maps with (sub_147B9F900)
+    // the counter empty maps number their maps with
     int32_t takeMapNameIndex() {
         return mMapNameIndex++;
     }
@@ -204,6 +270,22 @@ public:
         mGameType = gameType;
     }
 
+    bool isSurvival() const {
+        return mGameType == (int32_t) GameType::Survival;
+    }
+
+    bool isCreative() const {
+        return mGameType == (int32_t) GameType::Creative;
+    }
+
+    bool isAdventure() const {
+        return mGameType == (int32_t) GameType::Adventure;
+    }
+
+    bool isSpectator() const {
+        return mGameType == (int32_t) GameType::Spectator;
+    }
+
     int64_t getLastActiveTick() const {
         return mLastActiveTick;
     }
@@ -219,7 +301,10 @@ public:
         return changed;
     }
 
-    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId);
+    // hitPosition: where the client says it hit, in world space; null when unknown
+    // checkReach false: a gametest simulated player attacks at any distance, facing anywhere
+    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition = nullptr,
+                     bool checkReach = true);
 
     Vector3f getLookDirection() const;
 
@@ -243,7 +328,67 @@ public:
         bool mJumping = false;
         float mMoveX = 0.0f;
         float mMoveY = 0.0f;
+        // PlayerAuthInputData::HotbarOnlyTouch
+        bool mTouchOnlyHotbar = false;
     };
+
+    // the device the client reported in its login client data, graphics mode updated by
+    // UpdateClientOptionsPacket: memory tier clamped to 0-4, Fancy until told otherwise
+    struct ClientDevice {
+        int32_t mMemoryTier = 0;
+        int32_t mMaxViewDistance = 0;
+        int32_t mPlatformType = 0;
+        int32_t mGraphicsMode = 1;
+    };
+
+    ClientDevice &getClientDevice() {
+        return mClientDevice;
+    }
+
+    // the server camera state: the first camera instruction creates it unnamed,
+    // a set names it after the preset, a clear puts it back on first person
+    struct CameraState {
+        bool mPresent = false;
+        std::string mPreset;
+    };
+
+    const CameraState &getCameraState() const {
+        return mCameraState;
+    }
+
+    void recordCamera(const CameraInstructionPacket &packet);
+
+    // one entry of the scripted fog stack, bottom first
+    struct FogEntry {
+        std::string mId;
+        std::string mTag;
+    };
+
+    std::vector<FogEntry> &getFogStack() {
+        return mFogStack;
+    }
+
+    // PlayerAimAssist.settings: the last settings a script activated, empty once cleared
+    struct AimAssistSettings {
+        std::string mPresetId;
+        bool mDistanceMode = false;
+        float mViewAngleX = 0.0f;
+        float mViewAngleY = 0.0f;
+        float mDistance = 0.0f;
+    };
+
+    std::optional<AimAssistSettings> &getAimAssist() {
+        return mAimAssist;
+    }
+
+    // ControlSchemeComponent, LockedPlayerRelativeStrafe until set
+    int32_t getControlScheme() const {
+        return mControlScheme;
+    }
+
+    void setControlScheme(int32_t scheme) {
+        mControlScheme = scheme;
+    }
 
     InputState &getInputState() {
         return mInputState;
@@ -327,6 +472,10 @@ public:
             return false;
         box = mSimulatedBox;
         return true;
+    }
+
+    BlockCollisionEngine::RecoveryState &getCollisionRecovery() {
+        return mCollisionRecovery;
     }
 
     void clearMovementSimulation() {
@@ -582,6 +731,22 @@ public:
 
     void clearTitle();
 
+    static const int HUD_ELEMENT_COUNT = 13;
+
+    // no elements means all of them
+    void setHudVisibility(bool hidden, const std::vector<int32_t> *elements = nullptr);
+
+    // ClientInputLocks: one bit per InputPermissionCategory value, set when locked; true when it changed
+    bool setInputLocked(int32_t category, bool locked);
+
+    bool isInputLocked(int32_t category) const {
+        return category >= 0 && category < 32 && (mInputLocks & (1u << category)) != 0;
+    }
+
+    bool isHudElementHidden(int32_t element) const {
+        return element >= 0 && element < HUD_ELEMENT_COUNT && mHiddenHudElements[element];
+    }
+
     void resetTitle();
 
     bool hasPendingMove() const {
@@ -612,6 +777,20 @@ public:
 
     void setItemUseStartTick(int64_t tick) {
         mItemUseStartTick = tick;
+    }
+
+    // the slot and item a use started with
+    void setItemUseSource(int slot, const ItemStack &item) {
+        mItemUseSlot = slot;
+        mItemUseItem = item;
+    }
+
+    int getItemUseSlot() const {
+        return mItemUseSlot;
+    }
+
+    const ItemStack &getItemUseItem() const {
+        return mItemUseItem;
     }
 
     ChunkStreamState &getChunkStreamState() {
@@ -656,6 +835,15 @@ public:
 
     void clearSleeping() {
         mSleeping = false;
+    }
+
+    // actor data 133, the position before lying down
+    const Vector3f &getBedEnterPosition() const {
+        return mBedEnterPosition;
+    }
+
+    void setBedEnterPosition(const Vector3f &position) {
+        mBedEnterPosition = position;
     }
 
     void resetSleepCounter() {
@@ -708,13 +896,13 @@ public:
         mSpawnWorld = world;
     }
 
-    // sub_1402DC450: /spawnpoint keeps the position and dimension, clears the block
+    // /spawnpoint keeps the position and dimension, clears the block
     void setSpawnPosition(const Vector3i &standPosition, DimensionType dimension, const std::string &world) {
         setSpawnPoint(standPosition, standPosition, dimension, world);
         mHasSpawnBlock = false;
     }
 
-    // sub_1402DC130: floor x and z, ceil of the feet
+    // floor x and z, ceil of the feet
     Vector3i getSpawnStandPositionHere() const;
 
     void clearSpawnPoint() {
@@ -1041,6 +1229,9 @@ private:
 
     bool _isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const;
 
+    // the playerItemAttackEntity before event; true when a script cancelled the attack
+    bool _scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition);
+
     bool _hasShieldReady(int64_t currentTick) const;
 
     bool _shouldRaiseShield(int64_t currentTick) const;
@@ -1049,8 +1240,11 @@ private:
 
     void _damageShield(ServerNetworkHandler &owner, float damage);
 
+    static const int MAX_PACK_CHUNK_REQUESTS = 3;
+
     NetworkIdentifier mId;
     LoginState mLoginState;
+    std::unordered_map<std::string, int> mPackChunkRequests;
     std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
     std::string mUuid;
@@ -1060,11 +1254,15 @@ private:
     std::string mPlayFabId;
     int mBuildPlatform = -1;
     bool mClientSideGenerationCompatible = false;
+    bool mProfanityFilterEnabled = true;
+    int mTextFilteringDebugTimeout = 0;
     float mServerBuildRatio = 1.0f;
     int32_t mMapNameIndex = 0;
     MapRequestQueue mMapRequests;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
+    int mItemUseSlot = -1;
+    ItemStack mItemUseItem;
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;
     bool mAwaitingDimensionAck = false;
@@ -1074,6 +1272,7 @@ private:
     bool mSleeping = false;
     int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
+    Vector3f mBedEnterPosition;
     bool mHasSpawnPoint = false;
     bool mHasSpawnBlock = false;
     Vector3i mSpawnPoint;
@@ -1122,14 +1321,21 @@ private:
     int32_t mLastChunkZ = 0;
     bool mHasChunkPosition = false;
     SerializedSkin mSkin;
+    std::vector<std::pair<int, std::shared_ptr<const SharedPacket>>> mListEntryPackets;
     int32_t mGameType = 0;
     int64_t mLastActiveTick = 0;
     int64_t mLoggedInTick = 0;
+    bool mSessionInspected = false;
     Vector3f mLastInputRotation;
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
     InputState mInputState;
+    ClientDevice mClientDevice;
+    CameraState mCameraState;
+    std::vector<FogEntry> mFogStack;
+    std::optional<AimAssistSettings> mAimAssist;
+    int32_t mControlScheme = 0;
     ChatStyle mChatStyle;
     bool mHasSimulatedVelocity = false;
     Vector3f mSimulatedVelocity;
@@ -1138,6 +1344,7 @@ private:
     AxisAlignedBB mSimulatedBox;
     Vector3f mSimulatedBoxFeet;
     bool mHasSimulatedBox = false;
+    BlockCollisionEngine::RecoveryState mCollisionRecovery;
     bool mHasSimulatedGround = false;
     bool mSimulatedOnGround = false;
     int32_t mJumpDelay = 0;
@@ -1149,6 +1356,7 @@ private:
     bool mHasSupportingBlock = false;
     Vector3i mSupportingBlock;
     PlayerAcknowledgements mAcknowledgements;
+    std::shared_ptr<SimulatedPlayerController> mSimulated;
     int32_t mPendingMovementChanges = 0;
     static constexpr int32_t MAX_INPUTS_WHILE_PENDING = 20;
     bool mAwaitingTeleport = false;
@@ -1169,6 +1377,8 @@ private:
     bool mEffectsNetworkReady = false;
     PlayerRaidState mRaidState;
     PlayerBossBars mBossBars;
+    bool mHiddenHudElements[HUD_ELEMENT_COUNT] = {};
+    uint32_t mInputLocks = 0;
     DebugHud mDebugHud;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
     int32_t mShieldTransitionTicks = 0;

@@ -242,8 +242,24 @@ void TerrainCache::waitForDecoration(std::chrono::milliseconds timeout) {
     mReleased.wait_for(lock, timeout);
 }
 
-GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache)
-        : mScratch("generator", 1, seed, dimension), mCache(cache) {
+bool TerrainCache::findStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t &value) {
+    std::lock_guard<std::mutex> lock(mStartMutex);
+    const auto found = mStartValues.find(std::make_tuple(structure, startX, startZ));
+    if (found == mStartValues.end())
+        return false;
+
+    value = found->second;
+    return true;
+}
+
+int32_t TerrainCache::storeStartValue(const std::string &structure, int32_t startX, int32_t startZ, int32_t value) {
+    std::lock_guard<std::mutex> lock(mStartMutex);
+    return mStartValues.emplace(std::make_tuple(structure, startX, startZ), value).first->second;
+}
+
+GeneratorChunkSource::GeneratorChunkSource(int64_t seed, DimensionType dimension, TerrainCache &cache,
+                                           Decoration decoration)
+        : mScratch("generator", 1, seed, dimension), mCache(cache), mDecoration(std::move(decoration)) {
     mScratch.setTerrainCache(&cache);
 }
 
@@ -294,7 +310,10 @@ uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
 
     const size_t first = overflow.size();
     LevelChunk &center = mScratch.insertChunk(std::move(chunk));
-    mScratch.decorate(center, &overflow);
+    if (mDecoration)
+        mDecoration(mScratch, center, &overflow);
+    else
+        mScratch.decorate(center, &overflow);
 
     // beyond the 3x3: in no cached copy, left unordered
     for (size_t index = first; index < overflow.size(); index++) {
@@ -304,7 +323,7 @@ uint64_t GeneratorChunkSource::_decorate(LevelChunk &chunk, uint64_t sequence,
     }
 
     chunk = mScratch.extractChunk(chunkX, chunkZ);
-    // later neighbours tell it from a raw one: structure pieces read its blocks (sub_147761B80)
+    // later neighbours tell it from a raw one: structure pieces read its blocks
     chunk.setPopulated(true);
     mCache.put(chunk);
 

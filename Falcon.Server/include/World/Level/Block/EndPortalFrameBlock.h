@@ -13,5 +13,7 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
+
     static bool tryCompletePortal(Level &level, const Vector3i &framePosition, ServerNetworkHandler *owner);
 };

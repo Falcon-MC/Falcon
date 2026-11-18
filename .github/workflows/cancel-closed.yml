@@ -1,0 +1,24 @@
+name: Cancel runs of closed pull requests
+
+# a pull request that is merged or closed leaves its runs in the queue: nothing reads their result any more
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Cancel the runs still waiting or running for the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          gh run list -R "$GITHUB_REPOSITORY" --branch "$BRANCH" --limit 100 --json databaseId,status,event \
+            --jq '.[] | select(.status != "completed" and .event == "pull_request") | .databaseId' |
+            while read -r id; do
+              gh run cancel "$id" -R "$GITHUB_REPOSITORY" || true
+            done

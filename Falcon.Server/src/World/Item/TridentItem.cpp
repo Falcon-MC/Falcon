@@ -108,7 +108,9 @@ bool TridentItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player,
     data.mBaseDamage = TRIDENT_BASE_DAMAGE;
     data.mLoyaltyLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LOYALTY);
     data.mImpalingLevel = ItemEnchantments::getLevel(item, EnchantmentIds::IMPALING);
-    data.mChanneling = ItemEnchantments::getLevel(item, EnchantmentIds::CHANNELING) > 0;
+    // channeling turns on the trident's lightning, as the script component shows it
+    if (ItemEnchantments::getLevel(item, EnchantmentIds::CHANNELING) > 0)
+        trident->getProjectileComponent().mLightning = true;
     data.mPickupItem = item;
     data.mPickupItem.mCount = 1;
     data.mFavoredSlot = player.getInventory().getSelectedSlot();

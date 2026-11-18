@@ -13,7 +13,7 @@
 namespace {
     using Type = MapDecorationType;
 
-    // sub_1418BA320; the abandoned camps search a biome rather than a structure
+    // the abandoned camps search a biome rather than a structure
     const ExplorationMaps::Entry ENTRIES[] = {
             {3, Type::Monument, "monument", "monument"},
             {4, Type::Mansion, "", "mansion"},
@@ -75,7 +75,8 @@ void ExplorationMaps::create(ServerNetworkHandler &owner, ItemStack &item, const
     if (dimension == DimensionType::Overworld && feature != nullptr && level.shareGenerator() != nullptr) {
         StructureChunkPos start;
         if (feature->findNearest(level.getGenerator(), (int32_t) position.x, (int32_t) position.z, start)) {
-            position = Vector3f((float) (start.x * 16 + 8), position.y, (float) (start.z * 16 + 8));
+            const int32_t offset = feature->getBlockOffset();
+            position = Vector3f((float) (start.x * 16 + offset), position.y, (float) (start.z * 16 + offset));
             found = true;
         }
     }

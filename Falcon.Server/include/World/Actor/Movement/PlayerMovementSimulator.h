@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cstdint>
 
@@ -13,7 +14,7 @@ class ServerPlayer;
 // property picks the position reconciliation policy; velocity always comes from server physics
 class PlayerMovementSimulator {
 public:
-    static constexpr float PLAYER_BASE_OFFSET = 1.62f;
+    static constexpr float PLAYER_BASE_OFFSET = MovementPhysics::PLAYER_BASE_OFFSET;
 
     static float groundAcceleration(const ServerPlayer &player, float friction, bool sprinting);
 

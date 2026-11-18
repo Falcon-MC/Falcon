@@ -15,4 +15,8 @@ public:
     float getDefaultMaxHealth() const override {
         return 20.0f;
     }
+
+    bool curesIntoTrader() const override {
+        return true;
+    }
 };

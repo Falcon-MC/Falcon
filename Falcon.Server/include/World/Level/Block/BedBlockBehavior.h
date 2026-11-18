@@ -8,7 +8,7 @@ public:
         return 0.75f;
     }
 
-    // BedBlock::onFallOn (client 26.60 sub_1431540B0), whether or not the actor sneaks
+    // whether or not the actor sneaks
     float getFallDistanceMultiplier() const override {
         return 0.5f;
     }

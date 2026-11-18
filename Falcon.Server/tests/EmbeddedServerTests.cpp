@@ -151,16 +151,15 @@ int main() {
                 "Invalid property error missing");
         require(await(server.startAsync(config)), "Same instance could not restart");
         server.stop();
-        const auto worldProperties = config.dataDirectory / "players" / "world_dynamic_properties.dat";
-        std::filesystem::remove(worldProperties);
-        std::filesystem::create_directory(worldProperties);
+        // a directory in place of level.dat: the shutdown save cannot write it
         require(await(server.startAsync(config)), "Could not restart for shutdown failure check");
+        std::filesystem::remove(metadata);
+        std::filesystem::create_directory(metadata);
         server.stop();
-        require(server.getState() == EmbeddedServer::State::Failed,
-                "World properties save failure reported a clean shutdown");
+        require(server.getState() == EmbeddedServer::State::Failed, "World save failure reported a clean shutdown");
         require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
-                "World properties save failure did not report Shutdown");
-        std::filesystem::remove(worldProperties);
+                "World save failure did not report Shutdown");
+        std::filesystem::remove(metadata);
         require(await(server.startAsync(config)), "Could not restart after failed shutdown");
         server.setPaused(true);
         client.mPort = server.getPort();
@@ -179,6 +178,8 @@ int main() {
         std::cout << "Embedded lifecycle checks passed\n";
         return 0;
     } catch (const std::exception &error) {
+        // the host logger above throws: the reason would never reach the ctest output
+        std::cerr << error.what() << '\n';
         LOG_ERROR(LogAreaID::Server, "%s", error.what());
         BedrockLog::flush();
         return 1;

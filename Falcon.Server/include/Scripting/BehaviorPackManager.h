@@ -22,6 +22,7 @@ struct BehaviorPack {
     std::string mPath;
     std::string mScriptEntry;
     std::string mScriptModuleUuid;
+    std::string mScriptModuleVersion;
     std::vector<ScriptModuleDependency> mScriptModules;
     std::vector<std::string> mDependencyUuids;
     std::vector<PackSetting> mSettings;

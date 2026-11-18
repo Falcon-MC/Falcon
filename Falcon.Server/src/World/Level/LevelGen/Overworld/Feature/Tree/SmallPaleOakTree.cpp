@@ -4,6 +4,7 @@
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -52,7 +53,7 @@ bool SmallPaleOakTree::generate(BlockManager &manager, IRandom &random, int32_t 
         return false;
 
     const std::string ground = manager.getBlockAt(x, y - 1, z).mName;
-    if ((ground != "minecraft:grass_block" && ground != "minecraft:dirt" && ground != "minecraft:farmland")
+    if ((ground != BlockNames::GRASS_BLOCK && ground != BlockNames::DIRT && ground != "minecraft:farmland")
         || y >= getMaxHeight() - i - 1)
         return false;
 
@@ -73,7 +74,7 @@ bool SmallPaleOakTree::generate(BlockManager &manager, IRandom &random, int32_t 
                 if (std::abs(l1) != j1 || std::abs(j2) != j1 || (random.nextInt(2) != 0 && i4 != 0)) {
                     const std::string identifier = manager.getBlockAt(k1, i3, i2).mName;
 
-                    if (identifier == "minecraft:air" || isLeaves(identifier)
+                    if (identifier == BlockNames::AIR || isLeaves(identifier)
                         || identifier == "minecraft:pale_hanging_moss") {
                         manager.setBlockStateAt(k1, i3, i2, metaLeaves);
 
@@ -81,7 +82,7 @@ bool SmallPaleOakTree::generate(BlockManager &manager, IRandom &random, int32_t 
                         if (mossRandom.nextInt(2) == 0) {
                             const int32_t depth = mossRandom.nextInt(1, 6);
                             for (int32_t j = 1; j < depth; i++) {
-                                if (manager.getBlockAt(k1, i3 - i, i2).mName == "minecraft:air") {
+                                if (manager.getBlockAt(k1, i3 - i, i2).mName == BlockNames::AIR) {
                                     if (i == depth - 1)
                                         manager.setBlockStateAt(k1, i3 - i, i2, paleHangingMossState(true));
                                     else

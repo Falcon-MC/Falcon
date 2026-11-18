@@ -16,6 +16,10 @@ public:
         return 0.6f;
     }
 
+    bool hearsActorsInside() const override {
+        return true;
+    }
+
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 };

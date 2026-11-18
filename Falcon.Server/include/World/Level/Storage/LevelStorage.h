@@ -5,9 +5,11 @@
 #include "Core/NBT/Tag.h"
 
 #include <cstdint>
+#include <functional>
 #include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -17,6 +19,7 @@ namespace leveldb {
     class FilterPolicy;
     class DecompressAllocator;
     struct ReadOptions;
+    class WriteBatch;
 }
 
 enum class LevelDbTag : unsigned char {
@@ -30,6 +33,8 @@ enum class LevelDbTag : unsigned char {
     LegacyEntities = '2',
     FinalizedState = '6',
     RandomTicks = ':',
+    StructureBounds = 'w',
+    NamedTicks = 'z',
     LegacyVersion = 'v'
 };
 
@@ -60,11 +65,23 @@ public:
 
     void close();
 
-    void compact();
+    // off the main thread: the task keeps the database open until it returns, the storage can close meanwhile
+    std::function<void()> compactionTask() const;
+
+    // writes of every storage since the start
+    static uint64_t getWriteCount();
+
+    // saveEntities() and saveBlockEntities() wait for commitBatch(): a write slowdown (level-0 files piling up)
+    // sleeps once per database write
+    void beginBatch();
+    bool commitBatch();
 
     bool isOpen() const {
         return mDb != nullptr;
     }
+
+    // level-0 files past the write slowdown: the next ones stop every write until a compaction ends
+    bool isWriteStalled() const;
 
     uint64_t getWriteFailures() const {
         return mWriteFailures.load();
@@ -75,8 +92,8 @@ public:
     bool loadChunk(LevelChunk &chunk);
 
     /**
-     * Whether a chunk of any format is stored, from the same version and legacy terrain records the game checks
-     * (DBChunkStorage, sub_1406CA2F0). It reads storage, so callers cache the answer.
+     * Whether a chunk of any format is stored, from the same version and legacy terrain records the game checks.
+     * It reads storage, so callers cache the answer.
      */
     bool hasChunk(int32_t chunkX, int32_t chunkZ) const;
 
@@ -87,6 +104,9 @@ public:
     bool erasePendingBlockChanges(int32_t chunkX, int32_t chunkZ);
 
     bool saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
+
+    // adds to the chunk's stored actors instead of replacing them: for a chunk whose actors are not loaded
+    bool appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities);
 
     std::vector<Tag> loadEntities(int32_t chunkX, int32_t chunkZ);
 
@@ -123,12 +143,21 @@ public:
 
     bool loadSavedData(const std::string &key, Tag &data, bool wrapped = true);
 
+    // present, readable or not
+    bool hasSavedData(const std::string &key);
+
+    // every key starting with prefix, prefix removed, with its unwrapped tag
+    std::vector<std::pair<std::string, Tag>> loadSavedDataWithPrefix(const std::string &prefix);
+
+    bool eraseSavedData(const std::string &key);
+
     bool loadGameRules(Tag &rules);
 
     // display name, game mode, difficulty and the game's own options are kept from the file;
     // the arguments only fill them in when missing
     void writeLevelDat(const std::string &levelName, int32_t spawnX, int32_t spawnY, int32_t spawnZ, int32_t gameType,
-                       int32_t difficulty, int64_t seed, int64_t time, bool bonusChestEnabled, bool bonusChestSpawned,
+                       int32_t difficulty, int64_t seed, int64_t time, int64_t worldTick, bool bonusChestEnabled,
+                       bool bonusChestSpawned,
                        int64_t worldStartCount) const;
 
     bool readLevelDat(Tag &out) const;
@@ -158,6 +187,13 @@ private:
     std::shared_ptr<const leveldb::FilterPolicy> mFilterPolicy;
     std::shared_ptr<leveldb::Cache> mBlockCache;
     std::shared_ptr<leveldb::DB> mDb;
+    bool _isBatching() const {
+        return mBatchThread.load(std::memory_order_relaxed) == std::this_thread::get_id();
+    }
+
+    // the chunk workers write block entities to the same storage: only the thread that began the batch adds to it
+    std::shared_ptr<leveldb::WriteBatch> mBatch;
+    std::atomic<std::thread::id> mBatchThread{};
     std::shared_ptr<leveldb::DecompressAllocator> mDecompressAllocator;
     std::string mPath;
     int mDimensionId;

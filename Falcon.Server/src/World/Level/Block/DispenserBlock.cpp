@@ -1,16 +1,23 @@
 #include "World/Level/Block/DispenserBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/DispenseSource.h"
 
-FALCON_REGISTER_BLOCK(DispenserBlock, 60);
+// before ContainerBlock, which matches the dispenser and the dropper too
+FALCON_REGISTER_BLOCK(DispenserBlock, 45);
 
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/HopperBlockActor.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Item/VanillaItems.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <random>
 
@@ -76,9 +83,7 @@ namespace {
         return picked;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 }
 
 DispenserBlock::DispenserBlock(const Block &base) : ContainerBlock(base) {}
@@ -108,7 +113,10 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     Container &inventory = actor->getInventory();
     const int slot = pickSlot(inventory);
     if (slot < 0) {
-        owner.playLevelSound(level, SOUND_DISPENSE_FAIL, centerOf(position));
+        // the sound at the block corner, the vibration at its center
+        owner.playLevelSound(level, SOUND_DISPENSE_FAIL,
+                             Vector3f((float) position.x, (float) position.y, (float) position.z));
+        level.postGameEvent(GameEvents::DISPENSE_FAIL, centerOf(position));
         return;
     }
 
@@ -116,15 +124,32 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     if (facing < 0 || facing >= 6)
         facing = 0;
 
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_DISPENSE)) {
+        ItemStack fired = inventory.getContainerItem(slot);
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BLOCK_DISPENSE;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mBlockPosition = position;
+        event.mBlockName = state.mName;
+        event.mItem = &fired;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+    }
+
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition == nullptr || definition->mKind != ContainerBlockKind::Dropper) {
+        _dispense(owner, level, position, facing, inventory, slot);
+        return;
+    }
+
     const ItemStack &item = inventory.getContainerItem(slot);
     const Vector3i target(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
                           position.z + FACE_OFFSETS[facing][2]);
 
     // a dropper facing a container only feeds it; keeps the item when it is full
-    const ContainerBlockDefinition *definition = findDefinition(state.mName);
-    BlockActor *targetActor = definition != nullptr && definition->mKind == ContainerBlockKind::Dropper
-                                      ? level.getBlockActors().find(target)
-                                      : nullptr;
+    BlockActor *targetActor = level.getBlockActors().find(target);
     Container *targetContainer = targetActor != nullptr ? targetActor->getContainer() : nullptr;
     if (targetContainer != nullptr) {
         if (!HopperBlockActor::addOne(*targetContainer, item))
@@ -142,8 +167,76 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     owner.refreshContainerViewers(position);
 }
 
+// a block item goes to its block, any other to its item;
+// a refusal drops it, and either way the shoot particles follow
+void DispenserBlock::_dispense(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
+                               Container &inventory, int slot) {
+    const DispenseSource source{owner, level, position, inventory, slot, dispensePosition(position, facing), facing};
+
+    const std::string identifier = inventory.getContainerItem(slot).mDefinition->getIdentifier();
+    const Item *itemType = VanillaItems::fromIdentifier(identifier);
+    bool dispensed = itemType != nullptr && itemType->dispense(source);
+    if (!dispensed) {
+        const Block *blockType = VanillaBlocks::fromIdentifier(identifier);
+        dispensed = blockType != nullptr && blockType->dispense(source);
+    }
+
+    if (!dispensed) {
+        ItemStack single = inventory.getContainerItem(slot);
+        single.mCount = 1;
+        ejectItem(owner, level, position, facing, single);
+        source.removeOne();
+        owner.playLevelSound(level, SOUND_DISPENSE, source.mPosition);
+    }
+
+    owner.broadcastLevelEvent(level, LEVEL_EVENT_PARTICLE_SHOOT, source.mPosition,
+                              FACE_OFFSETS[facing][0] + 3 * FACE_OFFSETS[facing][2] + 4);
+}
+
+Vector3f DispenserBlock::dispensePosition(const Vector3i &position, int facing) {
+    return Vector3f((float) position.x + 0.5f + EJECT_DISTANCE * (float) FACE_OFFSETS[facing][0],
+                    (float) position.y + EJECT_BASE_HEIGHT + EJECT_DISTANCE * (float) FACE_OFFSETS[facing][1],
+                    (float) position.z + 0.5f + EJECT_DISTANCE * (float) FACE_OFFSETS[facing][2]);
+}
+
+const ItemStack &DispenseSource::getItem() const {
+    return mContainer.getContainerItem(mSlot);
+}
+
+Vector3f DispenseSource::getFacingVector() const {
+    return Vector3f((float) FACE_OFFSETS[mFace][0], (float) FACE_OFFSETS[mFace][1], (float) FACE_OFFSETS[mFace][2]);
+}
+
+void DispenseSource::broadcastShootEvent(int32_t eventId) const {
+    mOwner.broadcastLevelEvent(mLevel, eventId, mPosition, SHOOT_EVENT_DATA);
+}
+
+void DispenseSource::playClick() const {
+    mOwner.playLevelSound(mLevel, SOUND_DISPENSE, mPosition);
+}
+
+void DispenseSource::removeOne() const {
+    ItemStack remaining = getItem();
+    --remaining.mCount;
+    if (remaining.mCount <= 0)
+        remaining = ItemStack::air();
+    mContainer.setContainerItem(mSlot, std::move(remaining));
+    mOwner.refreshContainerViewers(mBlockPosition);
+}
+
 void DispenserBlock::_eject(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
                             const ItemStack &item) {
+    ItemStack single = item;
+    single.mCount = 1;
+    ejectItem(owner, level, position, facing, single);
+
+    owner.broadcastLevelEvent(level, LEVEL_EVENT_PARTICLE_SHOOT, centerOf(position),
+                              FACE_OFFSETS[facing][0] + 3 * FACE_OFFSETS[facing][2] + 4);
+    owner.playLevelSound(level, SOUND_DISPENSE, centerOf(position));
+}
+
+void DispenserBlock::ejectItem(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing,
+                               const ItemStack &item) {
     const float dx = (float) FACE_OFFSETS[facing][0];
     const float dy = (float) FACE_OFFSETS[facing][1];
     const float dz = (float) FACE_OFFSETS[facing][2];
@@ -160,11 +253,5 @@ void DispenserBlock::_eject(ServerNetworkHandler &owner, Level &level, const Vec
                           EJECT_UPWARD_MOTION + gaussian(dispenseRandom()) * EJECT_SPREAD,
                           dz * speed + gaussian(dispenseRandom()) * EJECT_SPREAD);
 
-    ItemStack single = item;
-    single.mCount = 1;
-    ItemActorHandler::dropItem(owner, level, spawn, single, motion, ItemActorHandler::DROP_PICKUP_DELAY);
-
-    owner.broadcastLevelEvent(level, LEVEL_EVENT_PARTICLE_SHOOT, centerOf(position),
-                              FACE_OFFSETS[facing][0] + 3 * FACE_OFFSETS[facing][2] + 4);
-    owner.playLevelSound(level, SOUND_DISPENSE, centerOf(position));
+    ItemActorHandler::dropItem(owner, level, spawn, item, motion, ItemActorHandler::DROP_PICKUP_DELAY);
 }

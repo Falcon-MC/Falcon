@@ -3,6 +3,7 @@
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Spawn/StructureSpawnOverrides.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/LiquidView.h"
@@ -13,19 +14,22 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <limits>
 
 namespace {
-    // pool indices of the 26.60 population_control parser (sub_142D9F9A0, switch at 0x142DA2D95)
+    // pool indices of the 26.60 population_control parser
     const char *const POOLS[NaturalSpawner::POOL_COUNT] = {"animal",  "monster", "water_animal", "villager",
                                                            "ambient", "cat",     "pillager"};
 
-    // written by the 26.60 Dimension constructor (sub_142930ED0, 0x142932480-0x1429324F0), read by the spawner at
-    // 0x1432C21A8 (rows at Dimension+0x104 and +0x120); row 0 underground, row 1 surface
+    // written by the 26.60 Dimension constructor, read by the spawner;
+    // row 0 underground, row 1 surface
     const int32_t POOL_CAPS[2][NaturalSpawner::POOL_COUNT] = {{4, 16, 36, 0, 2, 0, 8}, {4, 8, 36, 0, 0, 4, 8}};
+
+    const int32_t MONSTER_POOL = 1;
 
     const int32_t CHUNK_SPAWN_ROLL = 2000;
     const int32_t CHUNK_SPAWN_THRESHOLD = 10;
@@ -136,12 +140,31 @@ float NaturalSpawner::_nextFloat() {
     return distribution(mRandom);
 }
 
+int32_t NaturalSpawner::countPopulationActors(ServerNetworkHandler &owner, Level &level) {
+    int32_t count = 0;
+    const char *lastIdentifier = nullptr;
+    bool lastPopulated = false;
+    for (auto &entry: owner.getActors()) {
+        const ServerActor &actor = *entry.second;
+        if (!actor.isAlive() || !actor.isIn(level))
+            continue;
+
+        const char *identifier = actor.getIdentifier();
+        if (lastIdentifier == nullptr || (identifier != lastIdentifier && std::strcmp(identifier, lastIdentifier) != 0))
+            lastPopulated = !SpawnRules::getPopulation(identifier).empty();
+        lastIdentifier = identifier;
+        if (lastPopulated)
+            ++count;
+    }
+    return count;
+}
+
 void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     std::vector<Vector3f> players;
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.isIn(level)
-            || player.getGameType() == (int32_t) GameType::Spectator)
+            || player.isSpectator())
             continue;
         players.push_back(player.getPosition());
     }
@@ -153,26 +176,22 @@ void NaturalSpawner::tick(ServerNetworkHandler &owner, Level &level) {
     if (!level.getGameRules().getBool("domobspawning"))
         return;
 
-    int32_t mobCount = 0;
-    for (auto &entry: owner.getActors()) {
-        const ServerActor &actor = *entry.second;
-        if (actor.isAlive() && !SpawnRules::getPopulation(actor.getIdentifier()).empty())
-            ++mobCount;
-    }
+    int32_t mobCount = countPopulationActors(owner, level);
 
     const int32_t difficulty = (int32_t) owner.getProperties().getDifficulty();
-    const std::vector<int64_t> columns(level.getActiveColumns().begin(), level.getActiveColumns().end());
-    for (const int64_t column: columns) {
-        // a ticking chunk goes on only when nextInt(2000) <= 10 (0x1432C3021)
-        if (_nextInt(CHUNK_SPAWN_ROLL) > CHUNK_SPAWN_THRESHOLD)
-            continue;
+    // a ticking chunk goes on only when nextInt(2000) <= 10: the gap to the next one that does is drawn
+    // at once, the same odds without a roll a chunk
+    const std::vector<int64_t> columns = level.getActiveColumnOrder();
+    std::geometric_distribution<size_t> gap((double) (CHUNK_SPAWN_THRESHOLD + 1) / (double) CHUNK_SPAWN_ROLL);
+    for (size_t index = gap(mRandom); index < columns.size(); index += 1 + gap(mRandom)) {
+        const int64_t column = columns[index];
         _tickChunk(owner, level, (int32_t) (column >> 32), (int32_t) (column & 0xffffffff), difficulty, mobCount,
                    players);
     }
 }
 
 void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ,
-                                int32_t difficulty, int32_t mobCount, const std::vector<Vector3f> &players) {
+                                int32_t difficulty, int32_t &mobCount, const std::vector<Vector3f> &players) {
     if (!level.isChunkResident(chunkX, chunkZ))
         return;
 
@@ -180,7 +199,7 @@ void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32
     const int32_t z = chunkZ * 16 + _nextInt(16);
 
     // column walked down from the top: the first floor is surface, every one below underground; each spawns one
-    // herd after recounting the mobs around the chunk (sub_1432C2EF0)
+    // herd after recounting the mobs around the chunk
     bool surface = true;
     int32_t y = level.getMaxY();
     while (y > level.getMinY()) {
@@ -203,53 +222,56 @@ void NaturalSpawner::_tickChunk(ServerNetworkHandler &owner, Level &level, int32
     }
 }
 
-void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts) {
-    std::unordered_set<int64_t> alive;
+void NaturalSpawner::_census(ServerNetworkHandler &owner, Level &level) {
+    if (mCensusLevel == &level && mCensusSerial == owner.getActorSetSerial() && mCensusTick == owner.getCurrentTick())
+        return;
+
+    mCensusLevel = &level;
+    mCensusSerial = owner.getActorSetSerial();
+    mCensusTick = owner.getCurrentTick();
+    mCensus.clear();
     for (auto &entry: owner.getActors()) {
         const ServerActor &actor = *entry.second;
-        if (!actor.isAlive())
-            continue;
-        alive.insert(entry.first);
-
-        if (!actor.isIn(level))
+        if (!actor.isAlive() || !actor.isIn(level))
             continue;
 
         const Vector3f &position = actor.getPosition();
-        const int32_t actorChunkX = (int32_t) std::floor(position.x) >> 4;
-        const int32_t actorChunkZ = (int32_t) std::floor(position.z) >> 4;
-        if (std::abs(actorChunkX - chunkX) > COUNT_CHUNK_RADIUS || std::abs(actorChunkZ - chunkZ) > COUNT_CHUNK_RADIUS)
-            continue;
-
-        // a mob not spawned on the surface counts as underground, like a missing "Surface" tag
-        const int32_t row = mSurfaceMobs.count(entry.first) != 0 ? 1 : 0;
-        const int32_t pool = poolIndex(SpawnRules::getPopulation(actor.getIdentifier()));
-        if (pool >= 0)
-            ++counts.mPools[row][pool];
-        ++counts.mTypes[row][actor.getIdentifier()];
+        mCensus.push_back(Counted{entry.first, (int32_t) std::floor(position.x) >> 4,
+                                  (int32_t) std::floor(position.z) >> 4,
+                                  poolIndex(SpawnRules::getPopulation(actor.getIdentifier())), actor.getIdentifier()});
     }
 
     for (auto iterator = mSurfaceMobs.begin(); iterator != mSurfaceMobs.end();) {
-        if (alive.count(*iterator) == 0)
+        const auto found = owner.getActors().find(*iterator);
+        if (found == owner.getActors().end() || !found->second->isAlive())
             iterator = mSurfaceMobs.erase(iterator);
         else
             ++iterator;
     }
 }
 
-void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
-                                   int32_t mobCount, Counts &counts) {
-    struct Candidate {
-        const SpawnRule *mRule;
-        const SpawnCondition *mCondition;
-    };
+void NaturalSpawner::_count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts) {
+    _census(owner, level);
+    for (const Counted &counted: mCensus) {
+        if (std::abs(counted.mChunkX - chunkX) > COUNT_CHUNK_RADIUS
+            || std::abs(counted.mChunkZ - chunkZ) > COUNT_CHUNK_RADIUS)
+            continue;
 
-    std::vector<Candidate> candidates;
-    int32_t totalWeight = 0;
-    for (const SpawnRule &rule: SpawnRules::getRules()) {
+        // a mob not spawned on the surface counts as underground, like a missing "Surface" tag
+        const int32_t row = mSurfaceMobs.count(counted.mId) != 0 ? 1 : 0;
+        if (counted.mPool >= 0)
+            ++counts.mPools[row][counted.mPool];
+        ++counts.mTypes[row][counted.mIdentifier];
+    }
+}
+
+void NaturalSpawner::_collectCandidates(Level &level, const SpawnSite &site, int32_t difficulty,
+                                        std::vector<Candidate> &candidates, int32_t &totalWeight) {
+    const auto consider = [&](const SpawnRule &rule) {
         const MobActor *prototype = ActorClassRegistry::getMobPrototype(rule.mIdentifier);
         if (prototype == nullptr
             || !prototype->canSpawnNaturally(level, site.mPosition, site.mBiome, site.mLight, mRandom))
-            continue;
+            return;
 
         for (const SpawnCondition &condition: rule.mConditions) {
             if (!_matches(level, site, condition, difficulty))
@@ -258,7 +280,41 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
             candidates.push_back(Candidate{&rule, &condition});
             totalWeight += condition.mWeight;
         }
+    };
+
+    // a structure piece can replace the monsters of the spot with its own list
+    const std::vector<SpawnRule> *monsters =
+            StructureSpawnOverrides::find(level, site.mPosition, POOLS[MONSTER_POOL]);
+    for (const SpawnRule &rule: SpawnRules::getRules()) {
+        if (monsters == nullptr || rule.mPopulation != POOLS[MONSTER_POOL])
+            consider(rule);
     }
+    if (monsters != nullptr) {
+        for (const SpawnRule &rule: *monsters)
+            consider(rule);
+    }
+}
+
+std::vector<std::string> NaturalSpawner::candidatesAt(Level &level, const Vector3i &position, bool surface,
+                                                      int32_t difficulty, const std::vector<Vector3f> &players) {
+    std::vector<std::string> identifiers;
+    SpawnSite site;
+    if (!_makeSite(level, position, players, surface, site))
+        return identifiers;
+
+    std::vector<Candidate> candidates;
+    int32_t totalWeight = 0;
+    _collectCandidates(level, site, difficulty, candidates, totalWeight);
+    for (const Candidate &candidate: candidates)
+        identifiers.push_back(candidate.mRule->mIdentifier);
+    return identifiers;
+}
+
+void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
+                                   int32_t &mobCount, Counts &counts) {
+    std::vector<Candidate> candidates;
+    int32_t totalWeight = 0;
+    _collectCandidates(level, site, difficulty, candidates, totalWeight);
     if (totalWeight <= 0)
         return;
 
@@ -279,7 +335,7 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
     if (condition.mRarity > 0 && _nextInt(condition.mRarity) != 0)
         return;
 
-    // squaring the roll biases herds toward their minimum size (0x1432C1E8F)
+    // squaring the roll biases herds toward their minimum size
     const SpawnHerd &herd = condition.mHerds[(size_t) _nextInt((int32_t) condition.mHerds.size())];
     const float factor = _nextFloat();
     int32_t size = herd.mMinSize + (int32_t) std::round((float) (herd.mMaxSize - herd.mMinSize) * (factor * factor));
@@ -297,7 +353,7 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
             size = density - existing;
     }
 
-    // one position for the whole herd; members stop only at the pool cap (0x1432C21E2, 0x1432C27DD)
+    // one position for the whole herd; members stop only at the pool cap
     const int32_t pool = poolIndex(rule.mPopulation);
     const Vector3f position((float) site.mPosition.x + HERD_OFFSET, (float) site.mPosition.y,
                             (float) site.mPosition.z + HERD_OFFSET);
@@ -315,7 +371,10 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
         if (spawned == nullptr)
             continue;
 
-        const int32_t spawnedPool = poolIndex(SpawnRules::getPopulation(identifier));
+        const std::string &population = SpawnRules::getPopulation(identifier);
+        const int32_t spawnedPool = poolIndex(population);
+        if (!population.empty())
+            ++mobCount;
         if (spawnedPool >= 0)
             ++counts.mPools[row][spawnedPool];
         ++counts.mTypes[row][identifier];
@@ -327,13 +386,19 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
 void NaturalSpawner::_despawn(ServerNetworkHandler &owner, Level &level, const std::vector<Vector3f> &players) {
     std::vector<int64_t> removed;
 
+    // actors come in runs of one type: the rule of the last identifier asked is kept
+    const char *lastIdentifier = nullptr;
+    const DespawnRule *rule = nullptr;
     for (auto &entry: owner.getActors()) {
         ServerActor &actor = *entry.second;
-        if (!actor.isAlive() || actor.isPersistent() || !actor.isIn(level))
+        const char *identifier = actor.getIdentifier();
+        if (lastIdentifier == nullptr || (identifier != lastIdentifier && std::strcmp(identifier, lastIdentifier) != 0))
+            rule = SpawnRules::getDespawnRule(identifier);
+        lastIdentifier = identifier;
+        if (rule == nullptr || !rule->mFromDistance)
             continue;
 
-        const DespawnRule *rule = SpawnRules::getDespawnRule(actor.getIdentifier());
-        if (rule == nullptr || !rule->mFromDistance)
+        if (!actor.isAlive() || actor.isPersistent() || !actor.isIn(level))
             continue;
 
         float nearest = std::numeric_limits<float>::max();
@@ -422,7 +487,7 @@ bool NaturalSpawner::_matches(Level &level, const SpawnSite &site, const SpawnCo
     if (condition.mHasHeight && (site.mPosition.y < condition.mMinHeight || site.mPosition.y > condition.mMaxHeight))
         return false;
 
-    // every environment flag of the site must be allowed by the rule (sub_145D43A40)
+    // every environment flag of the site must be allowed by the rule
     if (site.mWater && !condition.mUnderwater)
         return false;
     if (site.mLava && !condition.mLava)
@@ -448,7 +513,7 @@ bool NaturalSpawner::_matches(Level &level, const SpawnSite &site, const SpawnCo
 }
 
 bool NaturalSpawner::_canSpawnAt(Level &level, const SpawnSite &site, const SpawnCondition &condition) const {
-    // needs its neighbouring chunks and a player within the rule's distances (sub_145E16490)
+    // needs its neighbouring chunks and a player within the rule's distances
     const int32_t chunkX = site.mPosition.x >> 4;
     const int32_t chunkZ = site.mPosition.z >> 4;
     for (int32_t neighbourX = chunkX - 1; neighbourX <= chunkX + 1; ++neighbourX) {

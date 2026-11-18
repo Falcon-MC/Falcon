@@ -9,7 +9,6 @@ FALCON_REGISTER_PROJECTILE(EnderPearlActor, EnderPearl, "minecraft:ender_pearl",
 FALCON_REGISTER_PROJECTILE(SplashPotionActor, SplashPotion, "minecraft:splash_potion", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(LingeringPotionActor, LingeringPotion, "minecraft:lingering_potion", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(ExperienceBottleActor, ExperienceBottle, "minecraft:xp_bottle", 0.25f, 0.25f);
-FALCON_REGISTER_PROJECTILE(ThrownProjectileActor, EyeOfEnderSignal, "minecraft:eye_of_ender_signal", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(FireworksRocketActor, FireworksRocket, "minecraft:fireworks_rocket", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(ProjectileActor, WitherSkull, "minecraft:wither_skull", 0.25f, 0.25f);
 FALCON_REGISTER_PROJECTILE(ProjectileActor, WitherSkullDangerous, "minecraft:wither_skull_dangerous", 0.25f, 0.25f);

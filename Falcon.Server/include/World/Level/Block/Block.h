@@ -11,11 +11,14 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 struct BlockData;
+struct DispenseSource;
 class Actor;
 class BlockBehavior;
+class Container;
 class ItemStack;
 class Level;
 class LiquidPhysicsSystem;
@@ -109,7 +112,7 @@ public:
         return 0;
     }
 
-    // Material type 18: liquid falling onto it turns it to stone (sub_149C3E1F0)
+    // Material type 18: liquid falling onto it turns it to stone
     virtual bool isIceMaterial() const {
         return false;
     }
@@ -242,12 +245,35 @@ public:
         (void) blockFace;
     }
 
+    // set by anything reporting through Level::onBlockPlaced: a player, /setblock, fire
+    virtual void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           const BlockState &state) const {
         (void) owner;
         (void) level;
         (void) position;
         (void) state;
+    }
+
+    // of this very class, none derived from it: nothing overrides what a block does. Asked for every
+    // neighbour of every block an explosion breaks, so the answer is kept
+    bool isPlainClass() const {
+        if (mPlainClass == 0)
+            mPlainClass = typeid(*this) == typeid(Block) ? 1 : 2;
+        return mPlainClass == 1;
+    }
+
+    // true for a block that does something in onActorInside: the others are not even told, and a crowd
+    // standing in water or grass costs nothing. A block overriding one overrides the other
+    virtual bool hearsActorsInside() const {
+        return false;
     }
 
     virtual void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
@@ -292,6 +318,12 @@ public:
         (void) level;
         (void) position;
         (void) state;
+    }
+
+    // the block's own dispense for its item; false drops it as a dropper does
+    virtual bool dispense(const DispenseSource &source) const {
+        (void) source;
+        return false;
     }
 
     virtual std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
@@ -356,6 +388,18 @@ public:
         return false;
     }
 
+    // boxes, in world coordinates, for a mover whose box is known before it moves: a block that only carries what
+    // already stands above it. false leaves the usual shapes
+    virtual bool getMoverCollisionShapes(const BlockState &state, const Vector3i &position, const AxisAlignedBB &mover,
+                                         bool descending, std::vector<AxisAlignedBB> &shapes) const {
+        (void) state;
+        (void) position;
+        (void) mover;
+        (void) descending;
+        (void) shapes;
+        return false;
+    }
+
     // actor null outside a move: placement, explosions, block rays
     // shapes that depend on where the actor stands against the block
     virtual bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
@@ -398,8 +442,42 @@ public:
     static std::vector<BlockDrop> grassDrops(const std::string &shearedItem, int32_t shearedCount,
                                              const ItemStack &tool);
 
+    // what a comparator reads from this block, -1 when it gives none and the comparator reads redstone
+    virtual int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        return -1;
+    }
+
+    // what a comparator reads from the container of the block actor here, 0 without one
+    static int containerSignal(Level &level, const Vector3i &position);
+
+    static int containerSignal(const Container &container);
+
     virtual bool isSignalSource() const {
         return false;
+    }
+
+    // power this source gives the neighbour on `face` (RedstoneSystem convention), strong through solid blocks;
+    // -1 leaves it to RedstoneSystem
+    virtual int getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
+                                 bool strong) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) face;
+        (void) strong;
+        return -1;
+    }
+
+    // a normal or redstone update reached this block; the power around it may have changed
+    virtual void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
     }
 
     // block light of a state; `dataEmission` is the value the block data gives every state
@@ -410,6 +488,16 @@ public:
 
     virtual PistonMoveReaction getPistonMoveReaction() const {
         return PistonMoveReaction::Normal;
+    }
+
+    // VibrationProperties flags: the BlockVibrationPropertiesComponent the game gives wool and carpets
+    virtual uint8_t getVibrationProperties() const {
+        return 0;
+    }
+
+    // the block actor type this block carries, null for none: an actor of another type goes when the block is set
+    virtual const char *getBlockActorId() const {
+        return nullptr;
     }
 
     virtual BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const;
@@ -466,4 +554,5 @@ private:
     std::string mIdentifier;
     std::string mName;
     Tag mStates;
+    mutable uint8_t mPlainClass = 0;
 };

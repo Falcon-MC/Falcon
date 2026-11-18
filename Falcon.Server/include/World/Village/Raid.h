@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 class Level;
+class Tag;
 class ServerNetworkHandler;
 class Village;
 
@@ -49,7 +50,7 @@ public:
         return mRaiders.count(id) != 0;
     }
 
-    // sub_14CE8F940: the wave grows by the recruit's health truncated to int
+    // the wave grows by the recruit's health truncated to int
     void addRecruit(int64_t id, float health);
 
     // killed one of the village's hostile dwellers; rewarded on victory
@@ -62,6 +63,12 @@ public:
 
     // 0 to 1
     float getProgress(ServerNetworkHandler &owner) const;
+
+    // the game's raid record
+    Tag save() const;
+
+    // delta moves the saved tick onto this server's clock; the timers restart from their defaults
+    void restore(const Tag &raid, int64_t delta);
 
 private:
     void _resetStateTimers();
@@ -89,7 +96,7 @@ private:
     uint8_t mWaveCount = 0;
     int64_t mLastTick = -1;
     int64_t mTicksInState = 0;
-    // timers {300, 40, 40, 600} from xmmword_14F1B3880, then 600 and 600 (0x1439d7ce8), in _createRaid sub_1439D7BF0
+    // timers {300, 40, 40, 600}, then 600 and 600
     int32_t mCooldownTicks = 300;
     int32_t mNextWaveDelay = 40;
     int32_t mNextWaveCountdown = 40;
@@ -98,8 +105,12 @@ private:
     int32_t mCelebrationTicks = 600;
     Vector3f mSpawnPosition;
     std::unordered_set<int64_t> mRaiders;
+    // raiders of the wave when it spawned
+    uint8_t mWaveRaiders = 0;
     float mTotalHealth = 0.0f;
-    uint8_t mMaxSpawnFailures = 5; // 0x1439d7d43
+    // false for a raid saved without a health total: its progress counts the raiders left
+    bool mHealthProgress = true;
+    uint8_t mMaxSpawnFailures = 5;
     uint8_t mSpawnFailures = 0;
     std::unordered_set<int64_t> mHeroes;
 };

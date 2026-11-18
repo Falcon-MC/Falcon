@@ -7,7 +7,7 @@
 using namespace MovementPhysics;
 
 namespace MovementPhysics {
-    // GlideMoveSystem (0x140C66F70), before collision resolution
+    // GlideMoveSystem, before collision resolution
     void glide(Vector3f &velocity, const PlayerAuthInputPacket &packet, bool slowFalling) {
         const float pitch = packet.mRotation.x * MOJANG_PI / 180.0f;
         const float yaw = packet.mRotation.y * MOJANG_PI / 180.0f;

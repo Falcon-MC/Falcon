@@ -125,8 +125,10 @@ namespace {
         if (modules != nullptr && modules->isArray()) {
             for (const std::unique_ptr<json::Value> &module: modules->mArray) {
                 if (module->isObject() && module->get("type") != nullptr && module->get("type")->string() == "script"
-                    && module->get("uuid") != nullptr)
+                    && module->get("uuid") != nullptr) {
                     out.mScriptModuleUuid = module->get("uuid")->string();
+                    out.mScriptModuleVersion = versionText(module->get("version"));
+                }
             }
         }
 
@@ -200,7 +202,8 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
     }
 
     const std::filesystem::path base(pack.mPath);
-    const bool hasContent = std::filesystem::exists(base / "items") || std::filesystem::exists(base / "blocks");
+    const bool hasContent = std::filesystem::exists(base / "items") || std::filesystem::exists(base / "blocks")
+                            || std::filesystem::exists(base / "sounds" / "sound_definitions.json");
     if (!pack.hasScript() && !hasContent)
         return;
 
@@ -272,7 +275,16 @@ void BehaviorPackManager::_scanContainer(const std::string &directory, const std
 
     const std::filesystem::path cacheRoot(cacheDirectory);
 
-    for (const std::filesystem::directory_entry &entry: std::filesystem::directory_iterator(root, error)) {
+    // directory order differs between file systems, the pack order must not
+    std::vector<std::filesystem::directory_entry> entries;
+    for (const std::filesystem::directory_entry &entry: std::filesystem::directory_iterator(root, error))
+        entries.push_back(entry);
+    std::sort(entries.begin(), entries.end(),
+              [](const std::filesystem::directory_entry &a, const std::filesystem::directory_entry &b) {
+                  return a.path().filename() < b.path().filename();
+              });
+
+    for (const std::filesystem::directory_entry &entry: entries) {
         if (entry.path().filename() == ".cache")
             continue;
 

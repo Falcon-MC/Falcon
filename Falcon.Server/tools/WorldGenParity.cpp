@@ -11,8 +11,12 @@
 //   FalconWorldGenParity --db <path> --seed <int64> --far [--min-block-match pct] [--terrain-only]
 //
 // --dimension: 0 overworld (default), 1 nether, 2 end; only its build range is compared
+// populated Nether comparisons report positive placement chunk overlap for three structures
+// --mineshaft-markers minY,maxY: exact states at the union of mineshaft-marker positions in an overworld area
+// --min-mineshaft-marker-match pct: exit 2 when that score falls below the threshold
 // --terrain-only: chunks as the noise fills them, before population
 // --blocks: one "x y z expected generated" line per block that differs or is not plain terrain, for scripts
+// --block-states: append tab-separated expected and generated states to the block dump
 // --far: 6x6 chunks at +-1000 and +-10000 on both axes, one report each: climate-only bugs hide near the origin
 // area corners: chunk coordinates, inclusive; column: a block position
 // exit codes: 0 success, 1 invalid input or unreadable world, 2 block match below --min-block-match
@@ -142,6 +146,7 @@ namespace {
         std::string mCsv;
         std::string mJson;
         std::string mBlocks;
+        bool mDumpBlockStates = false;
         bool mHasColumn = false;
         bool mFar = false;
         int32_t mColumnX = 0;
@@ -149,6 +154,11 @@ namespace {
         bool mHasMinimum = false;
         double mMinBlockMatch = 0.0;
         bool mTerrainOnly = false;
+        bool mMineshaftMarkers = false;
+        bool mHasMineshaftMinimum = false;
+        double mMinMineshaftMatch = 0.0;
+        int32_t mMineshaftMinY = 0;
+        int32_t mMineshaftMaxY = 0;
     };
 
     enum class CoarseClass {
@@ -219,6 +229,8 @@ namespace {
         LOG_ERROR(LogAreaID::Level, "Usage: FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1");
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
         LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2] [--blocks file]");
+        LOG_ERROR(LogAreaID::Level, "                            [--block-states]");
+        LOG_ERROR(LogAreaID::Level, "                            [--mineshaft-markers minY,maxY] [--min-mineshaft-marker-match pct]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --far");
     }
@@ -233,6 +245,10 @@ namespace {
 
             if (flag == "--terrain-only") {
                 options.mTerrainOnly = true;
+                continue;
+            }
+            if (flag == "--block-states") {
+                options.mDumpBlockStates = true;
                 continue;
             }
 
@@ -277,21 +293,35 @@ namespace {
                     return false;
                 }
                 selectDimension(Dimension::fromId(value[0] - '0'));
+            } else if (flag == "--mineshaft-markers") {
+                if (!parseInt32List(value, 2, numbers) || numbers[0] < LevelChunk::MIN_Y
+                    || numbers[1] > LevelChunk::MAX_Y || numbers[0] > numbers[1]) {
+                    LOG_ERROR(LogAreaID::Level, "--mineshaft-markers needs ascending Overworld block heights minY,maxY");
+                    return false;
+                }
+                options.mMineshaftMarkers = true;
+                options.mMineshaftMinY = numbers[0];
+                options.mMineshaftMaxY = numbers[1];
             } else if (flag == "--csv") {
                 options.mCsv = value;
             } else if (flag == "--json") {
                 options.mJson = value;
             } else if (flag == "--blocks") {
                 options.mBlocks = value;
-            } else if (flag == "--min-block-match") {
+            } else if (flag == "--min-block-match" || flag == "--min-mineshaft-marker-match") {
                 char *end = nullptr;
-                options.mMinBlockMatch = std::strtod(value.c_str(), &end);
-                if (value.empty() || *end != '\0' || !(options.mMinBlockMatch >= 0.0)
-                    || options.mMinBlockMatch > 100.0) {
-                    LOG_ERROR(LogAreaID::Level, "--min-block-match must be a percentage, got '%s'", value.c_str());
+                const double threshold = std::strtod(value.c_str(), &end);
+                if (value.empty() || *end != '\0' || !(threshold >= 0.0) || threshold > 100.0) {
+                    LOG_ERROR(LogAreaID::Level, "%s must be a percentage, got '%s'", flag.c_str(), value.c_str());
                     return false;
                 }
-                options.mHasMinimum = true;
+                if (flag == "--min-block-match") {
+                    options.mMinBlockMatch = threshold;
+                    options.mHasMinimum = true;
+                } else {
+                    options.mMinMineshaftMatch = threshold;
+                    options.mHasMineshaftMinimum = true;
+                }
             } else {
                 LOG_ERROR(LogAreaID::Level, "unknown option %s", flag.c_str());
                 return false;
@@ -305,6 +335,16 @@ namespace {
 
         if ((int) options.mHasArea + (int) options.mHasColumn + (int) options.mFar != 1) {
             LOG_ERROR(LogAreaID::Level, "give exactly one of --area, --column and --far");
+            return false;
+        }
+
+        if (options.mHasMineshaftMinimum && !options.mMineshaftMarkers) {
+            LOG_ERROR(LogAreaID::Level, "--min-mineshaft-marker-match requires --mineshaft-markers");
+            return false;
+        }
+        if (options.mMineshaftMarkers && (!options.mHasArea || options.mTerrainOnly
+                                          || gDimension != DimensionType::Overworld)) {
+            LOG_ERROR(LogAreaID::Level, "--mineshaft-markers requires a populated Overworld --area");
             return false;
         }
 
@@ -1012,7 +1052,7 @@ namespace {
     }
 
     // one line per block that differs or that is not plain terrain in either world: x y z expected generated
-    void writeBlocks(std::ofstream &out, const LevelChunk &expected, const LevelChunk &generated) {
+    void writeBlocks(std::ofstream &out, const LevelChunk &expected, const LevelChunk &generated, bool states) {
         static const std::unordered_set<std::string> TERRAIN = {
                 "minecraft:air", "minecraft:stone", "minecraft:deepslate", "minecraft:water", "minecraft:bedrock",
                 "minecraft:lava", "minecraft:dirt", "minecraft:grass_block"};
@@ -1025,7 +1065,147 @@ namespace {
                         continue;
 
                     out << ((expected.getX() << 4) + x) << ' ' << y << ' ' << ((expected.getZ() << 4) + z) << ' '
-                        << expectedBlock.mName << ' ' << generatedBlock.mName << '\n';
+                        << expectedBlock.mName << ' ' << generatedBlock.mName;
+                    if (states)
+                        out << '\t' << expectedBlock.mStates.toString() << '\t' << generatedBlock.mStates.toString();
+                    out << '\n';
+                }
+            }
+        }
+    }
+
+    struct PlacementScore {
+        const char *mName;
+        uint64_t mExpected = 0;
+        uint64_t mGenerated = 0;
+        uint64_t mShared = 0;
+        uint64_t mGeneratedWithoutReference = 0;
+        uint64_t mMarkerPositions = 0;
+        uint64_t mMatchingMarkers = 0;
+        uint64_t mSharedMarkerPositions = 0;
+
+        void add(bool expected, bool generated) {
+            mExpected += expected;
+            mGenerated += generated;
+            mShared += expected && generated;
+        }
+
+        void addMarker(bool expected, bool generated, bool sameState) {
+            mMarkerPositions += expected || generated;
+            mSharedMarkerPositions += expected && generated;
+            mMatchingMarkers += expected && generated && sameState;
+        }
+
+        void print() const {
+            if (mGeneratedWithoutReference != 0)
+                LOG_INFO(LogAreaID::Level, "Nether placement %s: %llu Falcon chunks lack a BDS reference",
+                         mName, (unsigned long long) mGeneratedWithoutReference);
+
+            const uint64_t total = mExpected + mGenerated - mShared;
+            if (total == 0) {
+                LOG_INFO(LogAreaID::Level, "Nether placement %s: no positive chunks in either world", mName);
+                return;
+            }
+            const double percent = 100.0 * (double) mShared / (double) total;
+            LOG_INFO(LogAreaID::Level, "Nether placement %s: %.2f%% overlap (%llu shared, %llu BDS, %llu Falcon)",
+                     mName, percent, (unsigned long long) mShared, (unsigned long long) mExpected,
+                     (unsigned long long) mGenerated);
+            if (mMarkerPositions != 0)
+                LOG_INFO(LogAreaID::Level, "Nether markers %s: %.2f%% identical (%llu / %llu; %llu shared positions before comparing states)",
+                         mName, 100.0 * (double) mMatchingMarkers / (double) mMarkerPositions,
+                         (unsigned long long) mMatchingMarkers, (unsigned long long) mMarkerPositions,
+                         (unsigned long long) mSharedMarkerPositions);
+        }
+    };
+
+    struct NetherPlacement {
+        bool mFossil = false;
+        bool mPortal = false;
+        bool mBastion = false;
+        bool mDriedGhast = false;
+
+        void merge(const NetherPlacement &other) {
+            mFossil |= other.mFossil;
+            mPortal |= other.mPortal;
+            mBastion |= other.mBastion;
+            mDriedGhast |= other.mDriedGhast;
+        }
+    };
+
+    NetherPlacement netherMarkers(const BlockState &block) {
+        const std::string &name = block.mName;
+        return {name == "minecraft:bone_block",
+                name == "minecraft:obsidian" || name == "minecraft:crying_obsidian",
+                name == "minecraft:polished_blackstone_bricks"
+                        || name == "minecraft:cracked_polished_blackstone_bricks"
+                        || name == "minecraft:gilded_blackstone",
+                name == "minecraft:dried_ghast"};
+    }
+
+    NetherPlacement netherBounds(const LevelChunk &chunk) {
+        const ChunkStructureBounds &bounds = chunk.getStructureBounds();
+        return {bounds.hasName("minecraft:nether_fossil"), bounds.hasName("minecraft:ruined_portal"),
+                bounds.hasName("minecraft:bastion_remnant")};
+    }
+
+    void compareNetherPlacement(const LevelChunk *expected, const LevelChunk &generated, PlacementScore &fossils,
+                                PlacementScore &portals, PlacementScore &bastions, PlacementScore &driedGhasts) {
+        NetherPlacement falcon = netherBounds(generated);
+        NetherPlacement vanilla = expected != nullptr ? netherBounds(*expected) : NetherPlacement{};
+        // fossils and older saves can lack bounds: use the generated blocks as placement markers
+        for (int32_t x = 0; x < 16; ++x) {
+            for (int32_t z = 0; z < 16; ++z) {
+                for (int32_t y = gMinY; y <= gMaxY; ++y) {
+                    const BlockState &actual = generated.getBlock(x, y, z);
+                    const NetherPlacement actualMarkers = netherMarkers(actual);
+                    falcon.merge(actualMarkers);
+                    if (expected == nullptr)
+                        continue;
+
+                    const BlockState &reference = expected->getBlock(x, y, z);
+                    const NetherPlacement referenceMarkers = netherMarkers(reference);
+                    vanilla.merge(referenceMarkers);
+                    const bool sameState = reference == actual;
+                    fossils.addMarker(referenceMarkers.mFossil, actualMarkers.mFossil, sameState);
+                    portals.addMarker(referenceMarkers.mPortal, actualMarkers.mPortal, sameState);
+                    bastions.addMarker(referenceMarkers.mBastion, actualMarkers.mBastion, sameState);
+                    driedGhasts.addMarker(referenceMarkers.mDriedGhast, actualMarkers.mDriedGhast, sameState);
+                }
+            }
+        }
+
+        if (expected == nullptr) {
+            fossils.mGeneratedWithoutReference += falcon.mFossil;
+            portals.mGeneratedWithoutReference += falcon.mPortal;
+            bastions.mGeneratedWithoutReference += falcon.mBastion;
+            driedGhasts.mGeneratedWithoutReference += falcon.mDriedGhast;
+            return;
+        }
+
+        fossils.add(vanilla.mFossil, falcon.mFossil);
+        portals.add(vanilla.mPortal, falcon.mPortal);
+        bastions.add(vanilla.mBastion, falcon.mBastion);
+        driedGhasts.add(vanilla.mDriedGhast, falcon.mDriedGhast);
+    }
+
+    bool isMineshaftMarker(const BlockState &block) {
+        const std::string &name = block.mName;
+        return name == "minecraft:oak_planks" || name == "minecraft:oak_fence"
+               || name == "minecraft:dark_oak_planks" || name == "minecraft:dark_oak_fence"
+               || name == "minecraft:rail" || name == "minecraft:web"
+               || name == "minecraft:torch" || name == "minecraft:mob_spawner"
+               || name == "minecraft:iron_chain" || name == "minecraft:oak_log"
+               || name == "minecraft:dark_oak_log";
+    }
+
+    void compareMineshaftMarkers(const LevelChunk &expected, const LevelChunk &generated, const Options &options,
+                                  PlacementScore &score) {
+        for (int32_t x = 0; x < 16; ++x) {
+            for (int32_t z = 0; z < 16; ++z) {
+                for (int32_t y = options.mMineshaftMinY; y <= options.mMineshaftMaxY; ++y) {
+                    const BlockState &reference = expected.getBlock(x, y, z);
+                    const BlockState &actual = generated.getBlock(x, y, z);
+                    score.addMarker(isMineshaftMarker(reference), isMineshaftMarker(actual), reference == actual);
                 }
             }
         }
@@ -1034,6 +1214,12 @@ namespace {
     int compareArea(LevelStorage &storage, const Options &options, const ChunkArea &area,
                     const BlockClassifier &classifier, const BiomeNames &biomes) {
         ParityReport report(classifier, biomes);
+        const bool trackPlacement = gDimension == DimensionType::Nether && !options.mTerrainOnly;
+        PlacementScore fossils{"nether_fossil"};
+        PlacementScore portals{"ruined_portal"};
+        PlacementScore bastions{"bastion_remnant"};
+        PlacementScore driedGhasts{"dried_ghast"};
+        PlacementScore mineshaft{"mineshaft"};
         uint64_t skipped[3] = {0, 0, 0};
         std::ofstream blocks;
         if (!options.mBlocks.empty())
@@ -1044,12 +1230,18 @@ namespace {
             const LoadResult loaded = loadExpected(storage, expected);
             if (loaded != LoadResult::Loaded) {
                 skipped[(int) loaded - 1]++;
+                if (trackPlacement)
+                    compareNetherPlacement(nullptr, generated, fossils, portals, bastions, driedGhasts);
                 return;
             }
 
             report.compare(expected, generated);
+            if (options.mMineshaftMarkers)
+                compareMineshaftMarkers(expected, generated, options, mineshaft);
+            if (trackPlacement)
+                compareNetherPlacement(&expected, generated, fossils, portals, bastions, driedGhasts);
             if (blocks.is_open())
-                writeBlocks(blocks, expected, generated);
+                writeBlocks(blocks, expected, generated, options.mDumpBlockStates);
         });
 
         if (report.getBlocks().mTotal == 0) {
@@ -1058,6 +1250,26 @@ namespace {
         }
 
         report.printText(options.mSeed, area, skipped);
+        double mineshaftScore = 0.0;
+        if (options.mMineshaftMarkers) {
+            if (mineshaft.mMarkerPositions == 0) {
+                LOG_ERROR(LogAreaID::Level, "No mineshaft markers in the compared chunks and height range");
+                return EXIT_INVALID;
+            }
+            mineshaftScore = 100.0 * (double) mineshaft.mMatchingMarkers / (double) mineshaft.mMarkerPositions;
+            LOG_INFO(LogAreaID::Level,
+                     "Mineshaft markers Y %d..%d: %.3f%% identical (%llu / %llu; %llu shared positions)",
+                     options.mMineshaftMinY, options.mMineshaftMaxY, mineshaftScore,
+                     (unsigned long long) mineshaft.mMatchingMarkers,
+                     (unsigned long long) mineshaft.mMarkerPositions,
+                     (unsigned long long) mineshaft.mSharedMarkerPositions);
+        }
+        if (trackPlacement) {
+            fossils.print();
+            portals.print();
+            bastions.print();
+            driedGhasts.print();
+        }
 
         if (!options.mCsv.empty() && !report.writeCsv(options.mCsv)) {
             LOG_ERROR(LogAreaID::Level, "could not write %s", options.mCsv.c_str());
@@ -1069,6 +1281,15 @@ namespace {
             return EXIT_INVALID;
         }
 
+        if (options.mHasMineshaftMinimum && mineshaftScore < options.mMinMineshaftMatch) {
+            LOG_ERROR(LogAreaID::Level, "mineshaft marker match %.3f%% is below the required %.3f%%",
+                      mineshaftScore, options.mMinMineshaftMatch);
+            return EXIT_BELOW_THRESHOLD;
+        }
+        if (options.mHasMineshaftMinimum && (skipped[0] || skipped[1] || skipped[2])) {
+            LOG_ERROR(LogAreaID::Level, "mineshaft marker threshold requires a finalized BDS reference for every chunk");
+            return EXIT_INVALID;
+        }
         if (options.mHasMinimum && report.getBlocks().percent() < options.mMinBlockMatch) {
             LOG_ERROR(LogAreaID::Level, "block match %.3f%% is below the required %.3f%%", report.getBlocks().percent(),
                                         options.mMinBlockMatch);
@@ -1093,8 +1314,12 @@ namespace {
         }
 
         Tag levelDat;
-        if (storage.readLevelDat(levelDat) && levelDat.contains("RandomSeed")
-            && levelDat.getLong("RandomSeed") != options.mSeed)
+        const bool hasReferenceSeed = storage.readLevelDat(levelDat) && levelDat.contains("RandomSeed");
+        if (options.mMineshaftMarkers && (!hasReferenceSeed || levelDat.getLong("RandomSeed") != options.mSeed)) {
+            LOG_ERROR(LogAreaID::Level, "--mineshaft-markers requires level.dat with the same seed as --seed");
+            return EXIT_INVALID;
+        }
+        if (hasReferenceSeed && levelDat.getLong("RandomSeed") != options.mSeed)
             LOG_WARN(LogAreaID::Level, "level.dat records seed %lld, comparing with --seed %lld",
                                        (long long) levelDat.getLong("RandomSeed"), (long long) options.mSeed);
 

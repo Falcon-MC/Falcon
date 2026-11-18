@@ -1,4 +1,9 @@
+#include <cstring>
+#include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Explosion.h"
+#include "World/Level/LevelSoundEventIds.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
@@ -29,11 +34,8 @@
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
-#include "Protocol/Packets/RemoveObjectivePacket.h"
-#include "Protocol/Packets/SetDisplayObjectivePacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Packets/TakeItemActorPacket.h"
-#include "Protocol/Packets/SetScorePacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
 #include "Protocol/Packets/TextPacket.h"
 #include "World/Item/Item.h"
@@ -44,6 +46,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Actor/Misc/ExperienceOrbActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
+#include "World/Level/Block/LiquidView.h"
 #include "World/Item/FireworkRocketItem.h"
 #include "World/Item/PotionEffects.h"
 #include "World/Item/StringToItemParser.h"
@@ -58,6 +61,7 @@
 
 #include <algorithm>
 #include "Network/Handler/ChunkStreamHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -141,8 +145,10 @@ namespace {
     const float LINGERING_CLOUD_MIN_RADIUS = 1.5f;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PROJECTILE_HIT_GROW = 0.3f;
+    // blocks per axis a projectile sweep reads through the actor index; wider reads every actor once
+    const float SWEEP_INDEX_SPAN = 64.0f;
     const int32_t EXPERIENCE_ORB_PICKUP_DELAY = 10;
 
     bool intersectsActorBox(const Vector3f &actorPosition, float width, float height, const Vector3f &point) {
@@ -192,7 +198,11 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
-    std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
+    // a summoned tnt is primed like one lit from a block
+    std::unique_ptr<ServerActor> actor = identifier == PrimedTntActor::IDENTIFIER
+                                                 ? std::unique_ptr<ServerActor>(new PrimedTntActor(
+                                                           runtimeId, PrimedTntActor::DEFAULT_FUSE))
+                                                 : ActorClassRegistry::create(runtimeId, identifier);
     actor->setUniqueId(allocateActorUniqueId());
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->moveToLevel(level);
@@ -206,7 +216,7 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     if (configure)
         configure(*actor);
 
-    // an identifier carrying its own spawn event makes the cause Event (sub_143708AF0)
+    // an identifier carrying its own spawn event makes the cause Event
     if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
         cause = "Event";
 
@@ -355,6 +365,9 @@ ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> a
     mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
     mActors[result->getUniqueId()] = std::move(actor);
     mActorIndexDirty = true;
+    ++mActorSetSerial;
+    if (mJoinedTracked)
+        mActorChanges.push_back(ActorChange{result, result->getPosition(), true});
     if (!result->getPendingPassengers().empty())
         mVehiclesWithPendingPassengers.insert(result->getUniqueId());
     return result;
@@ -365,10 +378,13 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     if (it == mActors.end())
         return;
 
+    if (mJoinedTracked)
+        mActorChanges.push_back(ActorChange{it->second.get(), it->second->getPosition(), false});
     mVehiclesWithPendingPassengers.erase(uniqueId);
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     mActors.erase(it);
     mActorIndexDirty = true;
+    ++mActorSetSerial;
 }
 
 void ServerNetworkHandler::_refreshActorIndex() {
@@ -386,11 +402,26 @@ void ServerNetworkHandler::_refreshActorIndex() {
         ++it;
     }
 
+    mActorIndexWidestHalf = 0.0f;
+    mActorIndexWidestBox = 0.0f;
+    mCollidableActors.clear();
+    const std::string *lastType = nullptr;
+    float lastHalf = 0.0f;
     for (auto &entry: mActors) {
+        if (entry.second->getFlags().get(ActorFlag::Collidable))
+            mCollidableActors.push_back(entry.second.get());
         const Vector3f position = entry.second->getPosition();
         const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
         const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
         mActorIndex[_actorIndexKey(chunkX, chunkZ)].push_back(entry.second.get());
+        // actors come in runs of one type: the size of the last type asked is kept
+        const std::string &typeId = entry.second->getTypeId();
+        if (lastType == nullptr || *lastType != typeId) {
+            lastType = &typeId;
+            lastHalf = ActorClassRegistry::getSize(typeId).mWidth * 0.5f;
+        }
+        mActorIndexWidestHalf = std::max(mActorIndexWidestHalf, lastHalf);
+        mActorIndexWidestBox = std::max(mActorIndexWidestBox, entry.second->getSize().mWidth * 0.5f);
     }
 }
 
@@ -463,6 +494,35 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
+// a projectile spawned without an owner, then shot:
+// the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
+ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
+                                                            const Vector3f &position, const Vector3f &direction) {
+    ServerActor *projectile = spawnActor(level, identifier, position);
+    if (projectile == nullptr)
+        return nullptr;
+
+    projectile->setProjectile(true);
+    ProjectileComponent component;
+    if (ProjectileComponent::find(identifier, projectile->getDefinition(), component)) {
+        static std::mt19937 generator{std::random_device{}()};
+        std::normal_distribution<float> gaussian(0.0f, 1.0f);
+        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
+                                       + direction.z * direction.z);
+        Vector3f motion;
+        if (length >= 0.001f)
+            motion = Vector3f(direction.x / length, direction.y / length, direction.z / length);
+        const float spread = 0.0075f * component.mUncertaintyBase;
+        motion.x = (motion.x + gaussian(generator) * spread) * component.mPower;
+        motion.y = (motion.y + gaussian(generator) * spread) * component.mPower;
+        motion.z = (motion.z + gaussian(generator) * spread) * component.mPower;
+        projectile->setMotion(motion);
+        faceMotion(*projectile, motion);
+        broadcastActorMove(*projectile);
+    }
+    return allowProjectileLaunch(*projectile, nullptr) ? projectile : nullptr;
+}
+
 bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
     PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PROJECTILE_LAUNCH);
     if (plugins == nullptr)
@@ -477,7 +537,7 @@ bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor 
     if (!launchEvent.mCancelled)
         return true;
 
-    removeActor((int64_t) projectile.getRuntimeId());
+    removeActor(projectile.getUniqueId());
     return false;
 }
 
@@ -491,7 +551,13 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         ProjectileData &data = projectile.getProjectileData();
         const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
-        playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT, hitPosition);
+        // hit_ground_sound; arrow.json defines none and keeps
+        // its bow.hit
+        const int32_t groundSound = projectile.getProjectileComponent().mHitGroundSound;
+        if (groundSound != LevelSoundEventIds::UNDEFINED)
+            playLevelSound(level, LevelSoundEventIds::nameOf(groundSound), hitPosition);
+        else if (!isTrident)
+            playLevelSound(level, LevelSoundEvent::BOW_HIT, hitPosition);
 
         if (isTrident && data.mLoyaltyLevel > 0) {
             data.mReturning = true;
@@ -652,7 +718,7 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(projectile)
-            || player.getGameType() == (int32_t) GameType::Spectator)
+            || player.isSpectator())
             continue;
 
         const Vector3f &feet = player.getPosition();
@@ -662,7 +728,7 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
             continue;
 
         // nothing to give outside creative: the arrow stays until it expires
-        const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+        const bool creative = player.isCreative();
         if (!creative && (data.mPickupCreativeOnly || data.mPickupItem.isAir()))
             continue;
 
@@ -800,12 +866,16 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     }
 
     Level &level = getLevelFor(projectile);
-    playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT : LevelSoundEvent::BOW_HIT, hitPosition);
+    // hit_sound: bow.hit and item.trident.hit in the vanilla definitions
+    const int32_t hitSound = projectile.getProjectileComponent().mHitSound;
+    if (hitSound != LevelSoundEventIds::UNDEFINED)
+        playLevelSound(level, LevelSoundEventIds::nameOf(hitSound), hitPosition);
 
     if (isTrident) {
         data.mHadCollision = true;
 
-        if (data.mChanneling && level.hasSkyLight() && getWorldOf(level).getOverworld().isThundering())
+        if (projectile.getProjectileComponent().mLightning && level.hasSkyLight()
+            && getWorldOf(level).getOverworld().isThundering())
             strikeLightning(level, targetPosition);
 
         if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
@@ -923,7 +993,7 @@ bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &
     if (player.getSentChunks().count(ChunkStreamHandler::packChunk(chunkX, chunkZ)) == 0)
         return false;
 
-    // only chunks the server holds fully loaded hand out their actors (sub_14294B4A0)
+    // only chunks the server holds fully loaded hand out their actors
     return getLevelFor(actor).isChunkPopulated(chunkX, chunkZ);
 }
 
@@ -987,6 +1057,14 @@ void ServerNetworkHandler::refreshContainerViewers(const Vector3i &position, con
     }
 }
 
+void ServerNetworkHandler::refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except) {
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned())
+            player.getInventoryManager().refreshEntityContainer(actorId);
+    }
+}
+
 void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
@@ -1001,6 +1079,12 @@ void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
 }
 
 void ServerNetworkHandler::updateActorVisibility() {
+    // every offset the range table holds fits in this many chunks
+    static const int32_t RANGE_CHUNKS = 4;
+    static std::vector<uint64_t> seenIds;
+
+    mActorIndexDirty = true;
+    _refreshActorIndex();
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned())
@@ -1008,23 +1092,39 @@ void ServerNetworkHandler::updateActorVisibility() {
 
         std::unordered_set<uint64_t> &visible = player.getVisibleActors();
 
-        for (auto &actorEntry: mActors) {
-            ServerActor &actor = *actorEntry.second;
-            const bool seen = visible.find(actor.getRuntimeId()) != visible.end();
-            // an autonomous actor stays known once sent, wherever it goes (sub_14102EF40)
-            const bool kept = seen && actor.isAutonomous() && player.sharesLevelWith(actor);
-            const bool shouldSee = (actor.isAlive() || (actor.isDead() && seen))
-                                   && (kept || canPlayerSeeActor(player, actor));
-
-            if (shouldSee == seen)
+        // the ones seen, then the ones near: never every actor for every player
+        seenIds.assign(visible.begin(), visible.end());
+        for (const uint64_t runtimeId: seenIds) {
+            ServerActor *actor = getActorByRuntimeId(runtimeId);
+            if (actor == nullptr)
                 continue;
 
-            if (shouldSee) {
-                visible.insert(actor.getRuntimeId());
-                _sendActorSpawn(player, actor);
-            } else {
-                visible.erase(actor.getRuntimeId());
-                _sendActorRemove(player, actor);
+            // an autonomous actor stays known once sent, wherever it goes
+            const bool kept = actor->isAutonomous() && player.sharesLevelWith(*actor);
+            if ((actor->isAlive() || actor->isDead()) && (kept || canPlayerSeeActor(player, *actor)))
+                continue;
+
+            visible.erase(runtimeId);
+            _sendActorRemove(player, *actor);
+        }
+
+        const Vector3f position = player.getPosition();
+        const int32_t centreX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t centreZ = (int32_t) std::floor(position.z) >> 4;
+        for (int32_t chunkX = centreX - RANGE_CHUNKS; chunkX <= centreX + RANGE_CHUNKS; chunkX++) {
+            for (int32_t chunkZ = centreZ - RANGE_CHUNKS; chunkZ <= centreZ + RANGE_CHUNKS; chunkZ++) {
+                const auto bucket = mActorIndex.find(_actorIndexKey(chunkX, chunkZ));
+                if (bucket == mActorIndex.end())
+                    continue;
+
+                for (ServerActor *actor: bucket->second) {
+                    if (!actor->isAlive() || visible.find(actor->getRuntimeId()) != visible.end()
+                        || !canPlayerSeeActor(player, *actor))
+                        continue;
+
+                    visible.insert(actor->getRuntimeId());
+                    _sendActorSpawn(player, *actor);
+                }
             }
         }
     }
@@ -1319,14 +1419,27 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleporte
 }
 
 void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet) {
-    std::vector<NetworkIdentifier> viewers;
-    for (auto &entry: mPlayers) {
-        if (!entry.second.isSpawned())
-            continue;
+    // kept between calls: a crowd sends one packet an actor a tick
+    static std::vector<NetworkIdentifier> viewers;
+    viewers.clear();
+    const auto consider = [&](ServerPlayer &player) {
+        if (!player.isSpawned())
+            return;
 
-        const std::unordered_set<uint64_t> &visible = entry.second.getVisibleActors();
+        const std::unordered_set<uint64_t> &visible = player.getVisibleActors();
         if (visible.find(actor.getRuntimeId()) != visible.end())
-            viewers.push_back(entry.first);
+            viewers.push_back(player.getNetworkIdentifier());
+    };
+    if (actor.isAutonomous()) {
+        // known wherever it goes: its viewers can be anywhere
+        for (auto &entry: mPlayers)
+            consider(entry.second);
+    } else {
+        // a viewer was in range at the last visibility pass: one chunk more covers the move since
+        static const int32_t VIEWER_CHUNKS = 6;
+        const Vector3f position = actor.getPosition();
+        forEachPlayerAroundChunk((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4,
+                                 VIEWER_CHUNKS, consider);
     }
     mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
 }
@@ -1343,13 +1456,25 @@ void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::str
 }
 
 void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position) {
+    spawnParticleEffect(level, identifier, position, nullptr, nullptr);
+}
+
+void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position,
+                                               const std::string *molangJson, ServerPlayer *viewer) {
     SpawnParticleEffectPacket packet;
     packet.mDimensionId = level.getDimensionId();
     packet.mUniqueActorId = -1;
     packet.mPosition = position;
     packet.mIdentifier = identifier;
-    packet.mHasMolangVariablesJson = false;
+    packet.mHasMolangVariablesJson = molangJson != nullptr;
+    if (molangJson != nullptr)
+        packet.mMolangVariablesJson = *molangJson;
 
+    if (viewer != nullptr) {
+        if (viewer->isSpawned())
+            mNetworkHandler->send(viewer->getNetworkIdentifier(), packet, mCodecContext);
+        return;
+    }
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned() && entry.second.isIn(level))
             mNetworkHandler->send(entry.first, packet, mCodecContext);
@@ -1468,90 +1593,6 @@ void ServerNetworkHandler::syncPlayerAttributes(ServerPlayer &player) {
     _sendAttributes(player);
 }
 
-void ServerNetworkHandler::displayScoreboardObjective(const std::string &slot, const std::string &objectiveId,
-                                                      const std::string &displayName) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = objectiveId;
-    packet.mDisplayName = displayName.empty() ? objectiveId : displayName;
-    packet.mCriteria = "dummy";
-    packet.mSortOrder = 0;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::clearScoreboardDisplay(const std::string &slot) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = "";
-    packet.mDisplayName = "";
-    packet.mCriteria = "dummy";
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::setScoreboardScore(const std::string &objectiveId, const std::string &participant,
-                                              int32_t score) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        it = mScoreboardIds.emplace(key, mNextScoreboardId++).first;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mScore = score;
-    info.mType = ScorerType::Fake;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mAction = SetScorePacket::Action::Change;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::removeScoreboardScore(const std::string &objectiveId, const std::string &participant) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        return;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mType = ScorerType::Invalid;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-    mScoreboardIds.erase(it);
-}
-
-void ServerNetworkHandler::removeScoreboardObjective(const std::string &objectiveId) {
-    RemoveObjectivePacket packet;
-    packet.mObjectiveId = objectiveId;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
 void ServerNetworkHandler::sendJsonMessage(ServerPlayer &player, const std::string &json) {
     TextPacket packet;
     packet.mType = TextPacket::Type::Json;
@@ -1571,10 +1612,32 @@ void ServerNetworkHandler::playPlayerAnimation(ServerPlayer &player, const std::
 }
 
 
+namespace {
+    // in the world database, not under players/: a player of that name would save over the file
+    const char *const WORLD_DYNAMIC_PROPERTIES_KEY = "falcon_world_dynamic_properties";
+    const char *const LEGACY_WORLD_DYNAMIC_PROPERTIES = "world_dynamic_properties";
+}
+
 void ServerNetworkHandler::loadWorldDynamicProperties() {
+    mWorldDynamicPropertiesUnreadable = false;
+    Level &overworld = mWorlds.getDefault().getOverworld();
     Tag data;
-    if (!mPlayerData.loadData("world_dynamic_properties", data))
-        return;
+    if (!overworld.loadSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false)) {
+        if (overworld.hasSavedData(WORLD_DYNAMIC_PROPERTIES_KEY)) {
+            mWorldDynamicPropertiesUnreadable = true;
+            LOG_WARN(LogAreaID::Server, "The stored world dynamic properties are unreadable: kept as is, not saved");
+            return;
+        }
+        // a player save in its place holds more than this one key: not ours, left to that player
+        Tag legacy;
+        if (!mPlayerData.loadData(LEGACY_WORLD_DYNAMIC_PROPERTIES, legacy) || !legacy.isCompound()
+            || legacy.getKeys().size() != 1 || !legacy.contains("DynamicProperties"))
+            return;
+        if (!overworld.saveSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, legacy, false))
+            return;
+        mPlayerData.removeData(LEGACY_WORLD_DYNAMIC_PROPERTIES);
+        data = std::move(legacy);
+    }
 
     const Tag *properties = data.get("DynamicProperties");
     if (properties != nullptr)
@@ -1582,15 +1645,178 @@ void ServerNetworkHandler::loadWorldDynamicProperties() {
 }
 
 void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
+    Level &overworld = mWorlds.getDefault().getOverworld();
+    if (!overworld.isStorageOpen() || mWorldDynamicPropertiesUnreadable)
+        return;
     Tag data = Tag::ofCompound();
     data.put("DynamicProperties", serializeDynamicProperties(mWorldDynamicProperties));
-    if (!mPlayerData.saveData("world_dynamic_properties", data) && checked)
+    if (!overworld.saveSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false) && checked)
         throw std::runtime_error("Could not save world dynamic properties");
 }
 
 
+void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &center, double size,
+                                              const ServerActor &source, bool fromTnt) {
+    if (mTickingActors) {
+        mPendingExplosions.push_back(PendingExplosion{&level, center, size, source.getUniqueId(), fromTnt});
+        return;
+    }
+
+    Explosion explosion(*this, level, center, size, &source, fromTnt);
+    explosion.explode();
+}
+
+namespace {
+    const size_t CROWDED_EXPLOSIONS = 16;
+    const size_t APART_EXPLOSIONS = 32;
+}
+
+void ServerNetworkHandler::_flushExplosions() {
+    if (mPendingExplosions.empty())
+        return;
+
+    // the order within a tick is no one's to rely on: the explosions that break nothing (in water) go first,
+    // over blocks that stay as they are, and share one read of them
+    const auto quietEnd = std::stable_partition(
+            mPendingExplosions.begin(), mPendingExplosions.end(), [this](const PendingExplosion &pending) {
+                return mActors.find(pending.mSourceId) != mActors.end()
+                       && (Explosion::breaksNothingAt(*pending.mLevel, pending.mCenter)
+                           || (pending.mSize >= 0.1
+                               && Explosion::isReachEmpty(*pending.mLevel, pending.mCenter, pending.mSize)));
+            });
+    const size_t quietCount = (size_t) (quietEnd - mPendingExplosions.begin());
+    // neighbours one after the other: the read of the blocks around one serves the next
+    const auto byPlace = [](const PendingExplosion &left, const PendingExplosion &right) {
+        const int32_t leftX = (int32_t) std::floor(left.mCenter.x) >> 5;
+        const int32_t rightX = (int32_t) std::floor(right.mCenter.x) >> 5;
+        if (leftX != rightX)
+            return leftX < rightX;
+        const int32_t leftZ = (int32_t) std::floor(left.mCenter.z) >> 5;
+        const int32_t rightZ = (int32_t) std::floor(right.mCenter.z) >> 5;
+        if (leftZ != rightZ)
+            return leftZ < rightZ;
+        return ((int32_t) std::floor(left.mCenter.y) >> 4) < ((int32_t) std::floor(right.mCenter.y) >> 4);
+    };
+    // the others too: many of them go off in the air and leave the blocks as they were
+    std::stable_sort(mPendingExplosions.begin(), quietEnd, byPlace);
+    std::stable_sort(quietEnd, mPendingExplosions.end(), byPlace);
+
+    // a block falling or an orb dropping out of one explosion joins the targets of the next ones
+    mActorChanges.clear();
+    mJoinedTracked = true;
+    struct JoinedScope {
+        bool &mTracked;
+        ~JoinedScope() {
+            mTracked = false;
+        }
+    } joinedScope{mJoinedTracked};
+
+    // the sky light of a column an explosion digs into is worked out once, after the last explosion
+    struct SkyLightScope {
+        std::vector<Level *> mLevels;
+        ~SkyLightScope() {
+            for (Level *level: mLevels)
+                level->endSkyLightBatch();
+        }
+    } skyLight;
+    for (const PendingExplosion &pending: mPendingExplosions) {
+        if (std::find(skyLight.mLevels.begin(), skyLight.mLevels.end(), pending.mLevel) == skyLight.mLevels.end()) {
+            skyLight.mLevels.push_back(pending.mLevel);
+            pending.mLevel->beginSkyLightBatch();
+        }
+    }
+
+    ExplosionBatch batch(*this);
+    batch.setFollowingJoins(true);
+
+    // the ones that break nothing: plugins and scripts have their say on each, then every push is worked out
+    // at once on every core, then each explosion ends in turn (damage, items, effects)
+    {
+        Level *quietLevel = quietCount == 0 ? nullptr : mPendingExplosions[0].mLevel;
+        std::vector<std::unique_ptr<Explosion>> quiet;
+        std::vector<ExplosionBatch::QuietBlast> blasts;
+        std::vector<size_t> ranks;
+        for (size_t index = 0; index < quietCount; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            const ServerActor *sourceActor = source == mActors.end() ? nullptr : source->second.get();
+            std::unique_ptr<Explosion> explosion(
+                    new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize, sourceActor, pending.mFromTnt));
+            explosion->setBatch(&batch);
+            if (!explosion->explodeA())
+                continue;
+
+            if (pending.mLevel == quietLevel && sourceActor != nullptr) {
+                ranks.push_back(blasts.size());
+                blasts.push_back(ExplosionBatch::QuietBlast{pending.mCenter, explosion->getSize(), sourceActor});
+            } else {
+                ranks.push_back(SIZE_MAX);
+            }
+            quiet.push_back(std::move(explosion));
+        }
+        if (quietLevel != nullptr)
+            batch.settleQuiet(*quietLevel, blasts);
+        for (size_t index = 0; index < quiet.size(); ++index) {
+            if (ranks[index] != SIZE_MAX)
+                quiet[index]->setSettledAs(ranks[index]);
+            quiet[index]->explodeB();
+        }
+    }
+
+    // the ones left break blocks, one after the other; when they are many their rays and their pushes are
+    // shared out to helper threads kept awake until the last one
+    batch.setCrowded(mPendingExplosions.size() - quietCount >= CROWDED_EXPLOSIONS);
+    std::vector<Vector3f> centers;
+    for (const PendingExplosion &pending: mPendingExplosions)
+        centers.push_back(pending.mCenter);
+
+    // when nothing can call an explosion off (no plugin, no script listening before it), the ones standing
+    // apart are worked out together on every core while this thread ends them one by one
+    size_t apartEnd = quietCount;
+    if (mPendingExplosions.size() - quietCount >= APART_EXPLOSIONS
+        && !getPluginManager().hasSubscribers(FALCON_EVENT_EXPLOSION)
+        && !mScriptEngine.hasSubscribers("before.explosion")) {
+        batch.setCrowded(false);
+        Level *apartLevel = mPendingExplosions[quietCount].mLevel;
+        std::vector<std::unique_ptr<Explosion>> apart;
+        std::vector<Explosion *> apartList;
+        const size_t pendingEnd = mPendingExplosions.size();
+        // the others first in the list, the ones of another level left for the loop below
+        std::stable_partition(mPendingExplosions.begin() + (std::ptrdiff_t) quietCount, mPendingExplosions.end(),
+                              [apartLevel](const PendingExplosion &pending) { return pending.mLevel == apartLevel; });
+        for (size_t index = quietCount; index < pendingEnd && mPendingExplosions[index].mLevel == apartLevel; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            apart.emplace_back(new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                                             source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt));
+            apart.back()->setBatch(&batch);
+            apartList.push_back(apart.back().get());
+            apartEnd = index + 1;
+        }
+        batch.runApart(*apartLevel, apartList);
+    }
+
+    // by index: an explosion may queue another
+    for (size_t index = apartEnd; index < mPendingExplosions.size(); ++index) {
+        const PendingExplosion pending = mPendingExplosions[index];
+        if (index < centers.size())
+            batch.setUpcoming(centers.data() + index, centers.size() - index);
+        else
+            batch.setUpcoming(nullptr, 0);
+        const auto source = mActors.find(pending.mSourceId);
+        Explosion explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                            source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt);
+        explosion.setBatch(&batch);
+        explosion.explode();
+    }
+    mPendingExplosions.clear();
+}
+
 void ServerNetworkHandler::tickActors() {
     mActorIndexDirty = true;
+    mTickingActors = true;
+    // the moves of a crowd leave together at the end of the pass
+    mNetworkHandler->cork();
     std::vector<int64_t> expired;
 
     std::vector<int64_t> tickOrder;
@@ -1631,7 +1857,8 @@ void ServerNetworkHandler::tickActors() {
 
         if (!actor.isProjectile()) {
             const ActorSize size = actor.getSize();
-            if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
+            // nothing hurts an invulnerable actor: where its eyes are is not even looked at
+            if (!actor.isInvulnerable() && _isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
                            ActorDamageSource::environment("death.attack.inWall", actor.getName()));
 
@@ -1704,8 +1931,16 @@ void ServerNetworkHandler::tickActors() {
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
             const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
-            const float gravity = projectile != nullptr ? projectile->getGravity() : ProjectileActor::DEFAULT_GRAVITY;
-            const float inertia = projectile != nullptr ? projectile->getInertia() : 1.0f;
+            const ProjectileComponent &settings = actor.getProjectileComponent();
+            const Vector3f &at = actor.getPosition();
+            const int32_t atX = (int32_t) std::floor(at.x);
+            const int32_t atY = (int32_t) std::floor(at.y);
+            const int32_t atZ = (int32_t) std::floor(at.z);
+            // liquid_inertia replaces inertia while the projectile is in water
+            const bool inWater = LiquidView(level.getBlockState(atX, atY, atZ)).isWater()
+                                 || LiquidView(level.getBlockStateAtLayer(atX, atY, atZ, 1)).isWater();
+            const float gravity = settings.mGravity;
+            const float inertia = inWater ? settings.mLiquidInertia : settings.mInertia;
             const bool arrowLike = dynamic_cast<const ArrowActor *>(&actor) != nullptr;
 
             if (arrowLike && actor.getProjectileData().mReturning) {
@@ -1753,6 +1988,12 @@ void ServerNetworkHandler::tickActors() {
             position.y += motion.y;
             position.z += motion.z;
 
+            // a script or plugin impulse can make it non finite: no block or actor lookup survives that
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+                expired.push_back(actorId);
+                continue;
+            }
+
             actor.setMotion(motion);
             actor.setPosition(position);
             faceMotion(actor, motion);
@@ -1776,6 +2017,8 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
+                if (DetectorSystem::isTarget(hitState))
+                    DetectorSystem::onTargetHit(*this, level, hitBlock, position, previousPosition, actor, arrowLike);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
                     expired.push_back(actorId);
@@ -1783,7 +2026,7 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (!onThrownProjectileHit(actor, hitPosition, nullptr))
-                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ);
+                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ, previousPosition, position);
 
                 if (actor.getProjectileData().mStuck) {
                     plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));
@@ -1806,60 +2049,126 @@ void ServerNetworkHandler::tickActors() {
                 const float sweepY = position.y - previousPosition.y;
                 const float sweepZ = position.z - previousPosition.z;
                 const float sweepLength = std::sqrt(sweepX * sweepX + sweepY * sweepY + sweepZ * sweepZ);
-                const int32_t sampleCount = std::max(1, (int32_t) std::ceil(sweepLength / 0.25f));
+                const int64_t sampleCount = std::max<int64_t>(
+                        1, (int64_t) std::min(std::ceil((double) sweepLength / 0.25), 2147483647.0));
 
                 ServerPlayer *hitPlayer = nullptr;
                 ServerActor *hitActor = nullptr;
                 Vector3f contactPosition = position;
 
-                for (int32_t sample = 1; sample <= sampleCount && hitPlayer == nullptr && hitActor == nullptr;
-                     ++sample) {
-                    const float progress = (float) sample / (float) sampleCount;
-                    const Vector3f samplePosition(previousPosition.x + sweepX * progress,
-                                                  previousPosition.y + sweepY * progress,
-                                                  previousPosition.z + sweepZ * progress);
+                // candidates picked once per tick: only a box meeting the sweep's bounds can hold a sample
+                const Vector3f low(std::min(previousPosition.x, position.x), std::min(previousPosition.y, position.y),
+                                   std::min(previousPosition.z, position.z));
+                const Vector3f high(std::max(previousPosition.x, position.x), std::max(previousPosition.y, position.y),
+                                    std::max(previousPosition.z, position.z));
+                const auto meetsSweep = [&low, &high](const Vector3f &at, float width, float height) {
+                    const float half = width * 0.5f + PROJECTILE_HIT_GROW;
+                    return at.x + half >= low.x && at.x - half <= high.x && at.z + half >= low.z
+                           && at.z - half <= high.z && at.y + height + PROJECTILE_HIT_GROW >= low.y
+                           && at.y - PROJECTILE_HIT_GROW <= high.y;
+                };
 
-                    for (auto &playerEntry: mPlayers) {
-                        ServerPlayer &candidate = playerEntry.second;
-                        if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
-                            continue;
-                        if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId()
-                            && actor.getLifetimeTicks() < 8)
-                            continue;
+                std::vector<ServerPlayer *> nearPlayers;
+                for (auto &playerEntry: mPlayers) {
+                    ServerPlayer &candidate = playerEntry.second;
+                    if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
+                        continue;
+                    if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
+                        continue;
+                    if (meetsSweep(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+                        nearPlayers.push_back(&candidate);
+                }
 
-                        if (intersectsActorBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT, samplePosition)) {
-                            hitPlayer = &candidate;
-                            contactPosition = samplePosition;
-                            break;
+                std::vector<std::pair<ServerActor *, ActorSize>> nearActors;
+                const auto consider = [&](ServerActor &candidate) {
+                    if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
+                        return;
+
+                    const bool candidateIsProjectile = candidate.isProjectile();
+                    if (candidateIsProjectile && candidate.getProjectileData().mStuck)
+                        return;
+                    if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId()
+                        && candidate.getLifetimeTicks() < 8)
+                        return;
+                    if (projectile != nullptr && projectile->passesThroughOwner()
+                        && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
+                        return;
+
+                    const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
+                    if (meetsSweep(candidate.getPosition(), size.mWidth, size.mHeight))
+                        nearActors.emplace_back(&candidate, size);
+                };
+                // a sweep over many columns reads every actor once rather than every column of the index
+                if (high.x - low.x <= SWEEP_INDEX_SPAN && high.z - low.z <= SWEEP_INDEX_SPAN) {
+                    _refreshActorIndex();
+                    const Vector3f middle((low.x + high.x) * 0.5f, position.y, (low.z + high.z) * 0.5f);
+                    const float reach = std::max(high.x - low.x, high.z - low.z) * 0.5f + mActorIndexWidestHalf
+                                        + PROJECTILE_HIT_GROW;
+                    forEachActorNear(middle, reach, consider);
+                } else {
+                    for (auto &actorEntry: mActors)
+                        consider(*actorEntry.second);
+                }
+
+                // the first 0.25 block sample inside a box, from the segment's entry into it; players first on a tie
+                const auto sampleAt = [&](int64_t sample) {
+                    const float progress = (float) ((double) sample / (double) sampleCount);
+                    return Vector3f(previousPosition.x + sweepX * progress, previousPosition.y + sweepY * progress,
+                                    previousPosition.z + sweepZ * progress);
+                };
+                const auto firstSample = [&](const Vector3f &at, float width, float height) -> int64_t {
+                    const float half = width * 0.5f + PROJECTILE_HIT_GROW;
+                    const Vector3f boxLow(at.x - half, at.y - PROJECTILE_HIT_GROW, at.z - half);
+                    const Vector3f boxHigh(at.x + half, at.y + height + PROJECTILE_HIT_GROW, at.z + half);
+                    double enter = 0.0, leave = 1.0;
+                    const float from[3] = {previousPosition.x, previousPosition.y, previousPosition.z};
+                    const float delta[3] = {sweepX, sweepY, sweepZ};
+                    const float lows[3] = {boxLow.x, boxLow.y, boxLow.z};
+                    const float highs[3] = {boxHigh.x, boxHigh.y, boxHigh.z};
+                    for (int axis = 0; axis < 3; ++axis) {
+                        if (delta[axis] == 0.0f) {
+                            if (from[axis] < lows[axis] || from[axis] > highs[axis])
+                                return 0;
+                            continue;
                         }
+                        double slabIn = ((double) lows[axis] - from[axis]) / delta[axis];
+                        double slabOut = ((double) highs[axis] - from[axis]) / delta[axis];
+                        if (slabIn > slabOut)
+                            std::swap(slabIn, slabOut);
+                        enter = std::max(enter, slabIn);
+                        leave = std::min(leave, slabOut);
+                        if (enter > leave)
+                            return 0;
                     }
+                    const int64_t first = std::max<int64_t>(1, (int64_t) std::ceil(enter * (double) sampleCount));
+                    // float rounding at the box edge: the exact test decides between the nearest samples
+                    for (int64_t sample = std::max<int64_t>(1, first - 1); sample <= first + 1 && sample <= sampleCount;
+                         ++sample) {
+                        if (intersectsActorBox(at, width, height, sampleAt(sample)))
+                            return sample;
+                    }
+                    return 0;
+                };
 
-                    if (hitPlayer != nullptr)
-                        break;
-
-                    for (auto &actorEntry: mActors) {
-                        ServerActor &candidate = *actorEntry.second;
-                        if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
-                            continue;
-
-                        const bool candidateIsProjectile = candidate.isProjectile();
-                        if (candidateIsProjectile && candidate.getProjectileData().mStuck)
-                            continue;
-                        if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId()
-                            && candidate.getLifetimeTicks() < 8)
-                            continue;
-                        if (projectile != nullptr && projectile->passesThroughOwner()
-                            && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
-                            continue;
-
-                        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
-                        if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight, samplePosition)) {
-                            hitActor = &candidate;
-                            contactPosition = samplePosition;
-                            break;
-                        }
+                int64_t hitSample = 0;
+                for (ServerPlayer *candidate: nearPlayers) {
+                    const int64_t sample = firstSample(candidate->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
+                    if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
+                        hitSample = sample;
+                        hitPlayer = candidate;
                     }
                 }
+                for (const auto &candidate: nearActors) {
+                    const int64_t sample = firstSample(candidate.first->getPosition(), candidate.second.mWidth,
+                                                       candidate.second.mHeight);
+                    if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
+                        hitSample = sample;
+                        hitPlayer = nullptr;
+                        hitActor = candidate.first;
+                    }
+                }
+                if (hitSample != 0)
+                    contactPosition = sampleAt(hitSample);
 
                 if (hitPlayer != nullptr) {
                     if (!allowProjectileHit(*this, actor, level, contactPosition, hitPlayer, nullptr)) {
@@ -1908,12 +2217,20 @@ void ServerNetworkHandler::tickActors() {
     }
 
     std::vector<int64_t> expiredClouds;
-    for (auto &entry: mLingeringClouds) {
-        LingeringCloud &cloud = entry.second;
+    // ids first: an effect can kill, and the death's script events can spawn another cloud
+    std::vector<int64_t> cloudIds;
+    cloudIds.reserve(mLingeringClouds.size());
+    for (const auto &entry: mLingeringClouds)
+        cloudIds.push_back(entry.first);
+    for (const int64_t cloudId: cloudIds) {
+        const auto found = mLingeringClouds.find(cloudId);
+        if (found == mLingeringClouds.end())
+            continue;
+        LingeringCloud &cloud = found->second;
         cloud.mAge += 1;
 
-        if (mActors.find(entry.first) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
-            expiredClouds.push_back(entry.first);
+        if (mActors.find(cloudId) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
+            expiredClouds.push_back(cloudId);
             continue;
         }
 
@@ -1947,9 +2264,10 @@ void ServerNetworkHandler::tickActors() {
                 touched = true;
             }
 
+            std::vector<int64_t> inside;
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
-                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
+                if (actorEntry.first == cloudId || !nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
                     || nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
                     || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
                     continue;
@@ -1961,7 +2279,14 @@ void ServerNetworkHandler::tickActors() {
                 if (dx * dx + dz * dz > radiusSquared || std::fabs(dy) > 1.0f)
                     continue;
 
-                touched = true;
+                inside.push_back(actorEntry.first);
+            }
+            // applied after the walk: an instant damage can kill and remove the actor
+            for (const int64_t uniqueId: inside) {
+                if (ServerActor *nearby = getActor(uniqueId)) {
+                    applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
+                    touched = true;
+                }
             }
 
             if (touched) {
@@ -1971,12 +2296,12 @@ void ServerNetworkHandler::tickActors() {
         }
 
         if (cloud.mRadius <= LINGERING_CLOUD_MIN_RADIUS) {
-            expiredClouds.push_back(entry.first);
+            expiredClouds.push_back(cloudId);
             continue;
         }
 
         if (cloud.mAge % 10 == 0) {
-            ServerActor *cloudActor = getActor(entry.first);
+            ServerActor *cloudActor = getActor(cloudId);
             if (cloudActor != nullptr) {
                 EntityDataMap metadata;
 
@@ -1996,6 +2321,11 @@ void ServerNetworkHandler::tickActors() {
             }
         }
     }
+
+    mTickingActors = false;
+    // the block updates and drops of the explosions leave with the moves, in one go
+    _flushExplosions();
+    mNetworkHandler->uncork();
 
     for (const int64_t uniqueId: expiredClouds) {
         mLingeringClouds.erase(uniqueId);

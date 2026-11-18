@@ -7,6 +7,8 @@
 #include "World/Level/LightSystem.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(TurtleEggBlock, 185);
 
@@ -36,9 +38,7 @@ namespace {
         return 1;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 }
 
 bool TurtleEggBlock::matches(const std::string &identifier) {
@@ -76,7 +76,7 @@ void TurtleEggBlock::breakEgg(ServerNetworkHandler &owner, Level &level, const V
 
     const int32_t count = eggCount(state);
     if (count <= 1) {
-        level.setBlock(position, BlockState("minecraft:air"), true);
+        level.setBlock(position, BlockState(BlockNames::AIR), true);
         return;
     }
 
@@ -90,7 +90,7 @@ void TurtleEggBlock::hatch(ServerNetworkHandler &owner, Level &level, const Vect
     const int32_t turtles = eggCount(state);
     owner.playNamedSound(level, PlaySoundName::TURTLE_EGG_CRACK, centerOf(position), CRACK_VOLUME,
                          EggHelpers::soundPitch());
-    level.setBlock(position, BlockState("minecraft:air"), true);
+    level.setBlock(position, BlockState(BlockNames::AIR), true);
 
     for (int32_t turtle = 0; turtle < turtles; turtle++) {
         const Vector3f spawnAt((float) position.x + 0.3f + (float) turtle * 0.2f, (float) position.y,

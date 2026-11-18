@@ -22,22 +22,21 @@ public:
 
     MapDataManager &operator=(MapDataManager &&) noexcept = default;
 
-    // sub_141ED0DD0 behind the cache; nullptr for a map storage does not hold
+    // behind the cache; nullptr for a map storage does not hold
     MapItemSavedData *getMap(LevelStorage *storage, int64_t mapId);
 
     MapItemSavedData *findLoaded(int64_t mapId);
 
-    // sub_141ED1C40: a blank map that replaces any loaded one
+    // a blank map that replaces any loaded one
     MapItemSavedData &createMap(int64_t mapId);
 
-    // sub_141ECEF80 with a new id: all five scales at once, each the parent of the one below
+    // with a new id: all five scales at once, each the parent of the one below
     MapItemSavedData &createMapSavedData(const IdAllocator &allocate, const Vector3f &position, int32_t dimension,
                                          int8_t scale);
 
-    // sub_141ECFD30: the parent the next zoom level shows, recentred on the child unless it was already scaled
+    // the parent the next zoom level shows, recentred on the child unless it was already scaled
     int64_t expandMap(LevelStorage *storage, int64_t mapId, bool alreadyScaled);
 
-    // sub_14101FB00
     MapItemSavedData *copyAndLockMap(LevelStorage *storage, int64_t originalId, int64_t newId);
 
     // the map's id followed by its parents while their scale is at most 3, for the creation packet

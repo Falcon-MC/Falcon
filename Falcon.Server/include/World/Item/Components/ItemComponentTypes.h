@@ -283,6 +283,17 @@ public:
     }
 };
 
+class InteractButtonItemComponent final : public NetworkedItemComponent<InteractButtonItemComponent> {
+public:
+    static constexpr const char *componentName() {
+        return "minecraft:interact_button";
+    }
+    std::string mText = "action.interact.use";
+    const std::string &getText() const {
+        return mText;
+    }
+};
+
 class KineticWeaponItemComponent final : public NetworkedItemComponent<KineticWeaponItemComponent> {
 public:
     static constexpr const char *componentName() {

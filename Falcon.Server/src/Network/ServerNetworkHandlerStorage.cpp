@@ -8,8 +8,11 @@
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
 #include "Scripting/Content/CustomContentRegistry.h"
+#include "Falcon/Plugin/PluginManager.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -33,6 +36,10 @@ namespace {
 }
 
 void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool checked) {
+    // loaded in sendStartGame: before it the player is blank, and would overwrite its own save
+    if (player.getLoginState() < ServerPlayer::LoginState::StartGameSent)
+        return;
+
     Tag data = player.saveNbt(getWorldFor(player).getName());
     if (!player.getXuid().empty())
         data.putString(PlayerDataProvider::TAG_OWNER_XUID, player.getXuid());
@@ -44,6 +51,24 @@ void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool chec
         if (checked)
             throw std::runtime_error("Could not save player: " + player.getName());
     }
+}
+
+void ServerNetworkHandler::_saveTouchedContainers(ServerPlayer &player) {
+    const std::vector<Level *> levels = getLevels();
+    for (const std::pair<const Level *, int64_t> &touched: player.getInventoryManager().getTouchedColumns()) {
+        const auto found = std::find(levels.begin(), levels.end(), touched.first);
+        if (found == levels.end() || !(*found)->isStorageOpen())
+            continue;
+
+        Level &level = **found;
+        const int32_t chunkX = (int32_t) (touched.second >> 32);
+        const int32_t chunkZ = (int32_t) (touched.second & 0xffffffff);
+        if (level.getBlockActors().isChunkLoaded(chunkX, chunkZ))
+            saveBlockActorsForChunk(level, chunkX, chunkZ, false);
+        if (getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(touched.second) != 0)
+            saveActorsForChunk(level, chunkX, chunkZ, false);
+    }
+    player.getInventoryManager().clearTouchedColumns();
 }
 
 void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
@@ -83,8 +108,10 @@ void ServerNetworkHandler::_loadPlayerData(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::loadActorsForChunk(Level &level, int32_t chunkX, int32_t chunkZ) {
-    const std::vector<Tag> entities = level.loadEntities(chunkX, chunkZ);
+    spawnStoredActors(level, level.loadEntities(chunkX, chunkZ));
+}
 
+void ServerNetworkHandler::spawnStoredActors(Level &level, const std::vector<Tag> &entities) {
     for (const Tag &tag: entities) {
         const std::string identifier = tag.getString("identifier", std::string());
         if (identifier.empty())
@@ -199,6 +226,7 @@ void ServerNetworkHandler::saveActorsForChunk(Level &level, int32_t chunkX, int3
 
 void ServerNetworkHandler::saveAllActors() {
     for (Level *level: getLevels()) {
+        PistonSystem::finishMoves(*this, *level);
         const std::unordered_set<int64_t> &columns = getWorldOf(*level).getActorLoadedChunks(level->getDimensionType());
 
         // one pass, in saveActorsForChunk() order; asking each loaded chunk walks every actor once per chunk
@@ -210,6 +238,8 @@ void ServerNetworkHandler::saveAllActors() {
                 byChunk[column].push_back(actor.saveNbt());
         }
 
+        // two writes per loaded column, thousands with many players: a write slowdown sleeps a millisecond on each
+        level->beginStorageBatch();
         for (const int64_t column: columns) {
             const int32_t chunkX = (int32_t) (column >> 32);
             const int32_t chunkZ = (int32_t) (column & 0xffffffff);
@@ -223,12 +253,57 @@ void ServerNetworkHandler::saveAllActors() {
             level->saveEntities(chunkX, chunkZ, entities);
             saveBlockActorsForChunk(*level, chunkX, chunkZ, false);
         }
+        level->commitStorageBatch();
+
+        saveStrayActors(*level, columns);
     }
+}
+
+// one walked out of the loaded columns keeps ticking: the column it left is written without it
+void ServerNetworkHandler::saveStrayActors(Level &level, const std::unordered_set<int64_t> &loadedColumns) {
+    std::unordered_map<int64_t, std::vector<Tag>> byChunk;
+    for (auto &entry: mActors) {
+        int64_t column = 0;
+        if (savedActorColumn(*entry.second, level, column) && loadedColumns.count(column) == 0)
+            byChunk[column].push_back(entry.second->saveNbt());
+    }
+
+    for (const std::unique_ptr<ItemActor> &item: mItemEntities) {
+        if (item->isRemoved() || !item->isIn(level))
+            continue;
+
+        const Vector3f &position = item->getPosition();
+        const int64_t column = ((int64_t) ((int32_t) std::floor(position.x) >> 4) << 32)
+                               | (uint32_t) ((int32_t) std::floor(position.z) >> 4);
+        if (loadedColumns.count(column) == 0)
+            byChunk[column].push_back(item->saveNbt());
+    }
+
+    for (const auto &entry: byChunk)
+        level.appendEntities((int32_t) (entry.first >> 32), (int32_t) (entry.first & 0xffffffff), entry.second);
+}
+
+bool ServerNetworkHandler::_isStorageWriteStalled() {
+    for (Level *level: getLevels()) {
+        if (level->isStorageWriteStalled())
+            return true;
+    }
+    return false;
 }
 
 void ServerNetworkHandler::autoSave(bool wait) {
     if (!getLevel().isStorageOpen())
         return;
+
+    // before anything is written: a plugin can store its own state in the same save
+    if (mPluginManager->hasSubscribers(FALCON_EVENT_WORLD_SAVE)) {
+        for (World *world: mWorlds.getWorlds()) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_WORLD_SAVE;
+            event.mWorldName = world->getName();
+            mPluginManager->dispatch(event);
+        }
+    }
 
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     std::vector<std::pair<Level *, uint64_t>> failures;
@@ -239,13 +314,16 @@ void ServerNetworkHandler::autoSave(bool wait) {
 
     for (auto &entry: mPlayers) {
         const ServerPlayer &player = entry.second;
-        if (player.isSpawned() && !player.getName().empty())
+        if (player.isSpawned() && !player.getName().empty() && !player.isSimulated())
             _savePlayerData(player, wait);
     }
 
     saveWorldDynamicProperties(wait);
+    saveScoreboard(wait);
     mScriptEngine.saveWorldClocks();
     saveAllActors();
+    for (auto &entry: mPlayers)
+        entry.second.getInventoryManager().clearTouchedColumns();
 
     for (World *world: mWorlds.getWorlds())
         world->saveAll(wait);
@@ -264,10 +342,11 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
         return false;
 
     std::unordered_set<int64_t> &loadedChunks = getWorldOf(level).getActorLoadedChunks(level.getDimensionType());
-    const std::unordered_set<int64_t> active(activeColumns.begin(), activeColumns.end());
+    // the level holds the same columns as a set by now: no second copy to probe
+    const std::unordered_set<int64_t> &active = level.getActiveColumns();
     bool deferred = false;
 
-    for (const int64_t column: active) {
+    for (const int64_t column: activeColumns) {
         if (loadedChunks.count(column) != 0)
             continue;
 
@@ -288,6 +367,10 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
         if (active.count(column) == 0)
             unloaded.push_back(column);
     }
+    if (!unloaded.empty()) {
+        const std::unordered_set<int64_t> leaving(unloaded.begin(), unloaded.end());
+        PistonSystem::finishMoves(*this, level, &leaving);
+    }
 
     for (const int64_t column: unloaded) {
         const int32_t chunkX = (int32_t) (column >> 32);
@@ -296,6 +379,8 @@ bool ServerNetworkHandler::syncActorPersistence(Level &level, const std::vector<
         saveBlockActorsForChunk(level, chunkX, chunkZ, true);
         loadedChunks.erase(column);
     }
+    if (!unloaded.empty())
+        saveStrayActors(level, loadedChunks);
 
     return deferred;
 }

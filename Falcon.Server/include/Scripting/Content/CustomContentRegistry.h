@@ -1,12 +1,15 @@
 #pragma once
 
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Level/Block/BlockPlacementFilter.h"
 #include "World/Actor/ActorPropertySchema.h"
 #include "Core/NBT/Tag.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Item/ItemTypes.h"
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class BehaviorPackManager;
@@ -17,6 +20,14 @@ class BlockDefinitionRegistry;
 struct CustomRepairEntry {
     std::vector<std::string> mItems;
     std::string mAmount;
+};
+
+// one minecraft:shooter ammunition entry; the flags default to false as in the game
+struct CustomAmmunition {
+    std::string mItem;
+    bool mUseOffhand = false;
+    bool mSearchInventory = false;
+    bool mUseInCreative = false;
 };
 
 // a custom component bound in the JSON; params is its JSON text, empty in the 1.x list form
@@ -40,6 +51,78 @@ struct CustomItemDefinition {
     bool mCanAlwaysEat = false;
     int32_t mMaxDurability = 0;
     bool mHandEquipped = false;
+    // minecraft:enchantable: slot lowercased as the game looks it up
+    bool mHasEnchantable = false;
+    std::string mEnchantableSlot = "none";
+    int32_t mEnchantableValue = 0;
+    // minecraft:damage: attack damage on top of the empty hand's
+    int32_t mDamage = 0;
+    std::vector<std::string> mTags;
+    // the defaults of an item that declares none of these
+    bool mAllowOffHand = false;
+    bool mCanDestroyInCreative = true;
+    bool mGlint = false;
+    bool mLiquidClipped = false;
+    bool mShouldDespawn = true;
+    bool mStackedByData = false;
+    bool mFireResistant = false;
+    // minecraft:hover_text_color: empty when the item keeps the default name color
+    std::string mHoverTextColor;
+    // minecraft:dyeable: default_color as 0xRRGGBB, white when the JSON leaves it out
+    bool mHasDyeable = false;
+    uint32_t mDyeableDefaultColor = 0xFFFFFF;
+    // minecraft:interact_button: true or false keeps the game's default text
+    bool mHasInteractButton = false;
+    std::string mInteractButtonText = "action.interact.use";
+    // minecraft:entity_placer: the entity the item places, and the blocks it may be used on (any when empty)
+    bool mHasEntityPlacer = false;
+    std::string mPlacerEntity;
+    std::vector<std::string> mEntityPlacerUseOn;
+    std::vector<std::string> mEntityPlacerDispenseOn;
+    // minecraft:throwable and minecraft:projectile: using the item throws the entity
+    bool mHasThrowable = false;
+    bool mThrowSwings = false;
+    float mLaunchPowerScale = 1.0f;
+    float mMaxLaunchPower = 1.0f;
+    float mMinDrawDuration = 0.0f;
+    float mMaxDrawDuration = 0.0f;
+    bool mScalePowerByDraw = false;
+    bool mHasProjectile = false;
+    std::string mProjectileEntity;
+    float mMinimumCriticalPower = 0.0f;
+    // minecraft:shooter: max_draw_duration in seconds
+    bool mHasShooter = false;
+    std::vector<CustomAmmunition> mAmmunition;
+    float mShooterMaxDrawDuration = 0.0f;
+    bool mShooterScalePowerByDraw = false;
+    bool mChargeOnDraw = false;
+    // minecraft:block_placer: the block the item places, and the blocks it may be used on (any when empty)
+    bool mHasBlockPlacer = false;
+    std::string mPlacerBlock;
+    std::vector<std::string> mPlacerUseOn;
+    bool mPlacerReplacesBlockItem = false;
+    bool mPlacerAligned = false;
+    // minecraft:fuel: seconds of burning
+    bool mHasFuel = false;
+    float mFuelDuration = 0.0f;
+    // minecraft:compostable: chance out of 100
+    bool mHasCompostable = false;
+    int32_t mCompostingChance = 0;
+    // minecraft:use_modifiers: use_duration in seconds
+    bool mHasUseModifiers = false;
+    float mUseDuration = 0.0f;
+    float mMovementModifier = 1.0f;
+    bool mEmitVibrations = true;
+    std::string mUseStartSound;
+    std::string mStartUsing = "always";
+    // minecraft:use_animation: empty when the item declares none
+    std::string mUseAnimation;
+    // minecraft:wearable: the slot name as declared, and its armor slot when it is one of the four
+    bool mHasWearable = false;
+    std::string mWearableSlotName;
+    ArmorSlot mWearableSlot = ArmorSlot::None;
+    int32_t mProtection = 0;
+    bool mHidesPlayerLocation = false;
     std::vector<CustomComponentUse> mCustomComponents;
     bool mHasDigger = false;
     bool mDiggerUseEfficiency = false;
@@ -101,6 +184,16 @@ struct CustomBlockDefinition {
     int32_t mRedstoneMinPower = 0;
     bool mEntityFallOn = false;
     float mMinFallDistance = 0.0f;
+    // minecraft:instrument_sound: up and down faces to a note sound
+    bool mInstrumentSound = false;
+    std::vector<std::pair<std::string, std::string>> mInstrumentSounds;
+    // minecraft:neighbor_change: one bit a face (down 0 ... east 5)
+    uint8_t mNeighborDirections = 0;
+    // minecraft:vibration_properties, both optional and false by default
+    bool mCanDampenVibrations = false;
+    bool mCanOccludeVibrations = false;
+    // minecraft:block_entity entity_storage: a data-driven block actor keeps entities for scripts
+    bool mEntityStorage = false;
 };
 
 struct CustomActorDefinition {
@@ -110,6 +203,8 @@ struct CustomActorDefinition {
     bool mIsSpawnable = false;
     bool mIsExperimental = false;
     bool mIsProjectile = false;
+    bool mHasProjectileComponent = false;
+    ProjectileComponent mProjectileComponent;
     float mCollisionWidth = 0.6f;
     float mCollisionHeight = 1.8f;
     std::vector<std::string> mTypeFamilies;
@@ -158,6 +253,16 @@ public:
         return mRecipes;
     }
 
+    // plugins add and remove recipes while the server runs
+    std::vector<CustomRecipe> &getRecipesMutable() {
+        return mRecipes;
+    }
+
+    // vanilla crafting recipes left out of the recipe book, by recipe id
+    std::unordered_set<std::string> &getDisabledRecipes() {
+        return mDisabledRecipes;
+    }
+
     const CustomActorDefinition *getActorDefinition(const std::string &identifier) const;
 
     int32_t getItemMaxStackSize(const std::string &identifier) const;
@@ -180,6 +285,21 @@ public:
     static std::vector<CustomComponentUse> componentsFor(const CustomBlockDefinition &block, const Tag &states);
 
     bool hasIdentifier(const std::string &identifier) const;
+
+    // the faces a block's minecraft:neighbor_change watches, 0 for any other block
+    uint8_t neighborDirectionsOf(const std::string &identifier) const {
+        const auto found = mNeighborListeners.find(identifier);
+        return found == mNeighborListeners.end() ? 0 : found->second;
+    }
+
+    bool hasNeighborListeners() const {
+        return !mNeighborListeners.empty();
+    }
+
+    // the world's upcoming_creator_features experiment, read before the packs load
+    void setUpcomingCreatorFeatures(bool enabled) {
+        mUpcomingCreatorFeatures = enabled;
+    }
 
     const CustomItemDefinition *registerItem(const CustomItemDefinition &item, ItemDefinitionRegistry &items);
 
@@ -225,6 +345,9 @@ private:
     std::vector<CustomBlockDefinition> mBlocks;
     std::vector<CustomActorDefinition> mActors;
     std::vector<CustomRecipe> mRecipes;
+    std::unordered_set<std::string> mDisabledRecipes;
     std::vector<BlockPropertyData> mBlockProperties;
+    std::unordered_map<std::string, uint8_t> mNeighborListeners;
+    bool mUpcomingCreatorFeatures = false;
     bool mFrozen = false;
 };

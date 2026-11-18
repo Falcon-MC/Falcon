@@ -135,7 +135,7 @@ namespace {
                 "raw terrain picked up a stored decoration");
     }
 
-    // sub_1432CE930: a decoration writes into its generated neighbours at once, the next one reads it
+    // a decoration writes into its generated neighbours at once, the next one reads it
     void writesReachNeighbours() {
         const std::unique_ptr<ChunkGenerator> generator = DimensionFactory::createGenerator(DimensionType::Overworld,
                                                                                             42);

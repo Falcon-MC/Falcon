@@ -14,7 +14,7 @@
 #include <thread>
 
 namespace {
-    // an empty search runs once more from here (sub_14BEA2690, xmmword_14F1FBCD0)
+    // an empty search runs once more from here
     const int32_t RETRY_OFFSET = 32;
 
     std::atomic<bool> gSearchRunning{false};
@@ -148,7 +148,7 @@ bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<st
 
     std::thread search([&handler, generator, feature, requesterId, requestOrigin, originX, originZ]() {
         StructureChunkPos start;
-        const bool found = generator->getDimensionType() == DimensionType::Overworld
+        const bool found = generator->getDimensionType() == feature->getDimension()
                            && feature->findNearest(*generator, originX, originZ, start);
         gSearchRunning = false;
 
@@ -166,8 +166,8 @@ bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<st
                 return;
             }
 
-            const int32_t foundX = start.x * 16 + 8;
-            const int32_t foundZ = start.z * 16 + 8;
+            const int32_t foundX = start.x * 16 + feature->getBlockOffset();
+            const int32_t foundZ = start.z * 16 + feature->getBlockOffset();
             const int64_t deltaX = foundX - originX;
             const int64_t deltaZ = foundZ - originZ;
             const int64_t distance = (int64_t) std::sqrt((double) (deltaX * deltaX + deltaZ * deltaZ));

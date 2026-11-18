@@ -3,6 +3,8 @@
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Inventory/SimpleContainerInventory.h"
 
+#include <memory>
+
 class ContainerBlockActor : public BlockActor {
 public:
     explicit ContainerBlockActor(int size) : mInventory(size) {}
@@ -124,7 +126,7 @@ public:
     static const int SLOT_FUEL = 4;
     static const int FIRST_POTION_SLOT = 1;
     static const int POTION_SLOTS = 3;
-    static const int MAX_BREW_TIME = 400;
+    static constexpr int MAX_BREW_TIME = 400;
     static const int FUEL_PER_BLAZE_POWDER = 20;
 
     BrewingStandBlockActor() : ContainerBlockActor(SIZE) {}
@@ -154,9 +156,10 @@ private:
 
     void _updateSlotStates(ServerNetworkHandler &owner);
 
-    int mBrewTime = MAX_BREW_TIME;
+    int mBrewTime = 0;
     int mFuelAmount = 0;
     int mFuelTotal = 0;
+    std::shared_ptr<ItemDefinition> mBrewingIngredient;
 };
 
 class BeaconBlockActor final : public ContainerBlockActor {
@@ -185,11 +188,32 @@ public:
 
     static const int SIZE = 9;
 
+    // how long the crafting state stays on after a craft
+    static const int CRAFTING_TICKS = 6;
+
     CrafterBlockActor() : ContainerBlockActor(SIZE) {}
 
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    // the items and the disabled slots; the crafting ticks only travel to clients
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    // the crafting state goes off when the ticks run out
+    bool tick(ServerNetworkHandler &owner) override;
+
+    // only an empty slot can be disabled; false when nothing changed
+    bool setSlotDisabled(int slot, bool disabled);
+
+    // disabled slots plus filled slots
+    int getComparatorSignal() const;
+
+    int mCraftingTicks = 0;
 };
 
 class CampfireBlockActor final : public ContainerBlockActor {
@@ -197,7 +221,7 @@ public:
     static constexpr const char *BLOCK_ACTOR_ID = "Campfire";
 
     static const int SIZE = 4;
-    static const int COOK_TIME = 600;
+    static constexpr int COOK_TIME = 600;
 
     CampfireBlockActor() : ContainerBlockActor(SIZE) {}
 
@@ -258,6 +282,24 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    Tag saveNbt() const override;
+
+    Tag getSpawnCompound() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    // the four sherd or brick item names, kept as the game saves them
+    const Tag *getSherds() const {
+        return mSherds.isList() ? &mSherds : nullptr;
+    }
+
+    void setSherds(const Tag &sherds) {
+        mSherds = sherds;
+    }
+
+private:
+    Tag mSherds;
 };
 
 class JukeboxBlockActor final : public ContainerBlockActor {
@@ -271,6 +313,25 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    bool isPlaying() const {
+        return !mFinishedRecording;
+    }
+
+    void setPlaying(bool playing) {
+        mFinishedRecording = !playing;
+        mTicksPlaying = 0;
+    }
+
+private:
+    bool mFinishedRecording = true;
+    int mTicksPlaying = 0;
 };
 
 class LecternBlockActor final : public ContainerBlockActor {
@@ -288,6 +349,20 @@ public:
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    bool hasBook() const {
+        return !mInventory.getContainerItem(0).isAir();
+    }
+
+    const ItemStack &getBook() const {
+        return mInventory.getContainerItem(0);
+    }
+
+    // one book in slot 0, back to its first page
+    void setBook(ItemStack book);
+
+    // the book, now out of the lectern; air when there was none
+    ItemStack takeBook();
 
     int mPage = 0;
     int mTotalPages = 0;

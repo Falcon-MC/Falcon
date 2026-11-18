@@ -7,11 +7,12 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     bool isTransparentAt(Level &level, const Vector3i &position) {
         const BlockState state = level.getBlockState(position.x, position.y, position.z);
-        if (state.mName == "minecraft:air")
+        if (state.mName == BlockNames::AIR)
             return true;
 
         const BlockData *data = BlockDataTable::find(state.mName.c_str());

@@ -1,6 +1,7 @@
 #include "Network/Handler/NetworkHandler.h"
 
 #include "Core/Utility/BinaryStream.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Packet.h"
 
@@ -148,12 +149,49 @@ int NetworkHandler::getAveragePing(const NetworkIdentifier &id) const {
     return found == shard.mPings.end() ? -1 : found->second;
 }
 
+bool NetworkHandler::getBatchTraits(const NetworkIdentifier &id,
+                                    CompressedNetworkPeer::BatchTraits &outTraits) const {
+    if (mShards.empty())
+        return false;
+    const Shard &shard = *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
+    std::lock_guard<std::mutex> lock(shard.mPingMutex);
+    const auto found = shard.mBatchTraits.find(id);
+    if (found == shard.mBatchTraits.end())
+        return false;
+    outTraits = found->second;
+    return true;
+}
+
 NetworkHandler::Shard &NetworkHandler::_shardFor(const NetworkIdentifier &id) {
     return *mShards[NetworkIdentifier::Hasher()(id) % mShards.size()];
 }
 
 void NetworkHandler::_pushOutbound(OutboundCommand command) {
+    if (mCorked.load(std::memory_order_relaxed) && std::this_thread::get_id() == mCorkThread) {
+        mCorkedCommands[NetworkIdentifier::Hasher()(command.mId) % mShards.size()].push_back(std::move(command));
+        return;
+    }
     _shardFor(command.mId).mOutbound.push(std::move(command));
+}
+
+void NetworkHandler::cork() {
+    if (mCorked.load(std::memory_order_relaxed))
+        return;
+    mCorkedCommands.resize(mShards.size());
+    mCorkThread = std::this_thread::get_id();
+    mCorked.store(true, std::memory_order_relaxed);
+}
+
+void NetworkHandler::uncork() {
+    if (!mCorked.load(std::memory_order_relaxed) || std::this_thread::get_id() != mCorkThread)
+        return;
+    mCorked.store(false, std::memory_order_relaxed);
+    for (size_t index = 0; index < mShards.size(); ++index) {
+        if (mCorkedCommands[index].empty())
+            continue;
+        mShards[index]->mOutbound.pushAll(std::move(mCorkedCommands[index]));
+        mCorkedCommands[index].clear();
+    }
 }
 
 size_t NetworkHandler::getPendingOutboundBytes(const NetworkIdentifier &id) const {
@@ -234,17 +272,40 @@ Compressibility NetworkHandler::_toPeerCompressibility(const Packet &packet) {
                                                                            : Compressibility::Compressible;
 }
 
+void NetworkHandler::addLocalSession(const NetworkIdentifier &id) {
+    std::lock_guard<std::mutex> lock(mLocalSessionsMutex);
+    if (mLocalSessions.insert(id).second)
+        mLocalSessionCount.fetch_add(1);
+}
+
+void NetworkHandler::removeLocalSession(const NetworkIdentifier &id) {
+    std::lock_guard<std::mutex> lock(mLocalSessionsMutex);
+    if (mLocalSessions.erase(id) != 0)
+        mLocalSessionCount.fetch_sub(1);
+}
+
+bool NetworkHandler::isLocalSession(const NetworkIdentifier &id) const {
+    if (mLocalSessionCount.load() == 0)
+        return false;
+    std::lock_guard<std::mutex> lock(mLocalSessionsMutex);
+    return mLocalSessions.count(id) != 0;
+}
+
 void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, const PacketCodecContext &context) {
+    if (isLocalSession(id))
+        return;
     const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
     const PacketCodecContext &session = own != nullptr ? *own : context;
     if (!session.getCodec().supports(packet.getId()))
+        return;
+    if (mSendHook && !mSendHook({id}, packet.getId()))
         return;
 
     BinaryStream stream;
     packet.writeWithHeader(stream, session);
 
     if (!mOutboundFilter) {
-        send(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
+        _queueData(id, stream.getBuffer(), _toPeerReliability(packet), _toPeerCompressibility(packet));
         return;
     }
 
@@ -252,16 +313,23 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
     if (!mOutboundFilter(id, data))
         return;
 
-    send(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
+    _queueData(id, data, _toPeerReliability(packet), _toPeerCompressibility(packet));
 }
 
 void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
                                 const PacketCodecContext &context) {
     // same-protocol sessions share a codec context: most recipients reuse one encoding
     std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
-    std::vector<std::vector<OutboundCommand>> commands(mShards.size());
+    if (mSendHook && !ids.empty() && !mSendHook(ids, packet.getId()))
+        return;
+    // corked, the commands go straight where they wait
+    const bool corked = mCorked.load(std::memory_order_relaxed) && std::this_thread::get_id() == mCorkThread;
+    std::vector<std::vector<OutboundCommand>> uncorked(corked ? 0 : mShards.size());
+    std::vector<std::vector<OutboundCommand>> &commands = corked ? mCorkedCommands : uncorked;
 
     for (const NetworkIdentifier &id: ids) {
+        if (isLocalSession(id))
+            continue;
         const PacketCodecContext *own = mContextResolver ? mContextResolver(id) : nullptr;
         const PacketCodecContext &session = own != nullptr ? *own : context;
         if (!session.getCodec().supports(packet.getId()))
@@ -294,6 +362,9 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
         commands[NetworkIdentifier::Hasher()(id) % mShards.size()].push_back(std::move(command));
     }
 
+    if (corked)
+        return;
+
     for (size_t index = 0; index < mShards.size(); ++index)
         mShards[index]->mOutbound.pushAll(std::move(commands[index]));
 }
@@ -302,12 +373,36 @@ void NetworkHandler::setOutboundFilter(OutboundFilter filter) {
     mOutboundFilter = std::move(filter);
 }
 
+void NetworkHandler::setSendHook(SendHook hook) {
+    mSendHook = std::move(hook);
+}
+
+bool NetworkHandler::_allowRaw(const std::vector<NetworkIdentifier> &ids, const std::string &data) {
+    if (!mSendHook || ids.empty() || data.empty())
+        return true;
+    try {
+        ReadOnlyBinaryStream stream(data);
+        unsigned char senderSubId;
+        unsigned char clientSubId;
+        return mSendHook(ids, Packet::peekId(stream, senderSubId, clientSubId));
+    } catch (const std::exception &) {
+        return true;
+    }
+}
+
 void NetworkHandler::setContextResolver(ContextResolver resolver) {
     mContextResolver = std::move(resolver);
 }
 
 void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, NetworkPeer::Reliability reliability,
                           Compressibility compressibility) {
+    if (isLocalSession(id) || (mSendHook && !_allowRaw({id}, data)))
+        return;
+    _queueData(id, data, reliability, compressibility);
+}
+
+void NetworkHandler::_queueData(const NetworkIdentifier &id, const std::string &data,
+                                NetworkPeer::Reliability reliability, Compressibility compressibility) {
     OutboundCommand command;
     command.mKind = OutboundCommand::Kind::Data;
     command.mId = id;
@@ -320,14 +415,14 @@ void NetworkHandler::send(const NetworkIdentifier &id, const std::string &data, 
 
 void NetworkHandler::sendShared(const NetworkIdentifier &id, const std::shared_ptr<const SharedPacket> &packet,
                                 NetworkPeer::Reliability reliability) {
-    if (packet == nullptr)
+    if (packet == nullptr || isLocalSession(id) || (mSendHook && !_allowRaw({id}, packet->getPacket())))
         return;
 
     // a filter may rewrite the bytes: that copy can't be shared
     if (mOutboundFilter) {
         std::string data = packet->getPacket();
         if (mOutboundFilter(id, data))
-            send(id, data, reliability, Compressibility::Compressible);
+            _queueData(id, data, reliability, Compressibility::Compressible);
         return;
     }
 
@@ -342,6 +437,13 @@ void NetworkHandler::sendShared(const NetworkIdentifier &id, const std::shared_p
 
 void NetworkHandler::sendToAll(const std::string &data, NetworkPeer::Reliability reliability,
                                Compressibility compressibility) {
+    if (mSendHook) {
+        std::vector<NetworkIdentifier> ids;
+        for (const auto &entry: mPendingBytes)
+            ids.push_back(entry.first);
+        if (!_allowRaw(ids, data))
+            return;
+    }
     for (std::unique_ptr<Shard> &shard: mShards) {
         OutboundCommand command;
         command.mKind = OutboundCommand::Kind::Data;
@@ -395,6 +497,7 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
         {
             std::lock_guard<std::mutex> lock(shard.mPingMutex);
             shard.mPings.erase(command.mId);
+            shard.mBatchTraits.erase(command.mId);
         }
 
         InboundEvent event;
@@ -464,8 +567,10 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
     if (now >= shard.mPingRefresh) {
         shard.mPingRefresh = now + std::chrono::seconds(1);
         std::lock_guard<std::mutex> lock(shard.mPingMutex);
-        for (auto &entry: shard.mConnections)
+        for (auto &entry: shard.mConnections) {
             shard.mPings[entry.first] = entry.second->getPeer()->getNetworkStatus().mAveragePing;
+            shard.mBatchTraits[entry.first] = entry.second->getCompressedPeer()->getBatchTraits();
+        }
     }
 
     std::vector<OutboundCommand> commands = shard.mOutbound.drain();

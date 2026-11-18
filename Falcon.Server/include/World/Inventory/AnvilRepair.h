@@ -14,7 +14,7 @@ struct AnvilResult {
     int32_t mMaterialCost = 0;
 };
 
-// AnvilContainerManagerModel::_createResult (sub_14CC96B10): repair by material or second item, enchantment
+// repair by material or second item, enchantment
 // merging, renaming, cumulative RepairCost penalty, "Too Expensive" limit
 class AnvilRepair {
 public:
@@ -29,13 +29,12 @@ public:
 
     static bool hasCustomName(const ItemStack &item);
 
-    // ItemEnchants::getTotalValue (sub_14555B500)
     static int32_t getEnchantValue(const std::vector<EnchantmentInstance> &enchantments, bool bookModifier);
 
-    // sub_1436ADD20: returns the level cost the material's enchantments add
+    // returns the level cost the material's enchantments add
     static int32_t mergeEnchantments(const ItemStack &input, const ItemStack &material, ItemStack &result,
                                      bool bookModifier, const std::shared_ptr<ItemDefinition> &enchantedBook);
 
-    // Item::isValidRepairItem for vanilla items repaired by a material
+    // vanilla items repaired by a material
     static bool isValidRepairItem(const ItemStack &item, const ItemStack &material);
 };

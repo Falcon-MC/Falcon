@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <array>
+#include <utility>
 #include <vector>
 
 class NetworkIdentifier;
@@ -21,6 +22,8 @@ class ChestBlockActor;
 class FurnaceBlockActor;
 class Level;
 class ContainerBlockActor;
+class ServerActor;
+class UpdateTradePacket;
 enum class FurnaceKind : uint8_t;
 
 class InventoryManager {
@@ -78,6 +81,30 @@ public:
 
     bool isCartographyOpen() const;
 
+    bool onClientOpenSmithing(const Vector3i &position);
+    bool isSmithingOpen() const;
+    void syncSmithingInputs();
+
+    bool onClientOpenStonecutter(const Vector3i &position);
+
+    bool isStonecutterOpen() const;
+
+    int getStonecutterWindowId() const {
+        return isStonecutterOpen() ? mAnvilWindowId : CONTAINER_ID_NONE;
+    }
+
+    // index into StonecutterRecipes::validRecipes of the input
+    int32_t getStonecutterSelectedRecipe() const {
+        return mStonecutterSelectedRecipe;
+    }
+
+    // the server's choice: the client is told
+    void setStonecutterSelectedRecipe(int32_t index);
+
+    void onClientSelectStonecutterRecipe(int containerId, int32_t index);
+
+    void syncStonecutterInput();
+
     // the copy id a MapCreateLockedCopyPacket asked for, kept until the table locks a map
     void setClientMapLock(const CartographyLock &lock) {
         mClientMapLock = lock;
@@ -93,6 +120,10 @@ public:
 
     bool isCraftingTableOpen() const {
         return mCraftingTableWindowId != CONTAINER_ID_NONE;
+    }
+
+    const Vector3i &getCraftingTablePosition() const {
+        return mCraftingTablePosition;
     }
 
     bool isFurnaceOpen() const {
@@ -127,11 +158,36 @@ public:
 
     static void tickStoredFurnace(ServerNetworkHandler &owner, FurnaceBlockActor &furnace);
 
+    static int getFuelTime(const ItemStack &item);
+
     static void onFurnaceBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     bool onClientOpenChest(const Vector3i &position);
 
     bool onClientOpenBlockContainer(const Vector3i &position, ContainerType type);
+
+    // a ContainerOpenPacket naming the actor; false while another window is open or it has no container
+    bool openEntityContainer(ServerActor &actor, ContainerType type);
+
+    // the trade screen opens from UpdateTradePacket alone, no ContainerOpenPacket
+    bool openTrade(int64_t traderId, UpdateTradePacket &packet);
+
+    bool isTradeOpen() const {
+        return mTradeWindowId != CONTAINER_ID_NONE;
+    }
+
+    // the trader of the open trade screen, -1 for none
+    int64_t getTradeActorId() const {
+        return isTradeOpen() ? mTradeActorId : -1;
+    }
+
+    // the actor whose container is open, -1 for a block container or none
+    int64_t getContainerActorId() const {
+        return mContainerActorId;
+    }
+
+    // resends the open entity container after a change made outside the window
+    void refreshEntityContainer(int64_t actorId);
 
     bool isContainerOpen() const {
         return mContainerWindowId != CONTAINER_ID_NONE;
@@ -147,6 +203,16 @@ public:
 
     ContainerType getCurrentWindowType() const {
         return mCurrentWindowType;
+    }
+
+    // packed columns of the containers opened since the last save: written with the player when it leaves,
+    // its items and theirs together
+    const std::vector<std::pair<const Level *, int64_t>> &getTouchedColumns() const {
+        return mTouchedColumns;
+    }
+
+    void clearTouchedColumns() {
+        mTouchedColumns.clear();
     }
 
     bool refreshEnchantInput(const ItemStack &current, int32_t newSeed);
@@ -169,9 +235,14 @@ public:
 
     void onClientRemoveWindow(int windowId);
 
+    // the player left: every open window closes now, no ContainerClose will come
+    void closeAllWindows();
+
     void dispatchPluginClose();
 
     int getCurrentWindowId() const {
+        if (mTradeWindowId != CONTAINER_ID_NONE)
+            return mTradeWindowId;
         return mFurnaceWindowId != CONTAINER_ID_NONE
                        ? mFurnaceWindowId
                        : (mCraftingTableWindowId != CONTAINER_ID_NONE
@@ -190,6 +261,8 @@ private:
 
     bool _allowPluginOpen(const Vector3i &position);
 
+    void _touchColumn(const Vector3i &position);
+
     int _getWindowId(InventoryId inventory) const;
 
     int _getSize(InventoryId inventory) const;
@@ -204,9 +277,15 @@ private:
 
     void _closeAnvil();
 
+    void _closeTrade();
+
+    void _returnToInventory(ItemStack item);
+
     bool _openWorkbench(ContainerType type, const Vector3i &position);
 
     void _sendContentPackets(int containerId, const Container &container);
+
+    void _closeContainerWindow();
 
     void _sendContentPackets(int containerId, InventoryId inventory);
 
@@ -233,8 +312,13 @@ private:
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
     CartographyLock mClientMapLock;
+    int32_t mStonecutterSelectedRecipe = 0;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
+    int64_t mContainerActorId = -1;
+    int mTradeWindowId = CONTAINER_ID_NONE;
+    int64_t mTradeActorId = -1;
+    std::vector<std::pair<const Level *, int64_t>> mTouchedColumns;
     std::string mEnchantInputId;
     int32_t mEnchantInputCount = 0;
     int32_t mEnchantInputDamage = 0;

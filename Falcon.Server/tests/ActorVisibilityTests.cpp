@@ -16,7 +16,7 @@ namespace {
             throw std::runtime_error(message);
     }
 
-    // the chunk offsets the game copies into each level (sub_1430054F0, 57 entries)
+    // the chunk offsets the game copies into each level
     const std::pair<int32_t, int32_t> GAME_OFFSETS[] = {
             {-1, -4}, {0, -4}, {1, -4}, {-2, -3}, {-1, -3}, {0, -3},  {1, -3},  {2, -3},  {-3, -2}, {-2, -2},
             {-1, -2}, {0, -2}, {1, -2}, {2, -2},  {3, -2},  {-4, -1}, {-3, -1}, {-2, -1}, {-1, -1}, {0, -1},

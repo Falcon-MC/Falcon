@@ -30,7 +30,7 @@ void ServerPlayerMovementComponent::beginTick(int64_t serverTick, int maxCredits
 }
 
 std::shared_ptr<const PlayerAuthInputPacket> ServerPlayerMovementComponent::takeNext() {
-    // tick policy (0x140B45360, 1.26.10): discard old inputs beyond credits + 1 or batch size
+    // tick policy: discard old inputs beyond credits + 1 or batch size
     while (!mInputs.empty()) {
         if (mCredits == 0 && mInputs.size() <= 1)
             return nullptr;
@@ -76,7 +76,7 @@ void ServerPlayerMovementComponent::clearPending() {
 }
 
 size_t ServerPlayerMovementComponent::catchupSteps(double previousTickMilliseconds) {
-    // catch-up loop (0x1432502B0): 2 * min(elapsed 50 ms steps, 20) + 1
+    // catch-up loop: 2 * min(elapsed 50 ms steps, 20) + 1
     if (!std::isfinite(previousTickMilliseconds) || previousTickMilliseconds <= 0.0)
         return 1;
     const size_t elapsed = (size_t) std::min(previousTickMilliseconds / 50.0, 20.0);

@@ -11,7 +11,7 @@ namespace FeatureMath {
 
     float cosLookup(double value);
 
-    // the game's sine table (sub_14199D950): sinf(i / 10430.378f), indexed by an angle pre-scaled by 10430.378f;
+    // the game's sine table: sinf(i / 10430.378f), indexed by an angle pre-scaled by 10430.378f;
     // two thirds of its entries differ by an ulp from sinLookup's double-filled table: game-exact ports read this one
     float sineAt(float scaled);
 

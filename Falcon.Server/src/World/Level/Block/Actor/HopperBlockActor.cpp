@@ -6,6 +6,7 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <utility>
@@ -98,7 +99,10 @@ namespace {
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
             const ItemStack &existing = container.getContainerItem(slot);
-            if (existing.isAir() || existing.mCount <= 0)
+            if (existing.isAir() || existing.mCount <= 0 || container.isSlotDisabled(slot))
+                continue;
+
+            if (!container.canHoldInSlot(slot, item))
                 continue;
 
             if (!PlayerInventory::canStack(existing, item) || existing.mCount >= maxStackSize)
@@ -112,7 +116,10 @@ namespace {
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
             const ItemStack &existing = container.getContainerItem(slot);
-            if (!existing.isAir() && existing.mCount > 0)
+            if ((!existing.isAir() && existing.mCount > 0) || container.isSlotDisabled(slot))
+                continue;
+
+            if (!container.canHoldInSlot(slot, item))
                 continue;
 
             ItemStack single = item;
@@ -161,11 +168,33 @@ namespace {
         return item.mCount - remaining;
     }
 
-    bool moveOne(Container &from, const SlotRange &fromRange, Container &to, const SlotRange &toRange) {
+    // FALCON_EVENT_HOPPER_TRANSFER for the one item about to move; false when a plugin keeps it
+    bool allowedByPlugins(Level *level, const Vector3i &hopper, const ItemStack &source, bool pushing) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_HOPPER_TRANSFER);
+        if (plugins == nullptr)
+            return true;
+
+        ItemStack one = source;
+        one.mCount = 1;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_HOPPER_TRANSFER;
+        event.mCancellable = true;
+        event.mLevel = level;
+        event.mBlockPosition = hopper;
+        event.mItem = &one;
+        event.mState = pushing;
+        plugins->dispatch(event);
+        return !event.mCancelled;
+    }
+
+    bool moveOne(Container &from, const SlotRange &fromRange, Container &to, const SlotRange &toRange, Level *level,
+                 const Vector3i &hopper, bool pushing) {
         for (int slot = fromRange.mFirst; slot < fromRange.mLast; ++slot) {
             const ItemStack &source = from.getContainerItem(slot);
             if (source.isAir() || source.mCount <= 0)
                 continue;
+            if (!allowedByPlugins(level, hopper, source, pushing))
+                return false;
 
             ItemStack moved = source;
             if (!addOneWithin(to, toRange, moved))
@@ -252,16 +281,12 @@ bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {
     if (targetActor == nullptr)
         return false;
 
-    HopperBlockActor *targetHopper = dynamic_cast<HopperBlockActor *>(targetActor);
-    if (targetHopper != nullptr && facing != FACE_DOWN)
-        return false;
-
     Container *targetContainer = targetActor->getContainer();
     if (targetContainer == nullptr)
         return false;
 
     return moveOne(mInventory, fullRange(mInventory), *targetContainer,
-                   pushRange(*targetActor, *targetContainer, facing == FACE_DOWN));
+                   pushRange(*targetActor, *targetContainer, facing == FACE_DOWN), &level, mPosition, true);
 }
 
 bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
@@ -279,7 +304,8 @@ bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
     if (sourceContainer == nullptr)
         return _pickupItemActors(owner);
 
-    return moveOne(*sourceContainer, pullRange(*sourceActor, *sourceContainer), mInventory, fullRange(mInventory));
+    return moveOne(*sourceContainer, pullRange(*sourceActor, *sourceContainer), mInventory, fullRange(mInventory),
+                   mLevel, mPosition, false);
 }
 
 bool HopperBlockActor::_pickupItemActors(ServerNetworkHandler &owner) {

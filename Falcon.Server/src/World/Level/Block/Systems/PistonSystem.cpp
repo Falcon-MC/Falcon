@@ -13,6 +13,7 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <unordered_map>
 #include <algorithm>
@@ -25,7 +26,7 @@ namespace {
     const char *STICKY_PISTON = "minecraft:sticky_piston";
     const char *PISTON_ARM_COLLISION = "minecraft:piston_arm_collision";
     const char *STICKY_PISTON_ARM_COLLISION = "minecraft:sticky_piston_arm_collision";
-    const char *AIR = "minecraft:air";
+    using BlockNames::AIR;
 
     const std::unordered_set<std::string> UNPUSHABLE = {"minecraft:bedrock",
                                                         "minecraft:obsidian",
@@ -114,7 +115,8 @@ namespace {
         }
     }
 
-    std::unordered_map<int32_t, std::vector<PendingMove>> gPendingMoves;
+    // per level: worlds share dimension ids
+    std::unordered_map<const Level *, std::vector<PendingMove>> gPendingMoves;
 
     bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
         return set.find(value) != set.end();
@@ -159,7 +161,7 @@ namespace {
         return 0;
     }
 
-    // PistonBlockActor::_attachedBlockWalker (client 26.60 sub_144C4AFD0): slime and honey reach every neighbour
+    // slime and honey reach every neighbour
     // but the one walked from; along the move direction pushed, from a sticky side only dragged if pullable
     struct MoveResolver {
         Level &mLevel;
@@ -179,7 +181,7 @@ namespace {
             return position.y >= mLevel.getMinY() && position.y <= mLevel.getMaxY();
         }
 
-        // _checkAttachedBlocks (sub_144C49B90) starts the walk with the piston's facing as the branch
+        // _checkAttachedBlocks starts the walk with the piston's facing as the branch
         bool resolve(const Vector3i &origin, int facing) {
             return walk(origin, facing) && mToMove.size() <= (size_t) PistonSystem::MOVE_BLOCK_LIMIT;
         }
@@ -397,7 +399,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
                 if (!resolver.resolve(origin, face)) {
                     if (extending)
                         return false;
-                    // PistonBlockActor::tick (sub_144C481C0) still retracts a sticky piston whose blocks cannot be
+                    // the game still retracts a sticky piston whose blocks cannot be
                     // pulled: it drops the collected blocks and pulls nothing
                     toMove.clear();
                     toDestroy.clear();
@@ -424,8 +426,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     for (size_t index = toDestroy.size(); index > 0; --index) {
         const Vector3i &destroyed = toDestroy[index - 1];
         const BlockState broken = level.getBlockState(destroyed.x, destroyed.y, destroyed.z);
-        level.setBlock(destroyed, BlockState(AIR), false);
-        owner.getScriptEngine().onCustomBlockBreak(level, destroyed, broken, nullptr, &position);
+        BlockActionHandler::destroyBlock(owner, level, destroyed, broken, true, ItemStack::air(), nullptr, &position);
     }
 
     // lifted out now (actors detached, container screens closed), placed when the arm animation ends in
@@ -444,11 +445,12 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     arm.setSticky(sticky);
     arm.setFacing(face);
     arm.beginMove(extending, toMove);
+    owner.getScriptEngine().onPistonActivate(level, position, extending);
 
     for (size_t index = toMove.size(); index > 0; --index)
         level.setBlock(toMove[index - 1], BlockState(AIR), false);
 
-    gPendingMoves[level.getDimensionId()].push_back(
+    gPendingMoves[&level].push_back(
             PendingMove{position, toMove, std::move(moved), std::move(movedActors), moveDirection});
     BlockActionHandler::broadcastBlockActorData(owner, level, arm);
 
@@ -468,27 +470,8 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     return true;
 }
 
-void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
-    std::vector<PendingMove> &pendingMoves = gPendingMoves[level.getDimensionId()];
-    if (pendingMoves.empty())
-        return;
-
-    std::vector<PendingMove> pending;
-    pending.swap(pendingMoves);
-
-    for (PendingMove &move: pending) {
-        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
-        if (arm != nullptr) {
-            arm->advance();
-
-            const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
-            if (!done) {
-                BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
-                pendingMoves.push_back(std::move(move));
-                continue;
-            }
-        }
-
+namespace {
+    void completeMove(ServerNetworkHandler &owner, Level &level, PendingMove &move) {
         for (size_t index = 0; index < move.mSources.size() && index < move.mMoved.size(); ++index) {
             const Vector3i destination = relative(move.mSources[index], move.mDirection);
             level.setBlock(destination, move.mMoved[index], false);
@@ -508,13 +491,85 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
             RedstoneSystem::updateAroundRedstone(owner, level, relative(source, move.mDirection));
         }
 
+        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
         if (arm == nullptr)
-            continue;
+            return;
 
         arm->finish();
         BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
         RedstoneSystem::updateAroundRedstone(owner, level, relative(move.mPiston, arm->getFacing()));
     }
+}
+
+void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end() || found->second.empty())
+        return;
+
+    std::vector<PendingMove> pending;
+    pending.swap(found->second);
+
+    for (PendingMove &move: pending) {
+        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
+        if (arm != nullptr) {
+            arm->advance();
+
+            const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
+            if (!done) {
+                BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
+                gPendingMoves[&level].push_back(std::move(move));
+                continue;
+            }
+        }
+
+        completeMove(owner, level, move);
+    }
+}
+
+// the moved blocks live only in memory until the arm stops: placed now, before anything is saved or unloaded
+void PistonSystem::finishMoves(ServerNetworkHandler &owner, Level &level, const std::unordered_set<int64_t> *columns) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end())
+        return;
+
+    const auto inColumns = [columns](const Vector3i &position) {
+        return columns->count(((int64_t) (position.x >> 4) << 32) | (uint32_t) (position.z >> 4)) != 0;
+    };
+
+    std::vector<PendingMove> pending;
+    pending.swap(found->second);
+    gPendingMoves.erase(found);
+
+    for (PendingMove &move: pending) {
+        bool touched = columns == nullptr || inColumns(move.mPiston);
+        for (size_t index = 0; index < move.mSources.size() && !touched; ++index)
+            touched = inColumns(move.mSources[index]) || inColumns(relative(move.mSources[index], move.mDirection));
+        if (!touched) {
+            gPendingMoves[&level].push_back(std::move(move));
+            continue;
+        }
+
+        completeMove(owner, level, move);
+    }
+}
+
+void PistonSystem::forgetLevel(const Level &level) {
+    gPendingMoves.erase(&level);
+}
+
+// the game fills each destination with a moving_block, which nothing can be placed into
+bool PistonSystem::isMovingInto(const Level &level, const Vector3i &position) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end())
+        return false;
+
+    for (const PendingMove &move: found->second) {
+        for (const Vector3i &source: move.mSources) {
+            if (relative(source, move.mDirection) == position)
+                return true;
+        }
+    }
+    return false;
 }
 
 // movement checks: never judge a player against blocks mid-move
@@ -524,7 +579,11 @@ bool PistonSystem::isMovingNear(const Level &level, const AxisAlignedBB &area) {
                && position.y < area.mMaxY && position.z + 1.0f > area.mMinZ && position.z < area.mMaxZ;
     };
 
-    for (const PendingMove &move: gPendingMoves[level.getDimensionId()]) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end())
+        return false;
+
+    for (const PendingMove &move: found->second) {
         if (touches(move.mPiston) || touches(relative(move.mPiston, move.mDirection)))
             return true;
         for (const Vector3i &source: move.mSources) {
