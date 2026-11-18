@@ -24,6 +24,15 @@ namespace {
     // facing_direction: down, up, north, south, west, east
     const int32_t STEPS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
+    // a north/south rail turns the minecart a quarter round: it faces the way it will move
+    float yawOn(const BlockState &rail) {
+        const int32_t direction = rail.mStates.getInt("rail_direction", 0);
+        return direction == BaseRailBlock::STRAIGHT_NORTH_SOUTH || direction == BaseRailBlock::ASCENDING_NORTH
+                               || direction == BaseRailBlock::ASCENDING_SOUTH
+                       ? 90.0f
+                       : 0.0f;
+    }
+
     bool isSlope(const BlockState &rail) {
         const int32_t direction = rail.mStates.getInt("rail_direction", 0);
         return direction >= BaseRailBlock::ASCENDING_EAST && direction <= BaseRailBlock::ASCENDING_SOUTH;
@@ -53,7 +62,10 @@ bool MinecartItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     const Vector3f position((float) blockPosition.x + 0.5f,
                             (float) blockPosition.y + RAIL_HEIGHT + (slope ? SLOPE_HEIGHT : 0.0f),
                             (float) blockPosition.z + 0.5f);
-    if (owner.spawnActor(level, MinecartActor::actorOfItem(item.mDefinition->getIdentifier()), position) == nullptr)
+    const float yaw = yawOn(*rail);
+    if (owner.spawnActor(level, MinecartActor::actorOfItem(item.mDefinition->getIdentifier()), position,
+                         [&](ServerActor &minecart) { minecart.setRotation(Vector3f(0.0f, yaw, yaw)); })
+        == nullptr)
         return false;
 
     player.consumeOneHeldItem();
@@ -75,20 +87,24 @@ bool MinecartItem::dispense(const DispenseSource &source) const {
         return false;
 
     float lift;
+    float yaw;
     if (BaseRailBlock::matches(ahead->mName)) {
         lift = isSlope(*ahead) ? DISPENSE_ON_SLOPE : DISPENSE_ON_RAIL;
+        yaw = yawOn(*ahead);
     } else {
         const BlockState *below = source.mLevel.peekBlockPtr(front.x, front.y - 1, front.z);
         if (ahead->mName != "minecraft:air" || below == nullptr || !BaseRailBlock::matches(below->mName))
             return false;
         lift = source.mFace != 0 && isSlope(*below) ? DISPENSE_DOWN_SLOPE : DISPENSE_DOWN_RAIL;
+        yaw = yawOn(*below);
     }
 
     const Vector3f position((float) source.mBlockPosition.x + 0.5f + (float) step[0] * DISPENSE_REACH,
                             (float) (source.mBlockPosition.y + step[1]) + lift,
                             (float) source.mBlockPosition.z + 0.5f + (float) step[2] * DISPENSE_REACH);
     if (source.mOwner.spawnActor(source.mLevel, MinecartActor::actorOfItem(item.mDefinition->getIdentifier()),
-                                 position)
+                                 position,
+                                 [&](ServerActor &minecart) { minecart.setRotation(Vector3f(0.0f, yaw, yaw)); })
         == nullptr)
         return false;
 

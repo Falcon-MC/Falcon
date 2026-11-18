@@ -45,6 +45,12 @@ void PoweredRailBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level
         RedstoneSystem::updateAroundRedstone(owner, level, Vector3i(position.x, position.y + 1, position.z));
 }
 
+// a rail placed beside a live source powers itself at once
+void PoweredRailBlock::onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                       const BlockState &state) const {
+    onRedstonePower(owner, level, position, state);
+}
+
 // the next rail along the line, one step forward or back; a slope also looks one block lower
 bool PoweredRailBlock::_findSignal(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                    const BlockState &state, bool forward, int distance) {
@@ -63,23 +69,24 @@ bool PoweredRailBlock::_findSignal(ServerNetworkHandler &owner, Level &level, co
         case STRAIGHT_EAST_WEST:
             x += forward ? -1 : 1;
             break;
+        // the slope rises toward its name: east is x + 1, west is x - 1
         case ASCENDING_EAST:
             if (forward) {
                 --x;
-                ++y;
-                lower = false;
             } else {
                 ++x;
+                ++y;
+                lower = false;
             }
             direction = STRAIGHT_EAST_WEST;
             break;
         case ASCENDING_WEST:
             if (forward) {
                 --x;
-            } else {
-                ++x;
                 ++y;
                 lower = false;
+            } else {
+                ++x;
             }
             direction = STRAIGHT_EAST_WEST;
             break;

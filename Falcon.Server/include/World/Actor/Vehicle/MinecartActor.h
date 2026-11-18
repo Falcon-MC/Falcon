@@ -92,6 +92,8 @@ private:
 
     void _pullInMobs(ServerNetworkHandler &owner);
 
+    void _faceMotion();
+
     void _tickTnt(ServerNetworkHandler &owner);
 
     void _tickHopper(ServerNetworkHandler &owner);

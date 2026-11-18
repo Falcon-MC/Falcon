@@ -105,6 +105,7 @@ namespace {
     const float DEGREES_TO_RADIANS = 0.017453292f;
     // the pull in reach around the minecart
     const float PULL_IN_MARGIN = 0.2f;
+    const float TURN_MIN_SPEED_SQUARED = 0.0001f;
 
     MinecartActor::Kind kindOf(const std::string &identifier) {
         if (identifier == CHEST)
@@ -428,11 +429,26 @@ void MinecartActor::tickMovement(ServerNetworkHandler &owner) {
         _activate(owner, false);
     }
 
+    _faceMotion();
     RideSystem::syncPassengerPositions(owner, *this);
     if (needsMovementSync()) {
         owner.broadcastActorMove(*this);
         markMovementSynced();
     }
+}
+
+// the minecart turns along the way it moves; a reversal keeps its line instead of spinning round
+void MinecartActor::_faceMotion() {
+    const Vector3f motion = getMotion();
+    if (motion.x * motion.x + motion.z * motion.z < TURN_MIN_SPEED_SQUARED)
+        return;
+
+    float yaw = std::atan2(motion.z, motion.x) / DEGREES_TO_RADIANS;
+    const float previous = getRotation().y;
+    if (std::fabs(std::remainder(yaw - previous, 360.0f)) > 170.0f)
+        yaw += 180.0f;
+    yaw = std::remainder(yaw, 360.0f);
+    setRotation(Vector3f(getRotation().x, yaw, yaw));
 }
 
 // pull_in_entities: a mob bumping an empty rideable minecart climbs in, unless a powered activator rail ejects it

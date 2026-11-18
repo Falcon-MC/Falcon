@@ -17,6 +17,9 @@ public:
     void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state) const override;
 
+    void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
+
 private:
     static bool _findSignal(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state, bool forward, int distance);
