@@ -166,6 +166,11 @@ public:
         return mBehaviorsRemoved;
     }
 
+    // the running goals stop; they may start again on the next tick
+    void stopGoals(ServerNetworkHandler &owner) {
+        mGoalSelector.stopAll(owner, *this);
+    }
+
     MobExplode &getExplode() {
         return mExplode;
     }

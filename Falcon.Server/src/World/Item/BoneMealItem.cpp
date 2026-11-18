@@ -199,6 +199,14 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
     return true;
 }
 
+bool BoneMealItem::fertilizeBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+    if (!fertilize(owner, level, position))
+        return false;
+
+    owner.broadcastLevelEvent(level, BONE_MEAL_USE_EVENT, centerOf(position), 0);
+    return true;
+}
+
 // BoneMealItem::dispense: the block the dispense position is in; a block that takes
 // no bone meal keeps the item with block.click.fail, and the dispense still counts as done
 bool BoneMealItem::dispense(const DispenseSource &source) const {
