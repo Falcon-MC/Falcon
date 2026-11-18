@@ -16,6 +16,7 @@
 // --min-mineshaft-marker-match pct: exit 2 when that score falls below the threshold
 // --terrain-only: chunks as the noise fills them, before population
 // --blocks: one "x y z expected generated" line per block that differs or is not plain terrain, for scripts
+// --block-states: append tab-separated expected and generated states to the block dump
 // --far: 6x6 chunks at +-1000 and +-10000 on both axes, one report each: climate-only bugs hide near the origin
 // area corners: chunk coordinates, inclusive; column: a block position
 // exit codes: 0 success, 1 invalid input or unreadable world, 2 block match below --min-block-match
@@ -145,6 +146,7 @@ namespace {
         std::string mCsv;
         std::string mJson;
         std::string mBlocks;
+        bool mDumpBlockStates = false;
         bool mHasColumn = false;
         bool mFar = false;
         int32_t mColumnX = 0;
@@ -227,6 +229,7 @@ namespace {
         LOG_ERROR(LogAreaID::Level, "Usage: FalconWorldGenParity --db <path> --seed <int64> --area x0,z0,x1,z1");
         LOG_ERROR(LogAreaID::Level, "                            [--csv file] [--json file] [--min-block-match pct]");
         LOG_ERROR(LogAreaID::Level, "                            [--terrain-only] [--dimension 0|1|2] [--blocks file]");
+        LOG_ERROR(LogAreaID::Level, "                            [--block-states]");
         LOG_ERROR(LogAreaID::Level, "                            [--mineshaft-markers minY,maxY] [--min-mineshaft-marker-match pct]");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --column x,z");
         LOG_ERROR(LogAreaID::Level, "       FalconWorldGenParity --db <path> --seed <int64> --far");
@@ -242,6 +245,10 @@ namespace {
 
             if (flag == "--terrain-only") {
                 options.mTerrainOnly = true;
+                continue;
+            }
+            if (flag == "--block-states") {
+                options.mDumpBlockStates = true;
                 continue;
             }
 
@@ -1045,7 +1052,7 @@ namespace {
     }
 
     // one line per block that differs or that is not plain terrain in either world: x y z expected generated
-    void writeBlocks(std::ofstream &out, const LevelChunk &expected, const LevelChunk &generated) {
+    void writeBlocks(std::ofstream &out, const LevelChunk &expected, const LevelChunk &generated, bool states) {
         static const std::unordered_set<std::string> TERRAIN = {
                 "minecraft:air", "minecraft:stone", "minecraft:deepslate", "minecraft:water", "minecraft:bedrock",
                 "minecraft:lava", "minecraft:dirt", "minecraft:grass_block"};
@@ -1058,7 +1065,10 @@ namespace {
                         continue;
 
                     out << ((expected.getX() << 4) + x) << ' ' << y << ' ' << ((expected.getZ() << 4) + z) << ' '
-                        << expectedBlock.mName << ' ' << generatedBlock.mName << '\n';
+                        << expectedBlock.mName << ' ' << generatedBlock.mName;
+                    if (states)
+                        out << '\t' << expectedBlock.mStates.toString() << '\t' << generatedBlock.mStates.toString();
+                    out << '\n';
                 }
             }
         }
@@ -1231,7 +1241,7 @@ namespace {
             if (trackPlacement)
                 compareNetherPlacement(&expected, generated, fossils, portals, bastions, driedGhasts);
             if (blocks.is_open())
-                writeBlocks(blocks, expected, generated);
+                writeBlocks(blocks, expected, generated, options.mDumpBlockStates);
         });
 
         if (report.getBlocks().mTotal == 0) {

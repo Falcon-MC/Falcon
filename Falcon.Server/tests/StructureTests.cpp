@@ -23,6 +23,8 @@
 #include "World/Level/LevelGen/Structure/RuinedPortalStructure.h"
 #include "World/Level/LevelGen/Structure/ScatteredPiece.h"
 #include "World/Level/LevelGen/Structure/StructureBlockTable.h"
+#include "World/Level/LevelGen/Structure/MansionFeature.h"
+#include "World/Level/LevelGen/Structure/MansionLayout.h"
 #include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/LevelGen/Structure/StructureMaterials.h"
 #include "World/Level/LevelGen/Structure/StructureProcessors.h"
@@ -464,6 +466,57 @@ namespace {
 }
 
 namespace {
+    void checkMansionStart() {
+        const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
+        const StructureFeature *mansions = StructureFeature::get("mansion");
+        require(mansions != nullptr, "Woodland mansions are not registered");
+        StructureChunkPos start;
+        require(mansions->findNearest(*generator, 0, 0, start) && start.x == -454 && start.z == 511,
+                "The seed 42 woodland mansion start differs from BDS");
+        auto random = mansions->createStartRandom(generator->getSeed(), start.x, start.z);
+        const int32_t turn = (int32_t) (random() % 4);
+        StructureTerrain terrain(*generator);
+        require(turn == 0 && MansionFeature::getBaseY(terrain, start.x, start.z, turn) == 74,
+                "The seed 42 woodland mansion entrance pose differs from BDS");
+        const auto plan = MansionLayout::build(random);
+        const auto &floor = plan.mBase;
+        // carpet footprints on the ground floor, excluding the entrance
+        constexpr std::array<uint16_t, MansionLayout::SIZE> CORRIDORS = {
+                0, 0, 0x1fc, 0x164, 0x004, 0x004, 0x174, 0x1c4, 0x004, 0, 0};
+        constexpr std::array<uint16_t, MansionLayout::SIZE> UPPER_CORRIDORS = {
+                0, 0, 0, 0x00e, 0x00a, 0x00a, 0x008, 0, 0, 0, 0};
+        for (int32_t z = 0; z < MansionLayout::SIZE; ++z) {
+            for (int32_t x = 0; x < MansionLayout::SIZE; ++x) {
+                require((floor[z][x] == MansionLayout::Cell::Corridor) == ((CORRIDORS[z] & (1U << x)) != 0),
+                        "The seed 42 woodland mansion ground-floor corridors differ from BDS");
+                require((plan.mUpper[z][x] == MansionLayout::Cell::Corridor) == ((UPPER_CORRIDORS[z] & (1U << x)) != 0),
+                        "The seed 42 woodland mansion upper-floor corridors differ from BDS");
+            }
+        }
+        const auto &rooms = plan.mRooms[0];
+        std::array<int32_t, 256> counts{};
+        std::array<int32_t, 256> origins{};
+        for (int32_t z = 0; z < MansionLayout::SIZE; ++z) {
+            for (int32_t x = 0; x < MansionLayout::SIZE; ++x) {
+                const auto &room = rooms[z][x];
+                require((room.mId != 0) == (floor[z][x] == MansionLayout::Cell::Room),
+                        "A mansion room extends outside its floor plan or leaves a room cell empty");
+                if (room.mId != 0) {
+                    ++counts[room.mId];
+                    origins[room.mId] += room.mOrigin;
+                }
+            }
+        }
+        for (const auto &row : rooms) {
+            for (const auto &room : row) {
+                if (room.mId != 0) {
+                    require(counts[room.mId] == (1 << static_cast<int>(room.mSize)) && origins[room.mId] == 1,
+                            "A mansion room has a wrong area or origin count");
+                }
+            }
+        }
+    }
+
     void checkMineshaftStarts() {
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const StructureFeature *mineshaft = StructureFeature::get("mineshaft");
@@ -799,6 +852,7 @@ int main() {
         checkMaterials();
         checkOceanRuins();
         checkPillagerOutposts();
+        checkMansionStart();
         checkMineshaftStarts();
         checkRuinedPortals();
         checkScatteredPieces();

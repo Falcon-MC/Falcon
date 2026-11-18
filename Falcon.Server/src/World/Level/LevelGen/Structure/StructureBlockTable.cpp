@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -127,6 +128,10 @@ namespace {
             out = BlockState(prefixed(species, "_planks"));
             return true;
         }
+        if (name == "minecraft:planks" && variant == "birch") {
+            out = BlockState("minecraft:birch_planks");
+            return true;
+        }
 
         if (name == "minecraft:fence" || name == "minecraft:dark_oak_fence") {
             out = BlockState(prefixed(species, "_fence"), states);
@@ -149,12 +154,13 @@ namespace {
             return true;
         }
 
-        if (name == "minecraft:stripped_oak_log") {
+        if (name == "minecraft:stripped_oak_log" || (name == "minecraft:log2" && variant == "dark_oak")) {
             std::string axis = property(entry, "axis");
             if ((quarterTurns & 1) != 0 && axis != "y")
                 axis = axis == "x" ? "z" : "x";
             states.putString("pillar_axis", axis);
-            out = BlockState("minecraft:stripped_" + species + "_log", states);
+            out = BlockState((name == "minecraft:log2" ? "minecraft:" : "minecraft:stripped_") + species + "_log",
+                             states);
             return true;
         }
 
@@ -486,7 +492,9 @@ bool StructureBlockTable::translate(const StructureTemplate::PaletteEntry &entry
     if (!_translate(mirrored, quarterTurns, mirror, out, wood))
         return false;
     for (const char *state: UNMIRRORED_STATES) {
-        if (out.mStates.contains(state))
+        if (out.mStates.contains(state)
+            && !(entry.mName == "minecraft:log2" && std::string_view(state) == "pillar_axis")
+            && !(entry.mName == "minecraft:wall_banner" && std::string_view(state) == "facing_direction"))
             return false;
     }
     return true;
@@ -648,12 +656,25 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         return true;
     }
 
-    if (name == "minecraft:spruce_stairs") {
+    if (name == "minecraft:spruce_stairs" || name == "minecraft:stone_stairs" || name == "minecraft:birch_stairs") {
         // the file keeps the corner the stairs had in the editor, the game saves them as plain stairs
         states.putString("minecraft:corner", "none");
         states.putByte("upside_down_bit", property(entry, "half") == "top" ? 1 : 0);
         states.putInt("weirdo_direction", weirdoDirection(rotatedFacing(entry, quarterTurns)));
         out = BlockState(name, states);
+        return true;
+    }
+
+    if (name == "minecraft:leaves2" && property(entry, "variant") == "dark_oak") {
+        states.putByte("persistent_bit", 0);
+        states.putByte("update_bit", 0);
+        out = BlockState("minecraft:dark_oak_leaves", states);
+        return true;
+    }
+
+    if (name == "minecraft:sapling" && property(entry, "type") == "dark_oak") {
+        states.putByte("age_bit", property(entry, "stage") == "1" ? 1 : 0);
+        out = BlockState("minecraft:dark_oak_sapling", states);
         return true;
     }
 
@@ -663,9 +684,26 @@ bool StructureBlockTable::_translate(const StructureTemplate::PaletteEntry &entr
         return true;
     }
 
-    if (name == "minecraft:carpet" && property(entry, "color") == "red") {
-        out = BlockState("minecraft:red_carpet");
-        return true;
+    if (name == "minecraft:carpet" || name == "minecraft:wool") {
+        std::string color = property(entry, "color");
+        if (color == "silver")
+            color = "light_gray";
+        const std::string dyed = "minecraft:" + color + (name == "minecraft:carpet" ? "_carpet" : "_wool");
+        if (BlockPaletteRegistry::getInstance().getDefaultStates(dyed) != nullptr) {
+            out = BlockState(dyed);
+            return true;
+        }
+    }
+
+    if (name == "minecraft:stone_slab") {
+        const std::string variant = property(entry, "variant");
+        if (variant == "cobblestone" || variant == "smoothstone") {
+            states.putString("minecraft:vertical_half", property(entry, "half"));
+            out = BlockState(variant == "smoothstone" ? "minecraft:smooth_stone_slab"
+                                                       : "minecraft:cobblestone_slab",
+                             states);
+            return true;
+        }
     }
 
     // an empty cauldron has no level: its default states
