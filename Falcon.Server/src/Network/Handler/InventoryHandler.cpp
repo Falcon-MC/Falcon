@@ -513,8 +513,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         return copyId;
     };
 
-    const bool grindstoneOpen = manager.isGrindstoneOpenIn(level) && GrindstoneBlock::matches(
-            level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName);
+    const bool grindstoneOpen = manager.isGrindstoneOpenIn(level) && VanillaBlocks::getAs<GrindstoneBlock>(
+            level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName) != nullptr;
     const bool leftGrindstone = manager.isGrindstoneOpen() && (!grindstoneOpen || !withinContainerReach(
             player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
                              (float) anvilPosition.z + 0.5f)));

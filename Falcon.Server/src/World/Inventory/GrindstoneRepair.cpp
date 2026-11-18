@@ -1,9 +1,9 @@
 #include "World/Inventory/GrindstoneRepair.h"
 
-#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Inventory/AnvilRepair.h"
 #include "World/Item/EnchantmentHelper.h"
-#include "World/Item/ItemData.h"
+#include "World/Item/Item.h"
+#include "World/Item/VanillaItems.h"
 
 #include <algorithm>
 #include <unordered_set>
@@ -11,10 +11,8 @@
 
 namespace {
     int32_t maxDamage(const std::string &identifier) {
-        if (const ItemData *data = ItemDataTable::find(identifier))
-            return data->mMaxDurability;
-        const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier);
-        return custom == nullptr ? 0 : custom->mMaxDurability;
+        const Item *item = VanillaItems::fromIdentifier(identifier);
+        return item == nullptr ? 0 : item->getMaxDurability();
     }
 }
 
