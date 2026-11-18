@@ -4,9 +4,15 @@
 
 #include <string>
 
+class ServerActor;
+
 class FireworkRocketItem : public Item {
 public:
     explicit FireworkRocketItem(const Item &base);
+
+    // a rocket from the item's Fireworks data, the default star without it, rising from position
+    static ServerActor *launch(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                               const ItemStack &item);
 
     bool onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
 

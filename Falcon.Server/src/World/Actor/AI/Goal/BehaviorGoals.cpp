@@ -11,10 +11,12 @@
 #include "World/Actor/AI/Goal/DefendVillageTargetGoal.h"
 #include "World/Actor/AI/Goal/DragonGoals.h"
 #include "World/Actor/AI/Goal/CelebrateGoal.h"
+#include "World/Actor/AI/Goal/CelebrateSurviveGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "World/Actor/AI/Goal/CircleAroundAnchorGoal.h"
 #include "World/Actor/AI/Goal/EatBlockGoal.h"
 #include "World/Actor/AI/Goal/EquipItemGoal.h"
+#include "World/Actor/AI/Goal/ExploreOutskirtsGoal.h"
 #include "World/Actor/AI/Goal/FertilizeFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/FindMountGoal.h"
 #include "World/Actor/AI/Goal/FleeSunGoal.h"
@@ -27,6 +29,7 @@
 #include "World/Actor/AI/Goal/GoalSelector.h"
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
+#include "World/Actor/AI/Goal/HideGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
 #include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
@@ -37,7 +40,9 @@
 #include "World/Actor/AI/Goal/MakeLoveGoal.h"
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 #include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
+#include "World/Actor/AI/Goal/MingleGoal.h"
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
+#include "World/Actor/AI/Goal/MoveIndoorsGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveThroughVillageGoal.h"
@@ -51,6 +56,7 @@
 #include "World/Actor/AI/Goal/OwnerTargetGoal.h"
 #include "World/Actor/AI/Goal/PanicGoal.h"
 #include "World/Actor/AI/Goal/PickupItemsGoal.h"
+#include "World/Actor/AI/Goal/PlayGoal.h"
 #include "World/Actor/AI/Goal/PlaceBlockGoal.h"
 #include "World/Actor/AI/Goal/RamAttackGoal.h"
 #include "World/Actor/AI/Goal/RandomHoverGoal.h"
@@ -202,6 +208,20 @@ namespace {
     const Vector3f OFFER_FLOWER_DEFAULT_AREA(6.0f, 2.0f, 6.0f);
     const float STOMP_DEFAULT_RANGE_MULTIPLIER = 2.0f;
     const float STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER = 2.0f;
+    // the hide, mingle, play and explore_outskirts definition defaults
+    const float HIDE_DEFAULT_DURATION = 1.0f;
+    const float MINGLE_DEFAULT_DURATION = 1.0f;
+    const float MINGLE_DEFAULT_DISTANCE = 2.0f;
+    const float PLAY_DEFAULT_FOLLOW_DISTANCE = 2.0f;
+    const Vector3f PLAY_DEFAULT_SEARCH_AREA(6.0f, 3.0f, 6.0f);
+    const float PLAY_DEFAULT_SECONDS = 50.0f;
+    const float PLAY_DEFAULT_RANGE = 16.0f;
+    const float PLAY_DEFAULT_HEIGHT = 3.0f;
+    const float EXPLORE_DEFAULT_DISTANCE = 5.0f;
+    const float EXPLORE_DEFAULT_MIN_DISTANCE = 2.2f;
+    const float EXPLORE_DEFAULT_WAIT_SECONDS = 3.0f;
+    const float CELEBRATE_SURVIVE_DEFAULT_MIN = 10.0f;
+    const float CELEBRATE_SURVIVE_DEFAULT_MAX = 20.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -1076,6 +1096,74 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "move_through_village")
         return std::make_unique<MoveThroughVillageGoal>(speed, isFlagSet(component, "only_at_night"));
+
+    if (behavior == "hide")
+        return std::make_unique<HideGoal>(speed, PoiType::Bed,
+                                          (int32_t) (numberOf(component, "duration", HIDE_DEFAULT_DURATION)
+                                                     * TICKS_PER_SECOND));
+
+    if (behavior == "move_indoors" || behavior == "move_outdoors")
+        return std::make_unique<MoveIndoorsGoal>(
+                behavior == "move_indoors" ? MoveIndoorsGoal::Direction::Indoors : MoveIndoorsGoal::Direction::Outdoors,
+                speed, (int32_t) (numberOf(component, "timeout_cooldown", 0.0f) * TICKS_PER_SECOND));
+
+    if (behavior == "celebrate_survive") {
+        CelebrateSurviveGoal::Settings settings;
+        settings.mDurationTicks = (int32_t) (numberOf(component, "duration", CELEBRATE_DEFAULT_DURATION)
+                                             * TICKS_PER_SECOND);
+        settings.mFireworksMinTicks = (int32_t) (rangeValue(component, "fireworks_interval", "min",
+                                                            CELEBRATE_SURVIVE_DEFAULT_MIN)
+                                                 * TICKS_PER_SECOND);
+        settings.mFireworksMaxTicks = (int32_t) (rangeValue(component, "fireworks_interval", "max",
+                                                            CELEBRATE_SURVIVE_DEFAULT_MAX)
+                                                 * TICKS_PER_SECOND);
+        settings.mOnEnd = cloneOf(component.get("on_celebration_end_event"));
+        return std::make_unique<CelebrateSurviveGoal>(std::move(settings));
+    }
+
+    if (behavior == "mingle") {
+        MingleGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mDurationTicks = (int32_t) (numberOf(component, "duration", MINGLE_DEFAULT_DURATION)
+                                             * TICKS_PER_SECOND);
+        settings.mCooldownTicks = (int32_t) (numberOf(component, "cooldown_time", 0.0f) * TICKS_PER_SECOND);
+        settings.mMingleDistance = numberOf(component, "mingle_distance", MINGLE_DEFAULT_DISTANCE);
+        settings.mPartnerType = stringOf(component, "mingle_partner_type");
+        if (settings.mPartnerType.empty())
+            settings.mPartnerType = mob.getIdentifier();
+        return std::make_unique<MingleGoal>(std::move(settings));
+    }
+
+    if (behavior == "play") {
+        PlayGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mChanceToStart = numberOf(component, "chance_to_start", 0.0f);
+        settings.mFollowDistance = numberOf(component, "follow_distance", PLAY_DEFAULT_FOLLOW_DISTANCE);
+        const json::Value *area = component.get("friend_search_area");
+        settings.mFriendSearchArea = area != nullptr && area->isArray() && area->mArray.size() >= 3
+                                             ? vectorOf(component, "friend_search_area")
+                                             : PLAY_DEFAULT_SEARCH_AREA;
+        settings.mMaxPlayTicks = (int32_t) (numberOf(component, "max_play_duration_seconds", PLAY_DEFAULT_SECONDS)
+                                            * TICKS_PER_SECOND);
+        settings.mRandomRange = (int32_t) numberOf(component, "random_pos_search_range", PLAY_DEFAULT_RANGE);
+        settings.mRandomHeight = (int32_t) numberOf(component, "random_pos_search_height", PLAY_DEFAULT_HEIGHT);
+        const json::Value *friends = component.get("friend_types");
+        if (friends != nullptr && friends->isArray()) {
+            for (const std::unique_ptr<json::Value> &type: friends->mArray)
+                settings.mFriendFilters.push_back(cloneOf(type->get("filters")));
+        }
+        return std::make_unique<PlayGoal>(std::move(settings));
+    }
+
+    if (behavior == "explore_outskirts") {
+        ExploreOutskirtsGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mExploreDistance = numberOf(component, "explore_dist", EXPLORE_DEFAULT_DISTANCE);
+        settings.mMinDistanceFromTarget = numberOf(component, "min_dist_from_target", EXPLORE_DEFAULT_MIN_DISTANCE);
+        settings.mMaxWaitTicks = (int32_t) (numberOf(component, "max_wait_time", EXPLORE_DEFAULT_WAIT_SECONDS)
+                                            * TICKS_PER_SECOND);
+        return std::make_unique<ExploreOutskirtsGoal>(settings);
+    }
 
     if (behavior == "move_towards_dwelling_restriction")
         return std::make_unique<MoveTowardsDwellingRestrictionGoal>(speed);

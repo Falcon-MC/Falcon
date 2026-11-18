@@ -146,9 +146,18 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
             break;
     }
 
-    ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, spawnPosition);
-    if (rocket == nullptr)
+    if (launch(owner, owner.getLevelFor(player), spawnPosition, item) == nullptr)
         return false;
+
+    player.consumeOneHeldItem();
+    return true;
+}
+
+ServerActor *FireworkRocketItem::launch(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                                        const ItemStack &item) {
+    ServerActor *rocket = owner.spawnActor(level, FIREWORK_ACTOR, position);
+    if (rocket == nullptr)
+        return nullptr;
 
     rocket->setProjectile(true);
     rocket->setMotion(Vector3f(gaussianDrift(), 0.05f, gaussianDrift()));
@@ -156,7 +165,6 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
     rocket->getProjectileData().mFireworkData = buildFireworkData(item);
     owner.syncActorFirework(*rocket);
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, spawnPosition);
-    player.consumeOneHeldItem();
-    return true;
+    owner.playLevelSound(level, LevelSoundEvent::LAUNCH, position);
+    return rocket;
 }
