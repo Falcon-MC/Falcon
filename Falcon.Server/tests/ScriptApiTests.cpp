@@ -57,7 +57,7 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Misc/ItemActor.h"
-#include "World/Actor/Vehicle/ChestVehicleActor.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "World/Inventory/InventoryManager.h"
 #include "Protocol/Packets/ContainerOpenPacket.h"
 #include "Network/Handler/ItemActorHandler.h"
@@ -3150,7 +3150,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
         require(chestItems != nullptr && chestItems->getList().size() == 1
                         && chestItems->getList().front().getByte("Slot") == 4,
                 "the minecart items were not saved as ChestItems");
-        ChestVehicleActor reloaded(9999, "minecraft:chest_minecart", ActorSize{0.98f, 0.7f}, true);
+        MinecartActor reloaded(9999, "minecraft:chest_minecart");
         Tag legacy = Tag::ofCompound();
         legacy.put("Items", *chestItems);
         reloaded.loadEquipment(legacy, owner.getCodecContext());

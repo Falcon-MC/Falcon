@@ -6,6 +6,7 @@
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Vehicle/BoatActor.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/FrostedIceBlock.h"
@@ -556,6 +557,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (player.isRiding()) {
         RideControlSystem::receiveInput(owner, player, packet);
         BoatActor::followController(owner, player, feetPosition, packet);
+        MinecartActor::readRider(owner, player, packet);
     }
 
     if (player.isSpawned()) {

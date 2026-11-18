@@ -31,11 +31,13 @@ PushableByEntityPreset PushableByEntityPreset::read(const json::Value &preset) {
         result.mMode = PushMode::None;
     else if (mode != nullptr && mode->isString() && mode->mString == "legacy_boat")
         result.mMode = PushMode::LegacyBoat;
+    else if (mode != nullptr && mode->isString() && mode->mString == "legacy_minecart")
+        result.mMode = PushMode::LegacyMinecart;
     result.mMinDistance = numberIn(preset, "min_distance", result.mMinDistance);
-    // the game's own boat preset reaches without limit
+    // the game's own boat and minecart presets reach without limit
+    const bool legacy = result.mMode == PushMode::LegacyBoat || result.mMode == PushMode::LegacyMinecart;
     result.mMaxDistance = numberIn(preset, "max_distance",
-                                   result.mMode == PushMode::LegacyBoat ? std::numeric_limits<float>::max()
-                                                                        : result.mMaxDistance);
+                                   legacy ? std::numeric_limits<float>::max() : result.mMaxDistance);
     result.mStrengthMultiplier = numberIn(preset, "strength_multiplier", result.mStrengthMultiplier);
     result.mPushScaleOther = numberIn(preset, "push_scale_other", result.mPushScaleOther);
     result.mRequireCollisionOverlap = flagIn(preset, "require_collision_overlap", result.mRequireCollisionOverlap);
