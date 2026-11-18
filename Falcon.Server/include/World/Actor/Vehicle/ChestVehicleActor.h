@@ -1,21 +1,19 @@
 #pragma once
 
 #include "World/Actor/SizedActor.h"
-#include "World/Level/Block/Inventory/SimpleContainerInventory.h"
+#include "World/Actor/Vehicle/VehicleChest.h"
 
-// chest minecart and chest boat: a SizedActor carrying the 27 slots of its minecraft:inventory
+// chest minecart: a SizedActor carrying the 27 slots of its minecraft:inventory
 class ChestVehicleActor : public SizedActor {
 public:
-    static const char *TAG_CHEST_ITEMS;
-
-    ChestVehicleActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size, bool minecart);
+    ChestVehicleActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size);
 
     bool isMinecart() const override {
-        return mMinecart;
+        return true;
     }
 
     Container *getEntityContainer() override {
-        return &mInventory;
+        return &mChest.getContainer();
     }
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;
@@ -27,10 +25,5 @@ public:
     void loadEquipment(const Tag &data, const PacketCodecContext &context) override;
 
 private:
-    void _unpackLoot(ServerNetworkHandler &owner);
-
-    std::string mLootTable;
-    int32_t mLootSeed = 0;
-    SimpleContainerInventory mInventory;
-    bool mMinecart;
+    VehicleChest mChest;
 };

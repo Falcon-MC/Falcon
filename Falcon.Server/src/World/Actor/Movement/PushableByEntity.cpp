@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
     const float MIN_DIRECTION_LENGTH = 0.0001f;
@@ -28,8 +29,15 @@ PushableByEntityPreset PushableByEntityPreset::read(const json::Value &preset) {
         result.mMode = PushMode::Ball;
     else if (mode != nullptr && mode->isString() && mode->mString == "none")
         result.mMode = PushMode::None;
+    else if (mode != nullptr && mode->isString() && mode->mString == "legacy_boat")
+        result.mMode = PushMode::LegacyBoat;
     result.mMinDistance = numberIn(preset, "min_distance", result.mMinDistance);
-    result.mMaxDistance = numberIn(preset, "max_distance", result.mMaxDistance);
+    // the game's own boat preset reaches without limit
+    result.mMaxDistance = numberIn(preset, "max_distance",
+                                   result.mMode == PushMode::LegacyBoat ? std::numeric_limits<float>::max()
+                                                                        : result.mMaxDistance);
+    result.mStrengthMultiplier = numberIn(preset, "strength_multiplier", result.mStrengthMultiplier);
+    result.mPushScaleOther = numberIn(preset, "push_scale_other", result.mPushScaleOther);
     result.mRequireCollisionOverlap = flagIn(preset, "require_collision_overlap", result.mRequireCollisionOverlap);
     result.mPushScaleSelf = numberIn(preset, "push_scale_self", result.mPushScaleSelf);
     result.mKickSpeedScale = numberIn(preset, "kick_speed_scale", result.mKickSpeedScale);
@@ -63,7 +71,7 @@ void PushableByEntityPresets::refresh(const json::Value *component) {
     }
 }
 
-const PushableByEntityPreset *PushableByEntity::findPreset(ServerNetworkHandler &owner, const MobActor &self,
+const PushableByEntityPreset *PushableByEntity::findPreset(ServerNetworkHandler &owner, const ServerActor &self,
                                                            const PushableByEntityPresets &presets,
                                                            const Actor &pusher) {
     for (const PushableByEntityPreset &preset: presets.mPresets) {
@@ -90,4 +98,15 @@ Vector3f PushableByEntity::kick(const PushableByEntityPreset &preset, float offs
     const float vertical = selfOnGround ? preset.mVerticalKickMultiplier : 0.0f;
     return Vector3f(preset.mPushScaleSelf * (-directionX * speed), preset.mPushScaleSelf * (vertical * speed),
                     preset.mPushScaleSelf * (speed * -directionZ));
+}
+
+Vector3f PushableByEntity::legacyBoatPush(const PushableByEntityPreset &preset, float offsetX, float offsetZ) {
+    const float length = std::sqrt(offsetX * offsetX + offsetZ * offsetZ);
+    if (!(length > 0.0f))
+        return Vector3f(0.0f, 0.0f, 0.0f);
+
+    const float inverse = 1.0f / length;
+    const float strength = std::min(1.0f, inverse) * preset.mStrengthMultiplier;
+    return Vector3f(-offsetX * inverse * strength * preset.mPushScaleSelf, 0.0f,
+                    -offsetZ * inverse * strength * preset.mPushScaleSelf);
 }

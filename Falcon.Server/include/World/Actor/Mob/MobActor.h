@@ -17,7 +17,7 @@
 #include "World/Actor/Mob/Component/MobAreaAttack.h"
 #include "World/Actor/Mob/Component/MobEquipmentChanged.h"
 #include "World/Actor/Mob/Component/MobExplode.h"
-#include "World/Actor/Mob/Component/MobLeash.h"
+#include "World/Actor/ActorLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/Component/MobEconomy.h"
@@ -430,9 +430,17 @@ public:
         return mEquipment;
     }
 
-    MobLeash &getLeash() {
+    ActorLeash &getLeash() {
         return mLeash;
     }
+
+    ActorLeash *getActorLeash() override {
+        return &mLeash;
+    }
+
+    const json::Value *getLeashableComponent() const override;
+
+    const json::Value *getLeashableToComponent() const override;
 
     MobAdmiration &getAdmiration() {
         return mAdmiration;
@@ -666,6 +674,8 @@ private:
 
     bool _tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
+    bool _tryTieLeads(ServerNetworkHandler &owner, ServerPlayer &player);
+
     bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
     bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
@@ -807,7 +817,7 @@ private:
     MobDweller mDweller;
     MobAddRider mAddRider;
     MobAdmiration mAdmiration;
-    MobLeash mLeash;
+    ActorLeash mLeash;
     MobAreaAttack mAreaAttack;
     MobExplode mExplode;
     MobEquipmentChanged mEquipmentChanged;

@@ -16,7 +16,6 @@ namespace {
     };
 }
 
-FALCON_REGISTER_SIZED_ACTOR(Boat, "minecraft:boat", 1.3f, 0.5f, false);
 FALCON_REGISTER_ACTOR(MinecartActor, "minecraft:minecart");
 
 static const ActorClassRegistry::Registration gActorRegistrationHopperMinecart(
@@ -37,13 +36,8 @@ static const ActorClassRegistry::Registration gActorRegistrationCommandBlockMine
             return std::make_unique<MinecartActor>(runtimeId, identifier);
         });
 
-static const ActorClassRegistry::Registration gActorRegistrationChestBoat(
-        "minecraft:chest_boat", [](uint64_t runtimeId, const std::string &identifier) -> std::unique_ptr<ServerActor> {
-            return std::make_unique<ChestVehicleActor>(runtimeId, identifier, ActorSize{1.3f, 0.5f}, false);
-        });
-
 static const ActorClassRegistry::Registration gActorRegistrationChestMinecart(
         "minecraft:chest_minecart",
         [](uint64_t runtimeId, const std::string &identifier) -> std::unique_ptr<ServerActor> {
-            return std::make_unique<ChestVehicleActor>(runtimeId, identifier, MINECART_SIZE, true);
+            return std::make_unique<ChestVehicleActor>(runtimeId, identifier, MINECART_SIZE);
         });

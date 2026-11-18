@@ -21,8 +21,12 @@
 #include <vector>
 
 struct CustomActorDefinition;
+class ActorLeash;
 class Container;
 class ServerNetworkHandler;
+namespace json {
+    struct Value;
+}
 class ServerPlayer;
 
 struct ProjectileData {
@@ -158,6 +162,21 @@ public:
 
     // the minecraft:inventory a player can open: chest vehicles, chested and tamed mounts
     virtual Container *getEntityContainer() {
+        return nullptr;
+    }
+
+    // minecraft:leashable of the active definition; nullptr: no lead holds this actor
+    virtual const json::Value *getLeashableComponent() const {
+        return nullptr;
+    }
+
+    // the lead of a leashable actor
+    virtual ActorLeash *getActorLeash() {
+        return nullptr;
+    }
+
+    // minecraft:leashable_to: the leads a player holds can be tied to this actor
+    virtual const json::Value *getLeashableToComponent() const {
         return nullptr;
     }
 

@@ -5,6 +5,7 @@
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/RideSystem.h"
+#include "World/Actor/Vehicle/BoatActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/FrostedIceBlock.h"
@@ -552,8 +553,10 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())
         player.setMotion(packet.mDelta);
-    if (player.isRiding())
+    if (player.isRiding()) {
         RideControlSystem::receiveInput(owner, player, packet);
+        BoatActor::followController(owner, player, feetPosition, packet);
+    }
 
     if (player.isSpawned()) {
         const int32_t chunkX = (int32_t) std::floor(feetPosition.x) >> 4;

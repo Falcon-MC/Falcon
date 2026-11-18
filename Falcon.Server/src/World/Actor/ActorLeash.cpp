@@ -1,4 +1,4 @@
-#include "World/Actor/Mob/Component/MobLeash.h"
+#include "World/Actor/ActorLeash.h"
 
 #include "Core/Json/Json.h"
 #include "Core/NBT/Tag.h"
@@ -8,6 +8,7 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/RideSystem.h"
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -15,11 +16,13 @@
 
 #include <cmath>
 #include <memory>
+#include <vector>
 
 namespace {
-    const char *const LEASHABLE_COMPONENT = "minecraft:leashable";
     const char *const TAG_LEASHER = "LeasherID";
     const char *const LEAD_ITEM = "minecraft:lead";
+    // how far from the player a held lead may be to move to a leashable_to actor: the default break distance
+    const float TIE_RADIUS = 12.0f;
 
     const int32_t LEASH_HOLDER_DATA_ID = 37;
 
@@ -87,102 +90,131 @@ namespace {
     }
 
     Actor *findHolder(ServerNetworkHandler &owner, int64_t uniqueId) {
-        for (auto &entry: owner.getPlayers()) {
-            ServerPlayer &player = entry.second;
-            if (player.getUniqueId() == uniqueId)
-                return player.isSpawned() && !player.isDead() ? &player : nullptr;
-        }
-        return nullptr;
+        Actor *holder = RideSystem::resolve(owner, uniqueId);
+        if (const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(holder))
+            return player->isSpawned() && !player->isDead() ? holder : nullptr;
+        return holder != nullptr && holder->isAlive() ? holder : nullptr;
     }
 }
 
-void MobLeash::attach(ServerNetworkHandler &owner, MobActor &mob, int64_t holderUniqueId) {
+void ActorLeash::attach(ServerNetworkHandler &owner, ServerActor &actor, int64_t holderUniqueId) {
     mHolderId = holderUniqueId;
-    _sync(owner, mob);
+    Actor *holder = findHolder(owner, holderUniqueId);
+    mHeldByActor = holder != nullptr && !holder->isPlayer();
+    const ServerActor *holderActor = dynamic_cast<const ServerActor *>(holder);
+    const json::Value *to = holderActor == nullptr ? nullptr : holderActor->getLeashableToComponent();
+    const json::Value *removal = to == nullptr ? nullptr : to->get("unleash_on_removal");
+    mKeptPastRemoval = removal != nullptr && !removal->boolean(true);
+    _sync(owner, actor);
 
-    const json::Value *leashable = mob.getComponent(LEASHABLE_COMPONENT);
-    if (leashable != nullptr)
-        EntityEvents::fireTrigger(owner, mob, leashable->get("on_leash"), findHolder(owner, holderUniqueId));
+    const json::Value *leashable = actor.getLeashableComponent();
+    if (MobActor *mob = dynamic_cast<MobActor *>(&actor); mob != nullptr && leashable != nullptr)
+        EntityEvents::fireTrigger(owner, *mob, leashable->get("on_leash"), holder);
 }
 
-void MobLeash::detach(ServerNetworkHandler &owner, MobActor &mob, bool dropLead) {
+void ActorLeash::detach(ServerNetworkHandler &owner, ServerActor &actor, bool dropLead) {
     if (!isLeashed())
         return;
 
     Actor *holder = findHolder(owner, mHolderId);
     mHolderId = 0;
-    _sync(owner, mob);
-    mob.getNavigation().stop(mob);
+    mHeldByActor = false;
+    _sync(owner, actor);
+    MobActor *mob = dynamic_cast<MobActor *>(&actor);
+    if (mob != nullptr)
+        mob->getNavigation().stop(*mob);
 
     if (dropLead) {
         LootDrop drop;
         drop.mIdentifier = LEAD_ITEM;
         const ItemStack lead = LootItems::toItemStack(owner, drop);
         if (!lead.isAir())
-            owner.dropItem(owner.getLevelFor(mob), mob.getPosition(), lead, ItemActorHandler::randomDropMotion(),
+            owner.dropItem(owner.getLevelFor(actor), actor.getPosition(), lead, ItemActorHandler::randomDropMotion(),
                            ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
-    const json::Value *leashable = mob.getComponent(LEASHABLE_COMPONENT);
-    if (leashable != nullptr)
-        EntityEvents::fireTrigger(owner, mob, leashable->get("on_unleash"), holder);
+    const json::Value *leashable = actor.getLeashableComponent();
+    if (mob != nullptr && leashable != nullptr)
+        EntityEvents::fireTrigger(owner, *mob, leashable->get("on_unleash"), holder);
 }
 
-void MobLeash::tick(ServerNetworkHandler &owner, MobActor &mob) {
+void ActorLeash::tick(ServerNetworkHandler &owner, ServerActor &actor) {
     if (!isLeashed())
         return;
 
     Actor *holder = findHolder(owner, mHolderId);
-    // an offline holder keeps the leash: it reconnects when the player rejoins
-    if (holder == nullptr)
+    // an offline player keeps the leash: it reconnects when the player rejoins
+    if (holder == nullptr) {
+        if (mHeldByActor && !mKeptPastRemoval)
+            detach(owner, actor, true);
         return;
+    }
+    mHeldByActor = !holder->isPlayer();
 
-    if (!holder->sharesLevelWith(mob) || mob.getComponent(LEASHABLE_COMPONENT) == nullptr) {
-        detach(owner, mob, true);
+    if (!holder->sharesLevelWith(actor) || actor.getLeashableComponent() == nullptr) {
+        detach(owner, actor, true);
         return;
     }
 
-    const Preset preset = _preset(owner, mob, *holder);
-    const Box mobBox = boxOf(mob, 0.0f);
+    const Preset preset = _preset(owner, actor, *holder);
+    const Box mobBox = boxOf(actor, 0.0f);
     const Box holderBox = boxOf(*holder, 0.0f);
     const float dx = holderBox.mCenter.x - mobBox.mCenter.x;
     const float dy = holderBox.mCenter.y - mobBox.mCenter.y;
     const float dz = holderBox.mCenter.z - mobBox.mCenter.z;
     const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
     if (distance > preset.mMaxDistance) {
-        detach(owner, mob, true);
+        detach(owner, actor, true);
         return;
     }
 
-    if (distance > preset.mSoftDistance) {
+    MobActor *mob = dynamic_cast<MobActor *>(&actor);
+    if (mob != nullptr && distance > preset.mSoftDistance) {
         if (distance <= preset.mHardDistance) {
             const Vector3f &target = holder->getPosition();
             const float moved = (target.x - mPathTarget.x) * (target.x - mPathTarget.x)
                                 + (target.y - mPathTarget.y) * (target.y - mPathTarget.y)
                                 + (target.z - mPathTarget.z) * (target.z - mPathTarget.z);
             // re-pathing every tick restarts the search and stalls the mob
-            if (mob.getNavigation().isDone() || moved > REPATH_DISTANCE_SQUARED) {
+            if (mob->getNavigation().isDone() || moved > REPATH_DISTANCE_SQUARED) {
                 mPathTarget = target;
-                mob.getNavigation().moveTo(target, FOLLOW_SPEED);
+                mob->getNavigation().moveTo(target, FOLLOW_SPEED);
             }
         } else
-            mob.getNavigation().stop(mob);
+            mob->getNavigation().stop(*mob);
     }
 
-    _pull(mob, *holder, preset, distance);
+    _pull(actor, *holder, preset, distance);
 }
 
-MobLeash::Preset MobLeash::_preset(ServerNetworkHandler &owner, MobActor &mob, Actor &holder) const {
+bool ActorLeash::tieHeldLeads(ServerNetworkHandler &owner, ServerPlayer &player, ServerActor &holder) {
+    if (holder.getLeashableToComponent() == nullptr)
+        return false;
+
+    std::vector<ServerActor *> led;
+    owner.forEachActorNear(player.getPosition(), TIE_RADIUS, [&](ServerActor &actor) {
+        const ActorLeash *leash = actor.getActorLeash();
+        if (&actor != &holder && leash != nullptr && leash->getHolderId() == player.getUniqueId()
+            && actor.sharesLevelWith(player))
+            led.push_back(&actor);
+    });
+    // a holder tied to the player keeps its own lead: it would hold itself
+    for (ServerActor *actor: led)
+        actor->getActorLeash()->attach(owner, *actor, holder.getUniqueId());
+    return !led.empty();
+}
+
+ActorLeash::Preset ActorLeash::_preset(ServerNetworkHandler &owner, ServerActor &actor, Actor &holder) const {
     Preset preset{DEFAULT_SOFT_DISTANCE, DEFAULT_HARD_DISTANCE, DEFAULT_MAX_DISTANCE, SpringType::Dampened, 0.0f};
 
-    const json::Value *leashable = mob.getComponent(LEASHABLE_COMPONENT);
+    const json::Value *leashable = actor.getLeashableComponent();
     const json::Value *presets = leashable == nullptr ? nullptr : leashable->get("presets");
     if (presets == nullptr || !presets->isArray())
         return preset;
 
     for (const std::unique_ptr<json::Value> &entry: presets->mArray) {
         const json::Value *filter = entry->get("filter");
-        if (filter != nullptr && !EntityFilter::test(*filter, owner, mob, &holder))
+        if (filter != nullptr && !EntityFilter::test(*filter, owner, actor, &holder))
             continue;
 
         preset.mSoftDistance = numberOr(entry.get(), "soft_distance", preset.mSoftDistance);
@@ -203,19 +235,19 @@ MobLeash::Preset MobLeash::_preset(ServerNetworkHandler &owner, MobActor &mob, A
     return preset;
 }
 
-void MobLeash::_pull(MobActor &mob, const Actor &holder, const Preset &preset, float distance) const {
-    Vector3f motion = mob.getMotion();
+void ActorLeash::_pull(ServerActor &actor, const Actor &holder, const Preset &preset, float distance) const {
+    Vector3f motion = actor.getMotion();
 
     if (preset.mSpringType == SpringType::Bouncy) {
         if (distance <= preset.mHardDistance || distance <= 0.0f)
             return;
 
-        const Box mobBox = boxOf(mob, 0.0f);
+        const Box mobBox = boxOf(actor, 0.0f);
         const Box holderBox = boxOf(holder, 0.0f);
         motion.x += (holderBox.mCenter.x - mobBox.mCenter.x) / distance * BOUNCY_PULL;
         motion.y += (holderBox.mCenter.y - mobBox.mCenter.y) / distance * BOUNCY_PULL;
         motion.z += (holderBox.mCenter.z - mobBox.mCenter.z) / distance * BOUNCY_PULL;
-        mob.setMotion(motion);
+        actor.setMotion(motion);
         return;
     }
 
@@ -224,7 +256,7 @@ void MobLeash::_pull(MobActor &mob, const Actor &holder, const Preset &preset, f
     const AttachPoint *holderPoints = quad ? QUAD_POINTS : DAMPENED_HOLDER_POINTS;
     const size_t count = quad ? 4 : 1;
 
-    const Box mobBox = boxOf(mob, preset.mRotationAdjustment);
+    const Box mobBox = boxOf(actor, preset.mRotationAdjustment);
     const Box holderBox = boxOf(holder, 0.0f);
 
     Vector3f force(0.0f, 0.0f, 0.0f);
@@ -254,12 +286,12 @@ void MobLeash::_pull(MobActor &mob, const Actor &holder, const Preset &preset, f
     motion.x += force.x * average * SPRING_HORIZONTAL + (holderMotion.x - motion.x) * VELOCITY_MATCH;
     motion.y += force.y * average * SPRING_VERTICAL + (holderMotion.y - motion.y) * VELOCITY_MATCH;
     motion.z += force.z * average * SPRING_HORIZONTAL + (holderMotion.z - motion.z) * VELOCITY_MATCH;
-    mob.setMotion(motion);
+    actor.setMotion(motion);
 }
 
-void MobLeash::_sync(ServerNetworkHandler &owner, MobActor &mob) {
-    mob.getFlags().set(ActorFlag::Leashed, isLeashed());
-    owner.syncActorFlags(mob);
+void ActorLeash::_sync(ServerNetworkHandler &owner, ServerActor &actor) {
+    actor.getFlags().set(ActorFlag::Leashed, isLeashed());
+    owner.syncActorFlags(actor);
 
     EntityDataEntry entry;
     entry.mId = LEASH_HOLDER_DATA_ID;
@@ -268,10 +300,10 @@ void MobLeash::_sync(ServerNetworkHandler &owner, MobActor &mob) {
 
     EntityDataMap metadata;
     metadata.mEntries.push_back(entry);
-    owner.sendActorMetadata(mob, metadata);
+    owner.sendActorMetadata(actor, metadata);
 }
 
-void MobLeash::appendSpawnMetadata(EntityDataMap &metadata) const {
+void ActorLeash::appendSpawnMetadata(EntityDataMap &metadata) const {
     if (!isLeashed())
         return;
 
@@ -282,11 +314,11 @@ void MobLeash::appendSpawnMetadata(EntityDataMap &metadata) const {
     metadata.mEntries.push_back(entry);
 }
 
-void MobLeash::saveNbt(Tag &data) const {
+void ActorLeash::saveNbt(Tag &data) const {
     if (isLeashed())
         data.putLong(TAG_LEASHER, mHolderId);
 }
 
-void MobLeash::loadNbt(const Tag &data) {
+void ActorLeash::loadNbt(const Tag &data) {
     mHolderId = data.getLong(TAG_LEASHER, 0);
 }

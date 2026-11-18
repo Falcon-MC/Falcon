@@ -145,6 +145,18 @@ namespace {
         return block != nullptr && block->bindsHomeActors();
     }
 
+    // only a mob has a target
+    const Actor *targetOf(ServerNetworkHandler &owner, const ServerActor &self) {
+        const MobActor *mob = dynamic_cast<const MobActor *>(&self);
+        return mob == nullptr ? nullptr : mob->getTarget(owner);
+    }
+
+    float distanceSquared(const Actor &from, const Actor &to) {
+        const Vector3f &a = from.getPosition();
+        const Vector3f &b = to.getPosition();
+        return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z);
+    }
+
     std::vector<const ItemStack *> equipmentOf(const Actor &actor, const std::string &domain) {
         std::vector<const ItemStack *> items;
         if (const ServerPlayer *player = dynamic_cast<const ServerPlayer *>(&actor)) {
@@ -353,7 +365,7 @@ EntityFilter::DamageScope::~DamageScope() {
 }
 
 // runs for every candidate of every scan: keys matched in one pass over the object, not a hashed lookup per group
-bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
+bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, const ServerActor &self,
                         const Actor *other) {
     if (filter.isArray())
         return _testAll(filter, owner, self, other);
@@ -395,7 +407,7 @@ bool EntityFilter::test(const json::Value &filter, ServerNetworkHandler &owner, 
     return grouped || _testSingle(filter, owner, self, other);
 }
 
-bool EntityFilter::_testAll(const json::Value &filters, ServerNetworkHandler &owner, const MobActor &self,
+bool EntityFilter::_testAll(const json::Value &filters, ServerNetworkHandler &owner, const ServerActor &self,
                             const Actor *other) {
     if (!filters.isArray())
         return test(filters, owner, self, other);
@@ -407,7 +419,7 @@ bool EntityFilter::_testAll(const json::Value &filters, ServerNetworkHandler &ow
     return true;
 }
 
-bool EntityFilter::_testAny(const json::Value &filters, ServerNetworkHandler &owner, const MobActor &self,
+bool EntityFilter::_testAny(const json::Value &filters, ServerNetworkHandler &owner, const ServerActor &self,
                             const Actor *other) {
     if (!filters.isArray())
         return test(filters, owner, self, other);
@@ -420,12 +432,13 @@ bool EntityFilter::_testAny(const json::Value &filters, ServerNetworkHandler &ow
 }
 
 bool EntityFilter::_testBlock(const std::string &test, const std::string &op, const json::Value *value,
-                              ServerNetworkHandler &owner, const MobActor &self) {
-    if (!self.hasEventBlock())
+                              ServerNetworkHandler &owner, const ServerActor &self) {
+    const MobActor *mob = dynamic_cast<const MobActor *>(&self);
+    if (mob == nullptr || !mob->hasEventBlock())
         return false;
 
     Level &level = owner.getLevelFor(self);
-    const Vector3i &position = self.getEventBlock();
+    const Vector3i &position = mob->getEventBlock();
     const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
     if (state == nullptr)
         return false;
@@ -444,7 +457,7 @@ bool EntityFilter::_testBlock(const std::string &test, const std::string &op, co
     return false;
 }
 
-bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &owner, const MobActor &self,
+bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &owner, const ServerActor &self,
                                const Actor *other) {
     const json::Value *testValue = nullptr;
     const json::Value *operatorValue = nullptr;
@@ -473,7 +486,7 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (subject == "other" || subject == "damager" || subject == "player")
         target = other;
     else if (subject == "target")
-        target = self.getTarget(owner);
+        target = targetOf(owner, self);
 
     if (subject == "block")
         return _testBlock(test, op, value, owner, self);
@@ -495,12 +508,12 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     }
 
     if (test == "has_target")
-        return applyBoolean(self.getTarget(owner) != nullptr, value, op);
+        return applyBoolean(targetOf(owner, self) != nullptr, value, op);
 
     if (test == "target_distance") {
-        const Actor *mobTarget = self.getTarget(owner);
+        const Actor *mobTarget = targetOf(owner, self);
         return mobTarget != nullptr && value != nullptr
-               && compareFloats(std::sqrt(self.distanceSquaredTo(*mobTarget)), (float) value->number(0.0), op);
+               && compareFloats(std::sqrt(distanceSquared(self, *mobTarget)), (float) value->number(0.0), op);
     }
 
     if (test == "y_rotation") {
@@ -789,11 +802,14 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (test == "is_tamed")
         return applyBoolean(targetMob != nullptr && targetMob->isTamed(), value, op);
 
+    const MobActor *selfMob = dynamic_cast<const MobActor *>(&self);
     if (test == "is_owner")
-        return applyBoolean(self.isOwnedBy(*target), value, op);
+        return applyBoolean(selfMob != nullptr && selfMob->isOwnedBy(*target), value, op);
 
     if (test == "was_last_hurt_by")
-        return applyBoolean(self.getLastHurtBy() != 0 && self.getLastHurtBy() == target->getRuntimeId(), value, op);
+        return applyBoolean(selfMob != nullptr && selfMob->getLastHurtBy() != 0
+                                    && selfMob->getLastHurtBy() == target->getRuntimeId(),
+                            value, op);
 
     if (test == "is_avoiding_mobs")
         return applyBoolean(targetMob != nullptr && targetMob->isAvoidingMobs(), value, op);
