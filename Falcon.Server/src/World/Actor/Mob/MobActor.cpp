@@ -372,6 +372,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     mAnger.tick(owner, *this);
     mAdmiration.tick(owner, *this);
     mDweller.tick(owner, *this);
+    mEconomy.tick(owner, *this);
 
     if (RideControlSystem::tick(owner, *this)) {
         ServerActor::tick(owner);
@@ -2571,6 +2572,7 @@ Tag MobActor::saveNbt() const {
     mEquipment.saveNbt(data);
     mEntitySpawner.saveNbt(data);
     mLeash.saveNbt(data);
+    mDweller.saveNbt(*this, data);
 
     return data;
 }
@@ -2591,6 +2593,7 @@ void MobActor::loadNbt(const Tag &data) {
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
     mEconomy.loadNbt(data);
+    mDweller.loadNbt(data);
     if (data.contains(TAG_AIR))
         mAirSupply = data.getShort(TAG_AIR, 0);
     mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, attributeIn(data, "minecraft:movement", -1.0f));

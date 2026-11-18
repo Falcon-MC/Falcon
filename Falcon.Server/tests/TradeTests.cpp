@@ -629,6 +629,62 @@ namespace {
         require(village.getStanding(3) == 0, "the cure gave standing to a stranger");
     }
 
+    void newTierRewardsThePlayer(Arena &arena) {
+        const std::shared_ptr<Village> village = std::make_shared<Village>();
+        MobActor &armorer = arena.villager("armorer");
+        armorer.getDweller().joinVillage(arena.mOwner, armorer, *village);
+        MerchantOffers *offers = armorer.getEconomy().getOffers(arena.mOwner, armorer);
+        require(offers != nullptr && offers->mTierExpRequirements.size() > 1, "the armorer has a single tier");
+        const MerchantOffer &offer = offers->mOffers.front();
+        const int32_t trades = (offers->mTierExpRequirements[1] + offer.mTraderExp - 1) / offer.mTraderExp;
+
+        ServerPlayer &player = arena.player(12);
+        require(armorer.onInteract(arena.mOwner, player), "interacting did not open the trade");
+        armorer.getEconomy().onTrade(arena.mOwner, armorer, 0, trades);
+        require(armorer.getEconomy().getTier() == 1, "the trades did not raise the tier");
+        const Vector3f anchor = armorer.getPosition();
+        for (int32_t tick = 0; tick < 20; ++tick) {
+            armorer.setPosition(anchor);
+            armorer.tick(arena.mOwner);
+        }
+        require(village->getStanding(player.getUniqueId()) == 0, "the new tier rewarded during the trade");
+
+        player.getInventoryManager().onClientRemoveWindow(player.getInventoryManager().getCurrentWindowId());
+        for (int32_t tick = 0; tick < 9; ++tick) {
+            armorer.setPosition(anchor);
+            armorer.tick(arena.mOwner);
+        }
+        require(village->getStanding(player.getUniqueId()) == 0, "the new tier rewarded before 10 ticks");
+        armorer.setPosition(anchor);
+        armorer.tick(arena.mOwner);
+        require(village->getStanding(player.getUniqueId()) == 1, "the new tier did not raise the standing by 1");
+        const MobEffectInstance *regeneration = armorer.getEffect(MobEffectId::Regeneration);
+        require(regeneration != nullptr && regeneration->mAmplifier == 0, "the trader did not regenerate");
+    }
+
+    void firstInhabitantsRewardTheVillage(Arena &arena) {
+        const std::shared_ptr<Village> first = std::make_shared<Village>();
+        first->changeStanding(21, 2);
+        MobActor &villager = arena.villager("farmer");
+        villager.getDweller().joinVillage(arena.mOwner, villager, *first);
+        require(first->getStanding(21) == 7, "the first village of an inhabitant gave no founding reward");
+        require(first->getStanding(22) == 0, "the founding reward reached a stranger");
+
+        const std::shared_ptr<Village> second = std::make_shared<Village>();
+        second->changeStanding(21, 2);
+        villager.getDweller().joinVillage(arena.mOwner, villager, *second);
+        require(second->getStanding(21) == 2, "a second village rewarded the players again");
+
+        Tag saved = villager.saveNbt();
+        require(saved.getByte("RewardPlayersOnFirstFounding", 1) == 0, "the spent reward was not saved");
+        MobActor &newcomer = arena.villager("farmer");
+        newcomer.loadNbt(saved);
+        const std::shared_ptr<Village> third = std::make_shared<Village>();
+        third->changeStanding(21, 2);
+        newcomer.getDweller().joinVillage(arena.mOwner, newcomer, *third);
+        require(third->getStanding(21) == 2, "a loaded villager rewarded again");
+    }
+
     void tippedArrowsKeepThePotionOffset() {
         const std::unique_ptr<json::Value> definition =
                 json::parse(R"({"function": "set_potion", "id": "nightvision"})");
@@ -675,6 +731,8 @@ int main() {
         richesCountEmeralds(arena);
         leatherArmorIsDyed();
         cureRaisesEveryStanding();
+        newTierRewardsThePlayer(arena);
+        firstInhabitantsRewardTheVillage(arena);
         traderStandsStillWhileTrading(arena);
         packTablesReplaceVanilla(arena, directory);
         std::cout << "trade checks passed\n";

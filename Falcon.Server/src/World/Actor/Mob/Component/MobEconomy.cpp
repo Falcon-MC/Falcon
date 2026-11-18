@@ -56,6 +56,10 @@ namespace {
     const int32_t TRADE_EXPERIENCE_BASE = 3;
     const int32_t TRADE_EXPERIENCE_SPREAD = 4;
     const int32_t TIER_UP_EXPERIENCE = 5;
+    // ticks out of the trade screen before the new tier rewards the player and heals the trader
+    const int32_t TIER_UP_DELAY = 10;
+    const int32_t TIER_UP_STANDING = 1;
+    const int32_t TIER_UP_REGENERATION_TICKS = 200;
     const int32_t DEFAULT_MAX_LOW_CURED_DISCOUNT = -25;
     const int32_t DEFAULT_MAX_HIGH_CURED_DISCOUNT = -20;
 
@@ -384,8 +388,11 @@ void MobEconomy::onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t off
     if (mTier < mMaxTier) {
         mExperience += crafts * offer.mTraderExp;
         const int32_t tier = mOffers->tierForExperience(mExperience);
-        if (mTier < tier)
+        if (mTier < tier) {
             experience += TIER_UP_EXPERIENCE;
+            mTierUpCountdown = TIER_UP_DELAY;
+            mTierUpPlayer = mTradingPlayer;
+        }
         mTier = tier;
         _syncMetadata(owner, mob);
     }
@@ -396,6 +403,17 @@ void MobEconomy::onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t off
 
     if (offer.mRewardExp)
         owner.spawnExperienceOrbs(level, mob.getPosition(), experience);
+}
+
+void MobEconomy::tick(ServerNetworkHandler &owner, MobActor &mob) {
+    if (mTierUpCountdown <= 0 || _isTrading(owner, mob) || --mTierUpCountdown != 0)
+        return;
+
+    const std::shared_ptr<Village> village = mob.getDweller().getVillage();
+    if (village != nullptr && mTierUpPlayer != NO_PLAYER)
+        village->changeStanding(mTierUpPlayer, TIER_UP_STANDING);
+    mTierUpPlayer = NO_PLAYER;
+    owner.addEffect(mob, MobEffectId::Regeneration, 0, TIER_UP_REGENERATION_TICKS);
 }
 
 void MobEconomy::_syncMetadata(ServerNetworkHandler &owner, MobActor &mob) const {
