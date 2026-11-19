@@ -9,6 +9,7 @@
 #include "World/Actor/Definition/EntityEvents.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Definition/Molang.h"
+#include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -385,13 +386,15 @@ void MobActor::tick(ServerNetworkHandler &owner) {
         return;
     }
 
-    mGoalSelector.tick(owner, *this);
+    if (runsGoals())
+        mGoalSelector.tick(owner, *this);
     _syncTarget(owner);
     if (_tickInstantDespawn(owner))
         return;
 
     mLeash.tick(owner, *this);
-    mNavigation.tick(owner, *this);
+    if (runsGoals())
+        mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
     RideSystem::syncPassengerPositions(owner, *this);
@@ -2805,18 +2808,28 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (killer != nullptr)
         killer->onKilledActor(owner, *this);
 
-    if (owner.getWorldFor(*this).getOverworld().getGameRules().getBool("domobloot")) {
-        Level &level = owner.getLevelFor(*this);
-        const int experience = _deathExperience(source);
-        dropLoot(owner, level, source, lootingLevel);
-        mEquipment.dropOnDeath(owner, level, *this, source != nullptr, lootingLevel);
-        mLeash.detach(owner, *this, true);
+    const ActorDamageSource *fatal = getFatalSource();
+    if (fatal != nullptr && WitherActor::isWitherDamage(owner, *fatal))
+        WitherActor::leaveWitherRose(owner, *this);
 
-        if (experience > 0)
-            owner.spawnExperienceOrbs(level, getPosition(), experience);
-    }
+    if (dropsRewardsOnDeath())
+        dropDeathRewards(owner, source, lootingLevel);
 
     ServerActor::kill(owner, source, lootingLevel);
+}
+
+void MobActor::dropDeathRewards(ServerNetworkHandler &owner, ServerPlayer *killer, int32_t lootingLevel) {
+    if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool("domobloot"))
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    const int experience = _deathExperience(killer);
+    dropLoot(owner, level, killer, lootingLevel);
+    mEquipment.dropOnDeath(owner, level, *this, killer != nullptr, lootingLevel);
+    mLeash.detach(owner, *this, true);
+
+    if (experience > 0)
+        owner.spawnExperienceOrbs(level, getPosition(), experience);
 }
 
 int MobActor::_experienceReward(const char *key, const ServerPlayer *player) const {

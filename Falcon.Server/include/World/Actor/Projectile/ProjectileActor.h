@@ -58,6 +58,26 @@ public:
         (void) hitActor;
         return false;
     }
+
+    // a hit that fires a definition event leaves the projectile in place a tick, for the event to run
+    bool isHeldAfterHit() const {
+        return mHeldAfterHit;
+    }
+
+    // the tick after a held hit; the projectile is removed after it
+    virtual void tickAfterHit(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
+protected:
+    void holdAfterHit(const Vector3f &hitPosition) {
+        mHeldAfterHit = true;
+        setPosition(hitPosition);
+        setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+
+private:
+    bool mHeldAfterHit = false;
 };
 
 class SnowballActor final : public ThrownProjectileActor {
@@ -164,6 +184,42 @@ public:
 
 private:
     void _burst(ServerNetworkHandler &owner, const Vector3f &hitPosition);
+};
+
+// wither_skull.json, wither_skull_dangerous.json: on_hit gives the actor hit its mob_effect, then the
+// definition_event explodes the skull with the minecraft:explode of the group it adds
+class WitherSkullActor final : public ThrownProjectileActor {
+public:
+    WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size);
+
+    float getGravity() const override {
+        return 0.0f;
+    }
+
+    float getInertia() const override {
+        return 1.0f;
+    }
+
+    bool passesThroughOwner() const override {
+        return true;
+    }
+
+    // minecraft:projectile is_dangerous: the blue skull
+    bool isDangerous() const {
+        return mDangerous;
+    }
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+    // the explode component added by the hit goes off now, its fuse being 0
+    void tickAfterHit(ServerNetworkHandler &owner) override;
+
+private:
+    void _applyEffects(ServerNetworkHandler &owner, Actor &target) const;
+
+    bool mDangerous = false;
 };
 
 class ArrowActor : public ProjectileActor {

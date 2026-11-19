@@ -11,6 +11,7 @@
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/Actor/SkullBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/CommandBlockActor.h"
 #include "World/Level/Block/Actor/ConduitBlockActor.h"
@@ -366,6 +367,7 @@ FALCON_REGISTER_BLOCK_ACTOR(ConduitBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(MobSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(TrialSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BannerBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(SkullBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FlowerPotBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(CauldronBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(SignBlockActor);

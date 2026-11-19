@@ -545,6 +545,9 @@ bool EntityFilter::_testSingle(const json::Value &filter, ServerNetworkHandler &
     if (target == nullptr)
         return false;
 
+    if (test == "is_target")
+        return applyBoolean(target == targetOf(owner, self), value, op);
+
     if (test == "actor_health")
         return value != nullptr
                && compareNumbers((int64_t) std::ceil(target->getHealth()), (int64_t) value->number(0.0), op);

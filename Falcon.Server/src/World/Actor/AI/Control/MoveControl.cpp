@@ -50,7 +50,8 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
         _tickSwimming(mob);
         return;
     }
-    if (!jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
+    // a mob without gravity has no jump arc to wait out
+    if (mob.hasGravity() && !jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
         return;
 
     const float speed = mSpeed * mob.getMovementSpeedMultiplier();

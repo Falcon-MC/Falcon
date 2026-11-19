@@ -311,6 +311,12 @@ public:
         return false;
     }
 
+    // instant effects included: a refused effect is neither added nor applied
+    virtual bool canBeAffected(MobEffectId id) const {
+        (void) id;
+        return true;
+    }
+
     void markInFreezingBlock(int64_t tick) {
         mFreezingBlockTick = tick;
     }

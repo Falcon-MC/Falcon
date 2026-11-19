@@ -167,6 +167,12 @@ public:
         return false;
     }
 
+    // left standing when the wither breaks the blocks around it, hurt or charging
+    virtual bool resistsWither(bool charging) const {
+        (void) charging;
+        return false;
+    }
+
     virtual bool suppressesFreezing() const {
         return false;
     }
