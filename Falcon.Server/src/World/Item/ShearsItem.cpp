@@ -6,8 +6,11 @@ FALCON_REGISTER_ITEM(ShearsItem, 130);
 
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/CobwebBlock.h"
+#include "World/Level/Block/PumpkinBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/VineBlock.h"
+#include "World/Level/Level.h"
+#include "Network/ServerNetworkHandler.h"
 
 namespace {
     const float WEB_AND_LEAVES_SPEED = 15.0f;
@@ -47,4 +50,17 @@ bool ShearsItem::getDestroySpeed(const std::string &blockIdentifier, float &spee
 
 bool ShearsItem::canDestroySpecial(const std::string &blockIdentifier) const {
     return dynamic_cast<const CobwebBlock *>(VanillaBlocks::fromIdentifier(blockIdentifier)) != nullptr;
+}
+
+bool ShearsItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                              const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
+    (void) item;
+    (void) clickPosition;
+    const BlockState &state =
+            owner.getLevelFor(player).getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    const PumpkinBlock *pumpkin = dynamic_cast<const PumpkinBlock *>(VanillaBlocks::fromState(state));
+    if (pumpkin == nullptr)
+        return false;
+    pumpkin->carve(owner, player, blockPosition, face);
+    return true;
 }
