@@ -11,8 +11,6 @@ namespace {
     // the random stroll definition's own ranges
     const float DEFAULT_HORIZONTAL_RANGE = 10.0f;
     const float DEFAULT_VERTICAL_RANGE = 7.0f;
-    // the follow range attribute the wither spawns with
-    const float FOLLOW_RANGE = 70.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
@@ -95,7 +93,7 @@ bool WitherTargetHighestDamageGoal::canContinueToUse(ServerNetworkHandler &owner
     // a target lost for good is dropped; one outdone by another player only ends the goal
     Actor *target = mob.getTarget(owner);
     if (target == nullptr || !mob.canTarget(*target)
-        || mob.distanceSquaredTo(*target) > FOLLOW_RANGE * FOLLOW_RANGE) {
+        || mob.distanceSquaredTo(*target) > mob.getFollowRange() * mob.getFollowRange()) {
         mob.clearTarget();
         return false;
     }
