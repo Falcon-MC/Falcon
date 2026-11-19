@@ -121,6 +121,8 @@ void ServerNetworkHandler::_tickSleep() {
     for (auto &entry: mPlayers) {
         if (entry.second.isSleeping())
             entry.second.tickSleepCounter();
+        if (entry.second.isSpawned())
+            entry.second.tickInsomnia(getLevelFor(entry.second).getGameRules().getBool("doinsomnia"));
     }
 
     for (World *world: mWorlds.getWorlds())

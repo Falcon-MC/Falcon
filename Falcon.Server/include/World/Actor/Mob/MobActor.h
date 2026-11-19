@@ -536,6 +536,16 @@ public:
         return true;
     }
 
+    // a natural spawn the spawner settled on, before the mob is made: a few mobs move it, or call it off
+    virtual bool placeNaturalSpawn(ServerNetworkHandler &owner, Level &level, Vector3f &position,
+                                   std::mt19937 &random) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) random;
+        return true;
+    }
+
     RideControlState &getRideControl() {
         return mRideControl;
     }
