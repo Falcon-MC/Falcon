@@ -822,6 +822,9 @@ namespace {
             && !AnvilRepair::hasCustomName(*predicted))
             name = nullptr;
 
+        if (name != nullptr && !AnvilRepair::isTypedName(*name))
+            return false;
+
         std::shared_ptr<ItemDefinition> enchantedBook;
         if (context.mCodecContext != nullptr)
             enchantedBook = context.mCodecContext->getItemDefinitions().getDefinition("minecraft:enchanted_book");
@@ -864,6 +867,9 @@ namespace {
         if (name != nullptr && !name->empty() && !AnvilRepair::hasCustomName(*input) && predicted != nullptr
             && !AnvilRepair::hasCustomName(*predicted))
             name = nullptr;
+
+        if (name != nullptr && !AnvilRepair::isTypedName(*name))
+            return false;
 
         CartographyResult result = CartographyRecipes::createResult(*input, *additional, name,
                                                                     *context.mCartographyMaps);
