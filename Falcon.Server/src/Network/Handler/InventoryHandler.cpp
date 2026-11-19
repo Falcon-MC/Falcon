@@ -773,11 +773,12 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         manager.syncSmithingInputs();
         manager.syncGrindstoneInputs();
     }
-    if (renumberedBundles) {
+    if (!leftContainer && (needsResync || renumberedBundles)) {
         manager.refreshOpenContainer(manager.getContainerPosition());
         manager.refreshEntityContainer(manager.getContainerActorId());
-        manager.syncBundles();
     }
+    if (renumberedBundles)
+        manager.syncBundles();
 }
 
 void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, ServerPlayer &player) {
