@@ -833,6 +833,22 @@ public:
         return mSleeping;
     }
 
+    // ticks since the player last slept: past three days, phantoms may spawn above it
+    int32_t getTimeSinceRest() const {
+        return mTimeSinceRest;
+    }
+
+    void setTimeSinceRest(int32_t ticks) {
+        mTimeSinceRest = ticks;
+    }
+
+    // one tick more awake; back to 1 asleep or with doinsomnia off; a spectator's stays as it is
+    void tickInsomnia(bool doInsomnia) {
+        if (isSpectator())
+            return;
+        mTimeSinceRest = doInsomnia && !mSleeping ? mTimeSinceRest + 1 : 1;
+    }
+
     const Vector3i &getSleepingPosition() const {
         return mSleepingPosition;
     }
@@ -1262,6 +1278,7 @@ private:
     static constexpr int32_t DEEP_SLEEP_TICKS = 100;
 
     bool mSleeping = false;
+    int32_t mTimeSinceRest = 1;
     int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
     Vector3f mBedEnterPosition;

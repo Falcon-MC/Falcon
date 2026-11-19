@@ -61,6 +61,7 @@ namespace {
     const char *TAG_FIRE = "Fire";
     const char *TAG_AIR = "Air";
     const char *TAG_GAME_MODE = "playerGameType";
+    const char *TAG_TIME_SINCE_REST = "TimeSinceRest";
     const char *TAG_FIRST_PLAYED = "firstPlayed";
     const char *TAG_LAST_PLAYED = "lastPlayed";
     const char *TAG_LAST_KNOWN_XUID = "LastKnownXUID";
@@ -1008,6 +1009,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.putString(TAG_LEVEL, levelName);
     data.putInt("DimensionId", Dimension::toId(mDimension));
     data.putInt(TAG_GAME_MODE, mGameType);
+    data.putInt(TAG_TIME_SINCE_REST, mTimeSinceRest);
     data.putLong(TAG_FIRST_PLAYED, mFirstPlayed == 0 ? currentTimeMillis() : mFirstPlayed);
     data.putLong(TAG_LAST_PLAYED, currentTimeMillis());
     data.putString(TAG_LAST_KNOWN_XUID, mXuid);
@@ -1114,6 +1116,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mAttributes.set("minecraft:health", storedHealth);
     mAirSupply = std::clamp(data.getInt(TAG_AIR, MAX_AIR_SUPPLY), -20, MAX_AIR_SUPPLY);
     mGameType = data.getInt(TAG_GAME_MODE, mGameType);
+    mTimeSinceRest = data.getInt(TAG_TIME_SINCE_REST, mTimeSinceRest);
     mFirstPlayed = data.getLong(TAG_FIRST_PLAYED, 0);
 
     mHasSpawnPoint = data.contains(TAG_SPAWN_BLOCK_X) || data.contains(TAG_SPAWN_X);
