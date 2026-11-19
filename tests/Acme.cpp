@@ -169,7 +169,8 @@ namespace {
         ASN1_OBJECT_free(oid);
         require(index >= 0, "the acmeIdentifier extension is missing");
 
-        const X509_EXTENSION *extension = X509_get_ext(certificate, index);
+        // const or not depends on the OpenSSL version, and the data accessor wants the same as it returns
+        auto *extension = X509_get_ext(certificate, index);
         require(X509_EXTENSION_get_critical(extension) == 1, "acmeIdentifier must be critical");
         const ASN1_OCTET_STRING *data = X509_EXTENSION_get_data(extension);
         const std::string value((const char *) ASN1_STRING_get0_data(data), (size_t) ASN1_STRING_length(data));
