@@ -120,11 +120,16 @@ namespace {
                         && appearance[0].mMotive == stored.getString("Motif"),
                 "the painting spawn did not use its dedicated packet");
 
-        large->tick(owner);
+        const int64_t largeId = large->getUniqueId();
+        level.setBlockState(11, 84, 7, BlockState("minecraft:stone"));
+        owner.tickActors();
+        require(owner.getActor(largeId) == large && owner.getItemEntities().empty(),
+                "a ceiling above the painting caused suffocation");
+
         level.setBlockState(9, 79, 6, BlockState("minecraft:air"));
         for (int32_t tick = 0; tick < 121; ++tick)
-            large->tick(owner);
-        require(large->isExpired() && !large->shouldSave() && owner.getItemEntities().size() == 1,
+            owner.tickActors();
+        require(owner.getActor(largeId) == nullptr && owner.getItemEntities().size() == 1,
                 "breaking the support did not drop exactly one painting");
 
         player.setGameType((int32_t) GameType::Creative);

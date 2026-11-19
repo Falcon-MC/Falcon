@@ -1878,9 +1878,9 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
-        if (ExperienceOrbActor *orb = dynamic_cast<ExperienceOrbActor *>(&actor)) {
-            orb->tick(*this);
-            if (orb->isExpired())
+        if (dynamic_cast<ExperienceOrbActor *>(&actor) != nullptr || dynamic_cast<PaintingActor *>(&actor) != nullptr) {
+            actor.tick(*this);
+            if (actor.isExpired())
                 expired.push_back(actorId);
             continue;
         }
