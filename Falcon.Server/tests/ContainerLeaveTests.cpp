@@ -1,3 +1,8 @@
+#include "Network/Handler/InventoryHandler.h"
+#include "Protocol/Packets/InventoryContentPacket.h"
+#include "Protocol/Packets/ItemStackRequestPacket.h"
+#include "Protocol/Packets/ItemStackResponsePacket.h"
+#include "World/Inventory/ItemStackRequestHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
@@ -49,6 +54,68 @@ namespace {
 
         require(player.getInventoryManager().onClientOpenChest(position), "the chest did not open");
         require(chest.getViewerCount() == 1, "the open chest has no viewer");
+
+        player.getInventory().setItem(0, owner.createItemStack("minecraft:stone", 4));
+        chest.getContainer()->setContainerItem(0, owner.createItemStack("minecraft:stone", 64));
+        const int window = player.getInventoryManager().getCurrentWindowId();
+        ItemStackRequestAction place;
+        place.mType = ItemStackRequestActionType::Place;
+        place.mCount = 1;
+        place.mSource.mContainer = place.mSource.mContainerName.mContainer = ContainerSlotType::Inventory;
+        place.mSource.mStackNetworkId = player.getInventory().getItem(0).mNetId;
+        place.mDestination.mContainer = place.mDestination.mContainerName.mContainer = ContainerSlotType::LevelEntity;
+        place.mDestination.mStackNetworkId = chest.getContainer()->getContainerItem(0).mNetId;
+        ItemStackRequestAction stage = place;
+        stage.mDestination.mContainer = stage.mDestination.mContainerName.mContainer = ContainerSlotType::Inventory;
+        stage.mDestination.mSlot = 1;
+        stage.mDestination.mStackNetworkId = 0;
+
+        ItemStackRequestAction take = place;
+        take.mType = ItemStackRequestActionType::Take;
+        std::swap(take.mSource, take.mDestination);
+        ItemStackRequestAction split = take;
+        split.mDestination.mSlot = 2;
+        split.mDestination.mStackNetworkId = 0;
+        ItemStackRequestPacket request;
+        request.mRequests.resize(2);
+        request.mRequests[0].mRequestId = -1;
+        request.mRequests[0].mActions = {stage, place};
+        request.mRequests[1].mRequestId = -3;
+        request.mRequests[1].mActions = {take, split};
+
+        std::vector<ItemStackResponseEntry> responses;
+        bool chestRefreshed = false;
+        owner.getNetworkHandler().setOutboundFilter([&](const NetworkIdentifier &, std::string &bytes) {
+            ReadOnlyBinaryStream header(bytes);
+            unsigned char sender = 0, recipient = 0;
+            const auto type = Packet::peekId(header, sender, recipient);
+            ReadOnlyBinaryStream body(bytes);
+            if (type == MinecraftPacketIds::ItemStackResponse) {
+                ItemStackResponsePacket response;
+                response.readHeader(body);
+                response.read(body, owner.getCodecContext());
+                responses = std::move(response.mEntries);
+            } else if (type == MinecraftPacketIds::InventoryContent) {
+                InventoryContentPacket content;
+                content.readHeader(body);
+                content.read(body, owner.getCodecContext());
+                if (content.mContainerId == window && !content.mContents.empty())
+                    chestRefreshed = !responses.empty() && content.mContents[0].mCount == 62;
+            }
+            return false;
+        });
+        InventoryHandler::handleItemStackRequest(owner, id, player, request);
+        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        require(responses.size() == 2 && responses[0].mRequestId == -1 && responses[1].mRequestId == -3,
+                "the response lost a request or changed their order");
+        require(responses[0].mResult == ItemStackRequestHandler::RESULT_ERROR
+                        && responses[1].mResult == ItemStackRequestHandler::RESULT_OK,
+                "the full chest did not reject only the first request");
+        require(player.getInventory().getItem(0).mCount == 5 && player.getInventory().getItem(1).isAir()
+                        && player.getInventory().getItem(2).mCount == 1
+                        && chest.getContainer()->getContainerItem(0).mCount == 62,
+                "the rejected move changed the final stack counts");
+        require(chestRefreshed, "the open chest did not resync after the response");
 
         ServerTickProbe::leave(owner, id);
         require(owner.getPlayers().find(id) == owner.getPlayers().end(), "the player stayed after leaving");
