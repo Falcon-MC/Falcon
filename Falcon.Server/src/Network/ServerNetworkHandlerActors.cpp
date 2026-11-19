@@ -13,6 +13,7 @@
 #include "World/Actor/Movement/BandwidthOptimization.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Misc/PaintingActor.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
@@ -152,18 +153,10 @@ namespace {
     const float SWEEP_INDEX_SPAN = 64.0f;
     const int32_t EXPERIENCE_ORB_PICKUP_DELAY = 10;
 
-    bool intersectsActorBox(const Vector3f &actorPosition, float width, float height, const Vector3f &point) {
-        const float halfWidth = width * 0.5f + PROJECTILE_HIT_GROW;
-
-        const float minX = actorPosition.x - halfWidth;
-        const float maxX = actorPosition.x + halfWidth;
-        const float minY = actorPosition.y - PROJECTILE_HIT_GROW;
-        const float maxY = actorPosition.y + height + PROJECTILE_HIT_GROW;
-        const float minZ = actorPosition.z - halfWidth;
-        const float maxZ = actorPosition.z + halfWidth;
-
-        return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY && point.z >= minZ
-               && point.z <= maxZ;
+    AxisAlignedBB projectileHitBox(const Vector3f &position, float width, float height) {
+        const float half = width * 0.5f + PROJECTILE_HIT_GROW;
+        return AxisAlignedBB(position.x - half, position.y - PROJECTILE_HIT_GROW, position.z - half,
+                             position.x + half, position.y + height + PROJECTILE_HIT_GROW, position.z + half);
     }
 
     EntityProperties buildActorProperties(ServerActor &actor) {
@@ -1002,6 +995,11 @@ bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &
 }
 
 void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &actor) {
+    if (const auto *painting = dynamic_cast<const PaintingActor *>(&actor)) {
+        painting->sendPaintingSpawn(*this, player);
+        return;
+    }
+
     AddActorPacket packet;
     packet.mUniqueActorId = actor.getUniqueId();
     packet.mRuntimeActorId = (int64_t) actor.getRuntimeId();
@@ -1888,9 +1886,9 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
-        if (ExperienceOrbActor *orb = dynamic_cast<ExperienceOrbActor *>(&actor)) {
-            orb->tick(*this);
-            if (orb->isExpired())
+        if (dynamic_cast<ExperienceOrbActor *>(&actor) != nullptr || dynamic_cast<PaintingActor *>(&actor) != nullptr) {
+            actor.tick(*this);
+            if (actor.isExpired())
                 expired.push_back(actorId);
             continue;
         }
@@ -2112,11 +2110,9 @@ void ServerNetworkHandler::tickActors() {
                                    std::min(previousPosition.z, position.z));
                 const Vector3f high(std::max(previousPosition.x, position.x), std::max(previousPosition.y, position.y),
                                     std::max(previousPosition.z, position.z));
-                const auto meetsSweep = [&low, &high](const Vector3f &at, float width, float height) {
-                    const float half = width * 0.5f + PROJECTILE_HIT_GROW;
-                    return at.x + half >= low.x && at.x - half <= high.x && at.z + half >= low.z
-                           && at.z - half <= high.z && at.y + height + PROJECTILE_HIT_GROW >= low.y
-                           && at.y - PROJECTILE_HIT_GROW <= high.y;
+                const auto meetsSweep = [&low, &high](const AxisAlignedBB &box) {
+                    return box.mMaxX >= low.x && box.mMinX <= high.x && box.mMaxY >= low.y && box.mMinY <= high.y
+                           && box.mMaxZ >= low.z && box.mMinZ <= high.z;
                 };
 
                 std::vector<ServerPlayer *> nearPlayers;
@@ -2126,11 +2122,11 @@ void ServerNetworkHandler::tickActors() {
                         continue;
                     if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
                         continue;
-                    if (meetsSweep(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+                    if (meetsSweep(projectileHitBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT)))
                         nearPlayers.push_back(&candidate);
                 }
 
-                std::vector<std::pair<ServerActor *, ActorSize>> nearActors;
+                std::vector<std::pair<ServerActor *, AxisAlignedBB>> nearActors;
                 const auto consider = [&](ServerActor &candidate) {
                     if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
                         return;
@@ -2146,15 +2142,21 @@ void ServerNetworkHandler::tickActors() {
                         return;
 
                     const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
-                    if (meetsSweep(candidate.getPosition(), size.mWidth, size.mHeight))
-                        nearActors.emplace_back(&candidate, size);
+                    const auto *painting = dynamic_cast<const PaintingActor *>(&candidate);
+                    const auto box = painting == nullptr
+                                             ? projectileHitBox(candidate.getPosition(), size.mWidth, size.mHeight)
+                                             : painting->getPaintingBounds().expand(PROJECTILE_HIT_GROW,
+                                                                                   PROJECTILE_HIT_GROW,
+                                                                                   PROJECTILE_HIT_GROW);
+                    if (meetsSweep(box))
+                        nearActors.emplace_back(&candidate, box);
                 };
                 // a sweep over many columns reads every actor once rather than every column of the index
                 if (high.x - low.x <= SWEEP_INDEX_SPAN && high.z - low.z <= SWEEP_INDEX_SPAN) {
                     _refreshActorIndex();
                     const Vector3f middle((low.x + high.x) * 0.5f, position.y, (low.z + high.z) * 0.5f);
-                    const float reach = std::max(high.x - low.x, high.z - low.z) * 0.5f + mActorIndexWidestHalf
-                                        + PROJECTILE_HIT_GROW;
+                    const float reach = std::max(high.x - low.x, high.z - low.z) * 0.5f
+                                        + std::max(mActorIndexWidestHalf, mActorIndexWidestBox) + PROJECTILE_HIT_GROW;
                     forEachActorNear(middle, reach, consider);
                 } else {
                     for (auto &actorEntry: mActors)
@@ -2167,15 +2169,12 @@ void ServerNetworkHandler::tickActors() {
                     return Vector3f(previousPosition.x + sweepX * progress, previousPosition.y + sweepY * progress,
                                     previousPosition.z + sweepZ * progress);
                 };
-                const auto firstSample = [&](const Vector3f &at, float width, float height) -> int64_t {
-                    const float half = width * 0.5f + PROJECTILE_HIT_GROW;
-                    const Vector3f boxLow(at.x - half, at.y - PROJECTILE_HIT_GROW, at.z - half);
-                    const Vector3f boxHigh(at.x + half, at.y + height + PROJECTILE_HIT_GROW, at.z + half);
+                const auto firstSample = [&](const AxisAlignedBB &box) -> int64_t {
                     double enter = 0.0, leave = 1.0;
                     const float from[3] = {previousPosition.x, previousPosition.y, previousPosition.z};
                     const float delta[3] = {sweepX, sweepY, sweepZ};
-                    const float lows[3] = {boxLow.x, boxLow.y, boxLow.z};
-                    const float highs[3] = {boxHigh.x, boxHigh.y, boxHigh.z};
+                    const float lows[3] = {box.mMinX, box.mMinY, box.mMinZ};
+                    const float highs[3] = {box.mMaxX, box.mMaxY, box.mMaxZ};
                     for (int axis = 0; axis < 3; ++axis) {
                         if (delta[axis] == 0.0f) {
                             if (from[axis] < lows[axis] || from[axis] > highs[axis])
@@ -2195,7 +2194,9 @@ void ServerNetworkHandler::tickActors() {
                     // float rounding at the box edge: the exact test decides between the nearest samples
                     for (int64_t sample = std::max<int64_t>(1, first - 1); sample <= first + 1 && sample <= sampleCount;
                          ++sample) {
-                        if (intersectsActorBox(at, width, height, sampleAt(sample)))
+                        const auto point = sampleAt(sample);
+                        if (point.x >= box.mMinX && point.x <= box.mMaxX && point.y >= box.mMinY && point.y <= box.mMaxY
+                            && point.z >= box.mMinZ && point.z <= box.mMaxZ)
                             return sample;
                     }
                     return 0;
@@ -2203,15 +2204,15 @@ void ServerNetworkHandler::tickActors() {
 
                 int64_t hitSample = 0;
                 for (ServerPlayer *candidate: nearPlayers) {
-                    const int64_t sample = firstSample(candidate->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
+                    const int64_t sample = firstSample(projectileHitBox(candidate->getPosition(), PLAYER_WIDTH,
+                                                                       PLAYER_HEIGHT));
                     if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
                         hitSample = sample;
                         hitPlayer = candidate;
                     }
                 }
                 for (const auto &candidate: nearActors) {
-                    const int64_t sample = firstSample(candidate.first->getPosition(), candidate.second.mWidth,
-                                                       candidate.second.mHeight);
+                    const int64_t sample = firstSample(candidate.second);
                     if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
                         hitSample = sample;
                         hitPlayer = nullptr;

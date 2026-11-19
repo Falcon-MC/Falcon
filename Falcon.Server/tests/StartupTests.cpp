@@ -122,9 +122,10 @@ namespace {
         const Vector3i spawnerPosition(1, 70, 1);
         const Vector3i comparatorPosition(2, 70, 2);
 
-        Tag spawner = unknownBlockActor("Conduit", spawnerPosition);
-        spawner.putByte("Active", 1);
-        spawner.putLong("Target", -1);
+        Tag spawner = unknownBlockActor("NetherReactor", spawnerPosition);
+        spawner.putByte("IsInitialized", 1);
+        spawner.putShort("Progress", 0);
+        spawner.putByte("HasFinished", 0);
         Tag comparator = unknownBlockActor("Comparator", comparatorPosition);
         comparator.putInt("OutputSignal", 7);
 
@@ -132,7 +133,7 @@ namespace {
         require(level.openStorage(directory.string()), "Could not create block actor world");
         level.getChunk(0, 0);
         level.setBlockState(spawnerPosition.x, spawnerPosition.y, spawnerPosition.z,
-                            VanillaBlocks::CONDUIT().toBlockState());
+                            VanillaBlocks::NETHERREACTOR().toBlockState());
         level.setBlockState(comparatorPosition.x, comparatorPosition.y, comparatorPosition.z,
                             VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState());
         level.saveBlockEntities(0, 0, {spawner, comparator});
