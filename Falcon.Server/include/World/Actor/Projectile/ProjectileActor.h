@@ -166,6 +166,41 @@ private:
     void _burst(ServerNetworkHandler &owner, const Vector3f &hitPosition);
 };
 
+// wither_skull.json, wither_skull_dangerous.json: on_hit gives the actor hit its mob_effect, then the
+// definition_event explodes the skull with the minecraft:explode of the group it adds
+class WitherSkullActor final : public ThrownProjectileActor {
+public:
+    WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size);
+
+    float getGravity() const override {
+        return 0.0f;
+    }
+
+    float getInertia() const override {
+        return 1.0f;
+    }
+
+    bool passesThroughOwner() const override {
+        return true;
+    }
+
+    // minecraft:projectile is_dangerous: the blue skull
+    bool isDangerous() const {
+        return mDangerous;
+    }
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+private:
+    void _applyEffects(ServerNetworkHandler &owner, Actor &target) const;
+
+    void _explode(ServerNetworkHandler &owner, const Vector3f &hitPosition);
+
+    bool mDangerous = false;
+};
+
 class ArrowActor : public ProjectileActor {
 public:
     using ProjectileActor::ProjectileActor;

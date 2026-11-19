@@ -84,6 +84,7 @@
 #include "World/Actor/AI/Goal/TradeInterestGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
+#include "World/Actor/AI/Goal/WitherGoals.h"
 #include "World/Actor/AI/Goal/WorkComposterGoal.h"
 #include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Mob/MobActor.h"
@@ -112,6 +113,7 @@ namespace {
     const float LOOK_DEFAULT_PROBABILITY = 0.02f;
     const int32_t LOOK_PROBABILITY_SCALE = 1000;
     const int32_t LOOK_DURATION = 60;
+    const char *const IS_TARGET_FILTER = "{\"test\":\"is_target\",\"subject\":\"other\"}";
 
     const float TARGET_DEFAULT_RANGE = 16.0f;
     const int32_t TICKS_PER_SECOND = 20;
@@ -674,6 +676,9 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior.rfind("dragon", 0) == 0)
         return DragonGoals::create(mob, behavior, component);
 
+    if (behavior.rfind("wither", 0) == 0)
+        return WitherGoals::create(mob, behavior, component);
+
     if (behavior == "float")
         return std::make_unique<FloatGoal>();
 
@@ -951,6 +956,20 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "teleport_to_owner")
         return std::make_unique<TeleportToOwnerGoal>(cloneOf(component.get("filters")));
+
+    // look_at_entity whose only candidate is the mob's target: the game builds the is_target filter itself
+    if (behavior == "look_at_target") {
+        LookAtEntityGoal::Settings settings;
+        settings.mRange = numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE);
+        settings.mProbability = numberOf(component, "probability", LOOK_DEFAULT_PROBABILITY);
+        settings.mMinLookTicks = secondsToTicks(
+                rangeValue(component, "look_time", "min", LOOK_ENTITY_DEFAULT_MIN_TIME));
+        settings.mMaxLookTicks = secondsToTicks(
+                rangeValue(component, "look_time", "max", LOOK_ENTITY_DEFAULT_MAX_TIME));
+        settings.mHorizontalAngle = numberOf(component, "angle_of_view_horizontal", LOOK_ENTITY_FULL_ANGLE);
+        settings.mFilters = std::shared_ptr<json::Value>(json::parse(IS_TARGET_FILTER));
+        return std::make_unique<LookAtEntityGoal>(settings);
+    }
 
     if (behavior == "look_at_entity") {
         LookAtEntityGoal::Settings settings;

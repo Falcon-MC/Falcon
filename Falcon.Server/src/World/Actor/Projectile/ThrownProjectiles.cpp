@@ -1,7 +1,12 @@
 #include "World/Actor/Projectile/ProjectileActor.h"
 
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/Hostile/BlazeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Explosion.h"
+#include "World/Level/Level.h"
+#include "Server/PropertiesSettings.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
@@ -258,5 +263,118 @@ bool DragonFireballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f
     (void) hitActor;
 
     _burst(owner, hitPosition);
+    return true;
+}
+
+namespace {
+    const float SKULL_DEFAULT_EXPLOSION_POWER = 3.0f;
+
+    const json::Value *skullProjectile(const std::string &identifier) {
+        const json::Value *definition = EntityDefinitions::find(identifier);
+        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+        return components == nullptr ? nullptr : components->get("minecraft:projectile");
+    }
+
+    bool skullFlag(const json::Value *component, const char *key, bool fallback) {
+        const json::Value *value = component == nullptr ? nullptr : component->get(key);
+        return value == nullptr ? fallback : value->boolean(fallback);
+    }
+
+    // the minecraft:explode of the groups the on_hit definition_event adds
+    const json::Value *skullExplode(const std::string &identifier) {
+        const json::Value *definition = EntityDefinitions::find(identifier);
+        const json::Value *projectile = skullProjectile(identifier);
+        const json::Value *onHit = projectile == nullptr ? nullptr : projectile->get("on_hit");
+        const json::Value *definitionEvent = onHit == nullptr ? nullptr : onHit->get("definition_event");
+        const json::Value *trigger = definitionEvent == nullptr ? nullptr : definitionEvent->get("event_trigger");
+        const json::Value *eventName = trigger == nullptr ? nullptr : trigger->get("event");
+        const json::Value *events = definition == nullptr ? nullptr : definition->get("events");
+        const json::Value *groups = definition == nullptr ? nullptr : definition->get("component_groups");
+        if (eventName == nullptr || events == nullptr || groups == nullptr)
+            return nullptr;
+
+        const json::Value *event = events->get(eventName->string());
+        const json::Value *add = event == nullptr ? nullptr : event->get("add");
+        const json::Value *names = add == nullptr ? nullptr : add->get("component_groups");
+        if (names == nullptr || !names->isArray())
+            return nullptr;
+
+        for (const std::unique_ptr<json::Value> &name: names->mArray) {
+            const json::Value *group = groups->get(name->string());
+            const json::Value *explode = group == nullptr ? nullptr : group->get("minecraft:explode");
+            if (explode != nullptr)
+                return explode;
+        }
+        return nullptr;
+    }
+}
+
+WitherSkullActor::WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size)
+        : ThrownProjectileActor(runtimeId, identifier, size) {
+    mDangerous = skullFlag(skullProjectile(identifier), "is_dangerous", false);
+}
+
+void WitherSkullActor::_applyEffects(ServerNetworkHandler &owner, Actor &target) const {
+    const json::Value *projectile = skullProjectile(getIdentifier());
+    const json::Value *onHit = projectile == nullptr ? nullptr : projectile->get("on_hit");
+    const json::Value *mobEffect = onHit == nullptr ? nullptr : onHit->get("mob_effect");
+    const json::Value *effects = mobEffect == nullptr ? nullptr : mobEffect->get("effects");
+    if (effects == nullptr || !effects->isArray())
+        return;
+
+    const Difficulty difficulty = owner.getProperties().getDifficulty();
+    const char *durationKey = difficulty == Difficulty::Hard     ? "durationhard"
+                              : difficulty == Difficulty::Normal ? "durationnormal"
+                                                                 : "durationeasy";
+    for (const std::unique_ptr<json::Value> &entry: effects->mArray) {
+        const json::Value *name = entry->get("effect");
+        MobEffectInstance instance;
+        if (name == nullptr || !parseDefinitionMobEffect(name->string(), instance.mId))
+            continue;
+
+        const json::Value *duration = entry->get(durationKey);
+        if (duration == nullptr)
+            duration = entry->get("duration");
+        const json::Value *amplifier = entry->get("amplifier");
+        instance.mDuration = duration == nullptr ? 0 : duration->integer(0);
+        instance.mAmplifier = amplifier == nullptr ? 0 : amplifier->integer(0);
+        owner.addEffect(target, instance);
+    }
+}
+
+void WitherSkullActor::_explode(ServerNetworkHandler &owner, const Vector3f &hitPosition) {
+    const json::Value *explode = skullExplode(getIdentifier());
+    if (explode == nullptr)
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    const json::Value *power = explode->get("power");
+    Explosion explosion(owner, level, hitPosition,
+                        power == nullptr ? SKULL_DEFAULT_EXPLOSION_POWER
+                                         : power->number(SKULL_DEFAULT_EXPLOSION_POWER),
+                        this, false);
+    explosion.setIncendiary(skullFlag(explode, "causes_fire", false));
+
+    const bool griefing = !skullFlag(explode, "destroy_affected_by_griefing", false)
+                          || level.getGameRules().getBool("mobgriefing");
+    // allow_underwater off: under water the blast leaves the blocks
+    const bool underwater = LiquidBlocksFetch::at(level, hitPosition).water;
+    if (skullFlag(explode, "breaks_blocks", true) && griefing
+        && (!underwater || skullFlag(explode, "allow_underwater", false)))
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
+}
+
+bool WitherSkullActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
+    if (hitPlayer != nullptr)
+        _applyEffects(owner, *hitPlayer);
+    _explode(owner, hitPosition);
+    return true;
+}
+
+bool WitherSkullActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
+    _applyEffects(owner, hitActor);
+    _explode(owner, hitPosition);
     return true;
 }

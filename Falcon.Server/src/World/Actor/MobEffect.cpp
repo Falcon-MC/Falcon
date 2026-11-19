@@ -333,6 +333,8 @@ namespace {
 bool MobEffectManager::add(const MobEffectInstance &input) {
     if (input.mId == MobEffectId::Freezing && FreezingMobEffect::isImmune(mActor))
         return false;
+    if (!mActor.canBeAffected(input.mId))
+        return false;
     if (input.mDuration == 0 && !input.mInfinite)
         return false;
 

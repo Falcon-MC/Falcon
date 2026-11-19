@@ -951,6 +951,9 @@ void ServerNetworkHandler::applyPotionEffects(ServerActor &actor, int32_t potion
         if (effect.mId != MobEffectId::InstantHealth && effect.mId != MobEffectId::InstantDamage)
             continue;
 
+        if (!actor.canBeAffected(effect.mId))
+            continue;
+
         if ((effect.mId == MobEffectId::InstantHealth) != undead) {
             actor.heal(4.0f * (float) (1 << effect.mAmplifier));
             syncActorAttributes(actor);

@@ -223,7 +223,8 @@ public:
 
     std::vector<std::string> getFamilies() const;
 
-    float getMovementSpeed() const;
+    // the game overrides the movement attribute of a few mobs
+    virtual float getMovementSpeed() const;
 
     bool hasComponentGroup(const std::string &group) const;
 
@@ -543,6 +544,19 @@ protected:
     virtual void registerGoals(GoalSelector &goalSelector) {
         (void) goalSelector;
     }
+
+    // false skips the goals and the navigation of the tick
+    virtual bool runsGoals() const {
+        return true;
+    }
+
+    // false leaves the loot and the experience to dropDeathRewards, called later by the mob
+    virtual bool dropsRewardsOnDeath() const {
+        return true;
+    }
+
+    // loot, equipment and experience, under domobloot; killer may be null
+    void dropDeathRewards(ServerNetworkHandler &owner, ServerPlayer *killer, int32_t lootingLevel);
 
     void tickControls(ServerNetworkHandler &owner);
 

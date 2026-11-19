@@ -462,6 +462,11 @@ protected:
         return ProjectileComponent();
     }
 
+    // null outside the kill() a hurt() runs
+    const ActorDamageSource *getFatalSource() const {
+        return mFatalSource;
+    }
+
 private:
     std::string mIdentifier;
     double mBuoyancyTimer = 0.0;
