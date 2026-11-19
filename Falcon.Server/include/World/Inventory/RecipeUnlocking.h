@@ -68,7 +68,7 @@ public:
     static constexpr const char *TAG = "recipe_unlocking";
 
     bool isUnlocked(const std::string &recipeId) const {
-        return mUnlocked.contains(recipeId);
+        return mUnlocked.count(recipeId) != 0;
     }
 
     bool unlock(const std::string &recipeId) {

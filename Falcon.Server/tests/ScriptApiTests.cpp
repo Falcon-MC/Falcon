@@ -424,6 +424,8 @@ system.runTimeout(() => {
         + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 0, ignoreBlockCollision: true }).length
         + ":" + viewer.getEntitiesFromViewDirection({ maxDistance: 20, excludeTypes: ["minecraft:player"],
                                                     ignoreBlockCollision: true }).length;
+    // either fixture cow can be listed first, and the one at x 0.5 faces the fence: look up, where no block is
+    cow.setRotation({ x: -90, y: 0 });
     r.blockRay = cow.getBlockFromViewDirection() === undefined;
     player.setRotation({ x: 0, y: 0 });
     const fence = player.getBlockFromViewDirection();

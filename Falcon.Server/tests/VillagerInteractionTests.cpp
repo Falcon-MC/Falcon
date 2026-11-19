@@ -47,6 +47,9 @@ namespace {
             mLevel = &mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
             for (int32_t x = -2; x <= 2; x++) {
                 for (int32_t z = -2; z <= 2; z++) {
+                    // the world may have generated its spawn chunks already, and an existing chunk wins the insert:
+                    // its terrain, from a random seed, would stand on the floor
+                    mLevel->dropChunk(x, z);
                     LevelChunk &chunk = mLevel->insertChunk(LevelChunk(x, z));
                     chunk.setPopulated(true);
                     chunk.setBiome(BiomeIds::PLAINS);
