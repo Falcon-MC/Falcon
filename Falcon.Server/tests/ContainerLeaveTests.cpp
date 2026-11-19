@@ -20,6 +20,8 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 class ServerTickProbe {
 public:
@@ -85,7 +87,7 @@ namespace {
 
         std::vector<ItemStackResponseEntry> responses;
         bool chestRefreshed = false;
-        owner.getNetworkHandler().setOutboundFilter([&](const NetworkIdentifier &, std::string &bytes) {
+        const auto capture = [&](const NetworkIdentifier &, std::string &bytes) {
             ReadOnlyBinaryStream header(bytes);
             unsigned char sender = 0, recipient = 0;
             const auto type = Packet::peekId(header, sender, recipient);
@@ -103,9 +105,15 @@ namespace {
                     chestRefreshed = !responses.empty() && content.mContents[0].mCount == 62;
             }
             return false;
-        });
-        InventoryHandler::handleItemStackRequest(owner, id, player, request);
-        owner.getNetworkHandler().setOutboundFilter(nullptr);
+        };
+        const auto send = [&]() {
+            responses.clear();
+            chestRefreshed = false;
+            owner.getNetworkHandler().setOutboundFilter(capture);
+            InventoryHandler::handleItemStackRequest(owner, id, player, request);
+            owner.getNetworkHandler().setOutboundFilter(nullptr);
+        };
+        send();
         require(responses.size() == 2 && responses[0].mRequestId == -1 && responses[1].mRequestId == -3,
                 "the response lost a request or changed their order");
         require(responses[0].mResult == ItemStackRequestHandler::RESULT_ERROR
@@ -116,6 +124,22 @@ namespace {
                         && chest.getContainer()->getContainerItem(0).mCount == 62,
                 "the rejected move changed the final stack counts");
         require(chestRefreshed, "the open chest did not resync after the response");
+
+        const auto previousPosition = player.getPosition();
+        player.setPosition(Vector3f(30.0f, 100.0f, 30.0f));
+        request.mRequests.resize(1);
+        request.mRequests[0].mRequestId = -5;
+        take.mSource.mStackNetworkId = chest.getContainer()->getContainerItem(0).mNetId;
+        take.mDestination.mStackNetworkId = player.getInventory().getItem(0).mNetId;
+        request.mRequests[0].mActions = {take};
+        send();
+        require(responses.size() == 1 && responses.front().mRequestId == -5
+                        && responses.front().mResult == ItemStackRequestHandler::RESULT_ERROR,
+                "a move after walking away did not return an error");
+        require(!chestRefreshed && chest.getContainer()->getContainerItem(0).mCount == 62
+                        && player.getInventory().getItem(0).mCount == 5,
+                "a move after walking away changed the inventory or refreshed the chest");
+        player.setPosition(previousPosition);
 
         ServerTickProbe::leave(owner, id);
         require(owner.getPlayers().find(id) == owner.getPlayers().end(), "the player stayed after leaving");
