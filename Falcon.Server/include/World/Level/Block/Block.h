@@ -167,6 +167,11 @@ public:
         return false;
     }
 
+    // counts toward a conduit's frame
+    virtual bool isConduitFrame() const {
+        return false;
+    }
+
     virtual bool suppressesFreezing() const {
         return false;
     }

@@ -13,6 +13,7 @@
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Block/Systems/PrecipitationSystem.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 
 #include <cmath>
@@ -31,12 +32,15 @@ namespace {
     const float ATTACK_REACH = 8.0f;
     const float SQRT_3 = 1.7320508f;
 
-    // in water, or rained on at the top of its box
+    // in water over its own box and pose, or rained on at the top of its box
     bool isInWaterOrRain(Level &level, const Actor &actor) {
         const Vector3f &position = actor.getPosition();
-        if (LiquidBlocksFetch::at(level, position).water)
-            return true;
         const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(actor);
+        const ActorFlags &flags = actor.getFlags();
+        const bool horizontal = flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding)
+                                || flags.get(ActorFlag::Crawling);
+        if (LiquidBlocksFetch::at(level, position, horizontal, box.mMaxY - box.mMinY).water)
+            return true;
         return PrecipitationSystem::isRainingOn(level, Vector3i((int32_t) std::floor(position.x),
                                                                 (int32_t) std::floor(box.mMaxY),
                                                                 (int32_t) std::floor(position.z)));
@@ -72,8 +76,8 @@ Tag ConduitBlockActor::getSpawnCompound() const {
 }
 
 bool ConduitBlockActor::isFrameBlock(const BlockState &state) {
-    return state.mName == BlockNames::PRISMARINE || state.mName == BlockNames::PRISMARINE_BRICKS
-           || state.mName == BlockNames::DARK_PRISMARINE || state.mName == BlockNames::SEA_LANTERN;
+    const Block *block = VanillaBlocks::fromState(state);
+    return block != nullptr && block->isConduitFrame();
 }
 
 bool ConduitBlockActor::isSurroundedByWater(Level &level, const Vector3i &position) {
