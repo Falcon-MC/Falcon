@@ -13,6 +13,8 @@
 
 namespace {
 
+    // a client that never reads its disconnect keeps the connection this long at most
+    const std::chrono::milliseconds CLOSE_GRACE(1000);
     const int GATHERING_TIMEOUT_SECONDS = 15;
     const unsigned int SIGNAL_TIMEOUT_MS = 10000;
     const char *IDENTITY_DOMAIN = "self";
@@ -170,14 +172,37 @@ void NetherNetInstance::disconnect() {
         for (const auto &entry: mPeers)
             connections.push_back(entry.second);
 
+        for (const ClosingPeer &closing: mClosing)
+            connections.push_back(closing.mConnection);
+
         mPending.clear();
         mPeers.clear();
+        mClosing.clear();
     }
 
     for (const std::shared_ptr<nethernet::Connection> &connection: connections)
         connection->close();
 
     mIsHosting = false;
+}
+
+bool NetherNetInstance::closeConnection(const NetworkIdentifier &id) {
+    std::shared_ptr<nethernet::Connection> connection;
+
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+
+        const auto it = mPeers.find(id);
+        if (it == mPeers.end())
+            return false;
+
+        connection = it->second;
+        mPeers.erase(it);
+        mClosing.push_back(ClosingPeer{connection, std::chrono::steady_clock::now() + CLOSE_GRACE});
+    }
+
+    connection->stopReceiving();
+    return true;
 }
 
 std::shared_ptr<NetworkPeer> NetherNetInstance::getPeerForUser(const NetworkIdentifier &id) {
@@ -602,6 +627,7 @@ void NetherNetInstance::runEvents() {
 
     std::vector<std::shared_ptr<nethernet::Connection>> ready;
     std::vector<std::shared_ptr<nethernet::Connection>> dropped;
+    std::vector<std::shared_ptr<nethernet::Connection>> finished;
 
     {
         std::lock_guard<std::mutex> lock(mMutex);
@@ -646,7 +672,24 @@ void NetherNetInstance::runEvents() {
 
             ++it;
         }
+
+        // the server already let these go: no closed callback for them
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        for (size_t i = 0; i < mClosing.size();) {
+            const ClosingPeer &closing = mClosing[i];
+            if (closing.mConnection->isClosed() || closing.mConnection->getBufferedAmount() == 0
+                || now >= closing.mDeadline) {
+                finished.push_back(closing.mConnection);
+                mClosing.erase(mClosing.begin() + (long) i);
+                continue;
+            }
+
+            i++;
+        }
     }
+
+    for (const std::shared_ptr<nethernet::Connection> &connection: finished)
+        connection->close();
 
     for (const std::shared_ptr<nethernet::Connection> &connection: ready) {
         const NetworkIdentifier &id = connection->getNetworkIdentifier();

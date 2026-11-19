@@ -156,7 +156,7 @@ namespace nethernet {
         {
             std::unique_lock<std::mutex> lock(mMutex);
 
-            if (mClosed)
+            if (mClosed || mStoppedReceiving)
                 return;
 
             ChannelState &state = mChannels[(int) reliability];
@@ -172,10 +172,11 @@ namespace nethernet {
                 if (segments == 0) {
                     std::string packet;
                     packet.swap(state.mBuffer);
+                    // nobody reads a connection the server closed: stopReceiving() lets this wait go
                     mIncomingSpace.wait(lock, [this] {
-                        return mClosed || mIncoming.size() < MAX_INCOMING_PACKETS;
+                        return mClosed || mStoppedReceiving || mIncoming.size() < MAX_INCOMING_PACKETS;
                     });
-                    if (mClosed)
+                    if (mClosed || mStoppedReceiving)
                         return;
                     mIncoming.push_back(std::move(packet));
                 }
@@ -290,6 +291,36 @@ namespace nethernet {
     bool Connection::isClosed() const {
         std::lock_guard<std::mutex> lock(mMutex);
         return mClosed;
+    }
+
+    void Connection::stopReceiving() {
+        std::lock_guard<std::mutex> lock(mMutex);
+
+        mStoppedReceiving = true;
+        mIncoming.clear();
+        for (int i = 0; i < (int) ChannelReliability::Count; i++) {
+            mChannels[i].mBuffer.clear();
+            mChannels[i].mSegments = 0;
+        }
+        mIncomingSpace.notify_all();
+    }
+
+    size_t Connection::getBufferedAmount() const {
+        std::shared_ptr<rtc::DataChannel> channels[(int) ChannelReliability::Count];
+
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+
+            for (int i = 0; i < (int) ChannelReliability::Count; i++)
+                channels[i] = mChannels[i].mChannel;
+        }
+
+        size_t amount = 0;
+        for (int i = 0; i < (int) ChannelReliability::Count; i++) {
+            if (channels[i] != nullptr)
+                amount += channels[i]->bufferedAmount();
+        }
+        return amount;
     }
 
     void Connection::_fail(const std::string &reason) {

@@ -11,6 +11,7 @@
 #include "Network/RakPeerHelper.h"
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -31,6 +32,10 @@ public:
     void disconnect() override;
 
     void runEvents() override;
+
+    // the server's close: the connection stops reading at once and is closed by runEvents once its
+    // queued sends (the disconnect) have left, or after a short grace at the latest
+    bool closeConnection(const NetworkIdentifier &id) override;
 
     std::shared_ptr<NetworkPeer> getPeerForUser(const NetworkIdentifier &id) override;
 
@@ -148,6 +153,13 @@ private:
     std::mutex mMutex;
     std::vector<std::shared_ptr<nethernet::Connection>> mPending;
     std::unordered_map<NetworkIdentifier, std::shared_ptr<nethernet::Connection>, NetworkIdentifier::Hasher> mPeers;
+
+    struct ClosingPeer {
+        std::shared_ptr<nethernet::Connection> mConnection;
+        std::chrono::steady_clock::time_point mDeadline;
+    };
+
+    std::vector<ClosingPeer> mClosing;
     std::shared_ptr<nethernet::Signaling> mOnlineSignaling;
     unsigned int mSignalSubscription = 0;
     std::unordered_map<std::string, std::weak_ptr<rtc::PeerConnection>> mNegotiating;

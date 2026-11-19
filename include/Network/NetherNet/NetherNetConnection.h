@@ -73,6 +73,13 @@ namespace nethernet {
 
         void close();
 
+        // the first half of a server close: what was received is dropped and a held channel callback goes
+        // on, while what is queued to send (the disconnect) still leaves
+        void stopReceiving();
+
+        // bytes the data channels still hold to send
+        size_t getBufferedAmount() const;
+
     private:
         struct ChannelState {
             std::shared_ptr<rtc::DataChannel> mChannel;
@@ -101,5 +108,6 @@ namespace nethernet {
         std::deque<std::string> mIncoming;
         std::mutex mWriteMutex;
         bool mClosed;
+        bool mStoppedReceiving = false;
     };
 }
