@@ -139,14 +139,13 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
             return;
     }
 
-    // a composter in front takes the item as a player gives it
+    // a composter in front takes the item as a player gives it; one it refuses is dispensed as usual
     const Vector3i front(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
                          position.z + FACE_OFFSETS[facing][2]);
     const BlockState *frontState = level.peekBlockPtr(front.x, front.y, front.z);
-    if (frontState != nullptr && ComposterBlock::matches(frontState->mName)) {
-        ItemStack composted = inventory.getContainerItem(slot);
-        if (!ComposterBlock::addItem(owner, level, front, composted))
-            return;
+    ItemStack composted = inventory.getContainerItem(slot);
+    if (frontState != nullptr && ComposterBlock::matches(frontState->mName)
+        && ComposterBlock::addItem(owner, level, front, composted)) {
         --composted.mCount;
         inventory.setContainerItem(slot, composted.mCount <= 0 ? ItemStack::air() : std::move(composted));
         owner.refreshContainerViewers(position);

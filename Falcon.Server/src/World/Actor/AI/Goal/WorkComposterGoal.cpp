@@ -1,6 +1,7 @@
 #include "World/Actor/AI/Goal/WorkComposterGoal.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Item/VanillaItems.h"
 #include "World/Level/Block/ComposterBlock.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/ItemActorHandler.h"
@@ -8,19 +9,16 @@
 
 #include <algorithm>
 #include <string>
-#include <unordered_set>
 #include <utility>
 
 namespace {
     const char *const BONE_MEAL = "minecraft:bone_meal";
 
-    // the planting items that are no food: carrots and potatoes are eaten, not composted
-    bool isCompostedSeed(const ItemStack &item) {
-        static const std::unordered_set<std::string> SEEDS = {
-                "minecraft:wheat_seeds",      "minecraft:beetroot_seeds", "minecraft:pumpkin_seeds",
-                "minecraft:melon_seeds",      "minecraft:torchflower_seeds", "minecraft:pitcher_pod",
-                "minecraft:nether_wart"};
-        return !item.isAir() && SEEDS.count(item.mDefinition->getIdentifier()) != 0;
+    bool isFarmerCompost(const ItemStack &item) {
+        if (item.isAir())
+            return false;
+        const Item *type = VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
+        return type != nullptr && type->isFarmerCompost();
     }
 
     int32_t countOf(const MobEquipment &equipment, const std::string &identifier) {
@@ -57,7 +55,7 @@ bool WorkComposterGoal::_fill(ServerNetworkHandler &owner, MobActor &mob) {
     MobEquipment &equipment = mob.getEquipment();
     for (int slot = equipment.getInventorySize() - 1; slot >= 0; --slot) {
         ItemStack item = equipment.getInventoryItem(slot);
-        if (!isCompostedSeed(item))
+        if (!isFarmerCompost(item))
             continue;
         const int32_t surplus = countOf(equipment, item.mDefinition->getIdentifier()) - mComposting.mMinItemCount;
         if (surplus <= 0)

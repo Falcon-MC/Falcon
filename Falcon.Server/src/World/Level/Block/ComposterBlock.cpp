@@ -1,5 +1,6 @@
 #include "World/Level/Block/ComposterBlock.h"
 
+#include "Core/Math/VectorMath.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/ItemNetworkIdTable.h"
@@ -87,10 +88,6 @@ namespace {
         }
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
-
     // a new state: the copied one would keep the hash of its old level
     BlockState withLevel(const BlockState &state, int32_t level) {
         Tag states = state.mStates;
@@ -162,14 +159,14 @@ int32_t ComposterBlock::addItems(ServerNetworkHandler &owner, Level &level, cons
     }
 
     if (next == fill) {
-        owner.playLevelSound(level, FILL_SOUND, centerOf(position));
+        owner.playLevelSound(level, FILL_SOUND, VectorMath::centerOf(position));
         return used;
     }
 
     level.setBlock(position, withLevel(*state, next), true);
     if (next == FULL_LEVEL)
         level.scheduleBlockUpdate(position, READY_DELAY);
-    owner.playLevelSound(level, FILL_SUCCESS_SOUND, centerOf(position));
+    owner.playLevelSound(level, FILL_SUCCESS_SOUND, VectorMath::centerOf(position));
     return used;
 }
 
@@ -209,7 +206,7 @@ void ComposterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
         return;
 
     level.setBlock(position, withLevel(state, READY_LEVEL), true);
-    owner.playLevelSound(level, READY_SOUND, centerOf(position));
+    owner.playLevelSound(level, READY_SOUND, VectorMath::centerOf(position));
 }
 
 bool ComposterBlock::takeOutput(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
@@ -218,6 +215,6 @@ bool ComposterBlock::takeOutput(ServerNetworkHandler &owner, Level &level, const
         return false;
 
     level.setBlock(position, withLevel(*state, 0), true);
-    owner.playLevelSound(level, EMPTY_SOUND, centerOf(position));
+    owner.playLevelSound(level, EMPTY_SOUND, VectorMath::centerOf(position));
     return true;
 }

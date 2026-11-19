@@ -18,6 +18,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/Block/ComposterBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
+#include "World/Item/VanillaItems.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -448,6 +449,9 @@ namespace {
                 "the compostable component of a data item was not read");
         require(ComposterBlock::compostChance(arena.mOwner.createItemStack("minecraft:stone", 1)) == 0,
                 "stone composts");
+        require(VanillaItems::fromIdentifier("minecraft:wheat_seeds")->isFarmerCompost()
+                        && !VanillaItems::fromIdentifier("minecraft:carrot")->isFarmerCompost(),
+                "the farmer composts the wrong items");
 
         const Vector3i site(100, 64, 100);
         arena.mLevel->setBlockState(site.x, site.y, site.z, stateOf(BlockNames::COMPOSTER));
