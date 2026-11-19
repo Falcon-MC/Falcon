@@ -1,6 +1,7 @@
+#include "Network/ServerNetworkHandler.h"
+
 #include "Falcon/Plugin/PluginManager.h"
 #include "Server/Commands/ServerCommandOrigin.h"
-#include "Network/ServerNetworkHandler.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -97,6 +98,16 @@ namespace {
             return CommandPermission::Internal;
         }
 
+        std::vector<CommandOverloadData> getOverloads() const override {
+            CommandOverloadData overload;
+            overload.mParameters = {
+                    makeEnumParameter("action", "PermissionGroupAction", {"list", "create", "delete", "default",
+                                                                           "assign", "unassign", "inherit", "uninherit",
+                                                                           "set", "unset", "reload"}),
+                    makeTypedParameter("arguments", CommandParamType::RawText, true)};
+            return {std::move(overload)};
+        }
+
         bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) override {
             if (dynamic_cast<ServerCommandOrigin *>(&sender) == nullptr)
                 return false;
@@ -121,9 +132,7 @@ namespace {
     private:
         ServerNetworkHandler &mOwner;
     };
-}
 
-namespace {
     std::string toLowerCopy(const std::string &value) {
         std::string lowered = value;
         for (char &character: lowered) {

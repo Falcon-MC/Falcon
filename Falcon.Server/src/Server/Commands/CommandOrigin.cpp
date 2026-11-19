@@ -1,6 +1,6 @@
-#include "Server/Commands/Command.h"
 #include "Server/Commands/CommandOrigin.h"
 
+#include "Server/Commands/Command.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Localization.h"
 
