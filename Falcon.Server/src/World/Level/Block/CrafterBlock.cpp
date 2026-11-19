@@ -4,6 +4,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Inventory/CraftingManager.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Level/Block/ComposterBlock.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/HopperBlockActor.h"
@@ -37,6 +38,7 @@ namespace {
             {"west_up", 4},   {"east_up", 5},    {"north_up", 2},   {"south_up", 3}};
 
     const int FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+    const int DOWN = 0;
 
     // an unknown orientation reads as south_up, as the game clamps it to the last one
     int facingOf(const BlockState &state) {
@@ -143,7 +145,19 @@ void CrafterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, 
     const int facing = facingOf(state);
     const Vector3i front(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
                          position.z + FACE_OFFSETS[facing][2]);
-    insertInFront(owner, level, front, results);
+    const BlockState *frontState = level.peekBlockPtr(front.x, front.y, front.z);
+    if (facing == DOWN && frontState != nullptr && ComposterBlock::matches(frontState->mName)) {
+        // a crafter facing down composts whole stacks into the composter below
+        std::vector<ItemStack> remaining;
+        for (ItemStack &result: results) {
+            result.mCount -= ComposterBlock::addItems(owner, level, front, result, result.mCount);
+            if (result.mCount > 0)
+                remaining.push_back(std::move(result));
+        }
+        results = std::move(remaining);
+    } else {
+        insertInFront(owner, level, front, results);
+    }
 
     if (!results.empty()) {
         for (const ItemStack &result: results)

@@ -13,8 +13,12 @@
 #include "World/Actor/Mob/Component/MobShareables.h"
 #include "World/Actor/Mob/Passive/VillagerV2Actor.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/ComposterBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Item/VanillaItems.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
@@ -24,6 +28,7 @@
 #include "World/Village/Village.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -432,6 +437,54 @@ namespace {
     }
 }
 
+namespace {
+    void composterTakesItsTable(Arena &arena) {
+        require(ComposterBlock::compostChance(arena.mOwner.createItemStack("minecraft:cake", 1)) == 100,
+                "a cake does not always compost");
+        require(ComposterBlock::compostChance(arena.mOwner.createItemStack("minecraft:wheat_seeds", 1)) == 30,
+                "wheat seeds lost their 30 percent");
+        require(ComposterBlock::compostChance(arena.mOwner.createItemStack("minecraft:melon_block", 1)) == 65,
+                "a melon composts as its block");
+        require(ComposterBlock::compostChance(arena.mOwner.createItemStack("minecraft:red_shrub", 1)) == 30,
+                "the compostable component of a data item was not read");
+        require(ComposterBlock::compostChance(arena.mOwner.createItemStack("minecraft:stone", 1)) == 0,
+                "stone composts");
+        require(VanillaItems::fromIdentifier("minecraft:wheat_seeds")->isFarmerCompost()
+                        && !VanillaItems::fromIdentifier("minecraft:carrot")->isFarmerCompost(),
+                "the farmer composts the wrong items");
+
+        const Vector3i site(100, 64, 100);
+        arena.mLevel->setBlockState(site.x, site.y, site.z, stateOf(BlockNames::COMPOSTER));
+        const ItemStack stone = arena.mOwner.createItemStack("minecraft:stone", 1);
+        require(ComposterBlock::addItems(arena.mOwner, *arena.mLevel, site, stone, 1) == 0, "stone went in");
+
+        const ItemStack cakes = arena.mOwner.createItemStack("minecraft:cake", 10);
+        require(ComposterBlock::addItems(arena.mOwner, *arena.mLevel, site, cakes, 10) == 7,
+                "the composter did not stop at its seventh layer");
+        require(arena.mLevel->getBlockState(site.x, site.y, site.z).mStates.getInt("composter_fill_level", 0) == 7,
+                "seven cakes did not fill the composter");
+        require(ComposterBlock::addItems(arena.mOwner, *arena.mLevel, site, cakes, 1) == 0, "a full composter took more");
+        // the floor inside rises with the layers: 15 pixels at the seventh
+        std::vector<AxisAlignedBB> boxes;
+        BlockShape::appendShapesAt(arena.mLevel->getBlockState(site.x, site.y, site.z), site.x, site.y, site.z, nullptr,
+                                   [](int32_t, int32_t, int32_t) -> const BlockState * { return nullptr; }, boxes);
+        bool floor = false;
+        for (const AxisAlignedBB &box: boxes)
+            floor = floor || std::abs(box.mMaxY - ((float) site.y + 0.9375f)) < 1e-4f;
+        require(floor, "the composter floor did not follow its layers");
+
+        require(arena.mLevel->isUpdateScheduled(site), "the full composter scheduled no tick");
+        const auto *block = VanillaBlocks::getAs<ComposterBlock>(BlockNames::COMPOSTER);
+        require(block != nullptr, "the composter has no class");
+        block->onScheduledUpdate(arena.mOwner, *arena.mLevel, site, arena.mLevel->getBlockState(site.x, site.y, site.z));
+        require(arena.mLevel->getBlockState(site.x, site.y, site.z).mStates.getInt("composter_fill_level", 0) == 8,
+                "the full composter did not turn ready");
+        require(ComposterBlock::takeOutput(arena.mOwner, *arena.mLevel, site), "the ready composter was not emptied");
+        require(arena.mLevel->getBlockState(site.x, site.y, site.z).mStates.getInt("composter_fill_level", -1) == 0,
+                "the emptied composter kept its layers");
+    }
+}
+
 int main() {
     const std::filesystem::path originalRoot = ServerPaths::getRoot();
     const std::filesystem::path directory =
@@ -452,6 +505,7 @@ int main() {
         farmerHarvestsAndReplants(arena);
         farmerFertilizes(arena);
         farmerEmptiesComposter(arena);
+        composterTakesItsTable(arena);
         std::cout << "villager breeding checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';

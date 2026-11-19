@@ -1,6 +1,7 @@
 #include "World/Level/Block/DispenserBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/ComposterBlock.h"
 #include "World/Level/Block/DispenseSource.h"
 
 // before ContainerBlock, which matches the dispenser and the dropper too
@@ -136,6 +137,19 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
         plugins->dispatch(event);
         if (event.mCancelled)
             return;
+    }
+
+    // a composter in front takes the item as a player gives it; one it refuses is dispensed as usual
+    const Vector3i front(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
+                         position.z + FACE_OFFSETS[facing][2]);
+    const BlockState *frontState = level.peekBlockPtr(front.x, front.y, front.z);
+    ItemStack composted = inventory.getContainerItem(slot);
+    if (frontState != nullptr && ComposterBlock::matches(frontState->mName)
+        && ComposterBlock::addItem(owner, level, front, composted)) {
+        --composted.mCount;
+        inventory.setContainerItem(slot, composted.mCount <= 0 ? ItemStack::air() : std::move(composted));
+        owner.refreshContainerViewers(position);
+        return;
     }
 
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
