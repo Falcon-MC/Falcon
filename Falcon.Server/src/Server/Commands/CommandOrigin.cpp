@@ -1,3 +1,4 @@
+#include "Server/Commands/Command.h"
 #include "Server/Commands/CommandOrigin.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
@@ -35,4 +36,8 @@ bool CommandOrigin::getSourceBlock(Level *&, Vector3i &) {
 
 void CommandOrigin::sendError(const std::string &message) {
     sendMessage(message);
+}
+
+bool CommandOrigin::canExecuteCommand(const Command &command) const {
+    return getCommandPermission() >= command.getRequiredPermission();
 }

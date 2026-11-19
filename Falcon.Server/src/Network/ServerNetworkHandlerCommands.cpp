@@ -1,3 +1,5 @@
+#include "Falcon/Plugin/PluginManager.h"
+#include "Server/Commands/ServerCommandOrigin.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Actor/ServerActor.h"
@@ -82,6 +84,44 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace {
+    class PermissionGroupsCommand final : public Command {
+    public:
+        explicit PermissionGroupsCommand(ServerNetworkHandler &owner)
+                : Command("permissiongroup", "Manages permission groups",
+                          "permissiongroup <list|create|delete|default|assign|unassign|inherit|uninherit|set|unset|reload>"),
+                  mOwner(owner) {}
+
+        CommandPermission getRequiredPermission() const override {
+            return CommandPermission::Internal;
+        }
+
+        bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) override {
+            if (dynamic_cast<ServerCommandOrigin *>(&sender) == nullptr)
+                return false;
+            auto &permissions = mOwner.getPluginManager().getPermissions();
+            if (arguments.size() == 1 && arguments[0] == "list") {
+                const auto names = permissions.groupNames();
+                sender.sendMessage(names.empty() ? "No permission groups." : Command::joinArguments(names, 0));
+                return true;
+            }
+            if (!permissions.updateGroups(arguments)) {
+                sender.sendMessage("Could not update permission groups. Check the arguments and configuration.");
+                return false;
+            }
+            for (auto &[id, player]: mOwner.getPlayers()) {
+                if (player.isSpawned())
+                    mOwner._sendAvailableCommands(player);
+            }
+            sender.sendMessage("Permission groups updated.");
+            return true;
+        }
+
+    private:
+        ServerNetworkHandler &mOwner;
+    };
+}
 
 namespace {
     std::string toLowerCopy(const std::string &value) {
@@ -316,6 +356,7 @@ namespace {
 }
 
 void ServerNetworkHandler::_registerCommands() {
+    mCommands.registerCommand(std::make_shared<PermissionGroupsCommand>(*this));
     mCommands.registerCommand(std::make_shared<GameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<OpCommand>(*this));
     mCommands.registerCommand(std::make_shared<DeopCommand>(*this));

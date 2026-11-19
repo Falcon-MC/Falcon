@@ -30,6 +30,8 @@ public:
 
     CommandPermission getCommandPermission() const override;
 
+    bool canExecuteCommand(const Command &command) const override;
+
     Level *getLevel() override;
 
     const CommandOriginData &getOriginData() const {

@@ -8,6 +8,7 @@
 #include <vector>
 
 class Actor;
+class Command;
 class Level;
 class ServerPlayer;
 
@@ -20,6 +21,12 @@ public:
     virtual bool isPlayer() const = 0;
 
     virtual ServerPlayer *asPlayer() = 0;
+
+    virtual ServerPlayer *permissionPlayer() {
+        return asPlayer();
+    }
+
+    virtual bool canExecuteCommand(const Command &command) const;
 
     virtual void sendMessage(const std::string &message) = 0;
 

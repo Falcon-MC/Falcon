@@ -26,6 +26,14 @@ public:
 
     CommandPermission getCommandPermission() const override;
 
+    ServerPlayer *permissionPlayer() override {
+        return mBase.permissionPlayer();
+    }
+
+    bool canExecuteCommand(const Command &command) const override {
+        return mBase.canExecuteCommand(command);
+    }
+
     Vector3f getPosition() override {
         return mPosition;
     }
