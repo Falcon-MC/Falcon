@@ -801,6 +801,14 @@ namespace {
         PluginPermissions reloaded(fixture.owner.getEventBus());
         require(reloaded.commandPermission(*fixture.player, *kick) == true, "the XUID assignment was not saved");
         require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "inherited plugin node was ignored");
+        LoadedPlugin plugin;
+        permissions.setPermission(plugin, *fixture.player, "test.read", false);
+        require(!api.playerHasPermission(fixture.playerHandle(), "test.read"), "a plugin denial was ignored");
+        permissions.clearPlugin(plugin);
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "the inherited node was not restored");
+        require(permissions.registerPermission("test.legacy", FALCON_PERMISSION_DEFAULT_TRUE),
+                "an existing plugin permission default could not be registered");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.legacy"), "the plugin default was ignored");
         require(sender.canExecuteCommand(*kick) && !sender.canExecuteCommand(*admin),
                 "the group did not grant exactly the permitted command level");
         ExecuteCommandOrigin chained(sender, nullptr, Vector3f(), Vector3f(), fixture.level);
@@ -808,7 +816,9 @@ namespace {
                 "execute did not preserve the source command permissions");
         require(permissions.updateGroups({"set", "member", "falcon.command.kick", "false"}),
                 "could not set an inherited denial");
-        require(!sender.canExecuteCommand(*kick), "an inherited denial did not take precedence");
+        fixture.player->setOp(true);
+        require(!sender.canExecuteCommand(*kick), "an inherited denial did not take precedence over operator access");
+        fixture.player->setOp(false);
         fixture.player->setXuid("");
         fixture.player->setName("Tester");
     }
