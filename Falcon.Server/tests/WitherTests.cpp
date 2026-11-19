@@ -61,7 +61,7 @@ namespace {
         size_t countOf(const char *identifier) {
             size_t found = 0;
             for (auto &entry: mOwner.getActors()) {
-                if (entry.second->getIdentifier() == identifier && !entry.second->isDead())
+                if (entry.second->getTypeId() == identifier && !entry.second->isDead())
                     ++found;
             }
             return found;
@@ -117,8 +117,9 @@ namespace {
         }
         require(arena.nameAt(Vector3i(top.x, top.y - 2, top.z)) == BlockNames::AIR, "the foot stayed");
 
+        // origin + 1.5 in world axes: the origin is a corner of the T, either end of its arms
         const Vector3f position = arena.findWither()->getPosition();
-        require(std::fabs(position.x - (float) top.x) <= 2.0f && std::fabs(position.z - (float) top.z) <= 2.0f
+        require(std::fabs(position.x - (float) top.x) <= 3.0f && std::fabs(position.z - (float) top.z) <= 2.0f
                         && std::fabs(position.y - (float) (top.y - 2)) <= 1.0f,
                 "the wither did not appear at its T");
 

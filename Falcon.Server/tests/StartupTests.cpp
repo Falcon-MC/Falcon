@@ -120,23 +120,22 @@ namespace {
         ItemDefinitionRegistry items;
         PacketCodecContext context(blocks, items);
         const Vector3i spawnerPosition(1, 70, 1);
-        const Vector3i skullPosition(2, 70, 2);
+        const Vector3i comparatorPosition(2, 70, 2);
 
         Tag spawner = unknownBlockActor("Conduit", spawnerPosition);
         spawner.putByte("Active", 1);
         spawner.putLong("Target", -1);
-        Tag skull = unknownBlockActor("Skull", skullPosition);
-        skull.putByte("SkullType", 1);
-        skull.putFloat("Rotation", 90.0f);
+        Tag comparator = unknownBlockActor("Comparator", comparatorPosition);
+        comparator.putInt("OutputSignal", 7);
 
         Level level("BlockActors", 4, 12345);
         require(level.openStorage(directory.string()), "Could not create block actor world");
         level.getChunk(0, 0);
         level.setBlockState(spawnerPosition.x, spawnerPosition.y, spawnerPosition.z,
                             VanillaBlocks::CONDUIT().toBlockState());
-        level.setBlockState(skullPosition.x, skullPosition.y, skullPosition.z,
-                            VanillaBlocks::SKELETON_SKULL().toBlockState());
-        level.saveBlockEntities(0, 0, {spawner, skull});
+        level.setBlockState(comparatorPosition.x, comparatorPosition.y, comparatorPosition.z,
+                            VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState());
+        level.saveBlockEntities(0, 0, {spawner, comparator});
 
         BlockActorStore &store = level.getBlockActors();
         store.loadChunk(0, 0, level.loadBlockEntities(0, 0), context);
@@ -145,8 +144,8 @@ namespace {
         require(saved.size() == 2, "A block actor of no class was dropped on save");
         require(savedAt(saved, spawnerPosition) != nullptr && *savedAt(saved, spawnerPosition) == spawner,
                 "The spawner was not saved back untouched");
-        require(savedAt(saved, skullPosition) != nullptr && *savedAt(saved, skullPosition) == skull,
-                "The skull was not saved back untouched");
+        require(savedAt(saved, comparatorPosition) != nullptr && *savedAt(saved, comparatorPosition) == comparator,
+                "The comparator was not saved back untouched");
         require(!store.encodeChunkNetwork(0, 0).empty(), "A block actor of no class is not sent");
 
         level.saveBlockEntities(0, 0, saved);
@@ -154,7 +153,8 @@ namespace {
         store.loadChunk(0, 0, level.loadBlockEntities(0, 0), context);
         require(store.saveChunk(0, 0).size() == 2, "A block actor of no class did not survive a reload");
 
-        level.setBlockState(skullPosition.x, skullPosition.y, skullPosition.z, VanillaBlocks::AIR().toBlockState());
+        level.setBlockState(comparatorPosition.x, comparatorPosition.y, comparatorPosition.z,
+                            VanillaBlocks::AIR().toBlockState());
         saved = store.saveChunk(0, 0);
         require(saved.size() == 1 && savedAt(saved, spawnerPosition) != nullptr,
                 "A replaced block kept its unknown block actor");
