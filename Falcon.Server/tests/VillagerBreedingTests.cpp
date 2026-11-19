@@ -77,6 +77,9 @@ namespace {
             mLevel = &mOwner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
             for (int32_t x = -4; x <= 4; x++) {
                 for (int32_t z = -4; z <= 4; z++) {
+                    // the world may have generated its spawn chunks already, and an existing chunk wins the insert:
+                    // its terrain, from a random seed, would stand on the floor
+                    mLevel->dropChunk(x, z);
                     LevelChunk &chunk = mLevel->insertChunk(LevelChunk(x, z));
                     chunk.setPopulated(true);
                     chunk.setBiome(BiomeIds::PLAINS);
@@ -99,6 +102,8 @@ namespace {
             villager->startDefinition(mOwner);
             for (const char *schedule: SCHEDULE_GROUPS)
                 villager->removeComponentGroup(schedule);
+            // the spawn makes one adult in fourteen a nitwit, and a nitwit takes no job site
+            villager->removeComponentGroup("nitwit");
             villager->addComponentGroup("adult");
             villager->addComponentGroup(group);
             villager->tick(mOwner);
