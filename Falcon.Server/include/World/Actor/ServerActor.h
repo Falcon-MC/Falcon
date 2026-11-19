@@ -410,7 +410,7 @@ public:
         mNameTag = nameTag;
     }
 
-    bool isPersistent() const {
+    virtual bool isPersistent() const {
         return mPersistent || !mNameTag.empty();
     }
 

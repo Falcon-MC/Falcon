@@ -54,6 +54,7 @@ namespace {
                                                    {"largeexplode", "minecraft:large_explosion"}};
 
     const char *const SPAWNED_EVENT = "minecraft:entity_spawned";
+    const char *const PERSISTENT = "minecraft:persistent";
     const char *const BORN_EVENT = "minecraft:entity_born";
     const char *const TRANSFORMED_EVENT = "minecraft:entity_transformed";
     // the villagers a cure reaches: a box 16 blocks out on every axis
@@ -2866,4 +2867,8 @@ void MobActor::dropLoot(ServerNetworkHandler &owner, Level &level, const ServerP
             owner.dropItem(level, position, stack, ItemActorHandler::randomDropMotion(),
                            ItemActorHandler::DROP_PICKUP_DELAY);
     }
+}
+
+bool MobActor::isPersistent() const {
+    return ServerActor::isPersistent() || getComponent(PERSISTENT) != nullptr;
 }
