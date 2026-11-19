@@ -152,7 +152,7 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
         return false;
     }
 
-    if ((int) sender.getCommandPermission() < (int) command->getRequiredPermission()) {
+    if (!sender.canExecuteCommand(*command)) {
         sender.sendTranslation("commands.generic.error.permissions", {tokens[0]});
         return false;
     }

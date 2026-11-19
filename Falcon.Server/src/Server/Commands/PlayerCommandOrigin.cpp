@@ -2,6 +2,7 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 PlayerCommandOrigin::PlayerCommandOrigin(ServerNetworkHandler &handler, ServerPlayer &player,
                                          const CommandOriginData &origin)
@@ -29,6 +30,11 @@ std::string PlayerCommandOrigin::getLocale() const {
 
 CommandPermission PlayerCommandOrigin::getCommandPermission() const {
     return mPlayer.getCommandPermission();
+}
+
+bool PlayerCommandOrigin::canExecuteCommand(const Command &command) const {
+    const auto group = mHandler.getPluginManager().getPermissions().commandPermission(mPlayer, command);
+    return group.value_or(CommandOrigin::canExecuteCommand(command));
 }
 
 Level *PlayerCommandOrigin::getLevel() {

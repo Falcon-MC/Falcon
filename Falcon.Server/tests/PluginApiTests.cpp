@@ -6,6 +6,8 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Commands/CommandMap.h"
+#include "Server/Commands/ExecuteCommandOrigin.h"
+#include "Server/Commands/PlayerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Inventory/PlayerInventory.h"
@@ -774,6 +776,53 @@ namespace {
         require(api.findPlayer("Bot_1") == nullptr, "the simulated player is still online");
     }
 
+    void permissionGroups(const FalconServerApi &api, Fixture &fixture) {
+        auto &permissions = fixture.owner.getPluginManager().getPermissions();
+        require(permissions.updateGroups({"create", "member"}), "could not create member group");
+        require(permissions.updateGroups({"create", "moderator"}), "could not create moderator group");
+        require(permissions.updateGroups({"default", "member"}), "could not set the default group");
+        require(permissions.updateGroups({"set", "member", "test.read", "true"}), "could not set a default node");
+        require(permissions.updateGroups({"inherit", "moderator", "member"}), "could not inherit the member group");
+        require(!permissions.updateGroups({"inherit", "member", "moderator"}), "an inheritance cycle was accepted");
+        require(permissions.updateGroups({"set", "moderator", "falcon.command.kick", "true"}),
+                "could not set a command node");
+        require(permissions.updateGroups({"set", "moderator", "falcon.command.permissiongroup", "true"}),
+                "could not record a console command node");
+        require(permissions.updateGroups({"assign", "12345", "moderator"}), "could not assign a player");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "default group was ignored");
+
+        const auto *kick = fixture.owner.getCommands().getCommand("kick");
+        const auto *admin = fixture.owner.getCommands().getCommand("permissiongroup");
+        require(kick != nullptr && admin != nullptr, "the test commands were not registered");
+        PlayerCommandOrigin sender(fixture.owner, *fixture.player, CommandOriginData{});
+        require(!sender.canExecuteCommand(*kick), "an unassigned player received a group command");
+        fixture.player->setXuid("12345");
+        fixture.player->setName("Renamed");
+        PluginPermissions reloaded(fixture.owner.getEventBus());
+        require(reloaded.commandPermission(*fixture.player, *kick) == true, "the XUID assignment was not saved");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "inherited plugin node was ignored");
+        LoadedPlugin plugin;
+        permissions.setPermission(plugin, *fixture.player, "test.read", false);
+        require(!api.playerHasPermission(fixture.playerHandle(), "test.read"), "a plugin denial was ignored");
+        permissions.clearPlugin(plugin);
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "the inherited node was not restored");
+        require(permissions.registerPermission("test.legacy", FALCON_PERMISSION_DEFAULT_TRUE),
+                "an existing plugin permission default could not be registered");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.legacy"), "the plugin default was ignored");
+        require(sender.canExecuteCommand(*kick) && !sender.canExecuteCommand(*admin),
+                "the group did not grant exactly the permitted command level");
+        ExecuteCommandOrigin chained(sender, nullptr, Vector3f(), Vector3f(), fixture.level);
+        require(chained.canExecuteCommand(*kick) && !chained.canExecuteCommand(*admin),
+                "execute did not preserve the source command permissions");
+        require(permissions.updateGroups({"set", "member", "falcon.command.kick", "false"}),
+                "could not set an inherited denial");
+        fixture.player->setOp(true);
+        require(!sender.canExecuteCommand(*kick), "an inherited denial did not take precedence over operator access");
+        fixture.player->setOp(false);
+        fixture.player->setXuid("");
+        fixture.player->setName("Tester");
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -792,6 +841,7 @@ namespace {
         playerAndEntityEvents(api, fixture);
         worldEvents(api, fixture);
         simulatedPlayers(api, fixture);
+        permissionGroups(api, fixture);
     }
 }
 

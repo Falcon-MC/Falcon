@@ -51,6 +51,29 @@ Falcon speaks Minecraft **1.26.60** (protocol 2225). 1.26.52, 1.26.45 and 1.26.4
 The API lives in [PluginAPI](https://github.com/Falcon-MC/PluginAPI), with a complete
 [example](https://github.com/Falcon-MC/PluginAPI/tree/main/examples/wasm/HelloWasm).
 
+## Permission groups
+
+Use the server console to manage permission groups. For example, these commands let a moderator
+use `kick` and give them the permissions of the default group:
+
+```text
+permissiongroup create player
+permissiongroup default player
+permissiongroup create moderator
+permissiongroup inherit moderator player
+permissiongroup set moderator falcon.command.kick true
+permissiongroup assign 123456789 moderator
+```
+
+Replace `123456789` with the player's Xbox XUID. Unassigned players use the default group. An explicit
+denial in any assigned or inherited group wins. Commands use their canonical names, and commands reserved
+for the console retain their existing restrictions. Plugin permission nodes use the same groups and retain
+their existing overrides and defaults where the groups have no decision.
+
+Changes are saved to `permission-groups.json` next to `server.properties`. Use `permissiongroup reload`
+after editing it by hand. Other actions are `list`, `delete <group>`, `default -`,
+`unassign <xuid> <group>`, `uninherit <group> <parent>` and `unset <group> <node>`.
+
 ## Privacy
 
 To tell the game's client from unofficial ones, the server asks `api.falcon-mc.com` about each NetherNet

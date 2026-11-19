@@ -41,7 +41,7 @@ namespace {
             return 0;
 
         CommandOrigin *origin = sender(source);
-        ServerPlayer *target = origin->asPlayer();
+        ServerPlayer *target = origin->permissionPlayer();
         if (target != nullptr)
             return permissions().hasPermission(*target, node) ? 1 : 0;
         return (int) origin->getCommandPermission() >= (int) CommandPermission::GameDirectors ? 1 : 0;

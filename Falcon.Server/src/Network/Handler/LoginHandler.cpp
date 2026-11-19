@@ -1421,13 +1421,14 @@ void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlay
     AvailableCommandsPacket availableCommands;
 
     for (Command *command: owner.getCommands().getCommands()) {
-        if ((int) player.getCommandPermission() < (int) command->getRequiredPermission())
+        const auto group = owner.getPluginManager().getPermissions().commandPermission(player, *command);
+        if (!group.value_or(player.getCommandPermission() >= command->getRequiredPermission()))
             continue;
 
         CommandData data;
         data.mName = command->getName();
         data.mDescription = command->getDescription();
-        data.mPermission = command->getRequiredPermission();
+        data.mPermission = group == true ? CommandPermission::Any : command->getRequiredPermission();
         // <name>CommandAliases, the name then its aliases
         if (!command->getAliases().empty()) {
             data.mHasAliases = true;
