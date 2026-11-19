@@ -177,13 +177,44 @@ namespace {
         return type == ContainerSlotType::EnchantingInput || type == ContainerSlotType::EnchantingMaterial;
     }
 
+    bool isEnchantCraft(const ItemStackRequestAction &action) {
+        return (action.mType == ItemStackRequestActionType::CraftRecipe
+                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
+               && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
+    }
+
     bool usesEnchantingTable(const ItemStackRequestAction &action) {
         if (isEnchantingSlot(action.mSource.mContainerName.mContainer)
             || isEnchantingSlot(action.mDestination.mContainerName.mContainer))
             return true;
 
-        return action.mType == ItemStackRequestActionType::CraftRecipe
-               && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
+        return isEnchantCraft(action);
+    }
+
+    bool craftsEnchant(const ItemStackRequest &request) {
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (isEnchantCraft(action))
+                return true;
+        }
+        return false;
+    }
+
+    // an option belongs to the player it was sent to and to the item then in the table: not another player's
+    // net id, nor an item swapped in by an earlier action of the same request
+    bool takesForeignEnchant(const InventoryManager &manager, const PlayerInventory &inventory,
+                             const ItemStackRequest &request) {
+        const ItemStack *input = inventory.resolveSlot(ContainerSlotType::EnchantingInput, 0);
+        bool inputMoved = false;
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (isEnchantCraft(action)
+                && (inputMoved || input == nullptr || !manager.offersEnchant(action.mRecipeNetworkId, *input)))
+                return true;
+
+            if (action.mSource.mContainerName.mContainer == ContainerSlotType::EnchantingInput
+                || action.mDestination.mContainerName.mContainer == ContainerSlotType::EnchantingInput)
+                inputMoved = true;
+        }
+        return false;
     }
 
     // the enchanting table's two slots and the beacon's payment live in the player inventory: nothing else gives
@@ -601,6 +632,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         }
 
         if (leftContainer || renumberedBundles || strayEnchanting || lockedRecipe
+            || takesForeignEnchant(manager, inventory, request)
             || (creativeCraft && gameType != (int32_t) GameType::Creative)
             || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
@@ -655,6 +687,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                                  cartographyLock.mCopyId)
                        != nullptr)
             manager.setClientMapLock(CartographyLock());
+
+        // the item is enchanted now: its other options go with it, the next ones are rolled for what it became
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && craftsEnchant(request))
+            manager.clearEnchantOptions();
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && enchantLevelsConsumed > 0) {
             player.getExperience().subtractXpLevels(enchantLevelsConsumed);
@@ -799,6 +835,11 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
     if (!current.isAir())
         packet.mOptions = EnchantmentHelper::getEnchantOptions(
                 owner.getLevelFor(player), manager.getContainerPosition(), current, manager.getEnchantSeed());
+
+    std::vector<int32_t> offered;
+    for (const EnchantOptionData &option: packet.mOptions)
+        offered.push_back(option.mEnchantNetId);
+    manager.setEnchantOptions(std::move(offered));
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
 }
