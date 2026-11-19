@@ -1,6 +1,7 @@
 #include "World/Actor/Movement/ActorPushSystem.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Misc/PaintingActor.h"
 #include "World/Actor/Movement/PushableByEntity.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -27,6 +28,8 @@ namespace {
 }
 
 AxisAlignedBB ActorPushSystem::boundingBoxOf(const ServerActor &actor) {
+    if (const auto *painting = dynamic_cast<const PaintingActor *>(&actor))
+        return painting->getPaintingBounds();
     const ActorSize size = actor.getSize();
     return boxAround(actor.getPosition(), size.mWidth, size.mHeight);
 }
