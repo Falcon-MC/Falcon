@@ -35,6 +35,38 @@ namespace nethernet {
         close();
     }
 
+    std::string Connection::hostOfEndpoint(const std::string &endpoint) {
+        // "host:port" with a bare IPv6 host: the port follows the last colon
+        const size_t colon = endpoint.rfind(':');
+        if (colon == std::string::npos || colon == 0)
+            return std::string();
+
+        std::string host = endpoint.substr(0, colon);
+        // an IPv4 peer seen through a dual-stack socket is the same host as its plain form
+        static const std::string MAPPED = "::ffff:";
+        if (host.compare(0, MAPPED.size(), MAPPED) == 0 && host.find('.') != std::string::npos)
+            host.erase(0, MAPPED.size());
+        return host;
+    }
+
+    void Connection::resolveRemoteAddress() {
+        std::shared_ptr<rtc::PeerConnection> peerConnection;
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            peerConnection = mPeerConnection;
+        }
+        if (peerConnection == nullptr)
+            return;
+
+        const std::optional<std::string> endpoint = peerConnection->remoteAddress();
+        const std::string host = endpoint.has_value() ? hostOfEndpoint(endpoint.value()) : std::string();
+        if (host.empty())
+            return;
+
+        std::lock_guard<std::mutex> lock(mMutex);
+        mId.setRemoteAddress(host);
+    }
+
     std::string Connection::getRemoteCandidates() const {
         std::lock_guard<std::mutex> lock(mMutex);
         return mRemoteCandidates;
@@ -324,14 +356,17 @@ namespace nethernet {
     }
 
     void Connection::_fail(const std::string &reason) {
+        std::string name;
         {
             std::lock_guard<std::mutex> lock(mMutex);
 
             if (mClosed)
                 return;
+            // read under the lock: the address is filled in from another thread
+            name = mId.toString();
         }
 
-        LOG_WARN(LogAreaID::Network, "NetherNet connection %s failed: %s", mId.toString().c_str(), reason.c_str());
+        LOG_WARN(LogAreaID::Network, "NetherNet connection %s failed: %s", name.c_str(), reason.c_str());
         close();
     }
 

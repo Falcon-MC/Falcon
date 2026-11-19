@@ -692,6 +692,9 @@ void NetherNetInstance::runEvents() {
         connection->close();
 
     for (const std::shared_ptr<nethernet::Connection> &connection: ready) {
+        // channels are open, so the ICE pair is chosen: bans and logs go by where the packets come from,
+        // not by the network id the peer picked for itself
+        connection->resolveRemoteAddress();
         const NetworkIdentifier &id = connection->getNetworkIdentifier();
 
         if (mConnectionInspector && !mUnofficialClientsAllowed) {

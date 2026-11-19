@@ -33,7 +33,12 @@ public:
 
     const RakNet::SystemAddress &getSystemAddress() const { return mSystemAddress; }
 
+    // a NetherNet peer names its own network id: once its transport is up this is the host its packets
+    // come from instead
     std::string getAddress() const;
+
+    // never part of the identity: two identifiers of one connection stay equal before and after
+    void setRemoteAddress(const std::string &address);
 
     size_t getHash() const;
 
@@ -47,6 +52,7 @@ private:
     RakNet::RakNetGUID mGuid;
     RakNet::SystemAddress mSystemAddress;
     std::string mNetworkID;
+    std::string mRemoteAddress;
     unsigned long long mConnectionID;
     Type mType;
 };

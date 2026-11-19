@@ -42,6 +42,12 @@ namespace nethernet {
 
         const NetworkIdentifier &getNetworkIdentifier() const { return mId; }
 
+        // gives the identifier the host of the chosen ICE pair; nothing changes until a pair is chosen
+        void resolveRemoteAddress();
+
+        // host of an endpoint as the ICE agent prints it, empty when it holds none
+        static std::string hostOfEndpoint(const std::string &endpoint);
+
         // the certificate the peer announced in its offer, as written there
         const std::string &getRemoteFingerprint() const { return mRemoteFingerprint; }
 
