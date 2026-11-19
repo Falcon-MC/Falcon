@@ -66,6 +66,9 @@ public:
 
     static void handleTeleport(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    // after every player's tick: what the players waiting for their spawn chunks left of the generation slots
+    static void loadDeferred(ServerNetworkHandler &owner, ServerPlayer &player);
+
     static void handleViewDistanceChange(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void invalidateChunk(ServerPlayer &player, int64_t hash);

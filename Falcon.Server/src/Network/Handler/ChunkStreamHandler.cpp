@@ -618,12 +618,21 @@ void ChunkStreamHandler::tick(ServerNetworkHandler &owner, ServerPlayer &player)
     const int32_t attempts = player.hasSpawnChunksReady()
                                      ? (int32_t) owner.getChunksPerTick()
                                      : std::max((int32_t) owner.getChunksPerTick(), (int32_t) SPAWN_CHUNK_COUNT);
-    loadQueuedChunks(state, owner, player, attempts);
+    // generation admission goes first come: a spawned view loading its edge would take the slots a spawn waits on
+    if (!player.hasSpawnChunksReady() || !owner.hasPlayersAwaitingTerrain())
+        loadQueuedChunks(state, owner, player, attempts);
     sendReadyChunks(state, owner, player);
     if (clientSideGeneration)
         recheckClientBuilt(state, owner, player);
 
     player.setLastChunkPosition(state.mComparatorChunkX, state.mComparatorChunkZ);
+}
+
+void ChunkStreamHandler::loadDeferred(ServerNetworkHandler &owner, ServerPlayer &player) {
+    if (!player.hasSpawnChunksReady() || !owner.hasPlayersAwaitingTerrain())
+        return;
+
+    loadQueuedChunks(player.getChunkStreamState(), owner, player, (int32_t) owner.getChunksPerTick());
 }
 
 void ChunkStreamHandler::handleTeleport(ServerNetworkHandler &owner, ServerPlayer &player) {

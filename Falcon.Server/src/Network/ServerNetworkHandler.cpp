@@ -920,6 +920,7 @@ void ServerNetworkHandler::tick(bool paused) {
             }
             player.getAcknowledgements().flush(*this, entry.first);
         }
+        _loadDeferredChunks();
         return;
     }
 
@@ -1009,6 +1010,10 @@ void ServerNetworkHandler::tick(bool paused) {
         _tickPlayer(entry.second);
     }
     mProfiler.endSection(ProfilerSection::Players);
+
+    mProfiler.beginSection(ProfilerSection::ChunkStreaming);
+    _loadDeferredChunks();
+    mProfiler.endSection(ProfilerSection::ChunkStreaming);
 
     mProfiler.beginSection(ProfilerSection::BlockActors);
     for (Level *level: getLevels())
@@ -1150,13 +1155,26 @@ void ServerNetworkHandler::tick(bool paused) {
 void ServerNetworkHandler::_updateJoinBurst() {
     // bounded in time: a client stalling before its spawn must not slow the others for good
     mJoinBurst = false;
+    mAwaitingTerrain = false;
     for (const auto &entry: mPlayers) {
         const ServerPlayer &player = entry.second;
+        if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition()
+            && !player.hasSpawnChunksReady())
+            mAwaitingTerrain = true;
         if (player.getLoginState() >= ServerPlayer::LoginState::LoggedIn && !player.hasSpawnChunksReady()
-            && mCurrentTick - player.getLoggedInTick() < JOIN_BURST_TICKS) {
+            && mCurrentTick - player.getLoggedInTick() < JOIN_BURST_TICKS)
             mJoinBurst = true;
-            return;
-        }
+    }
+}
+
+void ServerNetworkHandler::_loadDeferredChunks() {
+    if (!mAwaitingTerrain)
+        return;
+
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (player.getLoginState() >= ServerPlayer::LoginState::StartGameSent && player.hasChunkPosition())
+            ChunkStreamHandler::loadDeferred(*this, player);
     }
 }
 

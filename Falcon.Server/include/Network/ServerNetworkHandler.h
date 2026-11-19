@@ -155,6 +155,11 @@ public:
         return mJoinBurst;
     }
 
+    // a player is still waiting for its spawn chunks: the others' generation requests wait for theirs
+    bool hasPlayersAwaitingTerrain() const {
+        return mAwaitingTerrain;
+    }
+
     uint64_t getChunkStreamTick() const {
         return mChunkStreamTick;
     }
@@ -926,6 +931,8 @@ public:
 
     void _sendChunks(ServerPlayer &player);
 
+    void _loadDeferredChunks();
+
     void _handleFallDamage(ServerPlayer &player, const Block *supportBlock = nullptr);
 
     void _disconnect(const NetworkIdentifier &id, DisconnectReason reason, const std::string &message);
@@ -1367,6 +1374,7 @@ private:
     int64_t mPlayerIdleTimeoutTicks = 0;
     uint64_t mChunkStreamTick = 0;
     bool mJoinBurst = false;
+    bool mAwaitingTerrain = false;
     static const int64_t JOIN_BURST_TICKS = 200;
     static const uint64_t CHUNK_PACKET_EXPIRY_INTERVAL = 20;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
