@@ -73,6 +73,7 @@ namespace {
     const char *const TAG_SITTING = "Sitting";
     const char *const TAG_HOME = "HomePos";
     const float DEFAULT_MOVEMENT_SPEED = 0.25f;
+    const float DEFAULT_FOLLOW_RANGE = 16.0f;
     const int32_t LOVE_TICKS = 600;
     const int32_t BREED_COOLDOWN_TICKS = 6000;
     const float DEFAULT_AGEABLE_SECONDS = 1200.0f;
@@ -2432,6 +2433,12 @@ std::vector<std::string> MobActor::getFamilies() const {
 
 float MobActor::getMovementSpeed() const {
     return _rolledValue(getComponent("minecraft:movement"), mRolledMovementSpeed, DEFAULT_MOVEMENT_SPEED);
+}
+
+float MobActor::getFollowRange() const {
+    const json::Value *component = getComponent("minecraft:follow_range");
+    const json::Value *value = component == nullptr ? nullptr : component->get("value");
+    return value == nullptr ? DEFAULT_FOLLOW_RANGE : (float) value->number(DEFAULT_FOLLOW_RANGE);
 }
 
 float MobActor::getJumpStrength() const {

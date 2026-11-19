@@ -115,7 +115,6 @@ namespace {
     const int32_t LOOK_DURATION = 60;
     const char *const IS_TARGET_FILTER = "{\"test\":\"is_target\",\"subject\":\"other\"}";
 
-    const float TARGET_DEFAULT_RANGE = 16.0f;
     const int32_t TICKS_PER_SECOND = 20;
     const float MELEE_ATTACK_RANGE_SQUARED = 2.5f;
     const float MELEE_NO_ATTACK = -1.0f;
@@ -324,8 +323,7 @@ namespace {
         if (radius > 0.0f)
             return radius;
 
-        const json::Value *followRange = mob.getComponent("minecraft:follow_range");
-        return followRange == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*followRange, "value", TARGET_DEFAULT_RANGE);
+        return mob.getFollowRange();
     }
 
     float rangeValue(const json::Value &component, const char *key, const char *field, float fallback) {
@@ -492,8 +490,7 @@ namespace {
     }
 
     float followRange(const MobActor &mob) {
-        const json::Value *follow = mob.getComponent("minecraft:follow_range");
-        return follow == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*follow, "value", TARGET_DEFAULT_RANGE);
+        return mob.getFollowRange();
     }
 
     float attackReachSquared(const MobActor &mob) {

@@ -226,6 +226,9 @@ public:
     // the game overrides the movement attribute of a few mobs
     virtual float getMovementSpeed() const;
 
+    // how far its targets are kept: minecraft:follow_range, 16 without it; the game sets a few mobs' in code
+    virtual float getFollowRange() const;
+
     bool hasComponentGroup(const std::string &group) const;
 
     void addComponentGroup(const std::string &group);
