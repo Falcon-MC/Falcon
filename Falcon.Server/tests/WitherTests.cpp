@@ -100,6 +100,13 @@ namespace {
         return ActorDamageSource::environment("death.attack.generic", "Wither").withoutArmor().withoutCooldown();
     }
 
+    // the armor below half health only stops a hit from an arrow
+    ActorDamageSource arrowHit(Arena &arena) {
+        ServerActor *arrow = arena.mOwner.spawnActor(*arena.mLevel, "minecraft:arrow", Vector3f(0.5f, 140.0f, 0.5f));
+        require(dynamic_cast<ArrowActor *>(arrow) != nullptr, "no arrow to shoot the wither with");
+        return generic().asProjectile().withDamager(arrow);
+    }
+
     void summon(Arena &arena) {
         const Vector3i top(-20, 102, -20);
         buildT(arena, top, 2);
@@ -166,11 +173,18 @@ namespace {
         for (int32_t tick = 0; tick < 40 && wither.getNoDamageTicks() > 0; ++tick)
             owner.tickActors();
         require(wither.getNoDamageTicks() == 0, "the hurt cooldown never ended");
-        require(!wither.hurt(owner, 5.0f, generic().asProjectile()), "a projectile hurt the armored wither");
+        require(!wither.hurt(owner, 5.0f, arrowHit(arena)), "an arrow hurt the armored wither");
 
-        const float before = wither.getHealth();
+        float before = wither.getHealth();
         require(wither.hurt(owner, 5.0f, generic()), "a melee blow was refused below half health");
         require(wither.getHealth() < before, "a melee blow dealt nothing below half health");
+
+        // any projectile but an arrow still goes through
+        for (int32_t tick = 0; tick < 40 && wither.getNoDamageTicks() > 0; ++tick)
+            owner.tickActors();
+        before = wither.getHealth();
+        require(wither.hurt(owner, 5.0f, generic().asProjectile()), "a projectile other than an arrow was refused");
+        require(wither.getHealth() < before, "a projectile other than an arrow dealt nothing");
     }
 
     void saveAndLoad(Arena &arena, WitherActor &wither) {
@@ -192,8 +206,8 @@ namespace {
 
         // a reloaded wither past its frames does not start them again
         arena.mOwner.tickActors();
-        require(!loaded->hurt(arena.mOwner, 5.0f, generic().asProjectile()),
-                "the reloaded wither below half health took a projectile");
+        require(!loaded->hurt(arena.mOwner, 5.0f, arrowHit(arena)),
+                "the reloaded wither below half health took an arrow");
         require(loaded->hurt(arena.mOwner, 5.0f, generic()), "the reloaded wither restarted its spawn frames");
         loaded->kill(arena.mOwner);
     }
@@ -208,6 +222,24 @@ namespace {
         for (int32_t tick = 0; tick < WitherActor::DEATH_FRAMES / 2 + 10; ++tick)
             arena.mOwner.tickActors();
         require(arena.mOwner.getActors().count(id) == 0, "the wither stayed after its death frames");
+    }
+
+    void blocksItBreaks() {
+        for (const char *identifier:
+             {"minecraft:bedrock", "minecraft:invisible_bedrock", "minecraft:end_portal", "minecraft:end_portal_frame",
+              "minecraft:command_block", "minecraft:repeating_command_block", "minecraft:chain_command_block",
+              "minecraft:barrier", "minecraft:border_block", "minecraft:allow", "minecraft:deny",
+              "minecraft:chalkboard", "minecraft:camera", "minecraft:structure_block", "minecraft:structure_void",
+              "minecraft:reinforced_deepslate"}) {
+            const Block *block = VanillaBlocks::fromIdentifier(identifier);
+            require(block != nullptr && block->resistsWither(false) && block->resistsWither(true),
+                    std::string("the wither breaks ") + identifier);
+        }
+        const Block *obsidian = VanillaBlocks::fromIdentifier(BlockNames::OBSIDIAN);
+        require(obsidian != nullptr && obsidian->resistsWither(true), "obsidian gave way to the charge");
+        require(!obsidian->resistsWither(false), "obsidian held when the wither was hurt");
+        const Block *stone = VanillaBlocks::fromIdentifier("minecraft:stone");
+        require(stone != nullptr && !stone->resistsWither(true), "stone held against the wither");
     }
 
     void skullRotation(Arena &arena) {
@@ -379,6 +411,7 @@ int main() {
         halfHealth(arena, *wither);
         saveAndLoad(arena, *wither);
         death(arena, *wither);
+        blocksItBreaks();
         skullRotation(arena);
         dispenser(arena);
         skullExplodesAfterHit(arena);

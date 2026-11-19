@@ -29,6 +29,11 @@ public:
         return true;
     }
 
+    bool resistsWither(bool charging) const override {
+        (void) charging;
+        return true;
+    }
+
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;
 

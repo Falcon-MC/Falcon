@@ -151,7 +151,7 @@ private:
     void _setHeadTarget(ServerNetworkHandler &owner, int32_t head, uint64_t runtimeId);
 
     void _breakBlocks(ServerNetworkHandler &owner, Level &level, const AxisAlignedBB &area, int32_t inflate,
-                      bool obsidian);
+                      bool charging);
 
     void _hurtCharged(ServerNetworkHandler &owner, Level &level);
 
@@ -221,7 +221,6 @@ private:
 
     // the damage each player dealt, by runtime id
     std::unordered_map<uint64_t, int32_t> mDamageDealt;
-    float mHealthBeforeHurt = 0.0f;
 
     int32_t mDeathFlashInterval = 15;
     uint64_t mKillerRuntimeId = 0;

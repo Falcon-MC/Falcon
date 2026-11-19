@@ -86,36 +86,10 @@ namespace {
     const int32_t SPAWN_NO_DAMAGE_TICKS = 200;
     const int32_t SKELETON_NO_DAMAGE_TICKS = 60;
 
-    // blocks no hit or charge breaks; obsidian only holds against the charge
-    const char *const UNBREAKABLE_BLOCKS[] = {"minecraft:bedrock",
-                                              "minecraft:end_portal",
-                                              "minecraft:end_portal_frame",
-                                              "minecraft:command_block",
-                                              "minecraft:repeating_command_block",
-                                              "minecraft:chain_command_block",
-                                              "minecraft:barrier",
-                                              "minecraft:invisible_bedrock",
-                                              "minecraft:border_block",
-                                              "minecraft:allow",
-                                              "minecraft:deny",
-                                              "minecraft:chalkboard",
-                                              "minecraft:camera",
-                                              "minecraft:structure_block",
-                                              "minecraft:structure_void",
-                                              "minecraft:reinforced_deepslate"};
-
     using VectorMath::wrapDegrees;
 
     float clampf(float value, float minimum, float maximum) {
         return std::max(minimum, std::min(maximum, value));
-    }
-
-    bool canBreak(const std::string &name, bool obsidian) {
-        for (const char *unbreakable: UNBREAKABLE_BLOCKS) {
-            if (name == unbreakable)
-                return false;
-        }
-        return obsidian || name != "minecraft:obsidian";
     }
 
     // the game aims at the actor's position, a player's being its eyes
@@ -394,7 +368,7 @@ void WitherActor::_serverAiStep(ServerNetworkHandler &owner, Level &level) {
     _tickHeads(owner, level, target, shoots);
 
     if (mBlockBreakTicks > 0 && --mBlockBreakTicks == 0)
-        _breakBlocks(owner, level, ActorPushSystem::boundingBoxOf(*this), 1, true);
+        _breakBlocks(owner, level, ActorPushSystem::boundingBoxOf(*this), 1, false);
 
     if (mAerialAttackTicks > 0 && --mAerialAttackTicks == 0) {
         if (mAirAttack) {
@@ -505,7 +479,7 @@ void WitherActor::_tickHeads(ServerNetworkHandler &owner, Level &level, Actor *t
 }
 
 void WitherActor::_tickCharge(ServerNetworkHandler &owner, Level &level) {
-    _breakBlocks(owner, level, ActorPushSystem::boundingBoxOf(*this), 2, false);
+    _breakBlocks(owner, level, ActorPushSystem::boundingBoxOf(*this), 2, true);
     _hurtCharged(owner, level);
 }
 
@@ -607,7 +581,7 @@ void WitherActor::_setHeadTarget(ServerNetworkHandler &owner, int32_t head, uint
 }
 
 void WitherActor::_breakBlocks(ServerNetworkHandler &owner, Level &level, const AxisAlignedBB &area, int32_t inflate,
-                               bool obsidian) {
+                               bool charging) {
     if (!level.getGameRules().getBool(GRIEFING_RULE))
         return;
 
@@ -616,7 +590,10 @@ void WitherActor::_breakBlocks(ServerNetworkHandler &owner, Level &level, const 
         for (int32_t z = (int32_t) area.mMinZ - inflate; z <= (int32_t) area.mMaxZ + inflate; ++z) {
             for (int32_t y = (int32_t) area.mMinY - inflate; y <= (int32_t) area.mMaxY + inflate; ++y) {
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                if (state == nullptr || state->mName == BlockNames::AIR || !canBreak(state->mName, obsidian))
+                if (state == nullptr || state->mName == BlockNames::AIR)
+                    continue;
+                const Block *block = VanillaBlocks::fromState(*state);
+                if (block != nullptr && block->resistsWither(charging))
                     continue;
 
                 const BlockState broken = *state;
@@ -639,31 +616,31 @@ bool WitherActor::senseDamage(ServerNetworkHandler &owner, float &amount, const 
     if (DamageCause::matches("fall", source) || DamageCause::matches("drowning", source))
         return false;
 
-    const Actor *responsible = responsibleOf(owner, source);
+    Actor *responsible = responsibleOf(owner, source);
     if (dynamic_cast<const WitherActor *>(responsible) != nullptr && !DamageCause::matches("self_destruct", source))
         return false;
 
-    const bool attack = DamageCause::matches("entity_attack", source);
-    ServerPlayer *player = dynamic_cast<ServerPlayer *>(source.mAttacker);
-    if (attack && mSpawningFrames > 0 && player != nullptr) {
+    // any mob or player hitting it while it spawns is pushed back
+    const bool mob = responsible != nullptr && (responsible->isPlayer() || dynamic_cast<MobActor *>(responsible));
+    if (DamageCause::matches("entity_attack", source) && mSpawningFrames > 0 && mob) {
         // the game feeds the height difference in place of the z one
         const Vector3f position = getPosition();
-        const Vector3f other = aimPosition(*player);
-        owner.knockBack(*player, other.x - position.x, other.y - position.y, 0.4f, 0.4f);
+        const Vector3f other = aimPosition(*responsible);
+        owner.knockBack(*responsible, other.x - position.x, other.y - position.y, 0.4f, 0.4f);
     }
 
     if (mInvulnerableTicks > 0 && !DamageCause::matches("void", source))
         return false;
 
-    // below half health its armor stops every projectile
-    if (!mAirAttack && (source.mProjectile || DamageCause::matches("projectile", source)))
+    // below half health its armor stops arrows; tridents and other projectiles still hurt it
+    const bool arrow = dynamic_cast<ArrowActor *>(source.mDamager) != nullptr
+                       && dynamic_cast<ThrownTridentActor *>(source.mDamager) == nullptr;
+    if (!mAirAttack && arrow && (source.mProjectile || DamageCause::matches("projectile", source)))
         return false;
 
-    if (!HostileActor::senseDamage(owner, amount, source))
-        return false;
-
-    if (player != nullptr)
-        _addDamage(player, amount);
+    // all of this before the hit is weighed, as the game does: a hit its damage sensor then refuses still counts
+    if (responsible != nullptr && responsible->isPlayer())
+        _addDamage(responsible, amount);
 
     WitherSkullActor *skull = dynamic_cast<WitherSkullActor *>(source.mDamager);
     if (skull != nullptr && !skull->isDangerous())
@@ -674,13 +651,11 @@ bool WitherActor::senseDamage(ServerNetworkHandler &owner, float &amount, const 
     for (int32_t &updates: mIdleHeadUpdates)
         updates += 3;
 
-    mHealthBeforeHurt = getHealth();
-    return true;
+    return HostileActor::senseDamage(owner, amount, source);
 }
 
 void WitherActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     HostileActor::onDamaged(owner, attacker);
-    const float dealt = mHealthBeforeHurt - getHealth();
     const int32_t health = (int32_t) getHealth();
 
     // every sixth of its health lost halves the fire rate
@@ -708,9 +683,6 @@ void WitherActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     if (attacker == target
         && (!canSee(owner, *attacker) || distanceSquaredTo(*attacker) > mHeadRange * mHeadRange))
         mAerialAttackTicks = 1;
-
-    if (attacker->isPlayer() && dealt > 0.0f)
-        _addDamage(attacker, dealt);
 }
 
 void WitherActor::_addDamage(const Actor *attacker, float amount) {

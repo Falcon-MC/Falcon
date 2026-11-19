@@ -15,5 +15,10 @@ public:
 
     int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
 
+    bool resistsWither(bool charging) const override {
+        (void) charging;
+        return true;
+    }
+
     static bool tryCompletePortal(Level &level, const Vector3i &framePosition, ServerNetworkHandler *owner);
 };
