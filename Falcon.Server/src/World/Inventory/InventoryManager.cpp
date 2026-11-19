@@ -19,6 +19,7 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/StonecutterRecipes.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/EnchantmentHelper.h"
 #include "World/Item/FurnaceExperience.h"
 #include "World/Inventory/CraftingManager.h"
 #include "World/Level/Level.h"
@@ -1313,6 +1314,27 @@ bool InventoryManager::refreshEnchantInput(const ItemStack &current, int32_t new
     return true;
 }
 
+void InventoryManager::setEnchantOptions(std::vector<int32_t> enchantNetIds) {
+    EnchantmentHelper::discardOptions(mEnchantOptionIds);
+    mEnchantOptionIds = std::move(enchantNetIds);
+}
+
+bool InventoryManager::offersEnchant(int32_t enchantNetId, const ItemStack &input) const {
+    if (std::find(mEnchantOptionIds.begin(), mEnchantOptionIds.end(), enchantNetId) == mEnchantOptionIds.end())
+        return false;
+
+    return !input.isAir() && input.mDefinition != nullptr && input.mDefinition->getIdentifier() == mEnchantInputId
+           && input.mCount == mEnchantInputCount && input.mDamage == mEnchantInputDamage;
+}
+
+void InventoryManager::clearEnchantOptions() {
+    setEnchantOptions({});
+    // the next item put in the table is a new one, even the same kind: its options are rolled again
+    mEnchantInputId.clear();
+    mEnchantInputCount = 0;
+    mEnchantInputDamage = 0;
+}
+
 void InventoryManager::refreshOpenContainer(const Vector3i &position) {
     if (mContainerWindowId == CONTAINER_ID_NONE || mContainerActorId != -1 || !(mContainerPosition == position))
         return;
@@ -1454,6 +1476,7 @@ void InventoryManager::refreshEntityContainer(int64_t actorId) {
 
 // the entity container window fires entityContainerClosed, a block one closes its block actor
 void InventoryManager::_closeContainerWindow() {
+    clearEnchantOptions();
     if (mContainerActorId == -1) {
         _closeBlockContainer();
         return;

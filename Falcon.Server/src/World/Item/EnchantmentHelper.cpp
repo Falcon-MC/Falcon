@@ -518,3 +518,8 @@ bool EnchantmentHelper::takeOption(int32_t enchantNetId, std::vector<Enchantment
     recipeMap().erase(found);
     return true;
 }
+
+void EnchantmentHelper::discardOptions(const std::vector<int32_t> &enchantNetIds) {
+    for (const int32_t enchantNetId: enchantNetIds)
+        recipeMap().erase(enchantNetId);
+}

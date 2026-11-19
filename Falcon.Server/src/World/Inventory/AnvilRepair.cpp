@@ -410,6 +410,18 @@ int32_t AnvilRepair::getRepairCost(const ItemStack &item) {
     return item.mTag.getInt(TAG_REPAIR_COST, 0);
 }
 
+bool AnvilRepair::isTypedName(const std::string &name) {
+    size_t characters = 0;
+    for (const unsigned char byte: name) {
+        if (byte < 0x20 || byte == 0x7f)
+            return false;
+        // UTF-8 continuation bytes belong to the character before them
+        if ((byte & 0xc0) != 0x80)
+            ++characters;
+    }
+    return characters <= MAX_NAME_LENGTH;
+}
+
 bool AnvilRepair::hasCustomName(const ItemStack &item) {
     if (item.isAir() || !item.mTag.isCompound())
         return false;

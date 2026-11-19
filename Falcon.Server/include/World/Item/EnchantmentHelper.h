@@ -37,4 +37,6 @@ namespace EnchantmentHelper {
     bool takeOption(int32_t enchantNetId, std::vector<EnchantmentInstance> &outEnchantments, int32_t &outConsumeCost,
                     int32_t &outRequiredLevel);
 
+    void discardOptions(const std::vector<int32_t> &enchantNetIds);
+
 }

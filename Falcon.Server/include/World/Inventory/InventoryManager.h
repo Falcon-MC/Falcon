@@ -222,6 +222,14 @@ public:
 
     bool refreshEnchantInput(const ItemStack &current, int32_t newSeed);
 
+    // the options last sent to this player: the only ones it may take, and the earlier ones are dropped
+    void setEnchantOptions(std::vector<int32_t> enchantNetIds);
+
+    // false for another player's option, and once the item the options were rolled for left the table
+    bool offersEnchant(int32_t enchantNetId, const ItemStack &input) const;
+
+    void clearEnchantOptions();
+
     int32_t getEnchantSeed() const {
         return mEnchantSeed;
     }
@@ -329,6 +337,7 @@ private:
     int32_t mEnchantInputCount = 0;
     int32_t mEnchantInputDamage = 0;
     int32_t mEnchantSeed = 0;
+    std::vector<int32_t> mEnchantOptionIds;
     int mFurnaceWindowId;
     Vector3i mFurnacePosition;
     FurnaceKind mFurnaceKind;
