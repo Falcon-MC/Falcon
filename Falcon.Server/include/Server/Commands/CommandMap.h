@@ -19,8 +19,12 @@ public:
 
     std::vector<Command *> getCommands() const;
 
+    std::vector<std::string> complete(const std::string &line, const std::vector<std::string> &playerNames,
+                                      size_t &replacementStart) const;
+
     // starts: where each token begins in the line, for a command that needs the text behind one untouched
-    static std::vector<std::string> tokenize(const std::string &commandLine, std::vector<size_t> *starts = nullptr);
+    static std::vector<std::string> tokenize(const std::string &commandLine, std::vector<size_t> *starts = nullptr,
+                                             bool *endsInToken = nullptr);
 
 private:
 

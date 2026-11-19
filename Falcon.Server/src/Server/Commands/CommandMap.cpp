@@ -45,7 +45,8 @@ Command *CommandMap::getCommand(const std::string &name) const {
     return it == mByName.end() ? nullptr : it->second;
 }
 
-std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts) {
+std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts,
+                                              bool *endsInToken) {
     std::vector<std::string> tokens;
     std::string token;
     bool quoted = false;
@@ -105,6 +106,8 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
         started = true;
     }
 
+    if (endsInToken != nullptr)
+        *endsInToken = started;
     if (started) {
         tokens.push_back(token);
         if (starts != nullptr)
@@ -179,4 +182,96 @@ std::vector<Command *> CommandMap::getCommands() const {
         commands.push_back(command.get());
 
     return commands;
+}
+
+std::vector<std::string> CommandMap::complete(const std::string &line, const std::vector<std::string> &playerNames,
+                                              size_t &replacementStart) const {
+    std::vector<size_t> starts;
+    bool endsInToken = false;
+    auto tokens = tokenize(line, &starts, &endsInToken);
+    const bool newArgument = !endsInToken;
+    replacementStart = newArgument || starts.empty() ? line.size() : starts.back();
+    std::string prefix;
+    if (!newArgument && !tokens.empty()) {
+        prefix = std::move(tokens.back());
+        tokens.pop_back();
+    }
+
+    if (tokens.empty() && prefix.starts_with('/')) {
+        prefix.erase(0, 1);
+        ++replacementStart;
+    }
+    const std::string lowered = toLowerCase(prefix);
+    const auto printable = [](const std::string &value) {
+        return std::none_of(value.begin(), value.end(), [](unsigned char byte) {
+            return byte < 32 || byte == 127;
+        });
+    };
+    std::vector<std::string> results;
+    auto collect = [&](const std::string &value) {
+        if (printable(value) && toLowerCase(value).starts_with(lowered))
+            results.push_back(value);
+    };
+
+    if (tokens.empty()) {
+        for (const auto &[name, command]: mByName)
+            collect(name);
+    } else {
+        const std::string &name = tokens.front();
+        const Command *command = getCommand(name.starts_with('/') ? name.substr(1) : name);
+        if (command == nullptr)
+            return {};
+        for (const auto &overload: command->getOverloads()) {
+            size_t token = 1;
+            for (const auto &parameter: overload.mParameters) {
+                const bool position = parameter.mHasType
+                                      && (parameter.mType == CommandParamType::Position
+                                          || parameter.mType == CommandParamType::BlockPosition);
+                const bool identifier = parameter.mHasEnumData
+                                        && (parameter.mEnumData.mName == "Item" || parameter.mEnumData.mName == "Block");
+                if (token >= tokens.size()) {
+                    if (parameter.mHasEnumData) {
+                        for (const auto &value: parameter.mEnumData.mValues) {
+                            collect(value);
+                            if (identifier && lowered.starts_with("minecraft:") && value.find(':') == std::string::npos)
+                                collect("minecraft:" + value);
+                        }
+                    }
+                    if (parameter.mHasType && (parameter.mType == CommandParamType::Target
+                                               || parameter.mType == CommandParamType::WildcardTarget)) {
+                        for (const auto &player: playerNames) {
+                            if (!printable(player) || !toLowerCase(player).starts_with(lowered))
+                                continue;
+                            if (player.find_first_of(" \t\"\\") == std::string::npos) {
+                                results.push_back(player);
+                                continue;
+                            }
+                            std::string quoted = "\"";
+                            for (const char byte: player) {
+                                if (byte == '"' || byte == '\\')
+                                    quoted += '\\';
+                                quoted += byte;
+                            }
+                            results.push_back(quoted + '"');
+                        }
+                        for (const char *selector: {"@a", "@e", "@p", "@r", "@s"})
+                            collect(selector);
+                    }
+                    break;
+                }
+                if (parameter.mHasEnumData && !identifier) {
+                    const auto &values = parameter.mEnumData.mValues;
+                    if (std::find(values.begin(), values.end(), tokens[token]) == values.end())
+                        break;
+                }
+                token += position ? 3 : 1;
+                if (token > tokens.size())
+                    break;
+            }
+        }
+    }
+
+    std::sort(results.begin(), results.end());
+    results.erase(std::unique(results.begin(), results.end()), results.end());
+    return results;
 }

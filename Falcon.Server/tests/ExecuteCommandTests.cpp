@@ -52,6 +52,22 @@ namespace {
                 level.insertChunk(LevelChunk(x, z)).setPopulated(true);
         }
 
+        size_t start = 0;
+        const auto includes = [](const std::vector<std::string> &values, const std::string &name) {
+            return std::find(values.begin(), values.end(), name) != values.end();
+        };
+        const auto &commands = owner.getCommands();
+        require(includes(commands.complete("/wo", {}, start), "world") && start == 1,
+                "console did not complete a command after the slash");
+        require(includes(commands.complete("world lo", {}, start), "load") && start == 6,
+                "console did not complete a subcommand");
+        require(includes(commands.complete("give Ale", {"Alex Stone"}, start), "\"Alex Stone\""),
+                "console did not quote a player name");
+        require(includes(commands.complete("give @p", {}, start), "@p"), "console did not complete a selector");
+        require(includes(commands.complete("give @a dia", {}, start), "diamond"), "console did not complete an item");
+        require(includes(commands.complete("setblock ~ ~ ~ minecraft:ston", {}, start), "minecraft:stone"),
+                "console did not complete a block after a position");
+
         ExecuteCommand execute(owner);
 
         // a block test far from any loaded chunk is refused instead of generating the column
