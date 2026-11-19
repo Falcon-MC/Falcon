@@ -37,6 +37,13 @@ public:
 
     static void sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    /** Rebuilds the lookup the two calls below read; it holds until an item is added or erased. */
+    static void indexForViewers(ServerNetworkHandler &owner);
+
+    static void hideIfOutOfView(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId);
+
+    static void showColumnTo(ServerNetworkHandler &owner, ServerPlayer &player, int32_t chunkX, int32_t chunkZ);
+
     static void tickItemActors(ServerNetworkHandler &owner);
 
     static ItemActor *restoreItem(ServerNetworkHandler &owner, Level &level, const Tag &data);

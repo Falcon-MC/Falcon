@@ -1087,6 +1087,7 @@ void ServerNetworkHandler::updateActorVisibility() {
 
     mActorIndexDirty = true;
     _refreshActorIndex();
+    ItemActorHandler::indexForViewers(*this);
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned())
@@ -1098,8 +1099,11 @@ void ServerNetworkHandler::updateActorVisibility() {
         seenIds.assign(visible.begin(), visible.end());
         for (const uint64_t runtimeId: seenIds) {
             ServerActor *actor = getActorByRuntimeId(runtimeId);
-            if (actor == nullptr)
+            if (actor == nullptr) {
+                // dropped items share the set and its ids, not the actor table
+                ItemActorHandler::hideIfOutOfView(*this, player, runtimeId);
                 continue;
+            }
 
             // an autonomous actor stays known once sent, wherever it goes
             const bool kept = actor->isAutonomous() && player.sharesLevelWith(*actor);
@@ -1115,6 +1119,8 @@ void ServerNetworkHandler::updateActorVisibility() {
         const int32_t centreZ = (int32_t) std::floor(position.z) >> 4;
         for (int32_t chunkX = centreX - RANGE_CHUNKS; chunkX <= centreX + RANGE_CHUNKS; chunkX++) {
             for (int32_t chunkZ = centreZ - RANGE_CHUNKS; chunkZ <= centreZ + RANGE_CHUNKS; chunkZ++) {
+                ItemActorHandler::showColumnTo(*this, player, chunkX, chunkZ);
+
                 const auto bucket = mActorIndex.find(_actorIndexKey(chunkX, chunkZ));
                 if (bucket == mActorIndex.end())
                     continue;

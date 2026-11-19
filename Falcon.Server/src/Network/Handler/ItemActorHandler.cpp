@@ -15,6 +15,7 @@
 #include "World/Item/ItemData.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
@@ -29,6 +30,8 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 #include <random>
 #include <string>
@@ -146,10 +149,11 @@ namespace {
         return free;
     }
 
-    void spawnItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
-        if (!player.sharesLevelWith(actor))
-            return;
+    // rebuilt once a tick for the visibility pass; buckets cleared, not freed
+    thread_local std::unordered_map<int64_t, std::vector<ItemActor *>> itemsByColumn;
+    thread_local std::vector<std::pair<uint64_t, ItemActor *>> itemsById;
 
+    void spawnItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
         AddItemActorPacket add;
         add.mUniqueActorId = actor.getUniqueId();
         add.mRuntimeActorId = actor.getRuntimeId();
@@ -194,11 +198,25 @@ add.mMetadata.mEntries.push_back(flags3);
         owner.getNetworkHandler().send(player.getNetworkIdentifier(), add, owner.getCodecContext());
     }
 
+    // sent once, to a client holding the item's chunk, as other actors: moves and removals follow that set
+    void showItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
+        std::unordered_set<uint64_t> &visible = player.getVisibleActors();
+        if (visible.count(actor.getRuntimeId()) != 0 || !owner.canPlayerSeeActor(player, actor))
+            return;
+
+        visible.insert(actor.getRuntimeId());
+        spawnItemActorTo(owner, player, actor);
+    }
+
+    void removeItemActorFrom(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
+        RemoveActorPacket remove;
+        remove.mUniqueActorId = actor.getUniqueId();
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), remove, owner.getCodecContext());
+    }
+
     void broadcastItemActorSpawn(ServerNetworkHandler &owner, const ItemActor &actor) {
-        for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                spawnItemActorTo(owner, entry.second, actor);
-        }
+        for (auto &entry: owner.getPlayers())
+            showItemActorTo(owner, entry.second, actor);
     }
 
     void broadcastItemActorMove(ServerNetworkHandler &owner, const ItemActor &actor, bool teleported = false) {
@@ -211,18 +229,15 @@ add.mMetadata.mEntries.push_back(flags3);
         move.mForceMove = false;
 
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
+            if (entry.second.getVisibleActors().count(actor.getRuntimeId()) != 0)
                 owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), move, owner.getCodecContext());
         }
     }
 
     void broadcastItemActorRemove(ServerNetworkHandler &owner, const ItemActor &actor) {
-        RemoveActorPacket remove;
-        remove.mUniqueActorId = actor.getUniqueId();
-
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), remove, owner.getCodecContext());
+            if (entry.second.getVisibleActors().erase(actor.getRuntimeId()) != 0)
+                removeItemActorFrom(owner, entry.second, actor);
         }
     }
 
@@ -577,7 +592,7 @@ void ItemActorHandler::collect(ServerNetworkHandler &owner, ItemActor &item, con
     take.mRuntimeActorId = collector.getRuntimeId();
 
     for (auto &viewer: owner.getPlayers()) {
-        if (viewer.second.isSpawned() && viewer.second.sharesLevelWith(item))
+        if (viewer.second.getVisibleActors().count(item.getRuntimeId()) != 0)
             owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
     }
 
@@ -618,8 +633,57 @@ void ItemActorHandler::teleport(ServerNetworkHandler &owner, Level &level, ItemA
 void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player) {
     for (const std::unique_ptr<ItemActor> &actor: owner.getItemEntities()) {
         if (!actor->isRemoved())
-            spawnItemActorTo(owner, player, *actor);
+            showItemActorTo(owner, player, *actor);
     }
+}
+
+void ItemActorHandler::indexForViewers(ServerNetworkHandler &owner) {
+    for (auto it = itemsByColumn.begin(); it != itemsByColumn.end();) {
+        if (it->second.empty()) {
+            it = itemsByColumn.erase(it);
+            continue;
+        }
+        it->second.clear();
+        ++it;
+    }
+
+    itemsById.clear();
+    for (const std::unique_ptr<ItemActor> &actor: owner.getItemEntities()) {
+        if (actor->isRemoved())
+            continue;
+
+        const Vector3f &position = actor->getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        itemsByColumn[ChunkStreamHandler::packChunk(chunkX, chunkZ)].push_back(actor.get());
+        itemsById.emplace_back(actor->getRuntimeId(), actor.get());
+    }
+
+    // ids grow along the list: sorted only if something broke that order
+    if (!std::is_sorted(itemsById.begin(), itemsById.end()))
+        std::sort(itemsById.begin(), itemsById.end());
+}
+
+void ItemActorHandler::hideIfOutOfView(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId) {
+    const auto found = std::lower_bound(itemsById.begin(), itemsById.end(), runtimeId,
+                                        [](const std::pair<uint64_t, ItemActor *> &entry, uint64_t id) {
+                                            return entry.first < id;
+                                        });
+    if (found == itemsById.end() || found->first != runtimeId || owner.canPlayerSeeActor(player, *found->second))
+        return;
+
+    player.getVisibleActors().erase(runtimeId);
+    removeItemActorFrom(owner, player, *found->second);
+}
+
+void ItemActorHandler::showColumnTo(ServerNetworkHandler &owner, ServerPlayer &player, int32_t chunkX,
+                                    int32_t chunkZ) {
+    const auto bucket = itemsByColumn.find(ChunkStreamHandler::packChunk(chunkX, chunkZ));
+    if (bucket == itemsByColumn.end())
+        return;
+
+    for (const ItemActor *actor: bucket->second)
+        showItemActorTo(owner, player, *actor);
 }
 
 void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
