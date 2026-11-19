@@ -2,6 +2,7 @@
 
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <algorithm>
@@ -86,9 +87,14 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return false;
     }
 
-    const std::vector<ServerPlayer *> targets = mHandler.resolveTargets(sender, arguments[0]);
+    // any entity the selector names, as the game's target parameter takes: players first
+    std::vector<Actor *> targets;
+    for (ServerPlayer *player: mHandler.resolveTargets(sender, arguments[0]))
+        targets.push_back(player);
+    for (ServerActor *actor: mHandler.resolveActorTargets(sender, arguments[0]))
+        targets.push_back(actor);
     if (targets.empty()) {
-        sender.sendTranslation("commands.generic.player.notFound", {});
+        sender.sendTranslation("commands.generic.noTargetMatch", {});
         return false;
     }
 
@@ -101,7 +107,7 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
         }
 
         int removed = 0;
-        for (ServerPlayer *target: targets) {
+        for (Actor *target: targets) {
             if (clearOne) {
                 removed += target->removeEffect(only) ? 1 : 0;
             } else {
@@ -159,7 +165,7 @@ bool EffectCommand::execute(CommandOrigin &sender, const std::vector<std::string
     instance.mParticles = particles;
 
     int applied = 0;
-    for (ServerPlayer *target: targets)
+    for (Actor *target: targets)
         applied += target->addEffect(instance) ? 1 : 0;
 
     if (applied == 0) {

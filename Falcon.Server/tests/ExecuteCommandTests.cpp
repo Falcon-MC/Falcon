@@ -1,9 +1,12 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/EffectCommand.h"
 #include "Server/Commands/ExecuteCommand.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/MobEffect.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -91,6 +94,21 @@ namespace {
             require(!origin.sent(NO_TARGET), std::string("execute ") + subcommand + " did not find the cow");
             require(origin.sent(OUT_OF_WORLD), std::string("execute ") + subcommand + " did not run for the cow");
         }
+
+        // /effect takes any entity, as the game's target does: a zombie can be kept from burning
+        ServerActor *zombie = owner.spawnActor(level, "minecraft:zombie", Vector3f(4.5f, 100.0f, 0.5f));
+        require(zombie != nullptr, "the zombie did not spawn");
+        EffectCommand effect(owner);
+        RecordingOrigin effectOrigin(&owner);
+        require(effect.execute(effectOrigin, {"@e[type=zombie]", "fire_resistance", "60", "0", "true"}),
+                "effect refused the zombie");
+        require(zombie->hasEffect(MobEffectId::FireResistance), "the zombie got no fire resistance");
+        RecordingOrigin clearOrigin(&owner);
+        require(effect.execute(clearOrigin, {"@e[type=zombie]", "clear"}), "effect clear refused the zombie");
+        require(!zombie->hasEffect(MobEffectId::FireResistance), "effect clear left the zombie's effect");
+        RecordingOrigin noneOrigin(&owner);
+        require(!effect.execute(noneOrigin, {"@e[type=creeper]", "speed"}), "effect ran with no target");
+        require(noneOrigin.sent(NO_TARGET), "an effect without a target was not answered as no target");
     }
 }
 
