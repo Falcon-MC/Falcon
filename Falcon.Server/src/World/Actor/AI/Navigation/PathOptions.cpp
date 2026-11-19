@@ -19,6 +19,8 @@ namespace {
                                                          {"minecraft:navigation.float", NavigationMode::Fly}};
 
     const char *const GLIDE_MOVEMENT_COMPONENT = "minecraft:movement.glide";
+    // the pathfinder no longer needs ground under the path: the wither walks its navigation through the air
+    const char *const CAN_FLY_COMPONENT = "minecraft:can_fly";
     const char *const OPEN_DOOR_ANNOTATION = "minecraft:annotation.open_door";
     const char *const BREAK_DOOR_ANNOTATION = "minecraft:annotation.break_door";
     const char *const FLEE_SUN_BEHAVIOR = "minecraft:behavior.flee_sun";
@@ -111,7 +113,7 @@ PathOptions PathOptions::read(const MobActor &mob) {
         break;
     }
 
-    if (mob.getComponent(GLIDE_MOVEMENT_COMPONENT) != nullptr)
+    if (mob.getComponent(GLIDE_MOVEMENT_COMPONENT) != nullptr || mob.getComponent(CAN_FLY_COMPONENT) != nullptr)
         options.mMode = NavigationMode::Fly;
 
     if (mob.getComponent(OPEN_DOOR_ANNOTATION) != nullptr)

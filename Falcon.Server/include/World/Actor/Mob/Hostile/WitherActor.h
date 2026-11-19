@@ -55,6 +55,9 @@ public:
     // the game sets the movement attribute to 0.6 once the spawn frames are over
     float getMovementSpeed() const override;
 
+    // the follow range attribute the game gives it: 70
+    float getFollowRange() const override;
+
     // the frames run their own course, ending in remove()
     int32_t getDeathDuration() const override {
         return DEATH_FRAMES + 1;

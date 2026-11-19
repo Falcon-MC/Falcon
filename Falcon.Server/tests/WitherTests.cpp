@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
+#include "World/Actor/AI/Navigation/PathOptions.h"
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/Hostile/WitherActor.h"
@@ -136,6 +137,13 @@ namespace {
         arena.mLevel->setBlockState(spoiled.x - 1, spoiled.y - 2, spoiled.z, BlockState("minecraft:stone"));
         require(!WitherActor::trySummon(arena.mOwner, *arena.mLevel, spoiled),
                 "a T with a filled corner summoned a wither");
+    }
+
+    // minecraft:can_fly lets its walk navigation leave the ground, and the game gives it a follow range of 70:
+    // without either it never reaches the point of a dive and loses a player past 16 blocks
+    void flight(WitherActor &wither) {
+        require(PathOptions::read(wither).isVolumetric(), "the wither's navigation keeps to the ground");
+        require(wither.getFollowRange() == 70.0f, "the wither's follow range is not 70");
     }
 
     void spawnFrames(Arena &arena, WitherActor &wither) {
@@ -407,6 +415,7 @@ int main() {
         summon(arena);
         WitherActor *wither = arena.findWither();
         require(wither != nullptr, "no wither after the summon");
+        flight(*wither);
         spawnFrames(arena, *wither);
         halfHealth(arena, *wither);
         saveAndLoad(arena, *wither);

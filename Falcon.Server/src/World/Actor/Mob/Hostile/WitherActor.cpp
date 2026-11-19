@@ -170,6 +170,10 @@ float WitherActor::getMovementSpeed() const {
     return MOVEMENT_SPEED;
 }
 
+float WitherActor::getFollowRange() const {
+    return FOLLOW_RANGE;
+}
+
 void WitherActor::finalizeSpawn() {
     HostileActor::finalizeSpawn();
     mSpawnPending = true;
