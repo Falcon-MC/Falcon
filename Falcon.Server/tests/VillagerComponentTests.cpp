@@ -4,6 +4,7 @@
 #include "World/Actor/AI/Navigation/NodeEvaluator.h"
 #include "World/Actor/AI/Navigation/PathOptions.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Movement/BandwidthOptimization.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/PlayerInventory.h"
@@ -145,6 +146,19 @@ namespace {
 }
 
 namespace {
+    // three quarters of max_dropped_ticks at the edge, scaled down by the distance inside it
+    void bandwidthGapGrowsWithDistance() {
+        BandwidthOptimization::Values values;
+        values.mMaxOptimizedDistance = 80.0f;
+        values.mMaxDroppedTicks = 10;
+        require(BandwidthOptimization::allowedGap(values, 0.0f) == 0, "a viewer on the actor got a gap");
+        require(BandwidthOptimization::allowedGap(values, 40.0f) == 3, "half the distance did not give 3 ticks");
+        require(BandwidthOptimization::allowedGap(values, 200.0f) == 7, "past the distance did not give 7 ticks");
+        values.mMaxOptimizedDistance = 0.0f;
+        values.mMaxDroppedTicks = 0;
+        require(BandwidthOptimization::allowedGap(values, 30.0f) == 0, "a zeroed entry still dropped ticks");
+    }
+
     // minecraft:persistent keeps a mob even when it came from the natural spawner
     void persistentComponentKeepsTheMob(Arena &arena) {
         MobActor &villager = arena.adult(Vector3f(0.5f, 64.0f, 0.5f));
@@ -177,6 +191,7 @@ int main() {
         pistonsPushVillagers(arena);
         eggHatchesABaby(arena);
         persistentComponentKeepsTheMob(arena);
+        bandwidthGapGrowsWithDistance();
         std::cout << "villager component checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';

@@ -10,6 +10,7 @@
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/BandwidthOptimization.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockShape.h"
@@ -1407,7 +1408,7 @@ void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::stri
         target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
 }
 
-void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported, const ServerPlayer *except) {
+bool ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported, const ServerPlayer *except) {
     MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
     move.mPosition = actor.getPosition();
@@ -1415,10 +1416,41 @@ void ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleporte
     move.mRotation = actor.getRotation();
     move.mTeleported = teleported;
 
-    _sendToViewers(actor, move, except);
+    BandwidthOptimization::Values values;
+    if (teleported || !BandwidthOptimization::valuesOf(*this, actor, values)) {
+        _sendToViewers(actor, move, except);
+        return true;
+    }
+
+    const int64_t tick = getCurrentTick();
+    const bool onGround = actor.isOnGround();
+    const Vector3f position = actor.getPosition();
+    std::unordered_map<uint64_t, ServerActor::MoveSent> &sent = actor.getMovesSent();
+    bool everyone = true;
+    _sendToViewers(actor, move, except, [&](ServerPlayer &player) {
+        ServerActor::MoveSent &last = sent[player.getRuntimeId()];
+        int64_t gap = 0;
+        // a landing or a lift-off goes out at once
+        if (last.mOnGround == onGround) {
+            const Vector3f &viewer = player.getPosition();
+            const float dx = position.x - viewer.x;
+            const float dy = position.y - viewer.y;
+            const float dz = position.z - viewer.z;
+            gap = BandwidthOptimization::allowedGap(values, std::sqrt(dx * dx + dy * dy + dz * dz));
+        }
+        if (tick < last.mTick + gap) {
+            everyone = false;
+            return false;
+        }
+        last.mTick = tick;
+        last.mOnGround = onGround;
+        return true;
+    });
+    return everyone;
 }
 
-void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet, const ServerPlayer *except) {
+void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet, const ServerPlayer *except,
+                                          const std::function<bool(ServerPlayer &)> &accept) {
     // kept between calls: a crowd sends one packet an actor a tick
     static std::vector<NetworkIdentifier> viewers;
     viewers.clear();
@@ -1427,7 +1459,7 @@ void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet
             return;
 
         const std::unordered_set<uint64_t> &visible = player.getVisibleActors();
-        if (visible.find(actor.getRuntimeId()) != visible.end())
+        if (visible.find(actor.getRuntimeId()) != visible.end() && (!accept || accept(player)))
             viewers.push_back(player.getNetworkIdentifier());
     };
     if (actor.isAutonomous()) {

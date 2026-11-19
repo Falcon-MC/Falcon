@@ -254,6 +254,16 @@ public:
 
     void markMovementSynced();
 
+    // the last move packet each viewer got, by its runtime id
+    struct MoveSent {
+        int64_t mTick = 0;
+        bool mOnGround = false;
+    };
+
+    std::unordered_map<uint64_t, MoveSent> &getMovesSent() {
+        return mMovesSent;
+    }
+
     const char *getIdentifier() const override {
         return mIdentifier.c_str();
     }
@@ -459,6 +469,7 @@ private:
     Vector3f mSyncedPosition;
     Vector3f mSyncedRotation;
     bool mMovementSynced = false;
+    std::unordered_map<uint64_t, MoveSent> mMovesSent;
     const CustomActorDefinition *mDefinition = nullptr;
     bool mIsProjectile = false;
     int64_t mOwnerUniqueId = -1;

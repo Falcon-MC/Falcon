@@ -199,6 +199,7 @@ void ActorMovementSystem::_syncMovement(ServerNetworkHandler &owner, ServerActor
     if (!actor.needsMovementSync())
         return;
 
-    owner.broadcastActorMove(actor);
-    actor.markMovementSynced();
+    // a skipped far viewer keeps the move owed: the next tick tries again
+    if (owner.broadcastActorMove(actor))
+        actor.markMovementSynced();
 }
