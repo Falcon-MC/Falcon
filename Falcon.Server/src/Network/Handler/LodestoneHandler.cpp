@@ -13,6 +13,8 @@
 #include "World/Level/PositionTrackingDB.h"
 #include "World/Level/World.h"
 
+#include <cmath>
+#include <cstdlib>
 #include <vector>
 
 namespace {
@@ -23,6 +25,21 @@ namespace {
 
     bool isPlaying(const ServerPlayer &player) {
         return player.getLoginState() >= ServerPlayer::LoginState::StartGameSent;
+    }
+
+    bool isCompassFor(const ItemStack &item, int32_t trackingId) {
+        return !item.isAir() && item.mDefinition != nullptr && item.mDefinition->getIdentifier() == LODESTONE_COMPASS
+               && item.mTag.isCompound()
+               && item.mTag.getInt(TAG_TRACKING_HANDLE, PositionTrackingDB::INVALID_ID) == trackingId;
+    }
+
+    void sendRecord(ServerNetworkHandler &owner, const ServerPlayer &player, const TrackingRecord &record) {
+        PositionTrackingDBServerBroadcastPacket packet;
+        packet.mAction = record.mStatus == TrackingRecordStatus::Destroyed ? PositionTrackingDBBroadcastAction::Destroy
+                                                                            : PositionTrackingDBBroadcastAction::Update;
+        packet.mTrackingId = record.mId;
+        packet.mTag = PositionTrackingDB::toTag(record);
+        owner.sendPacketTo(player.getNetworkIdentifier(), packet);
     }
 
     // the lodestone gets a record on its first link, the compass its id
@@ -121,8 +138,9 @@ void LodestoneHandler::handleRequest(ServerNetworkHandler &owner, ServerPlayer &
 
     World &world = owner.getWorldFor(player);
     const TrackingRecord *record = world.getPositionTracking().find(packet.mTrackingId);
-    if (record != nullptr) {
-        broadcast(owner, world, *record);
+    // a record the player may not know reads as missing, so its existence leaks nothing either
+    if (record != nullptr && record->mStatus != TrackingRecordStatus::Pending && mayKnow(owner, player, *record)) {
+        sendRecord(owner, player, *record);
         return;
     }
 
@@ -133,17 +151,31 @@ void LodestoneHandler::handleRequest(ServerNetworkHandler &owner, ServerPlayer &
     owner.sendPacketTo(player.getNetworkIdentifier(), notFound);
 }
 
+bool LodestoneHandler::mayKnow(ServerNetworkHandler &owner, ServerPlayer &player, const TrackingRecord &record) {
+    const PlayerInventory &inventory = player.getInventory();
+    if (isCompassFor(inventory.getOffhand(), record.mId) || isCompassFor(inventory.getCursor(), record.mId))
+        return true;
+    for (int slot = 0; slot < inventory.getContainerSize(); ++slot) {
+        if (isCompassFor(inventory.getItem(slot), record.mId))
+            return true;
+    }
+
+    if (owner.getLevelFor(player).getDimensionId() != record.mDimension)
+        return false;
+    const Vector3f &position = player.getPosition();
+    const int32_t radius = player.getChunkStreamState().mRadius;
+    const int32_t dx = (record.mPosition.x >> 4) - ((int32_t) std::floor(position.x) >> 4);
+    const int32_t dz = (record.mPosition.z >> 4) - ((int32_t) std::floor(position.z) >> 4);
+    return std::abs(dx) <= radius && std::abs(dz) <= radius;
+}
+
 void LodestoneHandler::broadcast(ServerNetworkHandler &owner, World &world, const TrackingRecord &record) {
     if (record.mStatus == TrackingRecordStatus::Pending)
         return;
 
-    PositionTrackingDBServerBroadcastPacket packet;
-    packet.mAction = record.mStatus == TrackingRecordStatus::Destroyed ? PositionTrackingDBBroadcastAction::Destroy
-                                                                        : PositionTrackingDBBroadcastAction::Update;
-    packet.mTrackingId = record.mId;
-    packet.mTag = PositionTrackingDB::toTag(record);
     for (auto &entry: owner.getPlayers()) {
-        if (isPlaying(entry.second) && &owner.getWorldFor(entry.second) == &world)
-            owner.sendPacketTo(entry.second.getNetworkIdentifier(), packet);
+        if (isPlaying(entry.second) && &owner.getWorldFor(entry.second) == &world
+            && mayKnow(owner, entry.second, record))
+            sendRecord(owner, entry.second, record);
     }
 }
