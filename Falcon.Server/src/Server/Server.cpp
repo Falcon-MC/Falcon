@@ -320,11 +320,12 @@ namespace {
                     ++mRevision;
                 } else {
                     const size_t shown = std::min<size_t>(choices.size(), 20);
-                    for (size_t index = 0; index < shown; ++index)
-                        std::printf("%s%s", index == 0 ? "" : "  ", choices[index].c_str());
+                    std::string matches = choices.front();
+                    for (size_t index = 1; index < shown; ++index)
+                        matches += "  " + choices[index];
                     if (shown < choices.size())
-                        std::printf("  (%zu more)", choices.size() - shown);
-                    std::fputc('\n', stdout);
+                        matches += "  (" + std::to_string(choices.size() - shown) + " more)";
+                    std::puts(matches.c_str());
                 }
             }
             _draw();
