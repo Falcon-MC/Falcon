@@ -13,6 +13,7 @@
 #include "World/Level/Block/Actor/SignBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/CommandBlockActor.h"
+#include "World/Level/Block/Actor/ConduitBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/CopperGolemStatueBlockActor.h"
 #include "World/Level/Block/Actor/DataDrivenBlockActor.h"
@@ -361,6 +362,7 @@ FALCON_REGISTER_BLOCK_ACTOR(EndGatewayBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BellBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(StructureBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(LodestoneBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(ConduitBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(MobSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(TrialSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BannerBlockActor);
