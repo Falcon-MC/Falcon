@@ -69,7 +69,8 @@ namespace {
     const int32_t BOSS_ACTION_CREATE = 0;
     const int32_t BOSS_ACTION_REMOVE = 2;
     const int32_t BOSS_ACTION_UPDATE_PERCENT = 4;
-    const int32_t BOSS_COLOR_PURPLE = 5;
+    // the colour the game's boss component sends for every boss: red
+    const int32_t BOSS_COLOR_RED = 2;
 
     const int32_t PARTICLE_EVENT = 2009;
     const int32_t SUMMON_PARTICLE = 15;
@@ -865,7 +866,7 @@ void WitherActor::_sendBossEvent(ServerNetworkHandler &owner, ServerPlayer &play
     packet.mAction = (BossEventPacket::Action) action;
     packet.mTitle = getName();
     packet.mHealthPercentage = mBossPercent;
-    packet.mColor = BOSS_COLOR_PURPLE;
+    packet.mColor = BOSS_COLOR_RED;
     packet.mOverlay = 0;
     owner.sendPacketTo(player.getNetworkIdentifier(), packet);
 }

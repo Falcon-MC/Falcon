@@ -58,6 +58,26 @@ public:
         (void) hitActor;
         return false;
     }
+
+    // a hit that fires a definition event leaves the projectile in place a tick, for the event to run
+    bool isHeldAfterHit() const {
+        return mHeldAfterHit;
+    }
+
+    // the tick after a held hit; the projectile is removed after it
+    virtual void tickAfterHit(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
+protected:
+    void holdAfterHit(const Vector3f &hitPosition) {
+        mHeldAfterHit = true;
+        setPosition(hitPosition);
+        setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+    }
+
+private:
+    bool mHeldAfterHit = false;
 };
 
 class SnowballActor final : public ThrownProjectileActor {
@@ -193,10 +213,11 @@ public:
 
     bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
 
+    // the explode component added by the hit goes off now, its fuse being 0
+    void tickAfterHit(ServerNetworkHandler &owner) override;
+
 private:
     void _applyEffects(ServerNetworkHandler &owner, Actor &target) const;
-
-    void _explode(ServerNetworkHandler &owner, const Vector3f &hitPosition);
 
     bool mDangerous = false;
 };

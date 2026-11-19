@@ -1704,6 +1704,11 @@ void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &cent
 namespace {
     const size_t CROWDED_EXPLOSIONS = 16;
     const size_t APART_EXPLOSIONS = 32;
+
+    ThrownProjectileActor *heldAfterHit(ServerActor &actor) {
+        ThrownProjectileActor *thrown = dynamic_cast<ThrownProjectileActor *>(&actor);
+        return thrown != nullptr && thrown->isHeldAfterHit() ? thrown : nullptr;
+    }
 }
 
 void ServerNetworkHandler::_flushExplosions() {
@@ -1957,6 +1962,12 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
+        if (ThrownProjectileActor *held = actor.isProjectile() ? heldAfterHit(actor) : nullptr) {
+            held->tickAfterHit(*this);
+            expired.push_back(actorId);
+            continue;
+        }
+
         if (actor.isProjectile() && actor.getProjectileData().mStuck) {
             if (tickPlantedProjectile(actor, level))
                 expired.push_back(actorId);
@@ -2065,6 +2076,11 @@ void ServerNetworkHandler::tickActors() {
 
                 if (actor.getProjectileData().mStuck) {
                     plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));
+                    continue;
+                }
+
+                if (heldAfterHit(actor) != nullptr) {
+                    broadcastActorMove(actor);
                     continue;
                 }
 
@@ -2213,7 +2229,10 @@ void ServerNetworkHandler::tickActors() {
 
                     mScriptEngine.onProjectileHitEntity(actor, *hitPlayer, contactPosition);
                     onThrownProjectileHit(actor, contactPosition, hitPlayer);
-                    expired.push_back(actorId);
+                    if (heldAfterHit(actor) != nullptr)
+                        broadcastActorMove(actor);
+                    else
+                        expired.push_back(actorId);
                     continue;
                 }
 
@@ -2225,7 +2244,10 @@ void ServerNetworkHandler::tickActors() {
 
                     mScriptEngine.onProjectileHitEntity(actor, *hitActor, contactPosition);
                     onThrownProjectileHitActor(actor, contactPosition, *hitActor);
-                    expired.push_back(actorId);
+                    if (heldAfterHit(actor) != nullptr)
+                        broadcastActorMove(actor);
+                    else
+                        expired.push_back(actorId);
                     continue;
                 }
             }

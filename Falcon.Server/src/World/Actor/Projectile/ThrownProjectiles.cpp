@@ -342,12 +342,13 @@ void WitherSkullActor::_applyEffects(ServerNetworkHandler &owner, Actor &target)
     }
 }
 
-void WitherSkullActor::_explode(ServerNetworkHandler &owner, const Vector3f &hitPosition) {
+void WitherSkullActor::tickAfterHit(ServerNetworkHandler &owner) {
     const json::Value *explode = skullExplode(getIdentifier());
     if (explode == nullptr)
         return;
 
     Level &level = owner.getLevelFor(*this);
+    const Vector3f hitPosition = getPosition();
     const json::Value *power = explode->get("power");
     Explosion explosion(owner, level, hitPosition,
                         power == nullptr ? SKULL_DEFAULT_EXPLOSION_POWER
@@ -369,12 +370,14 @@ void WitherSkullActor::_explode(ServerNetworkHandler &owner, const Vector3f &hit
 bool WitherSkullActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
     if (hitPlayer != nullptr)
         _applyEffects(owner, *hitPlayer);
-    _explode(owner, hitPosition);
+    if (skullExplode(getIdentifier()) != nullptr)
+        holdAfterHit(hitPosition);
     return true;
 }
 
 bool WitherSkullActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
     _applyEffects(owner, hitActor);
-    _explode(owner, hitPosition);
+    if (skullExplode(getIdentifier()) != nullptr)
+        holdAfterHit(hitPosition);
     return true;
 }

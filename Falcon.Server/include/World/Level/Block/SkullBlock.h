@@ -15,6 +15,12 @@ public:
     bool isWornOnHead() const override {
         return true;
     }
+
+    const char *getBlockActorId() const override;
+
+    // a skull put on a floor faces the player, in 16 steps
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
 };
 
 // placing it may complete the T of soul blocks that summons the wither
