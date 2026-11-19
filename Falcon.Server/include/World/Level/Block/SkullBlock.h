@@ -26,4 +26,7 @@ public:
 
     void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                   const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+
+    // placed in front of the dispenser only where it may complete the T; dropped otherwise
+    bool dispense(const DispenseSource &source) const override;
 };

@@ -6,6 +6,10 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/DispenseSource.h"
+#include "World/Level/Level.h"
+
+#include <cmath>
 
 FALCON_REGISTER_BLOCK(WitherSkeletonSkullBlock, 204);
 FALCON_REGISTER_BLOCK(SkullBlock, 205);
@@ -31,4 +35,17 @@ void WitherSkeletonSkullBlock::onPlaced(ServerNetworkHandler &owner, ServerPlaye
     (void) usedItem;
     (void) blockFace;
     WitherActor::trySummon(owner, owner.getLevelFor(player), position);
+}
+
+bool WitherSkeletonSkullBlock::dispense(const DispenseSource &source) const {
+    const Vector3i target((int32_t) std::floor(source.mPosition.x), (int32_t) std::floor(source.mPosition.y),
+                          (int32_t) std::floor(source.mPosition.z));
+    if (!WitherActor::canDispenseSkull(source.mLevel, target))
+        return false;
+
+    source.mLevel.setBlock(target, toBlockState(), true);
+    WitherActor::trySummon(source.mOwner, source.mLevel, target);
+    source.playClick();
+    source.removeOne();
+    return true;
 }

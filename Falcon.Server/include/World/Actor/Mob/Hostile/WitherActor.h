@@ -104,11 +104,15 @@ public:
     // the wither itself, its skull or its explosion: the game reads it from the damage's responsible actor
     static bool isWitherDamage(ServerNetworkHandler &owner, const ActorDamageSource &source);
 
-    // a wither rose at the victim's feet when it can grow there and mob griefing allows it, dropped otherwise
-    static void leaveWitherRose(ServerNetworkHandler &owner, const ServerActor &victim);
+    // a wither rose in the victim's block (a player's eyes) when it can grow there and mob griefing allows it,
+    // dropped otherwise
+    static void leaveWitherRose(ServerNetworkHandler &owner, const Actor &victim);
 
     // the T of soul sand or soul soil under three wither skeleton skulls, the skull at position just placed
     static bool trySummon(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+
+    // a dispenser places its wither skeleton skull only in air, next to the soul blocks of the T
+    static bool canDispenseSkull(Level &level, const Vector3i &position);
 
 protected:
     bool runsGoals() const override {
@@ -166,6 +170,11 @@ private:
     void _sendBossEvent(ServerNetworkHandler &owner, ServerPlayer &player, int32_t action);
 
     void _clearBossBar(ServerNetworkHandler &owner);
+
+    void _awardSpawnAchievement(ServerNetworkHandler &owner);
+
+    // the boss killed event, to every player who damaged it
+    void _sendBossKilled(ServerNetworkHandler &owner);
 
     int32_t _nextInt(int32_t bound);
 

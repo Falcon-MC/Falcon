@@ -3,6 +3,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/BossEventPacket.h"
+#include "Protocol/Packets/LegacyTelemetryEventPacket.h"
 #include "Server/PropertiesSettings.h"
 #include "World/Actor/AI/Goal/MobAttack.h"
 #include "World/Actor/ActorClassRegistry.h"
@@ -57,7 +58,6 @@ namespace {
     // the follow range attribute the spawn sets
     const float FOLLOW_RANGE = 70.0f;
     const float EXPLOSION_POWER = 7.0f;
-    const float EYE_HEIGHT_RATIO = 0.85f;
     const float CHARGE_DAMAGE = 15.0f;
     const int32_t SKELETON_COUNT = 3;
     const int32_t FROZEN_TICKS = 80;
@@ -74,6 +74,16 @@ namespace {
     const int32_t PARTICLE_EVENT = 2009;
     const int32_t SUMMON_PARTICLE = 15;
     const int32_t SUMMON_PARTICLE_COUNT = 120;
+
+    // the players in this box around the new wither get the achievement
+    const float ACHIEVEMENT_RANGE = 50.5f;
+    const float ACHIEVEMENT_RANGE_Z = 51.75f;
+    const int32_t SPAWN_THE_WITHER_ACHIEVEMENT = 62;
+    // the low byte of the wither's actor type, as the boss killed event carries it
+    const int32_t WITHER_ACTOR_TYPE = 52;
+    // the hurt cooldown the game gives the wither at spawn and the skeletons it summons
+    const int32_t SPAWN_NO_DAMAGE_TICKS = 200;
+    const int32_t SKELETON_NO_DAMAGE_TICKS = 60;
 
     // blocks no hit or charge breaks; obsidian only holds against the charge
     const char *const UNBREAKABLE_BLOCKS[] = {"minecraft:bedrock",
@@ -214,6 +224,7 @@ void WitherActor::_startSpawning(ServerNetworkHandler &owner) {
         mMaxShieldHealth = (int32_t) ((float) mMaxShieldHealth * 0.75f);
 
     mSavedMaxHealth = (int32_t) getMaxHealth();
+    setNoDamageTicks(SPAWN_NO_DAMAGE_TICKS);
     setHealth(1.0f);
     mLastHealthStep = (int32_t) getMaxHealth();
     owner.syncActorAttributes(*this);
@@ -310,10 +321,9 @@ void WitherActor::_preAiStep(ServerNetworkHandler &owner) {
 
     // turns its body at most 10 degrees a tick toward the target
     if (target != nullptr) {
-        const Vector3f eyes(position.x, position.y + getSize().mHeight * EYE_HEIGHT_RATIO, position.z);
         const Vector3f aim = aimPosition(*target);
         Vector3f rotation = getRotation();
-        const float towards = std::atan2(aim.z - eyes.z, aim.x - eyes.x) * RADIANS_TO_DEGREES - 90.0f;
+        const float towards = std::atan2(aim.z - position.z, aim.x - position.x) * RADIANS_TO_DEGREES - 90.0f;
         rotation.y += clampf(wrapDegrees(towards - rotation.y), -10.0f, 10.0f);
         setRotation(rotation);
     }
@@ -323,10 +333,9 @@ void WitherActor::_tickSpawning(ServerNetworkHandler &owner, Level &level) {
     if (mSpawningFrames-- == 1) {
         _setAirAttack(owner, true);
         mShieldHealth = mMaxShieldHealth;
-        const Vector3f position = getPosition();
-        _explode(owner, level,
-                 Vector3f(position.x, position.y + getSize().mHeight * EYE_HEIGHT_RATIO, position.z));
-        owner.playLevelSound(level, "spawn", position, IDENTIFIER);
+        // the wither has no offset on the attach point the game explodes at: its own position
+        _explode(owner, level, getPosition());
+        owner.playLevelSound(level, "spawn", getPosition(), IDENTIFIER);
     }
 
     _setInvulnerableTicks(owner, mSpawningFrames);
@@ -526,8 +535,11 @@ void WitherActor::_explodeAtHalfHealth(ServerNetworkHandler &owner, Level &level
     if (owner.getProperties().getDifficulty() == Difficulty::Easy)
         return;
 
-    for (int32_t i = 0; i < SKELETON_COUNT; ++i)
-        owner.spawnActor(level, SKELETON_IDENTIFIER, getPosition());
+    for (int32_t i = 0; i < SKELETON_COUNT; ++i) {
+        ServerActor *skeleton = owner.spawnActor(level, SKELETON_IDENTIFIER, getPosition());
+        if (skeleton != nullptr)
+            skeleton->setNoDamageTicks(SKELETON_NO_DAMAGE_TICKS);
+    }
 }
 
 void WitherActor::_explode(ServerNetworkHandler &owner, Level &level, const Vector3f &center) {
@@ -633,9 +645,10 @@ bool WitherActor::senseDamage(ServerNetworkHandler &owner, float &amount, const 
     const bool attack = DamageCause::matches("entity_attack", source);
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(source.mAttacker);
     if (attack && mSpawningFrames > 0 && player != nullptr) {
+        // the game feeds the height difference in place of the z one
         const Vector3f position = getPosition();
-        const Vector3f other = player->getPosition();
-        owner.knockBack(*player, other.x - position.x, other.z - position.z, 0.4f, 0.4f);
+        const Vector3f other = aimPosition(*player);
+        owner.knockBack(*player, other.x - position.x, other.y - position.y, 0.4f, 0.4f);
     }
 
     if (mInvulnerableTicks > 0 && !DamageCause::matches("void", source))
@@ -732,6 +745,7 @@ void WitherActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     mFrozenTicks = 0;
     mChargeWindupTicks = 0;
     owner.playLevelSound(owner.getLevelFor(*this), "death.min.volume", getPosition(), IDENTIFIER);
+    _sendBossKilled(owner);
     HostileActor::kill(owner, source, lootingLevel);
 }
 
@@ -763,8 +777,7 @@ void WitherActor::tickDeath(ServerNetworkHandler &owner) {
         return;
     }
 
-    const Vector3f position = getPosition();
-    _explode(owner, level, Vector3f(position.x, position.y + getSize().mHeight * EYE_HEIGHT_RATIO, position.z));
+    _explode(owner, level, getPosition());
     dropDeathRewards(owner, mKillerRuntimeId == 0 ? nullptr : MobActor::findPlayer(owner, mKillerRuntimeId),
                      mKillerLooting);
     _clearBossBar(owner);
@@ -899,9 +912,9 @@ bool WitherActor::isWitherDamage(ServerNetworkHandler &owner, const ActorDamageS
     return dynamic_cast<const WitherActor *>(responsibleOf(owner, source)) != nullptr;
 }
 
-void WitherActor::leaveWitherRose(ServerNetworkHandler &owner, const ServerActor &victim) {
+void WitherActor::leaveWitherRose(ServerNetworkHandler &owner, const Actor &victim) {
     Level &level = owner.getLevelFor(victim);
-    const Vector3f position = victim.getPosition();
+    const Vector3f position = aimPosition(victim);
     const Vector3i feet((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                         (int32_t) std::floor(position.z));
 
@@ -914,16 +927,27 @@ void WitherActor::leaveWitherRose(ServerNetworkHandler &owner, const ServerActor
         return;
     }
 
-    owner.spawnItemActor(level, BlockNames::WITHER_ROSE, 1, position);
+    owner.spawnItemActor(level, BlockNames::WITHER_ROSE, 1, victim.getPosition());
 }
 
-bool WitherActor::trySummon(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
-    if (position.y < level.getMinY() + 2 || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
-        return false;
+namespace {
+    // the game's direction order: down, up, north, south, west, east
+    const Vector3i DIRECTIONS[6] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                    Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
 
     // the rows top to bottom: ^ a wither skeleton skull, # soul sand or soul soil, ~ air
-    static const char *const ROWS[3] = {"^^^", "###", "~#~"};
-    const auto matchesCell = [&level](char cell, const Vector3i &at) {
+    const char *const SUMMON_ROWS[] = {"^^^", "###", "~#~"};
+    // what a dispenser checks before placing the skull: the soul blocks alone
+    const char *const DISPENSER_ROWS[] = {"###", "~#~"};
+    const int32_t ROW_LENGTH = 3;
+
+    struct PatternMatch {
+        Vector3i mOrigin;
+        int32_t mFinger = 0;
+        int32_t mThumb = 0;
+    };
+
+    bool cellMatches(Level &level, char cell, const Vector3i &at) {
         const BlockState *state = level.peekBlockPtr(at.x, at.y, at.z);
         if (state == nullptr)
             return false;
@@ -932,76 +956,131 @@ bool WitherActor::trySummon(ServerNetworkHandler &owner, Level &level, const Vec
         if (cell == '#')
             return state->mName == BlockNames::SOUL_SAND || state->mName == BlockNames::SOUL_SOIL;
         return state->mName == BlockNames::AIR;
-    };
-
-    // the game's direction order: down, up, north, south, west, east
-    static const Vector3i DIRECTIONS[6] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
-                                           Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
-    // forward and up pairs in the order the game tries them, the up axis never the forward one
-    std::vector<std::pair<int32_t, int32_t>> orientations;
-    for (int32_t forward = 0; forward < 6; ++forward) {
-        for (int32_t up = 0; up < 6; ++up) {
-            if ((forward >> 1) != (up >> 1))
-                orientations.emplace_back(forward, up);
-        }
     }
 
-    const auto cellAt = [](const Vector3i &origin, const Vector3i &forward, const Vector3i &up, int32_t column,
-                           int32_t row) {
-        // palm = forward x up: the columns run along it, the rows down the up direction
-        const Vector3i palm(forward.y * up.z - forward.z * up.y, forward.z * up.x - forward.x * up.z,
-                            forward.x * up.y - forward.y * up.x);
-        return Vector3i(origin.x + palm.x * column - up.x * row, origin.y + palm.y * column - up.y * row,
-                        origin.z + palm.z * column - up.z * row);
-    };
+    // rows run along the thumb, columns along finger x thumb, from the origin cell (row 0, column 0)
+    Vector3i cellAt(const PatternMatch &match, int32_t row, int32_t column) {
+        const Vector3i &finger = DIRECTIONS[match.mFinger];
+        const Vector3i &thumb = DIRECTIONS[match.mThumb];
+        const Vector3i palm(finger.y * thumb.z - finger.z * thumb.y, finger.z * thumb.x - finger.x * thumb.z,
+                            finger.x * thumb.y - finger.y * thumb.x);
+        return Vector3i(match.mOrigin.x + thumb.x * row + palm.x * column,
+                        match.mOrigin.y + thumb.y * row + palm.y * column,
+                        match.mOrigin.z + thumb.z * row + palm.z * column);
+    }
 
-    for (const auto &orientation: orientations) {
-        const Vector3i &forward = DIRECTIONS[orientation.first];
-        const Vector3i &up = DIRECTIONS[orientation.second];
-        for (int32_t row = 0; row < 3; ++row) {
-            for (int32_t column = 0; column < 3; ++column) {
-                if (ROWS[row][column] != '^')
-                    continue;
+    // origins from position - 3 to position on each axis, x first; then every finger and thumb on another axis,
+    // in the game's order
+    bool findPattern(Level &level, const Vector3i &position, const char *const *rows, int32_t rowCount,
+                     PatternMatch &result) {
+        const int32_t reach = std::max(rowCount, ROW_LENGTH);
+        for (int32_t x = position.x - reach; x <= position.x; ++x) {
+            for (int32_t y = position.y - reach; y <= position.y; ++y) {
+                for (int32_t z = position.z - reach; z <= position.z; ++z) {
+                    for (int32_t finger = 0; finger < 6; ++finger) {
+                        for (int32_t thumb = 0; thumb < 6; ++thumb) {
+                            if ((finger >> 1) == (thumb >> 1))
+                                continue;
 
-                // the placed skull standing at this cell
-                const Vector3i palm(forward.y * up.z - forward.z * up.y, forward.z * up.x - forward.x * up.z,
-                                    forward.x * up.y - forward.y * up.x);
-                const Vector3i origin(position.x - palm.x * column + up.x * row,
-                                      position.y - palm.y * column + up.y * row,
-                                      position.z - palm.z * column + up.z * row);
-                bool matched = true;
-                for (int32_t r = 0; r < 3 && matched; ++r) {
-                    for (int32_t c = 0; c < 3 && matched; ++c)
-                        matched = matchesCell(ROWS[r][c], cellAt(origin, forward, up, c, r));
-                }
-                if (!matched)
-                    continue;
-
-                const BlockState air = VanillaBlocks::AIR().toBlockState();
-                for (int32_t r = 0; r < 3; ++r) {
-                    for (int32_t c = 0; c < 3; ++c) {
-                        if (ROWS[r][c] != '~')
-                            level.setBlock(cellAt(origin, forward, up, c, r), air, true);
+                            const PatternMatch candidate{Vector3i(x, y, z), finger, thumb};
+                            bool matched = true;
+                            for (int32_t row = 0; row < rowCount && matched; ++row) {
+                                for (int32_t column = 0; column < ROW_LENGTH && matched; ++column)
+                                    matched = cellMatches(level, rows[row][column], cellAt(candidate, row, column));
+                            }
+                            if (matched) {
+                                result = candidate;
+                                return true;
+                            }
+                        }
                     }
                 }
-
-                const Vector3i base = cellAt(origin, forward, up, 1, 2);
-                const Vector3f spawn((float) base.x + 0.5f, (float) base.y + 0.05f, (float) base.z + 0.5f);
-                ServerActor *wither = owner.spawnActor(level, IDENTIFIER, spawn);
-                if (wither == nullptr)
-                    return false;
-
-                std::mt19937 random(std::random_device{}());
-                std::uniform_real_distribution<float> unit(0.0f, 1.0f);
-                for (int32_t i = 0; i < SUMMON_PARTICLE_COUNT; ++i) {
-                    const float x = spawn.x + unit(random);
-                    const float y = spawn.y + unit(random) * 3.9f - 2.0f;
-                    const float z = spawn.z + unit(random);
-                    owner.broadcastLevelEvent(level, PARTICLE_EVENT, Vector3f(x, y, z), SUMMON_PARTICLE);
-                }
-                return true;
             }
         }
+        return false;
     }
-    return false;
+}
+
+bool WitherActor::canDispenseSkull(Level &level, const Vector3i &position) {
+    const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+    PatternMatch match;
+    return state != nullptr && state->mName == BlockNames::AIR
+           && findPattern(level, position, DISPENSER_ROWS, 2, match);
+}
+
+bool WitherActor::trySummon(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+    if (position.y < level.getMinY() + 2 || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
+        return false;
+
+    PatternMatch match;
+    if (!findPattern(level, position, SUMMON_ROWS, 3, match))
+        return false;
+
+    // the game centres the spawn on the origin in world axes, whatever way the pattern faces
+    const Vector3f spawn((float) match.mOrigin.x + 1.0f + 0.5f, (float) match.mOrigin.y - 2.0f + 0.05f,
+                         (float) match.mOrigin.z + 1.0f + 0.5f);
+    ServerActor *spawned = owner.spawnActor(level, IDENTIFIER, spawn);
+    WitherActor *wither = dynamic_cast<WitherActor *>(spawned);
+    if (wither == nullptr)
+        return false;
+
+    // a pattern facing north or south turns the wither a quarter
+    if (match.mFinger == 2 || match.mFinger == 3) {
+        Vector3f rotation = wither->getRotation();
+        rotation.y += 90.0f;
+        wither->setRotation(rotation);
+    }
+
+    const BlockState air = VanillaBlocks::AIR().toBlockState();
+    for (int32_t row = 0; row < 3; ++row) {
+        for (int32_t column = 0; column < ROW_LENGTH; ++column)
+            level.setBlock(cellAt(match, row, column), air, true);
+    }
+
+    wither->_awardSpawnAchievement(owner);
+
+    std::mt19937 random(std::random_device{}());
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+    for (int32_t i = 0; i < SUMMON_PARTICLE_COUNT; ++i) {
+        const float x = spawn.x + unit(random);
+        const float y = spawn.y + unit(random) * 3.9f - 2.0f;
+        const float z = spawn.z + unit(random);
+        owner.broadcastLevelEvent(level, PARTICLE_EVENT, Vector3f(x, y, z), SUMMON_PARTICLE);
+    }
+    return true;
+}
+
+void WitherActor::_awardSpawnAchievement(ServerNetworkHandler &owner) {
+    const Vector3f position = getPosition();
+    owner.forEachPlayerNear(position, ACHIEVEMENT_RANGE_Z, [&](ServerPlayer &player) {
+        const Vector3f other = aimPosition(player);
+        if (!player.isSpawned() || !player.sharesLevelWith(*this) || std::fabs(other.x - position.x) > ACHIEVEMENT_RANGE
+            || std::fabs(other.y - position.y) > ACHIEVEMENT_RANGE
+            || std::fabs(other.z - position.z) > ACHIEVEMENT_RANGE_Z)
+            return;
+
+        LegacyTelemetryEventPacket packet;
+        packet.mUniqueActorId = player.getUniqueId();
+        packet.mUsePlayerId = true;
+        packet.mEventData.mType = EventDataType::AchievementAwarded;
+        packet.mEventData.mAchievementId = SPAWN_THE_WITHER_ACHIEVEMENT;
+        owner.sendPacketTo(player.getNetworkIdentifier(), packet);
+    });
+}
+
+void WitherActor::_sendBossKilled(ServerNetworkHandler &owner) {
+    for (const auto &entry: mDamageDealt) {
+        ServerPlayer *player = MobActor::findPlayer(owner, entry.first);
+        if (player == nullptr)
+            continue;
+
+        LegacyTelemetryEventPacket packet;
+        packet.mUniqueActorId = player->getUniqueId();
+        packet.mUsePlayerId = true;
+        packet.mEventData.mType = EventDataType::BossKilled;
+        packet.mEventData.mBossUniqueActorId = getUniqueId();
+        packet.mEventData.mPlayerPartySize = (int32_t) mDamageDealt.size();
+        packet.mEventData.mBossActorType = WITHER_ACTOR_TYPE;
+        owner.sendPacketTo(player->getNetworkIdentifier(), packet);
+    }
 }

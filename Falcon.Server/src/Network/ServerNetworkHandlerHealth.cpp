@@ -1,5 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -260,6 +261,9 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
         mScriptEngine.onEntityDie(player, ActorDamageSource::environment(deathMessageKey, player.getName()));
 
     player.getInventoryManager().onCurrentWindowRemove();
+
+    if (mFatalSource != nullptr && WitherActor::isWitherDamage(*this, *mFatalSource))
+        WitherActor::leaveWitherRose(*this, player);
 
     const GameRules &rules = getWorldFor(player).getOverworld().getGameRules();
     const bool keepInventory = rules.getBool("keepinventory");
