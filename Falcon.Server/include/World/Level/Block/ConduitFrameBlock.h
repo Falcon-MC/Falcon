@@ -10,8 +10,4 @@ public:
     explicit ConduitFrameBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
-
-    bool isConduitFrame() const override {
-        return true;
-    }
 };

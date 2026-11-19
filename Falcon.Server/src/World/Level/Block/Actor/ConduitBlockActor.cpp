@@ -11,6 +11,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockMaterial.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/ConduitFrameBlock.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Block/Systems/PrecipitationSystem.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -76,8 +77,7 @@ Tag ConduitBlockActor::getSpawnCompound() const {
 }
 
 bool ConduitBlockActor::isFrameBlock(const BlockState &state) {
-    const Block *block = VanillaBlocks::fromState(state);
-    return block != nullptr && block->isConduitFrame();
+    return dynamic_cast<const ConduitFrameBlock *>(VanillaBlocks::fromState(state)) != nullptr;
 }
 
 bool ConduitBlockActor::isSurroundedByWater(Level &level, const Vector3i &position) {
