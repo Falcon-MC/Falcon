@@ -156,12 +156,17 @@ namespace {
         require(wither.hurt(owner, wither.getHealth() - WitherActor::NORMAL_HEALTH / 2.0f + 10.0f, generic()),
                 "the blow to half health was refused");
         require(!wither.canBeAffected(MobEffectId::InstantHealth), "an effect took below half health");
-        require(!wither.hurt(owner, 5.0f, generic().asProjectile()), "a projectile hurt the armored wither");
 
         const size_t skeletons = arena.countOf("minecraft:wither_skeleton");
         owner.tickActors();
         require(arena.countOf("minecraft:wither_skeleton") == skeletons + 3,
                 "half health did not bring 3 wither skeletons on normal");
+
+        // a weaker hit inside the hurt cooldown is refused anyway: wait it out first
+        for (int32_t tick = 0; tick < 40 && wither.getNoDamageTicks() > 0; ++tick)
+            owner.tickActors();
+        require(wither.getNoDamageTicks() == 0, "the hurt cooldown never ended");
+        require(!wither.hurt(owner, 5.0f, generic().asProjectile()), "a projectile hurt the armored wither");
 
         const float before = wither.getHealth();
         require(wither.hurt(owner, 5.0f, generic()), "a melee blow was refused below half health");
