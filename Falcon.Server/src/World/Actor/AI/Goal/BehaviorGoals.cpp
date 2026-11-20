@@ -79,6 +79,7 @@
 #include "World/Actor/AI/Goal/SquidMovementGoal.h"
 #include "World/Actor/AI/Goal/StompAttackGoal.h"
 #include "World/Actor/AI/Goal/StompTurtleEggGoal.h"
+#include "World/Actor/AI/Goal/SendEventGoal.h"
 #include "World/Actor/AI/Goal/SummonEntityGoal.h"
 #include "World/Actor/AI/Goal/SwellGoal.h"
 #include "World/Actor/AI/Goal/SwimIdleGoal.h"
@@ -715,6 +716,36 @@ namespace {
         choice.mCastDuration = summonTicks(entry, "cast_duration", sequenceTicks / TICKS_PER_SECOND);
         return choice;
     }
+
+    SendEventGoal::Choice eventChoiceOf(const json::Value &entry) {
+        SendEventGoal::Choice choice;
+        choice.mMinRange = numberOf(entry, "min_activation_range", choice.mMinRange);
+        choice.mMaxRange = numberOf(entry, "max_activation_range", choice.mMaxRange);
+        choice.mCooldown = summonTicks(entry, "cooldown_time", 0.0f);
+        choice.mWeight = numberOf(entry, "weight", choice.mWeight);
+        const json::Value *look = entry.get("look_at_target");
+        choice.mLookAtTarget = look == nullptr || look->boolean(true);
+        const json::Value *casting = entry.get("do_casting");
+        choice.mDoCasting = casting == nullptr || casting->boolean(true);
+        choice.mParticleColor = particleColorOf(entry);
+        choice.mFilters = cloneOf(entry.get("filters"));
+        choice.mStartSoundEvent = stringOf(entry, "start_sound_event");
+        // no cast_duration: the sum of the steps' delays
+        float sequenceTicks = 0.0f;
+        const json::Value *sequence = entry.get("sequence");
+        if (sequence != nullptr && sequence->isArray()) {
+            for (const std::unique_ptr<json::Value> &item: sequence->mArray) {
+                SendEventGoal::Step step;
+                step.mBaseDelay = summonTicks(*item, "base_delay", 0.0f);
+                step.mEvent = stringOf(*item, "event");
+                step.mSoundEvent = stringOf(*item, "sound_event");
+                sequenceTicks += (float) step.mBaseDelay;
+                choice.mSequence.push_back(step);
+            }
+        }
+        choice.mCastDuration = summonTicks(entry, "cast_duration", sequenceTicks / TICKS_PER_SECOND);
+        return choice;
+    }
 }
 
 void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
@@ -854,6 +885,16 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mMinHeightAboveTarget = rangeValue(component, "height_above_target_range", "min", 0.0f);
         settings.mMaxHeightAboveTarget = rangeValue(component, "height_above_target_range", "max", 0.0f);
         return std::make_unique<CircleAroundAnchorGoal>(settings);
+    }
+
+    if (behavior == "send_event") {
+        std::vector<SendEventGoal::Choice> choices;
+        const json::Value *list = component.get("event_choices");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: list->mArray)
+                choices.push_back(eventChoiceOf(*entry));
+        }
+        return std::make_unique<SendEventGoal>(std::move(choices));
     }
 
     if (behavior == "summon_entity") {
