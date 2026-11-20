@@ -1,4 +1,5 @@
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Player/FogStack.h"
 #include "Network/ConnectionRequest.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
@@ -1083,6 +1084,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
     saveTags(data);
     mRecipeUnlocks.save(data);
+    FogStack::save(mFogStack, data);
 
     return data;
 }
@@ -1100,6 +1102,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
 
     loadTags(data);
     mRecipeUnlocks.load(data);
+    FogStack::load(mFogStack, data);
 
     mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x), listValue(data, TAG_POS, 1, mPosition.y),
                          listValue(data, TAG_POS, 2, mPosition.z));
