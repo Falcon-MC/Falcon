@@ -4,7 +4,7 @@
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
-#include "World/Item/Item.h"
+#include "World/Item/PotionItem.h"
 #include "World/Item/VanillaItems.h"
 
 #include <random>
@@ -21,7 +21,9 @@ namespace {
 
     bool holdsPotion(const MobActor &mob) {
         const ItemStack &held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
-        return !held.isAir() && held.mDefinition->getIdentifier() == POTION;
+        return !held.isAir()
+               && dynamic_cast<const PotionItem *>(VanillaItems::fromIdentifier(held.mDefinition->getIdentifier()))
+                          != nullptr;
     }
 
     void setDrinking(ServerNetworkHandler &owner, MobActor &mob, bool drinking) {
@@ -54,11 +56,10 @@ bool DrinkPotionGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (chosen == nullptr)
         return false;
 
-    const Item *item = VanillaItems::fromIdentifier(POTION);
-    const int32_t duration = item == nullptr ? 0 : item->getUseDuration();
     ItemStack potion = owner.createItemStack(POTION, 1);
-    if (duration <= 0 || potion.isAir())
+    if (potion.isAir())
         return false;
+    const int64_t duration = ServerNetworkHandler::useDurationTicksFor(potion);
     potion.mDamage = chosen->mId;
     mob.getEquipment().setSlot(MobEquipment::MAINHAND, std::move(potion));
     mob.getEquipment().broadcast(owner, mob);

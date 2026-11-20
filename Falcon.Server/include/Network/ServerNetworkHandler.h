@@ -250,6 +250,9 @@ public:
 
     static int64_t randomSeed();
 
+    // the custom item's use_modifiers, else minecraft:use_duration, else the default
+    static int64_t useDurationTicksFor(const ItemStack &item);
+
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
     // goes through the dimension change handshake
