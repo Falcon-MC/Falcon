@@ -25,6 +25,7 @@
 #include "Server/Commands/GameModeCommand.h"
 #include "Server/Commands/GameRuleCommand.h"
 #include "Server/Commands/GiveCommand.h"
+#include "Server/Commands/HudCommand.h"
 #include "Server/Commands/KickCommand.h"
 #include "Server/Commands/KillCommand.h"
 #include "Server/Commands/ListCommand.h"
@@ -370,6 +371,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<OpCommand>(*this));
     mCommands.registerCommand(std::make_shared<DeopCommand>(*this));
     mCommands.registerCommand(std::make_shared<GiveCommand>(*this));
+    mCommands.registerCommand(std::make_shared<HudCommand>(*this));
     mCommands.registerCommand(std::make_shared<ReplaceItemCommand>(*this));
     mCommands.registerCommand(std::make_shared<EnchantCommand>(*this));
     mCommands.registerCommand(std::make_shared<EffectCommand>(*this));
