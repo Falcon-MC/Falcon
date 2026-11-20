@@ -31,6 +31,7 @@
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
+#include "World/Actor/AI/Goal/ChargeAttackGoal.h"
 #include "World/Actor/AI/Goal/DrinkPotionGoal.h"
 #include "World/Actor/AI/Goal/HoldGroundGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
@@ -857,6 +858,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         if (settings.mLeaderFilters == nullptr)
             return nullptr;
         return std::make_unique<FollowTargetLeaderGoal>(std::move(settings));
+    }
+
+    if (behavior == "charge_attack") {
+        ChargeAttackGoal::Settings settings;
+        settings.mMinDistance = numberOf(component, "min_distance", settings.mMinDistance);
+        settings.mMaxDistance = numberOf(component, "max_distance", settings.mMaxDistance);
+        settings.mSuccessRate = numberOf(component, "success_rate", settings.mSuccessRate);
+        settings.mSpeedMultiplier = numberOf(component, "speed_multiplier", settings.mSpeedMultiplier);
+        return std::make_unique<ChargeAttackGoal>(settings);
     }
 
     if (behavior == "drink_potion") {
