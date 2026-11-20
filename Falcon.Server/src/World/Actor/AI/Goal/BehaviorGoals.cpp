@@ -31,6 +31,7 @@
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
+#include "World/Actor/AI/Goal/DelayedAttackGoal.h"
 #include "World/Actor/AI/Goal/ChargeAttackGoal.h"
 #include "World/Actor/AI/Goal/DrinkPotionGoal.h"
 #include "World/Actor/AI/Goal/HoldGroundGoal.h"
@@ -850,6 +851,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "melee_attack")
         return std::make_unique<MeleeAttackGoal>(speed, followRange(mob), meleeCoolDown(component),
                                                  attackReachSquared(mob));
+
+    if (behavior == "delayed_attack") {
+        // seconds truncated to ticks; the hit lands that share of the swing in, truncated
+        const int32_t duration = (int32_t) (numberOf(component, "attack_duration", 0.75f) * TICKS_PER_SECOND);
+        const int32_t hitDelay = (int32_t) ((float) duration * numberOf(component, "hit_delay_pct", 0.5f));
+        return std::make_unique<DelayedAttackGoal>(speed, followRange(mob),
+                                                   numberOf(component, "reach_multiplier", 2.0f), duration,
+                                                   hitDelay);
+    }
 
     if (behavior == "melee_box_attack")
         return std::make_unique<MeleeBoxAttackGoal>(
