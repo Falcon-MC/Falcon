@@ -33,6 +33,8 @@ public:
     // one item; false when it takes none
     static bool addItem(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const ItemStack &item);
 
+    static bool isReady(const BlockState &state);
+
     // a full composter empties for its bone meal; false when it is not full
     static bool takeOutput(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 };

@@ -17,6 +17,7 @@
 
 namespace {
     const char *HOPPER = "minecraft:hopper";
+    const char *BONE_MEAL = "minecraft:bone_meal";
     const char *TAG_TRANSFER_COOLDOWN = "TransferCooldown";
     const char *STATE_FACING_DIRECTION = "facing_direction";
     const char *STATE_TOGGLE_BIT = "toggle_bit";
@@ -342,6 +343,14 @@ bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
 
     // a container above is pulled from; anything else lets the hopper pick up dropped items
     const Vector3i above(mPosition.x, mPosition.y + 1, mPosition.z);
+    // a ready composter above gives up its bone meal
+    const BlockState *aboveState = mLevel->peekBlockPtr(above.x, above.y, above.z);
+    if (aboveState != nullptr && ComposterBlock::isReady(*aboveState)) {
+        if (!addOne(mInventory, owner.createItemStack(BONE_MEAL, 1)))
+            return false;
+        ComposterBlock::takeOutput(owner, *mLevel, above);
+        return true;
+    }
     BlockActor *source = mLevel->getBlockActors().find(above);
     if (source != nullptr && source->getContainer() != nullptr)
         return pullFrom(owner, *mLevel, above, mInventory, mPosition);
