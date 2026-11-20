@@ -68,6 +68,8 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
     r.bullet = read("minecraft:shulker_bullet");
     const snowball = world.getDimension("overworld").getEntities({ type: "minecraft:snowball" })[0];
     const p = snowball.getComponent("projectile");
+    p.owner = world.getDimension("overworld").getEntities({ type: "minecraft:pig" })[0];
+    r.owner = String(p.owner?.typeId);
     p.gravity = 0;
     p.airInertia = 0.5;
     r.badParticle = fail(() => { p.hitParticle = "none"; }) + ":" + fail(() => { p.hitParticle = "nope"; })
@@ -123,6 +125,11 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         ServerActor &snowball = spawn(owner, level, "minecraft:snowball", 0.5f);
         ServerActor &trident = spawn(owner, level, "minecraft:thrown_trident", 2.5f);
         spawn(owner, level, "minecraft:shulker_bullet", 4.5f);
+        // unique ids saved by the game can be negative: only -1 means no owner
+        require(owner.spawnActor(level, "minecraft:pig", Vector3f(6.5f, 120.0f, 0.5f),
+                                 [](ServerActor &pig) { pig.setUniqueId(-8589934591LL); })
+                        != nullptr,
+                "no fixture minecraft:pig");
         engine.tick(0);
 
         // the definitions set the physics: thrown_trident.json gravity 0.1, liquid_inertia 0.99
@@ -152,6 +159,7 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         // none and unknown names are ParticleType 0, which the setter refuses; names are case sensitive
         expect(*r, "badParticle", "InvalidArgumentError:InvalidArgumentError:InvalidArgumentError");
         expect(*r, "crit", "crit");
+        expect(*r, "owner", "minecraft:pig");
         require(ProjectileComponent::particleType("iceballbreak") == 105 && ProjectileComponent::particleType("x") == 0
                         && std::string(ProjectileComponent::particleName(72)) == "blueflame",
                 "the particle type table does not follow the game");

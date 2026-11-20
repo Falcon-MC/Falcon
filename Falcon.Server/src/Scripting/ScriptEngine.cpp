@@ -688,7 +688,7 @@ void ScriptEngine::onProjectileHitEntity(ServerActor &projectile, Actor &hitEnti
                   ServerPlayer *owner = api.resolvePlayerByHandle(projectile.getOwnerPlayerHandle());
                   if (owner != nullptr)
                       JS_SetPropertyStr(ctx, event, "source", api.makePlayer(*owner));
-              } else if (projectile.getOwnerUniqueId() >= 0) {
+              } else if (projectile.getOwnerUniqueId() != -1) {
                   ServerActor *owner = api.host().getActor(projectile.getOwnerUniqueId());
                   if (owner != nullptr)
                       JS_SetPropertyStr(ctx, event, "source", api.makeActor(*owner));
