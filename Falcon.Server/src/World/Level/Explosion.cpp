@@ -1,5 +1,7 @@
 #include "World/Level/Explosion.h"
 
+#include "Core/Threading/CpuCount.h"
+
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/ServerActor.h"
@@ -284,7 +286,7 @@ namespace {
 
     private:
         BlastWorkers() {
-            const unsigned cores = std::thread::hardware_concurrency();
+            const unsigned cores = CpuCount::usable();
             // one helper a fast core, the calling thread on the last: more of them, or slow cores, wait on
             // one another longer than they work
             unsigned helpers = cores > 1 ? std::min(cores / 2, 4u) - 1 : 0;
@@ -1976,7 +1978,7 @@ namespace {
 
     private:
         QuietWorkers() {
-            const unsigned cores = std::thread::hardware_concurrency();
+            const unsigned cores = CpuCount::usable();
             const unsigned helpers = cores > 1 ? std::min(cores - 1, 15u) : 0;
             for (unsigned index = 0; index < helpers; ++index)
                 mThreads.emplace_back([this, index] {

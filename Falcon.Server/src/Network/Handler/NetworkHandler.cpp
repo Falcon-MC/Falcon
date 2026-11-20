@@ -1,5 +1,7 @@
 #include "Network/Handler/NetworkHandler.h"
 
+#include "Core/Threading/CpuCount.h"
+
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Protocol/Codec/ProtocolCodec.h"
@@ -20,8 +22,7 @@ namespace {
     const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(4);
 
     size_t ioShardCount() {
-        const unsigned cores = std::thread::hardware_concurrency();
-        return (size_t) std::max(1u, std::min(MAX_IO_SHARDS, cores / 2));
+        return (size_t) std::max(1u, std::min(MAX_IO_SHARDS, CpuCount::usable() / 2));
     }
 }
 
