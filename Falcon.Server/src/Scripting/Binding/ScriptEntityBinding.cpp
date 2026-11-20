@@ -1088,7 +1088,7 @@ namespace {
                 if (shot != nullptr && shot->hasOwnerPlayer())
                     damaging = api.resolvePlayerByHandle(shot->getOwnerPlayerHandle());
                 else if (shot != nullptr && shot->getOwnerUniqueId() != -1)
-                    damaging = api.host().getActor(shot->getOwnerUniqueId());
+                    damaging = api.host().getEntity(shot->getOwnerUniqueId());
             }
         } else if (hasCause) {
             const char *key = DamageCause::findDeathMessageKey(cause);

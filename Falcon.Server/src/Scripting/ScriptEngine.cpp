@@ -689,9 +689,9 @@ void ScriptEngine::onProjectileHitEntity(ServerActor &projectile, Actor &hitEnti
                   if (owner != nullptr)
                       JS_SetPropertyStr(ctx, event, "source", api.makePlayer(*owner));
               } else if (projectile.getOwnerUniqueId() != -1) {
-                  ServerActor *owner = api.host().getActor(projectile.getOwnerUniqueId());
+                  Actor *owner = api.host().getEntity(projectile.getOwnerUniqueId());
                   if (owner != nullptr)
-                      JS_SetPropertyStr(ctx, event, "source", api.makeActor(*owner));
+                      JS_SetPropertyStr(ctx, event, "source", api.makeEntity(*owner));
               }
 
               JSValue hit = JS_NewObject(ctx);

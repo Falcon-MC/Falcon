@@ -37,17 +37,6 @@ namespace {
         return state != nullptr && (VibrationProperties::of(*state) & property) != 0;
     }
 
-    Actor *findActor(ServerNetworkHandler &owner, int64_t uniqueId) {
-        ServerActor *actor = owner.getActor(uniqueId);
-        if (actor != nullptr)
-            return actor;
-        for (auto &entry: owner.getPlayers()) {
-            if (entry.second.getUniqueId() == uniqueId)
-                return &entry.second;
-        }
-        return nullptr;
-    }
-
     // a projectile answers for its shooter
     Actor *responsibleActor(Level &level, Actor &source) {
         const ServerActor *actor = dynamic_cast<const ServerActor *>(&source);
@@ -56,7 +45,7 @@ namespace {
         ServerNetworkHandler *owner = level.getOwner();
         if (owner == nullptr || actor->getOwnerUniqueId() == -1)
             return nullptr;
-        return findActor(*owner, actor->getOwnerUniqueId());
+        return owner->getEntity(actor->getOwnerUniqueId());
     }
 
     // the cells the segment crosses, its start cell included: a hit on the first occluding one
@@ -243,9 +232,9 @@ void VibrationListener::tick(Level &level) {
 
     const VibrationInfo arrived = *mPending;
     mLastEvent = arrived.mEvent;
-    Actor *source = owner != nullptr && arrived.mSource.has_value() ? findActor(*owner, *arrived.mSource) : nullptr;
+    Actor *source = owner != nullptr && arrived.mSource.has_value() ? owner->getEntity(*arrived.mSource) : nullptr;
     Actor *projectileOwner = owner != nullptr && arrived.mProjectileOwner.has_value()
-                                     ? findActor(*owner, *arrived.mProjectileOwner)
+                                     ? owner->getEntity(*arrived.mProjectileOwner)
                                      : nullptr;
     mConfig.onSignalReceive(level, arrived.mPosition, *arrived.mEvent, source, arrived.mDistance, mRange,
                             projectileOwner);

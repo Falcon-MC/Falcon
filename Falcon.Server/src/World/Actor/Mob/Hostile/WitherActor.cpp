@@ -114,8 +114,8 @@ namespace {
         ServerActor *damager = dynamic_cast<ServerActor *>(source.mDamager);
         if (damager == nullptr)
             return source.mDamager;
-        if (damager->isProjectile() && damager->getOwnerUniqueId() >= 0) {
-            Actor *shooter = MobActor::findActor(owner, (uint64_t) damager->getOwnerUniqueId());
+        if (damager->isProjectile() && damager->getOwnerUniqueId() != -1) {
+            Actor *shooter = owner.getEntity(damager->getOwnerUniqueId());
             if (shooter != nullptr)
                 return shooter;
         }
@@ -555,7 +555,7 @@ void WitherActor::_shootSkull(ServerNetworkHandler &owner, Level &level, int32_t
                              dz / length + gaussian(mRandom) * spread);
 
     skull->setProjectile(true);
-    skull->setOwnerUniqueId((int64_t) getRuntimeId());
+    skull->setOwnerUniqueId(getUniqueId());
     skull->setMotion(
             Vector3f(direction.x * settings.mPower, direction.y * settings.mPower, direction.z * settings.mPower));
     owner.allowProjectileLaunch(*skull, this);

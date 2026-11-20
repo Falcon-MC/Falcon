@@ -143,12 +143,12 @@ void FishingHookActor::fillSpawnMetadata(EntityDataMap &metadata) const {
 }
 
 bool FishingHookActor::isOwnedBy(const ServerPlayer &player) const {
-    return !mExpired && getOwnerUniqueId() == (int64_t) player.getRuntimeId();
+    return !mExpired && getOwnerUniqueId() == player.getUniqueId();
 }
 
 void FishingHookActor::cast(ServerNetworkHandler &owner, ServerPlayer &angler) {
     (void) owner;
-    setOwnerUniqueId((int64_t) angler.getRuntimeId());
+    setOwnerUniqueId(angler.getUniqueId());
     mAnglerUniqueId = angler.getUniqueId();
 
     const Vector3f &rotation = angler.getRotation();
@@ -212,7 +212,7 @@ void FishingHookActor::tick(ServerNetworkHandler &owner) {
 ServerPlayer *FishingHookActor::_findAngler(ServerNetworkHandler &owner) const {
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if ((int64_t) player.getRuntimeId() == getOwnerUniqueId())
+        if (player.getUniqueId() == getOwnerUniqueId())
             return player.isSpawned() && !player.isDead() ? &player : nullptr;
     }
     return nullptr;

@@ -2385,7 +2385,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 for (const auto &entry: owner.getActors()) {
                     ServerActor &actor = *entry.second;
                     if (std::string(actor.getIdentifier()) == identifier
-                        && actor.getOwnerUniqueId() == (int64_t) player.getRuntimeId()
+                        && actor.getOwnerUniqueId() == player.getUniqueId()
                         && std::find(existing.begin(), existing.end(), actor.getUniqueId()) == existing.end()
                         && actor.getProjectileData().mCritical == critical)
                         ++count;
@@ -2429,7 +2429,7 @@ world.afterEvents.worldLoad.subscribe(() => world.setDynamicProperty("rejected",
                 for (const auto &entry: owner.getActors()) {
                     ServerActor &actor = *entry.second;
                     if (std::string(actor.getIdentifier()) == "minecraft:arrow"
-                        && actor.getOwnerUniqueId() == (int64_t) player.getRuntimeId()
+                        && actor.getOwnerUniqueId() == player.getUniqueId()
                         && std::find(existing.begin(), existing.end(), actor.getUniqueId()) == existing.end()
                         && !actor.getProjectileData().mPickupCreativeOnly)
                         ++count;

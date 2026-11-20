@@ -126,10 +126,9 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         ServerActor &trident = spawn(owner, level, "minecraft:thrown_trident", 2.5f);
         spawn(owner, level, "minecraft:shulker_bullet", 4.5f);
         // unique ids saved by the game can be negative: only -1 means no owner
-        require(owner.spawnActor(level, "minecraft:pig", Vector3f(6.5f, 120.0f, 0.5f),
-                                 [](ServerActor &pig) { pig.setUniqueId(-8589934591LL); })
-                        != nullptr,
-                "no fixture minecraft:pig");
+        ServerActor *pig = owner.spawnActor(level, "minecraft:pig", Vector3f(6.5f, 120.0f, 0.5f),
+                                            [](ServerActor &spawned) { spawned.setUniqueId(-8589934591LL); });
+        require(pig != nullptr, "no fixture minecraft:pig");
         engine.tick(0);
 
         // the definitions set the physics: thrown_trident.json gravity 0.1, liquid_inertia 0.99
@@ -160,6 +159,10 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         expect(*r, "badParticle", "InvalidArgumentError:InvalidArgumentError:InvalidArgumentError");
         expect(*r, "crit", "crit");
         expect(*r, "owner", "minecraft:pig");
+        // the engine reads the same unique id back: the pig shot the snowball
+        require(snowball.getOwnerUniqueId() == pig->getUniqueId()
+                        && owner.getEntity(snowball.getOwnerUniqueId()) == pig,
+                "the engine does not find the owner a script set");
         require(ProjectileComponent::particleType("iceballbreak") == 105 && ProjectileComponent::particleType("x") == 0
                         && std::string(ProjectileComponent::particleName(72)) == "blueflame",
                 "the particle type table does not follow the game");
