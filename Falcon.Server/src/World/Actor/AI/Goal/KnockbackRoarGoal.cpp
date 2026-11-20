@@ -93,7 +93,7 @@ void KnockbackRoarGoal::_roar(ServerNetworkHandler &owner, MobActor &mob) {
 
     std::vector<Actor *> targets;
     owner.forEachActorNear(mob.getPosition(), range + mob.getSize().mWidth, [&](ServerActor &actor) {
-        if (&actor != &mob && dynamic_cast<MobActor *>(&actor) != nullptr
+        if (&actor != &mob && actor.sharesLevelWith(mob) && dynamic_cast<MobActor *>(&actor) != nullptr
             && area.intersectsWith(ActorPushSystem::boundingBoxOf(actor)))
             targets.push_back(&actor);
     });

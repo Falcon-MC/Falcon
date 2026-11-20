@@ -60,6 +60,12 @@ namespace {
         MobActor &pig = arena.spawn("minecraft:pig", Vector3f(3.5f, 100.0f, 0.5f));
         MobActor &pillager = arena.spawn("minecraft:pillager", Vector3f(-2.5f, 100.0f, 0.5f));
         MobActor &cow = arena.spawn("minecraft:cow", Vector3f(-12.5f, 100.0f, 0.5f));
+        // the same place in the nether: out of the roar's reach
+        Level &nether = arena.mOwner.getWorlds().getDefault().getLevel(DimensionType::Nether);
+        nether.insertChunk(LevelChunk(0, 0)).setPopulated(true);
+        ServerActor *netherPig = arena.mOwner.spawnActor(nether, "minecraft:pig", Vector3f(3.5f, 100.0f, 0.5f));
+        MobActor *elsewhere = dynamic_cast<MobActor *>(netherPig);
+        require(elsewhere != nullptr, "the nether pig did not spawn");
         const float pigHealth = pig.getHealth();
         const float pillagerHealth = pillager.getHealth();
 
@@ -79,6 +85,7 @@ namespace {
         require(pillager.getHealth() == pillagerHealth, "damage_filters let an illager be hurt");
         require(pillager.getMotion().x < 0.0f, "the pillager was not pushed away");
         require(cow.getMotion().x == 0.0f, "a mob out of knockback_range was pushed");
+        require(elsewhere->getMotion().x == 0.0f, "a mob in another level was pushed");
 
         for (int32_t tick = 0; tick < 10; tick++)
             goal.tick(arena.mOwner, ravager);
