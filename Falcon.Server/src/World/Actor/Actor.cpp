@@ -13,6 +13,8 @@
 #include <map>
 
 namespace {
+    // the game lifts a knocked back mob by 1.2 times the vertical power; players take another path there
+    const float VERTICAL_KNOCKBACK_FACTOR = 1.2f;
     const char *const UNDEAD_ACTORS[] = {"minecraft:bogged",
                                          "minecraft:drowned",
                                          "minecraft:husk",
@@ -205,8 +207,32 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     const float inverse = 1.0f / length;
     Vector3f motion = getMotion();
     motion.x = motion.x * 0.5f + x * inverse * base;
-    motion.y = std::min(motion.y * 0.5f + base, verticalLimit);
+    const float lift = isPlayer() ? base : base * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(motion.y * 0.5f + lift, verticalLimit);
     motion.z = motion.z * 0.5f + z * inverse * base;
+    setMotion(motion);
+    if (isPlayer())
+        static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
+}
+
+void Actor::knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap,
+                      float slowdownScale) {
+    // a negative resistance pushes harder; the game weakens both powers alike
+    const float resistance = getAttributes().get("minecraft:knockback_resistance") + getArmorKnockbackResistance();
+    const float kept = std::max(1.0f - resistance, 0.0f);
+    const float horizontal = horizontalPower * kept;
+    const float vertical = verticalPower * kept;
+    const float slowdown = std::min(std::max(slowdownScale, 0.0f), 1.0f);
+
+    const float length = std::sqrt(x * x + z * z);
+    const float directionX = length < 0.0001f ? 0.0f : x / length;
+    const float directionZ = length < 0.0001f ? 0.0f : z / length;
+
+    Vector3f motion = getMotion();
+    motion.x = motion.x * slowdown + directionX * horizontal;
+    const float lift = isPlayer() ? vertical : vertical * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(lift + motion.y * slowdown, verticalCap);
+    motion.z = motion.z * slowdown + directionZ * horizontal;
     setMotion(motion);
     if (isPlayer())
         static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);

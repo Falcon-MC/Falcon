@@ -1,6 +1,7 @@
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 
 #include "World/Actor/AI/Goal/MobAttack.h"
+#include "World/Actor/Definition/KnockbackRules.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
@@ -92,7 +93,11 @@ void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor 
 
     const Vector3f mobPosition = mob.getPosition();
     const Vector3f targetPosition = target.getPosition();
-    owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, ATTACK_KNOCKBACK);
+    KnockbackPreset preset;
+    if (KnockbackRules::select(owner, mob, target, preset))
+        owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, preset);
+    else
+        owner.knockBack(target, targetPosition.x - mobPosition.x, targetPosition.z - mobPosition.z, ATTACK_KNOCKBACK);
     owner.broadcastActorEvent(mob, EntityEventType::ArmSwing);
     mTicksSinceAttack = 0;
 }

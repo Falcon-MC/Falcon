@@ -2,6 +2,7 @@
 
 #include "World/Actor/Movement/ActorCollisionSystem.h"
 #include "World/Actor/ActorFlags.h"
+#include "World/Actor/Movement/Systems/BlockClimberSystem.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/Movement/MobMovementFrictionSystem.h"
@@ -114,6 +115,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
         }
     }
 
+    if (physics.mBlockClimber)
+        BlockClimberSystem::tick(owner, actor);
     _syncMovement(owner, actor);
 
     BlockContactSystem::land(owner, actor, landingFallDistance);

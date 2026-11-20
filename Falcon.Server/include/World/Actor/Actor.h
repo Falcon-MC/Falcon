@@ -368,6 +368,10 @@ public:
 
     void knockBack(float x, float z, float force = 0.4f, float verticalLimit = 0.4f);
 
+    // the game's knockback with its own powers, as minecraft:apply_knockback_rules sets them; (x, z) points away
+    // from the attacker
+    void knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap, float slowdownScale);
+
     float getFood() const;
 
     float getMaxFood() const;

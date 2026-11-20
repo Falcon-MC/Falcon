@@ -40,6 +40,9 @@ enum class ActorFlag : int {
     HasGravity = 49,
     SpinAttack = 56,
     Swimming = 57,
+    // set for minecraft:block_climber: scaffolding at the feet layer, then the layer below
+    InScaffolding = 69,
+    OverScaffolding = 70,
     Blocking = 72,
     TransitionBlocking = 73,
     BlockedUsingShield = 74,
@@ -55,6 +58,9 @@ enum class ActorFlag : int {
     Celebrating = 93,
     Admiring = 94,
     CelebratingSpecial = 95,
+    // the same layers: scaffolding resting on something, or powder snow the actor stands on
+    InAscendingBlock = 99,
+    OverDescendingBlock = 100,
     HasDashCooldown = 108,
     PushTowardsClosestSpace = 109,
     Crawling = 114,
