@@ -85,8 +85,11 @@ HelpCommand::HelpCommand(CommandMap &commands)
 
 std::vector<CommandOverloadData> HelpCommand::getOverloads() const {
     std::vector<std::string> names;
-    for (const Command *command: mCommands.getCommands())
+    for (const Command *command: mCommands.getCommands()) {
         names.push_back(command->getName());
+        for (const std::string &alias: command->getAliases())
+            names.push_back(alias);
+    }
     std::sort(names.begin(), names.end());
 
     CommandOverloadData byName;
