@@ -44,6 +44,7 @@
 #include "Server/Commands/GameTestCommand.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
+#include "Server/Commands/CloneCommand.h"
 #include "Server/Commands/FunctionCommand.h"
 #include "Server/Commands/PlayAnimationCommand.h"
 #include "Server/Commands/HelpCommand.h"
@@ -414,6 +415,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<PardonIpCommand>(*this));
     mCommands.registerCommand(std::make_shared<BanListCommand>(*this));
     mCommands.registerCommand(std::make_shared<SeedCommand>(*this));
+    mCommands.registerCommand(std::make_shared<CloneCommand>(*this));
     mCommands.registerCommand(std::make_shared<FunctionCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlayAnimationCommand>(*this));
     mCommands.registerCommand(std::make_shared<HelpCommand>(mCommands));
