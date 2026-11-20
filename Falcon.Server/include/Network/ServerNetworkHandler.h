@@ -27,6 +27,7 @@
 #include "Server/OpList.h"
 #include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Server/Functions/FunctionManager.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Profiler.h"
 #include "Server/PropertiesSettings.h"
@@ -975,6 +976,13 @@ public:
         return mCommands;
     }
 
+    FunctionManager &getFunctions() {
+        return mFunctions;
+    }
+
+    // the entries one function run may take: the maxcommandchainlength game rule
+    int getCommandChainLimit();
+
     BiomeRegistry &getBiomes() {
         return mBiomes;
     }
@@ -1392,6 +1400,7 @@ private:
     const ActorDamageSource *mFatalSource = nullptr;
     const char *mSpawnCause = nullptr;
     BehaviorPackManager mBehaviorPacks;
+    FunctionManager mFunctions;
 
     std::map<std::pair<int, int>, std::shared_ptr<const SharedPacket>> mSharedLoginPackets;
     ChunkPacketCache mChunkPacketCache;
