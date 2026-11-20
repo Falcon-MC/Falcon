@@ -329,7 +329,7 @@ bool SimulatedPlayerController::breakBlock(ServerNetworkHandler &owner, ServerPl
             return true;
         stopBreakingBlock();
     }
-    // BlockLegacy vtable +528: false only for air, fire and soul fire (26.60)
+    // every block can be broken but air, fire and soul fire
     const BlockState state = owner.getLevelFor(player).getBlockState(block.x, block.y, block.z);
     if (state.mName == "minecraft:air" || state.mName == "minecraft:fire" || state.mName == "minecraft:soul_fire"
         || player.getFlags().get(ActorFlag::UsingItem))

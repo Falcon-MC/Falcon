@@ -681,6 +681,7 @@ private:
     void _tickTimer(ServerNetworkHandler &owner);
 
     void _tickBreakBlocks(ServerNetworkHandler &owner);
+    void _tickDamageOverTime(ServerNetworkHandler &owner);
 
     void _tickScheduler(ServerNetworkHandler &owner);
 
@@ -811,6 +812,8 @@ private:
     int32_t mTimerTicks = 0;
     const json::Value *mBreakBlocksComponent = nullptr;
     std::unordered_set<std::string> mBreakableBlocks;
+    const json::Value *mDamageOverTimeComponent = nullptr;
+    int32_t mHurtCountdown = 0;
     const json::Value *mSchedulerComponent = nullptr;
     // the scheduled event whose filters held last; -1 for none
     int32_t mScheduledEvent = -1;

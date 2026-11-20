@@ -14,12 +14,12 @@
 using namespace ScriptValues;
 
 namespace {
-    // ScriptLocatorBar's waypoint group holds 0x100
+    // the most waypoints a locator bar holds
     const int32_t MAX_WAYPOINTS = 256;
     // the typings cap textureBoundsList
     const size_t MAX_TEXTURE_BOUNDS = 16;
 
-    // LocatorBarWaypointPayload update bits
+    // the waypoint fields an update carries
     const int32_t UPDATE_POSITION = 0x01;
     const int32_t UPDATE_VISIBLE = 0x02;
     const int32_t UPDATE_TEXTURE = 0x04;

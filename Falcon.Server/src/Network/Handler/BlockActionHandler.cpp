@@ -1242,7 +1242,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         return true;
 
     if (!onCooldown && useBlock && clickedBlock != nullptr
-        && clickedBlock->onInteract(owner, player, transaction.mBlockPosition, clickedState))
+        && clickedBlock->onInteractAt(owner, player, transaction.mBlockPosition, clickedState, transaction.mBlockFace,
+                                      transaction.mClickPosition))
         return true;
 
     if (!itemFirst && itemType != nullptr

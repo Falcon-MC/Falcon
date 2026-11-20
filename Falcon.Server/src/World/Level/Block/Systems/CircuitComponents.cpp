@@ -13,7 +13,7 @@
 namespace {
     enum class ComponentKind { None, Source, Wire, Consumer };
 
-    // a block setting up its own component (block vtable slot 56) or a producer hook
+    // a block setting up its own component, or a producer hook
     const std::unordered_set<std::string> &sources() {
         static const std::unordered_set<std::string> names = {
                 "minecraft:redstone_torch",

@@ -89,6 +89,7 @@ namespace {
     const char *const BREAK_BLOCKS_COMPONENT = "minecraft:break_blocks";
     // the box the game breaks blocks in: the mob's, a tenth wider on x and z
     const float BREAK_BLOCKS_MARGIN = 0.1f;
+    const char *const DAMAGE_OVER_TIME_COMPONENT = "minecraft:damage_over_time";
     const char *const ATTACK_COOLDOWN_COMPONENT = "minecraft:attack_cooldown";
     const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
     const char *const CELEBRATE_HUNT_COMPONENT = "minecraft:celebrate_hunt";
@@ -248,6 +249,11 @@ namespace {
         return numberIn(choices.mArray.back().get(), "value", 0.0f);
     }
 
+    // time_between_hurt in seconds, truncated to ticks: 0 hurts every tick
+    int32_t hurtIntervalTicks(const json::Value &component) {
+        return (int32_t) (numberIn(&component, "time_between_hurt", 0.0f) * 20.0f);
+    }
+
     int32_t timerTicks(const json::Value &timer) {
         const json::Value *choices = timer.get("random_time_choices");
         if (choices != nullptr && choices->isArray() && !choices->mArray.empty())
@@ -383,6 +389,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickSpellEffects();
     _tickTimer(owner);
     _tickBreakBlocks(owner);
+    _tickDamageOverTime(owner);
     _tickScheduler(owner);
     _tickAttackCooldown(owner);
     _tickBreathing(owner);
@@ -932,6 +939,22 @@ void MobActor::_tickBreakBlocks(ServerNetworkHandler &owner) {
             }
         }
     }
+}
+
+void MobActor::_tickDamageOverTime(ServerNetworkHandler &owner) {
+    const json::Value *component = getComponent(DAMAGE_OVER_TIME_COMPONENT);
+    if (component != mDamageOverTimeComponent) {
+        mDamageOverTimeComponent = component;
+        mHurtCountdown = component == nullptr ? 0 : hurtIntervalTicks(*component);
+    }
+
+    // a dead mob keeps counting down; the countdown only restarts on a hurt
+    if (component == nullptr || --mHurtCountdown > 0 || !isAlive())
+        return;
+
+    mHurtCountdown = hurtIntervalTicks(*component);
+    const float damage = (float) (int32_t) numberIn(component, "damage_per_hurt", 1.0f);
+    hurt(owner, damage, ActorDamageSource::environment("death.attack.generic", getName()));
 }
 
 void MobActor::_tickScheduler(ServerNetworkHandler &owner) {
