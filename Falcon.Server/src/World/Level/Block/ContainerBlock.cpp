@@ -240,25 +240,30 @@ namespace {
                && shelfFacing(*state) == shelfFacing(*neighbour);
     }
 
-    void setRow(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool powered, int type) {
+    // written without updates: a neighbour told of a half changed row would undo it; the caller notifies once
+    // every shelf of the row has its type
+    void setRow(Level &level, std::vector<Vector3i> &changed, const Vector3i &position, bool powered, int type) {
         const BlockState *state = shelfState(level, position);
         if (state == nullptr)
             return;
         Tag states = state->mStates;
         states.putByte("powered_bit", powered ? 1 : 0);
         states.putInt("powered_shelf_type", type);
-        const BlockState changed(state->mName, states);
-        level.setBlock(position, changed, true);
-        BlockActionHandler::broadcastBlockUpdate(owner, level, position, changed);
+        level.setBlock(position, BlockState(state->mName, states), false);
+        changed.push_back(position);
     }
 
     // a row that lost a shelf without hearing of it: the shelf takes the type its neighbours leave it
-    void checkRow(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
+    void checkRow(Level &level, std::vector<Vector3i> &changed, const Vector3i &position, const BlockState &state) {
         if (!isPowered(state))
             return;
         const int facing = shelfFacing(state);
         const Vector3i last = stepped(position, facing + 1);
         const Vector3i first = stepped(position, facing - 1);
+        // a neighbour in a chunk not loaded is unknown, not gone: the row is left as it is
+        if (level.peekBlockPtr(last.x, last.y, last.z) == nullptr
+            || level.peekBlockPtr(first.x, first.y, first.z) == nullptr)
+            return;
         const int type = state.mStates.getInt("powered_shelf_type");
         if (type == ROW_FIRST || type == ROW_LAST) {
             const Vector3i &other = type == ROW_FIRST ? last : first;
@@ -266,7 +271,7 @@ namespace {
             if (isRowType(level, other, end) || isRowType(level, other, ROW_MIDDLE))
                 return;
             if (!joins(level, position, other))
-                setRow(owner, level, position, true, ROW_ALONE);
+                setRow(level, changed, position, true, ROW_ALONE);
             return;
         }
         if (type != ROW_MIDDLE)
@@ -278,55 +283,55 @@ namespace {
             lastJoined = joins(level, position, last);
             if (isRowType(level, first, ROW_FIRST)) {
                 if (!lastJoined)
-                    setRow(owner, level, position, true, ROW_LAST);
+                    setRow(level, changed, position, true, ROW_LAST);
                 return;
             }
         }
         const bool firstJoined = joins(level, position, first);
         if (firstJoined && lastJoined)
             return;
-        setRow(owner, level, position, true, firstJoined ? ROW_LAST : ROW_FIRST);
+        setRow(level, changed, position, true, firstJoined ? ROW_LAST : ROW_FIRST);
     }
 
-    void powerOn(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing) {
+    void powerOn(Level &level, std::vector<Vector3i> &changed, const Vector3i &position, int facing) {
         const Vector3i last = stepped(position, facing + 1);
         const Vector3i farLast = stepped(position, facing + 1, 2);
         const Vector3i first = stepped(position, facing - 1);
         const Vector3i farFirst = stepped(position, facing - 1, 2);
         if (joins(level, position, last) && joins(level, position, farLast) && isRowType(level, last, ROW_FIRST)
             && isRowType(level, farLast, ROW_LAST)) {
-            setRow(owner, level, position, true, ROW_FIRST);
-            setRow(owner, level, last, true, ROW_MIDDLE);
+            setRow(level, changed, position, true, ROW_FIRST);
+            setRow(level, changed, last, true, ROW_MIDDLE);
             return;
         }
         const bool lastAlone = joins(level, position, last) && isRowType(level, last, ROW_ALONE);
         const bool firstAlone = joins(level, position, first) && isRowType(level, first, ROW_ALONE);
         if (lastAlone && firstAlone) {
-            setRow(owner, level, first, true, ROW_FIRST);
-            setRow(owner, level, position, true, ROW_MIDDLE);
-            setRow(owner, level, last, true, ROW_LAST);
+            setRow(level, changed, first, true, ROW_FIRST);
+            setRow(level, changed, position, true, ROW_MIDDLE);
+            setRow(level, changed, last, true, ROW_LAST);
             return;
         }
         if (lastAlone) {
-            setRow(owner, level, position, true, ROW_FIRST);
-            setRow(owner, level, last, true, ROW_LAST);
+            setRow(level, changed, position, true, ROW_FIRST);
+            setRow(level, changed, last, true, ROW_LAST);
             return;
         }
         if (joins(level, position, first) && joins(level, position, farFirst) && isRowType(level, first, ROW_LAST)
             && isRowType(level, farFirst, ROW_FIRST)) {
-            setRow(owner, level, first, true, ROW_MIDDLE);
-            setRow(owner, level, position, true, ROW_LAST);
+            setRow(level, changed, first, true, ROW_MIDDLE);
+            setRow(level, changed, position, true, ROW_LAST);
             return;
         }
         if (firstAlone) {
-            setRow(owner, level, first, true, ROW_FIRST);
-            setRow(owner, level, position, true, ROW_LAST);
+            setRow(level, changed, first, true, ROW_FIRST);
+            setRow(level, changed, position, true, ROW_LAST);
             return;
         }
-        setRow(owner, level, position, true, ROW_ALONE);
+        setRow(level, changed, position, true, ROW_ALONE);
     }
 
-    void powerOff(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int facing) {
+    void powerOff(Level &level, std::vector<Vector3i> &changed, const Vector3i &position, int facing) {
         const Vector3i last = stepped(position, facing + 1);
         const Vector3i first = stepped(position, facing - 1);
         const auto facesSame = [&](const Vector3i &at) {
@@ -334,14 +339,14 @@ namespace {
             return state != nullptr && shelfFacing(*state) == facing;
         };
         if (isRowType(level, last, ROW_LAST) && facesSame(last))
-            setRow(owner, level, last, true, ROW_ALONE);
+            setRow(level, changed, last, true, ROW_ALONE);
         if (isRowType(level, last, ROW_MIDDLE) && facesSame(last))
-            setRow(owner, level, last, true, ROW_FIRST);
+            setRow(level, changed, last, true, ROW_FIRST);
         if (isRowType(level, first, ROW_FIRST) && facesSame(first))
-            setRow(owner, level, first, true, ROW_ALONE);
+            setRow(level, changed, first, true, ROW_ALONE);
         if (isRowType(level, first, ROW_MIDDLE) && facesSame(first))
-            setRow(owner, level, first, true, ROW_LAST);
-        setRow(owner, level, position, false, ROW_ALONE);
+            setRow(level, changed, first, true, ROW_LAST);
+        setRow(level, changed, position, false, ROW_ALONE);
     }
 
     ShelfBlockActor *shelfActor(Level &level, const Vector3i &position) {
@@ -603,6 +608,14 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     blockActors.insert(std::move(created));
 }
 
+// a shelf placed against a live power source starts powered
+void ContainerBlock::onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition != nullptr && definition->mKind == ContainerBlockKind::Shelf)
+        onRedstonePower(owner, level, position, state);
+}
+
 void ContainerBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
@@ -738,18 +751,21 @@ void ContainerBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, 
                                      const BlockState &state) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition != nullptr && definition->mKind == ContainerBlockKind::Shelf) {
-        checkRow(owner, level, position, state);
+        std::vector<Vector3i> changed;
+        checkRow(level, changed, position, state);
         const BlockState current = level.getBlockState(position.x, position.y, position.z);
         const bool signal = RedstoneSystem::isGettingPower(owner, level, position);
-        if (signal == isPowered(current))
-            return;
-        const Vector3f center = VectorMath::centerOf(position);
-        owner.playLevelSound(level, signal ? "activate" : "deactivate", center);
-        level.postGameEvent(signal ? GameEvents::BLOCK_ACTIVATE : GameEvents::BLOCK_DEACTIVATE, center);
-        if (signal)
-            powerOn(owner, level, position, shelfFacing(current));
-        else
-            powerOff(owner, level, position, shelfFacing(current));
+        if (signal != isPowered(current)) {
+            const Vector3f center = VectorMath::centerOf(position);
+            owner.playLevelSound(level, signal ? "activate" : "deactivate", center);
+            level.postGameEvent(signal ? GameEvents::BLOCK_ACTIVATE : GameEvents::BLOCK_DEACTIVATE, center);
+            if (signal)
+                powerOn(level, changed, position, shelfFacing(current));
+            else
+                powerOff(level, changed, position, shelfFacing(current));
+        }
+        for (const Vector3i &at: changed)
+            level.updateAround(at);
         return;
     }
     if (definition == nullptr || definition->mKind != ContainerBlockKind::Hopper)

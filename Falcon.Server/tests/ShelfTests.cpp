@@ -141,6 +141,23 @@ int main() {
         power(SHELF, false);
         require(rowType(SHELF) == -1 && rowType(east) == 0 && rowType(west) == 0,
                 "the row did not come apart when its middle lost power");
+
+        // placed straight onto a powered block: powered at once
+        const Vector3i placed(SHELF.x, SHELF.y, SHELF.z + 3);
+        level.setBlock(Vector3i(placed.x, placed.y - 1, placed.z), BlockState("minecraft:redstone_block"), false);
+        level.setBlock(placed, state, false);
+        level.onBlockPlaced(placed, state);
+        require(rowType(placed) == 0, "a shelf placed on a redstone block was not powered");
+
+        // an end whose partner sits in a chunk not loaded keeps its place in the row
+        const Vector3i edge(15, SHELF.y, SHELF.z);
+        BlockState end = state;
+        end.mStates.putByte("powered_bit", 1);
+        end.mStates.putInt("powered_shelf_type", 1);
+        level.setBlock(Vector3i(edge.x, edge.y - 1, edge.z), BlockState("minecraft:redstone_block"), false);
+        level.setBlock(edge, end, false);
+        block->onRedstonePower(server, level, edge, end);
+        require(rowType(edge) == 1, "a row end left its row because the next chunk was not loaded");
         std::cout << "shelf checks passed\n";
     } catch (const std::exception &error) {
         std::clog << "Shelf regression failed: " << error.what() << '\n';
