@@ -32,6 +32,12 @@ Tag ShulkerBoxBlockActor::getSpawnCompound() const {
     return data;
 }
 
+Tag ShelfBlockActor::getSpawnCompound() const {
+    Tag data = BlockActor::getSpawnCompound();
+    data.put("Items", mInventory.saveItems());
+    return data;
+}
+
 Tag ContainerBlockActor::saveNbt() const {
     return mInventory.saveNbt();
 }
