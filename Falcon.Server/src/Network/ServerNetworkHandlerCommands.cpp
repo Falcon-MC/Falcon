@@ -30,6 +30,7 @@
 #include "Server/Commands/ListCommand.h"
 #include "Server/Commands/LocateCommand.h"
 #include "Server/Commands/MeCommand.h"
+#include "Server/Commands/MusicCommand.h"
 #include "Server/Commands/OpCommand.h"
 #include "Server/Commands/PardonCommand.h"
 #include "Server/Commands/PardonIpCommand.h"
@@ -396,6 +397,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<GameTestCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellCommand>(*this));
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<MusicCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
     mCommands.registerCommand(std::make_shared<TimeCommand>(*this));
     mCommands.registerCommand(std::make_shared<WorldCommand>(*this));
