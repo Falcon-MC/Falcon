@@ -44,6 +44,7 @@
 #include "Server/Commands/GameTestCommand.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
+#include "Server/Commands/PlayAnimationCommand.h"
 #include "Server/Commands/HelpCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
@@ -412,6 +413,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<PardonIpCommand>(*this));
     mCommands.registerCommand(std::make_shared<BanListCommand>(*this));
     mCommands.registerCommand(std::make_shared<SeedCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PlayAnimationCommand>(*this));
     mCommands.registerCommand(std::make_shared<HelpCommand>(mCommands));
     mCommands.registerCommand(std::make_shared<DefaultGameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetMaxPlayersCommand>(*this));
