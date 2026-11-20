@@ -922,8 +922,8 @@ namespace {
             ServerPlayer *owner = target.mApi->resolvePlayerByHandle(actor->getOwnerPlayerHandle());
             return owner == nullptr ? JS_UNDEFINED : target.mApi->makePlayer(*owner);
         }
-        ServerActor *owner = actor->getOwnerUniqueId() >= 0 ? target.mApi->host().getActor(actor->getOwnerUniqueId())
-                                                            : nullptr;
+        ServerActor *owner = actor->getOwnerUniqueId() != -1 ? target.mApi->host().getActor(actor->getOwnerUniqueId())
+                                                             : nullptr;
         return owner == nullptr ? JS_UNDEFINED : target.mApi->makeActor(*owner);
     }
 
