@@ -3,12 +3,12 @@
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ClientboundUpdateSoundDataPacket.h"
-#include "Protocol/Packets/LevelEventGenericPacket.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Scripting/ScriptEngine.h"
 #include "Scripting/ScriptSoundRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
+#include "World/Level/MusicEvents.h"
 
 #include <cmath>
 
@@ -500,11 +500,6 @@ void ScriptApi::_tickSounds() {
 }
 
 namespace {
-    // the music manager's level events
-    const int32_t MUSIC_QUEUE = 1900;
-    const int32_t MUSIC_PLAY = 1901;
-    const int32_t MUSIC_STOP = 1902;
-
     // MusicOptions as the game reads it: volume 1 and fade 0 by default, neither negative
     bool readMusicTag(JSContext *ctx, int argc, JSValueConst *argv, Tag &tag, JSValue &error) {
         error = JS_UNDEFINED;
@@ -541,21 +536,8 @@ namespace {
             error = outOfBounds(ctx, "PropertyOutOfBoundsError", fade, 0.0, 0.0, false);
             return false;
         }
-        tag.putString("trackName", toString(ctx, argv[0]));
-        tag.putFloat("volume", (float) volume);
-        tag.putFloat("fadeSeconds", (float) fade);
-        tag.putByte("repeatMode", loop ? 1 : 0);
+        tag = MusicEvents::trackTag(toString(ctx, argv[0]), (float) volume, (float) fade, loop);
         return true;
-    }
-
-    void sendMusic(ScriptApi &api, ServerPlayer *player, int32_t event, const Tag &tag) {
-        LevelEventGenericPacket packet;
-        packet.mEventId = event;
-        packet.mData = tag;
-        for (auto &entry: api.host().getPlayers()) {
-            if (entry.second.isSpawned() && (player == nullptr || &entry.second == player))
-                api.host().sendPacketTo(entry.first, packet);
-        }
     }
 
     // magic: the event; on a Player only that player hears it, on the World every player
@@ -565,7 +547,7 @@ namespace {
         JSValue error = JS_UNDEFINED;
         if (!readMusicTag(ctx, argc, argv, tag, error))
             return error;
-        sendMusic(*api, api->resolvePlayer(thisVal), magic, tag);
+        MusicEvents::send(api->host(), api->resolvePlayer(thisVal), magic, tag);
         return JS_UNDEFINED;
     }
 
@@ -573,7 +555,7 @@ namespace {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         Tag tag = Tag::ofCompound();
         tag.putFloat("fadeSeconds", 0.0f);
-        sendMusic(*api, api->resolvePlayer(thisVal), MUSIC_STOP, tag);
+        MusicEvents::send(api->host(), api->resolvePlayer(thisVal), MusicEvents::STOP, tag);
         return JS_UNDEFINED;
     }
 }
@@ -609,8 +591,8 @@ void ScriptApi::_bindSounds() {
     property(prototypeOf("World"), "World", "soundDefinitionRegistry", worldGetSoundDefinitionRegistry);
 
     for (const char *owner: {"World", "Player"}) {
-        methodMagic(prototypeOf(owner), owner, "playMusic", musicPlay, 2, MUSIC_PLAY);
-        methodMagic(prototypeOf(owner), owner, "queueMusic", musicPlay, 2, MUSIC_QUEUE);
+        methodMagic(prototypeOf(owner), owner, "playMusic", musicPlay, 2, MusicEvents::PLAY);
+        methodMagic(prototypeOf(owner), owner, "queueMusic", musicPlay, 2, MusicEvents::QUEUE);
         method(prototypeOf(owner), owner, "stopMusic", musicStop, 0);
     }
 }

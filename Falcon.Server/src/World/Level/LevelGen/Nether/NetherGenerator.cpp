@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace {
-    // bit patterns read from the game, one unit off the nearest float of the decimal values
+    // exact bit patterns, one unit off the nearest float of the decimal values
     const float LIMIT_XZ_SCALE = 0x1.5634bcp+9f;
     const float LIMIT_Y_SCALE = 0x1.00a78cp+11f;
     const float MAIN_XZ_SCALE = 0x1.11c3cap+3f;

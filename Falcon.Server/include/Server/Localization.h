@@ -38,8 +38,9 @@ private:
 
     static Entries _parse(const std::string &content);
 
-    std::string _format(const std::string &locale, const std::string &text,
-                        const std::vector<std::string> &parameters) const;
+    // an inline %key is expanded once, with the same parameters: "§2%commands.help.header" keeps its page numbers
+    std::string _format(const std::string &locale, const std::string &text, const std::vector<std::string> &parameters,
+                        bool expandKeys = true) const;
 
     std::string _inlineKey(const std::string &locale, const std::string &text, size_t start, size_t &end) const;
 

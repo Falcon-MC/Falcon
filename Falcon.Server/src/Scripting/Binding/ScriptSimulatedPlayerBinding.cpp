@@ -491,7 +491,7 @@ namespace {
         return JS_UNDEFINED;
     }
 
-    // Player vtable +0x6E0: the open container closes
+    // the open container closes
     JSValue spStopInteracting(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         ServerPlayer *player = argc >= 1 ? simulatedOf(*api, argv[0]) : nullptr;

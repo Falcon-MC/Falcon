@@ -2336,7 +2336,7 @@ namespace {
         return api->makeInstance("ContainerSlot", slot);
     }
 
-    // every armor container slot, body included, and no base armor: Mob vtable slot 153
+    // every armor container slot, body included, and no base armor
     JSValue equippableTotal(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *, int toughness) {
         ScriptApi *api = ScriptApi::fromContext(ctx);
         const ScriptContainerRef *ref = api->native<ScriptContainerRef>(thisVal);

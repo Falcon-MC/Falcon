@@ -31,6 +31,7 @@
 #include "Server/Commands/ListCommand.h"
 #include "Server/Commands/LocateCommand.h"
 #include "Server/Commands/MeCommand.h"
+#include "Server/Commands/MusicCommand.h"
 #include "Server/Commands/OpCommand.h"
 #include "Server/Commands/PardonCommand.h"
 #include "Server/Commands/PardonIpCommand.h"
@@ -45,12 +46,17 @@
 #include "Server/Commands/GameTestCommand.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
+#include "Server/Commands/CloneCommand.h"
+#include "Server/Commands/FunctionCommand.h"
+#include "Server/Commands/PlayAnimationCommand.h"
+#include "Server/Commands/HelpCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
 #include "Server/Commands/SetWorldSpawnCommand.h"
 #include "Server/Commands/SpawnPointCommand.h"
 #include "Server/Commands/AimAssistCommand.h"
 #include "Server/Commands/CameraShakeCommand.h"
+#include "Server/Commands/FogCommand.h"
 #include "Server/Commands/DebugHudCommand.h"
 #include "Server/Commands/StatusCommand.h"
 #include "Server/Commands/StopCommand.h"
@@ -393,6 +399,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<GameTestCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellCommand>(*this));
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<MusicCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
     mCommands.registerCommand(std::make_shared<TimeCommand>(*this));
     mCommands.registerCommand(std::make_shared<WorldCommand>(*this));
@@ -413,6 +420,10 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<PardonIpCommand>(*this));
     mCommands.registerCommand(std::make_shared<BanListCommand>(*this));
     mCommands.registerCommand(std::make_shared<SeedCommand>(*this));
+    mCommands.registerCommand(std::make_shared<CloneCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FunctionCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PlayAnimationCommand>(*this));
+    mCommands.registerCommand(std::make_shared<HelpCommand>(mCommands));
     mCommands.registerCommand(std::make_shared<DefaultGameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetMaxPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<StopCommand>(*this));
@@ -422,6 +433,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
     mCommands.registerCommand(std::make_shared<DebugHudCommand>(*this));
     mCommands.registerCommand(std::make_shared<CameraShakeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FogCommand>(*this));
     mCommands.registerCommand(std::make_shared<AimAssistCommand>(*this));
     mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
