@@ -100,7 +100,9 @@ bool MoveToRandomBlockGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 void MoveToRandomBlockGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
     mob.getNavigation().stop(mob);
+    // a fresh attempt forgets how often the last one got stuck
     mStuckTicks = 0;
+    mStuckCount = 0;
     mLastPosition = mob.getPosition();
 }
 
