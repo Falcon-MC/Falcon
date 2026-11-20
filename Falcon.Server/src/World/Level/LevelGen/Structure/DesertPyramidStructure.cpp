@@ -75,7 +75,7 @@ namespace {
     }
 
     // first draw: the piece keeps the floor of the first
-    // chunk it is post processed in (+0x44), whatever the others see
+    // chunk it is post processed in, whatever the others see
     int32_t floorY(Level &level, const LevelChunk &chunk, int32_t startX, int32_t startZ, int32_t lowered) {
         const int32_t minX = startX * 16;
         const int32_t minZ = startZ * 16;

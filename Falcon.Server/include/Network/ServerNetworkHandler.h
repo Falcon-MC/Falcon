@@ -531,6 +531,9 @@ public:
 
     void playActorAnimation(ServerActor &actor, const std::string &animation);
 
+    // to every spawned player, whatever their level
+    void broadcastToSpawned(const Packet &packet);
+
     void applyActorEffect(ServerActor &actor, int32_t effectId, int32_t amplifier, int32_t durationTicks,
                           bool particles);
 

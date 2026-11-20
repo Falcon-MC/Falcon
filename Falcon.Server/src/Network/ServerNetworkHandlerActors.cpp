@@ -1504,7 +1504,10 @@ void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::str
     AnimateEntityPacket packet;
     packet.mAnimation = animation;
     packet.mRuntimeActorIds.push_back(actor.getRuntimeId());
+    broadcastToSpawned(packet);
+}
 
+void ServerNetworkHandler::broadcastToSpawned(const Packet &packet) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
@@ -1660,11 +1663,7 @@ void ServerNetworkHandler::playPlayerAnimation(ServerPlayer &player, const std::
     AnimateEntityPacket packet;
     packet.mAnimation = animation;
     packet.mRuntimeActorIds.push_back(player.getRuntimeId());
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    broadcastToSpawned(packet);
 }
 
 

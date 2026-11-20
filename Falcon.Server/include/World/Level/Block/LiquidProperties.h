@@ -41,7 +41,7 @@ struct LiquidProperties {
     // two water sources make a third on top of it
     bool solid = true;
     bool containsWater = false;
-    // faces liquid cannot cross (BlockType +185, stops_liquid_flowing_from_direction)
+    // faces liquid cannot cross (stops_liquid_flowing_from_direction)
     uint8_t blockedFaces = 0;
     // the block class takes tick queue hooks (Block::usesBlockTicks)
     bool ticking = false;
