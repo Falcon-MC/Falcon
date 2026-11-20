@@ -51,6 +51,9 @@ public:
 
     static std::unique_ptr<BlockActor> createBlockActor(ContainerBlockKind kind);
 
+    bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                      const BlockState &state, int face, const Vector3f &clickPosition) const override;
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 

@@ -1,5 +1,9 @@
 #include "World/Level/Block/ContainerBlock.h"
 
+#include "Core/Math/VectorMath.h"
+#include "World/Item/ItemProperties.h"
+#include "World/Level/Vibration/GameEvent.h"
+
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/LiquidProperties.h"
 
@@ -153,7 +157,90 @@ namespace {
     }
 }
 
+namespace {
+    // the face the shelf shows its items on, from minecraft:cardinal_direction
+    int shelfFront(const BlockState &state) {
+        const std::string direction = state.mStates.getString("minecraft:cardinal_direction", "south");
+        return direction == "west" ? 4 : direction == "north" ? 2 : direction == "east" ? 5 : 3;
+    }
+
+    // the game cuts the front in thirds across, at 0.3125 and 0.6875, and only reads the band from 0.25 to 0.6875
+    // up; -1 off them
+    int shelfSlotAt(int face, const Vector3f &click) {
+        float across = 0.0f;
+        switch (face) {
+            case 2:
+                across = 1.0f - click.x;
+                break;
+            case 3:
+                across = click.x;
+                break;
+            case 4:
+                across = click.z;
+                break;
+            case 5:
+                across = 1.0f - click.z;
+                break;
+            default:
+                return -1;
+        }
+        if (click.y < 0.25f || click.y > 0.6875f)
+            return -1;
+        if (across >= 0.0f && across <= 0.3125f)
+            return 0;
+        if (across >= 0.3125f && across <= 0.6875f)
+            return 1;
+        if (across >= 0.6875f && across <= 1.0f)
+            return 2;
+        return -1;
+    }
+
+    // the held item and the one in the slot change places; with instant building the shelf takes a copy and the
+    // hand keeps its own
+    bool useShelf(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                  const BlockState &state, int face, const Vector3f &clickPosition) {
+        // the open containers ability, which every mode but spectator has
+        if (player.isSpectator() || face != shelfFront(state))
+            return false;
+        // a powered shelf swaps the whole hotbar row with its neighbours: not handled here
+        if (state.mStates.getByte("powered_bit") != 0)
+            return false;
+        const int slot = shelfSlotAt(face, clickPosition);
+        if (slot < 0)
+            return false;
+
+        Level &level = owner.getLevelFor(player);
+        ShelfBlockActor &shelf = level.getBlockActors().getOrCreate<ShelfBlockActor>(position);
+        PlayerInventory &inventory = player.getInventory();
+        const ItemStack held = inventory.getItemInHand();
+        const ItemStack stored = shelf.getInventory().getContainerItem(slot);
+        if ((held.isAir() && stored.isAir()) || ItemProperties::getLockMode(held) != ItemLockMode::None)
+            return false;
+
+        const bool both = !held.isAir() && !stored.isAir();
+        shelf.getInventory().setContainerItem(slot, held);
+        if (!player.isCreative()) {
+            inventory.setItemInHand(stored);
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                                  inventory.getSelectedSlot());
+        }
+        const Vector3f center = VectorMath::centerOf(position);
+        owner.playLevelSound(level, both && !player.isCreative() ? "single_swap" : "place_item", center);
+        BlockActionHandler::broadcastBlockActorData(owner, level, shelf);
+        level.postGameEvent(GameEvents::SINGLE_ITEM_SWAP, center, &player);
+        return true;
+    }
+}
+
 ContainerBlock::ContainerBlock(const Block &base) : Block(base) {}
+
+bool ContainerBlock::onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                  const BlockState &state, int face, const Vector3f &clickPosition) const {
+    const ContainerBlockDefinition *definition = findDefinition(state.mName);
+    if (definition != nullptr && definition->mKind == ContainerBlockKind::Shelf)
+        return useShelf(owner, player, position, state, face, clickPosition);
+    return onInteract(owner, player, position, state);
+}
 
 bool ContainerBlock::matches(const std::string &identifier) {
     ContainerBlockKind kind = ContainerBlockKind::Barrel;

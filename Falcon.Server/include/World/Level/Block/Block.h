@@ -72,6 +72,14 @@ public:
         return false;
     }
 
+    // with the face clicked and the spot on it, from 0 to 1 on each axis, for a block that reads where it was hit
+    virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const BlockState &state, int face, const Vector3f &clickPosition) const {
+        (void) face;
+        (void) clickPosition;
+        return onInteract(owner, player, position, state);
+    }
+
     virtual void onTouch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                          const BlockState &state) const {
         (void) owner;
