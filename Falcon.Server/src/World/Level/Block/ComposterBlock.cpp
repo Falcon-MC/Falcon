@@ -209,13 +209,17 @@ void ComposterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     owner.playLevelSound(level, READY_SOUND, VectorMath::centerOf(position));
 }
 
-bool ComposterBlock::isReady(const BlockState &state) {
-    return matches(state.mName) && state.mStates.getInt(FILL_LEVEL, 0) == READY_LEVEL;
+std::string ComposterBlock::getHopperOutput(const BlockState &state) const {
+    return state.mStates.getInt(FILL_LEVEL, 0) == READY_LEVEL ? BONE_MEAL : std::string();
+}
+
+void ComposterBlock::onHopperOutputTaken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+    takeOutput(owner, level, position);
 }
 
 bool ComposterBlock::takeOutput(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
     const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
-    if (state == nullptr || !isReady(*state))
+    if (state == nullptr || !matches(state->mName) || state->mStates.getInt(FILL_LEVEL, 0) != READY_LEVEL)
         return false;
 
     level.setBlock(position, withLevel(*state, 0), true);
