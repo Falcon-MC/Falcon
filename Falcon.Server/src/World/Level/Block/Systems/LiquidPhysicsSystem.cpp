@@ -521,7 +521,7 @@ void LiquidPhysicsSystem::_tickLiquid(const Vector3i &position, LiquidMaterial s
         int sources = 0;
         for (const Side &side: FEED_SIDES) {
             const Vector3i neighbor = offset(position, side.x, 0, side.z);
-            // the +185 bit and vtable+136 the game tests are one measured mask here
+            // the game's two face tests are one measured mask here
             if ((_propertiesAt(neighbor).blockedFaces >> side.face & 1) != 0)
                 continue;
             const int neighborDepth = _depth(neighbor, self);

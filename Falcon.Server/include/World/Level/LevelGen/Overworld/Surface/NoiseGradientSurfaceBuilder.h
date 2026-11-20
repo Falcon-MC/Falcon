@@ -9,7 +9,7 @@
 class BlockState;
 class LevelChunk;
 
-// minecraft:noise_gradient builder, vtable
+// minecraft:noise_gradient builder
 class NoiseGradientSurfaceBuilder {
 public:
     struct Range {

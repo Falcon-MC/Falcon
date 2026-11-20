@@ -1025,6 +1025,14 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mAttributes = actor.getAttributes().getAll();
     RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
+    if (actor.getLimitedLifeTicks() > 0) {
+        const int32_t ENTITY_DATA_LIFETIME_TICKS = 78;
+        EntityDataEntry lifetime;
+        lifetime.mId = ENTITY_DATA_LIFETIME_TICKS;
+        lifetime.mFormat = EntityDataFormat::Int;
+        lifetime.mIntValue = actor.getLimitedLifeTicks();
+        packet.mMetadata.mEntries.push_back(lifetime);
+    }
 
     if (!actor.getNameTag().empty()) {
         const int32_t ENTITY_DATA_NAME = 4;
@@ -1504,7 +1512,10 @@ void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::str
     AnimateEntityPacket packet;
     packet.mAnimation = animation;
     packet.mRuntimeActorIds.push_back(actor.getRuntimeId());
+    broadcastToSpawned(packet);
+}
 
+void ServerNetworkHandler::broadcastToSpawned(const Packet &packet) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
@@ -1660,11 +1671,7 @@ void ServerNetworkHandler::playPlayerAnimation(ServerPlayer &player, const std::
     AnimateEntityPacket packet;
     packet.mAnimation = animation;
     packet.mRuntimeActorIds.push_back(player.getRuntimeId());
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    broadcastToSpawned(packet);
 }
 
 
@@ -1899,6 +1906,10 @@ void ServerNetworkHandler::tickActors() {
 
         Level &level = getLevelFor(actor);
         actor.addLifetimeTick();
+        if (actor.tickLimitedLife()) {
+            expired.push_back(actorId);
+            continue;
+        }
         actor.tickCombat(1);
 
         if (actor.isDead()) {
