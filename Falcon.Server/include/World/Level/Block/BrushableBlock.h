@@ -4,7 +4,7 @@
 
 #include <string>
 
-// suspicious sand and gravel: the block side of brushing (BrushableBlock, 26.60)
+// suspicious sand and gravel: the block side of brushing
 class BrushableBlock : public Block {
 public:
     explicit BrushableBlock(const Block &block) : Block(block) {}
