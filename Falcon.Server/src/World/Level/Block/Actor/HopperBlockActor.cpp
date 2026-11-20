@@ -322,7 +322,11 @@ bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {
     if (below != nullptr && ComposterBlock::matches(below->mName) && level.getOwner() != nullptr) {
         for (int slot = 0; slot < mInventory.getContainerSize(); ++slot) {
             ItemStack item = mInventory.getContainerItem(slot);
-            if (item.isAir() || !ComposterBlock::addItem(*level.getOwner(), level, target, item))
+            if (item.isAir() || ComposterBlock::compostChance(item) <= 0)
+                continue;
+            if (!allowedByPlugins(&level, mPosition, item, true))
+                return false;
+            if (!ComposterBlock::addItem(*level.getOwner(), level, target, item))
                 continue;
             --item.mCount;
             mInventory.setContainerItem(slot, item.mCount <= 0 ? ItemStack::air() : std::move(item));
