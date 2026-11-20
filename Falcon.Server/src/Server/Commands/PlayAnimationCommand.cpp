@@ -5,26 +5,12 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 
-#include <cerrno>
-#include <cmath>
-#include <cstdlib>
-
 namespace {
     const char *const DEFAULT_NEXT_STATE = "default";
     const char *const DEFAULT_STOP_EXPRESSION = "query.any_animation_finished";
     const char *const DEFAULT_CONTROLLER = "__runtime_controller";
     // the molang version the game's command gives the stop expression
     const int32_t STOP_EXPRESSION_VERSION = 1;
-
-    bool parseFloat(const std::string &value, float &out) {
-        char *end = nullptr;
-        errno = 0;
-        const float parsed = std::strtof(value.c_str(), &end);
-        if (value.empty() || *end != '\0' || errno == ERANGE || !std::isfinite(parsed))
-            return false;
-        out = parsed;
-        return true;
-    }
 }
 
 PlayAnimationCommand::PlayAnimationCommand(ServerNetworkHandler &handler)
@@ -49,7 +35,8 @@ bool PlayAnimationCommand::readAnimation(const std::vector<std::string> &argumen
     packet.mAnimation = arguments.empty() ? std::string() : arguments[0];
     packet.mNextState = arguments.size() > 1 ? arguments[1] : DEFAULT_NEXT_STATE;
     packet.mBlendOutTime = 0.0f;
-    if (arguments.size() > 2 && !parseFloat(arguments[2], packet.mBlendOutTime)) {
+    if (arguments.size() > 2
+        && (!parseCoordinate(arguments[2], 0.0f, packet.mBlendOutTime) || arguments[2][0] == '~')) {
         invalid = arguments[2];
         return false;
     }
