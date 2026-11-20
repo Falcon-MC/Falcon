@@ -468,6 +468,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     AuthKeyProvider::getInstance().start();
     mPluginManager = std::make_unique<PluginManager>(*this);
+    mFunctions.setPermissions(&mPluginManager->getPermissions());
 }
 
 PlayerMovementRegistry &ServerNetworkHandler::getPlayerMovementRegistry() {
@@ -787,6 +788,12 @@ void ServerNetworkHandler::_loadScripts() {
 
     mScriptEngine.loadPacks(mBehaviorPacks.getPacks());
     mScriptEngine.startup();
+    // after the startup: a function may run a command a script registered there
+    mFunctions.load(mBehaviorPacks.getPacks(), mCommands);
+}
+
+int ServerNetworkHandler::getCommandChainLimit() {
+    return getLevel().getGameRules().getInt("maxcommandchainlength");
 }
 
 void ServerNetworkHandler::stopServerListening() {
@@ -1068,6 +1075,11 @@ void ServerNetworkHandler::tick(bool paused) {
     mProfiler.beginSection(ProfilerSection::Announcement);
     _updateServerAnnouncement();
     mProfiler.endSection(ProfilerSection::Announcement);
+
+    if (!mFunctions.getTickFunctions().empty()) {
+        ServerCommandOrigin server(this);
+        mFunctions.tick(server, mCommands, getCommandChainLimit());
+    }
 
     mScriptEngine.tick(mCurrentTick);
 

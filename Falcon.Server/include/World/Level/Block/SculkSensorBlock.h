@@ -14,7 +14,7 @@ public:
     static constexpr int32_t PHASE_INACTIVE = 0;
     static constexpr int32_t PHASE_ACTIVE = 1;
     static constexpr int32_t PHASE_COOLDOWN = 2;
-    // BlockLegacy +0x378 set at registration: 30 for the sensor, 10 for the calibrated one
+    // how long the game keeps it active: 30 ticks for the sensor, 10 for the calibrated one
     static constexpr int32_t ACTIVE_TICKS = 30;
     // the game schedules the cooldown's end 10 ticks on
     static constexpr int32_t COOLDOWN_TICKS = 10;

@@ -78,7 +78,7 @@ public:
 
     static std::string reasonText(WorldClockError error);
 
-    // FNV-1 64 of the name: the HashedString the game sends as the clock or marker id
+    // FNV-1 64 of the name: the id the game sends for the clock or marker
     static uint64_t idOf(const std::string &name);
 
     WorldClockError registerClock(const std::string &name, const std::vector<WorldClockMarker> &markers,
