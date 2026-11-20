@@ -1025,6 +1025,14 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mAttributes = actor.getAttributes().getAll();
     RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
+    if (actor.getLimitedLifeTicks() > 0) {
+        const int32_t ENTITY_DATA_LIFETIME_TICKS = 78;
+        EntityDataEntry lifetime;
+        lifetime.mId = ENTITY_DATA_LIFETIME_TICKS;
+        lifetime.mFormat = EntityDataFormat::Int;
+        lifetime.mIntValue = actor.getLimitedLifeTicks();
+        packet.mMetadata.mEntries.push_back(lifetime);
+    }
 
     if (!actor.getNameTag().empty()) {
         const int32_t ENTITY_DATA_NAME = 4;
@@ -1899,6 +1907,10 @@ void ServerNetworkHandler::tickActors() {
 
         Level &level = getLevelFor(actor);
         actor.addLifetimeTick();
+        if (actor.tickLimitedLife()) {
+            expired.push_back(actorId);
+            continue;
+        }
         actor.tickCombat(1);
 
         if (actor.isDead()) {

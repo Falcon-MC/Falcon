@@ -77,6 +77,7 @@
 #include "World/Actor/AI/Goal/SquidMovementGoal.h"
 #include "World/Actor/AI/Goal/StompAttackGoal.h"
 #include "World/Actor/AI/Goal/StompTurtleEggGoal.h"
+#include "World/Actor/AI/Goal/SummonEntityGoal.h"
 #include "World/Actor/AI/Goal/SwellGoal.h"
 #include "World/Actor/AI/Goal/SwimIdleGoal.h"
 #include "World/Actor/AI/Goal/SwoopAttackGoal.h"
@@ -649,6 +650,69 @@ namespace {
         settings.mOnStayCompleted = cloneOf(component.get("on_stay_completed"));
         return settings;
     }
+
+    // seconds truncated to ticks, as the summon_entity definition stores them
+    int32_t summonTicks(const json::Value &component, const char *key, float fallback) {
+        return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+    }
+
+    // "#AARRGGBB", or "#RRGGBB" opaque; anything else keeps the game's white
+    int32_t particleColorOf(const json::Value &choice) {
+        const std::string text = stringOf(choice, "particle_color");
+        const size_t digits = text.size() - 1;
+        if (text.empty() || text[0] != '#' || (digits != 6 && digits != 8)
+            || text.find_first_not_of("0123456789abcdefABCDEF", 1) != std::string::npos)
+            return -1;
+        uint32_t value = (uint32_t) std::stoul(text.substr(1), nullptr, 16);
+        if (digits == 6)
+            value |= 0xFF000000u;
+        return (int32_t) value;
+    }
+
+    SummonEntityGoal::Spawn summonSpawnOf(const json::Value &entry) {
+        SummonEntityGoal::Spawn spawn;
+        spawn.mShape = stringOf(entry, "shape") == "circle" ? SummonEntityGoal::Shape::Circle
+                                                            : SummonEntityGoal::Shape::Line;
+        spawn.mAroundTarget = stringOf(entry, "target") == "target";
+        spawn.mSize = numberOf(entry, "size", spawn.mSize);
+        spawn.mBaseDelay = summonTicks(entry, "base_delay", 0.0f);
+        spawn.mDelayPerSummon = summonTicks(entry, "delay_per_summon", 0.0f);
+        spawn.mCount = (int32_t) numberOf(entry, "num_entities_spawned", (float) spawn.mCount);
+        spawn.mLifespan = summonTicks(entry, "entity_lifespan", -1.0f);
+        spawn.mSummonCap = (int32_t) numberOf(entry, "summon_cap", 0.0f);
+        spawn.mSummonCapRadius = numberOf(entry, "summon_cap_radius", 0.0f);
+        spawn.mEntityType = stringOf(entry, "entity_type");
+        spawn.mSoundEvent = stringOf(entry, "sound_event");
+        spawn.mSummonEvent = stringOf(entry, "summon_event");
+        return spawn;
+    }
+
+    SummonEntityGoal::Choice summonChoiceOf(const json::Value &entry) {
+        SummonEntityGoal::Choice choice;
+        choice.mMinRange = numberOf(entry, "min_activation_range", choice.mMinRange);
+        choice.mMaxRange = numberOf(entry, "max_activation_range", choice.mMaxRange);
+        choice.mCooldown = summonTicks(entry, "cooldown_time", 0.0f);
+        choice.mWeight = numberOf(entry, "weight", choice.mWeight);
+        const json::Value *casting = entry.get("do_casting");
+        choice.mDoCasting = casting == nullptr || casting->boolean(true);
+        choice.mParticleColor = particleColorOf(entry);
+        choice.mFilters = cloneOf(entry.get("filters"));
+        choice.mStartSoundEvent = stringOf(entry, "start_sound_event");
+        // no cast_duration: the whole sequence's delays
+        float sequenceTicks = 0.0f;
+        const json::Value *sequence = entry.get("sequence");
+        if (sequence != nullptr && sequence->isArray()) {
+            for (const std::unique_ptr<json::Value> &step: sequence->mArray) {
+                choice.mSequence.push_back(summonSpawnOf(*step));
+                const SummonEntityGoal::Spawn &spawn = choice.mSequence.back();
+                sequenceTicks += (float) spawn.mBaseDelay;
+                if (spawn.mCount >= 2)
+                    sequenceTicks += (float) ((spawn.mCount - 1) * spawn.mDelayPerSummon);
+            }
+        }
+        choice.mCastDuration = summonTicks(entry, "cast_duration", sequenceTicks / TICKS_PER_SECOND);
+        return choice;
+    }
 }
 
 void BehaviorGoals::build(MobActor &mob, GoalSelector &selector) {
@@ -788,6 +852,16 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mMinHeightAboveTarget = rangeValue(component, "height_above_target_range", "min", 0.0f);
         settings.mMaxHeightAboveTarget = rangeValue(component, "height_above_target_range", "max", 0.0f);
         return std::make_unique<CircleAroundAnchorGoal>(settings);
+    }
+
+    if (behavior == "summon_entity") {
+        std::vector<SummonEntityGoal::Choice> choices;
+        const json::Value *list = component.get("summon_choices");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: list->mArray)
+                choices.push_back(summonChoiceOf(*entry));
+        }
+        return std::make_unique<SummonEntityGoal>(std::move(choices));
     }
 
     if (behavior == "swoop_attack")

@@ -32,6 +32,7 @@ enum class ActorFlag : int {
     ShowBottom = 38,
     Rearing = 39,
     Shaking = 40,
+    Casting = 42,
     Charging = 43,
     WasdControlled = 44,
     CanPowerJump = 45,
