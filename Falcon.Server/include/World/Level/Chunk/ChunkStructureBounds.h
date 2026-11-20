@@ -4,8 +4,8 @@
 #include <string>
 #include <vector>
 
-// the registry LevelChunk keeps at +0x1600: the structures post processed into the
-// chunk, each a name and boxes clipped to the chunk; entity ids number names and boxes together, as entt does
+// the structures post processed into a chunk, each a name and boxes clipped to the chunk; entity ids
+// number names and boxes together, as entt does
 class ChunkStructureBounds {
 public:
     struct Box {

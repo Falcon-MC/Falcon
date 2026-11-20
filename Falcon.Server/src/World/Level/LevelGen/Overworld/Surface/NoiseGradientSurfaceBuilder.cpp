@@ -66,7 +66,7 @@ void NoiseGradientSurfaceBuilder::build(LevelChunk &chunk, int32_t x, int32_t z,
     const int32_t top = std::min(toY - 1, chunk.getHeight(x, z));
     for (int32_t y = top; y >= fromY; y--) {
         const BlockState &state = chunk.getBlock(x, y, z);
-        // BlockLegacy flag +41 & 2: liquids, the aquifer's water stays (seed 42 parity)
+        // liquids are skipped: the aquifer's water stays (seed 42 parity)
         if (state.getHash() == airState().getHash() || DecorationSupport::isLiquid(state))
             continue;
 

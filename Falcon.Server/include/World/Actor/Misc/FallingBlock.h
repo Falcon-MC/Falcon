@@ -10,7 +10,7 @@ class FallingBlock : public ServerActor {
 public:
     static const char *IDENTIFIER;
 
-    // ActorType 66 rests on powder snow
+    // a falling block rests on powder snow
     bool canStandOnPowderSnow() const override {
         return true;
     }
