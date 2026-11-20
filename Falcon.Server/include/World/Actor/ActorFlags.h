@@ -32,6 +32,7 @@ enum class ActorFlag : int {
     ShowBottom = 38,
     Rearing = 39,
     Shaking = 40,
+    Casting = 42,
     Charging = 43,
     WasdControlled = 44,
     CanPowerJump = 45,
@@ -52,6 +53,8 @@ enum class ActorFlag : int {
     WantsToWake = 77,
     // a trader holds up what it would give for the item a player holds
     TradeInterest = 78,
+    Roaring = 84,
+    DelayedAttacking = 85,
     FacingTargetToRangeAttack = 88,
     // read by Player.isEmoting
     Emoting = 92,

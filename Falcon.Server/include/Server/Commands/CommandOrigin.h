@@ -26,6 +26,11 @@ public:
         return asPlayer();
     }
 
+    // the player whose permission groups decide what this origin may run; none: the permission level does
+    virtual ServerPlayer *permissionGroupPlayer() {
+        return nullptr;
+    }
+
     virtual bool canExecuteCommand(const Command &command) const;
 
     virtual void sendMessage(const std::string &message) = 0;

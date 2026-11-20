@@ -1,6 +1,7 @@
 #include "World/Level/Block/Actor/HopperBlockActor.h"
 
 #include "World/Level/Block/ComposterBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "World/Actor/ServerActor.h"
@@ -342,6 +343,17 @@ bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
 
     // a container above is pulled from; anything else lets the hopper pick up dropped items
     const Vector3i above(mPosition.x, mPosition.y + 1, mPosition.z);
+    // a block with no container may still give an item, as a ready composter its bone meal
+    const BlockState *aboveState = mLevel->peekBlockPtr(above.x, above.y, above.z);
+    const Block *aboveBlock = aboveState == nullptr ? nullptr : VanillaBlocks::fromState(*aboveState);
+    const std::string output = aboveBlock == nullptr ? std::string() : aboveBlock->getHopperOutput(*aboveState);
+    if (!output.empty()) {
+        const ItemStack item = owner.createItemStack(output, 1);
+        if (item.isAir() || !allowedByPlugins(mLevel, mPosition, item, false) || !addOne(mInventory, item))
+            return false;
+        aboveBlock->onHopperOutputTaken(owner, *mLevel, above);
+        return true;
+    }
     BlockActor *source = mLevel->getBlockActors().find(above);
     if (source != nullptr && source->getContainer() != nullptr)
         return pullFrom(owner, *mLevel, above, mInventory, mPosition);

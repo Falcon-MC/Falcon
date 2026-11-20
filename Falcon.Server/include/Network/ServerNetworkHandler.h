@@ -27,6 +27,7 @@
 #include "Server/OpList.h"
 #include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Server/Functions/FunctionManager.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Profiler.h"
 #include "Server/PropertiesSettings.h"
@@ -249,6 +250,9 @@ public:
     bool unloadWorld(const std::string &name, std::string &error);
 
     static int64_t randomSeed();
+
+    // the custom item's use_modifiers, else minecraft:use_duration, else the default
+    static int64_t useDurationTicksFor(const ItemStack &item);
 
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
@@ -529,6 +533,9 @@ public:
     void pushFrom(Actor &actor, const Vector3f &origin, float strength, float lift);
 
     void playActorAnimation(ServerActor &actor, const std::string &animation);
+
+    // to every spawned player, whatever their level
+    void broadcastToSpawned(const Packet &packet);
 
     void applyActorEffect(ServerActor &actor, int32_t effectId, int32_t amplifier, int32_t durationTicks,
                           bool particles);
@@ -975,6 +982,13 @@ public:
         return mCommands;
     }
 
+    FunctionManager &getFunctions() {
+        return mFunctions;
+    }
+
+    // the entries one function run may take: the maxcommandchainlength game rule
+    int getCommandChainLimit();
+
     BiomeRegistry &getBiomes() {
         return mBiomes;
     }
@@ -1392,6 +1406,7 @@ private:
     const ActorDamageSource *mFatalSource = nullptr;
     const char *mSpawnCause = nullptr;
     BehaviorPackManager mBehaviorPacks;
+    FunctionManager mFunctions;
 
     std::map<std::pair<int, int>, std::shared_ptr<const SharedPacket>> mSharedLoginPackets;
     ChunkPacketCache mChunkPacketCache;

@@ -45,12 +45,12 @@ public:
         return 0.0f;
     }
 
-    // item entities and projectiles (ActorType bit 0x400000) meet a snow layer at its look
+    // item entities and projectiles meet a snow layer at its look
     virtual bool collidesAtSnowLayerLook() const {
         return false;
     }
 
-    // ActorType bit 0x80000: every minecart, the actors detector rails sense
+    // every minecart: the actors detector rails sense
     virtual bool isMinecart() const {
         return false;
     }
