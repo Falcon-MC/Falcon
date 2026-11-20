@@ -60,6 +60,9 @@ void FogStack::send(ServerNetworkHandler &owner, ServerPlayer &player) {
 void FogStack::save(const Entries &stack, Tag &data) {
     Tag list = Tag::ofList(Tag::Type::String);
     for (const ServerPlayer::FogEntry &entry: stack) {
+        // scripts may push what the loader stops at: written, it would take every later entry with it
+        if (entry.mId.empty() || entry.mTag.empty() || !isValidId(entry.mId))
+            continue;
         list.addToList(Tag::ofString(entry.mId));
         list.addToList(Tag::ofString(entry.mTag));
     }

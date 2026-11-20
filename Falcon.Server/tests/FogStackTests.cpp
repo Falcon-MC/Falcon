@@ -61,6 +61,17 @@ namespace {
         FogStack::load(loaded, data);
         require(idsOf(loaded) == idsOf(stack) && loaded[1].mTag == "two", "the stack did not round trip");
 
+        // a script entry with an empty tag stays out of the save; the command entry after it survives
+        FogStack::Entries mixed;
+        FogStack::push(mixed, "minecraft:fog_hell", "");
+        FogStack::push(mixed, "minecraft:fog_b", "two");
+        Tag mixedData = Tag::ofCompound();
+        FogStack::save(mixed, mixedData);
+        FogStack::Entries reloaded;
+        FogStack::load(reloaded, mixedData);
+        require(idsOf(reloaded) == std::vector<std::string>({"minecraft:fog_b"}),
+                "an empty script tag took the later entries with it");
+
         Tag broken = Tag::ofCompound();
         Tag list = Tag::ofList(Tag::Type::String);
         for (const char *value: {"minecraft:fog_a", "one", "not a fog", "two", "minecraft:fog_c", "three"})
