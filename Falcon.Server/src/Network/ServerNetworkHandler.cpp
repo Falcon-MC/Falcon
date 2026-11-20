@@ -1,5 +1,6 @@
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Threading/CpuCount.h"
 #include "World/Level/Block/SignEditing.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
 
@@ -546,8 +547,8 @@ size_t ServerNetworkHandler::_getChunkWorkerThreadCount() const {
     int configured = mProperties.getMaxThreads();
 
     if (configured <= 0) {
-        const unsigned hardware = std::thread::hardware_concurrency();
-        configured = hardware == 0 ? 2 : (int) (hardware > 3 ? hardware - 2 : 1);
+        const unsigned cores = CpuCount::usable();
+        configured = (int) (cores > 3 ? cores - 2 : 1);
     }
 
     if (configured < 1)
