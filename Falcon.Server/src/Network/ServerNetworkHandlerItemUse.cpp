@@ -44,21 +44,6 @@ namespace {
         return VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
     }
 
-    int64_t useDurationTicksFor(const ItemStack &item) {
-        if (!item.isAir() && item.mDefinition != nullptr) {
-            const CustomItemDefinition *custom =
-                    CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
-            if (custom != nullptr && custom->mHasUseModifiers && custom->mUseDuration > 0.0f)
-                return std::llround(custom->mUseDuration * 20.0f);
-        }
-
-        const Tag *components = vanillaComponents(item);
-        const Tag *duration = components == nullptr ? nullptr : components->get("minecraft:use_duration");
-        if (duration != nullptr && duration->asInt() > 0)
-            return duration->asInt();
-        return DEFAULT_USE_DURATION_TICKS;
-    }
-
     const FoodItemComponent *findFoodComponent(const ItemStack &item) {
         if (item.isAir() || item.mDefinition == nullptr)
             return nullptr;
@@ -110,6 +95,21 @@ namespace {
         return "minecraft:" + name;
     }
 
+}
+
+int64_t ServerNetworkHandler::useDurationTicksFor(const ItemStack &item) {
+    if (!item.isAir() && item.mDefinition != nullptr) {
+        const CustomItemDefinition *custom =
+                CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+        if (custom != nullptr && custom->mHasUseModifiers && custom->mUseDuration > 0.0f)
+            return std::llround(custom->mUseDuration * 20.0f);
+    }
+
+    const Tag *components = vanillaComponents(item);
+    const Tag *duration = components == nullptr ? nullptr : components->get("minecraft:use_duration");
+    if (duration != nullptr && duration->asInt() > 0)
+        return duration->asInt();
+    return DEFAULT_USE_DURATION_TICKS;
 }
 
 void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks) {

@@ -82,7 +82,7 @@ namespace {
     using FeatureRandom::nextFloat;
     using FeatureRandom::nextInt;
 
-    // HashedString's hash (FNV-1, 64 bits), kept by each feature rule
+    // the FNV-1 64-bit hash of a name, kept by each feature rule
     uint64_t hashedString(const std::string &value) {
         uint64_t hash = 0xCBF29CE484222325ULL;
         for (char character: value)

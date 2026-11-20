@@ -34,6 +34,10 @@ public:
         return mBase.canExecuteCommand(command);
     }
 
+    ServerPlayer *permissionGroupPlayer() override {
+        return mBase.permissionGroupPlayer();
+    }
+
     Vector3f getPosition() override {
         return mPosition;
     }

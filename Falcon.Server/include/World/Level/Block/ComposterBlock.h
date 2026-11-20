@@ -23,6 +23,11 @@ public:
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 
+    // a ready composter gives its bone meal to a hopper below
+    std::string getHopperOutput(const BlockState &state) const override;
+
+    void onHopperOutputTaken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const override;
+
     // out of 100: the item's minecraft:compostable component, else the game's table; 0 for anything else
     static int32_t compostChance(const ItemStack &item);
 
