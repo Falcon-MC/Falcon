@@ -227,7 +227,7 @@ namespace {
         const Vector3f center = VectorMath::centerOf(position);
         owner.playLevelSound(level, both && !player.isCreative() ? "single_swap" : "place_item", center);
         BlockActionHandler::broadcastBlockActorData(owner, level, shelf);
-        level.postGameEvent(GameEvents::BLOCK_CHANGE, center, &player);
+        level.postGameEvent(GameEvents::SINGLE_ITEM_SWAP, center, &player);
         return true;
     }
 }
