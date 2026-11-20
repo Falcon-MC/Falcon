@@ -258,6 +258,8 @@ jobs:
   release:
     name: Publish release
     needs: [prepare, build]
+    # a platform whose runners are down must not hold back the others: rerunning adds its files to the release
+    if: ${{ always() && needs.prepare.result == 'success' }}
     runs-on: ubuntu-22.04
 
     steps:
