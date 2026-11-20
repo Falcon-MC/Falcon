@@ -163,6 +163,13 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         require(snowball.getOwnerUniqueId() == pig->getUniqueId()
                         && owner.getEntity(snowball.getOwnerUniqueId()) == pig,
                 "the engine does not find the owner a script set");
+        // saved under the game's key: an arrow from a world the game wrote keeps its shooter
+        const Tag saved = snowball.saveNbt();
+        require(saved.getLong("OwnerNew", -1) == pig->getUniqueId(), "the owner was not saved as OwnerNew");
+        const std::unique_ptr<ServerActor> loaded = ActorClassRegistry::create(2, "minecraft:snowball");
+        require(loaded != nullptr, "no snowball to load");
+        loaded->loadNbt(saved);
+        require(loaded->getOwnerUniqueId() == pig->getUniqueId(), "the loaded snowball lost its owner");
         require(ProjectileComponent::particleType("iceballbreak") == 105 && ProjectileComponent::particleType("x") == 0
                         && std::string(ProjectileComponent::particleName(72)) == "blueflame",
                 "the particle type table does not follow the game");
