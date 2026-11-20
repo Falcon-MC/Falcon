@@ -72,6 +72,14 @@ public:
         return false;
     }
 
+    // with the face clicked and the spot on it, from 0 to 1 on each axis, for a block that reads where it was hit
+    virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const BlockState &state, int face, const Vector3f &clickPosition) const {
+        (void) face;
+        (void) clickPosition;
+        return onInteract(owner, player, position, state);
+    }
+
     virtual void onTouch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                          const BlockState &state) const {
         (void) owner;
@@ -106,7 +114,7 @@ public:
         return false;
     }
 
-    // faces liquid cannot cross, a bit per LiquidFace (BlockType +185, stops_liquid_flowing_from_direction)
+    // faces liquid cannot cross, a bit per LiquidFace (stops_liquid_flowing_from_direction)
     virtual uint8_t getLiquidBlockedFaces(const BlockState &state) const {
         (void) state;
         return 0;

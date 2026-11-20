@@ -50,7 +50,7 @@ namespace BlockMaterial {
     // 0 for a name the game does not register
     uint8_t flagsOf(const BlockState &state);
 
-    // bit 0x40000 of the block's properties (BlockLegacy +304): set by the base constructor, cleared by most
-    // classes with their own shape; false for a name the game does not register
+    // a property every block starts with and most blocks with their own shape drop; false for a name the
+    // game does not register
     bool hasDefaultProperty(const BlockState &state);
 }

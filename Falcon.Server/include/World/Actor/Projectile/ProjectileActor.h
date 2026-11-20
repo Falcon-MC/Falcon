@@ -240,7 +240,7 @@ class FireworksRocketActor : public ProjectileActor {
 public:
     using ProjectileActor::ProjectileActor;
 
-    // ActorType 0x48 has no projectile bit: the default snow shape
+    // not a projectile to the game: the default snow shape
     bool collidesAtSnowLayerLook() const override {
         return false;
     }

@@ -77,7 +77,7 @@ bool ChunkStructureBounds::Box::contains(int32_t x, int32_t y, int32_t z) const 
     return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
 }
 
-// the box LevelChunk keeps at +0x1900: the dimension's height, top excluded
+// a chunk's box: the dimension's height, top excluded
 ChunkStructureBounds::Box ChunkStructureBounds::chunkBox(int32_t chunkX, int32_t chunkZ, int32_t minY, int32_t maxY) {
     Box box;
     box.minX = chunkX * 16;

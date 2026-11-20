@@ -236,6 +236,9 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    // the client draws the items: they travel with the block actor
+    Tag getSpawnCompound() const override;
 };
 
 class ChiseledBookshelfBlockActor final : public ContainerBlockActor {
