@@ -10,13 +10,6 @@
 #include <utility>
 
 namespace {
-    float squaredDistance(const Vector3f &a, const Vector3f &b) {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        const float dz = a.z - b.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
-
     struct Candidate {
         int32_t mChoice;
         int64_t mReceiver;
@@ -40,9 +33,9 @@ bool SendEventGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
         const float range = choice.mMaxRange;
         const AxisAlignedBB area = ActorPushSystem::boundingBoxOf(mob).expand(range, range, range);
         owner.forEachActorNear(mob.getPosition(), range + mob.getSize().mWidth, [&](ServerActor &actor) {
-            if (!area.intersectsWith(ActorPushSystem::boundingBoxOf(actor)))
+            if (!actor.sharesLevelWith(mob) || !area.intersectsWith(ActorPushSystem::boundingBoxOf(actor)))
                 return;
-            const float distance = squaredDistance(mob.getPosition(), actor.getPosition());
+            const float distance = mob.distanceSquaredTo(actor);
             if (distance > choice.mMaxRange * choice.mMaxRange || distance < choice.mMinRange * choice.mMinRange)
                 return;
             if (choice.mFilters != nullptr && !EntityFilter::test(*choice.mFilters, owner, mob, &actor))
