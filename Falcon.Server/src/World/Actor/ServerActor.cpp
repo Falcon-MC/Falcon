@@ -238,6 +238,8 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     ServerPlayer *source = dynamic_cast<ServerPlayer *>(attacker);
     if (source != nullptr)
         source->recordAttacked(getRuntimeId(), owner.getCurrentTick());
+    else if (auto *mobAttacker = dynamic_cast<MobActor *>(attacker); mobAttacker != nullptr && mobAttacker != this)
+        mobAttacker->setLastHurtMob(getRuntimeId());
 
     const float rawAmount = amount;
     if (damageSource.mApplyArmor) {

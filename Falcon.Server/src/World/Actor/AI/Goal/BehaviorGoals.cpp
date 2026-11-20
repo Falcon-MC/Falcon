@@ -25,11 +25,13 @@
 #include "World/Actor/AI/Goal/FollowMobGoal.h"
 #include "World/Actor/AI/Goal/FollowOwnerGoal.h"
 #include "World/Actor/AI/Goal/FollowParentGoal.h"
+#include "World/Actor/AI/Goal/FollowTargetLeaderGoal.h"
 #include "World/Actor/AI/Goal/GoHomeGoal.h"
 #include "World/Actor/AI/Goal/GoalSelector.h"
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
+#include "World/Actor/AI/Goal/HoldGroundGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
 #include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
@@ -44,6 +46,7 @@
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
 #include "World/Actor/AI/Goal/MoveIndoorsGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
+#include "World/Actor/AI/Goal/MoveToRandomBlockGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveThroughVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveToWaterGoal.h"
@@ -114,6 +117,13 @@ namespace {
     const int32_t LOOK_PROBABILITY_SCALE = 1000;
     const int32_t LOOK_DURATION = 60;
     const char *const IS_TARGET_FILTER = "{\"test\":\"is_target\",\"subject\":\"other\"}";
+    // what the game adds to a follow_target_captain it loads as follow_target_leader
+    const char *const CAPTAIN_LEADER_FILTER =
+            "{\"test\":\"has_component\",\"subject\":\"other\",\"value\":\"minecraft:is_illager_captain\"}";
+    const int32_t CAPTAIN_SEARCH_COOLDOWN_TICKS = 1;
+    const int32_t LEADER_DEFAULT_SEARCH_COOLDOWN_TICKS = 20;
+    const float HOLD_GROUND_DEFAULT_MIN_RADIUS = 10.0f;
+    const int32_t RANDOM_BLOCK_DEFAULT_DISTANCE = 16;
 
     const int32_t TICKS_PER_SECOND = 20;
     const float MELEE_ATTACK_RANGE_SQUARED = 2.5f;
@@ -826,6 +836,41 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "silverfish_wake_up_friends")
         return std::make_unique<SilverfishWakeUpFriendsGoal>();
+
+    if (behavior == "follow_target_leader" || behavior == "follow_target_captain") {
+        const bool captain = behavior == "follow_target_captain";
+        FollowTargetLeaderGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mWithinRadius = numberOf(component, "within_radius", 0.0f);
+        settings.mFollowDistance = numberOf(component, "follow_distance", 0.0f);
+        settings.mAlwaysLookForLeader = isFlagSet(component, "always_look_for_leader");
+        settings.mSearchCooldownTicks = (int32_t) numberOf(
+                component, "search_cooldown",
+                (float) (captain ? CAPTAIN_SEARCH_COOLDOWN_TICKS : LEADER_DEFAULT_SEARCH_COOLDOWN_TICKS));
+        const json::Value *filters = component.get("leader_filters");
+        if (filters != nullptr)
+            settings.mLeaderFilters = std::shared_ptr<json::Value>(filters->clone());
+        else if (captain)
+            settings.mLeaderFilters = std::shared_ptr<json::Value>(json::parse(CAPTAIN_LEADER_FILTER));
+        // the game refuses a leader goal with nothing to pick its leader by
+        if (settings.mLeaderFilters == nullptr)
+            return nullptr;
+        return std::make_unique<FollowTargetLeaderGoal>(std::move(settings));
+    }
+
+    if (behavior == "hold_ground") {
+        HoldGroundGoal::Settings settings;
+        settings.mMinRadius = numberOf(component, "min_radius", HOLD_GROUND_DEFAULT_MIN_RADIUS);
+        settings.mBroadcast = isFlagSet(component, "broadcast");
+        settings.mBroadcastRange = numberOf(component, "broadcast_range", 0.0f);
+        settings.mWithinRadiusEvent = cloneOf(component.get("within_radius_event"));
+        return std::make_unique<HoldGroundGoal>(std::move(settings));
+    }
+
+    if (behavior == "move_to_random_block")
+        return std::make_unique<MoveToRandomBlockGoal>(
+                speed, numberOf(component, "within_radius", 0.0f),
+                (int32_t) numberOf(component, "block_distance", (float) RANDOM_BLOCK_DEFAULT_DISTANCE));
 
     if (behavior == "beg")
         return std::make_unique<BegGoal>(

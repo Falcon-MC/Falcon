@@ -1,6 +1,7 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Actor/Mob/Hostile/WitherActor.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -161,6 +162,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
         player.recordHurtBy(source.mAttacker->getRuntimeId(), mCurrentTick);
         if (ServerPlayer *attacker = dynamic_cast<ServerPlayer *>(source.mAttacker))
             attacker->recordAttacked(player.getRuntimeId(), mCurrentTick);
+        else if (MobActor *mob = dynamic_cast<MobActor *>(source.mAttacker))
+            mob->setLastHurtMob(player.getRuntimeId());
     }
 
     PluginEvent damageEvent;

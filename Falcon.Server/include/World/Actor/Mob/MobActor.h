@@ -397,6 +397,24 @@ public:
         return mLastHurtBy;
     }
 
+    // the runtime id of the last actor this mob damaged
+    uint64_t getLastHurtMob() const {
+        return mLastHurtMob;
+    }
+
+    void setLastHurtMob(uint64_t runtimeId) {
+        mLastHurtMob = runtimeId;
+    }
+
+    // unique id of the leader minecraft:behavior.follow_target_leader follows, 0 for none
+    int64_t getTargetCaptainId() const {
+        return mTargetCaptainId;
+    }
+
+    void setTargetCaptainId(int64_t uniqueId) {
+        mTargetCaptainId = uniqueId;
+    }
+
     uint32_t getHurtCount() const {
         return mHurtCount;
     }
@@ -832,6 +850,8 @@ private:
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;
     uint64_t mLastHurtBy = 0;
+    uint64_t mLastHurtMob = 0;
+    int64_t mTargetCaptainId = 0;
     ActorDamageSource mLastHurtSource;
     uint32_t mHurtCount = 0;
     uint64_t mTargetRuntimeId = 0;
