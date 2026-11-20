@@ -87,7 +87,7 @@ public:
         return false;
     }
 
-    // Item::dispense (vtable +0x2A8, 26.60): false drops the item as a dropper does
+    // the item's own dispense; false drops the item as a dropper does
     virtual bool dispense(const DispenseSource &source) const {
         (void) source;
         return false;
