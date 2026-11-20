@@ -437,7 +437,8 @@ Tag ServerActor::saveNbt() const {
     if (!mNameTag.empty())
         data.putString("CustomName", mNameTag);
     data.putByte("Persistent", mPersistent ? 1 : 0);
-    data.putLong("OwnerUniqueId", mOwnerUniqueId);
+    // the game's key for any actor's owner: a mob saved after this writes its tamer over it
+    data.putLong("OwnerNew", mOwnerUniqueId);
     saveTags(data);
 
     if (hasPassengers()) {
@@ -503,7 +504,7 @@ void ServerActor::loadNbt(const Tag &data) {
 
     mNameTag = data.getString("CustomName", data.getString("NameTag", mNameTag));
     mPersistent = data.getByte("Persistent", 1) != 0;
-    mOwnerUniqueId = data.getLong("OwnerUniqueId", mOwnerUniqueId);
+    mOwnerUniqueId = data.getLong("OwnerNew", mOwnerUniqueId);
 
     loadTags(data);
 
