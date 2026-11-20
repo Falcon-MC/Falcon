@@ -1,6 +1,8 @@
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/HelpCommand.h"
+#include "Server/Localization.h"
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -99,6 +101,12 @@ int main() {
         commands.registerCommand(std::make_shared<FakeCommand>("secret", CommandPermission::Admin,
                                                                std::vector<CommandOverloadData>{overload({})}));
 
+        const std::vector<CommandOverloadData> helpOverloads = commands.getCommand("help")->getOverloads();
+        const std::vector<std::string> &names = helpOverloads.front().mParameters.front().mEnumData.mValues;
+        require(std::find(names.begin(), names.end(), "z") != names.end()
+                        && std::find(names.begin(), names.end(), "?") != names.end(),
+                "the command names left the aliases out");
+
         const std::vector<std::string> zone = HelpCommand::usageLines(*commands.getCommand("zone"));
         require(zone.size() == 2 && zone[0] == "/zone <mode: ZoneMode> [who: target]"
                         && zone[1] == "/zone set <from: x y z> <player: target>",
@@ -132,6 +140,10 @@ int main() {
         require(!commands.dispatch(member, "/help secret"), "the help of a command out of reach was given");
         require(member.mLines.size() == 1 && member.mLines[0] == "{commands.generic.unknown|secret}",
                 "a command out of reach was not unknown");
+        // the console resolves the key itself: the page numbers must reach the expanded text
+        const std::string header =
+                Localization::getInstance().translate("en_US", "§2%commands.help.header", {"1", "2"});
+        require(header.find("page 1 of 2") != std::string::npos, "the console header lost its page numbers: " + header);
         std::cout << "help command checks passed\n";
         return 0;
     } catch (const std::exception &error) {
