@@ -3,9 +3,7 @@
 #include "Core/NBT/Tag.h"
 #include "World/Level/MusicEvents.h"
 
-#include <cmath>
 #include <cstdio>
-#include <cstdlib>
 
 namespace {
     const float DEFAULT_VOLUME = 1.0f;
@@ -14,12 +12,7 @@ namespace {
     const float MAX_FADE_SECONDS = 10.0f;
 
     bool parseFloat(const std::string &value, float &out) {
-        char *end = nullptr;
-        const float parsed = std::strtof(value.c_str(), &end);
-        if (value.empty() || *end != '\0' || !std::isfinite(parsed))
-            return false;
-        out = parsed;
-        return true;
+        return Command::parseCoordinate(value, 0.0f, out) && value[0] != '~';
     }
 
     // the game prints both numbers with two decimals
