@@ -369,6 +369,20 @@ public:
         mLifetimeTicks++;
     }
 
+    // a summoned actor's entity_lifespan in ticks; the client counts it down from actor data 78
+    void setLimitedLife(int32_t ticks) {
+        mLimitedLifeTicks = ticks;
+    }
+
+    int32_t getLimitedLifeTicks() const {
+        return mLimitedLifeTicks;
+    }
+
+    // true on the tick the limited life runs out
+    bool tickLimitedLife() {
+        return mLimitedLifeTicks > 0 && --mLimitedLifeTicks == 0;
+    }
+
     void setExperienceValue(int32_t value) {
         mExperienceValue = value;
     }
@@ -480,6 +494,8 @@ private:
     int64_t mOwnerUniqueId = -1;
     uint32_t mOwnerPlayerHandle = 0xFFFFFFFF;
     int32_t mLifetimeTicks = 0;
+    // -1: no limited life
+    int32_t mLimitedLifeTicks = -1;
     int32_t mDeathTicks = 0;
     int32_t mExperienceValue = 0;
     int32_t mPickupDelay = 0;
