@@ -182,6 +182,8 @@ namespace {
     // explosions that break nothing: from that many on they are shared out to every core, a few at a time
     const size_t QUIET_CROWD = 16;
     const size_t QUIET_SHARE = 4;
+    // the explosions that break nothing share one read of blocks per cube of that many blocks a side, as a shift
+    const int32_t QUIET_REGION_SHIFT = 6;
     // explosions that break blocks: two this many blocks apart on an axis neither read what the other
     // breaks nor push the same actors; and how far from the middle of the lot the one read of blocks goes
     const int32_t APART_BLOCKS = 18;
@@ -1469,7 +1471,6 @@ int32_t BlastField::targetReach(double size) {
 
 void BlastField::prepare(Level &level, const Vector3f &source, double size, const Vector3i &needLow,
                          const Vector3i &needHigh, bool sums, const Vector3f *upcoming, size_t upcomingCount) {
-    mFailed = false;
     const int32_t radius = targetReach(size);
     if (radius > FIELD_MAX_RADIUS) {
         mRead = true;
@@ -1648,13 +1649,6 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
                 chunkZ = z >> 4;
                 chunk = level.peekChunkPtr(chunkX, chunkZ);
                 haveChunk = true;
-                // unpacking is the tick thread's to do
-                if (chunk != nullptr && mHelperOwned && chunk->isPacked()) {
-                    mFailed = true;
-                    mRead = false;
-                    mCovers = false;
-                    return;
-                }
             }
             if (chunk == nullptr)
                 continue;
@@ -1729,8 +1723,6 @@ void BlastField::_read(Level &level, const Vector3i &low, const Vector3i &high) 
 
 void BlastField::readForMany(Level &level, const Vector3i &low, const Vector3i &high) {
     mKeepShapes = false;
-    mHelperOwned = false;
-    mFailed = false;
     _read(level, low, high);
     resum();
     if (mRayStamps.size() < mStates.size())
@@ -2053,6 +2045,72 @@ void ExplosionBatch::settleQuiet(Level &level, const std::vector<QuietBlast> &bl
         centers.push_back(blast.mSource);
 
     const bool crowd = blasts.size() >= QUIET_CROWD;
+    // the helpers read copies of the blocks made here, one per region the explosions stand in: the level
+    // belongs to the tick thread. Only the explosions with someone in reach need blocks, most of a crowd of
+    // them have nobody
+    std::vector<int32_t> regionOf(blasts.size(), -1);
+    if (crowd) {
+        struct Region {
+            Vector3i mLow;
+            Vector3i mHigh;
+            double mLargest;
+        };
+        std::vector<Region> regions;
+        std::unordered_map<int64_t, int32_t> regionAt;
+        for (size_t index = 0; index < blasts.size(); ++index) {
+            const QuietBlast &blast = blasts[index];
+            const double reach = blast.mSize * 2.0;
+            bool anyone = false;
+            const int32_t minX = (int32_t) std::floor(blast.mSource.x - (float) reach) >> CELL_SHIFT;
+            const int32_t maxX = (int32_t) std::floor(blast.mSource.x + (float) reach) >> CELL_SHIFT;
+            const int32_t minZ = (int32_t) std::floor(blast.mSource.z - (float) reach) >> CELL_SHIFT;
+            const int32_t maxZ = (int32_t) std::floor(blast.mSource.z + (float) reach) >> CELL_SHIFT;
+            for (int32_t cellX = minX; !anyone && cellX <= maxX; ++cellX) {
+                for (int32_t cellZ = minZ; !anyone && cellZ <= maxZ; ++cellZ) {
+                    const auto found = mTargets.find(_cell(cellX, cellZ));
+                    if (found == mTargets.end())
+                        continue;
+                    for (const Target &target: found->second) {
+                        anyone = target.mActor != blast.mSourceActor
+                                 && maybeWithin(target.mPosition, blast.mSource, reach);
+                        if (anyone)
+                            break;
+                    }
+                }
+            }
+            if (!anyone)
+                continue;
+            const Vector3i cell((int32_t) std::floor(blast.mSource.x), (int32_t) std::floor(blast.mSource.y),
+                                (int32_t) std::floor(blast.mSource.z));
+            const auto part = [](int32_t value) {
+                return (uint64_t) (uint32_t) (value >> QUIET_REGION_SHIFT) & 0xFFFFFu;
+            };
+            const int64_t key = (int64_t) ((part(cell.x) << 40) | (part(cell.y) << 20) | part(cell.z));
+            const auto known = regionAt.find(key);
+            if (known == regionAt.end()) {
+                regionAt.emplace(key, (int32_t) regions.size());
+                regionOf[index] = (int32_t) regions.size();
+                regions.push_back(Region{cell, cell, blast.mSize});
+                continue;
+            }
+            Region &region = regions[(size_t) known->second];
+            region.mLow = Vector3i(std::min(region.mLow.x, cell.x), std::min(region.mLow.y, cell.y),
+                                   std::min(region.mLow.z, cell.z));
+            region.mHigh = Vector3i(std::max(region.mHigh.x, cell.x), std::max(region.mHigh.y, cell.y),
+                                    std::max(region.mHigh.z, cell.z));
+            region.mLargest = std::max(region.mLargest, blast.mSize);
+            regionOf[index] = known->second;
+        }
+        if (mQuietFields.size() < regions.size())
+            mQuietFields.resize(regions.size());
+        for (size_t index = 0; index < regions.size(); ++index) {
+            const Region &region = regions[index];
+            const int32_t margin = std::min(BlastField::targetReach(region.mLargest), FIELD_MAX_RADIUS);
+            const Vector3i low(region.mLow.x - margin, region.mLow.y - margin, region.mLow.z - margin);
+            const Vector3i high(region.mHigh.x + margin, region.mHigh.y + margin, region.mHigh.z + margin);
+            mQuietFields[index].readForMany(level, low, high);
+        }
+    }
     std::vector<QuietHand> hands(crowd ? QuietWorkers::get().size() : 1);
     std::atomic<size_t> next{0};
     const std::unordered_map<int64_t, std::vector<Target>> &buckets = mTargets;
@@ -2060,7 +2118,6 @@ void ExplosionBatch::settleQuiet(Level &level, const std::vector<QuietBlast> &bl
 
     const auto settle = [&](size_t worker) {
         QuietHand &hand = hands[worker];
-        hand.mField.setHelperOwned(crowd);
         hand.mPushes.assign(targetCount, Vector3f());
         for (;;) {
             const size_t first = next.fetch_add(QUIET_SHARE, std::memory_order_relaxed);
@@ -2115,11 +2172,15 @@ void ExplosionBatch::settleQuiet(Level &level, const std::vector<QuietBlast> &bl
                     continue;
                 }
 
-                hand.mField.prepare(level, source, blast.mSize, low, high, hand.mSeen.size() > FEW_TARGETS,
-                                    centers.data() + index, centers.size() - index);
-                if (hand.mField.hasFailed()) {
+                const BlastField *field = &hand.mField;
+                if (!crowd) {
+                    hand.mField.prepare(level, source, blast.mSize, low, high, hand.mSeen.size() > FEW_TARGETS,
+                                        centers.data() + index, centers.size() - index);
+                } else if (regionOf[index] < 0 || !mQuietFields[(size_t) regionOf[index]].contains(low, high)) {
                     hand.mLeftWhole.push_back(index);
                     continue;
+                } else {
+                    field = &mQuietFields[(size_t) regionOf[index]];
                 }
 
                 for (const QuietHand::Seen &seen: hand.mSeen) {
@@ -2128,9 +2189,9 @@ void ExplosionBatch::settleQuiet(Level &level, const std::vector<QuietBlast> &bl
                     size.mWidth = target.mWidth;
                     size.mHeight = target.mHeight;
                     const AxisAlignedBB box = boundingBoxOf(target.mPosition, size);
-                    float density = quickDensityOf(hand.mField, source, box);
+                    float density = quickDensityOf(*field, source, box);
                     if (density < 0.0f)
-                        density = walkedDensityOf(hand.mField, source, box);
+                        density = walkedDensityOf(*field, source, box);
 
                     // an invulnerable target takes the push alone: nothing else of the world is touched
                     if (density >= 0.0f && target.mInvulnerable) {
