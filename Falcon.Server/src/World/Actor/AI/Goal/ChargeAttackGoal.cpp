@@ -36,7 +36,9 @@ namespace {
     }
 }
 
-ChargeAttackGoal::ChargeAttackGoal(Settings settings) : mSettings(settings) {}
+ChargeAttackGoal::ChargeAttackGoal(Settings settings) : mSettings(settings) {
+    setRequiredControlFlags((uint8_t) GoalControlFlag::Move);
+}
 
 bool ChargeAttackGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     const Actor *target = mob.getTarget(owner);
@@ -57,7 +59,7 @@ void ChargeAttackGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     const Actor *target = mob.getTarget(owner);
     if (target == nullptr)
         return;
-    mob.getMoveControl().setWantedPosition(eyesOf(*target), mSettings.mSpeedMultiplier);
+    mob.getMoveControl().setWantedPosition(eyesOf(*target), mob.getMovementSpeed() * mSettings.mSpeedMultiplier);
     setCharging(owner, mob, true);
     owner.playLevelSound(owner.getLevelFor(mob), CHARGE_SOUND, mob.getPosition());
 }
@@ -77,5 +79,5 @@ void ChargeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
     }
     if (mob.distanceSquaredTo(*target) < mSettings.mMaxDistance * mSettings.mMaxDistance)
-        mob.getMoveControl().setWantedPosition(eyesOf(*target), mSettings.mSpeedMultiplier);
+        mob.getMoveControl().setWantedPosition(eyesOf(*target), mob.getMovementSpeed() * mSettings.mSpeedMultiplier);
 }
