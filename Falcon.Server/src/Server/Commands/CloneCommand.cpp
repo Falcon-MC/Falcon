@@ -155,7 +155,7 @@ bool CloneCommand::execute(CommandOrigin &sender, const std::vector<std::string>
                                       destination.z + z - low.z);
                 sources.push_back(source);
                 if (BlockActor *actor = level->getBlockActors().find(source))
-                    actors.emplace_back(target, actor->saveNbt());
+                    actors.emplace_back(target, actor->saveWithPosition());
                 const BlockState *extra = level->peekBlockPtr(x, y, z, 1);
                 Copied copied{target, state, extra != nullptr ? *extra : BlockState(BlockNames::AIR)};
                 (BlockShape::isFullCube(state) ? whole : leaning).push_back(std::move(copied));
@@ -199,17 +199,12 @@ bool CloneCommand::execute(CommandOrigin &sender, const std::vector<std::string>
             }
         }
         for (std::pair<Vector3i, Tag> &entry: actors) {
-            std::unique_ptr<BlockActor> actor = BlockActorStore::create(entry.second.getString("id"));
-            if (actor == nullptr)
-                continue;
             entry.second.putInt("x", entry.first.x);
             entry.second.putInt("y", entry.first.y);
             entry.second.putInt("z", entry.first.z);
-            actor->loadNbt(entry.second, mHandler.getCodecContext());
-            actor->setPosition(entry.first);
-            BlockActor &placed = *actor;
-            level->getBlockActors().insert(std::move(actor));
-            BlockActionHandler::broadcastBlockActorData(mHandler, *level, placed);
+            level->getBlockActors().addLoaded({entry.second}, mHandler.getCodecContext());
+            if (BlockActor *placed = level->getBlockActors().find(entry.first))
+                BlockActionHandler::broadcastBlockActorData(mHandler, *level, *placed);
         }
     }
     for (const Vector3i &position: changed) {
