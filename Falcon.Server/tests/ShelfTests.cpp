@@ -94,10 +94,50 @@ int main() {
                         && slotName(level, 2) == "minecraft:apple" && inventory.getItemInHand().mCount == 5,
                 "in creative the hand lost its item");
 
-        BlockState powered = state;
-        powered.mStates.putByte("powered_bit", 1);
-        require(!block->onInteractAt(server, player, SHELF, powered, FRONT, Vector3f(0.5f, 0.5f, 1.0f)),
-                "a powered shelf swapped one slot");
+        // facing south the row runs from the east end (type 1) to the west end (type 3), powered one by one
+        player.setGameType(0);
+        const Vector3i east(SHELF.x + 1, SHELF.y, SHELF.z);
+        const Vector3i west(SHELF.x - 1, SHELF.y, SHELF.z);
+        level.setBlock(east, state, false);
+        level.setBlock(west, state, false);
+        const auto power = [&](const Vector3i &at, bool on) {
+            const char *below = on ? "minecraft:redstone_block" : "minecraft:stone";
+            level.setBlock(Vector3i(at.x, at.y - 1, at.z), BlockState(below), false);
+            block->onRedstonePower(server, level, at, level.getBlockState(at.x, at.y, at.z));
+        };
+        const auto rowType = [&](const Vector3i &at) {
+            const BlockState now = level.getBlockState(at.x, at.y, at.z);
+            return now.mStates.getByte("powered_bit") == 0 ? -1 : now.mStates.getInt("powered_shelf_type");
+        };
+        power(east, true);
+        require(rowType(east) == 0, "a lone powered shelf was joined to something");
+        power(SHELF, true);
+        require(rowType(east) == 1 && rowType(SHELF) == 3, "two powered shelves did not join");
+        power(west, true);
+        require(rowType(east) == 1 && rowType(SHELF) == 2 && rowType(west) == 3,
+                "the third shelf did not join the row");
+
+        level.getBlockActors().getOrCreate<ShelfBlockActor>(east);
+        level.getBlockActors().getOrCreate<ShelfBlockActor>(west);
+        for (int slot = 0; slot < 9; ++slot)
+            inventory.setItem(slot, item(server, "minecraft:stick", slot + 1));
+        const BlockState middle = level.getBlockState(SHELF.x, SHELF.y, SHELF.z);
+        require(block->onInteractAt(server, player, SHELF, middle, FRONT, Vector3f(0.5f, 0.1f, 1.0f)),
+                "a powered row did not swap");
+        // the west end takes hotbar 0-2, the middle 3-5, the east end 6-8
+        ShelfBlockActor *westShelf = level.getBlockActors().find<ShelfBlockActor>(west);
+        ShelfBlockActor *eastShelf = level.getBlockActors().find<ShelfBlockActor>(east);
+        require(westShelf->getInventory().getContainerItem(0).mCount == 1
+                        && eastShelf->getInventory().getContainerItem(2).mCount == 9,
+                "the hotbar thirds went to the wrong shelves");
+        // the middle shelf held a stick and five apples from the checks above
+        require(inventory.getItem(3).mCount == 1
+                        && inventory.getItem(5).mDefinition->getIdentifier() == "minecraft:apple",
+                "the middle shelf's items did not come to the hotbar");
+
+        power(SHELF, false);
+        require(rowType(SHELF) == -1 && rowType(east) == 0 && rowType(west) == 0,
+                "the row did not come apart when its middle lost power");
         std::cout << "shelf checks passed\n";
     } catch (const std::exception &error) {
         std::clog << "Shelf regression failed: " << error.what() << '\n';
