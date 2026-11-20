@@ -99,7 +99,7 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
     ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, player.getPosition());
     if (rocket != nullptr) {
         rocket->setProjectile(true);
-        rocket->setOwnerUniqueId((int64_t) player.getRuntimeId());
+        rocket->setOwnerUniqueId(player.getUniqueId());
         rocket->getProjectileData().mFireworkLifetime = rollLifetime();
         rocket->getProjectileData().mFireworkData = buildFireworkData(item);
         owner.syncActorFirework(*rocket);

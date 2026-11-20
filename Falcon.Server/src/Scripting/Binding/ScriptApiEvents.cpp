@@ -473,9 +473,9 @@ void ScriptApi::emitProjectileHitBlock(ServerActor &projectile, int32_t x, int32
         if (owner != nullptr)
             JS_SetPropertyStr(mContext, event, "source", makePlayer(*owner));
     } else if (projectile.getOwnerUniqueId() != -1) {
-        ServerActor *owner = mHost.getActor(projectile.getOwnerUniqueId());
+        Actor *owner = mHost.getEntity(projectile.getOwnerUniqueId());
         if (owner != nullptr)
-            JS_SetPropertyStr(mContext, event, "source", makeActor(*owner));
+            JS_SetPropertyStr(mContext, event, "source", makeEntity(*owner));
     }
 
     JSValue hit = JS_NewObject(mContext);

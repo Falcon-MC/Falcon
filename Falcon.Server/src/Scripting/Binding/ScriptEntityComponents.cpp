@@ -922,9 +922,9 @@ namespace {
             ServerPlayer *owner = target.mApi->resolvePlayerByHandle(actor->getOwnerPlayerHandle());
             return owner == nullptr ? JS_UNDEFINED : target.mApi->makePlayer(*owner);
         }
-        ServerActor *owner = actor->getOwnerUniqueId() != -1 ? target.mApi->host().getActor(actor->getOwnerUniqueId())
-                                                             : nullptr;
-        return owner == nullptr ? JS_UNDEFINED : target.mApi->makeActor(*owner);
+        Actor *owner = actor->getOwnerUniqueId() != -1 ? target.mApi->host().getEntity(actor->getOwnerUniqueId())
+                                                       : nullptr;
+        return owner == nullptr ? JS_UNDEFINED : target.mApi->makeEntity(*owner);
     }
 
     JSValue projectileSetOwner(JSContext *ctx, JSValueConst thisVal, int argc, JSValueConst *argv) {
@@ -935,9 +935,12 @@ namespace {
         const ScriptEntityRef *owner = argc >= 1 ? target.mApi->native<ScriptEntityRef>(argv[0]) : nullptr;
         if (actor == nullptr || owner == nullptr)
             return JS_UNDEFINED;
-        if (owner->mKind == ScriptEntityRef::Kind::Player)
+        if (owner->mKind == ScriptEntityRef::Kind::Player) {
             actor->setOwnerPlayerHandle((uint32_t) owner->mId);
-        else if (ServerActor *resolved = target.mApi->resolveActor(argv[0]))
+            // the engine finds a shooter by unique id
+            if (ServerPlayer *player = target.mApi->resolvePlayerByHandle((uint32_t) owner->mId))
+                actor->setOwnerUniqueId(player->getUniqueId());
+        } else if (ServerActor *resolved = target.mApi->resolveActor(argv[0]))
             actor->setOwnerUniqueId(resolved->getUniqueId());
         return JS_UNDEFINED;
     }

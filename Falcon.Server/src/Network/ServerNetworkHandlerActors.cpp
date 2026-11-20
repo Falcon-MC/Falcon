@@ -114,7 +114,7 @@ namespace {
         }
 
         for (auto &entry: owner.getPlayers()) {
-            if ((int64_t) entry.second.getRuntimeId() == projectile.getOwnerUniqueId())
+            if (entry.second.getUniqueId() == projectile.getOwnerUniqueId())
                 hitEvent.mAttacker = &entry.second;
         }
 
@@ -348,6 +348,16 @@ ServerActor *ServerNetworkHandler::getActorByRuntimeId(uint64_t runtimeId) {
     return it == mActorUniqueIdsByRuntimeId.end() ? nullptr : getActor(it->second);
 }
 
+Actor *ServerNetworkHandler::getEntity(int64_t uniqueId) {
+    if (ServerActor *actor = getActor(uniqueId))
+        return actor;
+    for (auto &entry: mPlayers) {
+        if (entry.second.getUniqueId() == uniqueId)
+            return &entry.second;
+    }
+    return nullptr;
+}
+
 int64_t ServerNetworkHandler::allocateActorUniqueId() {
     return (int64_t) (((uint64_t) getLevel().getWorldStartCount() << 32) | ++mActorUniqueIdCounter);
 }
@@ -479,7 +489,7 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
         return nullptr;
 
     projectile->setProjectile(true);
-    projectile->setOwnerUniqueId((int64_t) player.getRuntimeId());
+    projectile->setOwnerUniqueId(player.getUniqueId());
     projectile->getProjectileData().mLootingLevel = ItemEnchantments::getLevel(player.getInventory().getItemInHand(),
                                                                                EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
@@ -642,7 +652,7 @@ ServerActor *ServerNetworkHandler::spawnAreaEffectCloud(Level &level, const Vect
     state.mPosition = position;
     state.mDimension = cloud->getDimension();
     state.mWorldId = cloud->getWorldId();
-    state.mOwnerRuntimeId = settings.mOwnerRuntimeId;
+    state.mOwnerUniqueId = settings.mOwnerUniqueId;
     mLingeringClouds[cloud->getUniqueId()] = state;
     return cloud;
 }
@@ -794,7 +804,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
 
     ServerPlayer *shooter = nullptr;
     for (auto &entry: mPlayers) {
-        if ((int64_t) entry.second.getRuntimeId() == projectile.getOwnerUniqueId())
+        if (entry.second.getUniqueId() == projectile.getOwnerUniqueId())
             shooter = &entry.second;
     }
 
@@ -1933,7 +1943,7 @@ void ServerNetworkHandler::tickActors() {
             ServerPlayer *rider = nullptr;
             if (firework.mFireworkAttached) {
                 for (auto &playerEntry: mPlayers) {
-                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId()
+                    if (playerEntry.second.getUniqueId() == actor.getOwnerUniqueId()
                         && playerEntry.second.isSpawned())
                         rider = &playerEntry.second;
                 }
@@ -2003,7 +2013,7 @@ void ServerNetworkHandler::tickActors() {
             if (arrowLike && actor.getProjectileData().mReturning) {
                 ServerPlayer *shooter = nullptr;
                 for (auto &playerEntry: mPlayers) {
-                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId()
+                    if (playerEntry.second.getUniqueId() == actor.getOwnerUniqueId()
                         && playerEntry.second.isSpawned() && !playerEntry.second.isDead())
                         shooter = &playerEntry.second;
                 }
@@ -2133,7 +2143,7 @@ void ServerNetworkHandler::tickActors() {
                     ServerPlayer &candidate = playerEntry.second;
                     if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
                         continue;
-                    if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
+                    if (candidate.getUniqueId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
                         continue;
                     if (meetsSweep(projectileHitBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT)))
                         nearPlayers.push_back(&candidate);
@@ -2151,7 +2161,7 @@ void ServerNetworkHandler::tickActors() {
                         && candidate.getLifetimeTicks() < 8)
                         return;
                     if (projectile != nullptr && projectile->passesThroughOwner()
-                        && (int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId())
+                        && candidate.getUniqueId() == actor.getOwnerUniqueId())
                         return;
 
                     const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
@@ -2321,7 +2331,7 @@ void ServerNetworkHandler::tickActors() {
                 ServerPlayer &nearby = playerEntry.second;
                 if (!nearby.isSpawned() || nearby.getDimension() != cloud.mDimension
                     || nearby.getWorldId() != cloud.mWorldId
-                    || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
+                    || nearby.getUniqueId() == cloud.mOwnerUniqueId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();
@@ -2340,7 +2350,7 @@ void ServerNetworkHandler::tickActors() {
                 ServerActor &nearby = *actorEntry.second;
                 if (actorEntry.first == cloudId || !nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
                     || nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
-                    || (int64_t) nearby.getRuntimeId() == cloud.mOwnerRuntimeId)
+                    || nearby.getUniqueId() == cloud.mOwnerUniqueId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();

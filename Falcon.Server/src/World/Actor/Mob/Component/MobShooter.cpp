@@ -248,7 +248,7 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
         return false;
 
     projectile->setProjectile(true);
-    projectile->setOwnerUniqueId((int64_t) mob.getRuntimeId());
+    projectile->setOwnerUniqueId(mob.getUniqueId());
     if (settings.mImpact != nullptr) {
         ProjectileData &data = projectile->getProjectileData();
         data.mImpactDamage = impactDamage(*settings.mImpact, shooterRandom());

@@ -449,8 +449,8 @@ public:
         int32_t mReapplicationDelay = 0;
         int32_t mParticle = 0;
         std::optional<int32_t> mColor;
-        // runtime id of the cloud's creator; the cloud leaves it alone
-        int64_t mOwnerRuntimeId = -1;
+        // unique id of the cloud's creator; the cloud leaves it alone
+        int64_t mOwnerUniqueId = -1;
     };
 
     ServerActor *spawnAreaEffectCloud(Level &level, const Vector3f &position, const AreaEffectCloudSettings &settings);
@@ -460,6 +460,9 @@ public:
     ServerActor *getActor(int64_t uniqueId);
 
     ServerActor *getActorByRuntimeId(uint64_t runtimeId);
+
+    // players too: getActor holds every actor but the players
+    Actor *getEntity(int64_t uniqueId);
 
     void removeActor(int64_t uniqueId);
 
@@ -1347,7 +1350,7 @@ private:
         Vector3f mPosition;
         DimensionType mDimension = DimensionType::Overworld;
         uint32_t mWorldId = 0;
-        int64_t mOwnerRuntimeId = -1;
+        int64_t mOwnerUniqueId = -1;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;

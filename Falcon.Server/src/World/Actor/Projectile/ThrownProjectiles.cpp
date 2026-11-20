@@ -125,7 +125,7 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
     const int64_t ownerId = getOwnerUniqueId();
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &shooter = entry.second;
-        if ((int64_t) shooter.getRuntimeId() != ownerId)
+        if (shooter.getUniqueId() != ownerId)
             continue;
 
         Vector3f destination = hitPosition;
@@ -248,7 +248,7 @@ void DragonFireballActor::_burst(ServerNetworkHandler &owner, const Vector3f &hi
     settings.mDuration = DRAGON_BREATH_DURATION;
     settings.mReapplicationDelay = DRAGON_BREATH_REAPPLICATION_DELAY;
     settings.mParticle = DRAGON_BREATH_PARTICLE;
-    settings.mOwnerRuntimeId = getOwnerUniqueId();
+    settings.mOwnerUniqueId = getOwnerUniqueId();
     owner.spawnAreaEffectCloud(level, hitPosition, settings);
 }
 
