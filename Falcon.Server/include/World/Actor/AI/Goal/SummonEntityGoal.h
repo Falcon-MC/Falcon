@@ -66,8 +66,6 @@ private:
     void _spawnOne(ServerNetworkHandler &owner, MobActor &mob, const Spawn &spawn, float x, float z, float bottom,
                    float top);
 
-    void _setCasting(ServerNetworkHandler &owner, MobActor &mob, bool casting);
-
     std::vector<Choice> mChoices;
     std::mt19937 mRandom{std::random_device{}()};
     int32_t mChoice = -1;

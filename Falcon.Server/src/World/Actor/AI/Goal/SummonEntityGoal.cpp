@@ -2,7 +2,7 @@
 
 #include "Core/Math/AxisAlignedBB.h"
 #include "Network/ServerNetworkHandler.h"
-#include "World/Actor/ActorFlags.h"
+#include "World/Actor/AI/Goal/SpellCasting.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
@@ -14,7 +14,6 @@
 #include <utility>
 
 namespace {
-    const int32_t ACTOR_DATA_SPELL_CASTING_COLOR = 77;
     const float PI = 3.1415927f;
     const float MIN_LINE_LENGTH = 0.0001f;
 
@@ -99,13 +98,6 @@ bool SummonEntityGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &m
     return mChoice >= 0 && mStep < (int32_t) mChoices[mChoice].mSequence.size();
 }
 
-void SummonEntityGoal::_setCasting(ServerNetworkHandler &owner, MobActor &mob, bool casting) {
-    if (mob.getFlags().get(ActorFlag::Casting) == casting)
-        return;
-    mob.getFlags().set(ActorFlag::Casting, casting);
-    owner.syncActorFlags(mob);
-}
-
 void SummonEntityGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     mStep = 0;
     mDelayTicks = -1;
@@ -121,22 +113,16 @@ void SummonEntityGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
         owner.playLevelSound(level, choice.mStartSoundEvent, mob.getPosition());
 
     mCastTicks = choice.mCastDuration;
-    EntityDataEntry color;
-    color.mId = ACTOR_DATA_SPELL_CASTING_COLOR;
-    color.mFormat = EntityDataFormat::Int;
-    color.mIntValue = choice.mParticleColor;
-    EntityDataMap metadata;
-    metadata.mEntries.push_back(color);
-    owner.sendActorMetadata(mob, metadata);
+    SpellCasting::sendColor(owner, mob, choice.mParticleColor);
     if (choice.mDoCasting)
-        _setCasting(owner, mob, mCastTicks > 0);
+        SpellCasting::setCasting(owner, mob, mCastTicks > 0);
 
     if (!choice.mSequence.empty() && !choice.mSequence.front().mSoundEvent.empty())
         owner.playLevelSound(level, choice.mSequence.front().mSoundEvent, mob.getPosition());
 }
 
 void SummonEntityGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
-    _setCasting(owner, mob, false);
+    SpellCasting::setCasting(owner, mob, false);
     if (mChoice >= 0)
         mCooldownEndTick = owner.getCurrentTick() + mChoices[mChoice].mCooldown;
 }
@@ -149,7 +135,7 @@ void SummonEntityGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     const Choice &choice = mChoices[mChoice];
     mob.getLookControl().setLookAt(target->getPosition());
     if (mCastTicks-- == 1)
-        _setCasting(owner, mob, false);
+        SpellCasting::setCasting(owner, mob, false);
 
     if (mStep >= (int32_t) choice.mSequence.size())
         return;
