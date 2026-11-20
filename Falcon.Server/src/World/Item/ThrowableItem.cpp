@@ -21,8 +21,8 @@ namespace {
 
     using Mode = ThrowableItem::DispenseMode;
 
-    // snowball, egg and experience bottle; the ender pearl keeps
-    // Item::dispense; ice ball and wind charge are ComponentItems (26.60)
+    // snowball, egg and experience bottle; the ender pearl keeps its own dispense; ice ball and wind charge
+    // are items made of components
     const ThrowableDefinition THROWABLES[] = {
             {"minecraft:ice_ball", "minecraft:ice_ball", 1.0f, 0, Mode::ShootWithClick},
             {"minecraft:snowball", "minecraft:snowball", 1.5f, 0, Mode::Shoot},

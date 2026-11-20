@@ -289,7 +289,7 @@ namespace {
         return identifier;
     }
 
-    // BlockType vtable +784: mDescriptionId + ".name", "tile." + the name without a minecraft namespace;
+    // "tile." + the name without a minecraft namespace, then ".name";
     // a display_name component replaces it
     std::string localizationKeyOf(const std::string &identifier) {
         const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(identifier);
