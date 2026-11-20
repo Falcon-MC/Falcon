@@ -788,6 +788,64 @@ namespace nethernet {
         return gRequestHeaders;
     }
 
+    std::vector<std::string> SignalingServer::currentRequestHostAddresses() {
+        static const size_t MAX_ADDRESSES = 4;
+        std::vector<std::string> addresses;
+
+        std::string lowered;
+        lowered.reserve(gRequestHeaders.size());
+        for (char c: gRequestHeaders)
+            lowered.push_back((char) tolower((unsigned char) c));
+
+        const size_t position = lowered.find("\r\nhost:");
+        if (position == std::string::npos)
+            return addresses;
+
+        const size_t start = position + 7;
+        const size_t end = gRequestHeaders.find("\r\n", start);
+        std::string host = gRequestHeaders.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        while (!host.empty() && (host.front() == ' ' || host.front() == '\t'))
+            host.erase(host.begin());
+        while (!host.empty() && (host.back() == ' ' || host.back() == '\t'))
+            host.pop_back();
+
+        // [v6]:port, name:port or a bare name
+        if (!host.empty() && host.front() == '[') {
+            const size_t close = host.find(']');
+            host = close == std::string::npos ? std::string() : host.substr(1, close - 1);
+        } else if (host.find(':') == host.rfind(':')) {
+            host = host.substr(0, host.find(':'));
+        }
+        if (host.empty())
+            return addresses;
+
+        addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_DGRAM;
+        addrinfo *results = nullptr;
+        if (getaddrinfo(host.c_str(), nullptr, &hints, &results) != 0 || results == nullptr)
+            return addresses;
+
+        for (addrinfo *entry = results; entry != nullptr && addresses.size() < MAX_ADDRESSES; entry = entry->ai_next) {
+            char text[INET6_ADDRSTRLEN] = {};
+            const void *raw = entry->ai_family == AF_INET6
+                                      ? (const void *) &((const sockaddr_in6 *) entry->ai_addr)->sin6_addr
+                                      : (const void *) &((const sockaddr_in *) entry->ai_addr)->sin_addr;
+            if ((entry->ai_family != AF_INET && entry->ai_family != AF_INET6)
+                || inet_ntop(entry->ai_family, raw, text, sizeof(text)) == nullptr)
+                continue;
+
+            const std::string address(text);
+            bool known = false;
+            for (const std::string &existing: addresses)
+                known = known || existing == address;
+            if (!known)
+                addresses.push_back(address);
+        }
+        freeaddrinfo(results);
+        return addresses;
+    }
+
     void SignalingServer::_serveRequest(const Stream &descriptor) {
         std::string buffer;
         char chunk[4096];

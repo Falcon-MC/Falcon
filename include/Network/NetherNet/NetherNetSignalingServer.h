@@ -41,6 +41,10 @@ namespace nethernet {
         // of an offer handler: an offer that came another way has none
         static const std::string &currentRequestHeaders();
 
+        // the addresses the Host header of that request names, resolved: where the client reached the server
+        // from its side of any NAT. Empty outside of an HTTP offer or when nothing resolves
+        static std::vector<std::string> currentRequestHostAddresses();
+
         bool isSecure() const {
             return mSecure.load();
         }

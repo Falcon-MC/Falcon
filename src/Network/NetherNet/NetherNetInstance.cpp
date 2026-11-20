@@ -17,6 +17,8 @@ namespace {
     const std::chrono::milliseconds CLOSE_GRACE(1000);
     const int GATHERING_TIMEOUT_SECONDS = 15;
     const unsigned int SIGNAL_TIMEOUT_MS = 10000;
+    // below the local host candidates: tried with them, after them
+    const uint32_t HOST_ADDRESS_CANDIDATE_PRIORITY = 2113929471;
     // asked again this long before they expire, as the signaling renews its cache: an offer answered just
     // before still gathers its relay candidates
     const int CREDENTIALS_REFRESH_MARGIN_SECONDS = 60;
@@ -456,6 +458,13 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
     rtc::Configuration configuration;
     configuration.mtu = nethernet::NETWORK_MTU;
     configuration.maxMessageSize = nethernet::MAX_MESSAGE_SIZE + 1;
+    // every connection on the game port, in UDP: the one port a host forwards beside the signaling
+    const unsigned short gamePort = mSignaling.getBoundPort();
+    if (gamePort != 0) {
+        configuration.enableIceUdpMux = true;
+        configuration.portRangeBegin = gamePort;
+        configuration.portRangeEnd = gamePort;
+    }
 
     for (const nethernet::IceServer &server: _currentCredentials().mIceServers) {
         for (const std::string &url: server.mUrls) {
@@ -642,6 +651,23 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
 
     for (const rtc::Candidate &candidate: localDescription.candidates())
         parameters.mCandidates.push_back(candidate.candidate());
+
+    // behind a NAT the local candidates are private addresses: the client reached this server at the Host it
+    // asked for, so that address on the game port is offered too
+    if (gamePort != 0) {
+        int index = 0;
+        for (const std::string &address: nethernet::SignalingServer::currentRequestHostAddresses()) {
+            bool known = false;
+            for (const rtc::Candidate &candidate: localDescription.candidates())
+                known = known || candidate.address().value_or(std::string()) == address;
+            if (known)
+                continue;
+
+            parameters.mCandidates.push_back("candidate:host" + std::to_string(index++) + " 1 udp "
+                                             + std::to_string(HOST_ADDRESS_CANDIDATE_PRIORITY) + " " + address + " "
+                                             + std::to_string(gamePort) + " typ host");
+        }
+    }
 
     if (parameters.mCandidates.empty()) {
         LOG_WARN(LogAreaID::Network, "NetherNet answer carries no ICE candidate, the client cannot connect back");
