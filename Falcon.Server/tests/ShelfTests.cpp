@@ -62,6 +62,9 @@ int main() {
                 "a diamond was not put on the shelf");
         require(slotName(level, 0) == "minecraft:diamond" && inventory.getItemInHand().isAir(),
                 "the whole stack did not go to the left slot");
+        const Tag spawn = level.getBlockActors().find<ShelfBlockActor>(SHELF)->getSpawnCompound();
+        const Tag *sent = spawn.get("Items");
+        require(sent != nullptr && sent->isList() && sent->size() == 1, "the shelf items did not reach the client");
 
         require(!block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.5f, 0.5f, 1.0f)),
                 "an empty hand on an empty slot did something");
