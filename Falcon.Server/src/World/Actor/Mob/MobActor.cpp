@@ -99,6 +99,8 @@ namespace {
     const char *const NAVIGATION_COMPONENTS[] = {"minecraft:navigation.generic", "minecraft:navigation.walk",
                                                  "minecraft:navigation.swim", "minecraft:navigation.climb"};
     const char *const CAN_CLIMB_COMPONENT = "minecraft:can_climb";
+    const char *const BLOCK_CLIMBER_COMPONENT = "minecraft:block_climber";
+    const char *const MOB_EFFECT_IMMUNITY_COMPONENT = "minecraft:mob_effect_immunity";
     const char *const BREATHABLE_COMPONENT = "minecraft:breathable";
     const char *const BURNS_IN_DAYLIGHT_COMPONENT = "minecraft:burns_in_daylight";
     const char *const SLOWDOWN_IMMUNITY_COMPONENT = "minecraft:block_movement_slowdown_immunity";
@@ -1091,6 +1093,20 @@ bool MobActor::canSwim() const {
     return false;
 }
 
+bool MobActor::canBeAffected(MobEffectId id) const {
+    const json::Value *immunity = getComponent(MOB_EFFECT_IMMUNITY_COMPONENT);
+    const json::Value *effects = immunity == nullptr ? nullptr : immunity->get("mob_effects");
+    if (effects == nullptr || !effects->isArray())
+        return true;
+
+    for (const std::unique_ptr<json::Value> &entry: effects->mArray) {
+        MobEffectId listed;
+        if (entry != nullptr && entry->isString() && parseDefinitionMobEffect(entry->mString, listed) && listed == id)
+            return false;
+    }
+    return true;
+}
+
 PhysicsComponent MobActor::getPhysics() const {
     PhysicsComponent physics = ServerActor::getPhysics();
     const DefinitionPhysics &definition = _getDefinitionPhysics();
@@ -1098,6 +1114,7 @@ PhysicsComponent MobActor::getPhysics() const {
     physics.mFloatsInLiquid = mGoalSelector.keepsAfloat();
     physics.mClimbsLadders = definition.mClimbsLadders;
     physics.mClimbsWalls = definition.mClimbsWalls;
+    physics.mBlockClimber = definition.mBlockClimber;
     physics.mGravityAfterMove = true;
     physics.mDefinitionFriction = definition.mDefinitionFriction;
     physics.mBounciness = definition.mBounciness;
@@ -1121,6 +1138,7 @@ const MobActor::DefinitionPhysics &MobActor::_getDefinitionPhysics() const {
     definition.mSwims = canSwim();
     definition.mClimbsLadders = getComponent(CAN_CLIMB_COMPONENT) != nullptr;
     definition.mClimbsWalls = getComponent(CLIMB_NAVIGATION_COMPONENT) != nullptr;
+    definition.mBlockClimber = getComponent(BLOCK_CLIMBER_COMPONENT) != nullptr;
 
     const json::Value *bounciness = getComponent(BOUNCINESS_COMPONENT);
     const json::Value *friction = getComponent(FRICTION_MODIFIER_COMPONENT);

@@ -85,6 +85,9 @@ public:
 
     PhysicsComponent getPhysics() const override;
 
+    // minecraft:mob_effect_immunity refuses the effects it lists
+    bool canBeAffected(MobEffectId id) const override;
+
     bool canSwim() const;
 
     bool canWalk() const;
@@ -633,6 +636,7 @@ private:
         bool mSwims = false;
         bool mClimbsLadders = false;
         bool mClimbsWalls = false;
+        bool mBlockClimber = false;
         bool mDefinitionFriction = false;
         float mBounciness = 0.0f;
         float mFrictionModifier = 1.0f;

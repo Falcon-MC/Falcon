@@ -54,6 +54,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
             motion.y = CLIMB_SPEED;
         actor.resetFallDistance();
     }
+    if (physics.mBlockClimber && _isInOrOverScaffolding(level, actor))
+        actor.resetFallDistance();
 
     Vector3f stuck;
     const bool isStuck = actor.takeStuckMultiplier(stuck);
@@ -180,6 +182,28 @@ bool ActorMovementSystem::_isClimbing(Level &level, const ServerActor &actor, co
 
     const Block *block = _blockAt(level, actor.getPosition());
     return block != nullptr && block->isClimbable();
+}
+
+// the game scans the box's columns at the feet layer and the one below; powder snow keeps the fall
+bool ActorMovementSystem::_isInOrOverScaffolding(Level &level, const ServerActor &actor) {
+    const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(actor);
+    const int32_t feetY = (int32_t) std::floor(actor.getPosition().y);
+    bool scaffolding = false;
+    for (int32_t x = (int32_t) std::floor(box.mMinX); x <= (int32_t) std::floor(box.mMaxX); ++x) {
+        for (int32_t z = (int32_t) std::floor(box.mMinZ); z <= (int32_t) std::floor(box.mMaxZ); ++z) {
+            for (int32_t y = feetY - 1; y <= feetY; ++y) {
+                const BlockState *state = level.peekBlockPtr(x, y, z);
+                const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+                if (block == nullptr)
+                    continue;
+                if (block->getTraversal() == BlockTraversal::PowderSnow)
+                    return false;
+                if (block->getTraversal() == BlockTraversal::Scaffolding)
+                    scaffolding = true;
+            }
+        }
+    }
+    return scaffolding;
 }
 
 float ActorMovementSystem::_speedFactorBelow(Level &level, const ServerActor &actor) {

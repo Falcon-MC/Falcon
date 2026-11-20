@@ -5,6 +5,7 @@
 #include "World/Level/LevelSoundEventIds.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
 
+#include "World/Actor/Definition/KnockbackRules.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/DynamicPropertyStore.h"
@@ -1366,6 +1367,12 @@ void ServerNetworkHandler::sendActorMotion(Actor &actor) {
 
 void ServerNetworkHandler::knockBack(Actor &actor, float deltaX, float deltaZ, float force, float verticalLimit) {
     actor.knockBack(deltaX, deltaZ, force, verticalLimit);
+    sendActorMotion(actor);
+}
+
+void ServerNetworkHandler::knockBack(Actor &actor, float deltaX, float deltaZ, const KnockbackPreset &preset) {
+    actor.knockBack(deltaX, deltaZ, preset.mHorizontalPower, preset.mVerticalPower, preset.mVerticalVelocityCap,
+                    preset.mSlowdownScale);
     sendActorMotion(actor);
 }
 

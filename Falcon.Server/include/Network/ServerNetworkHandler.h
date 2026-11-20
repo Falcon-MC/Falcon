@@ -73,6 +73,7 @@ class Item;
 class NetherNetInstance;
 class PluginManager;
 class PlayerMovementRegistry;
+struct KnockbackPreset;
 
 struct QueuedActorCommand {
     Level *mLevel = nullptr;
@@ -519,6 +520,8 @@ public:
     void sendActorMotion(Actor &actor);
 
     void knockBack(Actor &actor, float deltaX, float deltaZ, float force, float verticalLimit = 0.4f);
+
+    void knockBack(Actor &actor, float deltaX, float deltaZ, const KnockbackPreset &preset);
 
     void pushFrom(Actor &actor, const Vector3f &origin, float strength, float lift);
 

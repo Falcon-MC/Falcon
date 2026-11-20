@@ -212,6 +212,28 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
         static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
 }
 
+void Actor::knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap,
+                      float slowdownScale) {
+    // a negative resistance pushes harder; the game weakens both powers alike
+    const float resistance = getAttributes().get("minecraft:knockback_resistance") + getArmorKnockbackResistance();
+    const float kept = std::max(1.0f - resistance, 0.0f);
+    const float horizontal = horizontalPower * kept;
+    const float vertical = verticalPower * kept;
+    const float slowdown = std::min(std::max(slowdownScale, 0.0f), 1.0f);
+
+    const float length = std::sqrt(x * x + z * z);
+    const float directionX = length < 0.0001f ? 0.0f : x / length;
+    const float directionZ = length < 0.0001f ? 0.0f : z / length;
+
+    Vector3f motion = getMotion();
+    motion.x = motion.x * slowdown + directionX * horizontal;
+    motion.y = std::min(vertical * 1.2f + motion.y * slowdown, verticalCap);
+    motion.z = motion.z * slowdown + directionZ * horizontal;
+    setMotion(motion);
+    if (isPlayer())
+        static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
+}
+
 float Actor::getFood() const {
     return mAttributes.get(ATTRIBUTE_HUNGER);
 }

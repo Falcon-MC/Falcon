@@ -28,6 +28,8 @@ private:
 
     static bool _isClimbing(Level &level, const ServerActor &actor, const PhysicsComponent &physics);
 
+    static bool _isInOrOverScaffolding(Level &level, const ServerActor &actor);
+
     static float _speedFactorBelow(Level &level, const ServerActor &actor);
 
     static void _syncMovement(ServerNetworkHandler &owner, ServerActor &actor);
