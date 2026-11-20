@@ -395,6 +395,19 @@ public:
         (void) drop;
     }
 
+    // the item a hopper below pulls out of a block with no container; empty: none
+    virtual std::string getHopperOutput(const BlockState &state) const {
+        (void) state;
+        return std::string();
+    }
+
+    // the hopper below took the item getHopperOutput named
+    virtual void onHopperOutputTaken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+    }
+
     // item and projectile physics read the shape only of these; other blocks stop them at the cell
     virtual bool shapesCollisionPerActor() const {
         return false;
