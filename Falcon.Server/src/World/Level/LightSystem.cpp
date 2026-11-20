@@ -177,7 +177,7 @@ int32_t LightSystem::calculateSkyLightSubtracted(const Level &level, bool includ
     const float dark = std::min(1.0f, std::max(0.0f, 1.0f - (cosine + cosine + 0.5f)));
     float brightness = 1.0f - dark;
 
-    // the fog level term (Weather +0x4C) has no writer and no wither darkens the sky: both stay neutral
+    // the weather's fog level has no writer and no wither darkens the sky: both stay neutral
     if (includeWeather && Dimension::hasWeather(level.getDimensionType())) {
         brightness *= 1.0f - level.getRainLevel() * 5.0f * 0.0625f;
         brightness *= 1.0f - level.getLightningLevel() * 5.0f * 0.0625f;

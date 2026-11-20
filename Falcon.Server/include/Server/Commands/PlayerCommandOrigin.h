@@ -32,6 +32,10 @@ public:
 
     bool canExecuteCommand(const Command &command) const override;
 
+    ServerPlayer *permissionGroupPlayer() override {
+        return &mPlayer;
+    }
+
     Level *getLevel() override;
 
     const CommandOriginData &getOriginData() const {
