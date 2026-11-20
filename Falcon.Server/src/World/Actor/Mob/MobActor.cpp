@@ -2,6 +2,8 @@
 #include "Protocol/Packets/UpdateTradePacket.h"
 #include "World/Actor/Movement/MovementConstants.h"
 
+#include "Core/Math/AxisAlignedBB.h"
+#include "Network/Handler/BlockActionHandler.h"
 #include "World/Actor/AI/Goal/BehaviorGoals.h"
 #include "World/Actor/AI/Goal/BehaviorItems.h"
 #include "World/Actor/DamageCause.h"
@@ -24,7 +26,9 @@
 #include "World/Level/Storage/Loot/LootItems.h"
 #include "World/Level/Storage/Loot/LootTableRegistry.h"
 #include "World/Level/Explosion.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Level.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
@@ -82,6 +86,9 @@ namespace {
     const int64_t OWNER_SYNC_INTERVAL = 20;
     const char *const TIMER_COMPONENT = "minecraft:timer";
     const char *const SCHEDULER_COMPONENT = "minecraft:scheduler";
+    const char *const BREAK_BLOCKS_COMPONENT = "minecraft:break_blocks";
+    // the box the game breaks blocks in: the mob's, a tenth wider on x and z
+    const float BREAK_BLOCKS_MARGIN = 0.1f;
     const char *const DAMAGE_OVER_TIME_COMPONENT = "minecraft:damage_over_time";
     const char *const ATTACK_COOLDOWN_COMPONENT = "minecraft:attack_cooldown";
     const char *const IS_SHAKING_COMPONENT = "minecraft:is_shaking";
@@ -381,6 +388,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
         return;
     _tickSpellEffects();
     _tickTimer(owner);
+    _tickBreakBlocks(owner);
     _tickDamageOverTime(owner);
     _tickScheduler(owner);
     _tickAttackCooldown(owner);
@@ -882,6 +890,55 @@ void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     mTimerTicks = looping == nullptr || looping->boolean(true) ? timerTicks(*timer) : -1;
 
     EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
+}
+
+void MobActor::_tickBreakBlocks(ServerNetworkHandler &owner) {
+    const json::Value *component = getComponent(BREAK_BLOCKS_COMPONENT);
+    if (component != mBreakBlocksComponent) {
+        mBreakBlocksComponent = component;
+        mBreakableBlocks.clear();
+        const json::Value *list = component == nullptr ? nullptr : component->get("breakable_blocks");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &name: list->mArray) {
+                if (name->isString())
+                    mBreakableBlocks.insert(BlockStateUpgrades::currentName(name->mString));
+            }
+        }
+    }
+    if (mBreakableBlocks.empty())
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    if (!level.getGameRules().getBool("mobgriefing"))
+        return;
+
+    AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*this);
+    box.mMinX -= BREAK_BLOCKS_MARGIN;
+    box.mMaxX += BREAK_BLOCKS_MARGIN;
+    box.mMinZ -= BREAK_BLOCKS_MARGIN;
+    box.mMaxZ += BREAK_BLOCKS_MARGIN;
+    const int32_t maxX = (int32_t) std::ceil(box.mMaxX);
+    const int32_t maxY = (int32_t) std::ceil(box.mMaxY);
+    const int32_t maxZ = (int32_t) std::ceil(box.mMaxZ);
+    for (int32_t x = (int32_t) std::floor(box.mMinX); x <= maxX; x++) {
+        for (int32_t z = (int32_t) std::floor(box.mMinZ); z <= maxZ; z++) {
+            for (int32_t y = (int32_t) std::floor(box.mMinY); y <= maxY; y++) {
+                const BlockState *state = level.peekBlockPtr(x, y, z);
+                if (state == nullptr || mBreakableBlocks.count(state->mName) == 0)
+                    continue;
+                // no outline shapes here: a block without collision counts as its whole cell
+                AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, this);
+                if (shape.mMaxY <= shape.mMinY)
+                    shape = AxisAlignedBB((float) x, (float) y, (float) z, (float) x + 1.0f, (float) y + 1.0f,
+                                          (float) z + 1.0f);
+                if (!box.intersectsWith(shape))
+                    continue;
+                const BlockState broken = *state;
+                BlockActionHandler::destroyBlock(owner, level, Vector3i(x, y, z), broken, true, ItemStack::air(),
+                                                 this);
+            }
+        }
+    }
 }
 
 void MobActor::_tickDamageOverTime(ServerNetworkHandler &owner) {
