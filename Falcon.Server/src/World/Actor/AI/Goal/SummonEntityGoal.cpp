@@ -17,13 +17,6 @@ namespace {
     const float PI = 3.1415927f;
     const float MIN_LINE_LENGTH = 0.0001f;
 
-    float squaredDistance(const Vector3f &a, const Vector3f &b) {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        const float dz = a.z - b.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
-
     bool solidAt(Level &level, int32_t x, int32_t y, int32_t z, bool &known) {
         const BlockState *state = level.peekBlockPtr(x, y, z);
         if (state == nullptr) {
@@ -44,7 +37,8 @@ bool SummonEntityGoal::_capped(ServerNetworkHandler &owner, MobActor &mob, const
         const AxisAlignedBB area = ActorPushSystem::boundingBoxOf(mob).expand(radius, radius, radius);
         int32_t count = 0;
         owner.forEachActorNear(mob.getPosition(), radius + mob.getSize().mWidth, [&](ServerActor &actor) {
-            if (actor.getTypeId() == spawn.mEntityType && area.intersectsWith(ActorPushSystem::boundingBoxOf(actor)))
+            if (actor.sharesLevelWith(mob) && actor.getTypeId() == spawn.mEntityType
+                && area.intersectsWith(ActorPushSystem::boundingBoxOf(actor)))
                 ++count;
         });
         if (count >= spawn.mSummonCap)
@@ -58,7 +52,7 @@ bool SummonEntityGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (target == nullptr)
         return false;
 
-    const float distance = squaredDistance(mob.getPosition(), target->getPosition());
+    const float distance = mob.distanceSquaredTo(*target);
     std::vector<int32_t> candidates;
     int32_t totalWeight = 0;
     for (int32_t index = 0; index < (int32_t) mChoices.size(); ++index) {
@@ -101,6 +95,7 @@ bool SummonEntityGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &m
 void SummonEntityGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     mStep = 0;
     mDelayTicks = -1;
+    mSpawned = 0;
     const Actor *target = mob.getTarget(owner);
     if (target == nullptr || mChoice < 0)
         return;
