@@ -4,6 +4,8 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Definition/KnockbackRules.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/Systems/BlockClimberSystem.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
@@ -61,12 +63,40 @@ namespace {
 
     void blockClimber(const std::filesystem::path &directory) {
         Arena arena(directory);
-        require(arena.spawn("minecraft:endermite", Vector3f(0.5f, 100.0f, 0.5f)).getPhysics().mBlockClimber,
-                "the endermite is no block climber");
-        require(arena.spawn("minecraft:silverfish", Vector3f(2.5f, 100.0f, 0.5f)).getPhysics().mBlockClimber,
-                "the silverfish is no block climber");
-        require(!arena.spawn("minecraft:zombie", Vector3f(4.5f, 100.0f, 0.5f)).getPhysics().mBlockClimber,
+        Level &level = *arena.mLevel;
+        require(!arena.spawn("minecraft:zombie", Vector3f(4.5f, 100.0f, 4.5f)).getPhysics().mBlockClimber,
                 "a zombie became a block climber");
+
+        level.setBlockState(0, 98, 0, BlockState("minecraft:stone"));
+        level.setBlockState(0, 99, 0, BlockState("minecraft:scaffolding"));
+        MobActor &endermite = arena.spawn("minecraft:endermite", Vector3f(0.5f, 100.0f, 0.5f));
+        require(endermite.getPhysics().mBlockClimber, "the endermite is no block climber");
+        BlockClimberSystem::tick(arena.mOwner, endermite);
+        const ActorFlags &flags = endermite.getFlags();
+        require(flags.get(ActorFlag::OverScaffolding) && !flags.get(ActorFlag::InScaffolding),
+                "standing on scaffolding was not seen");
+        require(flags.get(ActorFlag::OverDescendingBlock) && !flags.get(ActorFlag::InAscendingBlock),
+                "scaffolding on stone below the feet was not descending");
+
+        level.setBlockState(0, 100, 0, BlockState("minecraft:scaffolding"));
+        BlockClimberSystem::tick(arena.mOwner, endermite);
+        require(flags.get(ActorFlag::InScaffolding) && flags.get(ActorFlag::InAscendingBlock),
+                "scaffolding at the feet was not seen");
+
+        // scaffolding hanging over air is no ladder
+        level.setBlockState(0, 98, 0, BlockState("minecraft:air"));
+        BlockClimberSystem::tick(arena.mOwner, endermite);
+        require(flags.get(ActorFlag::OverScaffolding) && !flags.get(ActorFlag::OverDescendingBlock),
+                "scaffolding over air counted as descending");
+    }
+
+    void mobKnockbackLift(const std::filesystem::path &directory) {
+        Arena arena(directory);
+        MobActor &zombie = arena.spawn("minecraft:zombie", Vector3f(0.5f, 100.0f, 0.5f));
+        zombie.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+        zombie.knockBack(1.0f, 0.0f, 0.4f, 1.0f);
+        require(closeTo(zombie.getMotion().y, 0.48f), "a mob was not lifted by 1.2 times the power");
+        require(closeTo(zombie.getMotion().x, 0.4f), "the horizontal push changed");
     }
 
     void drownedKnockback(const std::filesystem::path &directory) {
@@ -107,6 +137,7 @@ int main() {
         effectImmunity(directory);
         blockClimber(directory);
         drownedKnockback(directory);
+        mobKnockbackLift(directory);
         std::cout << "mob component checks passed\n";
     } catch (const std::exception &error) {
         std::cout << error.what() << '\n';

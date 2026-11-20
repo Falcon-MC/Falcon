@@ -14,7 +14,7 @@ struct PhysicsComponent {
     bool mSwims = false;
     bool mClimbsLadders = false;
     bool mClimbsWalls = false;
-    // minecraft:block_climber: in or over scaffolding a fall is forgotten, as for a player
+    // minecraft:block_climber: keeps the scaffolding and ascendable block flags
     bool mBlockClimber = false;
     // mobs move with vertical speed first, gravity and drag after: a 0.42 jump climbs a full block;
     // other actors apply both before moving

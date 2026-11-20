@@ -13,6 +13,8 @@
 #include <map>
 
 namespace {
+    // the game lifts a knocked back mob by 1.2 times the vertical power; players take another path there
+    const float VERTICAL_KNOCKBACK_FACTOR = 1.2f;
     const char *const UNDEAD_ACTORS[] = {"minecraft:bogged",
                                          "minecraft:drowned",
                                          "minecraft:husk",
@@ -205,7 +207,8 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     const float inverse = 1.0f / length;
     Vector3f motion = getMotion();
     motion.x = motion.x * 0.5f + x * inverse * base;
-    motion.y = std::min(motion.y * 0.5f + base, verticalLimit);
+    const float lift = isPlayer() ? base : base * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(motion.y * 0.5f + lift, verticalLimit);
     motion.z = motion.z * 0.5f + z * inverse * base;
     setMotion(motion);
     if (isPlayer())
@@ -227,7 +230,8 @@ void Actor::knockBack(float x, float z, float horizontalPower, float verticalPow
 
     Vector3f motion = getMotion();
     motion.x = motion.x * slowdown + directionX * horizontal;
-    motion.y = std::min(vertical * 1.2f + motion.y * slowdown, verticalCap);
+    const float lift = isPlayer() ? vertical : vertical * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(lift + motion.y * slowdown, verticalCap);
     motion.z = motion.z * slowdown + directionZ * horizontal;
     setMotion(motion);
     if (isPlayer())
