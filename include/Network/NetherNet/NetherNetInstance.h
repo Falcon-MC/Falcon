@@ -128,6 +128,8 @@ private:
 
     void _detachSignaling();
 
+    nethernet::Credentials _currentCredentials();
+
     static std::string _signalKey(const std::string &networkID, uint64_t connectionID);
 
     RakPeerHelper::IPSupportInterface &mIpSupport;
@@ -144,6 +146,7 @@ private:
     nethernet::DiscoveryListener mDiscovery;
     nethernet::Identity mIdentity;
     nethernet::Credentials mCredentials;
+    std::chrono::steady_clock::time_point mCredentialsDue = std::chrono::steady_clock::time_point::max();
     std::function<nethernet::ServerData()> mServerDataProvider;
     std::function<int(const std::string &)> mConnectionInspector;
     std::function<void(const nethernet::Connection &)> mConnectionObserver;

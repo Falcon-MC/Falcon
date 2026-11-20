@@ -27,6 +27,8 @@ namespace nethernet {
         const char *METHOD_SYSTEM_PING = "System_Ping_v1_0";
         const char *METHOD_SYSTEM_PONG = "System_Pong_v1_0";
         const char *METHOD_CREDENTIALS = "Signaling_TurnAuth_v1_0";
+        // stale this long before they expire: the NetherNet instance asks again at that point
+        const int64_t CREDENTIALS_REFRESH_MARGIN_SECONDS = 60;
         const char *METHOD_RECEIVE_MESSAGE = "Signaling_ReceiveMessage_v1_0";
         const char *METHOD_SEND_MESSAGE = "Signaling_SendClientMessage_v1_0";
         const char *METHOD_DELIVERY_NOTIFICATION = "Signaling_DeliveryNotification_V1_0";
@@ -350,7 +352,7 @@ namespace nethernet {
 
         const int64_t now = AuthenticationUtils::currentUnixTime();
 
-        if (!mCredentials.mIceServers.empty() && now < mCredentialsExpiry) {
+        if (!mCredentials.mIceServers.empty() && now + CREDENTIALS_REFRESH_MARGIN_SECONDS < mCredentialsExpiry) {
             outCredentials = mCredentials;
             return true;
         }

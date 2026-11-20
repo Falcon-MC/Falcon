@@ -17,6 +17,11 @@ namespace {
     const std::chrono::milliseconds CLOSE_GRACE(1000);
     const int GATHERING_TIMEOUT_SECONDS = 15;
     const unsigned int SIGNAL_TIMEOUT_MS = 10000;
+    // asked again this long before they expire, as the signaling renews its cache: an offer answered just
+    // before still gathers its relay candidates
+    const int CREDENTIALS_REFRESH_MARGIN_SECONDS = 60;
+    // a failed refresh holds back one offer at most per this many seconds
+    const int CREDENTIALS_RETRY_SECONDS = 30;
     const char *IDENTITY_DOMAIN = "self";
 
     unsigned long long randomNetworkID() {
@@ -57,6 +62,15 @@ bool NetherNetInstance::isIPv6Supported() const {
 void NetherNetInstance::setCredentials(const nethernet::Credentials &credentials) {
     std::lock_guard<std::mutex> lock(mMutex);
     mCredentials = credentials;
+    if (credentials.mExpirationInSeconds <= 0) {
+        mCredentialsDue = std::chrono::steady_clock::time_point::max();
+        return;
+    }
+
+    const int lifetime = credentials.mExpirationInSeconds > CREDENTIALS_REFRESH_MARGIN_SECONDS
+                                 ? credentials.mExpirationInSeconds - CREDENTIALS_REFRESH_MARGIN_SECONDS
+                                 : credentials.mExpirationInSeconds;
+    mCredentialsDue = std::chrono::steady_clock::now() + std::chrono::seconds(lifetime);
 }
 
 void NetherNetInstance::setTlsCertificate(const std::string &certificatePath, const std::string &privateKeyPath) {
@@ -223,16 +237,44 @@ void NetherNetInstance::attachSignaling(const std::shared_ptr<nethernet::Signali
 
     nethernet::Credentials credentials;
     std::string error;
-    if (signaling->requestCredentials(credentials, SIGNAL_TIMEOUT_MS, error))
+    const bool fetched = signaling->requestCredentials(credentials, SIGNAL_TIMEOUT_MS, error);
+    if (fetched)
         setCredentials(credentials);
     else
         LOG_WARN(LogAreaID::Network, "Could not fetch the NetherNet relay credentials: %s", error.c_str());
 
     std::lock_guard<std::mutex> lock(mMutex);
+    if (!fetched)
+        mCredentialsDue = std::chrono::steady_clock::now();
     mOnlineSignaling = signaling;
     mSignalSubscription = signaling->subscribe([this](const nethernet::Signal &signal) {
         _onSignal(signal);
     });
+}
+
+// the relay credentials expire: fetched again by the first offer past their due time
+nethernet::Credentials NetherNetInstance::_currentCredentials() {
+    std::shared_ptr<nethernet::Signaling> signaling;
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        if (mOnlineSignaling != nullptr && now >= mCredentialsDue) {
+            signaling = mOnlineSignaling;
+            mCredentialsDue = now + std::chrono::seconds(CREDENTIALS_RETRY_SECONDS);
+        }
+    }
+
+    if (signaling != nullptr) {
+        nethernet::Credentials credentials;
+        std::string error;
+        if (signaling->requestCredentials(credentials, SIGNAL_TIMEOUT_MS, error))
+            setCredentials(credentials);
+        else
+            LOG_WARN(LogAreaID::Network, "Could not refresh the NetherNet relay credentials: %s", error.c_str());
+    }
+
+    std::lock_guard<std::mutex> lock(mMutex);
+    return mCredentials;
 }
 
 void NetherNetInstance::_detachSignaling() {
@@ -415,16 +457,12 @@ bool NetherNetInstance::_negotiateOffer(const std::string &networkID, const std:
     configuration.mtu = nethernet::NETWORK_MTU;
     configuration.maxMessageSize = nethernet::MAX_MESSAGE_SIZE + 1;
 
-    {
-        std::lock_guard<std::mutex> lock(mMutex);
-
-        for (const nethernet::IceServer &server: mCredentials.mIceServers) {
-            for (const std::string &url: server.mUrls) {
-                rtc::IceServer entry(url);
-                entry.username = server.mUsername;
-                entry.password = server.mPassword;
-                configuration.iceServers.push_back(entry);
-            }
+    for (const nethernet::IceServer &server: _currentCredentials().mIceServers) {
+        for (const std::string &url: server.mUrls) {
+            rtc::IceServer entry(url);
+            entry.username = server.mUsername;
+            entry.password = server.mPassword;
+            configuration.iceServers.push_back(entry);
         }
     }
 
