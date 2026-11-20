@@ -1,19 +1,15 @@
 #include "Scripting/Binding/ScriptApi.h"
 
 #include "Network/ServerNetworkHandler.h"
-#include "Protocol/Packets/PlayerFogPacket.h"
-#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Player/FogStack.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <list>
-#include <regex>
 
 using namespace ScriptValues;
 
 namespace {
-    const size_t FOG_STACK_LIMIT = 16;
-
     JSValue typeError(JSContext *ctx) {
         return JS_ThrowTypeError(ctx, "Native type conversion failed.");
     }
@@ -36,22 +32,11 @@ namespace {
                                                 "has been reached.");
     }
 
-    // the lowercased identifier must read namespace:name
-    bool validFogId(const std::string &id) {
-        static const std::regex PATTERN("[a-z0-9._]+:[a-z0-9._]+");
-        std::string lowered = id;
-        for (char &c: lowered) {
-            if (c >= 'A' && c <= 'Z')
-                c = (char) (c + 32);
-        }
-        return std::regex_match(lowered, PATTERN);
-    }
-
     // an absent tag files the entry under "untagged"
     bool readTag(JSContext *ctx, int argc, JSValueConst *argv, int index, std::string &tag, bool &present) {
         present = argc > index && !JS_IsUndefined(argv[index]);
         if (!present) {
-            tag = "untagged";
+            tag = FogStack::UNTAGGED;
             return true;
         }
         if (!JS_IsString(argv[index]))
@@ -61,10 +46,7 @@ namespace {
     }
 
     void sendFog(JSContext *ctx, ServerPlayer &player) {
-        PlayerFogPacket packet;
-        for (const ServerPlayer::FogEntry &entry: player.getFogStack())
-            packet.mFogStack.push_back(entry.mId);
-        ScriptApi::fromContext(ctx)->host().sendPacketTo(player.getNetworkIdentifier(), packet);
+        FogStack::send(ScriptApi::fromContext(ctx)->host(), player);
     }
 
     uint64_t fnv1a(const std::string &text) {
@@ -166,12 +148,11 @@ namespace {
         if (player == nullptr)
             return error;
         const std::string id = toString(ctx, argv[0]);
-        if (!validFogId(id))
+        if (!FogStack::isValidId(id))
             return fogError(ctx, true);
-        std::vector<ServerPlayer::FogEntry> &stack = player->getFogStack();
-        if (stack.size() >= FOG_STACK_LIMIT)
+        FogStack::Entries &stack = player->getFogStack();
+        if (!FogStack::push(stack, id, tag))
             return fogError(ctx, false);
-        stack.push_back({id, tag});
         sendFog(ctx, *player);
         return JS_NewInt32(ctx, (int32_t) stack.size() - 1);
     }
@@ -186,18 +167,9 @@ namespace {
         ServerPlayer *player = fogOwner(ctx, thisVal, "pop", error);
         if (player == nullptr)
             return error;
-        std::vector<ServerPlayer::FogEntry> &stack = player->getFogStack();
-        auto found = stack.end();
-        for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-            if (!tagged || it->mTag == tag) {
-                found = std::next(it).base();
-                break;
-            }
-        }
-        if (found == stack.end())
+        const std::string id = FogStack::pop(player->getFogStack(), tagged ? &tag : nullptr);
+        if (id.empty())
             return JS_UNDEFINED;
-        const std::string id = found->mId;
-        stack.erase(found);
         sendFog(ctx, *player);
         return string(ctx, id);
     }
@@ -212,15 +184,7 @@ namespace {
         ServerPlayer *player = fogOwner(ctx, thisVal, "remove", error);
         if (player == nullptr)
             return error;
-        std::vector<ServerPlayer::FogEntry> &stack = player->getFogStack();
-        const size_t before = stack.size();
-        if (tagged)
-            stack.erase(std::remove_if(stack.begin(), stack.end(),
-                                       [&](const ServerPlayer::FogEntry &entry) { return entry.mTag == tag; }),
-                        stack.end());
-        else
-            stack.clear();
-        if (stack.size() == before)
+        if (!FogStack::remove(player->getFogStack(), tagged ? &tag : nullptr))
             return JS_FALSE;
         sendFog(ctx, *player);
         return JS_TRUE;
@@ -251,11 +215,11 @@ namespace {
         ServerPlayer *player = fogOwner(ctx, thisVal, "setStack", error);
         if (player == nullptr)
             return error;
-        if (ids.size() > FOG_STACK_LIMIT)
+        if (ids.size() > FogStack::LIMIT)
             return fogError(ctx, false);
-        if (!std::all_of(ids.begin(), ids.end(), validFogId))
+        if (!std::all_of(ids.begin(), ids.end(), FogStack::isValidId))
             return fogError(ctx, true);
-        std::vector<ServerPlayer::FogEntry> &stack = player->getFogStack();
+        FogStack::Entries &stack = player->getFogStack();
         stack.clear();
         for (const std::string &id: ids)
             stack.push_back({id, tag});

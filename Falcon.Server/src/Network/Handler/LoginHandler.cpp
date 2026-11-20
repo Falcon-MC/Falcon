@@ -15,6 +15,7 @@
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/VanillaActorTable.h"
+#include "World/Actor/Player/FogStack.h"
 #include "World/Actor/Player/PlayerAbility.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
@@ -1522,6 +1523,9 @@ void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner
     ItemActorHandler::sendItemActorsTo(owner, player);
     owner.sendActorsTo(player);
     owner.sendWeatherTo(player);
+    // the fog the player kept from /fog before it left
+    if (!player.getFogStack().empty())
+        FogStack::send(owner, player);
 
     owner.broadcastTranslation("multiplayer.player.joined", {player.getName()});
 }

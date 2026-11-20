@@ -54,6 +54,7 @@
 #include "Server/Commands/SpawnPointCommand.h"
 #include "Server/Commands/AimAssistCommand.h"
 #include "Server/Commands/CameraShakeCommand.h"
+#include "Server/Commands/FogCommand.h"
 #include "Server/Commands/DebugHudCommand.h"
 #include "Server/Commands/StatusCommand.h"
 #include "Server/Commands/StopCommand.h"
@@ -428,6 +429,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
     mCommands.registerCommand(std::make_shared<DebugHudCommand>(*this));
     mCommands.registerCommand(std::make_shared<CameraShakeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FogCommand>(*this));
     mCommands.registerCommand(std::make_shared<AimAssistCommand>(*this));
     mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
