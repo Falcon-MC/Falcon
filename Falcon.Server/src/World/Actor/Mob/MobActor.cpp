@@ -184,6 +184,9 @@ namespace {
     const int32_t TAME_FAILED_REARING_TICKS = 20;
     const float DEFAULT_JUMP_STRENGTH = 0.7f;
     const char *const TAG_TEMPER = "Temper";
+    const char *const TAG_TARGET_CAPTAIN = "TargetCaptainID";
+    const char *const ON_HURT_COMPONENT = "minecraft:on_hurt";
+    const char *const ON_HURT_BY_PLAYER_COMPONENT = "minecraft:on_hurt_by_player";
     const char *const TAG_MOVEMENT_SPEED = "RolledMovementSpeed";
     const char *const TAG_JUMP_STRENGTH = "RolledJumpStrength";
     const char *const TAG_CARRIED_BLOCK = "carriedBlock";
@@ -2578,6 +2581,8 @@ Tag MobActor::saveNbt() const {
     data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
     data.putInt("InLove", mLoveTicks);
     data.putInt(TAG_TEMPER, mTemper);
+    if (mTargetCaptainId != 0)
+        data.putLong(TAG_TARGET_CAPTAIN, mTargetCaptainId);
     if (mAirSupply != UNSET_AIR_SUPPLY)
         data.putShort(TAG_AIR, (int16_t) std::max(-32768, std::min(32767, mAirSupply)));
     if (mRolledMovementSpeed >= 0.0f)
@@ -2620,6 +2625,7 @@ void MobActor::loadNbt(const Tag &data) {
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
+    mTargetCaptainId = data.getLong(TAG_TARGET_CAPTAIN, 0);
     mEconomy.loadNbt(data);
     mDweller.loadNbt(data);
     if (data.contains(TAG_AIR))
@@ -2676,6 +2682,11 @@ void MobActor::onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
     mAdmiration.abort(owner, *this);
     mAnger.onHurt(owner, *this, attacker != this ? attacker : nullptr);
     mDweller.onHurt(owner, *this, attacker != this ? attacker : nullptr);
+
+    Actor *other = attacker != this ? attacker : nullptr;
+    EntityEvents::fireTrigger(owner, *this, getComponent(ON_HURT_COMPONENT), other);
+    if (other != nullptr && other->isPlayer())
+        EntityEvents::fireTrigger(owner, *this, getComponent(ON_HURT_BY_PLAYER_COMPONENT), other);
 }
 
 bool MobActor::setTarget(ServerNetworkHandler &owner, uint64_t runtimeId) {
