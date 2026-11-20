@@ -3,7 +3,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/Mob/MobActor.h"
-#include "World/Actor/Movement/ActorPushSystem.h"
+#include "Scripting/Binding/ScriptRaycast.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Level.h"
 
@@ -59,10 +59,11 @@ bool KnockbackRules::select(ServerNetworkHandler &owner, const MobActor &attacke
 
 bool KnockbackRules::isImmersedInWater(ServerNetworkHandler &owner, const Actor &actor) {
     Level &level = owner.getLevelFor(actor);
-    const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(actor);
+    // the box of the current pose: a swimming player is 0.6 high
+    const ActorSize size = ScriptRaycast::actorSize(actor);
     const Vector3f position = actor.getPosition();
     const int32_t x = (int32_t) std::floor(position.x);
     const int32_t z = (int32_t) std::floor(position.z);
-    return isWaterAt(level, x, (int32_t) std::floor(box.mMaxY), z)
-           && isWaterAt(level, x, (int32_t) std::floor(box.mMinY), z);
+    return isWaterAt(level, x, (int32_t) std::floor(position.y + size.mHeight), z)
+           && isWaterAt(level, x, (int32_t) std::floor(position.y), z);
 }
