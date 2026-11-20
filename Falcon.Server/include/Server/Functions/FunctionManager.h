@@ -8,6 +8,7 @@
 #include <vector>
 
 class CommandMap;
+class PluginPermissions;
 struct BehaviorPack;
 
 // the .mcfunction files of the behavior packs, and the stack their commands run from
@@ -23,6 +24,11 @@ public:
     void load(const std::vector<BehaviorPack> &packs, const CommandMap &commands);
 
     void clear();
+
+    // what decides the commands a player's function may run; set once the plugins exist
+    void setPermissions(const PluginPermissions *permissions) {
+        mPermissions = permissions;
+    }
 
     const Function *find(const std::string &name) const;
 
@@ -61,6 +67,7 @@ private:
     std::vector<std::string> mTickFunctions;
     std::vector<Entry> mStack;
     std::vector<std::unique_ptr<FunctionCommandOrigin>> mOrigins;
+    const PluginPermissions *mPermissions = nullptr;
     bool mRunning = false;
     int mExecuted = 0;
     int mLimit = 0;

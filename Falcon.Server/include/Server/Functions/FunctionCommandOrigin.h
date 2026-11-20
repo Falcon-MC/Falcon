@@ -2,13 +2,17 @@
 
 #include "Server/Commands/CommandOrigin.h"
 
+class PluginPermissions;
+
 // what a function's commands run as: the caller seen at the call, kept while its commands wait on the
 // stack; they print nothing, the function reports for them
 class FunctionCommandOrigin final : public CommandOrigin {
 public:
-    explicit FunctionCommandOrigin(CommandOrigin &caller)
+    // permissions null: only the permission level decides
+    FunctionCommandOrigin(CommandOrigin &caller, const PluginPermissions *permissions)
             : mName(caller.getSenderName()), mIsPlayer(caller.isPlayer()), mPlayer(caller.asPlayer()),
-              mPermissionPlayer(caller.permissionPlayer()), mLocale(caller.getLocale()),
+              mPermissionPlayer(caller.permissionPlayer()), mGroupPlayer(caller.permissionGroupPlayer()),
+              mPermissions(permissions), mLocale(caller.getLocale()),
               mPermission(caller.getCommandPermission()), mPosition(caller.getPosition()),
               mRotation(caller.getRotation()), mLevel(caller.getLevel()), mEntity(caller.getEntity()),
               mWithoutCheats(caller.canUseCommandsWithoutCheats()) {
@@ -30,6 +34,13 @@ public:
     ServerPlayer *permissionPlayer() override {
         return mPermissionPlayer;
     }
+
+    ServerPlayer *permissionGroupPlayer() override {
+        return mGroupPlayer;
+    }
+
+    // the caller's own rule: a player's permission groups first, as a player origin decides
+    bool canExecuteCommand(const Command &command) const override;
 
     void sendMessage(const std::string &) override {}
 
@@ -76,6 +87,8 @@ private:
     bool mIsPlayer;
     ServerPlayer *mPlayer;
     ServerPlayer *mPermissionPlayer;
+    ServerPlayer *mGroupPlayer;
+    const PluginPermissions *mPermissions;
     std::string mLocale;
     CommandPermission mPermission;
     Vector3f mPosition;

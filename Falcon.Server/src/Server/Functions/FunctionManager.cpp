@@ -139,7 +139,7 @@ const FunctionManager::Function *FunctionManager::find(const std::string &name) 
 }
 
 void FunctionManager::push(const Function &function, CommandOrigin &caller) {
-    mOrigins.push_back(std::make_unique<FunctionCommandOrigin>(caller));
+    mOrigins.push_back(std::make_unique<FunctionCommandOrigin>(caller, mPermissions));
     FunctionCommandOrigin *origin = mOrigins.back().get();
 
     // no more on the stack than entries left to run: the first commands go on top, what lies below is

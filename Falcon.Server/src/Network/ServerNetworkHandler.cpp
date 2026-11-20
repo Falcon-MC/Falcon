@@ -468,6 +468,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
 
     AuthKeyProvider::getInstance().start();
     mPluginManager = std::make_unique<PluginManager>(*this);
+    mFunctions.setPermissions(&mPluginManager->getPermissions());
 }
 
 PlayerMovementRegistry &ServerNetworkHandler::getPlayerMovementRegistry() {
