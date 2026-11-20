@@ -31,6 +31,8 @@
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
+#include "World/Actor/AI/Goal/ChargeAttackGoal.h"
+#include "World/Actor/AI/Goal/DrinkPotionGoal.h"
 #include "World/Actor/AI/Goal/HoldGroundGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
 #include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
@@ -971,6 +973,33 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         if (settings.mLeaderFilters == nullptr)
             return nullptr;
         return std::make_unique<FollowTargetLeaderGoal>(std::move(settings));
+    }
+
+    if (behavior == "charge_attack") {
+        ChargeAttackGoal::Settings settings;
+        settings.mMinDistance = numberOf(component, "min_distance", settings.mMinDistance);
+        settings.mMaxDistance = numberOf(component, "max_distance", settings.mMaxDistance);
+        settings.mSuccessRate = numberOf(component, "success_rate", settings.mSuccessRate);
+        settings.mSpeedMultiplier = numberOf(component, "speed_multiplier", settings.mSpeedMultiplier);
+        return std::make_unique<ChargeAttackGoal>(settings);
+    }
+
+    if (behavior == "drink_potion") {
+        std::vector<DrinkPotionGoal::Potion> potions;
+        const json::Value *list = component.get("potions");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: list->mArray) {
+                if (entry == nullptr || !entry->isObject())
+                    continue;
+                DrinkPotionGoal::Potion potion;
+                potion.mId = (int32_t) numberOf(*entry, "id", 0.0f);
+                potion.mChance = numberOf(*entry, "chance", 1.0f);
+                if (const json::Value *filters = entry->get("filters"))
+                    potion.mFilters = std::shared_ptr<json::Value>(filters->clone());
+                potions.push_back(std::move(potion));
+            }
+        }
+        return std::make_unique<DrinkPotionGoal>(std::move(potions));
     }
 
     if (behavior == "hold_ground") {
