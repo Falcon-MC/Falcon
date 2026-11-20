@@ -32,6 +32,7 @@
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
 #include "World/Actor/AI/Goal/HoldGroundGoal.h"
+#include "World/Actor/AI/Goal/KnockbackRoarGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
 #include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
@@ -856,6 +857,26 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         if (settings.mLeaderFilters == nullptr)
             return nullptr;
         return std::make_unique<FollowTargetLeaderGoal>(std::move(settings));
+    }
+
+    if (behavior == "knockback_roar") {
+        // seconds truncated to ticks, as the definition stores them
+        const auto ticksOf = [&](const char *key, float fallback) {
+            return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+        };
+        KnockbackRoarGoal::Settings settings;
+        settings.mDuration = ticksOf("duration", 1.0f);
+        settings.mAttackTime = ticksOf("attack_time", 0.5f);
+        settings.mDamage = (int32_t) numberOf(component, "knockback_damage", (float) settings.mDamage);
+        settings.mHorizontalStrength =
+                (int32_t) numberOf(component, "knockback_horizontal_strength", (float) settings.mHorizontalStrength);
+        settings.mHeightCap = numberOf(component, "knockback_height_cap", settings.mHeightCap);
+        settings.mRange = (int32_t) numberOf(component, "knockback_range", (float) settings.mRange);
+        settings.mCooldown = ticksOf("cooldown_time", 0.1f);
+        settings.mKnockbackFilters = cloneOf(component.get("knockback_filters"));
+        settings.mDamageFilters = cloneOf(component.get("damage_filters"));
+        settings.mOnRoarEnd = triggerOf(component, "on_roar_end");
+        return std::make_unique<KnockbackRoarGoal>(std::move(settings));
     }
 
     if (behavior == "hold_ground") {
