@@ -678,12 +678,20 @@ ServerActor *TrialSpawnerBlockActor::spawnOminousProjectile(ServerNetworkHandler
     else if (identifier == "minecraft:fire_charge")
         identifier = "minecraft:small_fireball";
     else if (identifier != "minecraft:arrow" && identifier != "minecraft:lingering_potion")
-        return nullptr;
+        identifier.clear();
 
-    return owner.spawnActor(level, identifier, position, [&drop](ServerActor &actor) {
-        if (auto *potion = dynamic_cast<PotionActor *>(&actor))
-            potion->setPotionId(drop.mData);
-        else if (dynamic_cast<ArrowActor *>(&actor) != nullptr)
-            actor.getProjectileData().mPotionId = drop.mData - 1;
-    });
+    // the game hands the item to its dispense behaviour aimed straight down, and drops what does not shoot
+    if (identifier.empty()) {
+        const ItemStack item = LootItems::toItemStack(owner, drop);
+        if (item.mCount > 0)
+            owner.dropItem(level, position, item, Vector3f(), ItemActorHandler::DROP_PICKUP_DELAY);
+        return nullptr;
+    }
+    return owner.spawnDispensedProjectile(level, identifier, position, Vector3f(0.0f, -1.0f, 0.0f),
+                                          [&drop](ServerActor &actor) {
+                                              if (auto *potion = dynamic_cast<PotionActor *>(&actor))
+                                                  potion->setPotionId(drop.mData);
+                                              else if (dynamic_cast<ArrowActor *>(&actor) != nullptr)
+                                                  actor.getProjectileData().mPotionId = drop.mData - 1;
+                                          });
 }

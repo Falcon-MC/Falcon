@@ -502,8 +502,9 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
 // a projectile spawned without an owner, then shot:
 // the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
 ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
-                                                            const Vector3f &position, const Vector3f &direction) {
-    ServerActor *projectile = spawnActor(level, identifier, position);
+                                                            const Vector3f &position, const Vector3f &direction,
+                                                            const std::function<void(ServerActor &)> &configure) {
+    ServerActor *projectile = spawnActor(level, identifier, position, configure);
     if (projectile == nullptr)
         return nullptr;
 
