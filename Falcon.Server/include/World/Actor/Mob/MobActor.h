@@ -356,6 +356,15 @@ public:
         return mSitting;
     }
 
+    // a bell rang close by: it hides until its hide goal is done with it
+    bool heardBell() const {
+        return mHeardBell;
+    }
+
+    void setHeardBell(bool heard) {
+        mHeardBell = heard;
+    }
+
     bool isPanicking() const {
         return mPanicking;
     }
@@ -795,6 +804,7 @@ private:
     bool mOwnerless = false;
     int64_t mSyncedOwnerId = NO_OWNER;
     bool mSitting = false;
+    bool mHeardBell = false;
     bool mGoalsRegistered = false;
     bool mGoalsDirty = false;
     bool mBehaviorsRemoved = false;
