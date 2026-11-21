@@ -4,6 +4,8 @@
 // usage: FalconGenSpeed [--seed <int64>] [--at x,z] [--size n] [--repeat n]
 //   --at: lowest chunk of the area, --size: side in chunks; terrain then decoration, in the workers' order
 
+#include "Core/Debug/BedrockLog.h"
+#include "Core/Debug/ContentLogEndPoint.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
@@ -15,6 +17,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -94,6 +97,7 @@ namespace {
 }
 
 int main(int argc, char **argv) {
+    BedrockLog::addEndPoint(std::make_shared<ContentLogEndPoint>(false));
     int64_t seed = -1051743253566878335LL;
     int32_t originX = 1250;
     int32_t originZ = 1250;
@@ -123,18 +127,21 @@ int main(int argc, char **argv) {
     for (int32_t i = 0; i < repeat; i++) {
         const Run result = run(seed, originX, originZ, size);
         if (i > 0 && result.mHash != hash) {
-            std::printf("hash changed between runs: %016llx then %016llx\n", (unsigned long long) hash,
-                        (unsigned long long) result.mHash);
+            LOG_ERROR(LogAreaID::Level, "hash changed between runs: %016llx then %016llx", (unsigned long long) hash,
+                      (unsigned long long) result.mHash);
+            BedrockLog::flush();
             return 1;
         }
         hash = result.mHash;
         bestTerrain = std::min(bestTerrain, result.mTerrain / terrainChunks);
         bestDecoration = std::min(bestDecoration, result.mDecoration / decoratedChunks);
-        std::printf("run %d: terrain %.2f ms/chunk, decoration %.2f ms/chunk\n", i + 1,
-                    result.mTerrain / terrainChunks, result.mDecoration / decoratedChunks);
+        LOG_INFO(LogAreaID::Level, "run %d: terrain %.2f ms/chunk, decoration %.2f ms/chunk", i + 1,
+                 result.mTerrain / terrainChunks, result.mDecoration / decoratedChunks);
     }
-    std::printf("best: terrain %.2f ms/chunk, decoration %.2f ms/chunk, total %.2f ms per decorated chunk\n",
-                bestTerrain, bestDecoration, bestTerrain * terrainChunks / decoratedChunks + bestDecoration);
-    std::printf("hash %016llx\n", (unsigned long long) hash);
+    LOG_INFO(LogAreaID::Level, "best: terrain %.2f ms/chunk, decoration %.2f ms/chunk, total %.2f ms per decorated chunk",
+             bestTerrain, bestDecoration, bestTerrain * terrainChunks / decoratedChunks + bestDecoration);
+    LOG_INFO(LogAreaID::Level, "hash %016llx", (unsigned long long) hash);
+    // log endpoints write from a worker thread: drain the report before the process exits
+    BedrockLog::flush();
     return 0;
 }
