@@ -337,6 +337,12 @@ public:
 
     bool isChunkPopulated(int32_t chunkX, int32_t chunkZ) const;
 
+    // the workers already hold a request for it
+    bool isChunkRequested(int32_t chunkX, int32_t chunkZ) const;
+
+    // whether the workers take one more chunk now
+    bool canRequestChunk() const;
+
     /**
      * Whether storage holds the chunk. The answers are cached as the
      * game does, until the cache fills or storage is reopened; a chunk queued for saving counts as saved.

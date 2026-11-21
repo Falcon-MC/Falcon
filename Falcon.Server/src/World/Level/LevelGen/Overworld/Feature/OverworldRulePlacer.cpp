@@ -51,6 +51,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -90,7 +91,7 @@ namespace {
         return hash;
     }
 
-    using ExpressionPtr = std::shared_ptr<const FeatureExpression>;
+    using ExpressionPtr = const FeatureExpression *;
 
     // boost-style combine of the decoration seed with the rule's hash
     uint32_t ruleSeed(uint32_t decorationSeed, const std::string &identifier) {
@@ -101,8 +102,8 @@ namespace {
     // one axis of a scatter: a single value or a distribution between two bounds
     struct Axis {
         int32_t mDistribution = 0;
-        ExpressionPtr mMin;
-        ExpressionPtr mMax;
+        ExpressionPtr mMin = nullptr;
+        ExpressionPtr mMax = nullptr;
         bool mReadsWorld = false;
         // step_size and grid_offset of a fixed_grid
         int32_t mStep = 0;
@@ -118,14 +119,14 @@ namespace {
     // uniform, gaussian and triangle are the only distributions the ported rules use
     bool parseAxis(int32_t distribution, const std::string &min, const std::string &max, Axis &axis) {
         axis.mDistribution = distribution;
-        axis.mMin = FeatureExpression::parse(min);
+        axis.mMin = FeatureExpression::find(min);
         axis.mReadsWorld = readsWorld(min);
         if (axis.mMin == nullptr)
             return false;
         if (distribution == 0)
             return true;
 
-        axis.mMax = FeatureExpression::parse(max);
+        axis.mMax = FeatureExpression::find(max);
         axis.mReadsWorld = axis.mReadsWorld || readsWorld(max);
         return axis.mMax != nullptr && (distribution == 1 || distribution == 2 || distribution == 6);
     }
@@ -827,8 +828,8 @@ struct OverworldRulePlacer::ScatterDefinition {
     const char *mChancePercent = "100";
 
     // parsed once with the definition, a placement only evaluates them
-    ExpressionPtr mParsedIterations = FeatureExpression::parse(mIterations);
-    ExpressionPtr mParsedChance = FeatureExpression::parse(mChancePercent);
+    ExpressionPtr mParsedIterations = FeatureExpression::find(mIterations);
+    ExpressionPtr mParsedChance = FeatureExpression::find(mChancePercent);
     std::array<Axis, 3> mParsedAxes = _parseAxes(mAxes);
 
     static std::array<Axis, 3> _parseAxes(const AxisText (&texts)[3]) {
@@ -2609,10 +2610,10 @@ bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
     if (!_find(entry).isPorted() || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
         return false;
 
-    if (FeatureExpression::parse(entry.mIterations) == nullptr)
+    if (FeatureExpression::find(entry.mIterations) == nullptr)
         return false;
     if ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0)
-        && FeatureExpression::parse(entry.mChancePercent) == nullptr)
+        && FeatureExpression::find(entry.mChancePercent) == nullptr)
         return false;
 
     Axis axes[3];
@@ -2688,8 +2689,8 @@ void OverworldRulePlacer::drawBiomeRules(BlockManager &blocks, const LevelChunk 
 
             shared.seed(ruleSeed(decorationSeed, entry.mIdentifier));
             ScatterVariables variables(blocks, origin);
-            const ExpressionPtr iterationsExpression = FeatureExpression::parse(entry.mIterations);
-            const ExpressionPtr percent = FeatureExpression::parse(entry.mChancePercent);
+            const ExpressionPtr iterationsExpression = FeatureExpression::find(entry.mIterations);
+            const ExpressionPtr percent = FeatureExpression::find(entry.mChancePercent);
             if (iterationsExpression == nullptr || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
                 continue;
 
@@ -2746,8 +2747,8 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
     if (!coordinatesDraw && !percentDraws && !draws(entry.mIterations))
         return;
 
-    const ExpressionPtr iterationsExpression = FeatureExpression::parse(entry.mIterations);
-    const ExpressionPtr percent = FeatureExpression::parse(entry.mChancePercent);
+    const ExpressionPtr iterationsExpression = FeatureExpression::find(entry.mIterations);
+    const ExpressionPtr percent = FeatureExpression::find(entry.mChancePercent);
     if (iterationsExpression == nullptr
         || ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0) && percent == nullptr)
         || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
@@ -2783,8 +2784,8 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
     ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
     int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator,
-                                      FeatureExpression::parse(entry.mChancePercent),
-                                      FeatureExpression::parse(entry.mIterations), variables, scatter);
+                                      FeatureExpression::find(entry.mChancePercent),
+                                      FeatureExpression::find(entry.mIterations), variables, scatter);
     if (iterations == 0)
         return;
 
@@ -3005,9 +3006,14 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
         maxZ = std::max(maxZ, static_cast<int32_t>(std::floor(sphere->mZ + sphere->mRadius)));
     }
 
-    std::vector<BlockState> states;
-    for (const ReplaceRule &rule: ore.mRules)
-        states.push_back(rule.mPlaces().toBlockState());
+    // built once per thread: a vein is tried hundreds of times a chunk
+    thread_local std::unordered_map<const OreDefinition *, std::vector<BlockState>> placedStates;
+    std::vector<BlockState> &states = placedStates[&ore];
+    if (states.size() != ore.mRules.size()) {
+        states.clear();
+        for (const ReplaceRule &rule: ore.mRules)
+            states.push_back(rule.mPlaces().toBlockState());
+    }
 
     bool placed = false;
     float centerX = static_cast<float>(minX) + 0.5f;
@@ -3053,7 +3059,7 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
                         continue;
 
                     const BlockState &state = states[index];
-                    if (current == state)
+                    if (current.getHash() == state.getHash() && current == state)
                         continue;
 
                     const float discard = ore.mDiscardChanceOnAirExposure;

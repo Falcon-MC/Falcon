@@ -54,7 +54,8 @@ private:
 
     void _carveCanyons(LevelChunk &chunk, OverworldAquifer &aquifer) const;
 
-    static void _addCanyon(std::mt19937 &random, int32_t sourceX, int32_t sourceZ, LevelChunk &chunk,
+    // false when the source holds no canyon
+    static bool _addCanyon(std::mt19937 &random, int32_t sourceX, int32_t sourceZ, LevelChunk &chunk,
                            OverworldAquifer &aquifer);
 
     uint32_t mSeed;

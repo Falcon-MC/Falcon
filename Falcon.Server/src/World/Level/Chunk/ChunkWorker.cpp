@@ -19,8 +19,9 @@ namespace {
     // lower quarter of the scheduling range: generation and storage never starve the tick thread
     void lowerCurrentThreadPriority() {
 #ifdef __APPLE__
-        // the scheduler picks cores by class there: this one leaves the fast cores to the tick and the network
-        if (pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0) == 0)
+        // the scheduler picks cores by class there: below the tick, still on the fast cores; utility kept the
+        // workers on the efficiency cores and halved generation
+        if (pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0) == 0)
             return;
 #endif
         sched_param parameters;
@@ -286,8 +287,12 @@ bool ChunkWorker::_processLoad(ChunkTask &task, size_t sourceIndex) {
     }
 
     task.mMissing = true;
-    if (_defer(task))
+    if (_defer(task)) {
+        // the wait for the neighbour goes into terrain the decoration needs anyway
+        if (sourceIndex < mSources.size())
+            mSources[sourceIndex]->prewarmArea(task.mX, task.mZ);
         return false;
+    }
 
     mGeneratedCount.fetch_add(1);
     _finishChunk(std::move(chunk), sourceIndex, false, true, std::move(task.mChanges));

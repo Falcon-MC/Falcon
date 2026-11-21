@@ -25,6 +25,7 @@ class LevelChunk;
 class TerrainCache {
 public:
     static constexpr size_t MAX_CACHED_CHUNKS = 1024;
+    static constexpr size_t MAX_PREWARMED_CHUNKS = 256;
 
     // holds the 3x3 around a decorated chunk; released on destruction
     class DecorationArea {
@@ -71,6 +72,10 @@ public:
     LevelChunk base(int32_t chunkX, int32_t chunkZ, uint64_t &created);
 
     void put(LevelChunk chunk);
+
+    // builds the raw terrain ahead, outside any decoration lock; it joins the cache only when first asked for,
+    // under the lock that asks
+    void prewarm(int32_t chunkX, int32_t chunkZ);
 
     // a decorated chunk from storage, false when absent or never decorated
     using StoredLoader = std::function<bool(LevelChunk &chunk)>;
@@ -133,6 +138,7 @@ private:
     StoredLoader mStoredLoader;
     std::unordered_map<int64_t, Entry> mChunks;
     std::list<int64_t> mOrder;
+    std::unordered_map<int64_t, std::shared_ptr<const LevelChunk>> mPrewarmed;
 
     std::unordered_set<int64_t> mLocked;
     std::condition_variable mReleased;
@@ -164,6 +170,9 @@ public:
     uint64_t populateGenerated(LevelChunk &chunk, const std::vector<GeneratedBlockChange> &older,
                                std::vector<GeneratedBlockChange> &overflow, std::vector<Tag> &blockActors,
                                std::vector<Tag> &entities, uint64_t &base);
+
+    // the raw terrain of the 3x3 around the chunk, built ahead; decoration order does not change it
+    void prewarmArea(int32_t chunkX, int32_t chunkZ);
 
 private:
     uint64_t _decorate(LevelChunk &chunk, uint64_t sequence, std::vector<GeneratedBlockChange> &overflow,

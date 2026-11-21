@@ -9,12 +9,15 @@
 #include "World/Level/LevelGen/Random/GameRandom.h"
 
 #include <cmath>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace {
     constexpr int32_t MIN_Y = OverworldGeneratorConstants::MIN_Y;
     // the game generates into a block volume 320 blocks tall, counted from MIN_Y
     constexpr int32_t VOLUME_HEIGHT = 320;
     constexpr int32_t RANGE = 8;
+    constexpr size_t MAX_REMEMBERED_SOURCES = 1 << 14;
     constexpr float PI = 3.1415927f;
     constexpr float HALF_PI = 1.5707964f;
 
@@ -270,14 +273,39 @@ void OverworldCarvers::_carveCaves(const CaveSettings &settings, LevelChunk &chu
 
     // the game caches each source chunk's segments and carves every one that can reach the chunk, where the
     // uncached path would stop a tunnel at its first unreachable step
-    std::vector<CaveSegment> segments;
+    // a source's segments only follow the seed: each one is asked for by the 17x17 chunks around it
+    struct SourceKey {
+        uint32_t mSeed;
+        const CaveSettings *mSettings;
+        int32_t mX;
+        int32_t mZ;
+
+        bool operator==(const SourceKey &other) const {
+            return mSeed == other.mSeed && mSettings == other.mSettings && mX == other.mX && mZ == other.mZ;
+        }
+    };
+    struct SourceKeyHash {
+        size_t operator()(const SourceKey &key) const {
+            uint64_t hash = ((uint64_t) (uint32_t) key.mX << 32) | (uint32_t) key.mZ;
+            hash ^= (uint64_t) (uintptr_t) key.mSettings + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
+            hash ^= (uint64_t) key.mSeed + 0x632be59bd9b4e019ull + (hash << 6) + (hash >> 2);
+            return (size_t) (hash * 0xff51afd7ed558ccdull);
+        }
+    };
+    thread_local std::unordered_map<SourceKey, std::vector<CaveSegment>, SourceKeyHash> sources;
+    if (sources.size() > MAX_REMEMBERED_SOURCES)
+        sources.clear();
+
     for (int32_t sourceX = chunkX - RANGE; sourceX <= chunkX + RANGE; sourceX++) {
         for (int32_t sourceZ = chunkZ - RANGE; sourceZ <= chunkZ + RANGE; sourceZ++) {
-            random.seed(
-                    mSeed
-                    ^ (multiplierX * static_cast<uint32_t>(sourceX) + multiplierZ * static_cast<uint32_t>(sourceZ)));
-            segments.clear();
-            _addCaves(settings, random, sourceX, sourceZ, segments);
+            const auto inserted = sources.try_emplace(SourceKey{mSeed, &settings, sourceX, sourceZ});
+            std::vector<CaveSegment> &segments = inserted.first->second;
+            if (inserted.second) {
+                random.seed(mSeed
+                            ^ (multiplierX * static_cast<uint32_t>(sourceX)
+                               + multiplierZ * static_cast<uint32_t>(sourceZ)));
+                _addCaves(settings, random, sourceX, sourceZ, segments);
+            }
 
             for (const CaveSegment &segment: segments) {
                 const float dx = segment.mX - centerX;
@@ -524,21 +552,32 @@ void OverworldCarvers::_carveCanyons(LevelChunk &chunk, OverworldAquifer &aquife
     const uint32_t multiplierX = static_cast<uint32_t>(nextInt(random)) | 1u;
     const uint32_t multiplierZ = static_cast<uint32_t>(nextInt(random)) | 1u;
 
+    // nearly no source holds a canyon, yet finding out seeds a twister: the empty ones are remembered
+    thread_local uint32_t rememberedSeed = 0;
+    thread_local std::unordered_set<int64_t> withoutCanyon;
+    if (rememberedSeed != mSeed || withoutCanyon.size() > MAX_REMEMBERED_SOURCES * 4) {
+        withoutCanyon.clear();
+        rememberedSeed = mSeed;
+    }
     for (int32_t sourceX = chunk.getX() - RANGE; sourceX <= chunk.getX() + RANGE; sourceX++) {
         for (int32_t sourceZ = chunk.getZ() - RANGE; sourceZ <= chunk.getZ() + RANGE; sourceZ++) {
+            const int64_t key = ((int64_t) sourceX << 32) | (uint32_t) sourceZ;
+            if (withoutCanyon.count(key) != 0)
+                continue;
             random.seed(
                     mSeed
                     ^ (multiplierX * static_cast<uint32_t>(sourceX) + multiplierZ * static_cast<uint32_t>(sourceZ)));
-            _addCanyon(random, sourceX, sourceZ, chunk, aquifer);
+            if (!_addCanyon(random, sourceX, sourceZ, chunk, aquifer))
+                withoutCanyon.insert(key);
         }
     }
 }
 
-void OverworldCarvers::_addCanyon(std::mt19937 &random, int32_t sourceX, int32_t sourceZ, LevelChunk &chunk,
+bool OverworldCarvers::_addCanyon(std::mt19937 &random, int32_t sourceX, int32_t sourceZ, LevelChunk &chunk,
                                   OverworldAquifer &aquifer) {
     // heights are rows from the bottom of the world
     if (nextInt(random, CANYON_RARITY) != 0)
-        return;
+        return false;
 
     const int32_t startX = (sourceX << 4) + nextInt(random, 16);
     const int32_t startRow = nextInt(random, 58) + 64 + 10;
@@ -613,7 +652,7 @@ void OverworldCarvers::_addCanyon(std::mt19937 &random, int32_t sourceX, int32_t
             const float dz = z - centerZ;
             const float remainingF = static_cast<float>(remaining);
             if ((dz * dz + dx * dx) - remainingF * remainingF > reachSquared)
-                return;
+                return true;
 
             const float horizontalRadius = (toFloat(horizontalRoll) * 0.25f + 0.75f) * radius;
             const float doubled = horizontalRadius + horizontalRadius;
@@ -653,7 +692,7 @@ void OverworldCarvers::_addCanyon(std::mt19937 &random, int32_t sourceX, int32_t
         }
 
         if (step >= length)
-            return;
+            return true;
 
         remaining--;
         yawChange = nextYawChange;
@@ -661,4 +700,5 @@ void OverworldCarvers::_addCanyon(std::mt19937 &random, int32_t sourceX, int32_t
         pitch = nextPitch;
         yaw = nextYaw;
     }
+    return true;
 }
