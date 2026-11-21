@@ -12,16 +12,16 @@ enum class CommandParamType : int32_t {
     Target = 8,
     WildcardTarget = 10,
     Filepath = 17,
-    IntegerRange = 22,
+    IntegerRange = 23,
     EquipmentSlots = 47,
     String = 56,
     BlockPosition = 64,
     Position = 65,
-    Message = 67,
+    Message = 68,
     RawText = 70,
     Json = 74,
     BlockStates = 84,
-    Command = 87,
+    Command = 90,
 };
 
 const uint32_t ARG_FLAG_VALID = 0x100000;
