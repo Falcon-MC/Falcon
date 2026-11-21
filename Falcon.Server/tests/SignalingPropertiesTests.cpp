@@ -23,6 +23,7 @@ namespace {
         require(defaults.getSignalingCertificate().empty(), "a certificate is set by default");
         require(defaults.getSignalingPrivateKey().empty(), "a private key is set by default");
         require(defaults.getSignalingExtraPort() == 0, "an extra signaling port is open by default");
+        require(defaults.getAllowLanWithoutIdentity(), "a player joining from the LAN worlds list is refused by default");
 
         const std::string generated = PropertiesSettings::getDefaultContents();
         require(generated.find("signaling-certificate=\n") != std::string::npos,
@@ -31,6 +32,8 @@ namespace {
                 "generated properties omit signaling-private-key");
         require(generated.find("signaling-extra-port=0\n") != std::string::npos,
                 "generated properties omit signaling-extra-port");
+        require(generated.find("allow-lan-without-identity=true\n") != std::string::npos,
+                "generated properties do not allow LAN joins without an identity");
 
         require(defaults.getSignalingAcmeDomain().empty(), "ACME is on by default");
         require(defaults.getSignalingAcmeDirectory() == "https://acme-v02.api.letsencrypt.org/directory",
