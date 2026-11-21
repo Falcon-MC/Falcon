@@ -493,7 +493,7 @@ namespace {
         if (id == "minecraft:bookshelf" || id == "minecraft:crafting_table" || id == "minecraft:cartography_table"
             || id == "minecraft:fletching_table" || id == "minecraft:smithing_table" || id == "minecraft:chest"
             || id == "minecraft:trapped_chest" || id == "minecraft:barrel" || id == "minecraft:jukebox"
-            || id == "minecraft:note_block" || id == "minecraft:daylight_detector" || id == "minecraft:banner"
+            || id == "minecraft:noteblock" || id == "minecraft:daylight_detector" || id == "minecraft:banner"
             || id.find("_banner") != std::string::npos || id.find("_hanging_sign") != std::string::npos)
             return 300;
         return 0;

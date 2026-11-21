@@ -7,6 +7,7 @@
 #include "World/Level/Block/Actor/VaultBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
+#include "World/Level/Block/Actor/NoteBlockActor.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
@@ -361,6 +362,7 @@ FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(DataDrivenBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(EndGatewayBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BellBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(NoteBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(StructureBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(LodestoneBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(ConduitBlockActor);
