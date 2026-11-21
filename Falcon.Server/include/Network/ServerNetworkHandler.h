@@ -396,7 +396,8 @@ public:
 
     // no shooter: the definition's power and uncertainty_base aim it along direction
     ServerActor *spawnDispensedProjectile(Level &level, const std::string &identifier, const Vector3f &position,
-                                          const Vector3f &direction);
+                                          const Vector3f &direction,
+                                          const std::function<void(ServerActor &)> &configure = nullptr);
 
     bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
 
