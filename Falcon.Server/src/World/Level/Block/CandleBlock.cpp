@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(CandleBlock, 360);
 
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
@@ -15,6 +16,8 @@ FALCON_REGISTER_BLOCK(CandleBlock, 360);
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Level.h"
 
+#include <algorithm>
+
 using namespace PlacementHelpers;
 
 namespace {
@@ -23,6 +26,28 @@ namespace {
     const char *const LIT = "lit";
     const char *const IGNITE_SOUND = "ignite";
     const char *const EXTINGUISH_SOUND = "extinguish.candle";
+    const int32_t SMOKE_PARTICLE_EVENT = 0x4000 | 5;
+    const float SMOKE_RISE = 0.125f;
+
+    // where the flames burn from the block's corner, for one to four candles
+    const Vector3f CANDLE_FLAMES[CANDLES_MAX + 1][CANDLES_MAX + 1] = {
+            {Vector3f(0.5f, 0.375f, 0.5f)},
+            {Vector3f(0.625f, 0.375f, 0.5f), Vector3f(0.375f, 0.3125f, 0.5625f)},
+            {Vector3f(0.5625f, 0.375f, 0.4375f), Vector3f(0.375f, 0.3125f, 0.5f), Vector3f(0.5f, 0.1875f, 0.625f)},
+            {Vector3f(0.5625f, 0.375f, 0.375f), Vector3f(0.375f, 0.3125f, 0.375f), Vector3f(0.625f, 0.3125f, 0.5625f),
+             Vector3f(0.4375f, 0.1875f, 0.5625f)},
+    };
+    const Vector3f CAKE_FLAME(0.5f, 0.85f, 0.5f);
+
+    bool isCandleCake(const std::string &identifier) {
+        return identifier == "minecraft:candle_cake" || BlockIdentifier::endsWith(identifier, "_candle_cake");
+    }
+
+    void puffSmoke(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const Vector3f &flame) {
+        const Vector3f at((float) position.x + flame.x, (float) position.y + flame.y + SMOKE_RISE,
+                          (float) position.z + flame.z);
+        owner.broadcastLevelEvent(level, SMOKE_PARTICLE_EVENT, at, 0);
+    }
 
     Vector3f centreOf(const Vector3i &position) {
         return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
@@ -89,6 +114,17 @@ bool CandleBlock::isLighter(const ItemStack &item) {
     return ItemEnchantments::getLevel(item, EnchantmentIds::FIRE_ASPECT) > 0;
 }
 
+bool CandleBlock::isBurning(const ServerActor &projectile) {
+    return projectile.isOnFire() || projectile.getProjectileData().mFlameTicks > 0;
+}
+
+bool CandleBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state, ServerActor &projectile) const {
+    if (isBurning(projectile))
+        light(owner, level, position, state, &projectile);
+    return false;
+}
+
 bool CandleBlock::canBeLit(Level &level, const Vector3i &position, const BlockState &state) {
     if (state.mStates.getByte(LIT, 0) != 0)
         return false;
@@ -108,6 +144,13 @@ bool CandleBlock::light(ServerNetworkHandler &owner, Level &level, const Vector3
 void CandleBlock::extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                              const BlockState &state, Actor *source) {
     level.setBlock(position, withLit(state, false), true);
+    if (isCandleCake(state.mName)) {
+        puffSmoke(owner, level, position, CAKE_FLAME);
+    } else {
+        const int32_t candles = std::clamp(state.mStates.getInt(CANDLES, 0), 0, CANDLES_MAX);
+        for (int32_t flame = 0; flame <= candles; ++flame)
+            puffSmoke(owner, level, position, CANDLE_FLAMES[candles][flame]);
+    }
     owner.playLevelSound(level, EXTINGUISH_SOUND, centreOf(position));
     level.postGameEvent(GameEvents::BLOCK_CHANGE, centreOf(position), source);
 }

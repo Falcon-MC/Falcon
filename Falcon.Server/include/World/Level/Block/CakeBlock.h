@@ -41,6 +41,12 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    // a whole cake's signal, whatever the candle
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                         ServerActor &projectile) const override;
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 

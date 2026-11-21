@@ -110,6 +110,20 @@ bool CandleCakeBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:candle_cake" || BlockIdentifier::endsWith(identifier, "_candle_cake");
 }
 
+int CandleCakeBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    (void) state;
+    return 14;
+}
+
+bool CandleCakeBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                      const BlockState &state, ServerActor &projectile) const {
+    if (CandleBlock::isBurning(projectile))
+        CandleBlock::light(owner, level, position, state, &projectile);
+    return false;
+}
+
 std::string CandleCakeBlock::candleOf(const std::string &candleCakeIdentifier) {
     const std::string suffix = CANDLE_CAKE_SUFFIX;
     if (candleCakeIdentifier.size() <= suffix.size())

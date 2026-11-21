@@ -5,6 +5,7 @@
 #include <string>
 
 class Actor;
+class ServerActor;
 
 class CandleBlock final : public Block {
 public:
@@ -19,6 +20,12 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    // a burning projectile lights it and flies on as from any block
+    bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                         ServerActor &projectile) const override;
+
+    static bool isBurning(const ServerActor &projectile);
+
     // flint and steel, or any item with Fire Aspect but a book
     static bool isLighter(const ItemStack &item);
 
@@ -28,6 +35,7 @@ public:
     static bool light(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
                       Actor *source);
 
+    // put out with a puff of smoke over each flame
     static void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state, Actor *source);
 };
