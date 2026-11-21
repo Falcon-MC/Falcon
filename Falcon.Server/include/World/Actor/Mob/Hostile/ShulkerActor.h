@@ -25,7 +25,7 @@ public:
     // open on a target
     static constexpr int32_t PEEK_OPEN = 100;
 
-    // the faces in the game's Facing order: down, up, north, south, west, east
+    // the faces in the game's order: down, up, north, south, west, east
     static constexpr int8_t FACE_DOWN = 0;
     static constexpr int8_t FACE_COUNT = 6;
 

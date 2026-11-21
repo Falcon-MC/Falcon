@@ -90,7 +90,7 @@ void ShulkerActor::tick(ServerNetworkHandler &owner) {
         _tickPeek(owner);
 }
 
-// the game's PeekSystem: with no target the shell opens now and then for a while; a target opens it wide
+// with no target the shell opens now and then for a while; a target opens it wide
 void ShulkerActor::_tickPeek(ServerNetworkHandler &owner) {
     const bool hasTarget = getTarget(owner) != nullptr;
     const json::Value *peek = getComponent(PEEK_COMPONENT);

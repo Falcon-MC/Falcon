@@ -36,7 +36,7 @@ public:
         mHasPlant = false;
     }
 
-    // the game's onRemove: whatever takes the pot away, its plant drops as an item
+    // whatever takes the pot away, its plant drops as an item
     void onRemoved() override;
 
 private:
