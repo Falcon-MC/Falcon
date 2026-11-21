@@ -60,4 +60,4 @@ mingw-w64-x86_64-gcc-16.2.0-7-any.pkg.tar.zst
 mingw-w64-x86_64-lld-23.1.5-1-any.pkg.tar.zst
 mingw-w64-x86_64-ninja-1.13.2-1-any.pkg.tar.zst
 mingw-w64-x86_64-openssl-4.1.0-1-any.pkg.tar.zst
-mingw-w64-x86_64-zlib-1.4-2-any.pkg.tar.zst
+mingw-w64-x86_64-zlib-1.4-2-any.pkg.tar.zst
