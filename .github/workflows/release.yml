@@ -167,18 +167,20 @@ jobs:
             mingw-w64-x86_64-openssl
             git
 
-      - name: Cache compiler objects
-        uses: actions/cache@v4
+      # the ci caches of the default branch, read only: a release run saves nothing nobody reads again
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ccache-${{ matrix.name }}-${{ github.sha }}
-          restore-keys: ccache-${{ matrix.name }}-
+          key: ci-ccache-${{ matrix.name }}-${{ github.sha }}
+          restore-keys: ci-ccache-${{ matrix.name }}-
 
       - name: Configure and build (Linux)
         if: matrix.os == 'ubuntu-22.04'
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -194,6 +196,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -209,6 +212,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
