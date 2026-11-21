@@ -594,6 +594,10 @@ namespace {
                     FalconPlayer *target = player(call.u64(0));
                     call.resultS32(target == nullptr ? 0 : api().playerProtocolVersion(target));
                 }},
+                {"players", "player-unique-id", "I:I", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS64(target == nullptr ? 0 : api().playerUniqueId(target));
+                }},
                 {"players", "player-send-packet", "Iiii:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     const uint32_t packetId = call.u32(1);
