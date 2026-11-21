@@ -61,21 +61,24 @@ jobs:
         if: matrix.os == 'macos-15'
         run: brew install ninja ccache openssl@3
 
-      - name: Install MSYS2 toolchain
+      - name: Install MSYS2
         if: matrix.os == 'windows-2022'
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: false
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-lld
-            mingw-w64-x86_64-ccache
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-openssl
-            git
+
+      - name: Cache the pinned MSYS2 packages
+        if: matrix.os == 'windows-2022'
+        uses: actions/cache@v4
+        with:
+          path: .msys2-packages
+          key: msys2-toolchain-${{ hashFiles('.github/msys2/toolchain.txt') }}
+
+      - name: Install the pinned MSYS2 toolchain
+        if: matrix.os == 'windows-2022'
+        shell: msys2 {0}
+        run: bash .github/msys2/install.sh .msys2-packages
 
       # the only job that saves a linux cache: the other linux jobs restore this one
       - name: Cache compiler objects
@@ -90,6 +93,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -102,6 +106,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -116,6 +121,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          ccache -z
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
