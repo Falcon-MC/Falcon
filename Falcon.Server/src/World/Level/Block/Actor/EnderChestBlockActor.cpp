@@ -14,3 +14,12 @@ void EnderChestBlockActor::loadNbt(const Tag &data, const PacketCodecContext &co
 Container *EnderChestBlockActor::getContainerFor(int64_t ownerId) {
     return &EnderChestInventoryStore::getInstance().get(ownerId);
 }
+
+void EnderChestBlockActor::addViewer() {
+    ++mViewers;
+}
+
+void EnderChestBlockActor::removeViewer() {
+    if (mViewers > 0)
+        --mViewers;
+}

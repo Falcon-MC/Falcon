@@ -287,7 +287,8 @@ private:
 
     void _animateChest(ChestBlockActor &chest, bool open);
 
-    void _animateBlockContainer(const Vector3i &position, bool open, const char *openSound, const char *closeSound);
+    void _animateBlockContainer(const Vector3i &position, bool open, const char *openSound, const char *closeSound,
+                                int32_t openData = 2);
 
     void _animateBarrel(const Vector3i &position, bool open);
 

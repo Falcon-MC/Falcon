@@ -55,6 +55,8 @@
 
 namespace {
     const int32_t CHEST_ANIMATION_EVENT_TYPE = 1;
+    // the ender chest opens like a chest: the client keeps the lid up while the value is above zero
+    const int32_t ENDER_CHEST_OPEN_DATA = 1;
 
     const ItemStack &itemAt(const PlayerInventory &inventory, InventoryManager::InventoryId id, int slot) {
         switch (id) {
@@ -1467,8 +1469,11 @@ bool InventoryManager::onClientOpenBlockContainer(const Vector3i &position, Cont
         if (shulkerBox->getViewerCount() == 1)
             _animateBlockContainer(position, true, LevelSoundEvent::SHULKER_BOX_OPEN,
                                    LevelSoundEvent::SHULKER_BOX_CLOSED);
-    } else if (dynamic_cast<EnderChestBlockActor *>(blockActor) != nullptr) {
-        _animateBlockContainer(position, true, LevelSoundEvent::ENDER_CHEST_OPEN, LevelSoundEvent::ENDER_CHEST_CLOSED);
+    } else if (EnderChestBlockActor *enderChest = dynamic_cast<EnderChestBlockActor *>(blockActor)) {
+        enderChest->addViewer();
+        if (enderChest->getViewerCount() == 1)
+            _animateBlockContainer(position, true, LevelSoundEvent::ENDER_CHEST_OPEN,
+                                   LevelSoundEvent::ENDER_CHEST_CLOSED, ENDER_CHEST_OPEN_DATA);
     }
 
     RedstoneSystem::queueRedstoneNotification(mOwner->getLevelFor(*mPlayer), position);
@@ -1614,7 +1619,7 @@ void InventoryManager::_animateChest(ChestBlockActor &chest, bool open) {
 }
 
 void InventoryManager::_animateBlockContainer(const Vector3i &position, bool open, const char *openSound,
-                                              const char *closeSound) {
+                                              const char *closeSound, int32_t openData) {
     if (mOwner == nullptr || mPlayer == nullptr)
         return;
 
@@ -1624,7 +1629,7 @@ void InventoryManager::_animateBlockContainer(const Vector3i &position, bool ope
     BlockEventPacket event;
     event.mBlockPosition = position;
     event.mEventType = CHEST_ANIMATION_EVENT_TYPE;
-    event.mEventData = open ? 2 : 0;
+    event.mEventData = open ? openData : 0;
     BlockActionHandler::broadcastToViewers(*mOwner, level, center, event);
     mOwner->playLevelSound(level, open ? openSound : closeSound, center);
 }
@@ -1688,9 +1693,14 @@ void InventoryManager::_closeBlockContainer() {
         return;
     }
 
-    if (dynamic_cast<EnderChestBlockActor *>(blockActor) != nullptr)
-        _animateBlockContainer(mContainerPosition, false, LevelSoundEvent::ENDER_CHEST_OPEN,
-                               LevelSoundEvent::ENDER_CHEST_CLOSED);
+    EnderChestBlockActor *enderChest = dynamic_cast<EnderChestBlockActor *>(blockActor);
+    if (enderChest != nullptr) {
+        const bool wasLastViewer = enderChest->getViewerCount() == 1;
+        enderChest->removeViewer();
+        if (wasLastViewer)
+            _animateBlockContainer(mContainerPosition, false, LevelSoundEvent::ENDER_CHEST_OPEN,
+                                   LevelSoundEvent::ENDER_CHEST_CLOSED, ENDER_CHEST_OPEN_DATA);
+    }
 }
 
 bool InventoryManager::onClientOpenFurnace(const Vector3i &position, FurnaceKind kind, ContainerType type) {
