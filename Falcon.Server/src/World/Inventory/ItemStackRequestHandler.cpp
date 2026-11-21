@@ -5,6 +5,7 @@
 #include "World/Inventory/AnvilRepair.h"
 #include "World/Item/BannerPatterns.h"
 #include "World/Inventory/BundleInventory.h"
+#include "World/Inventory/BannerRecipes.h"
 #include "World/Inventory/CartographyRecipes.h"
 #include "World/Inventory/GrindstoneRepair.h"
 #include "World/Inventory/StonecutterRecipes.h"
@@ -1120,6 +1121,48 @@ namespace {
         return true;
     }
 
+    // the grid decides the result, as the client only names the recipe
+    bool craftBannerRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        const int repetitions = action.mNumberOfRequestedCrafts <= 0 ? 1 : action.mNumberOfRequestedCrafts;
+        bool tableHasItems = false;
+        for (const ItemStack &item: inventory.getCraftingTableContents()) {
+            if (!item.isAir()) {
+                tableHasItems = true;
+                break;
+            }
+        }
+        if (tableHasItems && !context.mCraftingTableOpen)
+            return false;
+
+        const int gridWidth = tableHasItems ? 3 : 2;
+        const std::vector<ItemStack> &grid = tableHasItems ? inventory.getCraftingTableContents()
+                                                           : inventory.getCraftingContents();
+        BannerRecipes::Craft craft;
+        if (!BannerRecipes::craft(BannerRecipes::kindOf(action.mRecipeNetworkId), grid, craft))
+            return false;
+
+        std::vector<int32_t> required = craft.mRequiredBySlot;
+        for (size_t slot = 0; slot < required.size(); ++slot) {
+            required[slot] *= repetitions;
+            if (required[slot] > 0 && grid[slot].mCount < required[slot])
+                return false;
+        }
+        if (craft.mResult.mCount * repetitions > PlayerInventory::getMaxStackSize(craft.mResult))
+            return false;
+
+        context.mCreatedOutput = craft.mResult;
+        context.mCreatedOutput.mCount = craft.mResult.mCount * repetitions;
+        context.mCreatedOutputActive = true;
+        context.mCraftingMatch = CraftingRecipeMatch{nullptr, craft.mRequiredBySlot};
+        context.mCraftingRequired = std::move(required);
+        context.mCraftingConsumed.assign(context.mCraftingRequired.size(), 0);
+        context.mCraftingGridWidth = gridWidth;
+        context.mCraftingActive = true;
+        context.mCraftedRecipeOutput = craft.mResult;
+        context.mCraftedRecipe = true;
+        return true;
+    }
+
     bool craftRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
         if (context.mCraftRecipeSeen) {
@@ -1130,6 +1173,9 @@ namespace {
         if (action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE) {
             return craftEnchant(inventory, context, action, touched);
         }
+
+        if (BannerRecipes::kindOf(action.mRecipeNetworkId) != BannerRecipes::Kind::None)
+            return craftBannerRecipe(inventory, context, action);
 
         if (context.mRecipeOutputs == nullptr) {
             return false;
