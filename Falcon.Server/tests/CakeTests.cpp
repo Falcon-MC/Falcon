@@ -1,5 +1,6 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/ItemDefinitionRegistry.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
@@ -7,9 +8,11 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/VanillaItems.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/CakeBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -18,11 +21,13 @@
 #include "World/Level/World.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
     void require(bool condition, const std::string &message) {
@@ -57,6 +62,11 @@ namespace {
             player.setPosition(Vector3f(20.5f, 100.0f, 0.5f));
             player.setLoginState(ServerPlayer::LoginState::Spawned);
             player.setGameType((int32_t) GameType::Survival);
+            // the player sees these chunks, so what they are sent can be read
+            for (int32_t x = 1; x <= 3; x++) {
+                for (int32_t z = -1; z <= 1; z++)
+                    player.getSentChunks().insert(((int64_t) x << 32) | (uint32_t) z);
+            }
             mPlayer = &player;
         }
 
@@ -94,6 +104,40 @@ namespace {
 
         bool lit(const Vector3i &position) {
             return at(position).mStates.getByte("lit", 0) != 0;
+        }
+
+        // the smoke the server sends while it runs
+        template<typename Action>
+        std::vector<Vector3f> smokeOf(Action action) {
+            std::vector<Vector3f> smoke;
+            mOwner.getNetworkHandler().setOutboundFilter([&](const NetworkIdentifier &, std::string &data) {
+                ReadOnlyBinaryStream header(data);
+                unsigned char sender = 0, receiver = 0;
+                if (Packet::peekId(header, sender, receiver) == MinecraftPacketIds::LevelEvent) {
+                    ReadOnlyBinaryStream body(data);
+                    LevelEventPacket packet;
+                    packet.readHeader(body);
+                    packet.read(body, mOwner.getCodecContext());
+                    if (packet.mEventId == (0x4000 | 5))
+                        smoke.push_back(packet.mPosition);
+                }
+                return false;
+            });
+            action();
+            mOwner.getNetworkHandler().setOutboundFilter(nullptr);
+            return smoke;
+        }
+
+        bool useItemOn(const Vector3i &position, int32_t face) {
+            const ItemStack held = mPlayer->getInventory().getItemInHand();
+            const Item *item = VanillaItems::fromIdentifier(held.mDefinition->getIdentifier());
+            require(item != nullptr, "no item for what the player holds");
+            return item->onUseOnBlock(mOwner, *mPlayer, held, position, face, Vector3f());
+        }
+
+        bool hitBy(const Vector3i &position, ServerActor &projectile) {
+            const BlockState state = at(position);
+            return VanillaBlocks::fromState(state)->onProjectileHit(mOwner, *mLevel, position, state, projectile);
         }
 
         int32_t dropped(const char *identifier) {
@@ -240,6 +284,86 @@ namespace {
         arena.use(wet);
         require(!arena.lit(wet), "a candle under water was lit");
     }
+
+    bool near(const Vector3f &value, float x, float y, float z) {
+        return std::abs(value.x - x) < 0.001f && std::abs(value.y - y) < 0.001f && std::abs(value.z - z) < 0.001f;
+    }
+
+    // a candle cake gives a whole cake's signal
+    void comparator(Arena &arena) {
+        const Vector3i cake = arena.place(42, arena.block("minecraft:candle_cake"));
+        const BlockState state = arena.at(cake);
+        require(VanillaBlocks::fromState(state)->getComparatorSignal(*arena.mLevel, cake, state) == 14,
+                "a candle cake did not give 14");
+    }
+
+    // putting out sends one puff of smoke over each flame, and none for a candle never lit
+    void smoke(Arena &arena) {
+        const Vector3i candle = arena.place(44, arena.block("minecraft:candle"));
+        BlockState three = arena.at(candle);
+        three.mStates.putInt("candles", 2);
+        three.mStates.putByte("lit", 1);
+        arena.mLevel->setBlock(candle, three, false);
+        arena.hold(nullptr);
+        const std::vector<Vector3f> puffs = arena.smokeOf([&] { arena.use(candle); });
+        require(puffs.size() == 3, "three candles did not puff three times, " + std::to_string(puffs.size()));
+        require(near(puffs[0], 44.5625f, 100.5f, 0.4375f) && near(puffs[1], 44.375f, 100.4375f, 0.5f)
+                        && near(puffs[2], 44.5f, 100.3125f, 0.625f),
+                "the smoke of three candles was not over their flames");
+
+        const Vector3i single = arena.place(46, arena.block("minecraft:candle"));
+        BlockState one = arena.at(single);
+        one.mStates.putByte("lit", 1);
+        arena.mLevel->setBlock(single, one, false);
+        const std::vector<Vector3f> lone = arena.smokeOf([&] { arena.use(single); });
+        require(lone.size() == 1 && near(lone[0], 46.5f, 100.5f, 0.5f), "one candle did not puff over its flame");
+        require(arena.smokeOf([&] { arena.use(single); }).empty(), "a candle never lit puffed smoke");
+
+        const Vector3i cake = arena.place(48, arena.block("minecraft:candle_cake"));
+        BlockState lit = arena.at(cake);
+        lit.mStates.putByte("lit", 1);
+        arena.mLevel->setBlock(cake, lit, false);
+        const std::vector<Vector3f> cakePuff = arena.smokeOf([&] { arena.use(cake); });
+        require(cakePuff.size() == 1 && near(cakePuff[0], 48.5f, 100.975f, 0.5f),
+                "a candle cake did not puff over its candle");
+    }
+
+    // a fire charge lights a candle or a candle cake and is used up; a lit one keeps the charge and sets no fire
+    void fireCharge(Arena &arena) {
+        const Vector3i candle = arena.place(50, arena.block("minecraft:candle"));
+        const Vector3i above(candle.x, candle.y + 1, candle.z);
+        arena.hold("minecraft:fire_charge", 3);
+        require(arena.useItemOn(candle, 1), "a fire charge did nothing on a candle");
+        require(arena.lit(candle), "a fire charge did not light the candle");
+        require(arena.mPlayer->getInventory().getItemInHand().mCount == 2, "lighting a candle kept the fire charge");
+        require(arena.at(above).mName == "minecraft:air", "a fire charge on a candle set a fire");
+
+        require(!arena.useItemOn(candle, 1), "a fire charge did something on a lit candle");
+        require(arena.mPlayer->getInventory().getItemInHand().mCount == 2, "a lit candle took the fire charge");
+        require(arena.at(above).mName == "minecraft:air", "a fire charge on a lit candle set a fire");
+
+        const Vector3i cake = arena.place(52, arena.block("minecraft:candle_cake"));
+        require(arena.useItemOn(cake, 1) && arena.lit(cake), "a fire charge did not light the candle cake");
+        require(arena.mPlayer->getInventory().getItemInHand().mCount == 1, "lighting a candle cake kept the charge");
+    }
+
+    // a burning arrow lights what it hits and flies on; a cold one lights nothing
+    void projectiles(Arena &arena) {
+        const Vector3i candle = arena.place(54, arena.block("minecraft:candle"));
+        ServerActor *arrow = arena.mOwner.spawnActor(*arena.mLevel, "minecraft:arrow", Vector3f(54.5f, 102.0f, 0.5f));
+        require(arrow != nullptr, "no arrow spawned");
+        require(!arena.hitBy(candle, *arrow) && !arena.lit(candle), "a cold arrow lit the candle");
+
+        arrow->getProjectileData().mFlameTicks = 100;
+        require(!arena.hitBy(candle, *arrow), "a burning arrow stopped on the candle");
+        require(arena.lit(candle), "a Flame arrow did not light the candle");
+
+        const Vector3i cake = arena.place(56, arena.block("minecraft:candle_cake"));
+        arrow->getProjectileData().mFlameTicks = 0;
+        arrow->setOnFire(true);
+        require(!arena.hitBy(cake, *arrow), "a burning arrow stopped on the candle cake");
+        require(arena.lit(cake), "an arrow on fire did not light the candle cake");
+    }
 }
 
 int main() {
@@ -261,6 +385,10 @@ int main() {
             eatingCandleCake(arena);
             breaking(arena);
             candles(arena);
+            comparator(arena);
+            smoke(arena);
+            fireCharge(arena);
+            projectiles(arena);
         }
         // a second arena only once the first has closed the world
         peaceful(directory);
