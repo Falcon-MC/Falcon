@@ -287,6 +287,16 @@ public:
         return mGameType == (int32_t) GameType::Spectator;
     }
 
+    // where a wind burst that spares the fall threw the player from: a landing above it hurts nothing, one
+    // below counts the fall from there
+    const std::optional<float> &getWindImpulseHeight() const {
+        return mWindImpulseHeight;
+    }
+
+    void setWindImpulseHeight(std::optional<float> height) {
+        mWindImpulseHeight = height;
+    }
+
     int64_t getLastActiveTick() const {
         return mLastActiveTick;
     }
@@ -1231,6 +1241,7 @@ public:
                          bool disablesShield);
 
 private:
+    std::optional<float> mWindImpulseHeight;
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
     bool _isCriticalHit() const;

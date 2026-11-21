@@ -78,7 +78,12 @@ void ServerNetworkHandler::_handleFallDamage(ServerPlayer &player, const Block *
         return;
 
     const float multiplier = supportBlock == nullptr ? 1.0f : supportBlock->getFallDistanceMultiplier();
-    float damage = player.computeFallDamage(player.getFallDistance() * multiplier);
+    float distance = player.getFallDistance();
+    if (const std::optional<float> &impulse = player.getWindImpulseHeight(); impulse.has_value()) {
+        const float landing = player.getPosition().y;
+        distance = landing <= *impulse ? std::min(*impulse - landing, distance) : 0.0f;
+    }
+    float damage = player.computeFallDamage(distance * multiplier);
     if (supportBlock != nullptr) {
         const std::optional<float> blockDamage = supportBlock->getFallDamage(player, damage);
         if (blockDamage.has_value())

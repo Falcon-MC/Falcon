@@ -60,6 +60,12 @@ bool LeverBlock::isSignalSource() const {
     return true;
 }
 
+bool LeverBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                             const BlockState &state) const {
+    RedstoneSystem::onLeverActivated(owner, level, position, state);
+    return true;
+}
+
 bool LeverBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                             const BlockState &state) const {
     Level &level = owner.getLevelFor(player);

@@ -69,7 +69,7 @@ void PreMoveTravelVelocitySystem::_applyCurrent(Vector3f &motion, const LiquidCo
 }
 
 void PreMoveTravelVelocitySystem::_applyGroundFriction(Level &level, const ServerActor &actor, Vector3f &motion) {
-    if (!actor.isOnGround())
+    if (!actor.isOnGround() || actor.discardsFriction())
         return;
 
     if (std::fabs(motion.x) < PRECISION && std::fabs(motion.z) < PRECISION)

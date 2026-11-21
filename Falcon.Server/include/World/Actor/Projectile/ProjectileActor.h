@@ -189,7 +189,7 @@ public:
     bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
 
 private:
-    void _burst(ServerNetworkHandler &owner, const Vector3f &hitPosition);
+    void _burst(ServerNetworkHandler &owner, const Vector3f &center);
 };
 
 class ExperienceBottleActor final : public ThrownProjectileActor {

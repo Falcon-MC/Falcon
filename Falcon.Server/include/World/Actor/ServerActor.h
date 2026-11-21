@@ -80,6 +80,24 @@ public:
         return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT};
     }
 
+    // the collision box against blocks, scaled around its middle; the jump of behavior.jump_around_target shrinks it
+    float getCollisionScale() const {
+        return mCollisionScale;
+    }
+
+    void setCollisionScale(float scale) {
+        mCollisionScale = scale;
+    }
+
+    // the ground's friction is left out, as in the air: a long jump keeps its speed
+    bool discardsFriction() const {
+        return mDiscardsFriction;
+    }
+
+    void setDiscardsFriction(bool discards) {
+        mDiscardsFriction = discards;
+    }
+
     virtual bool isExpired() const {
         return false;
     }
@@ -483,6 +501,8 @@ protected:
 
 private:
     std::string mIdentifier;
+    float mCollisionScale = 1.0f;
+    bool mDiscardsFriction = false;
     double mBuoyancyTimer = 0.0;
     int64_t mPushSoundTick = INT64_MIN / 2;
     Vector3f mSyncedPosition;

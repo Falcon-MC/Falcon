@@ -273,6 +273,36 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
     return true;
 }
 
+ServerActor *MobShooter::shootFrom(ServerNetworkHandler &owner, MobActor &mob, const std::string &identifier,
+                                   const Vector3f &origin, const Vector3f &direction) {
+    const ProjectileSettings settings = projectileSettings(owner, mob, identifier);
+    const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+    if (!settings.mFound || length < 0.0000001f)
+        return nullptr;
+
+    const float spread = SPREAD_PER_UNCERTAINTY
+                         * uncertainty(settings.mUncertaintyBase, settings.mUncertaintyMultiplier,
+                                       (int32_t) owner.getProperties().getDifficulty());
+    std::normal_distribution<float> gaussian(0.0f, 1.0f);
+    const Vector3f aim(direction.x / length + gaussian(shooterRandom()) * spread,
+                       direction.y / length + gaussian(shooterRandom()) * spread,
+                       direction.z / length + gaussian(shooterRandom()) * spread);
+
+    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, origin);
+    if (projectile == nullptr)
+        return nullptr;
+    projectile->setProjectile(true);
+    projectile->setOwnerUniqueId(mob.getUniqueId());
+    if (settings.mImpact != nullptr) {
+        ProjectileData &data = projectile->getProjectileData();
+        data.mImpactDamage = impactDamage(*settings.mImpact, shooterRandom());
+        if (data.mImpactDamage < 0)
+            data.mBaseDamage = numberOf(*settings.mImpact, "power_multiplier", data.mBaseDamage);
+    }
+    projectile->setMotion(Vector3f(aim.x * settings.mPower, aim.y * settings.mPower, aim.z * settings.mPower));
+    return owner.allowProjectileLaunch(*projectile, &mob) ? projectile : nullptr;
+}
+
 float MobShooter::aimPitch(float horizontal, float height, float power, float gravity) {
     if (gravity == 0.0f)
         return -std::atan2(height, horizontal) * RADIANS_TO_DEGREES;

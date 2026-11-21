@@ -4,6 +4,7 @@
 #include "World/Actor/Mob/Hostile/BlazeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
+#include "World/Level/WindBurst.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
@@ -32,10 +33,10 @@ namespace {
     const float ENDER_PEARL_DAMAGE = 5.0f;
     const char *ENDER_PEARL_DEATH_MESSAGE = "death.fell.accident.generic";
     const char *ENDER_PEARL_PARTICLE = "minecraft:endermanpop_emitter";
-    const float WIND_CHARGE_RADIUS = 3.5f;
-    const float WIND_CHARGE_KNOCKBACK_STRENGTH = 0.2f;
-    const float WIND_CHARGE_LIFT = 0.6f;
-    const float WIND_CHARGE_BURST_HEIGHT = 1.0f;
+    const float WIND_CHARGE_FACE_OFFSET = 0.25f;
+    const char *const BREEZE_WIND_CHARGE = "minecraft:breeze_wind_charge_projectile";
+    const char *const BREEZE_WIND_CHARGE_PARTICLE = "minecraft:breeze_wind_explosion_emitter";
+    const char *const BREEZE_WIND_CHARGE_SOUND = "breeze_wind_charge.burst";
     const char *WIND_CHARGE_PARTICLE = "minecraft:wind_explosion_emitter";
     const int32_t EXPERIENCE_BOTTLE_MIN_XP = 3;
     const int32_t EXPERIENCE_BOTTLE_MAX_XP = 11;
@@ -141,47 +142,53 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
 }
 
 bool WindChargeActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
-    if (hitPlayer != nullptr)
+    if (hitPlayer != nullptr) {
         _hitTarget(owner, hitPosition, *hitPlayer);
-    _burst(owner, hitPosition);
+        _burst(owner, getPosition());
+        return true;
+    }
+
+    // a block hit bursts a quarter block out of the face it struck
+    const Vector3f motion = getMotion();
+    const float ax = std::fabs(motion.x);
+    const float ay = std::fabs(motion.y);
+    const float az = std::fabs(motion.z);
+    Vector3f out;
+    if (ax >= ay && ax >= az)
+        out.x = motion.x > 0.0f ? -1.0f : 1.0f;
+    else if (ay >= az)
+        out.y = motion.y > 0.0f ? -1.0f : 1.0f;
+    else
+        out.z = motion.z > 0.0f ? -1.0f : 1.0f;
+    _burst(owner, Vector3f(hitPosition.x + out.x * WIND_CHARGE_FACE_OFFSET, hitPosition.y + out.y * WIND_CHARGE_FACE_OFFSET,
+                           hitPosition.z + out.z * WIND_CHARGE_FACE_OFFSET));
     return true;
 }
 
 bool WindChargeActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
     _hitTarget(owner, hitPosition, hitActor);
-    _burst(owner, hitPosition);
+    _burst(owner, getPosition());
     return true;
 }
 
-void WindChargeActor::_burst(ServerNetworkHandler &owner, const Vector3f &hitPosition) {
-    const float radiusSquared = WIND_CHARGE_RADIUS * WIND_CHARGE_RADIUS;
-
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &nearby = entry.second;
-        if (!nearby.isSpawned() || !nearby.sharesLevelWith(*this))
-            continue;
-
-        if (distanceSquared(nearby.getPosition(), hitPosition) > radiusSquared)
-            continue;
-
-        owner.pushFrom(nearby, hitPosition, WIND_CHARGE_KNOCKBACK_STRENGTH, WIND_CHARGE_LIFT);
-    }
-
-    for (auto &entry: owner.getActors()) {
-        ServerActor &nearby = *entry.second;
-        if (!nearby.isAlive() || nearby.isProjectile() || !nearby.sharesLevelWith(*this))
-            continue;
-
-        if (distanceSquared(nearby.getPosition(), hitPosition) > radiusSquared)
-            continue;
-
-        owner.pushFrom(nearby, hitPosition, WIND_CHARGE_KNOCKBACK_STRENGTH, WIND_CHARGE_LIFT);
-    }
-
+void WindChargeActor::_burst(ServerNetworkHandler &owner, const Vector3f &center) {
     Level &level = owner.getLevelFor(*this);
-    const Vector3f burstPosition(hitPosition.x, hitPosition.y + WIND_CHARGE_BURST_HEIGHT, hitPosition.z);
-    owner.spawnParticleEffect(level, WIND_CHARGE_PARTICLE, burstPosition);
-    owner.playLevelSound(level, LevelSoundEvent::WIND_CHARGE_BURST, burstPosition);
+    const bool breeze = getIdentifier() == BREEZE_WIND_CHARGE;
+
+    WindBurst::Settings settings;
+    const json::Value *definition = EntityDefinitions::find(getIdentifier());
+    const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+    const json::Value *explode = components == nullptr ? nullptr : components->get("minecraft:explode");
+    if (explode != nullptr)
+        settings = WindBurst::fromComponent(*explode);
+    settings.mNeedsMobGriefing = breeze;
+    WindBurst::burst(owner, level, center, settings, this);
+
+    owner.spawnParticleEffect(level, breeze ? BREEZE_WIND_CHARGE_PARTICLE : WIND_CHARGE_PARTICLE, center);
+    if (breeze)
+        owner.playLevelSound(level, BREEZE_WIND_CHARGE_SOUND, center);
+    else
+        owner.playLevelSound(level, LevelSoundEvent::WIND_CHARGE_BURST, center);
 }
 
 bool ExperienceBottleActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {

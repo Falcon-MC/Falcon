@@ -18,6 +18,9 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    bool onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                     const BlockState &state) const override;
+
     void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
                   const ItemStack &usedItem, int blockFace) const override;
 };

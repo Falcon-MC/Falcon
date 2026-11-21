@@ -390,6 +390,16 @@ public:
         return true;
     }
 
+    // a wind burst reached the block; true when it reacted
+    virtual bool onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                             const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {
         (void) owner;

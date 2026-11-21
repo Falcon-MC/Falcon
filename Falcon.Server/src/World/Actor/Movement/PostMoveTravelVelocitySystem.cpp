@@ -7,7 +7,9 @@ void PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsCompon
                                          Vector3f motion, const ActorMoveResult &result, const LiquidContact &feet,
                                          float &landingFallDistance) {
     landingFallDistance = 0.0f;
-    actor.setPosition(Vector3f((box.mMinX + box.mMaxX) * 0.5f, box.mMinY, (box.mMinZ + box.mMaxZ) * 0.5f));
+    // a box scaled around its middle starts above the feet: the feet stay where the full box would put them
+    const float raised = actor.getSize().mHeight * (1.0f - actor.getCollisionScale()) * 0.5f;
+    actor.setPosition(Vector3f((box.mMinX + box.mMaxX) * 0.5f, box.mMinY - raised, (box.mMinZ + box.mMaxZ) * 0.5f));
 
     if (result.mCollidedX)
         motion.x = 0.0f;

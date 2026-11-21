@@ -78,6 +78,17 @@ BlockState BellBlock::applyPlacementOrientation(const BlockState &state, const B
     return BlockState(result.mName, states);
 }
 
+bool BellBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            const BlockState &state) const {
+    // rung the way it faces, wherever it hangs
+    const int32_t direction = state.mStates.getInt("direction", 0) & 3;
+    BellBlockActor *bell = &bellAt(owner, level, position, state);
+    bell->ring(RING_DIRECTION[direction]);
+    BlockActionHandler::broadcastBlockActorData(owner, level, *bell);
+    owner.playLevelSound(level, SOUND_BELL_HIT, Vector3f((float) position.x, (float) position.y, (float) position.z));
+    return true;
+}
+
 bool BellBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                            const BlockState &state) const {
     const std::string attachment = state.mStates.getString("attachment", "standing");

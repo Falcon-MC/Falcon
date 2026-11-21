@@ -1,6 +1,7 @@
 #include <cstring>
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Projectile/ProjectileReflection.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/LevelSoundEventIds.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
@@ -2272,6 +2273,11 @@ void ServerNetworkHandler::tickActors() {
                         broadcastActorMove(actor);
                     else
                         expired.push_back(actorId);
+                    continue;
+                }
+
+                if (hitActor != nullptr && ProjectileReflection::reflect(*this, level, actor, *hitActor)) {
+                    broadcastActorMove(actor);
                     continue;
                 }
 
