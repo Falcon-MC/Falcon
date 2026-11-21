@@ -9,6 +9,8 @@ mkdir -p "$packages"
 
 files=()
 while read -r file; do
+    # a windows checkout ends every line with a carriage return
+    file="${file%$'\r'}"
     [[ -z "$file" || "$file" == \#* ]] && continue
     # the signature comes along so pacman still checks every package
     for part in "$file" "$file.sig"; do
