@@ -28,6 +28,7 @@ namespace {
         ServerNetworkHandler mOwner{"Projectile impacts", "", 1};
         Level *mLevel = nullptr;
 
+        // the spawn chunk keeps its generated terrain, whose height changes with the seed: tests stay out of it
         explicit Arena(const std::filesystem::path &directory) {
             const std::filesystem::path path = directory / "normal.properties";
             std::ofstream(path) << "difficulty=normal\n";
@@ -64,14 +65,19 @@ namespace {
     }
 
     // flies into a cow standing in its way; true once the cow was struck
-    float hitCow(Arena &arena, const char *identifier, float x, ServerActor *&cowOut) {
+    float hitCow(Arena &arena, const char *identifier, float x, ServerActor *&cowOut, float height = 100.4f) {
         ServerActor &cow = arena.spawn("minecraft:cow", Vector3f(x, 100.0f, 6.5f));
         cowOut = &cow;
         const float before = cow.getHealth();
-        ServerActor &projectile = launch(arena, identifier, Vector3f(x, 100.4f, 3.5f));
+        ServerActor &projectile = launch(arena, identifier, Vector3f(x, height, 3.5f));
         const int64_t id = projectile.getUniqueId();
-        for (int32_t tick = 0; tick < 20 && arena.alive(id); ++tick)
+        // held where it stands: a falling or wandering cow can leave the projectile's path
+        const Vector3f standing = cow.getPosition();
+        for (int32_t tick = 0; tick < 20 && arena.alive(id); ++tick) {
+            cow.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            cow.setPosition(standing);
             arena.mOwner.tickActors();
+        }
         return before - cow.getHealth();
     }
 
@@ -98,14 +104,14 @@ namespace {
     void ghastFireball(Arena &arena) {
         Level &level = *arena.mLevel;
         for (int32_t y = 99; y <= 102; ++y) {
-            for (int32_t x = -1; x <= 1; ++x)
+            for (int32_t x = 49; x <= 51; ++x)
                 level.setBlockState(x, y, 9, BlockState("minecraft:dirt"));
         }
         ServerActor *cow = nullptr;
-        const float dealt = hitCow(arena, "minecraft:fireball", 0.5f, cow);
+        const float dealt = hitCow(arena, "minecraft:fireball", 50.5f, cow);
         require(dealt >= 6.0f, "a ghast fireball's impact dealt less than 6: " + std::to_string(dealt));
 
-        ServerActor &fireball = launch(arena, "minecraft:fireball", Vector3f(0.5f, 100.4f, 4.5f));
+        ServerActor &fireball = launch(arena, "minecraft:fireball", Vector3f(50.5f, 100.4f, 4.5f));
         auto *held = dynamic_cast<ThrownProjectileActor *>(&fireball);
         require(held != nullptr, "the ghast fireball has no hit handling");
         for (int32_t tick = 0; tick < 20 && !held->isHeldAfterHit(); ++tick)
@@ -114,7 +120,7 @@ namespace {
         arena.mOwner.tickActors();
         int32_t dirt = 0;
         for (int32_t y = 99; y <= 102; ++y) {
-            for (int32_t x = -1; x <= 1; ++x)
+            for (int32_t x = 49; x <= 51; ++x)
                 dirt += level.getBlockState(x, y, 9).mName == "minecraft:dirt" ? 1 : 0;
         }
         require(dirt < 12, "the ghast fireball's explosion broke nothing");
@@ -122,7 +128,7 @@ namespace {
 
     void llamaSpit(Arena &arena) {
         ServerActor *cow = nullptr;
-        const float dealt = hitCow(arena, "minecraft:llama_spit", 20.5f, cow);
+        const float dealt = hitCow(arena, "minecraft:llama_spit", 20.5f, cow, 101.4f);
         require(dealt == 1.0f, "llama spit did not deal 1, dealt " + std::to_string(dealt));
     }
 
