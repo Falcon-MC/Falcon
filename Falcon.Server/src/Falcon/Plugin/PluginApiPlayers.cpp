@@ -92,6 +92,11 @@ namespace {
                                 : ProtocolCodecRegistry::instance().getDefault().getProtocolVersion();
     }
 
+    // the id packets name the player by and their saved data keeps, not the runtime id of this session
+    int64_t playerUniqueId(FalconPlayer *target) {
+        return player(target)->getUniqueId();
+    }
+
     const char *playerUuid(FalconPlayer *target) {
         return hold(player(target)->getUuid());
     }
@@ -150,6 +155,7 @@ void PluginServerApi::fillPlayers(FalconServerApi &api) {
     api.playerRemoveSimulated = &playerRemoveSimulated;
     api.playerXuid = &playerXuid;
     api.playerProtocolVersion = &playerProtocolVersion;
+    api.playerUniqueId = &playerUniqueId;
     api.playerUuid = &playerUuid;
     api.playerAddress = &playerAddress;
     api.playerSendTitle = &playerSendTitle;

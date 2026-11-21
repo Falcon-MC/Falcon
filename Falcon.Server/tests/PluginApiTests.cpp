@@ -719,6 +719,14 @@ namespace {
         api.unsubscribe(spawnId);
     }
 
+    // packets such as UpdateAbilities name the player by this id, which outlives the session's runtime id
+    void uniqueId(const FalconServerApi &api, Fixture &fixture) {
+        fixture.player->setUniqueId(-4242);
+        require(api.playerUniqueId(fixture.playerHandle()) == -4242, "the player's unique id was not the one they keep");
+        require(api.playerUniqueId(fixture.playerHandle()) != (int64_t) api.entityRuntimeId(api.playerEntity(fixture.playerHandle())),
+                "the unique id was the runtime id");
+    }
+
     void simulatedPlayers(const FalconServerApi &api, Fixture &fixture) {
         FalconLevel *level = fixture.levelHandle();
         const FalconVec3 at{4.5, 100.0, 4.5};
@@ -841,6 +849,7 @@ namespace {
         playerAndEntityEvents(api, fixture);
         worldEvents(api, fixture);
         simulatedPlayers(api, fixture);
+        uniqueId(api, fixture);
         permissionGroups(api, fixture);
     }
 }
