@@ -1,5 +1,6 @@
 #include "World/Level/Block/CrafterBlock.h"
 #include "World/Inventory/BannerRecipes.h"
+#include "World/Inventory/GridRecipes.h"
 
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -13,6 +14,7 @@
 #include "World/Level/Block/DispenserBlock.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/World.h"
 
 #include <vector>
 
@@ -201,10 +203,37 @@ std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, c
     if (networkId > 0)
         return recipeOutputs(owner, networkId);
 
-    // the game's crafter takes every crafting table recipe, the banner copy and the shield decoration too
+    // the game's crafter takes every crafting table recipe, the multi recipes too
     BannerRecipes::Craft craft;
     if (BannerRecipes::duplicate(grid, craft) || BannerRecipes::decorateShield(grid, craft))
         return {craft.mResult};
+
+    // only a map growing reads the maps, kept by the world's overworld
+    Level &mapLevel = owner.getWorldOf(crafter.getLevel()).getOverworld();
+    CartographyRecipes::Maps maps;
+    maps.mGetMap = [&mapLevel](int64_t mapId) { return mapLevel.getMapData(mapId); };
+    maps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
+        return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
+    };
+    const GridRecipes::Make make = [&owner](const std::string &identifier, int32_t count) {
+        return owner.createItemStack(identifier, count);
+    };
+    for (const auto &recipe: GridRecipes::uuids()) {
+        GridRecipes::Craft made;
+        if (!GridRecipes::craft(recipe.first, grid, make, &maps, made))
+            continue;
+        // the crafter takes one of every slot: the book it copied comes back out with the copies
+        if (recipe.first == GridRecipes::Kind::BookCloning) {
+            for (size_t slot = 0; slot < grid.size(); ++slot) {
+                if (made.mRequiredBySlot[slot] == 0 && !grid[slot].isAir()) {
+                    ItemStack original = grid[slot];
+                    original.mCount = 1;
+                    return {made.mResult, original};
+                }
+            }
+        }
+        return {made.mResult};
+    }
     return {};
 }
 

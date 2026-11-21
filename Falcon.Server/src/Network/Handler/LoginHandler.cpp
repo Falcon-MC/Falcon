@@ -20,6 +20,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
 #include "World/Inventory/BannerRecipes.h"
+#include "World/Inventory/GridRecipes.h"
 #include "World/Inventory/CartographyRecipes.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Level/Level.h"
@@ -1152,6 +1153,15 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         cached.mMultiRecipes.push_back(multi);
     }
     BannerRecipes::setNetworkIds(bannerRecipeIds[0], bannerRecipeIds[1]);
+
+    // the grid's fireworks, book and map copies, repairs and decorated pots, the same way
+    for (const auto &recipe: GridRecipes::uuids()) {
+        MultiRecipeEntry multi;
+        multi.mUuid = Uuid::fromString(recipe.second);
+        multi.mRecipeNetId = furnaceRecipeNetId++;
+        GridRecipes::setNetworkId(recipe.first, (int32_t) multi.mRecipeNetId);
+        cached.mMultiRecipes.push_back(multi);
+    }
 
     // after every other recipe: their network ids stay put
     const StonecutterRecipeData *stonecutterRecipes = CraftingRecipeTable::getStonecutterRecipes();

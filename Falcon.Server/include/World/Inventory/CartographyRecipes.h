@@ -43,4 +43,10 @@ public:
 
     // the table slots a MapCreateLockedCopyPacket can stand for: the original map with a glass pane
     static bool isLocking(const ItemStack &input, const ItemStack &additional, int64_t originalId);
+
+    // a filled map one scale out, false when it can't grow; the crafting grid makes it too
+    static bool extendMap(const ItemStack &input, const Maps &maps, ItemStack &result);
+
+    // a map that shows the players, false when it already does; the crafting grid makes it too
+    static bool upgradeMap(const ItemStack &input, ItemStack &result);
 };
