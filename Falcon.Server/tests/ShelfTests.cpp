@@ -142,7 +142,8 @@ int main() {
         require(rowType(SHELF) == -1 && rowType(east) == 0 && rowType(west) == 0,
                 "the row did not come apart when its middle lost power");
 
-        // placed straight onto a powered block: powered at once
+        // placed straight onto a powered block: powered at once. Placement hooks run for a level the server owns
+        level.setOwner(&server);
         const Vector3i placed(SHELF.x, SHELF.y, SHELF.z + 3);
         level.setBlock(Vector3i(placed.x, placed.y - 1, placed.z), BlockState("minecraft:redstone_block"), false);
         level.setBlock(placed, state, false);
