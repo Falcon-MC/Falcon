@@ -113,7 +113,11 @@ int main() {
         client.mChunkRadius = 5;
         client.mDeferSpawn = false;
         client.mTimeoutMs = 30000;
+        // the test client can lose a race between its own ICE transport and the server's answer on a busy runner
+        // ("Got a remote candidate without ICE transport"); this test is about the embedded server, so it dials again
         auto connection = ClientNetworkSystem::dial(client);
+        for (int attempt = 1; attempt < 3 && connection.mConnection == nullptr; ++attempt)
+            connection = ClientNetworkSystem::dial(client);
         require(connection.mConnection != nullptr, connection.mError.c_str());
         const auto players = await(server.getPlayerNames());
         require(players.size() == 1 && players.front() == "EmbeddedPlayer", "Player snapshot missing");

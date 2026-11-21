@@ -17,6 +17,14 @@
 #include <stdexcept>
 #include <string>
 
+// a test server does not listen, so its tick returns at once: the clock is moved by hand
+class ServerTickProbe {
+public:
+    static void advance(ServerNetworkHandler &owner, int64_t ticks) {
+        owner.mCurrentTick += ticks;
+    }
+};
+
 namespace {
     void require(bool condition, const std::string &message) {
         if (!condition)
@@ -52,7 +60,7 @@ namespace {
         goal.tick(owner, *witch);
         require(!witch->hasEffect(MobEffectId::Speed), "the potion worked before it was drunk");
         for (int tick = 0; tick < 40 && witch->getFlags().get(ActorFlag::UsingItem); ++tick) {
-            owner.tick();
+            ServerTickProbe::advance(owner, 1);
             goal.tick(owner, *witch);
         }
         require(witch->hasEffect(MobEffectId::Speed) && !goal.canContinueToUse(owner, *witch),

@@ -39,9 +39,12 @@ namespace {
             return *vex;
         }
 
+        // as the server's actor tick does: the hurt cooldown counts down, then the mob ticks
         void tick(MobActor &mob, int32_t ticks) {
-            for (int32_t i = 0; i < ticks; i++)
+            for (int32_t i = 0; i < ticks; i++) {
+                mob.tickCombat(1);
                 mob.tick(mOwner);
+            }
         }
     };
 
