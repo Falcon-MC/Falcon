@@ -19,4 +19,16 @@ public:
     }
 
     Container *getContainerFor(int64_t ownerId);
+
+    // every player looking in counts, whoever's items they see: the lid shuts behind the last one
+    void addViewer();
+
+    void removeViewer();
+
+    int getViewerCount() const {
+        return mViewers;
+    }
+
+private:
+    int mViewers = 0;
 };
