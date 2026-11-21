@@ -9,6 +9,11 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# the tests share one library of the server, and every static library it takes in must allow that
+if(FALCON_BUILD_EMBEDDED_TESTS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 include(FetchContent)
 
 set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
