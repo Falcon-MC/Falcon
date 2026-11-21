@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/BlockTypeIds.h"
+#include "World/Level/Block/NoteBlockInstrument.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Falcon/Plugin/PluginContentRegistry.h"
 
@@ -51,14 +52,16 @@ Block VanillaBlocks::fromData(const BlockData &data) {
     registry.initialize();
     const Tag *defaultStates = registry.getDefaultStates(identifier);
 
-    if (defaultStates != nullptr)
-        return Block(data.mTypeId, data.mIdentifier, data.mName, *defaultStates);
+    if (defaultStates == nullptr) {
+        static std::unordered_set<std::string> warnedIdentifiers;
+        if (warnedIdentifiers.insert(identifier).second)
+            LOG_WARN(LogAreaID::Server, "Block palette has no default states for %s", identifier.c_str());
+    }
 
-    static std::unordered_set<std::string> warnedIdentifiers;
-    if (warnedIdentifiers.insert(identifier).second)
-        LOG_WARN(LogAreaID::Server, "Block palette has no default states for %s", identifier.c_str());
-
-    return Block(data.mTypeId, data.mIdentifier, data.mName, Tag::ofCompound());
+    Block block(data.mTypeId, data.mIdentifier, data.mName,
+                defaultStates != nullptr ? *defaultStates : Tag::ofCompound());
+    NoteBlockInstruments::assign(block);
+    return block;
 }
 
 Block VanillaBlocks::CYAN_TERRACOTTA() {
