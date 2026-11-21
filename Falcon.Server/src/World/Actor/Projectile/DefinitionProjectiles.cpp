@@ -1,0 +1,297 @@
+#include "World/Actor/Projectile/ProjectileActor.h"
+
+#include "Core/Json/Json.h"
+#include "Core/Math/VectorMath.h"
+#include "Network/Handler/BlockActionHandler.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelEventPacket.h"
+#include "Server/PropertiesSettings.h"
+#include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/MobEffect.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Systems/FireSystem.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Explosion.h"
+#include "World/Level/Level.h"
+
+#include <cmath>
+#include <memory>
+#include <random>
+#include <string>
+#include <unordered_map>
+
+namespace {
+    // the knockback the arrows' impact_damage gives, shared by every projectile with knockback on
+    const float IMPACT_KNOCKBACK = 0.3f;
+    const float DEFAULT_EXPLOSION_POWER = 3.0f;
+    const int32_t TICKS_PER_SECOND = 20;
+    // LevelEvent ParticleLegacyEvent: the particle type in the low bits
+    const int32_t PARTICLE_EVENT = 0x4000;
+
+    // the child actor's death message, as the game picks it by the projectile's type
+    const char *deathMessageOf(const std::string &identifier) {
+        if (identifier == "minecraft:small_fireball" || identifier == "minecraft:dragon_fireball")
+            return "death.attack.fireball";
+        if (identifier == "minecraft:shulker_bullet")
+            return "death.attack.bullet";
+        if (identifier == "minecraft:llama_spit")
+            return "death.attack.spit";
+        return "death.attack.arrow";
+    }
+
+    bool flag(const json::Value *object, const char *key, bool fallback) {
+        const json::Value *value = object == nullptr ? nullptr : object->get(key);
+        return value == nullptr ? fallback : value->boolean(fallback);
+    }
+
+    // minecraft:projectile on_hit, read once per entity
+    struct OnHit {
+        bool mDamages = false;
+        int32_t mDamageMin = 0;
+        int32_t mDamageMax = 0;
+        bool mKnockback = false;
+        // impact_damage catch_fire: the actor struck burns
+        bool mIgnitesTarget = false;
+        // on_hit catch_fire: the block struck is set alight
+        bool mIgnitesBlock = false;
+        bool mIgniteNeedsGriefing = false;
+        const json::Value *mEffects = nullptr;
+        int32_t mParticle = 0;
+        bool mParticleOnActor = false;
+        bool mParticleOnOther = false;
+        // the minecraft:explode of the groups the definition_event adds
+        const json::Value *mExplode = nullptr;
+    };
+
+    const json::Value *explodeOf(const json::Value &definition, const json::Value *onHit) {
+        const json::Value *definitionEvent = onHit == nullptr ? nullptr : onHit->get("definition_event");
+        const json::Value *trigger = definitionEvent == nullptr ? nullptr : definitionEvent->get("event_trigger");
+        const json::Value *eventName = trigger == nullptr ? nullptr : trigger->get("event");
+        const json::Value *events = definition.get("events");
+        const json::Value *groups = definition.get("component_groups");
+        if (eventName == nullptr || events == nullptr || groups == nullptr)
+            return nullptr;
+
+        const json::Value *event = events->get(eventName->string());
+        const json::Value *add = event == nullptr ? nullptr : event->get("add");
+        const json::Value *names = add == nullptr ? nullptr : add->get("component_groups");
+        if (names == nullptr || !names->isArray())
+            return nullptr;
+
+        for (const std::unique_ptr<json::Value> &name: names->mArray) {
+            const json::Value *group = groups->get(name->string());
+            const json::Value *explode = group == nullptr ? nullptr : group->get("minecraft:explode");
+            if (explode != nullptr)
+                return explode;
+        }
+        return nullptr;
+    }
+
+    OnHit readOnHit(const std::string &identifier) {
+        OnHit result;
+        const json::Value *definition = EntityDefinitions::find(identifier);
+        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+        const json::Value *projectile = components == nullptr ? nullptr : components->get("minecraft:projectile");
+        const json::Value *onHit = projectile == nullptr ? nullptr : projectile->get("on_hit");
+        if (onHit == nullptr)
+            return result;
+
+        if (const json::Value *impact = onHit->get("impact_damage")) {
+            result.mDamages = true;
+            const json::Value *damage = impact->get("damage");
+            if (damage != nullptr && damage->isNumber()) {
+                result.mDamageMin = result.mDamageMax = damage->integer(0);
+            } else if (damage != nullptr) {
+                const json::Value *low = damage->get("min");
+                const json::Value *high = damage->get("max");
+                result.mDamageMin = low == nullptr ? 0 : low->integer(0);
+                result.mDamageMax = high == nullptr ? result.mDamageMin : high->integer(result.mDamageMin);
+            }
+            result.mKnockback = flag(impact, "knockback", true);
+            result.mIgnitesTarget = flag(impact, "catch_fire", false);
+        }
+
+        if (const json::Value *catchFire = onHit->get("catch_fire")) {
+            result.mIgnitesBlock = true;
+            result.mIgniteNeedsGriefing = flag(catchFire, "fire_affected_by_griefing", false);
+        }
+
+        if (const json::Value *mobEffect = onHit->get("mob_effect")) {
+            const json::Value *effects = mobEffect->get("effects");
+            if (effects != nullptr && effects->isArray())
+                result.mEffects = effects;
+        }
+
+        if (const json::Value *particle = onHit->get("particle_on_hit")) {
+            const json::Value *type = particle->get("particle_type");
+            result.mParticle = type == nullptr ? 0 : ProjectileComponent::particleType(type->string());
+            result.mParticleOnActor = flag(particle, "on_entity_hit", false);
+            result.mParticleOnOther = flag(particle, "on_other_hit", false);
+        }
+
+        result.mExplode = explodeOf(*definition, onHit);
+        return result;
+    }
+
+    const OnHit &onHitOf(const std::string &identifier) {
+        static std::unordered_map<std::string, OnHit> cache;
+        auto found = cache.find(identifier);
+        if (found == cache.end())
+            found = cache.emplace(identifier, readOnHit(identifier)).first;
+        return found->second;
+    }
+
+    Actor *shooterOf(ServerNetworkHandler &owner, const ServerActor &projectile) {
+        for (auto &entry: owner.getPlayers()) {
+            if (entry.second.getUniqueId() == projectile.getOwnerUniqueId())
+                return &entry.second;
+        }
+        return owner.getActor(projectile.getOwnerUniqueId());
+    }
+
+    // the durations by difficulty an effect of mob_effect lists
+    void applyEffects(ServerNetworkHandler &owner, const json::Value &effects, Actor &target) {
+        const Difficulty difficulty = owner.getProperties().getDifficulty();
+        const char *durationKey = difficulty == Difficulty::Hard     ? "durationhard"
+                                  : difficulty == Difficulty::Normal ? "durationnormal"
+                                                                     : "durationeasy";
+        for (const std::unique_ptr<json::Value> &entry: effects.mArray) {
+            const json::Value *name = entry->get("effect");
+            MobEffectInstance instance;
+            if (name == nullptr || !parseDefinitionMobEffect(name->string(), instance.mId))
+                continue;
+
+            const json::Value *duration = entry->get(durationKey);
+            if (duration == nullptr)
+                duration = entry->get("duration");
+            const json::Value *amplifier = entry->get("amplifier");
+            instance.mDuration = duration == nullptr ? 0 : duration->integer(0);
+            instance.mAmplifier = amplifier == nullptr ? 0 : amplifier->integer(0);
+            owner.addEffect(target, instance);
+        }
+    }
+
+    void burn(ServerNetworkHandler &owner, Actor &target, float seconds) {
+        if (target.isFireImmune() || target.hasEffect(MobEffectId::FireResistance))
+            return;
+        target.setFireTicks((int) (seconds * (float) TICKS_PER_SECOND));
+        target.setOnFire(true);
+        if (auto *actor = dynamic_cast<ServerActor *>(&target))
+            owner.syncActorFlags(*actor);
+        else if (auto *player = dynamic_cast<ServerPlayer *>(&target))
+            owner._sendEntityData(*player);
+    }
+
+    void showParticle(ServerNetworkHandler &owner, Level &level, const Vector3f &position, int32_t particle) {
+        LevelEventPacket event;
+        event.mEventId = PARTICLE_EVENT | particle;
+        event.mPosition = position;
+        event.mData = 0;
+        BlockActionHandler::broadcastToViewers(owner, level, position, event);
+    }
+}
+
+void DefinitionProjectileActor::_hitTarget(ServerNetworkHandler &owner, const Vector3f &hitPosition, Actor &target) {
+    const OnHit &onHit = onHitOf(getIdentifier());
+    Actor *shooter = shooterOf(owner, *this);
+
+    if (onHit.mDamages) {
+        static thread_local std::mt19937 random(std::random_device{}());
+        const int32_t low = std::min(onHit.mDamageMin, onHit.mDamageMax);
+        const int32_t high = std::max(onHit.mDamageMin, onHit.mDamageMax);
+        const float damage = (float) std::uniform_int_distribution<int32_t>(low, high)(random);
+        const Vector3f motion = getMotion();
+        const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
+
+        ActorDamageSource source = ActorDamageSource::environment(deathMessageOf(getIdentifier()), target.getName());
+        source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
+        source.mAttacker = shooter;
+        source.fromOrigin(origin).asProjectile().withDamager(this);
+
+        bool dealt = false;
+        if (auto *player = dynamic_cast<ServerPlayer *>(&target))
+            dealt = owner.hurt(*player, damage, source) == DamageResult::Dealt;
+        else if (auto *actor = dynamic_cast<ServerActor *>(&target))
+            dealt = owner.damageActor(*actor, damage, source);
+
+        if (onHit.mKnockback && target.isAlive()) {
+            const Vector3f position = target.getPosition();
+            owner.knockBack(target, position.x - hitPosition.x, position.z - hitPosition.z, IMPACT_KNOCKBACK);
+        }
+        if (dealt && onHit.mIgnitesTarget)
+            burn(owner, target, getProjectileComponent().mOnFireTime);
+    }
+
+    if (onHit.mIgnitesBlock && target.isAlive())
+        burn(owner, target, getProjectileComponent().mOnFireTime);
+
+    if (onHit.mEffects != nullptr && target.isAlive())
+        applyEffects(owner, *onHit.mEffects, target);
+}
+
+void DefinitionProjectileActor::_hitAnywhere(ServerNetworkHandler &owner, const Vector3f &hitPosition,
+                                             bool struckActor) {
+    const OnHit &onHit = onHitOf(getIdentifier());
+    Level &level = owner.getLevelFor(*this);
+
+    // the block struck burns from the cell the projectile came through
+    if (onHit.mIgnitesBlock && !struckActor
+        && (!onHit.mIgniteNeedsGriefing || level.getGameRules().getBool("mobgriefing"))) {
+        const Vector3f position = getPosition();
+        const Vector3f motion = getMotion();
+        const Vector3i before((int32_t) std::floor(position.x - motion.x), (int32_t) std::floor(position.y - motion.y),
+                              (int32_t) std::floor(position.z - motion.z));
+        FireSystem::ignite(owner, level, before);
+    }
+
+    if (onHit.mParticle != 0 && (struckActor ? onHit.mParticleOnActor : onHit.mParticleOnOther))
+        showParticle(owner, level, hitPosition, onHit.mParticle);
+
+    const int32_t hitSound = getProjectileComponent().mHitSound;
+    if (hitSound != LevelSoundEventIds::UNDEFINED)
+        owner.playLevelSound(level, LevelSoundEventIds::nameOf(hitSound), hitPosition);
+
+    if (onHit.mExplode != nullptr)
+        holdAfterHit(hitPosition);
+}
+
+bool DefinitionProjectileActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition,
+                                      ServerPlayer *hitPlayer) {
+    if (hitPlayer != nullptr)
+        _hitTarget(owner, hitPosition, *hitPlayer);
+    _hitAnywhere(owner, hitPosition, hitPlayer != nullptr);
+    return true;
+}
+
+bool DefinitionProjectileActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition,
+                                           ServerActor &hitActor) {
+    _hitTarget(owner, hitPosition, hitActor);
+    _hitAnywhere(owner, hitPosition, true);
+    return true;
+}
+
+void DefinitionProjectileActor::tickAfterHit(ServerNetworkHandler &owner) {
+    const json::Value *explode = onHitOf(getIdentifier()).mExplode;
+    if (explode == nullptr)
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f hitPosition = getPosition();
+    const json::Value *power = explode->get("power");
+    Explosion explosion(owner, level, hitPosition,
+                        power == nullptr ? DEFAULT_EXPLOSION_POWER : power->number(DEFAULT_EXPLOSION_POWER), this,
+                        false);
+
+    const bool griefing = level.getGameRules().getBool("mobgriefing");
+    explosion.setIncendiary(flag(explode, "causes_fire", false)
+                            && (!flag(explode, "fire_affected_by_griefing", false) || griefing));
+
+    // allow_underwater off: under water the blast leaves the blocks
+    const bool underwater = LiquidBlocksFetch::at(level, hitPosition).water;
+    if (flag(explode, "breaks_blocks", true) && (!flag(explode, "destroy_affected_by_griefing", false) || griefing)
+        && (!underwater || flag(explode, "allow_underwater", false)))
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
+}
