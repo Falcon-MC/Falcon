@@ -6,6 +6,7 @@
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Math/MathConstants.h"
 #include "World/Inventory/ItemStackNbt.h"
@@ -287,6 +288,24 @@ bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &targ
     return owner.getScriptEngine().beforePlayerItemAttackEntity(*this, target, aimed ? &aim : nullptr);
 }
 
+// a punched projectile: shulker bullets break, fireballs and wind charges fly back the way the player looks
+bool ServerPlayer::_attackProjectile(ServerNetworkHandler &owner, ServerActor &target, const Vector3f *hitPosition,
+                                     bool checkReach) {
+    auto *projectile = dynamic_cast<ProjectileActor *>(&target);
+    if (projectile == nullptr)
+        return false;
+    const Vector3f delta(target.getPosition().x - getPosition().x, target.getPosition().y - getPosition().y,
+                         target.getPosition().z - getPosition().z);
+    if (checkReach && delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
+        return false;
+    const ActorSize size = target.getSize();
+    if (checkReach && !_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
+        return false;
+    if (_scriptsCancelAttack(owner, target, hitPosition))
+        return false;
+    return projectile->onMeleeHit(owner, *this);
+}
+
 bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition,
                                bool checkReach) {
     ActorEventPacket swing;
@@ -316,9 +335,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (victim == nullptr) {
         for (auto &entry: owner.getActors()) {
             ServerActor &target = *entry.second;
-            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile()
-                || !target.sharesLevelWith(*this))
+            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || !target.sharesLevelWith(*this))
                 continue;
+            if (target.isProjectile())
+                return _attackProjectile(owner, target, hitPosition, checkReach);
 
             const Vector3f actorDelta(target.getPosition().x - getPosition().x,
                                       target.getPosition().y - getPosition().y,

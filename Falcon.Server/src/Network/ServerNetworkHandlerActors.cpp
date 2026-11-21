@@ -2008,7 +2008,8 @@ void ServerNetworkHandler::tickActors() {
 
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
-            const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
+            ProjectileActor *steered = dynamic_cast<ProjectileActor *>(&actor);
+            const ProjectileActor *projectile = steered;
             const ProjectileComponent &settings = actor.getProjectileComponent();
             const Vector3f &at = actor.getPosition();
             const int32_t atX = (int32_t) std::floor(at.x);
@@ -2052,7 +2053,7 @@ void ServerNetworkHandler::tickActors() {
                 motion.x = toX / toLength * speed;
                 motion.y = toY / toLength * speed;
                 motion.z = toZ / toLength * speed;
-            } else {
+            } else if (steered == nullptr || !steered->steer(*this, motion)) {
                 motion.y -= gravity;
                 motion.x *= inertia;
                 motion.y *= inertia;
@@ -2074,6 +2075,8 @@ void ServerNetworkHandler::tickActors() {
 
             actor.setMotion(motion);
             actor.setPosition(position);
+            if (steered != nullptr)
+                steered->afterMove(*this);
             faceMotion(actor, motion);
 
             const int32_t blockX = (int32_t) std::floor(position.x);

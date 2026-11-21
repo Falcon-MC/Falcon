@@ -173,6 +173,99 @@ namespace {
             arena.mOwner.tickActors();
         require(!arena.alive(id), "the fang outlived its life");
     }
+
+    float distance(const Vector3f &a, const Vector3f &b) {
+        const float dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    DefinitionProjectileActor &definitionProjectile(Arena &arena, const char *identifier, const Vector3f &at) {
+        ServerActor &actor = arena.spawn(identifier, at);
+        actor.setProjectile(true);
+        actor.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+        auto *projectile = dynamic_cast<DefinitionProjectileActor *>(&actor);
+        require(projectile != nullptr, std::string(identifier) + " has no definition handling");
+        return *projectile;
+    }
+
+    // a shulker bullet weaves its way to a cow six blocks off and lands on it
+    void shulkerHoming(Arena &arena) {
+        Level &level = *arena.mLevel;
+        for (int32_t x = 38; x <= 42; ++x) {
+            for (int32_t z = -36; z <= -24; ++z)
+                level.setBlockState(x, 99, z, BlockState("minecraft:stone"));
+        }
+        // the shooter stays out of the way: a leg drawn at random may fly back past the start
+        ServerActor &shulker = arena.spawn("minecraft:cow", Vector3f(20.5f, 100.0f, -45.5f));
+        ServerActor &cow = arena.spawn("minecraft:cow", Vector3f(40.5f, 100.0f, -25.5f));
+        const float before = cow.getHealth();
+        DefinitionProjectileActor &bullet =
+                definitionProjectile(arena, "minecraft:shulker_bullet", Vector3f(40.5f, 101.0f, -33.5f));
+        bullet.setOwnerUniqueId(shulker.getUniqueId());
+        bullet.launchAt(arena.mOwner, shulker, cow);
+        const int64_t id = bullet.getUniqueId();
+        for (int32_t tick = 0; tick < 300 && arena.alive(id); ++tick)
+            arena.mOwner.tickActors();
+        require(!arena.alive(id), "the shulker bullet never reached the cow");
+        require(cow.hasEffect(MobEffectId::Levitation),
+                "the shulker bullet did not home onto the cow, dealt " + std::to_string(before - cow.getHealth()));
+    }
+
+    // its target gone, the bullet falls instead of flying on
+    void shulkerTargetLost(Arena &arena) {
+        ServerActor &shulker = arena.spawn("minecraft:cow", Vector3f(-40.5f, 100.0f, -35.5f));
+        ServerActor &cow = arena.spawn("minecraft:cow", Vector3f(-40.5f, 100.0f, -20.5f));
+        DefinitionProjectileActor &bullet =
+                definitionProjectile(arena, "minecraft:shulker_bullet", Vector3f(-40.5f, 110.0f, -33.5f));
+        bullet.launchAt(arena.mOwner, shulker, cow);
+        arena.mOwner.removeActor(cow.getUniqueId());
+        const float startY = bullet.getPosition().y;
+        for (int32_t tick = 0; tick < 5; ++tick)
+            arena.mOwner.tickActors();
+        require(bullet.getMotion().y < -0.15f, "a bullet without a target does not fall, motion y "
+                                                       + std::to_string(bullet.getMotion().y));
+        require(bullet.getPosition().y < startY, "a bullet without a target did not drop");
+    }
+
+    // a punch breaks a shulker bullet
+    void shulkerPunched(Arena &arena) {
+        ServerActor &attacker = arena.spawn("minecraft:cow", Vector3f(-10.5f, 100.0f, 40.5f));
+        DefinitionProjectileActor &bullet =
+                definitionProjectile(arena, "minecraft:shulker_bullet", Vector3f(-10.5f, 101.0f, 42.5f));
+        const int64_t id = bullet.getUniqueId();
+        require(bullet.onMeleeHit(arena.mOwner, attacker), "a punch did nothing to the shulker bullet");
+        require(!arena.alive(id), "a punched shulker bullet survived");
+    }
+
+    // a punched ghast fireball flies where the attacker looks, now the attacker's
+    void fireballReflected(Arena &arena) {
+        ServerActor &attacker = arena.spawn("minecraft:cow", Vector3f(10.5f, 100.0f, 40.5f));
+        // yaw 90: looking toward -x
+        attacker.setRotation(Vector3f(0.0f, 90.0f, 0.0f));
+        DefinitionProjectileActor &fireball =
+                definitionProjectile(arena, "minecraft:fireball", Vector3f(10.5f, 101.0f, 42.5f));
+        fireball.setMotion(Vector3f(0.0f, 0.0f, -0.5f));
+        require(fireball.onMeleeHit(arena.mOwner, attacker), "a punch did not reflect the fireball");
+        const Vector3f motion = fireball.getMotion();
+        require(distance(motion, Vector3f(-1.0f, 0.0f, 0.0f)) < 1.0e-4f,
+                "the fireball did not fly where the attacker looks");
+        require(fireball.getOwnerUniqueId() == attacker.getUniqueId(), "the reflected fireball kept its owner");
+        arena.mOwner.removeActor(fireball.getUniqueId());
+    }
+
+    // a fresh wind charge shrugs punches off until reflect_immunity's half second has passed
+    void windChargeImmunity(Arena &arena) {
+        ServerActor &attacker = arena.spawn("minecraft:cow", Vector3f(20.5f, 100.0f, 40.5f));
+        DefinitionProjectileActor &charge =
+                definitionProjectile(arena, "minecraft:wind_charge_projectile", Vector3f(20.5f, 110.0f, 42.5f));
+        require(!charge.onMeleeHit(arena.mOwner, attacker), "a fresh wind charge was reflected");
+        for (int32_t tick = 0; tick < 10; ++tick) {
+            charge.setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            arena.mOwner.tickActors();
+        }
+        require(charge.onMeleeHit(arena.mOwner, attacker), "a wind charge past its immunity was not reflected");
+        arena.mOwner.removeActor(charge.getUniqueId());
+    }
 }
 
 int main() {
@@ -192,6 +285,11 @@ int main() {
         shulkerBullet(arena);
         breezeWindCharge(arena);
         evocationFangs(arena);
+        shulkerHoming(arena);
+        shulkerTargetLost(arena);
+        shulkerPunched(arena);
+        fireballReflected(arena);
+        windChargeImmunity(arena);
     } catch (const std::exception &error) {
         std::cout << "Projectile impact regression failed: " << error.what() << '\n';
         result = 1;
