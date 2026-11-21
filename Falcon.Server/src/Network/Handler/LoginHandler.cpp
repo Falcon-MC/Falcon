@@ -656,6 +656,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDifficulty = (int32_t) owner.getProperties().getDifficulty();
     startGame.mDefaultSpawn = world.getSpawnPosition();
     startGame.mCommandsEnabled = owner.getProperties().getAllowCheats();
+    // a world without commands keeps its achievements: the client then reports them to Xbox Live itself
+    startGame.mAchievementsDisabled = owner.getProperties().getAllowCheats();
     startGame.mTexturePacksRequired = owner.getProperties().getTexturePackRequired();
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
