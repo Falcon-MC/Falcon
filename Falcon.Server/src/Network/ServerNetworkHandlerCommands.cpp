@@ -50,7 +50,6 @@
 #include "Server/Commands/CloneCommand.h"
 #include "Server/Commands/FunctionCommand.h"
 #include "Server/Commands/PlayAnimationCommand.h"
-#include "Server/Commands/HelpCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
 #include "Server/Commands/SetWorldSpawnCommand.h"
@@ -425,7 +424,8 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<CloneCommand>(*this));
     mCommands.registerCommand(std::make_shared<FunctionCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlayAnimationCommand>(*this));
-    mCommands.registerCommand(std::make_shared<HelpCommand>(mCommands));
+    // no help: the client keeps its own and runs it; a server one clashes with it and the client then drops
+    // the arguments of the other commands
     mCommands.registerCommand(std::make_shared<DefaultGameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetMaxPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<StopCommand>(*this));
