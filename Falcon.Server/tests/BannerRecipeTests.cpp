@@ -3,6 +3,8 @@
 #include "World/Inventory/BannerRecipes.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/CrafterBlock.h"
 
 #include <cstdint>
 #include <iostream>
@@ -239,6 +241,31 @@ namespace {
         six.setCraftingItem(1, bench.banner(1, {"cre", "bri", "bo", "bs", "ts", "ls"}));
         require(bench.craft(six, bench.mShield, {0, 1}, 1), "a banner of six layers did not go on a shield");
     }
+
+    // the crafter makes both too, from its own nine slots
+    void crafter(Bench &bench) {
+        CrafterBlockActor copier;
+        const ItemStack patterned = bench.banner(3, {"cre"});
+        copier.getInventory().setContainerItem(4, patterned);
+        copier.getInventory().setContainerItem(8, bench.banner(3, {}));
+        const std::vector<ItemStack> copies = CrafterBlock::craftResults(bench.mOwner, copier);
+        require(copies.size() == 1 && copies[0].mCount == 2 && copies[0].mTag == patterned.mTag,
+                "the crafter did not copy the banner");
+
+        CrafterBlockActor decorator;
+        decorator.getInventory().setContainerItem(0, bench.item("minecraft:shield"));
+        decorator.getInventory().setContainerItem(1, bench.banner(6, {"cre"}));
+        const std::vector<ItemStack> shields = CrafterBlock::craftResults(bench.mOwner, decorator);
+        require(shields.size() == 1 && shields[0].mDefinition->getIdentifier() == "minecraft:shield"
+                        && shields[0].mTag.getInt("Base", -1) == 6,
+                "the crafter did not decorate the shield");
+
+        CrafterBlockActor mismatched;
+        mismatched.getInventory().setContainerItem(0, bench.banner(3, {"cre"}));
+        mismatched.getInventory().setContainerItem(1, bench.banner(4, {}));
+        require(CrafterBlock::craftResults(bench.mOwner, mismatched).empty(),
+                "the crafter copied a banner onto another colour");
+    }
 }
 
 int main() {
@@ -250,6 +277,7 @@ int main() {
         refusedCopies(bench);
         decorating(bench);
         refusedShields(bench);
+        crafter(bench);
     } catch (const std::exception &error) {
         std::clog << "Banner recipe regression failed: " << error.what() << '\n';
         return 1;

@@ -1,4 +1,5 @@
 #include "World/Level/Block/CrafterBlock.h"
+#include "World/Inventory/BannerRecipes.h"
 
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -197,7 +198,14 @@ std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, c
         grid.push_back(inventory.getContainerItem(slot));
     const int32_t networkId =
             CraftingManager::findNetworkRecipe(grid, 3, owner.getRecipeOutputs(), owner.getRecipeSourceIndices());
-    return recipeOutputs(owner, networkId);
+    if (networkId > 0)
+        return recipeOutputs(owner, networkId);
+
+    // the game's crafter takes every crafting table recipe, the banner copy and the shield decoration too
+    BannerRecipes::Craft craft;
+    if (BannerRecipes::duplicate(grid, craft) || BannerRecipes::decorateShield(grid, craft))
+        return {craft.mResult};
+    return {};
 }
 
 int CrafterBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
