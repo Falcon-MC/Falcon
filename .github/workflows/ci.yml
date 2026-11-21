@@ -77,6 +77,7 @@ jobs:
             mingw-w64-x86_64-openssl
             git
 
+      # the only job that saves a linux cache: the other linux jobs restore this one
       - name: Cache compiler objects
         uses: actions/cache@v4
         with:
@@ -134,14 +135,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
 
-      - name: Cache compiler objects
-        uses: actions/cache@v4
+      # the linux build job's cache, read only: the five linux jobs compile the same objects, and one cache
+      # per job filled the repository's 10 GB and evicted each other
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ci-ccache-tests-${{ github.sha }}
-          restore-keys: |
-            ci-ccache-tests-
-            ci-ccache-linux-x64-
+          key: ci-ccache-linux-x64-${{ github.sha }}
+          restore-keys: ci-ccache-linux-x64-
 
       # the embedded checks are off by default: without this job no test ever runs in ci
       - name: Build and run the embedded tests
@@ -169,14 +170,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
 
-      - name: Cache compiler objects
-        uses: actions/cache@v4
+      # the linux build job's cache, read only: the five linux jobs compile the same objects, and one cache
+      # per job filled the repository's 10 GB and evicted each other
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ci-ccache-internal-plugins-${{ github.sha }}
-          restore-keys: |
-            ci-ccache-internal-plugins-
-            ci-ccache-linux-x64-
+          key: ci-ccache-linux-x64-${{ github.sha }}
+          restore-keys: ci-ccache-linux-x64-
 
       - name: Build the server and the internal example plugins
         env:
@@ -235,14 +236,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Cache compiler objects
-        uses: actions/cache@v4
+      # the linux build job's cache, read only: the five linux jobs compile the same objects, and one cache
+      # per job filled the repository's 10 GB and evicted each other
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ci-ccache-dotnet-plugins-${{ github.sha }}
-          restore-keys: |
-            ci-ccache-dotnet-plugins-
-            ci-ccache-linux-x64-
+          key: ci-ccache-linux-x64-${{ github.sha }}
+          restore-keys: ci-ccache-linux-x64-
 
       - name: Build the server
         env:
@@ -291,14 +292,14 @@ jobs:
           distribution: temurin
           java-version: 22
 
-      - name: Cache compiler objects
-        uses: actions/cache@v4
+      # the linux build job's cache, read only: the five linux jobs compile the same objects, and one cache
+      # per job filled the repository's 10 GB and evicted each other
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ci-ccache-java-plugins-${{ github.sha }}
-          restore-keys: |
-            ci-ccache-java-plugins-
-            ci-ccache-linux-x64-
+          key: ci-ccache-linux-x64-${{ github.sha }}
+          restore-keys: ci-ccache-linux-x64-
 
       - name: Build the server
         env:
