@@ -22,6 +22,23 @@ public:
         mHasPlant = true;
     }
 
+    bool hasPlant() const {
+        return mHasPlant && mPlant.mName != "minecraft:air";
+    }
+
+    const BlockState &getPlant() const {
+        return mPlant;
+    }
+
+    // emptied without dropping anything
+    void clearPlant() {
+        mPlant = BlockState();
+        mHasPlant = false;
+    }
+
+    // the game's onRemove: whatever takes the pot away, its plant drops as an item
+    void onRemoved() override;
+
 private:
     void _putFields(Tag &data) const;
 

@@ -269,6 +269,16 @@ public:
         (void) state;
     }
 
+    // the game's playerWillDestroy: a player is about to break the block, before its drops and its removal
+    virtual void onPlayerWillDestroy(ServerNetworkHandler &owner, ServerPlayer &player, Level &level,
+                                     const Vector3i &position, const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           const BlockState &state) const {
         (void) owner;
