@@ -41,6 +41,8 @@ namespace BlockMaterial {
     inline constexpr uint8_t FLAG_LIQUID = 2;
     // the flag the top solid block search stops on
     inline constexpr uint8_t FLAG_SOLID = 4;
+    // what a cake needs of the material under it: off for air, liquids, plants, fire, powder snow and portals
+    inline constexpr uint8_t FLAG_SUPPORTS_CAKE = 0x10;
 
     // false for a name the game does not register: custom blocks have no entry
     bool find(const BlockState &state, BlockMaterialType &type);
