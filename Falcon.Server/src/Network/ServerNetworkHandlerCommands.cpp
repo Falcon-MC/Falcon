@@ -54,6 +54,7 @@
 #include "Server/Commands/SetMaxPlayersCommand.h"
 #include "Server/Commands/SetWorldSpawnCommand.h"
 #include "Server/Commands/SpawnPointCommand.h"
+#include "Server/Commands/SpreadPlayersCommand.h"
 #include "Server/Commands/AimAssistCommand.h"
 #include "Server/Commands/CameraShakeCommand.h"
 #include "Server/Commands/FogCommand.h"
@@ -394,6 +395,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TitleCommand>(*this, true));
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, false));
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, true));
+    mCommands.registerCommand(std::make_shared<SpreadPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetWorldSpawnCommand>(*this));
     mCommands.registerCommand(std::make_shared<SayCommand>(*this));
     mCommands.registerCommand(std::make_shared<ScriptEventCommand>(*this));
