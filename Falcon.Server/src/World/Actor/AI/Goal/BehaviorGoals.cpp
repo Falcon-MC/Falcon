@@ -36,6 +36,9 @@
 #include "World/Actor/AI/Goal/DrinkPotionGoal.h"
 #include "World/Actor/AI/Goal/HoldGroundGoal.h"
 #include "World/Actor/AI/Goal/KnockbackRoarGoal.h"
+#include "World/Actor/AI/Goal/FireAtTargetGoal.h"
+#include "World/Actor/AI/Goal/JumpAroundTargetGoal.h"
+#include "World/Actor/AI/Goal/MoveAroundTargetGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
 #include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
@@ -984,6 +987,78 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         if (settings.mLeaderFilters == nullptr)
             return nullptr;
         return std::make_unique<FollowTargetLeaderGoal>(std::move(settings));
+    }
+
+    if (behavior == "fire_at_target") {
+        const auto ticksOf = [&](const char *key, float fallback) {
+            return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+        };
+        const auto anchorOf = [&](const char *key, FireAtTargetGoal::Anchor fallback) {
+            return (FireAtTargetGoal::Anchor) (int32_t) numberOf(component, key, (float) (int32_t) fallback);
+        };
+        FireAtTargetGoal::Settings settings;
+        const json::Value *projectile = component.get("projectile_def");
+        settings.mProjectile = projectile == nullptr ? "" : projectile->string();
+        settings.mFilters = cloneOf(component.get("filters"));
+        const float minimum = rangeValue(component, "attack_range", "min", 0.0f);
+        const float maximum = rangeValue(component, "attack_range", "max", 0.0f);
+        settings.mMinRangeSquared = minimum * minimum;
+        settings.mMaxRangeSquared = maximum * maximum;
+        settings.mCooldown = ticksOf("attack_cooldown", 0.5f);
+        settings.mPreShootDelay = ticksOf("pre_shoot_delay", 0.75f);
+        settings.mPostShootDelay = ticksOf("post_shoot_delay", 0.2f);
+        settings.mOwnerAnchor = anchorOf("owner_anchor", settings.mOwnerAnchor);
+        settings.mTargetAnchor = anchorOf("target_anchor", settings.mTargetAnchor);
+        settings.mOwnerOffset = vectorOf(component, "owner_offset");
+        settings.mTargetOffset = vectorOf(component, "target_offset");
+        return std::make_unique<FireAtTargetGoal>(std::move(settings));
+    }
+
+    if (behavior == "jump_around_target") {
+        const auto ticksOf = [&](const char *key, float fallback) {
+            return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+        };
+        JumpAroundTargetGoal::Settings settings;
+        settings.mFilters = cloneOf(component.get("filters"));
+        settings.mCooldown = ticksOf("jump_cooldown_duration", 0.5f);
+        settings.mHurtCooldown = ticksOf("jump_cooldown_when_hurt_duration", 0.1f);
+        settings.mLastHurtDuration = ticksOf("last_hurt_duration", 2.0f);
+        settings.mPrepareDuration = ticksOf("prepare_jump_duration", 0.5f);
+        settings.mMaxJumpVelocity = numberOf(component, "max_jump_velocity", settings.mMaxJumpVelocity);
+        settings.mBoxScale = numberOf(component, "entity_bounding_box_scale", settings.mBoxScale);
+        const json::Value *check = component.get("check_collision");
+        settings.mCheckCollision = check != nullptr && check->boolean(false);
+        settings.mLineOfSightIgnoredHeight = (int32_t) numberOf(component, "line_of_sight_obstruction_height_ignore",
+                                                                (float) settings.mLineOfSightIgnoredHeight);
+        settings.mMinTargetDistance = rangeValue(component, "valid_distance_to_target", "min", settings.mMinTargetDistance);
+        settings.mMaxTargetDistance = rangeValue(component, "valid_distance_to_target", "max", settings.mMaxTargetDistance);
+        settings.mLandingSpreadDegrees =
+                numberOf(component, "landing_position_spread_degrees", settings.mLandingSpreadDegrees);
+        settings.mMinLandingDistance =
+                rangeValue(component, "landing_distance_from_target", "min", settings.mMinLandingDistance);
+        settings.mMaxLandingDistance =
+                rangeValue(component, "landing_distance_from_target", "max", settings.mMaxLandingDistance);
+        settings.mRequiredVerticalSpace =
+                (int32_t) numberOf(component, "required_vertical_space", (float) settings.mRequiredVerticalSpace);
+        settings.mSnapRange = (int32_t) numberOf(component, "snap_to_surface_block_range", (float) settings.mSnapRange);
+        const json::Value *angles = component.get("jump_angles");
+        if (angles != nullptr && angles->isArray()) {
+            for (const std::unique_ptr<json::Value> &angle: angles->mArray)
+                settings.mJumpAngles.push_back((float) angle->number(0.0));
+        } else {
+            settings.mJumpAngles = {40.0f, 55.0f, 60.0f, 75.0f, 80.0f};
+        }
+        return std::make_unique<JumpAroundTargetGoal>(std::move(settings));
+    }
+
+    if (behavior == "move_around_target") {
+        MoveAroundTargetGoal::Settings settings;
+        settings.mFilters = cloneOf(component.get("filters"));
+        settings.mSpeed = numberOf(component, "movement_speed", settings.mSpeed);
+        settings.mSpreadDegrees = numberOf(component, "destination_pos_spread_degrees", settings.mSpreadDegrees);
+        settings.mMinDistance = rangeValue(component, "destination_position_range", "min", settings.mMinDistance);
+        settings.mMaxDistance = rangeValue(component, "destination_position_range", "max", settings.mMaxDistance);
+        return std::make_unique<MoveAroundTargetGoal>(std::move(settings));
     }
 
     if (behavior == "knockback_roar") {

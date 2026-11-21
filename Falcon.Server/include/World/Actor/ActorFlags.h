@@ -64,6 +64,7 @@ enum class ActorFlag : int {
     // the same layers: scaffolding resting on something, or powder snow the actor stands on
     InAscendingBlock = 99,
     OverDescendingBlock = 100,
+    JumpGoalJump = 103,
     HasDashCooldown = 108,
     PushTowardsClosestSpace = 109,
     Crawling = 114,

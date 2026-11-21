@@ -31,7 +31,13 @@ AxisAlignedBB ActorPushSystem::boundingBoxOf(const ServerActor &actor) {
     if (const auto *painting = dynamic_cast<const PaintingActor *>(&actor))
         return painting->getPaintingBounds();
     const ActorSize size = actor.getSize();
-    return boxAround(actor.getPosition(), size.mWidth, size.mHeight);
+    const float scale = actor.getCollisionScale();
+    if (scale == 1.0f)
+        return boxAround(actor.getPosition(), size.mWidth, size.mHeight);
+    // scaled around the middle: the feet rise by what the height loses on each side
+    Vector3f feet = actor.getPosition();
+    feet.y += size.mHeight * (1.0f - scale) * 0.5f;
+    return boxAround(feet, size.mWidth * scale, size.mHeight * scale);
 }
 
 AxisAlignedBB ActorPushSystem::boundingBoxOf(const Actor &actor) {

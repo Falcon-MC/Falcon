@@ -151,7 +151,7 @@ float ActorMovementSystem::_applyRestitution(Level &level, ServerActor &actor, c
 
 void ActorMovementSystem::_applyMovementFriction(Level &level, ServerActor &actor, const PhysicsComponent &physics) {
     float friction = NO_BLOCK_FRICTION;
-    if (actor.isOnGround()) {
+    if (actor.isOnGround() && !actor.discardsFriction()) {
         const Vector3f position = actor.getPosition();
         const Block *below = _blockAt(level, Vector3f(position.x, position.y - GROUND_PROBE_DEPTH, position.z));
         friction = below == nullptr ? DEFAULT_BLOCK_FRICTION : below->getFrictionFactor();
