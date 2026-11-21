@@ -1,40 +1,9 @@
 #pragma once
 
 #include "World/Level/Block/Block.h"
+#include "World/Level/Block/NoteBlockInstrument.h"
 
-#include <cstdint>
 #include <string>
-
-// NoteBlockInstrument, in the game's order: the event type of the block event a note block sends
-enum class NoteBlockInstrument : uint8_t {
-    Harp,
-    BassDrum,
-    Snare,
-    Hat,
-    Bass,
-    Flute,
-    Bell,
-    Guitar,
-    Chime,
-    Xylophone,
-    IronXylophone,
-    CowBell,
-    Didgeridoo,
-    Bit,
-    Banjo,
-    Pling,
-    Trumpet,
-    TrumpetExposed,
-    TrumpetWeathered,
-    TrumpetOxidized,
-    Zombie,
-    Skeleton,
-    Creeper,
-    EnderDragon,
-    WitherSkeleton,
-    Piglin,
-    None
-};
 
 class NoteBlock final : public Block {
 public:

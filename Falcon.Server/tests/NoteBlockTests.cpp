@@ -1,4 +1,11 @@
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Types/ItemUseTransaction.h"
+#include "Protocol/Types/StartGameTypes.h"
+#include "Scripting/ScriptEngine.h"
+#include "Server/PropertiesSettings.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Actor/NoteBlockActor.h"
@@ -7,6 +14,8 @@
 #include "World/Level/Level.h"
 #include "World/Level/WorldManager.h"
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 
@@ -81,6 +90,55 @@ namespace {
         require(loaded.getNote() == 1 && loaded.isPowered(), "the pitch or power did not survive a save");
     }
 
+    // the real placement path: a note block set down beside a powered block starts powered, so the next
+    // neighbour update is no rising edge
+    void checkPlacedPowered(ServerNetworkHandler &server, Level &level, const NoteBlock &block) {
+        const Vector3i support(12, 99, 12);
+        const Vector3i placed(12, 100, 12);
+        level.setBlock(support, BlockState("minecraft:stone"), false);
+        level.setBlock(Vector3i(placed.x + 1, placed.y, placed.z), BlockState("minecraft:redstone_block"), false);
+
+        const NetworkIdentifier id("placer", 7);
+        ServerPlayer &player = server.getPlayers().try_emplace(id, id, 4008).first->second;
+        player.setName("Placer");
+        player.getAttributes() = ActorAttributes::createPlayerDefaults();
+        player.moveToLevel(level);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(12.5f, 100.0f, 10.4f));
+        player.setGameType((int32_t) GameType::Creative);
+        player.getInventoryManager().attach(&player, &server);
+        player.getInventory().setSelectedSlot(0);
+        player.getInventory().setItem(0, server.createItemStack("minecraft:noteblock", 1));
+
+        ItemUseTransaction use;
+        use.mBlockFace = 1;
+        use.mHotbarSlot = 0;
+        use.mItemInHand = player.getInventory().getItemInHand();
+        use.mBlockPosition = support;
+        use.mPlayerPosition = player.getPosition();
+        use.mClickPosition = Vector3f(0.5f, 1.0f, 0.5f);
+        use.mClientInteractPrediction = ItemUsePredictedResult::Success;
+        require(BlockActionHandler::placeBlock(server, player, use), "the note block was not placed");
+        require(level.getBlockState(placed.x, placed.y, placed.z).mName == "minecraft:noteblock",
+                "the placement did not set a note block");
+
+        NoteBlockActor *note = level.getBlockActors().find<NoteBlockActor>(placed);
+        require(note != nullptr && note->isPowered(), "a note block placed beside a source started unpowered");
+        block.onRedstonePower(server, level, placed, level.getBlockState(placed.x, placed.y, placed.z));
+        require(note->isPowered(), "a steady power read as an edge");
+    }
+
+    // a note block set by a command has no actor: its first update records the power, as the game's does
+    void checkFirstUpdate(ServerNetworkHandler &server, Level &level, const NoteBlock &block) {
+        const Vector3i set(8, 100, 14);
+        level.setBlock(set, BlockState("minecraft:noteblock"), false);
+        level.setBlock(Vector3i(set.x + 1, set.y, set.z), BlockState("minecraft:redstone_block"), false);
+        level.getBlockActors().remove(set);
+        block.onRedstonePower(server, level, set, level.getBlockState(set.x, set.y, set.z));
+        NoteBlockActor *note = level.getBlockActors().find<NoteBlockActor>(set);
+        require(note != nullptr && note->isPowered(), "the first update did not record the power");
+    }
+
     void checkRedstone(ServerNetworkHandler &server, Level &level, const NoteBlock &block) {
         NoteBlockActor &note = level.getBlockActors().getOrCreate<NoteBlockActor>(NOTE);
         note.setPowered(false);
@@ -97,13 +155,22 @@ namespace {
 int main() {
     try {
         ServerNetworkHandler server("NoteBlock", "", 1);
+        const std::filesystem::path properties =
+                std::filesystem::temp_directory_path() / "falcon-note-block-test.properties";
+        std::ofstream(properties) << "spawn-protection=0\n";
+        server.setProperties(PropertiesSettings(properties.string()));
+        server.getScriptEngine().bindHost(server);
+        server.getScriptEngine().startup();
+        EntityDefinitions::initialize();
         Level &level = server.getWorlds().getDefault().getOverworld();
-        level.insertChunk(LevelChunk(0, 0));
+        level.insertChunk(LevelChunk(0, 0)).setPopulated(true);
         const auto *block = VanillaBlocks::getAs<NoteBlock>("minecraft:noteblock");
         require(block != nullptr, "the note block was not registered");
         checkInstruments(level);
         checkPitch(server, level, *block);
         checkRedstone(server, level, *block);
+        checkPlacedPowered(server, level, *block);
+        checkFirstUpdate(server, level, *block);
     } catch (const std::exception &error) {
         std::clog << "Note block regression failed: " << error.what() << '\n';
         return 1;

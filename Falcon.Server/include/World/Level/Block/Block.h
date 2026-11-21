@@ -7,6 +7,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/NoteBlockInstrument.h"
 
 #include <cstdint>
 #include <optional>
@@ -532,6 +533,22 @@ public:
         return 0;
     }
 
+    // minecraft:instrument_sound: what a note block plays with this block on top of it (above) or under it;
+    // false when that face has none and the note block stays silent
+    virtual bool getInstrumentSound(bool above, NoteBlockInstrument &instrument) const {
+        const uint8_t face = above ? mInstrumentAbove : mInstrumentBelow;
+        if (face == NO_INSTRUMENT)
+            return false;
+        instrument = (NoteBlockInstrument) face;
+        return true;
+    }
+
+    // `above` null: a note block under this block stays silent
+    void setInstrumentSounds(NoteBlockInstrument below, const NoteBlockInstrument *above) {
+        mInstrumentBelow = (uint8_t) below;
+        mInstrumentAbove = above == nullptr ? NO_INSTRUMENT : (uint8_t) *above;
+    }
+
     // the block actor type this block carries, null for none: an actor of another type goes when the block is set
     virtual const char *getBlockActorId() const {
         return nullptr;
@@ -592,4 +609,8 @@ private:
     std::string mName;
     Tag mStates;
     mutable uint8_t mPlainClass = 0;
+    static constexpr uint8_t NO_INSTRUMENT = 0xFF;
+    // a block without the component: the harp below, silence above
+    uint8_t mInstrumentBelow = (uint8_t) NoteBlockInstrument::Harp;
+    uint8_t mInstrumentAbove = NO_INSTRUMENT;
 };

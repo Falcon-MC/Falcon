@@ -10,34 +10,16 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
 
 #include <cstddef>
-#include <iterator>
 #include <string>
-#include <unordered_map>
 
 FALCON_REGISTER_BLOCK(NoteBlock, 100);
 
 namespace {
-    struct Entry {
-        const char *mIdentifier;
-        NoteBlockInstrument mInstrument;
-    };
-
-#include "NoteBlockInstruments.inc"
-
-    // the instrument_sound up face of the mob heads; any other block above but air silences the note block
-    const Entry ABOVE[] = {
-            {"minecraft:zombie_head", NoteBlockInstrument::Zombie},
-            {"minecraft:skeleton_skull", NoteBlockInstrument::Skeleton},
-            {"minecraft:creeper_head", NoteBlockInstrument::Creeper},
-            {"minecraft:dragon_head", NoteBlockInstrument::EnderDragon},
-            {"minecraft:wither_skeleton_skull", NoteBlockInstrument::WitherSkeleton},
-            {"minecraft:piglin_head", NoteBlockInstrument::Piglin},
-    };
-
     // NoteBlockInstrument as its sound, in the same order
     const char *const INSTRUMENT_SOUNDS[] = {
             "note.harp", "note.bd", "note.snare", "note.hat", "note.bassattack", "note.flute", "note.bell",
@@ -48,25 +30,6 @@ namespace {
 
     static_assert(sizeof(INSTRUMENT_SOUNDS) / sizeof(INSTRUMENT_SOUNDS[0]) == (size_t) NoteBlockInstrument::None + 1,
                   "one sound per instrument");
-
-    using Table = std::unordered_map<std::string, NoteBlockInstrument>;
-
-    Table tableOf(const Entry *begin, const Entry *end) {
-        Table table;
-        for (const Entry *entry = begin; entry != end; ++entry)
-            table.emplace(entry->mIdentifier, entry->mInstrument);
-        return table;
-    }
-
-    const Table &belowTable() {
-        static const Table table = tableOf(std::begin(BELOW), std::end(BELOW));
-        return table;
-    }
-
-    const Table &aboveTable() {
-        static const Table table = tableOf(std::begin(ABOVE), std::end(ABOVE));
-        return table;
-    }
 
     // false for a block without minecraft:instrument_sound; with it, a face it leaves out stays silent
     bool customFace(const std::string &identifier, const char *face, bool &declared,
@@ -83,8 +46,21 @@ namespace {
         return true;
     }
 
-    NoteBlockActor &noteAt(Level &level, const Vector3i &position, const BlockState &state) {
-        NoteBlockActor &note = level.getBlockActors().getOrCreate<NoteBlockActor>(position);
+    // a vanilla block's face as the game registered it
+    bool vanillaFace(const std::string &identifier, bool above, NoteBlockInstrument &instrument) {
+        const Block *block = VanillaBlocks::fromIdentifier(identifier);
+        if (block != nullptr)
+            return block->getInstrumentSound(above, instrument);
+        return Block().getInstrumentSound(above, instrument);
+    }
+
+    // `created`: the actor did not exist yet, as for a note block set by a command or a structure
+    NoteBlockActor &noteAt(Level &level, const Vector3i &position, const BlockState &state, bool *created = nullptr) {
+        NoteBlockActor *existing = level.getBlockActors().find<NoteBlockActor>(position);
+        if (created != nullptr)
+            *created = existing == nullptr;
+        NoteBlockActor &note = existing != nullptr ? *existing
+                                                   : level.getBlockActors().getOrCreate<NoteBlockActor>(position);
         note.setState(state);
         return note;
     }
@@ -125,21 +101,13 @@ bool NoteBlock::instrumentAt(Level &level, const Vector3i &position, NoteBlockIn
     if (above.mName != BlockNames::AIR) {
         if (customFace(above.mName, "up", declared, instrument))
             return declared;
-
-        const auto head = aboveTable().find(above.mName);
-        if (head == aboveTable().end())
-            return false;
-        instrument = head->second;
-        return true;
+        return vanillaFace(above.mName, true, instrument);
     }
 
     const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
     if (customFace(below.mName, "down", declared, instrument))
         return declared;
-
-    const auto found = belowTable().find(below.mName);
-    instrument = found == belowTable().end() ? NoteBlockInstrument::Harp : found->second;
-    return true;
+    return vanillaFace(below.mName, false, instrument);
 }
 
 const char *NoteBlock::getBlockActorId() const {
@@ -167,13 +135,21 @@ void NoteBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, cons
                          const BlockState &state, const ItemStack &usedItem, int blockFace) const {
     (void) usedItem;
     (void) blockFace;
-    noteAt(owner.getLevelFor(player), position, state);
+    // placed beside a source: already powered, not a rising edge
+    Level &level = owner.getLevelFor(player);
+    noteAt(level, position, state).setPowered(RedstoneSystem::isGettingPower(owner, level, position));
 }
 
 void NoteBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 const BlockState &state) const {
     const bool powered = RedstoneSystem::isGettingPower(owner, level, position);
-    NoteBlockActor &note = noteAt(level, position, state);
+    bool created = false;
+    NoteBlockActor &note = noteAt(level, position, state, &created);
+    // the game ignores a new note block's first update: the power it finds there is no edge
+    if (created) {
+        note.setPowered(powered);
+        return;
+    }
     if (note.isPowered() == powered)
         return;
 
