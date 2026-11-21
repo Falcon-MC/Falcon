@@ -103,12 +103,13 @@ jobs:
             mingw-w64-x86_64-openssl
             git
 
-      - name: Cache compiler objects
-        uses: actions/cache@v4
+      # the ci run this nightly follows just compiled the same commit: its cache is read, never saved again
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
-          key: ccache-${{ matrix.name }}-${{ needs.prepare.outputs.sha }}
-          restore-keys: ccache-${{ matrix.name }}-
+          key: ci-ccache-${{ matrix.name }}-${{ needs.prepare.outputs.sha }}
+          restore-keys: ci-ccache-${{ matrix.name }}-
 
       - name: Configure and build (Linux)
         if: matrix.os == 'ubuntu-22.04'
