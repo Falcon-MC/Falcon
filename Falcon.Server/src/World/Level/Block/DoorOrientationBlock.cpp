@@ -53,6 +53,13 @@ std::vector<BlockPlacementEntry> DoorOrientationBlock::getPlacementBlocks(Level 
     return {BlockPlacementEntry{Vector3i(position.x, position.y + 1, position.z), BlockState(state.mName, states)}};
 }
 
+bool DoorOrientationBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                       const BlockState &state) const {
+    if (!DoorBlock::isOpenableByHand(state.mName))
+        return false;
+    return DoorBlock::toggle(owner, level, position, state);
+}
+
 bool DoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                       const BlockState &state) const {
     return DoorBlock::toggle(owner, owner.getLevelFor(player), position, state);

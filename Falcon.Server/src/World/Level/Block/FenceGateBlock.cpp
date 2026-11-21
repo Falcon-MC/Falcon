@@ -16,6 +16,12 @@ bool FenceGateBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:fence_gate" || BlockIdentifier::endsWith(identifier, "_fence_gate");
 }
 
+bool FenceGateBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+    // no one to swing away from: the gate keeps its facing
+    return OpenableBlock::toggle(owner, level, position, state);
+}
+
 bool FenceGateBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                 const BlockState &state) const {
     using namespace PlacementOrientation;

@@ -276,6 +276,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
                 owner._handleFallDamage(player, hasSupport ? &supportBlock : nullptr);
 
             BlockContactSystem::land(owner, player, player.getFallDistance());
+            player.setWindImpulseHeight(std::nullopt);
         }
 
         player.resetFallDistance();

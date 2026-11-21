@@ -37,6 +37,15 @@ bool ButtonBlock::isSignalSource() const {
     return true;
 }
 
+bool ButtonBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+    if (state.mStates.getBool("button_pressed_bit", false))
+        return false;
+    RedstoneSystem::onButtonActivated(owner, level, position, state);
+    owner.getScriptEngine().onButtonPush(level, position, nullptr);
+    return true;
+}
+
 bool ButtonBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                              const BlockState &state) const {
     Level &level = owner.getLevelFor(player);

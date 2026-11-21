@@ -26,6 +26,14 @@ BlockState TrapDoorBlock::applyPlacementOrientation(const BlockState &state,
     return BlockState(result.mName, states);
 }
 
+bool TrapDoorBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                const BlockState &state) const {
+    // iron answers to redstone alone
+    if (state.mName == "minecraft:iron_trapdoor")
+        return false;
+    return OpenableBlock::toggle(owner, level, position, state);
+}
+
 bool TrapDoorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                const BlockState &state) const {
     return OpenableBlock::toggle(owner, owner.getLevelFor(player), position, state);
