@@ -7,4 +7,9 @@ public:
     float getLandingBounce() const override {
         return 0.75f;
     }
+
+    // whether or not the actor sneaks
+    float getFallDistanceMultiplier() const override {
+        return 0.5f;
+    }
 };

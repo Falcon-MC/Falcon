@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-template<typename T>
+template <typename T>
 class TaskQueue {
 public:
     void push(T value) {
@@ -18,6 +18,21 @@ public:
                 return;
 
             mItems.push_back(std::move(value));
+        }
+
+        mCondition.notify_one();
+    }
+
+    void pushAll(std::vector<T> values) {
+        if (values.empty())
+            return;
+
+        {
+            std::lock_guard<std::mutex> guard(mMutex);
+            if (mClosed)
+                return;
+
+            mItems.insert(mItems.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
         }
 
         mCondition.notify_one();

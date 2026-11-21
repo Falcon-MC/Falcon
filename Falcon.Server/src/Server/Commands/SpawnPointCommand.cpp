@@ -97,12 +97,12 @@ bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::st
             return false;
         }
 
-        target->setSpawnPoint(spawn, level.getName());
+        target->setSpawnPosition(spawn, level.getDimensionType(), level.getName());
 
         if (targets.size() == 1) {
-            sender.sendTranslation("commands.spawnpoint.success.single",
-                                   {target->getName(), std::to_string(spawn.x), std::to_string(spawn.y),
-                                    std::to_string(spawn.z)});
+            sender.sendTranslation(
+                    "commands.spawnpoint.success.single",
+                    {target->getName(), std::to_string(spawn.x), std::to_string(spawn.y), std::to_string(spawn.z)});
         }
     }
 

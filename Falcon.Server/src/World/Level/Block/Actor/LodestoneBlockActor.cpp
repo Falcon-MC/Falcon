@@ -1,0 +1,31 @@
+#include "World/Level/Block/Actor/LodestoneBlockActor.h"
+
+#include "Network/Handler/LodestoneHandler.h"
+#include "World/Level/Level.h"
+#include "World/Level/PositionTrackingDB.h"
+
+namespace {
+    const char *const TAG_TRACKING_HANDLE = "trackingHandle";
+}
+
+// written only once linked
+Tag LodestoneBlockActor::saveNbt() const {
+    Tag data = Tag::ofCompound();
+    if (mTrackingId != PositionTrackingDB::INVALID_ID)
+        data.putInt(TAG_TRACKING_HANDLE, mTrackingId);
+    return data;
+}
+
+void LodestoneBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    (void) context;
+    const Tag *handle = data.get(TAG_TRACKING_HANDLE);
+    if (handle != nullptr && handle->getType() == Tag::Type::Int)
+        mTrackingId = handle->asInt();
+}
+
+void LodestoneBlockActor::onRemoved() {
+    if (mLevel == nullptr || mLevel->getOwner() == nullptr || mTrackingId == PositionTrackingDB::INVALID_ID)
+        return;
+    LodestoneHandler::release(*mLevel->getOwner(), *mLevel, mTrackingId);
+    mTrackingId = PositionTrackingDB::INVALID_ID;
+}

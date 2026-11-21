@@ -1,27 +1,17 @@
 #include "World/Level/LevelGen/End/TheEndNoiseHolder.h"
 
-#include "World/Level/LevelGen/Random/SimpleRandom.h"
-#include "World/Level/LevelGen/Random/XoroshiroRandom.h"
 
-TheEndTerrainNoises::TheEndTerrainNoises(int64_t seed)
-        : mRoughnessNoiseOctaves(), mRoughnessNoiseOctaves2(), mDetailNoiseOctaves(), mIslandNoise() {
-    XoroshiroRandom roughnessRandom(seed);
-    mRoughnessNoiseOctaves.reset(new TheEndOctaveNoise(roughnessRandom, 16));
+#include <random>
 
-    XoroshiroRandom roughnessRandom2(seed);
-    mRoughnessNoiseOctaves2.reset(new TheEndOctaveNoise(roughnessRandom2, 16));
-
-    XoroshiroRandom detailRandom(seed);
-    mDetailNoiseOctaves.reset(new TheEndOctaveNoise(detailRandom, 8));
-
-    XoroshiroRandom islandRandom(seed);
-    mIslandNoise.reset(new TheEndSimplexNoise(islandRandom));
+TheEndTerrainNoises::TheEndTerrainNoises(int64_t seed) {
+    // the game seeds its Mersenne twister with the low half of the level seed and draws the stacks in this order
+    std::mt19937 random((uint32_t) seed);
+    mRoughnessNoiseOctaves.reset(new TheEndOctaveNoise(random, 16));
+    mRoughnessNoiseOctaves2.reset(new TheEndOctaveNoise(random, 16));
+    mDetailNoiseOctaves.reset(new TheEndOctaveNoise(random, 8));
+    mIslandNoise.reset(new TheEndSimplexNoise(random));
 }
 
-TheEndNoiseHolder::TheEndNoiseHolder(int64_t seed)
-        : mTerrainNoises(), mDecorationIslandNoise() {
+TheEndNoiseHolder::TheEndNoiseHolder(int64_t seed) {
     mTerrainNoises.reset(new TheEndTerrainNoises(seed));
-
-    SimpleRandom decorationRandom(seed);
-    mDecorationIslandNoise.reset(new TheEndSimplexNoise(decorationRandom));
 }

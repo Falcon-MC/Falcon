@@ -33,6 +33,14 @@ public:
         return mWaypoints.empty();
     }
 
+    const Vector3f &last() const {
+        return mWaypoints.back();
+    }
+
+    const std::vector<Vector3f> &getWaypoints() const {
+        return mWaypoints;
+    }
+
     bool reachesTarget() const {
         return mReachesTarget;
     }

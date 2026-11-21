@@ -1,9 +1,14 @@
 #pragma once
 
+#include "Core/NBT/Tag.h"
+#include "Protocol/Types/CraftingRecipeEntry.h"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+struct SmithingRecipeEntry;
 
 struct CraftingIngredientData {
     const char *mItemId;
@@ -14,6 +19,8 @@ struct CraftingIngredientData {
 struct CraftingOutputData {
     const char *mItemId;
     int32_t mCount;
+    int32_t mDamage;
+    Tag mTag;
 };
 
 struct CraftingRecipeData {
@@ -30,9 +37,20 @@ struct CraftingRecipeData {
 
 struct FurnaceRecipeData {
     const char *mRecipeId;
+    const char *mBlockName;
     const char *mInputItemId;
     int32_t mInputAuxValue;
     int32_t mInputCount;
+    const char *mOutputItemId;
+    int32_t mOutputCount;
+    int32_t mPriority;
+};
+
+struct StonecutterRecipeData {
+    const char *mRecipeId;
+    const char *mUuid;
+    const char *mInputItemId;
+    int32_t mInputAuxValue;
     const char *mOutputItemId;
     int32_t mOutputCount;
     int32_t mPriority;
@@ -47,6 +65,20 @@ struct BrewingMixData {
     int32_t mOutputMeta;
 };
 
+// what puts a recipe in a player's recipe book, as the game's recipe data gives it
+struct RecipeUnlockRequirement {
+    enum class Context : int32_t { None = 0, AlwaysUnlocked = 1, PlayerInWater = 2, PlayerHasManyItems = 3 };
+
+    Context mContext = Context::None;
+    // any one of these, held in the inventory, unlocks it
+    std::vector<RecipeIngredientEntry> mItems;
+
+    // the others have no place in the recipe book
+    bool isUnlockable() const {
+        return mContext != Context::None || !mItems.empty();
+    }
+};
+
 class CraftingRecipeTable {
 public:
     static const CraftingRecipeData *getRecipes();
@@ -57,6 +89,11 @@ public:
     static const FurnaceRecipeData *getFurnaceRecipes();
     static size_t getFurnaceRecipeCount();
 
+    static const std::vector<SmithingRecipeEntry> &getSmithingRecipes(bool trim);
+
+    static const StonecutterRecipeData *getStonecutterRecipes();
+    static size_t getStonecutterRecipeCount();
+
     static const FurnaceRecipeData *findCampfireRecipe(const std::string &inputId, int32_t inputMeta, bool soul);
 
     static const BrewingMixData *findBrewingMix(const std::string &inputId, int32_t inputMeta,
@@ -66,8 +103,12 @@ public:
 
     static const std::vector<std::string> &getItemTags(const std::string &identifier);
 
-    /**
-     * Whether a client of this protocol has this recipe. Ingredient variants of one recipe share its answer.
-     */
+    // ingredient variants of one recipe share its answer
     static bool isKnownBy(const std::string &recipeId, int32_t protocol);
+
+    // the variants of one recipe share its requirement; null for a recipe without one
+    static const RecipeUnlockRequirement *getUnlockRequirement(const std::string &recipeId);
+
+    // the recipe a variant id belongs to
+    static std::string baseRecipeId(const std::string &recipeId);
 };

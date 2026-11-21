@@ -19,9 +19,12 @@ public:
     ServerPlayer *findNearestHolder(ServerNetworkHandler &owner, const MobActor &mob, float range) const;
 
     bool isEmpty() const {
-        return mItems.empty();
+        return mItems.empty() && mTags.empty();
     }
 
 private:
+    void _addTags(const std::string &expression);
+
     std::vector<std::string> mItems;
+    std::vector<std::string> mTags;
 };

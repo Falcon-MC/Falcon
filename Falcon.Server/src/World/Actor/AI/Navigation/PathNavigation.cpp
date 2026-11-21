@@ -4,11 +4,18 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
+
+#include <cmath>
 
 namespace {
     const int32_t STUCK_TICKS = 40;
     const int32_t MAX_REPATHS = 3;
     const float STUCK_DISTANCE_SQUARED = 1.0e-4f;
+    // a partial path must bring the mob at least this much closer to an unreachable target
+    const float PARTIAL_PATH_MIN_GAIN = 1.0f;
+
+    using VectorMath::distanceSquared;
 }
 
 void PathNavigation::moveTo(const Vector3f &target, float speed) {
@@ -31,9 +38,6 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!mHasTarget)
         return;
 
-    const bool freeMoving = mOptions.isVolumetric()
-                            || (mOptions.swimsThroughWater()
-                                && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
     if (mNeedsPath) {
         Level &level = owner.getLevelFor(mob);
         const bool direct = PathFinder::get().findDirectPath(level, mob, mTarget, mOptions, mPath);
@@ -45,6 +49,17 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         if (!direct && !PathFinder::get().findPath(level, mob, mTarget, mOptions, mPath)) {
             stop(mob);
             return;
+        }
+
+        // out of reach (above a wall, across water): at the closest point a new partial path only sends the mob
+        // back and forth; wait for the target to move
+        if (!mPath.reachesTarget()) {
+            const float here = std::sqrt(distanceSquared(mob.getPosition(), mTarget));
+            const float there = std::sqrt(distanceSquared(mPath.last(), mTarget));
+            if (there > here - PARTIAL_PATH_MIN_GAIN) {
+                stop(mob);
+                return;
+            }
         }
 
         mLastPosition = mob.getPosition();
@@ -61,6 +76,9 @@ void PathNavigation::tick(ServerNetworkHandler &owner, MobActor &mob) {
         mPath.advance();
     }
 
+    const bool freeMoving = mOptions.isVolumetric()
+                            || (mOptions.swimsThroughWater()
+                                && LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water);
     _checkStuck(mob, freeMoving);
 }
 

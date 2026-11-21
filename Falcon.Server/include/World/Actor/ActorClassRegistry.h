@@ -32,19 +32,14 @@ public:
     static void resetPrototypes();
 };
 
-#define FALCON_REGISTER_SIZED_ACTOR(tag, identifier, width, height, projectile)          \
-    static const ActorClassRegistry::Registration gActorRegistration##tag(               \
-            (identifier),                                                                \
-            [](uint64_t runtimeId, const std::string &actorIdentifier)                   \
-                    -> std::unique_ptr<ServerActor> {                                    \
-                return std::make_unique<SizedActor>(runtimeId, actorIdentifier,          \
-                                                    ActorSize{width, height}, projectile); \
+#define FALCON_REGISTER_SIZED_ACTOR(tag, identifier, width, height, projectile)                                        \
+    static const ActorClassRegistry::Registration gActorRegistration##tag(                                             \
+            (identifier), [](uint64_t runtimeId, const std::string &actorIdentifier) -> std::unique_ptr<ServerActor> { \
+                return std::make_unique<SizedActor>(runtimeId, actorIdentifier, ActorSize{width, height}, projectile); \
             })
 
-#define FALCON_REGISTER_ACTOR(type, identifier)                                          \
-    static const ActorClassRegistry::Registration gActorRegistration##type(              \
-            (identifier),                                                                \
-            [](uint64_t runtimeId, const std::string &actorIdentifier)                   \
-                    -> std::unique_ptr<ServerActor> {                                    \
-                return std::make_unique<type>(runtimeId, actorIdentifier);               \
+#define FALCON_REGISTER_ACTOR(type, identifier)                                                                        \
+    static const ActorClassRegistry::Registration gActorRegistration##type(                                            \
+            (identifier), [](uint64_t runtimeId, const std::string &actorIdentifier) -> std::unique_ptr<ServerActor> { \
+                return std::make_unique<type>(runtimeId, actorIdentifier);                                             \
             })

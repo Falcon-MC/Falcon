@@ -20,11 +20,10 @@ namespace {
 }
 
 WorldCommand::WorldCommand(ServerNetworkHandler &handler)
-        : Command("world", "Manages the loaded worlds", "/world <list|create|load|unload|tp> ..."),
-          mHandler(handler) {}
+        : Command("world", "Manages the loaded worlds", "/world <list|create|load|unload|tp> ..."), mHandler(handler) {}
 
 CommandPermission WorldCommand::getRequiredPermission() const {
-    return CommandPermission::Admin;
+    return CommandPermission::GameDirectors;
 }
 
 std::vector<CommandOverloadData> WorldCommand::getOverloads() const {

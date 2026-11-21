@@ -6,9 +6,7 @@
 
 class CardinalPlayerBlock : public Block {
 public:
-    explicit CardinalPlayerBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit CardinalPlayerBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

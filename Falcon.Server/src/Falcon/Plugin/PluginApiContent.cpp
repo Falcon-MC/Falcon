@@ -31,14 +31,14 @@ namespace {
         const std::string identifier = value;
         const size_t colon = identifier.find(':');
         if (colon == std::string::npos || colon == 0 || colon + 1 >= identifier.size()) {
-            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the identifier needs a namespace",
-                      name, kind, value);
+            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the identifier needs a namespace", name,
+                      kind, value);
             return false;
         }
 
         if (identifier.compare(0, colon, "minecraft") == 0) {
-            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the minecraft namespace is reserved",
-                      name, kind, value);
+            LOG_ERROR(LogAreaID::Server, "[%s] Cannot register custom %s %s: the minecraft namespace is reserved", name,
+                      kind, value);
             return false;
         }
 
@@ -80,6 +80,8 @@ namespace {
             definition.mMaxStackSize = descriptor->maxStackSize > 64 ? 64 : (int32_t) descriptor->maxStackSize;
         definition.mMaxDurability = (int32_t) descriptor->maxDurability;
         definition.mHandEquipped = descriptor->handEquipped != 0;
+        // the descriptor has no field for it: plugin items keep going in the off hand
+        definition.mAllowOffHand = true;
 
         const CustomItemDefinition *stored = CustomContentRegistry::getInstance().registerItem(
                 definition, PluginApiHelpers::owner().getItemDefinitions());

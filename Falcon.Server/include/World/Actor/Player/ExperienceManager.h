@@ -17,7 +17,9 @@ public:
 
     static float getLevelFromXp(int xp);
 
-    int getXpLevel() const { return mXpLevel; }
+    int getXpLevel() const {
+        return mXpLevel;
+    }
 
     void setXpLevel(int level);
 
@@ -25,7 +27,9 @@ public:
 
     void subtractXpLevels(int amount);
 
-    float getXpProgress() const { return mXpProgress; }
+    float getXpProgress() const {
+        return mXpProgress;
+    }
 
     void setXpProgress(float progress);
 
@@ -41,7 +45,9 @@ public:
 
     void subtractXp(int amount);
 
-    int getLifetimeTotalXp() const { return mLifetimeTotalXp; }
+    int getLifetimeTotalXp() const {
+        return mLifetimeTotalXp;
+    }
 
     void setLifetimeTotalXp(int amount);
 

@@ -15,6 +15,7 @@ public:
 
     virtual int32_t nextInt(int32_t max) = 0;
 
+    // both bounds inclusive, unlike MersenneTwister::nextInt(origin, bound)
     virtual int32_t nextInt(int32_t min, int32_t max) = 0;
 
     virtual int32_t nextBoundedInt(int32_t max) = 0;

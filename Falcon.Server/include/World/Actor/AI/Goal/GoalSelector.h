@@ -14,6 +14,10 @@ public:
         return mGoals.empty();
     }
 
+    bool keepsAfloat() const {
+        return mKeepsAfloat;
+    }
+
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
     void stopAll(ServerNetworkHandler &owner, MobActor &mob);
@@ -32,4 +36,5 @@ private:
     void _stopConflicts(ServerNetworkHandler &owner, MobActor &mob, const PrioritizedGoal &candidate);
 
     std::vector<PrioritizedGoal> mGoals;
+    bool mKeepsAfloat = false;
 };

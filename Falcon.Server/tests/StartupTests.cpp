@@ -2,6 +2,11 @@
 #include "BlockPaletteNbt.h"
 #include "Core/Archive/Gzip.h"
 #include "Core/NBT/NbtIo.h"
+#include "Protocol/PacketCodecContext.h"
+#include "Protocol/Types/BlockDefinitionRegistry.h"
+#include "Protocol/Types/ItemDefinitionRegistry.h"
+#include "World/Level/Block/Actor/ChestBlockActor.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
 #include "World/Level/Level.h"
 #include "World/Level/Storage/LevelStorage.h"
@@ -27,7 +32,8 @@ namespace {
     void checkPalette() {
         std::string bytes;
         require(Gzip::decompress(std::string((const char *) FalconBlockPaletteData::kBlockPaletteNbt,
-                                            FalconBlockPaletteData::kBlockPaletteNbtSize), bytes),
+                                             FalconBlockPaletteData::kBlockPaletteNbtSize),
+                                 bytes),
                 "Could not decompress reference palette");
         ReadOnlyBinaryStream stream(bytes);
         EncodingSettings settings;
@@ -68,6 +74,114 @@ namespace {
             require(registry.getPermutations(entry.first)->size() == entry.second, "Extra block permutations");
     }
 
+    void checkPreopenedStorage(const std::filesystem::path &directory) {
+        Tag saved = Tag::ofCompound();
+        saved.put("value", Tag::ofInt(42));
+        LevelStorage::preopen(directory.string(), "Preopened");
+        {
+            LevelStorage adopted;
+            require(adopted.open(directory.string(), "Preopened"), "Could not adopt the preopened database");
+            require(adopted.saveSavedData("check", saved), "Preopened database is not writable");
+        }
+
+        // another level leaves the preopened one alone; discarding it releases the lock
+        LevelStorage::preopen(directory.string(), "Preopened");
+        {
+            LevelStorage other;
+            require(other.open(directory.string(), "Other"), "Preopening blocked another level");
+        }
+        LevelStorage::discardPreopened();
+        LevelStorage reopened;
+        require(reopened.open(directory.string(), "Preopened"), "Discarded database kept its lock");
+        Tag loaded;
+        require(reopened.loadSavedData("check", loaded) && loaded == saved, "Preopened database lost its data");
+    }
+
+    Tag unknownBlockActor(const char *id, const Vector3i &position) {
+        Tag data = Tag::ofCompound();
+        data.putString("id", id);
+        data.putInt("x", position.x);
+        data.putInt("y", position.y);
+        data.putInt("z", position.z);
+        data.putByte("isMovable", 1);
+        return data;
+    }
+
+    const Tag *savedAt(const std::vector<Tag> &saved, const Vector3i &position) {
+        for (const Tag &data: saved) {
+            if (data.getInt("x") == position.x && data.getInt("y") == position.y && data.getInt("z") == position.z)
+                return &data;
+        }
+        return nullptr;
+    }
+
+    void checkUnknownBlockActors(const std::filesystem::path &directory) {
+        BlockDefinitionRegistry blocks;
+        ItemDefinitionRegistry items;
+        PacketCodecContext context(blocks, items);
+        const Vector3i spawnerPosition(1, 70, 1);
+        const Vector3i comparatorPosition(2, 70, 2);
+
+        Tag spawner = unknownBlockActor("NetherReactor", spawnerPosition);
+        spawner.putByte("IsInitialized", 1);
+        spawner.putShort("Progress", 0);
+        spawner.putByte("HasFinished", 0);
+        Tag comparator = unknownBlockActor("Comparator", comparatorPosition);
+        comparator.putInt("OutputSignal", 7);
+
+        Level level("BlockActors", 4, 12345);
+        require(level.openStorage(directory.string()), "Could not create block actor world");
+        level.getChunk(0, 0);
+        level.setBlockState(spawnerPosition.x, spawnerPosition.y, spawnerPosition.z,
+                            VanillaBlocks::NETHERREACTOR().toBlockState());
+        level.setBlockState(comparatorPosition.x, comparatorPosition.y, comparatorPosition.z,
+                            VanillaBlocks::UNPOWERED_COMPARATOR().toBlockState());
+        level.saveBlockEntities(0, 0, {spawner, comparator});
+
+        BlockActorStore &store = level.getBlockActors();
+        store.loadChunk(0, 0, level.loadBlockEntities(0, 0), context);
+        require(store.find(spawnerPosition) == nullptr, "A block actor of no class got one");
+        std::vector<Tag> saved = store.saveChunk(0, 0);
+        require(saved.size() == 2, "A block actor of no class was dropped on save");
+        require(savedAt(saved, spawnerPosition) != nullptr && *savedAt(saved, spawnerPosition) == spawner,
+                "The spawner was not saved back untouched");
+        require(savedAt(saved, comparatorPosition) != nullptr && *savedAt(saved, comparatorPosition) == comparator,
+                "The comparator was not saved back untouched");
+        require(!store.encodeChunkNetwork(0, 0).empty(), "A block actor of no class is not sent");
+
+        level.saveBlockEntities(0, 0, saved);
+        store.unloadChunk(0, 0);
+        store.loadChunk(0, 0, level.loadBlockEntities(0, 0), context);
+        require(store.saveChunk(0, 0).size() == 2, "A block actor of no class did not survive a reload");
+
+        level.setBlockState(comparatorPosition.x, comparatorPosition.y, comparatorPosition.z,
+                            VanillaBlocks::AIR().toBlockState());
+        saved = store.saveChunk(0, 0);
+        require(saved.size() == 1 && savedAt(saved, spawnerPosition) != nullptr,
+                "A replaced block kept its unknown block actor");
+        level.closeStorage();
+    }
+
+    void checkBlockActorChunks() {
+        Level level("ChunkIndex", 4, 12345);
+        BlockActorStore &store = level.getBlockActors();
+        const Vector3i negative(-17, 70, -1);
+        const Vector3i positive(33, -40, 47);
+        store.getOrCreate<ChestBlockActor>(negative);
+        store.getOrCreate<ChestBlockActor>(positive);
+        require(store.saveChunk(-2, -1).size() == 1 && store.saveChunk(2, 2).size() == 1,
+                "A block actor was not found in its chunk");
+        require(store.saveChunk(-1, -1).empty() && store.saveChunk(0, 0).empty(),
+                "A block actor was found in another chunk");
+        require(!store.encodeSubChunkNetwork(2, -3, 2).empty() && store.encodeSubChunkNetwork(2, 4, 2).empty(),
+                "A block actor was sent with the wrong sub-chunk");
+        require(store.take(negative) != nullptr && store.saveChunk(-2, -1).empty(),
+                "A taken block actor stayed in its chunk");
+        store.unloadChunk(2, 2);
+        require(store.find(positive) == nullptr && store.saveChunk(2, 2).empty(),
+                "Unloading a chunk kept its block actors");
+    }
+
     void checkDimensions(const std::filesystem::path &directory, int64_t seed) {
         World world(7, "World", 4, seed);
         require(world.open(directory.string(), 1, Level::PacketBroadcaster(), nullptr), "Could not open world");
@@ -82,7 +196,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-startup-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-startup-test-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     try {
         BiomeChunkGenDataRegistry::initialize();
         BlockPaletteRegistry::getInstance().initialize();
@@ -103,7 +218,8 @@ int main() {
             Tag data;
             require(storage.readLevelDat(data), "Missing level.dat");
             require(data.getInt("SpawnX") == generatedSpawn.x && data.getInt("SpawnY") == generatedSpawn.y
-                    && data.getInt("SpawnZ") == generatedSpawn.z, "Generated spawn was not persisted");
+                            && data.getInt("SpawnZ") == generatedSpawn.z,
+                    "Generated spawn was not persisted");
         }
         {
             Level reopened("World", 4, 67890);
@@ -123,14 +239,18 @@ int main() {
         }
         checkDimensions(directory, 12345);
         checkDimensions(directory, 67890);
+        checkPreopenedStorage(directory);
+        checkUnknownBlockActors(directory);
+        checkBlockActorChunks();
         {
             LevelStorage legacy;
             require(legacy.open(directory.string(), "Legacy"), "Could not create legacy world");
-            legacy.writeLevelDat("Legacy", 0, Level::UNSET_SPAWN_Y, 0, 0, 1, 12345, 0, false, false, 0);
+            legacy.writeLevelDat("Legacy", 0, Level::UNSET_SPAWN_Y, 0, 0, 1, 12345, 0, 215, false, false, 0);
         }
         {
             Level legacy("Legacy", 4, 12345);
             require(legacy.openStorage(directory.string()), "Could not migrate legacy spawn");
+            require(legacy.getWorldTick() == 215, "World tick was not restored from level.dat");
             require(samePosition(legacy.getSpawnPosition(), generatedSpawn), "Legacy default spawn changed");
             legacy.closeStorage();
         }

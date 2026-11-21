@@ -8,13 +8,19 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{0.6f, 1.77f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.6f, 1.77f};
+    }
 
-    float getDefaultMaxHealth() const override { return 30.0f; }
+    float getDefaultMaxHealth() const override {
+        return 30.0f;
+    }
 
     bool preventsSleep() const override {
         return false;
     }
 
-    int getExperienceDrop() const override { return 10; }
+    int getExperienceDrop() const override {
+        return 10;
+    }
 };

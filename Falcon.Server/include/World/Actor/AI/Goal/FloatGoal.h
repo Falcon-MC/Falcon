@@ -10,6 +10,10 @@ public:
 
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
+    bool keepsAfloat() const override {
+        return true;
+    }
+
 private:
     bool mEyesWereInWater = false;
 };

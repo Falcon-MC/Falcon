@@ -34,7 +34,9 @@ namespace {
             mChanged.push_back(Vector3i(x, y, z));
         }
 
-        const std::vector<Vector3i> &getChanged() const { return mChanged; }
+        const std::vector<Vector3i> &getChanged() const {
+            return mChanged;
+        }
 
     private:
         std::vector<Vector3i> mChanged;
@@ -96,8 +98,7 @@ void SaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const
     if (RandomTickSystem::nextInt(7) != 0)
         return;
 
-    if (RandomTickSystem::getFullLight(level, Vector3i(position.x, position.y + 1, position.z))
-        < MINIMUM_LIGHT_LEVEL)
+    if (RandomTickSystem::getFullLight(level, Vector3i(position.x, position.y + 1, position.z)) < MINIMUM_LIGHT_LEVEL)
         return;
 
     if (state.mStates.getByte("age_bit") == 0) {

@@ -1,5 +1,6 @@
 #include "Server/Commands/TestForBlockCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
@@ -11,7 +12,7 @@ TestForBlockCommand::TestForBlockCommand()
 std::vector<CommandOverloadData> TestForBlockCommand::getOverloads() const {
     CommandOverloadData overload;
     overload.mParameters = {makeTypedParameter("position", CommandParamType::BlockPosition),
-                            makeTypedParameter("tileName", CommandParamType::String)};
+                            makeEnumParameter("tileName", "Block", CommandEnums::blockValues())};
     return {overload};
 }
 
@@ -37,9 +38,12 @@ bool TestForBlockCommand::execute(CommandOrigin &sender, const std::vector<std::
         return false;
     }
 
-    std::string expected = arguments[3];
-    if (expected.find(':') == std::string::npos)
-        expected = "minecraft:" + expected;
+    BlockState named;
+    if (!CommandEnums::parseBlock(arguments[3], named)) {
+        sender.sendTranslation("commands.setblock.notFound", {arguments[3]});
+        return false;
+    }
+    const std::string &expected = named.mName;
 
     const std::string actual = level->getBlockState(position.x, position.y, position.z).mName;
     const std::vector<std::string> coordinates = {std::to_string(position.x), std::to_string(position.y),

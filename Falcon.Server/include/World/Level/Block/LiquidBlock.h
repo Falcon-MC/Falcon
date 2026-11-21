@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Level/Block/Block.h"
+#include "World/Level/Dimension/Dimension.h"
 
 class LiquidBlock : public Block {
 public:
@@ -20,13 +21,11 @@ public:
     bool isLiquid() const;
     bool isSource() const;
     bool isFalling() const;
-    bool isStill() const;
     bool isBubbleColumn() const;
     bool isDragDown() const;
     int getDecay() const;
-    virtual int getTickRate() const;
-    virtual int getFlowDecayPerBlock() const;
-    virtual int getMinAdjacentSourcesToFormSource() const;
+    // ticks between two steps of the liquid; ultrawarm dimensions speed lava up
+    virtual int32_t getTickDelay(DimensionType dimension) const;
     virtual const char *getBucketFillSound() const;
     virtual const char *getBucketEmptySound() const;
     float getFluidHeightPercent() const;

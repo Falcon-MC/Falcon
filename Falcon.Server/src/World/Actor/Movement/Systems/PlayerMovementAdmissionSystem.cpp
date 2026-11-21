@@ -1,5 +1,7 @@
 #include "World/Actor/Movement/Systems/PlayerMovementAdmissionSystem.h"
 #include "World/Actor/Movement/PlayerMovementContext.h"
+#include "World/Actor/Movement/PlayerMovementValidator.h"
+#include "World/Actor/Movement/Systems/PlayerPredictionSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemEnchantments.h"
@@ -16,25 +18,37 @@ bool PlayerMovementAdmissionSystem::prepare(PlayerMovementContext &context) {
     const auto &input = context.input;
 
     const ItemStack &boots = context.player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
-    state.start = context.player.hasSimulatedPosition() ? context.player.getSimulatedPosition() : context.player.getPosition();
-    const Block *soulSupport = blockAt(context.level, state.start.x, state.start.y - SUPPORT_PROBE_DEPTH, state.start.z);
-    // BDS keeps the modifier over air while jumping, and refreshes it on the next non-air block.
+    state.start = context.player.hasSimulatedPosition() ? context.player.getSimulatedPosition()
+                                                        : context.player.getPosition();
+    const Block *soulSupport = blockAt(context.level, state.start.x, state.start.y - SUPPORT_PROBE_DEPTH,
+                                       state.start.z);
+    // the modifier stays over air while jumping, refreshed on the next non-air block
     if (soulSupport != nullptr && soulSupport->getTypeId() != BlockTypeIds::AIR) {
         const int enchantmentLevel = ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED);
         const float bonus = enchantmentLevel > 0 && soulSupport->getBehavior().supportsSoulSpeed()
-                            ? 0.03f + 0.0105f * (float) enchantmentLevel : 0.0f;
+                                    ? 0.03f + 0.0105f * (float) enchantmentLevel
+                                    : 0.0f;
         context.player.getEffects().setMovementSpeedBonus(bonus);
     }
-    if (!context.owner.getProperties().getSimulation()) {
+    // a simulated player has no client position to fall back on: the server always simulates it
+    if (!context.player.isSimulated() && !context.owner.getProperties().getMovementSimulation()) {
         context.player.clearMovementSimulation();
         return false;
     }
 
-    const bool skip = context.player.isRiding() || context.player.isSleeping() || context.player.hasPendingMovementChange()
-                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::InClientPredictedInVehicle)
-                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::HandleTeleport);
+    // only server state decides to skip: a server teleport keeps a movement change pending until acked, riding is
+    // server state; the client's HandleTeleport and vehicle flags aren't trusted: one bit would let it go anywhere
+    const bool riding = context.player.isRiding();
+    const bool skip = riding || context.player.isSleeping() || context.player.skipsForPendingMovementChange();
     if (skip || !chunkLoaded(context.level, state.start)
         || !chunkLoaded(context.level, *context.prediction.feetPosition)) {
+        // not replayed is not unchecked: an input claiming a place too far to reach in one step, a column the
+        // server never loaded included, is put back; a seat moves its rider itself
+        if (!riding && !PlayerMovementValidator::isWithinStep(state.start, *context.prediction.feetPosition)) {
+            *context.prediction.feetPosition = state.start;
+            PlayerPredictionSystem::correct(context, state.start, Vector3f(0.0f, 0.0f, 0.0f),
+                                            context.player.isOnGround());
+        }
         context.player.clearMovementSimulation();
         return false;
     }

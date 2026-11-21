@@ -6,6 +6,8 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(SnifferEggBlock, 185);
 
@@ -18,9 +20,7 @@ namespace {
     const float BABY_SCALE = 0.5f;
     const char *const SNIFFER = "minecraft:sniffer";
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 }
 
 bool SnifferEggBlock::matches(const std::string &identifier) {
@@ -57,7 +57,7 @@ void SnifferEggBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &leve
 
     if (EggHelpers::isFullyCracked(state)) {
         owner.playNamedSound(level, PlaySoundName::SNIFFER_EGG_HATCH, center, SOUND_VOLUME, EggHelpers::soundPitch());
-        level.setBlock(position, BlockState("minecraft:air"), true);
+        level.setBlock(position, BlockState(BlockNames::AIR), true);
         owner.spawnBabyActor(level, SNIFFER, Vector3f(center.x, (float) position.y, center.z), BABY_SCALE);
         return;
     }

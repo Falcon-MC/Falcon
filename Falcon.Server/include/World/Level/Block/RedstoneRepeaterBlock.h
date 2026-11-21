@@ -6,9 +6,7 @@
 
 class RedstoneRepeaterBlock final : public RedstoneDiodeBlock {
 public:
-    explicit RedstoneRepeaterBlock(const Block &block) : RedstoneDiodeBlock(block)
-    {
-    }
+    explicit RedstoneRepeaterBlock(const Block &block) : RedstoneDiodeBlock(block) {}
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;

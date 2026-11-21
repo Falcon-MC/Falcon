@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -35,8 +36,7 @@ namespace {
 
     class OrePlacementManager : public BlockManager {
     public:
-        explicit OrePlacementManager(Level &level) : BlockManager(level) {
-        }
+        explicit OrePlacementManager(Level &level) : BlockManager(level) {}
 
         void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state) override {
             if (y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y) {
@@ -62,7 +62,7 @@ namespace {
         if (state == nullptr)
             return true;
 
-        return state->mName == "minecraft:air";
+        return state->mName == BlockNames::AIR;
     }
 }
 
@@ -89,10 +89,6 @@ OreFeature::ConcentrationType OreFeature::getConcentration() const {
     return ConcentrationType::UNIFORM;
 }
 
-bool OreFeature::isRare() const {
-    return false;
-}
-
 bool OreFeature::canBeReplaced(const BlockState &state) const {
     return state == stoneState() || state == deepslateState() || state == netherrackState();
 }
@@ -109,9 +105,7 @@ void OreFeature::apply(ChunkGenerateContext &context) {
     const int32_t startZ = chunkZ << 4;
     BlockManager manager(level);
 
-    for (int32_t i = 0;
-         i < (isRare() ? (mRandom.nextInt(getClusterCount()) == 0 ? 1 : 0) : getClusterCount());
-         i++) {
+    for (int32_t i = 0; i < getClusterCount(); i++) {
         OrePlacementManager object(level);
         const int32_t maxY = std::min(getMaxHeight(), (int32_t) LevelChunk::MAX_Y);
         const int32_t minY = std::max(getMinHeight(), (int32_t) LevelChunk::MIN_Y);
@@ -188,9 +182,11 @@ void OreFeature::spawn(BlockManager &manager, IRandom &random, int32_t x, int32_
         const double scaleZ = scaleMaxZ + (scaleMinZ - scaleMaxZ) * (double) sizeIncr;
         const double randSizeOffset = random.nextDouble() * (double) clusterSize / 16.0;
         const double randVec1 = (double) (FeatureMath::sinLookup(MathConstants::PI_F * sizeIncr) + 1.0f)
-                                * randSizeOffset + 1.0;
+                                        * randSizeOffset
+                                + 1.0;
         const double randVec2 = (double) (FeatureMath::sinLookup(MathConstants::PI_F * sizeIncr) + 1.0f)
-                                * randSizeOffset + 1.0;
+                                        * randSizeOffset
+                                + 1.0;
 
         const int32_t minX = FeatureMath::floorDouble(scaleX - randVec1 / 2.0);
         const int32_t minY = FeatureMath::floorDouble(scaleY - randVec2 / 2.0);

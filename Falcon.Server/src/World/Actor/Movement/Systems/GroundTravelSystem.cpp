@@ -31,15 +31,15 @@ void GroundTravelSystem::tick(PlayerMovementContext &context) {
     auto &travel = context.travel;
 
     const ItemStack &boots = context.player.getInventory().getArmor(PlayerInventory::ARMOR_FEET);
-    if (!abilities.flying && !context.waterTravel.active && !context.liquidTravel.lava && state.onGround && !abilities.gliding) {
+    if (!abilities.flying && !context.waterTravel.active && !context.liquidTravel.lava && state.onGround
+        && !abilities.gliding) {
         const Block *ground = blockAt(context.level, state.start.x, state.start.y - GROUND_PROBE_DEPTH, state.start.z);
         const float groundFriction = blockFriction(ground);
         travel.friction *= groundFriction;
         float accelerationMultiplier = ground == nullptr ? 1.0f : ground->getAccelerationFrictionMultiplier();
         if (ItemEnchantments::getLevel(boots, EnchantmentIds::SOUL_SPEED) > 0)
             accelerationMultiplier = 1.0f;
-        // Ground acceleration scales with the cube of (default friction / block friction), so
-        // slippery blocks such as ice accelerate slowly but keep their momentum.
+        // ground acceleration scales with (default friction / block friction)^3: ice accelerates slowly, keeps momentum
         const float accelerationFriction = (groundFriction * accelerationMultiplier) * AIR_FRICTION;
         travel.acceleration = PlayerMovementSimulator::groundAcceleration(context.player, accelerationFriction,
                                                                           abilities.sprinting);

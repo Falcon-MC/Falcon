@@ -6,10 +6,7 @@
 class Level;
 class LevelChunk;
 
-/**
- * Heightmap, sky light and block light. Whole chunks are lit on the chunk workers; single
- * block changes are queued and relit incrementally on the main thread.
- */
+// whole chunks lit on the chunk workers; single block changes relit incrementally on the main thread
 class LightSystem {
 public:
     static constexpr int MAX_LIGHT = 15;
@@ -23,6 +20,9 @@ public:
     static void computeBlockLight(LevelChunk &chunk);
 
     static void onBlockChanged(Level &level, int32_t x, int32_t y, int32_t z);
+
+    // onBlockChanged for a whole column: a batch of changes relights each column once
+    static void relightColumn(LevelChunk &chunk, int x, int z);
 
     static void updateBlockLight(Level &level, std::unordered_set<int64_t> &pending);
 

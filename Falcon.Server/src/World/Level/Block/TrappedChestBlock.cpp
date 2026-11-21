@@ -8,12 +8,10 @@ namespace {
     const char *TRAPPED_CHEST = "minecraft:trapped_chest";
 }
 
-bool TrappedChestBlock::matches(const std::string &identifier)
-{
+bool TrappedChestBlock::matches(const std::string &identifier) {
     return identifier == TRAPPED_CHEST;
 }
 
-bool TrappedChestBlock::isSignalSource() const
-{
+bool TrappedChestBlock::isSignalSource() const {
     return true;
 }

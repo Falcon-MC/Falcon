@@ -8,13 +8,20 @@
 #include "World/Item/Item.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemNetworkIdTable.h"
+#include "World/Item/ItemProperties.h"
+#include "World/Item/PackShooter.h"
+#include "World/Item/StringToItemParser.h"
 #include "World/Item/VanillaItems.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 namespace {
@@ -37,14 +44,6 @@ namespace {
         return VanillaItems::fromIdentifier(item.mDefinition->getIdentifier());
     }
 
-    int64_t useDurationTicksFor(const ItemStack &item) {
-        const Tag *components = vanillaComponents(item);
-        const Tag *duration = components == nullptr ? nullptr : components->get("minecraft:use_duration");
-        if (duration != nullptr && duration->asInt() > 0)
-            return duration->asInt();
-        return DEFAULT_USE_DURATION_TICKS;
-    }
-
     const FoodItemComponent *findFoodComponent(const ItemStack &item) {
         if (item.isAir() || item.mDefinition == nullptr)
             return nullptr;
@@ -65,9 +64,18 @@ namespace {
         return itemType != nullptr && itemType->isConsumable();
     }
 
+    const Tag *vanillaFood(const ItemStack &item) {
+        const Tag *components = vanillaComponents(item);
+        return components == nullptr ? nullptr : components->get("minecraft:food");
+    }
+
     bool canAlwaysConsume(const ItemStack &item) {
         const FoodItemComponent *food = findFoodComponent(item);
         if (food == nullptr || food->canAlwaysEat())
+            return true;
+
+        const Tag *vanilla = vanillaFood(item);
+        if (vanilla != nullptr && vanilla->getByte("can_always_eat", 0) != 0)
             return true;
 
         const Item *itemType = itemTypeOf(item);
@@ -75,8 +83,7 @@ namespace {
     }
 
     std::string usingConvertsTo(const ItemStack &item) {
-        const Tag *components = vanillaComponents(item);
-        const Tag *food = components == nullptr ? nullptr : components->get("minecraft:food");
+        const Tag *food = vanillaFood(item);
         std::string name = food == nullptr ? std::string() : food->getString("using_converts_to");
         if (name.empty()) {
             const Item *itemType = itemTypeOf(item);
@@ -90,21 +97,77 @@ namespace {
 
 }
 
+int64_t ServerNetworkHandler::useDurationTicksFor(const ItemStack &item) {
+    if (!item.isAir() && item.mDefinition != nullptr) {
+        const CustomItemDefinition *custom =
+                CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+        if (custom != nullptr && custom->mHasUseModifiers && custom->mUseDuration > 0.0f)
+            return std::llround(custom->mUseDuration * 20.0f);
+    }
+
+    const Tag *components = vanillaComponents(item);
+    const Tag *duration = components == nullptr ? nullptr : components->get("minecraft:use_duration");
+    if (duration != nullptr && duration->asInt() > 0)
+        return duration->asInt();
+    return DEFAULT_USE_DURATION_TICKS;
+}
+
 void ServerNetworkHandler::addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks) {
     MobEffectInstance instance;
     instance.mId = effect;
     instance.mAmplifier = amplifier;
     instance.mDuration = durationTicks;
+    addEffect(actor, instance);
+}
 
+void ServerNetworkHandler::addEffect(Actor &actor, const MobEffectInstance &instance) {
     if (!actor.addEffect(instance) || !actor.isPlayer())
         return;
 
-    EffectAddAfterEvent event(static_cast<ServerPlayer &>(actor), (int32_t) effect, amplifier, durationTicks);
+    EffectAddAfterEvent event(static_cast<ServerPlayer &>(actor), (int32_t) instance.mId, instance.mAmplifier,
+                              instance.mDuration);
     mEventBus.after().mEffectAdd.emit(event);
 }
 
+bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item) {
+    const FoodItemComponent *food = findFoodComponent(item);
+    if (food == nullptr)
+        return false;
+
+    player.consumeFood(food->getNutrition(), food->getSaturation());
+    for (const FoodEffect &effect: food->getEffects())
+        addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
+
+    // cured effects (poison for the honey bottle) come only from the vanilla components
+    const Tag *vanilla = vanillaFood(item);
+    const Tag *removed = vanilla == nullptr ? nullptr : vanilla->get("remove_effects");
+    if (removed != nullptr && removed->isList()) {
+        for (const Tag &effect: removed->getList())
+            player.removeEffect((MobEffectId) effect.asInt());
+    }
+    return true;
+}
+
+bool ServerNetworkHandler::_keepItemUse(ServerPlayer &player) {
+    if (!player.getFlags().get(ActorFlag::UsingItem))
+        return true;
+
+    // the start tick belongs to the item that started the use: another one must not inherit its elapsed time
+    const PlayerInventory &inventory = player.getInventory();
+    const ItemStack &held = inventory.getItemInHand();
+    const ItemStack used = player.getItemUseItem();
+    if (inventory.getSelectedSlot() == player.getItemUseSlot() && !held.isAir() && held.mDefinition == used.mDefinition)
+        return true;
+
+    player.getFlags().set(ActorFlag::UsingItem, false);
+    _sendEntityData(player);
+    const int64_t left = useDurationTicksFor(used) - (mCurrentTick - player.getItemUseStartTick());
+    mScriptEngine.onItemStopUse(player, used, left > 0 ? (int32_t) left : 0, false);
+    return false;
+}
+
 void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
-    if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem))
+    if (!player.isSpawned() || !player.getFlags().get(ActorFlag::UsingItem) || !_keepItemUse(player))
         return;
 
     const int64_t itemUseTicks = mCurrentTick - player.getItemUseStartTick();
@@ -133,7 +196,7 @@ void ServerNetworkHandler::_tickItemUse(ServerPlayer &player) {
 }
 
 void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId) {
-    if (!player.getFlags().get(ActorFlag::UsingItem))
+    if (!player.getFlags().get(ActorFlag::UsingItem) || !_keepItemUse(player))
         return;
 
     const ItemStack &heldItem = player.getInventory().getItemInHand();
@@ -141,11 +204,17 @@ void ServerNetworkHandler::_completeItemUse(ServerPlayer &player, int32_t itemId
     if (heldTicks < useDurationTicksFor(heldItem))
         return;
 
-    if (heldItem.isAir() || heldItem.mDefinition == nullptr ||
-        static_cast<uint16_t>(itemId) != static_cast<uint16_t>(heldItem.mDefinition->getRuntimeId()))
+    if (heldItem.isAir() || heldItem.mDefinition == nullptr
+        || static_cast<uint16_t>(itemId) != static_cast<uint16_t>(heldItem.mDefinition->getRuntimeId()))
         return;
 
     _consumeHeldItem(player);
+}
+
+int32_t ServerNetworkHandler::getItemUseTicksLeft(const ServerPlayer &player) const {
+    const int64_t left = useDurationTicksFor(player.getInventory().getItemInHand())
+                         - (mCurrentTick - player.getItemUseStartTick());
+    return left > 0 ? (int32_t) left : 0;
 }
 
 void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
@@ -159,6 +228,7 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
 
     ItemUseAfterEvent useEvent(player, heldItem.mDefinition->getIdentifier());
     mEventBus.after().mItemUse.emit(useEvent);
+    mScriptEngine.onItemUse(player);
 }
 
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
@@ -189,17 +259,22 @@ bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &ite
     ItemStack worn = inventory.getArmor(armorSlot);
     ItemStack held = inventory.getItemInHand();
 
+    if (ItemProperties::getLockMode(held) == ItemLockMode::LockInSlot
+        || ItemProperties::getLockMode(worn) == ItemLockMode::LockInSlot)
+        return false;
+
+    const ItemStack before[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
+                                                           inventory.getArmor(2), inventory.getArmor(3)};
     inventory.setArmor(armorSlot, held);
     inventory.setItemInHand(std::move(worn));
 
     player.getInventoryManager().syncContents(InventoryManager::InventoryId::Armor);
-    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                          inventory.getSelectedSlot());
+    player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     InventoryHandler::sendArmorContent(*this, player);
     InventoryHandler::sendHeldItem(*this, player);
 
-    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(),
-                   "minecraft:player");
+    playLevelSound(getLevelFor(player), LevelSoundEvent::ARMOR_EQUIP_GENERIC, player.getPosition(), "minecraft:player");
+    PluginEvents::armorChanged(player, before);
     return true;
 }
 
@@ -211,6 +286,20 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
     }
 
     const ItemStack &heldItem = player.getInventory().getItemInHand();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_USE)) {
+        ItemStack used = heldItem;
+        PluginEvent useEvent;
+        useEvent.mType = FALCON_EVENT_PLAYER_ITEM_USE;
+        useEvent.mCancellable = true;
+        useEvent.mPlayer = &player;
+        useEvent.mItem = &used;
+        plugins->dispatch(useEvent);
+        if (useEvent.mCancelled) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                                  player.getInventory().getSelectedSlot());
+            return;
+        }
+    }
 
     emitItemUse(player);
 
@@ -222,6 +311,30 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (itemType != nullptr && _equipHeldArmor(player, *itemType))
             return;
 
+        const CustomItemDefinition *pack =
+                itemType == nullptr ? CustomContentRegistry::getInstance().findItem(heldItem.mDefinition->getIdentifier())
+                                    : nullptr;
+        int32_t drawDuration = 0;
+        const PackShooter::Use packUse = pack == nullptr || player.getFlags().get(ActorFlag::UsingItem)
+                                                 ? PackShooter::Use::None
+                                                 : PackShooter::use(*this, player, *pack, drawDuration);
+        if (packUse == PackShooter::Use::Done)
+            return;
+        if (packUse == PackShooter::Use::Drawing) {
+            player.getFlags().set(ActorFlag::UsingItem, true);
+            player.setItemUseStartTick(mCurrentTick);
+            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
+            _sendEntityData(player);
+            mScriptEngine.onItemStartUse(player, heldItem, drawDuration);
+            return;
+        }
+
+        // a pack item is not in the item table: its wearable slot rides on the parsed item
+        Item packItem;
+        if (itemType == nullptr && StringToItemParser::getInstance().parse(heldItem.mDefinition->getIdentifier(), packItem)
+            && _equipHeldArmor(player, packItem))
+            return;
+
         if (itemType != nullptr && itemType->onUse(*this, player, heldItem))
             return;
 
@@ -229,7 +342,11 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
             && itemType->onStartUsing(*this, player, heldItem)) {
             player.getFlags().set(ActorFlag::UsingItem, true);
             player.setItemUseStartTick(mCurrentTick);
+            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
             _sendEntityData(player);
+            const int32_t duration = itemType->getUseDuration();
+            mScriptEngine.onItemStartUse(player, heldItem,
+                                         duration > 0 ? duration : (int32_t) useDurationTicksFor(heldItem));
             return;
         }
     }
@@ -256,6 +373,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (usingItem) {
             player.getFlags().set(ActorFlag::UsingItem, false);
             _sendEntityData(player);
+            mScriptEngine.onItemStopUse(player, heldItem, getItemUseTicksLeft(player), false);
         }
         return;
     }
@@ -265,6 +383,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
     player.getFlags().set(ActorFlag::UsingItem, true);
     player.setItemUseStartTick(mCurrentTick);
+    player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
     _sendEntityData(player);
 
     if (heldItem.mDefinition != nullptr) {
@@ -272,9 +391,11 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
                                      (int32_t) useDurationTicksFor(heldItem));
         mEventBus.after().mItemStartUse.emit(event);
     }
+    mScriptEngine.onItemStartUse(player, heldItem, (int32_t) useDurationTicksFor(heldItem));
 }
 
 void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
+    _keepItemUse(player);
     const bool wasUsing = player.getFlags().get(ActorFlag::UsingItem);
     const int64_t heldTicks = mCurrentTick - player.getItemUseStartTick();
 
@@ -292,6 +413,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     if (wasUsing) {
         player.getFlags().set(ActorFlag::UsingItem, false);
         _sendEntityData(player);
+        mScriptEngine.onItemStopUse(player, heldItem, getItemUseTicksLeft(player), false);
     }
 
     if (!consumable)
@@ -336,11 +458,12 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
     }
 
-    if (food != nullptr) {
-        player.consumeFood(food->getNutrition(), food->getSaturation());
-        for (const FoodEffect &effect: food->getEffects())
-            addEffect(player, (MobEffectId) effect.mEffectId, effect.mAmplifier, effect.mDurationTicks);
-    }
+    applyFood(player, usedItem);
+
+    // both ride publisher_use_time_depleted: food at priority 0 eats and fires onConsume,
+    // custom onCompleteUse at priority 3 runs after
+    mScriptEngine.onItemConsume(player, usedItem);
+    mScriptEngine.onItemCompleteUse(player, usedItem);
 
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);

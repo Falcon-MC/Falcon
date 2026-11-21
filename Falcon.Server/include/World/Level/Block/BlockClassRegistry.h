@@ -23,9 +23,7 @@ public:
     static void remove(const void *owner);
 };
 
-#define FALCON_REGISTER_BLOCK(type, priority)                                            \
-    static const BlockClassRegistry::Registration gBlockRegistration##type(              \
-            (priority), &type::matches,                                                  \
-            [](const Block &block) -> std::unique_ptr<Block> {                           \
-                return std::make_unique<type>(block);                                    \
-            })
+#define FALCON_REGISTER_BLOCK(type, priority)                                                                          \
+    static const BlockClassRegistry::Registration gBlockRegistration##type(                                            \
+            (priority), &type::matches,                                                                                \
+            [](const Block &block) -> std::unique_ptr<Block> { return std::make_unique<type>(block); })

@@ -57,8 +57,7 @@ bool TotemItem::consume(ServerNetworkHandler &owner, ServerPlayer &player) {
         ItemStack totem = inventory.getItemInHand();
         totem.mCount -= 1;
         inventory.setItemInHand(totem.mCount <= 0 ? ItemStack::air() : std::move(totem));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     owner._broadcastEntityEvent(player, (uint8_t) EntityEventType::ConsumeTotem);

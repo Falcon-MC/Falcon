@@ -15,22 +15,28 @@
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/VanillaActorTable.h"
+#include "World/Actor/Player/FogStack.h"
 #include "World/Actor/Player/PlayerAbility.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Item/ItemNetworkIdTable.h"
 #include "World/Level/Level.h"
 #include "Network/ConnectionRequest.h"
 #include "Network/Crypto/EncryptionHandshake.h"
 #include "Network/Crypto/KeyPair.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/LoginChainVerifier.h"
+#include "World/Level/Storage/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
+#include "Core/Text/StringUtil.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Protocol/Packets/AvailableActorIdentifiersPacket.h"
 #include "Protocol/Packets/BiomeDefinitionListPacket.h"
+#include "Protocol/Packets/DimensionDataPacket.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
 #include "Protocol/Packets/CameraPresetsPacket.h"
 #include "Protocol/Types/CameraPresets.h"
@@ -64,13 +70,39 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
+#include <iterator>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
-    const float PLAYER_BASE_OFFSET = 1.62f;
-    const size_t SPAWN_CHUNK_THRESHOLD = 56;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
+    const char *const ENABLED_EXPERIMENTS[] = {"data_driven_vanilla_blocks_and_items"};
+
+    // the definition the game gives every script dimension
+    const int32_t CUSTOM_DIMENSION_GENERATOR = 5;
+    const char *const CUSTOM_DIMENSION_BIOME = "minecraft:ocean";
+    const int32_t CUSTOM_DIMENSION_CLOUD_HEIGHT = 128;
+
+    // Falcon's own toggles, then the ones the world's level.dat turns on
+    std::vector<ExperimentData> enabledExperiments(ServerNetworkHandler &owner) {
+        std::vector<std::string> names(std::begin(ENABLED_EXPERIMENTS), std::end(ENABLED_EXPERIMENTS));
+        for (const std::string &name: owner.getLevel().getExperiments()) {
+            if (std::find(names.begin(), names.end(), name) == names.end())
+                names.push_back(name);
+        }
+
+        std::vector<ExperimentData> experiments;
+        for (const std::string &name: names) {
+            ExperimentData experiment;
+            experiment.mName = name;
+            experiment.mEnabled = true;
+            experiments.push_back(experiment);
+        }
+        return experiments;
+    }
 
     Uuid listUuidFor(const ServerPlayer &player) {
         Uuid parsed = Uuid::fromString(player.getUuid());
@@ -86,6 +118,24 @@ namespace {
         return Uuid(most, least);
     }
 
+    // what the client's recipe book needs to show the recipe; registered for the unlocking too
+    void addUnlocking(ServerNetworkHandler &owner, CraftingRecipeEntry &entry, const std::string &recipeId,
+                      const RecipeUnlockRequirement *requirement) {
+        owner.getRecipeUnlockIndexMutable().add(recipeId, entry.mRecipeId, entry.mRecipeNetId, requirement);
+        entry.mHasUnlockingRequirement = requirement != nullptr;
+        if (requirement == nullptr)
+            return;
+
+        entry.mUnlockingContext = (int32_t) requirement->mContext;
+        entry.mHasUnlockingIngredients = !requirement->mItems.empty();
+        entry.mUnlockingIngredients.clear();
+        for (RecipeIngredientEntry item: requirement->mItems) {
+            if (item.mType == RecipeIngredientType::Name && item.mAuxValue < 0)
+                item.mAuxValue = 0x7fff;
+            entry.mUnlockingIngredients.push_back(std::move(item));
+        }
+    }
+
     std::string packRecipeId(uint32_t value) {
         std::string result(4, '\0');
         result[0] = (char) (value >> 24);
@@ -93,6 +143,27 @@ namespace {
         result[2] = (char) (value >> 8);
         result[3] = (char) value;
         return result;
+    }
+
+    std::string encodePacket(const Packet &packet, const PacketCodecContext &context) {
+        if (!context.getCodec().supports(packet.getId()))
+            return std::string();
+
+        BinaryStream stream;
+        packet.writeWithHeader(stream, context);
+        return stream.getBuffer();
+    }
+
+    void sendSharedLoginPacket(ServerNetworkHandler &owner, const ServerPlayer &player,
+                               ServerNetworkHandler::SharedLoginPacket kind,
+                               const std::function<std::string(const PacketCodecContext &)> &encode) {
+        const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
+        std::shared_ptr<const SharedPacket> &cached = owner.getSharedLoginPacket(
+                kind, context.getCodec().getProtocolVersion());
+        if (cached == nullptr)
+            cached = std::make_shared<const SharedPacket>(encode(context));
+
+        owner.getNetworkHandler().sendShared(player.getNetworkIdentifier(), cached);
     }
 
     void sendPropertySchema(ServerNetworkHandler &owner, const ServerPlayer &player, const std::string &identifier,
@@ -144,8 +215,8 @@ namespace {
 
 void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
     for (const std::unique_ptr<Block> &block: VanillaBlocks::getAll()) {
-        owner.getBlockDefinitions().registerDefinition(std::make_shared<BlockDefinition>(
-                block->getIdentifier(), block->getNetworkHash(), block->getStates()));
+        owner.getBlockDefinitions().registerDefinition(
+                std::make_shared<BlockDefinition>(block->getIdentifier(), block->getNetworkHash(), block->getStates()));
     }
 
     for (size_t index = 0; index < ItemNetworkIdTable::getCount(); ++index) {
@@ -155,9 +226,8 @@ void LoginHandler::registerVanillaDefinitions(ServerNetworkHandler &owner) {
                 entry.mIdentifier, entry.mNetworkId, entry.mComponentBased, entry.mComponents));
     }
 
-    LOG_TRACE(LogAreaID::Server, "Registered %zu block(s) and %zu item definition(s)",
-             VanillaBlocks::getAll().size(), owner.getItemDefinitions().size());
-
+    LOG_TRACE(LogAreaID::Server, "Registered %zu block(s) and %zu item definition(s)", VanillaBlocks::getAll().size(),
+              owner.getItemDefinitions().size());
 }
 
 void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, const NetworkIdentifier &id,
@@ -168,15 +238,14 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
         codec = nullptr;
     if (codec == nullptr) {
         PlayStatusPacket status;
-        status.mStatus = packet.mProtocolVersion < newest
-                         ? PlayStatusPacket::Status::LoginFailedClientOld
-                         : PlayStatusPacket::Status::LoginFailedServerOld;
+        status.mStatus = packet.mProtocolVersion < newest ? PlayStatusPacket::Status::LoginFailedClientOld
+                                                          : PlayStatusPacket::Status::LoginFailedServerOld;
 
         owner.getNetworkHandler().send(id, status, owner.getCodecContext());
         owner.getNetworkHandler().flush(id);
 
-        LOG_WARN(LogAreaID::Network, "%s uses protocol %d, which the server does not support",
-                 id.getAddress().c_str(), packet.mProtocolVersion);
+        LOG_WARN(LogAreaID::Network, "%s uses protocol %d, which the server does not support", id.getAddress().c_str(),
+                 packet.mProtocolVersion);
         return;
     }
 
@@ -197,11 +266,26 @@ void LoginHandler::handleRequestNetworkSettings(ServerNetworkHandler &owner, con
     owner.getNetworkHandler().flush(id);
     const CompressedNetworkPeer::CompressionAlgorithm algorithm =
             settings.mCompressionAlgorithm == NetworkSettingsPacket::CompressionAlgorithm::Snappy
-            ? CompressedNetworkPeer::CompressionAlgorithm::Snappy
-            : CompressedNetworkPeer::CompressionAlgorithm::ZLib;
+                    ? CompressedNetworkPeer::CompressionAlgorithm::Snappy
+                    : CompressedNetworkPeer::CompressionAlgorithm::ZLib;
     owner.getNetworkHandler().enableCompression(id, algorithm, settings.mCompressionThreshold);
 
     player.setLoginState(ServerPlayer::LoginState::NetworkSettingsSent);
+}
+
+namespace {
+    // empty, or hex digits and dashes: 36 characters at most
+    bool isUuidShaped(const std::string &uuid) {
+        if (uuid.size() > 36)
+            return false;
+        for (const char character: uuid) {
+            const bool hex = (character >= '0' && character <= '9') || (character >= 'a' && character <= 'f')
+                             || (character >= 'A' && character <= 'F');
+            if (!hex && character != '-')
+                return false;
+        }
+        return true;
+    }
 }
 
 void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
@@ -209,7 +293,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     if (player.getCodec() == nullptr || packet.mProtocolVersion != player.getCodec()->getProtocolVersion()) {
         LOG_WARN(LogAreaID::Network, "%s logged in with protocol %d after announcing another one",
                  id.getAddress().c_str(), packet.mProtocolVersion);
-        owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
+        owner._disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
         owner.erasePlayer(id);
         return;
     }
@@ -217,7 +301,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     ConnectionRequest request;
     if (!request.parse(packet.mAuthJwt, packet.mClientJwt)) {
         LOG_WARN(LogAreaID::Network, "%s sent a login that could not be parsed", id.getAddress().c_str());
-        owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
+        owner._disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
+        owner.erasePlayer(id);
         return;
     }
 
@@ -227,14 +312,14 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
     if (!verified) {
         LOG_WARN(LogAreaID::Network, "%s sent a login that failed verification: %s", id.getAddress().c_str(),
                  verifier.getFailureReason().c_str());
-        owner._disconnect(id, "disconnectionScreen.notAuthenticated");
+        owner._disconnect(id, DisconnectReason::NotAuthenticated, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
         return;
     }
 
     if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
-        owner._disconnect(id, "disconnectionScreen.notAuthenticated");
+        owner._disconnect(id, DisconnectReason::NotAuthenticated, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
         return;
     }
@@ -255,30 +340,48 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
 
     player.setPlayFabId(request.getPlayFabId());
 
-    const BanEntry *ban = owner.getBanList().find(player.getName());
+    // the name becomes a file name and a log line: an unverified one is whatever the client typed
+    if (!PlayerDataProvider::isSafeName(player.getName())) {
+        LOG_WARN(LogAreaID::Network, "%s logged in with an unusable name", id.getAddress().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.invalidName");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    // an unsigned login picks its own uuid, and it ends up in the log and the player list
+    if (!isUuidShaped(player.getUuid())) {
+        LOG_WARN(LogAreaID::Network, "%s logged in with a malformed uuid", id.getAddress().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.notAuthenticated");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    owner.getBanList().bindXuid(player.getName(), player.getXuid());
+    const BanEntry *ban = owner.getBanList().find(player.getName(), player.getXuid());
     if (ban == nullptr)
         ban = owner.getIpBanList().find(id.getAddress());
     if (ban != nullptr) {
         LOG_INFO(LogAreaID::Server, "Player %s is banned", player.getName().c_str());
         const Localization &localization = Localization::getInstance();
-        owner._disconnect(id, ban->mReason.empty()
-                              ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
-                              : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
-                                                       {ban->mReason}));
+        owner._disconnect(id, DisconnectReason::NotAllowed,
+                          ban->mReason.empty()
+                                  ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
+                                  : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
+                                                           {ban->mReason}));
         owner.erasePlayer(id);
         return;
     }
 
     if (!owner.isAllowListed(player)) {
         LOG_INFO(LogAreaID::Server, "Player %s is not in the allow list", player.getName().c_str());
-        owner._disconnect(id, ServerNetworkHandler::NOT_ALLOW_LISTED_MESSAGE);
+        owner._disconnect(id, DisconnectReason::NotAllowed, ServerNetworkHandler::NOT_ALLOW_LISTED_MESSAGE);
         owner.erasePlayer(id);
         return;
     }
 
     if (owner.isServerFull(id) && !owner.getAllowList().ignoresPlayerLimit(player.getName(), player.getXuid())) {
         LOG_INFO(LogAreaID::Server, "Player %s was refused because the server is full", player.getName().c_str());
-        owner._disconnect(id, "disconnectionScreen.serverFull");
+        owner._disconnect(id, DisconnectReason::ServerFull, "disconnectionScreen.serverFull");
         owner.erasePlayer(id);
         return;
     }
@@ -294,17 +397,64 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         plugins->dispatch(preLogin);
         if (preLogin.mCancelled) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
-            owner._disconnect(id, kickMessage);
+            owner._disconnect(id, DisconnectReason::NotAllowed, kickMessage);
             owner.erasePlayer(id);
             return;
         }
     }
 
-    player.setSkin(request.getSkin());
-    player.setBuildPlatform(request.getBuildPlatform());
-    player.setLocale(request.getLanguageCode());
+    // one session per account: two would load the same save, and the last to leave would write over the other.
+    // this login is refused; a signed login of the same account also closes the older one, its save landing
+    // before the next attempt reads it. a name alone proves nothing: the session holding it stays
+    bool alreadyOnline = false;
+    const std::string loweredName = StringUtil::toLowerCase(player.getName());
+    for (auto &entry: owner.getPlayers()) {
+        const ServerPlayer &other = entry.second;
+        if (&other == &player || other.isSimulated() || other.getName().empty())
+            continue;
 
-    if (owner.getProperties().getNetworkEncryption()) {
+        const bool sameAccount = !player.getXuid().empty() && other.getXuid() == player.getXuid();
+        if (!sameAccount && StringUtil::toLowerCase(other.getName()) != loweredName)
+            continue;
+
+        alreadyOnline = true;
+        if (sameAccount)
+            owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
+                              "disconnectionScreen.loggedinOtherLocation");
+    }
+    if (alreadyOnline) {
+        LOG_INFO(LogAreaID::Server, "Player %s logged in from another location", player.getName().c_str());
+        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, "disconnectionScreen.loggedinOtherLocation");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    // a gamertag can change hands: the save under it must be this account's before it is read or written
+    if (!owner.getPlayerDataProvider().claimData(player.getName(), player.getXuid())) {
+        LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
+                  player.getName().c_str());
+        owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.internalError.cantConnect");
+        owner.erasePlayer(id);
+        return;
+    }
+
+    SerializedSkin skin = request.getSkin();
+    ServerNetworkHandler::boundSkin(skin);
+    player.setSkin(skin);
+    player.setBuildPlatform(request.getBuildPlatform());
+    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
+    player.setClientSideGenerationCompatible(
+            ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
+    player.setLocale(request.getLanguageCode());
+    ServerPlayer::ClientDevice &device = player.getClientDevice();
+    const std::string &clientData = request.getClientData();
+    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
+    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
+    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
+    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
+    player.readSyncedClientOptions(request.getClientData());
+
+    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
         startEncryption(owner, id, player, verifier.getIdentityPublicKey());
         return;
     }
@@ -320,7 +470,7 @@ void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIde
     if (serverKey == nullptr
         || !EncryptionHandshake::createServerToken(*serverKey, clientPublicKey, handshake.mJwt, key)) {
         LOG_WARN(LogAreaID::Network, "Could not prepare the encryption handshake for %s", id.getAddress().c_str());
-        owner._disconnect(id, "disconnectionScreen.notAuthenticated");
+        owner._disconnect(id, DisconnectReason::NotAuthenticated, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
         return;
     }
@@ -334,7 +484,7 @@ void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIde
 void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                  ServerPlayer &player) {
     if (player.getLoginState() != ServerPlayer::LoginState::EncryptionHandshake) {
-        owner._disconnect(id, "disconnectionScreen.unexpectedPacket");
+        owner._disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
         return;
     }
 
@@ -342,7 +492,22 @@ void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, co
 }
 
 void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
+    ScriptEngine &scripts = owner.getScriptEngine();
+    if (scripts.isHoldingJoin(id))
+        return;
+    // asyncPlayerJoin: the login goes on once every subscriber's promise settled
+    const bool held = scripts.holdPlayerJoin(player, [&owner, id]() {
+        const auto it = owner.getPlayers().find(id);
+        if (it != owner.getPlayers().end())
+            _finishLogin(owner, id, it->second);
+    });
+    if (!held)
+        _finishLogin(owner, id, player);
+}
+
+void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::LoggedIn);
+    player.setLoggedInTick(owner.getCurrentTick());
 
     LOG_INFO(LogAreaID::Server, "Player %s logged in, uuid %s, xuid %s", player.getName().c_str(),
              player.getUuid().c_str(), player.getXuid().c_str());
@@ -402,6 +567,8 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
             ResourcePackStackPacket stack;
             stack.mForcedToAccept = owner.getProperties().getTexturePackRequired();
             stack.mGameVersion = owner.getAnnouncement().mGameVersion;
+            stack.mExperiments = enabledExperiments(owner);
+            stack.mExperimentsPreviouslyToggled = true;
 
             for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
                 ResourcePackStackPacket::Entry entry;
@@ -419,7 +586,7 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
             break;
 
         case ResourcePackClientResponsePacket::Status::Refused:
-            owner._disconnect(id, "disconnectionScreen.resourcePack");
+            owner._disconnect(id, DisconnectReason::ResourcePackProblem, "disconnectionScreen.resourcePack");
             break;
 
         default:
@@ -436,7 +603,13 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     }
 
     const uint64_t offset = (uint64_t) packet.mChunkIndex * (uint64_t) RESOURCE_PACK_CHUNK_SIZE;
-    if (offset >= pack->mSize)
+    if (packet.mChunkIndex < 0 || offset >= pack->mSize)
+        return;
+
+    // each answer is a megabyte: a chunk goes out a few times per login at most
+    const auto requester = owner.getPlayers().find(id);
+    if (requester == owner.getPlayers().end()
+        || !requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
         return;
 
     const uint64_t remaining = pack->mSize - offset;
@@ -449,6 +622,9 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
     chunk.mChunkIndex = packet.mChunkIndex;
     chunk.mProgress = (int64_t) offset;
     chunk.mData = pack->mData.substr(offset, length);
+    // packs are zips: deflate saves ~0.3% for ~30 ms per MiB on the main thread; the client asks for
+    // 100 chunks at once
+    chunk.mCompressible = Packet::Compressibility::Incompressible;
     owner.getNetworkHandler().send(id, chunk, owner.getCodecContext());
 }
 
@@ -459,8 +635,10 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getAttributes() = ActorAttributes::createPlayerDefaults();
     player.setGameType((int32_t) owner.getProperties().getGameType());
     owner._loadPlayerData(player);
-    player.setHungerEnabled(player.getGameType() == (int32_t) GameType::Survival
-                            || player.getGameType() == (int32_t) GameType::Adventure);
+    if (owner.getProperties().getForceGameType())
+        player.setGameType((int32_t) owner.getProperties().getGameType());
+    player.setHungerEnabled(player.isSurvival()
+                            || player.isAdventure());
 
     Level &world = owner.getWorldFor(player).getOverworld();
     StartGamePacket startGame;
@@ -468,7 +646,7 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mRuntimeActorId = player.getRuntimeId();
     startGame.mPlayerGameType = (GameType) player.getGameType();
     startGame.mPlayerPosition = Vector3f(player.getPosition().x, player.getPosition().y + PLAYER_BASE_OFFSET,
-                                        player.getPosition().z);
+                                         player.getPosition().z);
     startGame.mRotation = Vector2f(player.getRotation().x, player.getRotation().y);
 
     startGame.mSeed = world.getSeed();
@@ -482,7 +660,9 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();
-    startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled();
+    // only a client able to generate chunks is told the server leaves some to it.
+    startGame.mClientSideGenerationEnabled = owner.getProperties().getClientSideChunkGenerationEnabled()
+                                             && player.isClientSideGenerationCompatible();
     startGame.mDisablingCustomSkins = owner.getProperties().getDisableCustomSkins();
     startGame.mServerAuthoritativeBlockBreaking = owner.getProperties().getServerAuthoritativeBlockBreaking();
     startGame.mServerChunkTickRange = owner.getProperties().getTickDistance();
@@ -495,6 +675,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mEnchantmentSeed = 0;
     startGame.mBlockNetworkIdsHashed = owner.getProperties().getBlockNetworkIdsAreHashes();
     startGame.mInventoriesServerAuthoritative = true;
+    startGame.mExperiments = enabledExperiments(owner);
+    startGame.mExperimentsPreviouslyToggled = true;
     startGame.mRewindHistorySize = 40;
 
     startGame.mBlockProperties = DataDrivenBlockDefinitions::getAll();
@@ -503,16 +685,41 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
 
     startGame.mGamerules = world.getGameRules().toNetwork();
 
-    JigsawStructureDataPacket jigsawStructureData;
-    jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
-    jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
-    jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
-    jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
-    owner.getNetworkHandler().send(id, jigsawStructureData, owner.getCodecContext());
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::JigsawStructures,
+            [](const PacketCodecContext &context) {
+                JigsawStructureDataPacket jigsawStructureData;
+                jigsawStructureData.mJigsawStructureData.put("processors", Tag::ofList(Tag::Type::Compound));
+                jigsawStructureData.mJigsawStructureData.put("template_pools", Tag::ofList(Tag::Type::Compound));
+                jigsawStructureData.mJigsawStructureData.put("jigsaws", Tag::ofList(Tag::Type::Compound));
+                jigsawStructureData.mJigsawStructureData.put("structure_sets", Tag::ofList(Tag::Type::Compound));
+                return encodePacket(jigsawStructureData, context);
+            });
 
-    owner.getNetworkHandler().send(id, VoxelShapeRegistry::getPacket(), owner.getCodecContext());
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::VoxelShapes,
+            [](const PacketCodecContext &context) { return encodePacket(VoxelShapeRegistry::getPacket(), context); });
 
     owner.getNetworkHandler().send(id, startGame, owner.getCodecContext());
+
+    // right after StartGame, only when there are definitions to send
+    if (!Dimension::customDimensions().empty()) {
+        DimensionDataPacket dimensions;
+        for (const auto &entry: Dimension::customDimensions()) {
+            const DimensionType custom = (DimensionType) entry.first;
+            DimensionDefinition definition;
+            definition.mId = entry.second;
+            definition.mMinimumHeight = Dimension::getMinY(custom);
+            // the second field is the height range, not the top
+            definition.mMaximumHeight = Dimension::getMaxY(custom) + 1 - Dimension::getMinY(custom);
+            definition.mGeneratorType = CUSTOM_DIMENSION_GENERATOR;
+            definition.mDimensionType = Dimension::toId(custom);
+            definition.mDefaultBiome = CUSTOM_DIMENSION_BIOME;
+            definition.mCloudHeight = CUSTOM_DIMENSION_CLOUD_HEIGHT;
+            dimensions.mDefinitions.push_back(definition);
+        }
+        owner.getNetworkHandler().send(id, dimensions, owner.getCodecContext());
+    }
 
     SetTimePacket time;
     time.mTime = (int32_t) world.getDayTime();
@@ -522,9 +729,16 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     player.getInventoryManager().attach(&player, &owner);
 
     sendItemComponents(owner, player);
+    // the clock registry follows the item registry
+    owner.getScriptEngine().sendWorldClocks(player);
+    owner.sendScoreboard(player);
     sendActorIdentifiers(owner, player);
     sendCameraPresets(owner, player);
-    owner.getNetworkHandler().send(id, ArmorTrims::getPacket(), owner.getCodecContext());
+    // the whole aim assist registry
+    owner.getScriptEngine().sendAimAssist(player);
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::ArmorTrims,
+            [](const PacketCodecContext &context) { return encodePacket(ArmorTrims::getPacket(), context); });
     sendBiomeDefinitions(owner, player);
     sendAttributes(owner, player);
     sendAbilities(owner, player);
@@ -619,96 +833,102 @@ Uuid LoginHandler::playerListUuid(const ServerPlayer &player) {
 }
 
 void LoginHandler::sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player) {
-    BiomeDefinitionListPacket biomes;
-    biomes.mBiomes = owner.getBiomes().getBiomes();
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), biomes, owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::BiomeDefinitions,
+                          [&owner](const PacketCodecContext &context) {
+                              BiomeDefinitionListPacket biomes;
+                              biomes.mBiomes = owner.getBiomes().getBiomes();
+                              biomes.mStrings = owner.getBiomes().getStrings();
+                              return encodePacket(biomes, context);
+                          });
 }
 
 void LoginHandler::sendCameraPresets(ServerNetworkHandler &owner, ServerPlayer &player) {
-    CameraPresetsPacket presets;
-    presets.mPresets = standardCameraPresets();
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), presets, owner.getCodecContext());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CameraPresets,
+                          [](const PacketCodecContext &context) {
+                              CameraPresetsPacket presets;
+                              presets.mPresets = standardCameraPresets();
+                              return encodePacket(presets, context);
+                          });
 }
 
 void LoginHandler::sendItemComponents(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-    std::string &cached = owner.getItemComponentsBytes(context.getCodec().getProtocolVersion());
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::ItemRegistry,
+            [&owner](const PacketCodecContext &context) {
+                ItemRegistryPacket components;
+                const int protocol = context.getCodec().getProtocolVersion();
+                const bool translated = ItemNetworkIdTable::getNetworkIds(protocol) != nullptr;
 
-    if (cached.empty()) {
-        ItemRegistryPacket components;
-        const int protocol = context.getCodec().getProtocolVersion();
-        const bool translated = ItemNetworkIdTable::getNetworkIds(protocol) != nullptr;
+                if (translated) {
+                    for (const ItemNetworkIdEntry &source: ItemNetworkIdTable::getPalette(protocol)) {
+                        ItemComponentEntry entry;
+                        entry.mIdentifier = source.mIdentifier;
+                        entry.mRuntimeId = (int16_t) source.mNetworkId;
+                        entry.mComponentBased = source.mComponentBased;
+                        entry.mItemVersion = source.mVersion;
+                        entry.mComponentData = source.mComponents;
+                        components.mEntries.push_back(entry);
+                    }
+                }
 
-        if (translated) {
-            for (const ItemNetworkIdEntry &source: ItemNetworkIdTable::getPalette(protocol)) {
-                ItemComponentEntry entry;
-                entry.mIdentifier = source.mIdentifier;
-                entry.mRuntimeId = (int16_t) source.mNetworkId;
-                entry.mComponentBased = source.mComponentBased;
-                entry.mItemVersion = source.mVersion;
-                entry.mComponentData = source.mComponents;
-                components.mEntries.push_back(entry);
-            }
-        }
+                for (const std::shared_ptr<ItemDefinition> &definition: owner.getItemDefinitions().getAll()) {
+                    if (translated && ItemNetworkIdTable::find(definition->getIdentifier()) != nullptr)
+                        continue;
 
-        for (const std::shared_ptr<ItemDefinition> &definition: owner.getItemDefinitions().getAll()) {
-            if (translated && ItemNetworkIdTable::find(definition->getIdentifier()) != nullptr)
-                continue;
+                    ItemComponentEntry entry;
+                    entry.mIdentifier = definition->getIdentifier();
+                    entry.mRuntimeId = (int16_t) context.toNetworkItemId(definition->getRuntimeId());
+                    entry.mComponentBased = definition->isComponentBased();
 
-            ItemComponentEntry entry;
-            entry.mIdentifier = definition->getIdentifier();
-            entry.mRuntimeId = (int16_t) context.toNetworkItemId(definition->getRuntimeId());
-            entry.mComponentBased = definition->isComponentBased();
+                    const ItemNetworkIdEntry *source = ItemNetworkIdTable::find(definition->getIdentifier());
+                    entry.mItemVersion = source != nullptr ? source->mVersion
+                                                           : (definition->isComponentBased() ? 1 : 0);
 
-            const ItemNetworkIdEntry *source = ItemNetworkIdTable::find(definition->getIdentifier());
-            entry.mItemVersion = source != nullptr ? source->mVersion : (definition->isComponentBased() ? 1 : 0);
+                    entry.mComponentData = definition->getComponentData();
+                    components.mEntries.push_back(entry);
+                }
 
-            entry.mComponentData = definition->getComponentData();
-            components.mEntries.push_back(entry);
-        }
-
-        BinaryStream stream;
-        components.writeWithHeader(stream, context);
-        cached = stream.getBuffer();
-    }
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
+                BinaryStream stream;
+                components.writeWithHeader(stream, context);
+                return stream.getBuffer();
+            });
 }
 
 void LoginHandler::sendActorIdentifiers(ServerNetworkHandler &owner, ServerPlayer &player) {
-    AvailableActorIdentifiersPacket identifiers;
-    identifiers.mIdentifiers = Tag::ofCompound();
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::ActorIdentifiers,
+                          [](const PacketCodecContext &context) {
+                              AvailableActorIdentifiersPacket identifiers;
+                              identifiers.mIdentifiers = Tag::ofCompound();
 
-    Tag idlist = Tag::ofList(Tag::Type::Compound);
-    int32_t rid = 1;
+                              Tag idlist = Tag::ofList(Tag::Type::Compound);
+                              int32_t rid = 1;
 
-    const char *const *vanillaIds = VanillaActorTable::getIdentifiers();
-    for (size_t index = 0; index < VanillaActorTable::getCount(); ++index) {
-        Tag entry = Tag::ofCompound();
-        entry.putString("bid", "");
-        entry.putByte("hasspawnegg", 0);
-        entry.putString("id", vanillaIds[index]);
-        entry.putInt("rid", rid++);
-        entry.putByte("summonable", 1);
-        entry.putByte("experimental", 0);
-        idlist.addToList(entry);
-    }
+                              const char *const *vanillaIds = VanillaActorTable::getIdentifiers();
+                              for (size_t index = 0; index < VanillaActorTable::getCount(); ++index) {
+                                  Tag entry = Tag::ofCompound();
+                                  entry.putString("bid", "");
+                                  entry.putByte("hasspawnegg", 0);
+                                  entry.putString("id", vanillaIds[index]);
+                                  entry.putInt("rid", rid++);
+                                  entry.putByte("summonable", 1);
+                                  entry.putByte("experimental", 0);
+                                  idlist.addToList(entry);
+                              }
 
-    for (const CustomActorDefinition &actor: CustomContentRegistry::getInstance().getActors()) {
-        Tag entry = Tag::ofCompound();
-        entry.putString("bid", "");
-        entry.putByte("hasspawnegg", actor.mIsSpawnable ? 1 : 0);
-        entry.putString("id", actor.mIdentifier);
-        entry.putInt("rid", rid++);
-        entry.putByte("summonable", actor.mIsSummonable ? 1 : 0);
-        entry.putByte("experimental", actor.mIsExperimental ? 1 : 0);
-        idlist.addToList(entry);
-    }
-    identifiers.mIdentifiers.put("idlist", idlist);
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), identifiers, owner.getCodecContext());
+                              for (const CustomActorDefinition &actor:
+                                   CustomContentRegistry::getInstance().getActors()) {
+                                  Tag entry = Tag::ofCompound();
+                                  entry.putString("bid", "");
+                                  entry.putByte("hasspawnegg", actor.mIsSpawnable ? 1 : 0);
+                                  entry.putString("id", actor.mIdentifier);
+                                  entry.putInt("rid", rid++);
+                                  entry.putByte("summonable", actor.mIsSummonable ? 1 : 0);
+                                  entry.putByte("experimental", actor.mIsExperimental ? 1 : 0);
+                                  idlist.addToList(entry);
+                              }
+                              identifiers.mIdentifiers.put("idlist", idlist);
+                              return encodePacket(identifiers, context);
+                          });
 
     const CustomContentRegistry &custom = CustomContentRegistry::getInstance();
     for (const auto &entry: EntityDefinitions::getAllProperties()) {
@@ -732,8 +952,11 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
     std::vector<ItemStack> &recipeOutputs = owner.getRecipeOutputsMutable();
     std::vector<uint32_t> &recipeSourceIndices = owner.getRecipeSourceIndicesMutable();
 
+    const std::unordered_set<std::string> &disabled = CustomContentRegistry::getInstance().getDisabledRecipes();
     for (size_t index = 0; index < CraftingRecipeTable::getRecipeCount(); ++index) {
         const CraftingRecipeData &source = recipes[index];
+        if (!disabled.empty() && disabled.count(source.mRecipeId) != 0)
+            continue;
 
         CraftingRecipeEntry entry;
         entry.mWidth = source.mWidth;
@@ -773,7 +996,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             RecipeOutputEntry parsedOutput;
             parsedOutput.mRuntimeId = networkEntry->mNetworkId;
             parsedOutput.mCount = output.mCount;
-            parsedOutput.mMeta = 0;
+            parsedOutput.mMeta = output.mDamage;
+            parsedOutput.mTag = output.mTag;
             parsedOutput.mIsShield = std::string(output.mItemId) == "minecraft:shield";
             const auto blockDefinition = owner.getBlockDefinitions().getDefinition(output.mItemId);
             parsedOutput.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
@@ -783,12 +1007,16 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
                 resolvedOutput.mDefinition = owner.getItemDefinitions().getDefinition(output.mItemId);
                 resolvedOutput.mBlockDefinition = owner.getBlockDefinitions().getDefinition(output.mItemId);
                 resolvedOutput.mCount = output.mCount;
+                resolvedOutput.mDamage = output.mDamage;
+                resolvedOutput.mTag = output.mTag;
             }
         }
 
         if (entry.mOutputs.empty())
             continue;
 
+        addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                     CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
         if (source.mWidth > 0)
             cached.mShapedRecipes.push_back(entry);
         else
@@ -839,6 +1067,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
         parsedOutput.mBlockRuntimeId = outputBlock == nullptr ? 0 : outputBlock->getRuntimeId();
         entry.mOutputs.push_back(parsedOutput);
 
+        static const RecipeUnlockRequirement ALWAYS{RecipeUnlockRequirement::Context::AlwaysUnlocked, {}};
+        addUnlocking(owner, entry, recipe.mIdentifier, &ALWAYS);
         if (recipe.mShaped)
             cached.mShapedRecipes.push_back(entry);
         else
@@ -859,6 +1089,8 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
     for (const char *blockName: furnaceBlocks) {
         for (size_t index = 0; index < CraftingRecipeTable::getFurnaceRecipeCount(); ++index) {
             const FurnaceRecipeData &source = furnaceRecipes[index];
+            if (std::string(source.mBlockName) != blockName)
+                continue;
             const ItemNetworkIdEntry *inputNetwork = ItemNetworkIdTable::find(source.mInputItemId);
             const ItemNetworkIdEntry *outputNetwork = ItemNetworkIdTable::find(source.mOutputItemId);
             if (inputNetwork == nullptr || outputNetwork == nullptr) {
@@ -890,7 +1122,67 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
             output.mIsShield = std::string(source.mOutputItemId) == "minecraft:shield";
             entry.mOutputs.push_back(output);
             owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+            addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                         CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
             cached.mShapelessRecipes.push_back(std::move(entry));
+        }
+    }
+
+    // the cartography table crafts through the game's multi recipes, which the client finds by uuid
+    const char *const cartographyRecipes[] = {CartographyRecipes::CLONING_UUID, CartographyRecipes::EXTENDING_UUID,
+                                              CartographyRecipes::LOCKING_UUID, CartographyRecipes::UPGRADING_UUID};
+    for (const char *uuid: cartographyRecipes) {
+        MultiRecipeEntry multi;
+        multi.mUuid = Uuid::fromString(uuid);
+        multi.mRecipeNetId = furnaceRecipeNetId++;
+        cached.mMultiRecipes.push_back(multi);
+    }
+
+    // after every other recipe: their network ids stay put
+    const StonecutterRecipeData *stonecutterRecipes = CraftingRecipeTable::getStonecutterRecipes();
+    std::unordered_map<int32_t, uint32_t> &stonecutterIndices = owner.getStonecutterRecipeIndicesMutable();
+    for (size_t index = 0; index < CraftingRecipeTable::getStonecutterRecipeCount(); ++index) {
+        const StonecutterRecipeData &source = stonecutterRecipes[index];
+        const ItemNetworkIdEntry *outputNetwork = ItemNetworkIdTable::find(source.mOutputItemId);
+        if (outputNetwork == nullptr)
+            continue;
+
+        CraftingRecipeEntry entry;
+        entry.mRecipeNetId = furnaceRecipeNetId++;
+        entry.mRecipeId = packRecipeId((uint32_t) entry.mRecipeNetId);
+        entry.mUuid = Uuid::fromString(source.mUuid);
+        entry.mBlockName = "stonecutter";
+        entry.mPriority = source.mPriority;
+
+        RecipeIngredientEntry input;
+        input.mHasItem = true;
+        input.mItemId = source.mInputItemId;
+        input.mAuxValue = source.mInputAuxValue < 0 ? 0x7fff : source.mInputAuxValue;
+        input.mCount = 1;
+        entry.mInputs.push_back(std::move(input));
+
+        RecipeOutputEntry output;
+        output.mRuntimeId = outputNetwork->mNetworkId;
+        output.mCount = source.mOutputCount;
+        const auto blockDefinition = owner.getBlockDefinitions().getDefinition(source.mOutputItemId);
+        output.mBlockRuntimeId = blockDefinition == nullptr ? 0 : blockDefinition->getRuntimeId();
+        entry.mOutputs.push_back(output);
+
+        owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = source.mRecipeId;
+        addUnlocking(owner, entry, CraftingRecipeTable::baseRecipeId(source.mRecipeId),
+                     CraftingRecipeTable::getUnlockRequirement(source.mRecipeId));
+        stonecutterIndices[entry.mRecipeNetId] = (uint32_t) index;
+        cached.mShapelessRecipes.push_back(std::move(entry));
+    }
+
+    for (const bool trim: {false, true}) {
+        auto &target = trim ? cached.mSmithingTrimRecipes : cached.mSmithingTransformRecipes;
+        for (SmithingRecipeEntry entry: CraftingRecipeTable::getSmithingRecipes(trim)) {
+            if (disabled.contains(entry.mRecipeId))
+                continue;
+            entry.mRecipeNetId = furnaceRecipeNetId++;
+            owner.getVanillaRecipeIdsMutable()[entry.mRecipeNetId] = entry.mRecipeId;
+            target.push_back(std::move(entry));
         }
     }
 
@@ -898,33 +1190,36 @@ void LoginHandler::buildCraftingData(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCraftingData(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-    std::string &cached = owner.getCraftingDataBytes(context.getCodec().getProtocolVersion());
+    sendSharedLoginPacket(
+            owner, player, ServerNetworkHandler::SharedLoginPacket::CraftingData,
+            [&owner](const PacketCodecContext &context) {
+                buildCraftingData(owner);
 
-    if (cached.empty()) {
-        buildCraftingData(owner);
+                const int protocol = context.getCodec().getProtocolVersion();
+                const std::unordered_map<int32_t, std::string> &vanillaIds = owner.getVanillaRecipeIdsMutable();
+                auto unknown = [&](const CraftingRecipeEntry &recipe) {
+                    const auto it = vanillaIds.find(recipe.mRecipeNetId);
+                    return it != vanillaIds.end() && !CraftingRecipeTable::isKnownBy(it->second, protocol);
+                };
 
-        const int protocol = context.getCodec().getProtocolVersion();
-        const std::unordered_map<int32_t, std::string> &vanillaIds = owner.getVanillaRecipeIdsMutable();
-        auto unknown = [&](const CraftingRecipeEntry &recipe) {
-            const auto it = vanillaIds.find(recipe.mRecipeNetId);
-            return it != vanillaIds.end() && !CraftingRecipeTable::isKnownBy(it->second, protocol);
-        };
+                CraftingDataPacket crafting = owner.getCachedCraftingData();
+                crafting.mShapedRecipes.erase(
+                        std::remove_if(crafting.mShapedRecipes.begin(), crafting.mShapedRecipes.end(), unknown),
+                        crafting.mShapedRecipes.end());
+                crafting.mShapelessRecipes.erase(
+                        std::remove_if(crafting.mShapelessRecipes.begin(), crafting.mShapelessRecipes.end(), unknown),
+                        crafting.mShapelessRecipes.end());
 
-        CraftingDataPacket crafting = owner.getCachedCraftingData();
-        crafting.mShapedRecipes.erase(std::remove_if(crafting.mShapedRecipes.begin(),
-                                                     crafting.mShapedRecipes.end(), unknown),
-                                      crafting.mShapedRecipes.end());
-        crafting.mShapelessRecipes.erase(std::remove_if(crafting.mShapelessRecipes.begin(),
-                                                        crafting.mShapelessRecipes.end(), unknown),
-                                         crafting.mShapelessRecipes.end());
+                const auto unknownSmithing = [&](const SmithingRecipeEntry &recipe) {
+                    return !CraftingRecipeTable::isKnownBy(recipe.mRecipeId, protocol);
+                };
+                std::erase_if(crafting.mSmithingTransformRecipes, unknownSmithing);
+                std::erase_if(crafting.mSmithingTrimRecipes, unknownSmithing);
 
-        BinaryStream stream;
-        crafting.writeWithHeader(stream, context);
-        cached = stream.getBuffer();
-    }
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
+                BinaryStream stream;
+                crafting.writeWithHeader(stream, context);
+                return stream.getBuffer();
+            });
 }
 
 namespace {
@@ -1082,61 +1377,67 @@ void LoginHandler::buildCreativeContent(ServerNetworkHandler &owner) {
 }
 
 void LoginHandler::sendCreativeContent(ServerNetworkHandler &owner, ServerPlayer &player) {
-    const PacketCodecContext &context = owner.getCodecContext(player.getNetworkIdentifier());
-    std::string &cached = owner.getCreativeContentBytes(context.getCodec().getProtocolVersion());
+    sendSharedLoginPacket(owner, player, ServerNetworkHandler::SharedLoginPacket::CreativeContent,
+                          [&owner](const PacketCodecContext &context) {
+                              buildCreativeContent(owner);
 
-    if (cached.empty()) {
-        buildCreativeContent(owner);
+                              const int protocol = context.getCodec().getProtocolVersion();
+                              const std::vector<CreativeItemData> &items = owner.getCreativeItemsMutable();
+                              const std::vector<int32_t> &sources = owner.getCreativeSourceIndicesMutable();
+                              const std::vector<CreativeItemGroup> &groups = owner.getCreativeGroups();
 
-        const int protocol = context.getCodec().getProtocolVersion();
-        const std::vector<CreativeItemData> &items = owner.getCreativeItemsMutable();
-        const std::vector<int32_t> &sources = owner.getCreativeSourceIndicesMutable();
-        const std::vector<CreativeItemGroup> &groups = owner.getCreativeGroups();
+                              CreativeContentPacket creative;
+                              std::vector<bool> groupUsed(groups.size(), false);
+                              for (size_t index = 0; index < items.size(); ++index) {
+                                  if (sources[index] >= 0
+                                      && !CreativeContentTable::isKnownBy((size_t) sources[index], protocol))
+                                      continue;
 
-        CreativeContentPacket creative;
-        std::vector<bool> groupUsed(groups.size(), false);
-        for (size_t index = 0; index < items.size(); ++index) {
-            if (sources[index] >= 0 && !CreativeContentTable::isKnownBy((size_t) sources[index], protocol))
-                continue;
+                                  creative.mItems.push_back(items[index]);
+                                  if (items[index].mGroupIndex >= 0)
+                                      groupUsed[items[index].mGroupIndex] = true;
+                              }
 
-            creative.mItems.push_back(items[index]);
-            if (items[index].mGroupIndex >= 0)
-                groupUsed[items[index].mGroupIndex] = true;
-        }
+                              std::vector<int32_t> groupRemap(groups.size(), -1);
+                              for (size_t index = 0; index < groups.size(); ++index) {
+                                  if (!groupUsed[index])
+                                      continue;
 
-        std::vector<int32_t> groupRemap(groups.size(), -1);
-        for (size_t index = 0; index < groups.size(); ++index) {
-            if (!groupUsed[index])
-                continue;
+                                  groupRemap[index] = (int32_t) creative.mGroups.size();
+                                  creative.mGroups.push_back(groups[index]);
+                              }
 
-            groupRemap[index] = (int32_t) creative.mGroups.size();
-            creative.mGroups.push_back(groups[index]);
-        }
+                              for (CreativeItemData &item: creative.mItems) {
+                                  if (item.mGroupIndex >= 0)
+                                      item.mGroupIndex = groupRemap[item.mGroupIndex];
+                              }
 
-        for (CreativeItemData &item: creative.mItems) {
-            if (item.mGroupIndex >= 0)
-                item.mGroupIndex = groupRemap[item.mGroupIndex];
-        }
-
-        BinaryStream stream;
-        creative.writeWithHeader(stream, context);
-        cached = stream.getBuffer();
-    }
-
-    owner.getNetworkHandler().send(player.getNetworkIdentifier(), cached);
+                              BinaryStream stream;
+                              creative.writeWithHeader(stream, context);
+                              return stream.getBuffer();
+                          });
 }
 
 void LoginHandler::sendAvailableCommands(ServerNetworkHandler &owner, ServerPlayer &player) {
     AvailableCommandsPacket availableCommands;
 
     for (Command *command: owner.getCommands().getCommands()) {
-        if ((int) player.getCommandPermission() < (int) command->getRequiredPermission())
+        const auto group = owner.getPluginManager().getPermissions().commandPermission(player, *command);
+        if (!group.value_or(player.getCommandPermission() >= command->getRequiredPermission()))
             continue;
 
         CommandData data;
         data.mName = command->getName();
         data.mDescription = command->getDescription();
-        data.mPermission = command->getRequiredPermission();
+        data.mPermission = group == true ? CommandPermission::Any : command->getRequiredPermission();
+        // <name>CommandAliases, the name then its aliases
+        if (!command->getAliases().empty()) {
+            data.mHasAliases = true;
+            data.mAliases.mName = command->getName() + "CommandAliases";
+            data.mAliases.mValues.push_back(command->getName());
+            for (const std::string &alias: command->getAliases())
+                data.mAliases.mValues.push_back(alias);
+        }
 
         data.mOverloads = command->getOverloads();
 
@@ -1158,39 +1459,38 @@ void LoginHandler::sendAttributes(ServerNetworkHandler &owner, ServerPlayer &pla
 }
 
 void LoginHandler::addToPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {
-    PlayerListPacket::Entry newEntry(listUuidFor(player));
-    newEntry.mActorId = player.getUniqueId();
-    newEntry.mName = player.getName();
-    newEntry.mXuid = player.getXuid();
-    newEntry.mPlayFabId = player.getPlayFabId();
-    newEntry.mSkin = player.getSkin();
-    newEntry.mBuildPlatform = player.getBuildPlatform();
+    // an entry carries a skin: encoded once a player, not once a pair of players
+    const auto entryOf = [&owner](ServerPlayer &listed, const NetworkIdentifier &recipient) {
+        const PacketCodecContext &context = owner.getCodecContext(recipient);
+        std::shared_ptr<const SharedPacket> &cached =
+                listed.getListEntryPacket(context.getCodec().getProtocolVersion());
+        if (cached == nullptr) {
+            PlayerListPacket::Entry entry(listUuidFor(listed));
+            entry.mActorId = listed.getUniqueId();
+            entry.mName = listed.getName();
+            entry.mXuid = listed.getXuid();
+            entry.mPlayFabId = listed.getPlayFabId();
+            entry.mSkin = listed.getSkin();
+            entry.mBuildPlatform = listed.getBuildPlatform();
 
-    PlayerListPacket announce;
-    announce.mEntries.push_back(newEntry);
+            PlayerListPacket packet;
+            packet.mEntries.push_back(std::move(entry));
+            cached = std::make_shared<const SharedPacket>(encodePacket(packet, context));
+        }
+        return cached;
+    };
 
-    PlayerListPacket existing;
-
+    // name, platform and identifiers are final by now: what an earlier login of this session cached is stale
+    player.clearListEntryPackets();
     for (auto &entry: owner.getPlayers()) {
-        if (!entry.second.isSpawned() && &entry.second != &player)
+        ServerPlayer &other = entry.second;
+        if (!other.isSpawned() && &other != &player)
             continue;
 
-        owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), announce, owner.getCodecContext());
-
-        if (&entry.second != &player) {
-            PlayerListPacket::Entry existingEntry(listUuidFor(entry.second));
-            existingEntry.mActorId = entry.second.getUniqueId();
-            existingEntry.mName = entry.second.getName();
-            existingEntry.mXuid = entry.second.getXuid();
-            existingEntry.mPlayFabId = entry.second.getPlayFabId();
-            existingEntry.mSkin = entry.second.getSkin();
-            existingEntry.mBuildPlatform = entry.second.getBuildPlatform();
-            existing.mEntries.push_back(existingEntry);
-        }
+        owner.getNetworkHandler().sendShared(other.getNetworkIdentifier(), entryOf(player, other.getNetworkIdentifier()));
+        if (&other != &player)
+            owner.getNetworkHandler().sendShared(player.getNetworkIdentifier(), entryOf(other, player.getNetworkIdentifier()));
     }
-
-    if (!existing.mEntries.empty())
-        owner.getNetworkHandler().send(player.getNetworkIdentifier(), existing, owner.getCodecContext());
 }
 
 void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -1208,6 +1508,7 @@ void LoginHandler::removeFromPlayerList(ServerNetworkHandler &owner, ServerPlaye
 
 void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner, ServerPlayer &player) {
     player.setLoginState(ServerPlayer::LoginState::Spawned);
+    player.markActive(owner.getCurrentTick());
     player.grantSpawnInvulnerability();
     BonusChest::placeIfPending(owner, owner.getWorldFor(player).getOverworld());
     LOG_INFO(LogAreaID::Server, "Player %s spawned", player.getName().c_str());
@@ -1218,10 +1519,13 @@ void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner
     player.syncEffects();
 
     owner._sendInventory(player);
-    owner._sendHealth(player);
+    owner._sendAttributes(player);
     ItemActorHandler::sendItemActorsTo(owner, player);
     owner.sendActorsTo(player);
     owner.sendWeatherTo(player);
+    // the fog the player kept from /fog before it left
+    if (!player.getFogStack().empty())
+        FogStack::send(owner, player);
 
     owner.broadcastTranslation("multiplayer.player.joined", {player.getName()});
 }
@@ -1230,13 +1534,15 @@ void LoginHandler::checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &
     if (player.hasSpawnChunksReady())
         return;
 
-    if (player.getSentChunkCount() < SPAWN_CHUNK_THRESHOLD)
+    if (player.getSentChunkCount() < ChunkStreamHandler::SPAWN_CHUNK_COUNT)
         return;
 
     player.setSpawnChunksReady(true);
 
+    // before the spawn status: the client starts at full health, and a lower value once it plays reads as a hit
+    owner._sendHealth(player);
+
     PlayStatusPacket spawn;
     spawn.mStatus = PlayStatusPacket::Status::PlayerSpawn;
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), spawn, owner.getCodecContext());
-
 }

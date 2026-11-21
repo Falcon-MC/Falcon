@@ -1,12 +1,19 @@
 #include "World/Actor/Projectile/ProjectileActor.h"
 
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/Hostile/BlazeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Systems/LiquidBlocksFetch.h"
+#include "World/Level/Explosion.h"
+#include "World/Level/Level.h"
+#include "Server/PropertiesSettings.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +23,7 @@ namespace {
     const float SNOWBALL_KNOCKBACK = 0.3f;
     const float SNOWBALL_BLAZE_DAMAGE = 3.0f;
     const char *SNOWBALL_PARTICLE = "minecraft:snowballpoof";
-    // Bedrock v2225 registers ICE_BALL_BREAK as particle type 105.
+    // ICE_BALL_BREAK is particle type 105 (v2225)
     const int32_t ICE_BALL_BREAK_PARTICLE_EVENT = 0x4000 | 105;
     const float EGG_KNOCKBACK = 0.2f;
     const int32_t EGG_HATCH_CHANCE = 8;
@@ -41,12 +48,7 @@ namespace {
     const float SPLASH_POTION_MIN_SCALE = 0.25f;
     const char *SPLASH_POTION_PARTICLE = "minecraft:splash_spell_emitter";
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
     void knockBackFrom(ServerNetworkHandler &owner, Actor &target, const Vector3f &hitPosition, float force) {
         const Vector3f position = target.getPosition();
@@ -123,10 +125,13 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
     const int64_t ownerId = getOwnerUniqueId();
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &shooter = entry.second;
-        if ((int64_t) shooter.getRuntimeId() != ownerId)
+        if (shooter.getUniqueId() != ownerId)
             continue;
 
-        shooter.teleport(owner, hitPosition, MovePlayerTeleportationCause::Behavior);
+        Vector3f destination = hitPosition;
+        if (!PluginEvents::teleport(shooter, destination, "ender_pearl"))
+            break;
+        shooter.teleport(owner, destination, MovePlayerTeleportationCause::Behavior);
         owner.hurt(shooter, ENDER_PEARL_DAMAGE,
                    ActorDamageSource::environment(ENDER_PEARL_DEATH_MESSAGE, shooter.getName())
                            .withoutArmor()
@@ -222,5 +227,157 @@ bool LingeringPotionActor::onHit(ServerNetworkHandler &owner, const Vector3f &hi
     (void) hitPlayer;
 
     owner.spawnLingeringCloud(owner.getLevelFor(*this), hitPosition, getPotionId());
+    return true;
+}
+
+namespace {
+    const int32_t DRAGON_BREATH_POTION = 23;
+    const int32_t DRAGON_BREATH_PARTICLE = 49;
+    const float DRAGON_BREATH_RADIUS = 6.0f;
+    const int32_t DRAGON_BREATH_DURATION = 120;
+    const int32_t DRAGON_BREATH_REAPPLICATION_DELAY = 20;
+}
+
+void DragonFireballActor::_burst(ServerNetworkHandler &owner, const Vector3f &hitPosition) {
+    Level &level = owner.getLevelFor(*this);
+    owner.playLevelSound(level, LevelSoundEvent::EXPLODE, hitPosition);
+
+    ServerNetworkHandler::AreaEffectCloudSettings settings;
+    settings.mPotionId = DRAGON_BREATH_POTION;
+    settings.mRadius = DRAGON_BREATH_RADIUS;
+    settings.mDuration = DRAGON_BREATH_DURATION;
+    settings.mReapplicationDelay = DRAGON_BREATH_REAPPLICATION_DELAY;
+    settings.mParticle = DRAGON_BREATH_PARTICLE;
+    settings.mOwnerUniqueId = getOwnerUniqueId();
+    owner.spawnAreaEffectCloud(level, hitPosition, settings);
+}
+
+bool DragonFireballActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
+    (void) hitPlayer;
+
+    _burst(owner, hitPosition);
+    return true;
+}
+
+bool DragonFireballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
+    (void) hitActor;
+
+    _burst(owner, hitPosition);
+    return true;
+}
+
+namespace {
+    const float SKULL_DEFAULT_EXPLOSION_POWER = 3.0f;
+
+    const json::Value *skullProjectile(const std::string &identifier) {
+        const json::Value *definition = EntityDefinitions::find(identifier);
+        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+        return components == nullptr ? nullptr : components->get("minecraft:projectile");
+    }
+
+    bool skullFlag(const json::Value *component, const char *key, bool fallback) {
+        const json::Value *value = component == nullptr ? nullptr : component->get(key);
+        return value == nullptr ? fallback : value->boolean(fallback);
+    }
+
+    // the minecraft:explode of the groups the on_hit definition_event adds
+    const json::Value *skullExplode(const std::string &identifier) {
+        const json::Value *definition = EntityDefinitions::find(identifier);
+        const json::Value *projectile = skullProjectile(identifier);
+        const json::Value *onHit = projectile == nullptr ? nullptr : projectile->get("on_hit");
+        const json::Value *definitionEvent = onHit == nullptr ? nullptr : onHit->get("definition_event");
+        const json::Value *trigger = definitionEvent == nullptr ? nullptr : definitionEvent->get("event_trigger");
+        const json::Value *eventName = trigger == nullptr ? nullptr : trigger->get("event");
+        const json::Value *events = definition == nullptr ? nullptr : definition->get("events");
+        const json::Value *groups = definition == nullptr ? nullptr : definition->get("component_groups");
+        if (eventName == nullptr || events == nullptr || groups == nullptr)
+            return nullptr;
+
+        const json::Value *event = events->get(eventName->string());
+        const json::Value *add = event == nullptr ? nullptr : event->get("add");
+        const json::Value *names = add == nullptr ? nullptr : add->get("component_groups");
+        if (names == nullptr || !names->isArray())
+            return nullptr;
+
+        for (const std::unique_ptr<json::Value> &name: names->mArray) {
+            const json::Value *group = groups->get(name->string());
+            const json::Value *explode = group == nullptr ? nullptr : group->get("minecraft:explode");
+            if (explode != nullptr)
+                return explode;
+        }
+        return nullptr;
+    }
+}
+
+WitherSkullActor::WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size)
+        : ThrownProjectileActor(runtimeId, identifier, size) {
+    mDangerous = skullFlag(skullProjectile(identifier), "is_dangerous", false);
+}
+
+void WitherSkullActor::_applyEffects(ServerNetworkHandler &owner, Actor &target) const {
+    const json::Value *projectile = skullProjectile(getIdentifier());
+    const json::Value *onHit = projectile == nullptr ? nullptr : projectile->get("on_hit");
+    const json::Value *mobEffect = onHit == nullptr ? nullptr : onHit->get("mob_effect");
+    const json::Value *effects = mobEffect == nullptr ? nullptr : mobEffect->get("effects");
+    if (effects == nullptr || !effects->isArray())
+        return;
+
+    const Difficulty difficulty = owner.getProperties().getDifficulty();
+    const char *durationKey = difficulty == Difficulty::Hard     ? "durationhard"
+                              : difficulty == Difficulty::Normal ? "durationnormal"
+                                                                 : "durationeasy";
+    for (const std::unique_ptr<json::Value> &entry: effects->mArray) {
+        const json::Value *name = entry->get("effect");
+        MobEffectInstance instance;
+        if (name == nullptr || !parseDefinitionMobEffect(name->string(), instance.mId))
+            continue;
+
+        const json::Value *duration = entry->get(durationKey);
+        if (duration == nullptr)
+            duration = entry->get("duration");
+        const json::Value *amplifier = entry->get("amplifier");
+        instance.mDuration = duration == nullptr ? 0 : duration->integer(0);
+        instance.mAmplifier = amplifier == nullptr ? 0 : amplifier->integer(0);
+        owner.addEffect(target, instance);
+    }
+}
+
+void WitherSkullActor::tickAfterHit(ServerNetworkHandler &owner) {
+    const json::Value *explode = skullExplode(getIdentifier());
+    if (explode == nullptr)
+        return;
+
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f hitPosition = getPosition();
+    const json::Value *power = explode->get("power");
+    Explosion explosion(owner, level, hitPosition,
+                        power == nullptr ? SKULL_DEFAULT_EXPLOSION_POWER
+                                         : power->number(SKULL_DEFAULT_EXPLOSION_POWER),
+                        this, false);
+    explosion.setIncendiary(skullFlag(explode, "causes_fire", false));
+
+    const bool griefing = !skullFlag(explode, "destroy_affected_by_griefing", false)
+                          || level.getGameRules().getBool("mobgriefing");
+    // allow_underwater off: under water the blast leaves the blocks
+    const bool underwater = LiquidBlocksFetch::at(level, hitPosition).water;
+    if (skullFlag(explode, "breaks_blocks", true) && griefing
+        && (!underwater || skullFlag(explode, "allow_underwater", false)))
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
+}
+
+bool WitherSkullActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
+    if (hitPlayer != nullptr)
+        _applyEffects(owner, *hitPlayer);
+    if (skullExplode(getIdentifier()) != nullptr)
+        holdAfterHit(hitPosition);
+    return true;
+}
+
+bool WitherSkullActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
+    _applyEffects(owner, hitActor);
+    if (skullExplode(getIdentifier()) != nullptr)
+        holdAfterHit(hitPosition);
     return true;
 }

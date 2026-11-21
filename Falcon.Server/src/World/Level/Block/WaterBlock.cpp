@@ -1,15 +1,25 @@
 #include "World/Level/Block/WaterBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(WaterBlock, 324);
 
 bool WaterBlock::matches(const std::string &identifier) {
-    return identifier == "minecraft:water" || identifier == "minecraft:flowing_water";
+    return identifier == BlockNames::WATER || identifier == "minecraft:flowing_water";
+}
+
+bool WaterBlock::isDynamic(const std::string &identifier) {
+    return identifier == "minecraft:flowing_water";
 }
 
 bool WaterBlock::isSource(const BlockState &state) {
     return matches(state.mName) && state.mStates.getInt("liquid_depth", 0) == 0;
+}
+
+int32_t WaterBlock::getTickDelay(DimensionType dimension) const {
+    (void) dimension;
+    return 5;
 }
 
 BlockState WaterBlock::source() {

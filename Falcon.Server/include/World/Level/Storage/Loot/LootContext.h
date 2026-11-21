@@ -9,8 +9,7 @@
 #include <vector>
 
 struct LootContext {
-    explicit LootContext(std::mt19937 &random) : mRandom(random) {
-    }
+    explicit LootContext(std::mt19937 &random) : mRandom(random) {}
 
     std::mt19937 &mRandom;
     int32_t mLootingLevel = 0;

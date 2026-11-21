@@ -1,13 +1,16 @@
 #include "World/Level/Block/SnowLayerBlock.h"
 
+#include "World/Actor/Actor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
-
-FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
-
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
+
+#include <algorithm>
+
+FALCON_REGISTER_BLOCK(SnowLayerBlock, 340);
 
 using namespace PlacementHelpers;
 
@@ -23,6 +26,16 @@ bool SnowLayerBlock::matches(const std::string &identifier) {
 
 bool SnowLayerBlock::canBeReplaced(const BlockState &state) const {
     return state.mStates.getInt(SNOW_LAYER_HEIGHT, 0) < SNOW_LAYER_MAX_HEIGHT;
+}
+
+// one layer below its look, a single layer is walked through
+bool SnowLayerBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    int eighths = std::min(SNOW_LAYER_MAX_HEIGHT, std::max(0, state.mStates.getInt(SNOW_LAYER_HEIGHT, 0)));
+    if (actor != nullptr && actor->collidesAtSnowLayerLook())
+        eighths++;
+
+    shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, (float) eighths / 8.0f, 1.0f);
+    return true;
 }
 
 PlacementMergeResult SnowLayerBlock::mergePlacement(Level &level, const Vector3i &clickedPosition, int blockFace,
@@ -57,5 +70,5 @@ void SnowLayerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, con
     (void) state;
 
     if (RandomTickSystem::getBlockLight(level, position) >= SNOW_MELT_LIGHT_LEVEL)
-        BlockChangeSystem::change(level, position, BlockState("minecraft:air"), BlockChangeCause::Fade, true);
+        BlockChangeSystem::change(level, position, BlockState(BlockNames::AIR), BlockChangeCause::Fade, true);
 }

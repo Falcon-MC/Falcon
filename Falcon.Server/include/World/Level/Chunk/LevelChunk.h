@@ -1,5 +1,7 @@
 #pragma once
 
+#include "World/Level/Chunk/ChunkStructureBounds.h"
+#include "World/Level/Chunk/LightStorage.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Chunk/SubChunk.h"
 
@@ -9,11 +11,23 @@
 #include <unordered_map>
 #include <vector>
 
-/**
- * One 16x16 column of sub-chunks with its light, heightmap and biomes. Encoded network
- * forms are cached per sub-chunk and invalidated by block changes. Owned by the main
- * thread once resident; workers only ever see copies.
- */
+// fresh on construction and on every copy: a copy can diverge from its source
+struct LevelChunkInstance {
+    LevelChunkInstance() : mId(next()) {}
+
+    LevelChunkInstance(const LevelChunkInstance &) : mId(next()) {}
+
+    LevelChunkInstance &operator=(const LevelChunkInstance &) {
+        mId = next();
+        return *this;
+    }
+
+    static uint64_t next();
+
+    uint64_t mId;
+};
+
+// main thread once resident; workers only see copies; network encodings cached per sub-chunk
 class LevelChunk {
 public:
     static constexpr int SUB_CHUNK_COUNT = 24;
@@ -24,19 +38,47 @@ public:
 
     LevelChunk(int32_t x, int32_t z);
 
-    int32_t getX() const { return mX; }
+    int32_t getX() const {
+        return mX;
+    }
 
-    int32_t getZ() const { return mZ; }
+    int32_t getZ() const {
+        return mZ;
+    }
 
-    bool isDirty() const { return mDirty; }
+    bool isDirty() const {
+        return mDirty;
+    }
 
-    void clearDirty() { mDirty = false; }
+    void clearDirty() {
+        mDirty = false;
+    }
 
-    void markDirty() { mDirty = true; }
+    void markDirty() {
+        mDirty = true;
+    }
 
-    bool isPopulated() const { return mPopulated; }
+    bool isPopulated() const {
+        return mPopulated;
+    }
 
-    void setPopulated(bool populated) { mPopulated = populated; }
+    void setPopulated(bool populated) {
+        mPopulated = populated;
+    }
+
+    // in memory only, this session's TerrainCache order: see decorationHolds
+    uint64_t getDecorationSequence() const {
+        return mDecorationSequence;
+    }
+
+    uint64_t getBaseSequence() const {
+        return mBaseSequence;
+    }
+
+    void setDecorationSequence(uint64_t base, uint64_t own) {
+        mBaseSequence = base;
+        mDecorationSequence = own;
+    }
 
     const BlockState &getBlock(int x, int32_t y, int z) const;
 
@@ -50,9 +92,13 @@ public:
 
     void setBiome(uint32_t biomeId);
 
-    uint32_t getBiome() const { return mBiomeId; }
+    uint32_t getBiome() const {
+        return mBiomeId;
+    }
 
     void setBiomeAt(int x, int32_t y, int z, uint32_t biomeId);
+
+    void fillSubChunkBiome(int index, uint32_t biomeId);
 
     uint32_t getBiomeAt(int x, int32_t y, int z) const;
 
@@ -60,40 +106,50 @@ public:
 
     uint32_t getColumnBiome(int x, int z) const;
 
-    /**
-     * The chunk as a client sees it, with the block states translated by blockIds when it is set.
-     */
     std::string encodeNetwork(const BlockNetworkIdMap *blockIds = nullptr) const;
 
     const std::string &encodeNetworkAnchor() const;
 
     const std::string &encodeSubChunkNetwork(int index) const;
 
-    /**
-     * A section translated for clients of another version, cached per translation like the untranslated one.
-     * Main thread only: the cache is filled here and cleared by setBlock without a lock.
-     */
+    // cached per translation; main thread only: filled here, cleared by setBlock without a lock
     const std::string &encodeSubChunkNetwork(int index, const BlockNetworkIdMap &blockIds) const;
 
     const std::vector<int32_t> &getTopBlockHeights() const;
 
-    void buildNetworkCaches() const;
-
     void invalidateNetworkCaches();
+
+    // instance and revision together name one network encoding: a shared packet stays valid while both match
+    uint64_t getNetworkInstance() const {
+        return mInstance.mId;
+    }
+
+    uint32_t getNetworkRevision() const {
+        return mNetworkRevision;
+    }
 
     std::string encodeBiomes(int sectionCount) const;
 
-    std::string encodeBiomesPersistent(int sectionCount) const;
+    std::string encodeBiomesPersistent(int firstSection, int sectionCount) const;
 
-    bool readBiomesPersistent(ReadOnlyBinaryStream &stream, int sectionCount);
+    bool readBiomesPersistent(ReadOnlyBinaryStream &stream, int firstSection, int sectionCount);
 
     int getNetworkSubChunkCount() const;
 
-    SubChunk &getSubChunk(int index) { return mSubChunks[index]; }
+    // writes through it skip the network revision: only for chunks not resident yet, like a storage load
+    SubChunk &getSubChunk(int index) {
+        _ensureUnpacked();
+        return mSubChunks[index];
+    }
 
-    const SubChunk &getSubChunk(int index) const { return mSubChunks[index]; }
+    const SubChunk &getSubChunk(int index) const {
+        _ensureUnpacked();
+        return mSubChunks[index];
+    }
 
-    static int subChunkIndexFor(int32_t y) { return (y - MIN_Y) >> 4; }
+    static int subChunkIndexFor(int32_t y) {
+        return (y - MIN_Y) >> 4;
+    }
 
     static const int32_t UNKNOWN_HEIGHT = -32768;
 
@@ -111,27 +167,100 @@ public:
 
     void setBlockLight(int x, int32_t y, int z, int value);
 
-    bool hasSkyLight() const { return !mSkyLight.empty(); }
+    bool hasSkyLight() const {
+        _ensureUnpacked();
+        return mSkyLight.isAllocated();
+    }
 
-    bool hasBlockLight() const { return !mBlockLight.empty(); }
+    bool hasBlockLight() const {
+        _ensureUnpacked();
+        return mBlockLight.isAllocated();
+    }
 
-    bool hasHeightmap() const { return !mHeightmap.empty(); }
+    bool hasHeightmap() const {
+        return !mHeightmap.empty();
+    }
 
     void clearSkyLight();
+
+    void compactLight();
+
+    void compactBiomes();
     void setDimension(DimensionType dimension);
 
-    DimensionType getDimension() const { return mDimension; }
+    DimensionType getDimension() const {
+        return mDimension;
+    }
 
-    int getFirstNetworkSubChunk() const { return mFirstNetworkSubChunk; }
+    int getFirstNetworkSubChunk() const {
+        return mFirstNetworkSubChunk;
+    }
+
+    // sections and light into one compressed buffer: most loaded chunks are only kept for viewers; any read
+    // or write unpacks it; main thread only, a copy stays packed
+    void pack();
+
+    bool isPacked() const {
+        return mPacked;
+    }
+
+    // read or written since the last call: the packer leaves busy chunks alone
+    bool consumeAccessed();
+
+    // the PendingTicks record (LevelDB tag '3') saved with the chunk; empty when no tick waits
+    const std::string &getPendingTicks() const {
+        return mPendingTicks;
+    }
+
+    void setPendingTicks(std::string record) {
+        mPendingTicks = std::move(record);
+    }
+
+    // the RandomTicks record (tag ':') of the second queue
+    const std::string &getRandomTicks() const {
+        return mRandomTicks;
+    }
+
+    void setRandomTicks(std::string record) {
+        mRandomTicks = std::move(record);
+    }
+
+    // the script named ticks (tag 'z'); empty when none waits
+    const std::string &getNamedTicks() const {
+        return mNamedTicks;
+    }
+
+    void setNamedTicks(std::string record) {
+        mNamedTicks = std::move(record);
+    }
+
+    // the structures post processed into the chunk (tag 'w'); written by the decoration that populates it
+    ChunkStructureBounds &getStructureBounds() {
+        return mStructureBounds;
+    }
+
+    const ChunkStructureBounds &getStructureBounds() const {
+        return mStructureBounds;
+    }
+
+    // saved by Falcon before data version 2: its flowing blocks are rewritten on load
+    bool needsLiquidMigration() const {
+        return mNeedsLiquidMigration;
+    }
+
+    void setNeedsLiquidMigration(bool needed) {
+        mNeedsLiquidMigration = needed;
+    }
 
 private:
-    static const size_t LIGHT_STORAGE_SIZE = (size_t) SUB_CHUNK_COUNT * 16 * 256 / 2;
+    void _ensureUnpacked() const {
+        mAccessed = true;
+        if (mPacked)
+            _unpack();
+    }
 
-    static int _lightIndex(int x, int32_t y, int z);
+    void _unpack() const;
 
-    static int _getNibble(const std::vector<uint8_t> &storage, int x, int32_t y, int z);
-
-    static void _setNibble(std::vector<uint8_t> &storage, int x, int32_t y, int z, int value);
     int32_t mX;
     int32_t mZ;
     uint32_t mBiomeId;
@@ -140,10 +269,21 @@ private:
     int mNetworkSubChunkLimit = SUB_CHUNK_COUNT;
     bool mDirty;
     bool mPopulated = false;
-    std::vector<SubChunk> mSubChunks;
+    std::string mPendingTicks;
+    std::string mRandomTicks;
+    std::string mNamedTicks;
+    ChunkStructureBounds mStructureBounds;
+    bool mNeedsLiquidMigration = false;
+    uint64_t mBaseSequence = 0;
+    uint64_t mDecorationSequence = 0;
+    // mutable: const reads unpack a packed chunk first
+    mutable std::vector<SubChunk> mSubChunks;
     std::vector<int16_t> mHeightmap;
-    std::vector<uint8_t> mSkyLight;
-    std::vector<uint8_t> mBlockLight;
+    mutable LightStorage mSkyLight;
+    mutable LightStorage mBlockLight;
+    mutable std::string mPackedData;
+    mutable bool mPacked = false;
+    mutable bool mAccessed = false;
     mutable std::vector<std::string> mSubChunkNetworkCache;
     mutable std::vector<uint8_t> mSubChunkNetworkValid;
     mutable std::unordered_map<const BlockNetworkIdMap *, std::vector<std::string>> mTranslatedSubChunkCache;
@@ -151,4 +291,6 @@ private:
     mutable std::string mNetworkAnchorCache;
     mutable bool mTopHeightsValid = false;
     mutable bool mNetworkAnchorValid = false;
+    LevelChunkInstance mInstance;
+    uint32_t mNetworkRevision = 0;
 };

@@ -1,4 +1,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Player/FogStack.h"
+#include "Network/ConnectionRequest.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
@@ -16,6 +19,9 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AnimatePacket.h"
+#include "Protocol/Packets/CameraInstructionPacket.h"
+#include "Protocol/Packets/SetHudPacket.h"
+#include "Protocol/Packets/UpdateClientInputLocksPacket.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
@@ -24,8 +30,11 @@
 #include "Protocol/Packets/TextPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
+#include "Protocol/Types/CameraPresets.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
+#include "World/Item/ItemProperties.h"
 
 #include <algorithm>
 #include <chrono>
@@ -35,6 +44,17 @@
 #include <utility>
 
 namespace {
+    // the vanilla table already counts the empty hand's 1; minecraft:damage adds to it
+    float weaponBaseDamage(const ItemStack &weapon, const ItemData *data) {
+        if (data != nullptr && data->mAttackDamage > 0)
+            return (float) data->mAttackDamage;
+        const CustomItemDefinition *custom = weapon.isAir() || weapon.mDefinition == nullptr
+                                                     ? nullptr
+                                                     : CustomContentRegistry::getInstance().findItem(
+                                                               weapon.mDefinition->getIdentifier());
+        return custom == nullptr ? 1.0f : 1.0f + (float) custom->mDamage;
+    }
+
     const char *TAG_POS = "Pos";
     const char *TAG_MOTION = "Motion";
     const char *TAG_ROTATION = "Rotation";
@@ -42,6 +62,7 @@ namespace {
     const char *TAG_FIRE = "Fire";
     const char *TAG_AIR = "Air";
     const char *TAG_GAME_MODE = "playerGameType";
+    const char *TAG_TIME_SINCE_REST = "TimeSinceRest";
     const char *TAG_FIRST_PLAYED = "firstPlayed";
     const char *TAG_LAST_PLAYED = "lastPlayed";
     const char *TAG_LAST_KNOWN_XUID = "LastKnownXUID";
@@ -62,6 +83,12 @@ namespace {
     const char *TAG_SPAWN_Y = "SpawnY";
     const char *TAG_SPAWN_Z = "SpawnZ";
     const char *TAG_SPAWN_LEVEL = "SpawnLevel";
+    const char *TAG_SPAWN_BLOCK_X = "SpawnBlockPositionX";
+    const char *TAG_SPAWN_BLOCK_Y = "SpawnBlockPositionY";
+    const char *TAG_SPAWN_BLOCK_Z = "SpawnBlockPositionZ";
+    const char *TAG_SPAWN_DIMENSION = "SpawnDimension";
+    const int32_t UNSET_SPAWN_DIMENSION = 3;
+    const int32_t UNSET_SPAWN_COORDINATE = std::numeric_limits<int32_t>::min();
 
     int64_t currentTimeMillis() {
         using namespace std::chrono;
@@ -85,7 +112,7 @@ namespace {
     }
 
     constexpr float MAX_REACH = 8.0f;
-    constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     constexpr float FACING_MIN_DISTANCE = 1.0e-4f;
     constexpr float SPIN_ATTACK_DAMAGE = 8.0f;
     constexpr float SPIN_ATTACK_REACH = 1.0f;
@@ -150,7 +177,7 @@ namespace {
     }
 
     void damageHeldItem(ServerPlayer &attacker) {
-        if (attacker.getGameType() == (int32_t) GameType::Creative)
+        if (attacker.isCreative())
             return;
 
         PlayerInventory &inventory = attacker.getInventory();
@@ -164,6 +191,18 @@ namespace {
     }
 }
 
+bool ServerPlayer::canStandOnPowderSnow() const {
+    const ItemStack &boots = getInventory().getArmor(PlayerInventory::ARMOR_FEET);
+    return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
+}
+
+float ServerPlayer::getArmorKnockbackResistance() const {
+    float resistance = 0.0f;
+    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
+        resistance += ItemProperties::getArmorKnockbackResistance(getInventory().getArmor(slot));
+    return resistance;
+}
+
 ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, PacketSender *sender)
         : Actor(runtimeId), mId(id), mLoginState(LoginState::Connecting), mSender(sender) {
     getEffects().setEventCallback([this](const MobEffectInstance &effect, MobEffectEvent event) {
@@ -172,9 +211,9 @@ ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, Pack
 
         MobEffectPacket packet;
         packet.mRuntimeActorId = getRuntimeId();
-        packet.mEvent = event == MobEffectEvent::Add ? MobEffectPacket::Event::Add
-                         : event == MobEffectEvent::Modify ? MobEffectPacket::Event::Modify
-                         : MobEffectPacket::Event::Remove;
+        packet.mEvent = event == MobEffectEvent::Add      ? MobEffectPacket::Event::Add
+                        : event == MobEffectEvent::Modify ? MobEffectPacket::Event::Modify
+                                                          : MobEffectPacket::Event::Remove;
         packet.mEffectId = (int32_t) effect.mId;
         packet.mAmplifier = event == MobEffectEvent::Remove ? 0 : effect.mAmplifier;
         packet.mParticles = event == MobEffectEvent::Remove ? false : effect.mParticles;
@@ -215,8 +254,7 @@ Vector3f ServerPlayer::getLookDirection() const {
     return Vector3f(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
 }
 
-bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width,
-                             float height) const {
+bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const {
     const float threshold = std::clamp(owner.getProperties().getPlayerMovementActionDirectionThreshold(), 0.0f, 1.0f);
     const Vector3f eye(getPosition().x, getPosition().y + PLAYER_EYE_HEIGHT, getPosition().z);
     const float half = width * 0.5f;
@@ -232,7 +270,25 @@ bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &target
     return (look.x * toTarget.x + look.y * toTarget.y + look.z * toTarget.z) / length >= threshold;
 }
 
-bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId) {
+bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition) {
+    // the aim runs from the server-side eye to the client's hit position
+    Vector3f aim;
+    bool aimed = false;
+    if (hitPosition != nullptr && std::isfinite(hitPosition->x) && std::isfinite(hitPosition->y)
+        && std::isfinite(hitPosition->z)) {
+        const Vector3f delta(hitPosition->x - getPosition().x, hitPosition->y - (getPosition().y + PLAYER_EYE_HEIGHT),
+                             hitPosition->z - getPosition().z);
+        const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+        if (length > 0.0f) {
+            aim = Vector3f(delta.x / length, delta.y / length, delta.z / length);
+            aimed = true;
+        }
+    }
+    return owner.getScriptEngine().beforePlayerItemAttackEntity(*this, target, aimed ? &aim : nullptr);
+}
+
+bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition,
+                               bool checkReach) {
     ActorEventPacket swing;
     swing.mRuntimeActorId = getRuntimeId();
     swing.mEventId = (uint8_t) EntityEventType::ArmSwing;
@@ -243,14 +299,15 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), swing, owner.getCodecContext());
     }
 
-    if (!isSpawned() || isDead() || getGameType() == (int32_t) GameType::Spectator)
+    if (!isSpawned() || isDead() || isSpectator())
         return false;
 
     interruptShieldForAttack(owner);
 
     ServerPlayer *victim = nullptr;
     for (auto &entry: owner.getPlayers()) {
-        if (entry.second.getRuntimeId() == targetRuntimeId) {
+        // same world and dimension only: else a client could attack across dimensions and worlds, pvp-off ones included
+        if (entry.second.getRuntimeId() == targetRuntimeId && entry.second.sharesLevelWith(*this)) {
             victim = &entry.second;
             break;
         }
@@ -259,21 +316,25 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (victim == nullptr) {
         for (auto &entry: owner.getActors()) {
             ServerActor &target = *entry.second;
-            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile() ||
-                !target.sharesLevelWith(*this))
+            if (target.getRuntimeId() != targetRuntimeId || !target.isAlive() || target.isProjectile()
+                || !target.sharesLevelWith(*this))
                 continue;
 
             const Vector3f actorDelta(target.getPosition().x - getPosition().x,
                                       target.getPosition().y - getPosition().y,
                                       target.getPosition().z - getPosition().z);
-            if (actorDelta.x * actorDelta.x + actorDelta.y * actorDelta.y + actorDelta.z * actorDelta.z >
-                MAX_REACH * MAX_REACH)
+            if (checkReach
+                && actorDelta.x * actorDelta.x + actorDelta.y * actorDelta.y + actorDelta.z * actorDelta.z
+                           > MAX_REACH * MAX_REACH)
                 return false;
 
             const ActorSize size = target.getSize();
-            if (!_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
+            if (checkReach && !_isFacing(owner, target.getPosition(), size.mWidth, size.mHeight))
                 return false;
 
+            owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
+            if (_scriptsCancelAttack(owner, target, hitPosition))
+                return false;
             owner.getScriptEngine().onEntityHitEntity(*this, target);
             if (!target.isAlive())
                 return false;
@@ -285,14 +346,12 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const Item *weaponType = weapon.isAir() || weapon.mDefinition == nullptr
                                              ? nullptr
                                              : VanillaItems::fromIdentifier(weapon.mDefinition->getIdentifier());
-            const float weaponBaseDamage = weaponData == nullptr || weaponData->mAttackDamage <= 0
-                                                   ? 1.0f
-                                                   : (float) weaponData->mAttackDamage;
-            float attackDamage = weaponBaseDamage;
+            const float baseDamage = weaponBaseDamage(weapon, weaponData);
+            float attackDamage = baseDamage;
             if (weaponType != nullptr)
                 attackDamage = std::max(0.0f, attackDamage + weaponType->getAttackDamageBonus(weapon, *this));
 
-            attackDamage = _applyAttackerModifiers(weaponBaseDamage,
+            attackDamage = _applyAttackerModifiers(baseDamage,
                                                    attackDamage + target.getMeleeEnchantmentBonus(weapon));
             if (attackDamage <= 0.0f)
                 return false;
@@ -301,10 +360,10 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             const bool magic = target.getMeleeEnchantmentBonus(weapon) > 0.0f;
             const float healthBefore = target.getHealth();
             const float armorEfficiency = weaponType == nullptr ? 1.0f : weaponType->getArmorEfficiency(weapon);
-            owner.damageActor(target, attackDamage,
-                              ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(),
-                                                   getPosition())
-                                      .withArmorEfficiency(armorEfficiency));
+            owner.damageActor(
+                    target, attackDamage,
+                    ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(), getPosition())
+                            .withArmorEfficiency(armorEfficiency));
             const bool hurt = target.getHealth() < healthBefore;
             if (hurt && critical)
                 broadcastAnimation(owner, target, AnimatePacket::Action::CriticalHit);
@@ -315,40 +374,46 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
             if (weaponType != nullptr)
                 weaponType->onPostAttack(owner, *this, target, attackDamage, weapon);
 
-            const int32_t weaponWear = weaponType != nullptr && !weaponType->wearsOnAttack() ? 0
-                                       : (weaponData != nullptr && weaponData->mToolType == ToolType::Sword) ? 1 : 2;
-            owner.damagePlayerHeldItem(*this, weaponWear);
+            const int32_t weaponWear = weaponType != nullptr && !weaponType->wearsOnAttack()                 ? 0
+                                       : (weaponData != nullptr && weaponData->mToolType == ToolType::Sword) ? 1
+                                                                                                             : 2;
+            owner.damagePlayerHeldItem(*this, owner.getScriptEngine().onItemHitEntity(*this, target, hurt, weaponWear));
             return true;
         }
     }
 
-    if (victim == nullptr || victim == this || !victim->isSpawned() || victim->isDead() ||
-        victim->getGameType() == (int32_t) GameType::Spectator ||
-        victim->getGameType() == (int32_t) GameType::Creative)
+    if (victim == nullptr || victim == this || !victim->isSpawned() || victim->isDead()
+        || victim->isSpectator()
+        || victim->isCreative())
         return false;
 
-    if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool("pvp"))
+    // pvp is read from the victim's world: a victim in a pvp-disabled world must be protected
+    if (!owner.getWorldFor(*victim).getOverworld().getGameRules().getBool("pvp"))
         return false;
 
-    const Vector3f delta(victim->getPosition().x - getPosition().x,
-                         victim->getPosition().y - getPosition().y,
+    const Vector3f delta(victim->getPosition().x - getPosition().x, victim->getPosition().y - getPosition().y,
                          victim->getPosition().z - getPosition().z);
-    if (delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
+    if (checkReach && delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
         return false;
 
-    if (!_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+    if (checkReach && !_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
         return false;
 
+    owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
+    if (_scriptsCancelAttack(owner, *victim, hitPosition))
+        return false;
     owner.getScriptEngine().onEntityHitEntity(*this, *victim);
     if (victim->isDead())
         return false;
 
     const ItemStack &held = getInventory().getItemInHand();
     const ItemData *data = held.isAir() || held.mDefinition == nullptr
-                           ? nullptr : ItemDataTable::find(held.mDefinition->getIdentifier());
+                                   ? nullptr
+                                   : ItemDataTable::find(held.mDefinition->getIdentifier());
     const Item *heldType = held.isAir() || held.mDefinition == nullptr
-                                   ? nullptr : VanillaItems::fromIdentifier(held.mDefinition->getIdentifier());
-    const float baseDamage = data == nullptr || data->mAttackDamage <= 0 ? 1.0f : (float) data->mAttackDamage;
+                                   ? nullptr
+                                   : VanillaItems::fromIdentifier(held.mDefinition->getIdentifier());
+    const float baseDamage = weaponBaseDamage(held, data);
     float damage = baseDamage;
 
     if (heldType != nullptr)
@@ -362,19 +427,20 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     const bool coldTarget = victim->getAttackTime() <= 0;
     const float effectiveDamage = victim->getNoDamageTicks() > 0 ? damage - victim->getLastDamageAmount() : damage;
     const float armorEfficiency = heldType == nullptr ? 1.0f : heldType->getArmorEfficiency(held);
-    const ActorDamageSource source = ActorDamageSource::attack("death.attack.player", victim->getName(), *this, getName(),
-                                                     getPosition())
-            .disablingShield(axe)
-            .withArmorEfficiency(armorEfficiency);
+    const ActorDamageSource source = ActorDamageSource::attack("death.attack.player", victim->getName(), *this,
+                                                               getName(), getPosition())
+                                             .disablingShield(axe)
+                                             .withArmorEfficiency(armorEfficiency);
 
     const DamageResult result = owner.hurt(*victim, damage, source);
     if (result == DamageResult::Ignored)
         return false;
 
-    const int32_t weaponWear = heldType != nullptr && !heldType->wearsOnAttack() ? 0
-                               : (data != nullptr && data->mToolType == ToolType::Sword) ? 1 : 2;
+    const int32_t weaponWear = heldType != nullptr && !heldType->wearsOnAttack()         ? 0
+                               : (data != nullptr && data->mToolType == ToolType::Sword) ? 1
+                                                                                         : 2;
     if (result == DamageResult::Blocked) {
-        owner.damagePlayerHeldItem(*this, weaponWear);
+        owner.damagePlayerHeldItem(*this, owner.getScriptEngine().onItemHitEntity(*this, *victim, false, weaponWear));
         exhaust(0.1f);
         owner._sendAttributes(*this);
         return true;
@@ -383,7 +449,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (heldType != nullptr)
         heldType->onPostAttack(owner, *this, *victim, effectiveDamage, held);
 
-    owner.damagePlayerHeldItem(*this, weaponWear);
+    owner.damagePlayerHeldItem(*this, owner.getScriptEngine().onItemHitEntity(*this, *victim, true, weaponWear));
 
     if (victim->isDead())
         return true;
@@ -466,7 +532,7 @@ bool ServerPlayer::_hasShieldReady(int64_t currentTick) const {
 
 bool ServerPlayer::_shouldRaiseShield(int64_t currentTick) const {
     return isSpawned() && !isDead() && getFlags().get(ActorFlag::Sneaking) && mShieldInterruptTicks <= 0
-           && getGameType() != (int32_t) GameType::Spectator && _hasShieldReady(currentTick);
+           && !isSpectator() && _hasShieldReady(currentTick);
 }
 
 bool ServerPlayer::isBlockingWithShield() const {
@@ -511,8 +577,7 @@ void ServerPlayer::tickShield(ServerNetworkHandler &owner) {
 }
 
 void ServerPlayer::interruptShieldForAttack(ServerNetworkHandler &owner) {
-    if (mShieldInterruptTicks > 0 || !getFlags().get(ActorFlag::Sneaking)
-        || !_hasShieldReady(owner.getCurrentTick()))
+    if (mShieldInterruptTicks > 0 || !getFlags().get(ActorFlag::Sneaking) || !_hasShieldReady(owner.getCurrentTick()))
         return;
 
     mShieldReblockAfterAttack = true;
@@ -522,7 +587,7 @@ void ServerPlayer::interruptShieldForAttack(ServerNetworkHandler &owner) {
 }
 
 void ServerPlayer::_damageShield(ServerNetworkHandler &owner, float damage) {
-    if (damage < SHIELD_MIN_DURABILITY_DAMAGE || getGameType() == (int32_t) GameType::Creative)
+    if (damage < SHIELD_MIN_DURABILITY_DAMAGE || isCreative())
         return;
 
     const int amount = 1 + (int) std::floor(damage);
@@ -562,8 +627,7 @@ bool ServerPlayer::blockWithShield(ServerNetworkHandler &owner, const Vector3f &
 
     if (attacker != nullptr) {
         const Vector3f attackerPosition = attacker->getPosition();
-        owner.knockBack(*attacker, attackerPosition.x - position.x, attackerPosition.z - position.z,
-                        SHIELD_KNOCKBACK);
+        owner.knockBack(*attacker, attackerPosition.x - position.x, attackerPosition.z - position.z, SHIELD_KNOCKBACK);
     }
 
     if (disablesShield) {
@@ -607,24 +671,24 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 
     for (auto &entry: owner.getActors()) {
         ServerActor &target = *entry.second;
-        if (!target.isAlive() || target.isDead() || target.isProjectile() || target.getNoDamageTicks() > 0 ||
-            !target.sharesLevelWith(*this))
+        if (!target.isAlive() || target.isDead() || target.isProjectile() || target.getNoDamageTicks() > 0
+            || !target.sharesLevelWith(*this))
             continue;
 
         const ActorSize size = target.getSize();
         if (reaches(target.getPosition(), size.mWidth, size.mHeight))
-            owner.damageActor(target, SPIN_ATTACK_DAMAGE,
-                              ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(),
-                                                   position)
-                                      .withoutArmor());
+            owner.damageActor(
+                    target, SPIN_ATTACK_DAMAGE,
+                    ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(), position)
+                            .withoutArmor());
     }
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &target = entry.second;
         if (&target == this || !target.isSpawned() || target.isDead() || target.getNoDamageTicks() > 0)
             continue;
-        if (target.getGameType() == (int32_t) GameType::Creative
-            || target.getGameType() == (int32_t) GameType::Spectator)
+        if (target.isCreative()
+            || target.isSpectator())
             continue;
 
         if (reaches(target.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
@@ -641,15 +705,16 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
     }
 }
 
-void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &position,
-                             MovePlayerTeleportationCause cause) {
+void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &position, MovePlayerTeleportationCause cause) {
     Actor::teleport(position);
     markTeleported();
     clearPendingMove();
 
     MovePlayerPacket packet;
     packet.mRuntimeActorId = (int64_t) getRuntimeId();
-    packet.mPosition = Vector3f(getPosition().x, getPosition().y + 1.62f, getPosition().z);
+    const float baseOffset = isSleeping() ? MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET
+                                          : MovementPhysics::PLAYER_BASE_OFFSET;
+    packet.mPosition = Vector3f(getPosition().x, getPosition().y + baseOffset, getPosition().z);
     packet.mRotation = getRotation();
     packet.mMode = MovePlayerMode::Teleport;
     packet.mOnGround = isOnGround();
@@ -660,6 +725,22 @@ void ServerPlayer::teleport(ServerNetworkHandler &owner, const Vector3f &positio
     owner.getNetworkHandler().send(getNetworkIdentifier(), packet, owner.getCodecContext());
 
     ChunkStreamHandler::handleTeleport(owner, *this);
+}
+
+void ServerPlayer::applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion) {
+    setMotion(motion);
+    const int64_t inputTick = std::max(mMovementInputs.lastReceivedTick(), mMovementInputs.lastProcessedTick());
+    mPendingServerMotion = motion;
+    mPendingServerMotionTick = inputTick + 1;
+    mHasPendingServerMotion = true;
+    if (inputTick >= 0)
+        getMovementValidator().onMovementEffect((uint64_t) inputTick);
+
+    SetActorMotionPacket packet;
+    packet.mRuntimeActorId = (int64_t) getRuntimeId();
+    packet.mMotion = motion;
+    packet.mTick = inputTick < 0 ? 0 : (uint64_t) inputTick;
+    owner.getNetworkHandler().send(getNetworkIdentifier(), packet, owner.getCodecContext());
 }
 
 void ServerPlayer::syncEffects() {
@@ -687,8 +768,8 @@ int ServerPlayer::getItemCooldownRemaining(const ItemStack &item, int64_t curren
     if (item.isAir() || item.mDefinition == nullptr)
         return 0;
 
-    const CooldownItemComponent *cooldown = ItemDataTable::getComponents(item.mDefinition->getIdentifier())
-                                                    .get<CooldownItemComponent>();
+    const CooldownItemComponent *cooldown =
+            ItemDataTable::getComponents(item.mDefinition->getIdentifier()).get<CooldownItemComponent>();
     const std::string category = (cooldown != nullptr && !cooldown->getCategory().empty())
                                          ? cooldown->getCategory()
                                          : item.mDefinition->getIdentifier();
@@ -705,8 +786,8 @@ void ServerPlayer::startItemCooldown(const ItemStack &item, int64_t currentTick,
     if (item.isAir() || item.mDefinition == nullptr)
         return;
 
-    const CooldownItemComponent *cooldown = ItemDataTable::getComponents(item.mDefinition->getIdentifier())
-                                                    .get<CooldownItemComponent>();
+    const CooldownItemComponent *cooldown =
+            ItemDataTable::getComponents(item.mDefinition->getIdentifier()).get<CooldownItemComponent>();
     const std::string category = (cooldown != nullptr && !cooldown->getCategory().empty())
                                          ? cooldown->getCategory()
                                          : item.mDefinition->getIdentifier();
@@ -733,8 +814,13 @@ void ServerPlayer::tickItemCooldowns(int64_t currentTick) {
     }
 }
 
+Vector3i ServerPlayer::getSpawnStandPositionHere() const {
+    return Vector3i((int32_t) std::floor(mPosition.x), (int32_t) std::ceil(mPosition.y),
+                    (int32_t) std::floor(mPosition.z));
+}
+
 void ServerPlayer::consumeOneHeldItem() {
-    if (getGameType() == (int32_t) GameType::Creative)
+    if (isCreative())
         return;
 
     ItemStack held = mInventory.getItemInHand();
@@ -868,6 +954,38 @@ void ServerPlayer::clearTitle() {
     mSender->sendPacketTo(mId, packet);
 }
 
+bool ServerPlayer::setInputLocked(int32_t category, bool locked) {
+    if (category < 0 || category >= 32)
+        return false;
+    const uint32_t bit = 1u << category;
+    const uint32_t previous = mInputLocks;
+    mInputLocks = locked ? (mInputLocks | bit) : (mInputLocks & ~bit);
+
+    UpdateClientInputLocksPacket packet;
+    packet.mLockComponentData = (int32_t) mInputLocks;
+    if (mSender != nullptr)
+        mSender->sendPacketTo(mId, packet);
+    return mInputLocks != previous;
+}
+
+void ServerPlayer::setHudVisibility(bool hidden, const std::vector<int32_t> *elements) {
+    SetHudPacket packet;
+    packet.mVisibility = hidden ? SetHudPacket::HudVisibility::Hide : SetHudPacket::HudVisibility::Reset;
+    if (elements != nullptr) {
+        packet.mElements = *elements;
+    } else {
+        for (int32_t element = 0; element < HUD_ELEMENT_COUNT; ++element)
+            packet.mElements.push_back(element);
+    }
+    for (const int32_t element: packet.mElements) {
+        if (element >= 0 && element < HUD_ELEMENT_COUNT)
+            mHiddenHudElements[element] = hidden;
+    }
+
+    if (mSender != nullptr)
+        mSender->sendPacketTo(mId, packet);
+}
+
 void ServerPlayer::resetTitle() {
     if (mSender == nullptr)
         return;
@@ -892,15 +1010,24 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
     data.putString(TAG_LEVEL, levelName);
     data.putInt("DimensionId", Dimension::toId(mDimension));
     data.putInt(TAG_GAME_MODE, mGameType);
+    data.putInt(TAG_TIME_SINCE_REST, mTimeSinceRest);
     data.putLong(TAG_FIRST_PLAYED, mFirstPlayed == 0 ? currentTimeMillis() : mFirstPlayed);
     data.putLong(TAG_LAST_PLAYED, currentTimeMillis());
     data.putString(TAG_LAST_KNOWN_XUID, mXuid);
     data.putString(TAG_NAME, mName);
 
+    // block position, dimension, then where the player stood
     if (mHasSpawnPoint) {
-        data.putInt(TAG_SPAWN_X, mSpawnPoint.x);
-        data.putInt(TAG_SPAWN_Y, mSpawnPoint.y);
-        data.putInt(TAG_SPAWN_Z, mSpawnPoint.z);
+        const Vector3i block = mHasSpawnBlock ? mSpawnPoint
+                                              : Vector3i(UNSET_SPAWN_COORDINATE, UNSET_SPAWN_COORDINATE,
+                                                         UNSET_SPAWN_COORDINATE);
+        data.putInt(TAG_SPAWN_BLOCK_X, block.x);
+        data.putInt(TAG_SPAWN_BLOCK_Y, block.y);
+        data.putInt(TAG_SPAWN_BLOCK_Z, block.z);
+        data.putInt(TAG_SPAWN_DIMENSION, Dimension::toId(mSpawnDimension));
+        data.putInt(TAG_SPAWN_X, mSpawnStandPosition.x);
+        data.putInt(TAG_SPAWN_Y, mSpawnStandPosition.y);
+        data.putInt(TAG_SPAWN_Z, mSpawnStandPosition.z);
         data.putString(TAG_SPAWN_LEVEL, mSpawnWorld);
     }
 
@@ -928,6 +1055,9 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
             inventory.addToList(ItemStackNbt::write(item, PlayerInventory::CONTAINER_SIZE + slot));
     }
 
+    if (!mInventory.getBodyArmor().isAir())
+        inventory.addToList(ItemStackNbt::write(mInventory.getBodyArmor(), PlayerInventory::SAVED_BODY_SLOT));
+
     data.put(TAG_INVENTORY, inventory);
     data.put(TAG_OFF_INVENTORY, ItemStackNbt::write(mInventory.getOffhand(), 0));
     data.putInt(TAG_SELECTED_SLOT, mInventory.getSelectedSlot());
@@ -953,6 +1083,8 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
 
     data.put("DynamicProperties", serializeDynamicProperties(mDynamicProperties));
     saveTags(data);
+    mRecipeUnlocks.save(data);
+    FogStack::save(mFogStack, data);
 
     return data;
 }
@@ -969,17 +1101,16 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
         setUniqueId(data.getLong("UniqueID"));
 
     loadTags(data);
+    mRecipeUnlocks.load(data);
+    FogStack::load(mFogStack, data);
 
-    mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x),
-                         listValue(data, TAG_POS, 1, mPosition.y),
+    mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x), listValue(data, TAG_POS, 1, mPosition.y),
                          listValue(data, TAG_POS, 2, mPosition.z));
 
-    mMotion = Vector3f(listValue(data, TAG_MOTION, 0, 0.0f),
-                       listValue(data, TAG_MOTION, 1, 0.0f),
+    mMotion = Vector3f(listValue(data, TAG_MOTION, 0, 0.0f), listValue(data, TAG_MOTION, 1, 0.0f),
                        listValue(data, TAG_MOTION, 2, 0.0f));
 
-    mRotation = Vector3f(listValue(data, TAG_ROTATION, 0, 0.0f),
-                         listValue(data, TAG_ROTATION, 1, 0.0f),
+    mRotation = Vector3f(listValue(data, TAG_ROTATION, 0, 0.0f), listValue(data, TAG_ROTATION, 1, 0.0f),
                          listValue(data, TAG_ROTATION, 2, 0.0f));
 
     mDimension = Dimension::fromId(data.getInt("DimensionId", 0));
@@ -988,11 +1119,27 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mAttributes.set("minecraft:health", storedHealth);
     mAirSupply = std::clamp(data.getInt(TAG_AIR, MAX_AIR_SUPPLY), -20, MAX_AIR_SUPPLY);
     mGameType = data.getInt(TAG_GAME_MODE, mGameType);
+    mTimeSinceRest = data.getInt(TAG_TIME_SINCE_REST, mTimeSinceRest);
     mFirstPlayed = data.getLong(TAG_FIRST_PLAYED, 0);
 
-    mHasSpawnPoint = data.contains(TAG_SPAWN_X);
-    if (mHasSpawnPoint)
-        mSpawnPoint = Vector3i(data.getInt(TAG_SPAWN_X, 0), data.getInt(TAG_SPAWN_Y, 0), data.getInt(TAG_SPAWN_Z, 0));
+    mHasSpawnPoint = data.contains(TAG_SPAWN_BLOCK_X) || data.contains(TAG_SPAWN_X);
+    if (mHasSpawnPoint) {
+        const Vector3i stand(data.getInt(TAG_SPAWN_X, 0), data.getInt(TAG_SPAWN_Y, 0), data.getInt(TAG_SPAWN_Z, 0));
+        // older saves only kept the bed head, in SpawnX/Y/Z
+        mSpawnPoint = data.contains(TAG_SPAWN_BLOCK_X)
+                              ? Vector3i(data.getInt(TAG_SPAWN_BLOCK_X, 0), data.getInt(TAG_SPAWN_BLOCK_Y, 0),
+                                         data.getInt(TAG_SPAWN_BLOCK_Z, 0))
+                              : stand;
+        mSpawnStandPosition = data.contains(TAG_SPAWN_X) ? stand : mSpawnPoint;
+        const int32_t dimension = data.getInt(TAG_SPAWN_DIMENSION, 0);
+        mSpawnDimension = Dimension::fromId(dimension);
+        // INT_MIN block: a /spawnpoint spawn; INT_MIN everywhere in dimension 3: no spawn
+        mHasSpawnBlock = mSpawnPoint.x != UNSET_SPAWN_COORDINATE;
+        if (!mHasSpawnBlock)
+            mSpawnPoint = mSpawnStandPosition;
+        if (dimension == UNSET_SPAWN_DIMENSION || mSpawnStandPosition.x == UNSET_SPAWN_COORDINATE)
+            mHasSpawnPoint = false;
+    }
     mSpawnWorld = data.getString(TAG_SPAWN_LEVEL, data.getString(TAG_LEVEL, std::string()));
     setFireTicks(std::clamp((int) data.getShort(TAG_FIRE, 0), 0, 32767));
 
@@ -1022,6 +1169,8 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
                 mInventory.setItem(slot, std::move(item));
             else if (slot < PlayerInventory::SAVED_SIZE)
                 mInventory.setArmor(slot - PlayerInventory::CONTAINER_SIZE, std::move(item));
+            else if (slot == PlayerInventory::SAVED_BODY_SLOT)
+                mInventory.setBodyArmor(std::move(item));
         }
     }
 
@@ -1045,12 +1194,13 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
             if (value.getType() != Tag::Type::Compound)
                 continue;
             const int id = value.getByte("Id", 0);
-            if (id < 1 || id > 30)
+            if (!isKnownMobEffect(id))
                 continue;
             MobEffectInstance effect;
             effect.mId = (MobEffectId) id;
             effect.mDuration = value.getInt("Duration", 0);
-            effect.mAmplifier = value.getByte("Amplifier", 0);
+            // a byte on disk; /effect goes up to 255
+            effect.mAmplifier = (uint8_t) value.getByte("Amplifier", 0);
             effect.mAmbient = value.getByte("Ambient", 0) != 0;
             effect.mParticles = value.getByte("ShowParticles", 1) != 0;
             effect.mInfinite = effect.mDuration < 0;
@@ -1058,4 +1208,20 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
         }
     }
     mAttributes.setClamped("minecraft:health", storedHealth);
+}
+
+// FilterProfanity defaults to true; a debug timeout counts only above 0
+void ServerPlayer::readSyncedClientOptions(const std::string &clientData) {
+    mProfanityFilterEnabled = ConnectionRequest::findJsonBool(clientData, "FilterProfanity", true);
+    mTextFilteringDebugTimeout = ConnectionRequest::findJsonInt(clientData, "TextFilteringDebugTimeoutMilliSeconds", 0);
+}
+
+void ServerPlayer::recordCamera(const CameraInstructionPacket &packet) {
+    mCameraState.mPresent = true;
+    const std::vector<CameraPreset> &presets = standardCameraPresets();
+    const int32_t preset = packet.mSetInstruction.mPresetRuntimeId;
+    if (packet.mHasSetInstruction && preset >= 0 && (size_t) preset < presets.size())
+        mCameraState.mPreset = presets[(size_t) preset].mIdentifier;
+    if (packet.mHasClear && packet.mClear)
+        mCameraState.mPreset = "minecraft:first_person";
 }

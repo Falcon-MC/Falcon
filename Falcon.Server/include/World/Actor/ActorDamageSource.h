@@ -8,11 +8,7 @@
 
 class Actor;
 
-enum class DamageResult {
-    Ignored,
-    Blocked,
-    Dealt
-};
+enum class DamageResult { Ignored, Blocked, Dealt };
 
 class ActorDamageSource {
 public:
@@ -23,8 +19,8 @@ public:
         return source;
     }
 
-    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName,
-                               Actor &attacker, const std::string &attackerName, const Vector3f &origin) {
+    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName, Actor &attacker,
+                                    const std::string &attackerName, const Vector3f &origin) {
         ActorDamageSource source;
         source.mDeathMessageKey = deathMessageKey;
         source.mDeathMessageParameters = {victimName, attackerName};
@@ -63,12 +59,19 @@ public:
         return *this;
     }
 
+    // a cause the death message does not tell: minecraft:area_attack overrides the message of its cause
+    ActorDamageSource &withCause(const std::string &cause) {
+        mCause = cause;
+        return *this;
+    }
+
     ActorDamageSource &withDamager(Actor *damager) {
         mDamager = damager;
         return *this;
     }
 
     std::string mDeathMessageKey;
+    std::string mCause;
     std::vector<std::string> mDeathMessageParameters;
     Actor *mAttacker = nullptr;
     Actor *mDamager = nullptr;

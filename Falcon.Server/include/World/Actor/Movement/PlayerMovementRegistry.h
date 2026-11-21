@@ -15,7 +15,6 @@
 #include <tuple>
 #include <unordered_map>
 
-/** Per-player ECS storage for the components consumed by the movement systems. */
 class PlayerMovementRegistry {
 public:
     using Entity = uint64_t;
@@ -37,9 +36,8 @@ private:
 
     using Pools = std::tuple<Pool<StateVectorComponent>, Pool<MoveInputComponent>, Pool<MovementAbilitiesComponent>,
                              Pool<PlayerLiquidContactComponent>, Pool<PlayerPredictionComponent>,
-                             Pool<PlayerTravelComponent>, Pool<PlayerPoseComponent>,
-                             Pool<AutoClimbTravelFlagComponent>, Pool<WaterTravelFlagComponent>,
-                             Pool<LiquidTravelFlagComponent>>;
+                             Pool<PlayerTravelComponent>, Pool<PlayerPoseComponent>, Pool<AutoClimbTravelFlagComponent>,
+                             Pool<WaterTravelFlagComponent>, Pool<LiquidTravelFlagComponent>>;
 
     Pools mPools;
 };

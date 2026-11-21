@@ -10,7 +10,9 @@ public:
 
     using MobActor::MobActor;
 
-    ActorCategory getCategory() const override { return ActorCategory::Passive; }
+    ActorCategory getCategory() const override {
+        return ActorCategory::Passive;
+    }
 
     static constexpr float ANIMAL_STEP_HEIGHT = 0.5f;
 
@@ -20,7 +22,8 @@ public:
 
     PhysicsComponent getPhysics() const override {
         PhysicsComponent physics = MobActor::getPhysics();
-        physics.mStepHeight = ANIMAL_STEP_HEIGHT;
+        if (getComponent("minecraft:variable_max_auto_step") == nullptr)
+            physics.mStepHeight = ANIMAL_STEP_HEIGHT;
         return physics;
     }
 };

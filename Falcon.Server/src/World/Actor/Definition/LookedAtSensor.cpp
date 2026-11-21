@@ -8,6 +8,7 @@
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +24,7 @@ namespace {
     const char *const FEET_LOCATION = "feet";
     const float DEFAULT_SEARCH_RADIUS = 10.0f;
     const float DEFAULT_FIELD_OF_VIEW = 26.0f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float HEAD_HEIGHT_RATIO = 0.85f;
     const float BODY_HEIGHT_RATIO = 0.5f;
     const double SIGHT_STEP = 0.25;
@@ -118,34 +119,33 @@ ServerPlayer *LookedAtSensor::_findLooker(ServerNetworkHandler &owner, MobActor 
     std::unordered_map<uint64_t, int32_t> lookTicks;
     ServerPlayer *nearest = nullptr;
     float nearestDistance = radiusSquared;
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
+    owner.forEachPlayerNear(mob.getPosition(), radius, [&](ServerPlayer &player) {
         if (!mob.canTarget(player))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(player);
         if (distance > radiusSquared)
-            continue;
+            return;
 
         if (filters != nullptr && !EntityFilter::test(*filters, owner, mob, &player))
-            continue;
+            return;
 
         if (!_isLookingAt(level, mob, player, component))
-            continue;
+            return;
 
         if (minimumTicks > 0) {
             const auto previous = mLookTicks.find(player.getRuntimeId());
             const int32_t ticks = (previous == mLookTicks.end() ? 0 : previous->second) + interval;
             lookTicks[player.getRuntimeId()] = ticks;
             if (ticks < minimumTicks)
-                continue;
+                return;
         }
 
         if (nearest == nullptr || distance < nearestDistance) {
             nearest = &player;
             nearestDistance = distance;
         }
-    }
+    });
 
     mLookTicks.swap(lookTicks);
     return nearest;

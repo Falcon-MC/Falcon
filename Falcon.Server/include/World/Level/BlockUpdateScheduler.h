@@ -9,10 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-/**
- * Delayed block updates keyed by due tick. Updates in inactive columns are parked until the
- * column is active again, and the work done per tick is capped.
- */
+// updates in inactive columns are parked until the column is active again; work per tick is capped
 class BlockUpdateScheduler {
 public:
     using UpdateHandler = std::function<void(const Vector3i &)>;
@@ -31,11 +28,17 @@ public:
 
     void tick(const UpdateHandler &handler, const std::function<bool(int32_t, int32_t)> &isActive);
 
-    int64_t getCurrentTick() const { return mTick; }
+    int64_t getCurrentTick() const {
+        return mTick;
+    }
 
-    size_t getScheduledCount() const { return mSchedule.size(); }
+    size_t getScheduledCount() const {
+        return mSchedule.size();
+    }
 
-    size_t getLastProcessedCount() const { return mLastProcessed; }
+    size_t getLastProcessedCount() const {
+        return mLastProcessed;
+    }
 
 private:
     struct Position {

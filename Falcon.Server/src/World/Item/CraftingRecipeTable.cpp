@@ -1,7 +1,12 @@
 #include "World/Item/CraftingRecipeTable.h"
 #include "CraftingRecipeJson.h"
 #include "Core/Json/Json.h"
+#include "Core/NBT/NbtIo.h"
+#include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Network/ProtocolData.h"
+#include "Protocol/Types/CraftingRecipeEntry.h"
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Item/ItemNetworkIdTable.h"
 
 #include <algorithm>
 #include <cctype>
@@ -32,9 +37,12 @@ namespace {
         std::vector<FurnaceRecipeData> mFurnaceRecipes;
         std::vector<FurnaceRecipeData> mCampfireRecipes;
         std::vector<FurnaceRecipeData> mSoulCampfireRecipes;
+        std::vector<SmithingRecipeEntry> mSmithing[2];
+        std::vector<StonecutterRecipeData> mStonecutterRecipes;
         std::vector<BrewingMixData> mPotionMixes;
         std::vector<BrewingMixData> mContainerMixes;
         std::deque<std::string> mStrings;
+        std::unordered_map<std::string, RecipeUnlockRequirement> mUnlocking;
         bool mLoaded = false;
 
         const char *store(const std::string &value) {
@@ -64,6 +72,30 @@ namespace {
         return tags;
     }
 
+    bool stripMetadataSuffix(std::string &itemId, int32_t &metadata) {
+        const size_t namespaceSeparator = itemId.find(':');
+        const size_t metadataSeparator = itemId.find_last_of(':');
+        if (namespaceSeparator == std::string::npos || metadataSeparator == namespaceSeparator
+            || metadataSeparator + 1 == itemId.size()) {
+            return false;
+        }
+
+        int32_t parsed = 0;
+        for (size_t index = metadataSeparator + 1; index < itemId.size(); ++index) {
+            const char digit = itemId[index];
+            if (digit < '0' || digit > '9')
+                return false;
+            const int value = digit - '0';
+            if (parsed > (INT32_MAX - value) / 10)
+                return false;
+            parsed = parsed * 10 + value;
+        }
+
+        itemId.resize(metadataSeparator);
+        metadata = parsed;
+        return true;
+    }
+
     std::vector<IngredientChoice> parseIngredient(const json::Value &value, const TagMap &tags) {
         const json::Value *typeValue = value.get("type");
         const std::string type = typeValue == nullptr ? std::string() : typeValue->string();
@@ -91,8 +123,45 @@ namespace {
         if (itemId == nullptr || itemId->mType != json::Value::Type::String)
             return {};
         const json::Value *auxValue = value.get("auxValue");
-        const int32_t aux = auxValue == nullptr ? 0 : auxValue->integer(0);
-        return {{false, itemId->mString, aux, count}};
+        int32_t aux = auxValue == nullptr ? 0 : auxValue->integer(0);
+        std::string canonicalItemId = itemId->mString;
+        int32_t suffixAux = 0;
+        if (stripMetadataSuffix(canonicalItemId, suffixAux) && auxValue == nullptr)
+            aux = suffixAux;
+        return {{false, std::move(canonicalItemId), aux, count}};
+    }
+
+    std::string decodeBase64(const std::string &value) {
+        static const std::string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string decoded;
+        unsigned int buffer = 0;
+        int bits = 0;
+        for (const char character: value) {
+            if (character == '=')
+                break;
+            const size_t index = alphabet.find(character);
+            if (index == std::string::npos)
+                return {};
+            buffer = (buffer << 6) | (unsigned int) index;
+            bits += 6;
+            if (bits >= 8) {
+                bits -= 8;
+                decoded.push_back((char) ((buffer >> bits) & 0xff));
+                buffer &= (1u << bits) - 1;
+            }
+        }
+        return decoded;
+    }
+
+    Tag outputTag(const json::Value &output) {
+        const json::Value *encoded = output.get("nbt_b64");
+        if (encoded == nullptr || encoded->mType != json::Value::Type::String)
+            return Tag();
+        const std::string bytes = decodeBase64(encoded->mString);
+        if (bytes.empty())
+            return Tag();
+        ReadOnlyBinaryStream stream(bytes);
+        return NbtIo::readTag(stream, NbtVariant::LittleEndian);
     }
 
     void addRecipe(RecipeStorage &storage, const json::Value &source, int32_t width, int32_t height,
@@ -108,7 +177,9 @@ namespace {
                 continue;
             const json::Value *countValue = output->get("count");
             const int32_t count = countValue == nullptr ? 1 : countValue->integer(1);
-            storage.mOutputs.push_back({storage.store(itemId->mString), count});
+            const json::Value *damageValue = output->get("damage");
+            const int32_t damage = damageValue == nullptr ? 0 : damageValue->integer(0);
+            storage.mOutputs.push_back({storage.store(itemId->mString), count, damage, outputTag(*output)});
         }
         if (storage.mOutputs.size() == outputOffset)
             return;
@@ -118,8 +189,8 @@ namespace {
             if (ingredient.mEmpty)
                 storage.mIngredients.push_back({nullptr, 0, 0});
             else
-                storage.mIngredients.push_back({storage.store(ingredient.mItemId), ingredient.mAuxValue,
-                                                ingredient.mCount});
+                storage.mIngredients.push_back(
+                        {storage.store(ingredient.mItemId), ingredient.mAuxValue, ingredient.mCount});
         }
 
         const json::Value *id = source.get("id");
@@ -154,8 +225,8 @@ namespace {
     void loadShapedRecipe(RecipeStorage &storage, const json::Value &source, const TagMap &tags) {
         const json::Value *shapeData = source.get("shape");
         const json::Value *inputData = source.get("input");
-        if (shapeData == nullptr || inputData == nullptr || shapeData->mType != json::Value::Type::Array ||
-            inputData->mType != json::Value::Type::Object || shapeData->mArray.empty())
+        if (shapeData == nullptr || inputData == nullptr || shapeData->mType != json::Value::Type::Array
+            || inputData->mType != json::Value::Type::Object || shapeData->mArray.empty())
             return;
 
         std::vector<std::string> shape;
@@ -233,8 +304,8 @@ namespace {
         addVariants(storage, source, 0, 0, choices);
     }
 
-    void loadFurnaceRecipe(RecipeStorage &storage, std::vector<FurnaceRecipeData> &target,
-                           const json::Value &source, const TagMap &tags) {
+    void loadFurnaceRecipe(RecipeStorage &storage, std::vector<FurnaceRecipeData> &target, const json::Value &source,
+                           const TagMap &tags, const std::string &blockName) {
         const json::Value *inputData = source.get("input");
         const json::Value *outputData = source.get("output");
         if (inputData == nullptr || inputData->mType != json::Value::Type::Array || inputData->mArray.empty()
@@ -267,9 +338,50 @@ namespace {
                 continue;
             }
             const std::string recipeId = index == 0 ? baseId : baseId + "#" + std::to_string(index);
-            target.push_back({storage.store(recipeId), storage.store(choice.mItemId), choice.mAuxValue,
-                              choice.mCount, storage.store(output->mString), outputCount, priority});
+            target.push_back({storage.store(recipeId), storage.store(blockName), storage.store(choice.mItemId),
+                              choice.mAuxValue, choice.mCount, storage.store(output->mString), outputCount, priority});
         }
+    }
+
+    void loadStonecutterRecipe(RecipeStorage &storage, const json::Value &source) {
+        const json::Value *id = source.get("id");
+        const json::Value *uuid = source.get("uuid");
+        const json::Value *inputData = source.get("input");
+        const json::Value *outputData = source.get("output");
+        if (id == nullptr || inputData == nullptr || inputData->mType != json::Value::Type::Array
+            || inputData->mArray.size() != 1 || outputData == nullptr || outputData->mType != json::Value::Type::Array
+            || outputData->mArray.size() != 1) {
+            return;
+        }
+
+        const json::Value &input = *inputData->mArray.front();
+        const json::Value *inputType = input.get("type");
+        const json::Value *inputItem = input.get("itemId");
+        if (inputType == nullptr || inputType->string() != "name" || inputItem == nullptr
+            || inputItem->mType != json::Value::Type::String) {
+            return;
+        }
+
+        const json::Value *output = outputData->mArray.front()->get("id");
+        if (output == nullptr || output->mType != json::Value::Type::String)
+            return;
+
+        const json::Value *auxValue = input.get("auxValue");
+        int32_t inputAux = auxValue == nullptr ? 0 : auxValue->integer(0);
+        std::string canonicalInputId = inputItem->mString;
+        int32_t suffixAux = 0;
+        if (stripMetadataSuffix(canonicalInputId, suffixAux) && auxValue == nullptr)
+            inputAux = suffixAux;
+        const json::Value *countValue = outputData->mArray.front()->get("count");
+        const json::Value *priority = source.get("priority");
+        const int32_t outputCount = countValue == nullptr ? 1 : countValue->integer(1);
+        if (outputCount <= 0)
+            return;
+
+        storage.mStonecutterRecipes.push_back(
+                {storage.store(id->string()), storage.store(uuid == nullptr ? std::string() : uuid->string()),
+                 storage.store(canonicalInputId), inputAux, storage.store(output->mString), outputCount,
+                 priority == nullptr ? 0 : priority->integer(0)});
     }
 
     void loadBrewingMixes(RecipeStorage &storage, std::vector<BrewingMixData> &target, const json::Value *mixes) {
@@ -287,15 +399,70 @@ namespace {
             const json::Value *reagentMeta = mix->get("reagentMeta");
             const json::Value *outputMeta = mix->get("outputMeta");
             target.push_back({storage.store(input->string()), inputMeta == nullptr ? -1 : inputMeta->integer(-1),
-                              storage.store(reagent->string()),
-                              reagentMeta == nullptr ? -1 : reagentMeta->integer(-1),
-                              storage.store(output->string()),
-                              outputMeta == nullptr ? -1 : outputMeta->integer(-1)});
+                              storage.store(reagent->string()), reagentMeta == nullptr ? -1 : reagentMeta->integer(-1),
+                              storage.store(output->string()), outputMeta == nullptr ? -1 : outputMeta->integer(-1)});
         }
     }
 
     bool metaMatches(int32_t expected, int32_t actual) {
         return expected < 0 || expected == actual;
+    }
+
+    RecipeIngredientEntry smithingIngredient(const json::Value *ingredient) {
+        RecipeIngredientEntry value;
+        if (ingredient == nullptr)
+            return value;
+        if (const auto *name = ingredient->get("itemId")) {
+            value.mItemId = name->string();
+            value.mAuxValue = 0x7fff;
+            value.mHasItem = !value.mItemId.empty();
+        } else if (const auto *tag = ingredient->get("itemTag")) {
+            value.mType = RecipeIngredientType::ItemTag;
+            value.mItemTag = tag->string();
+            value.mHasItem = !value.mItemTag.empty();
+        }
+        return value;
+    }
+
+    void loadUnlockRequirement(RecipeStorage &storage, const json::Value &source) {
+        const json::Value *id = source.get("id");
+        const json::Value *data = source.get("unlockingRequirements");
+        if (id == nullptr || data == nullptr || data->mType != json::Value::Type::Object)
+            return;
+
+        RecipeUnlockRequirement requirement;
+        const json::Value *context = data->get("context");
+        requirement.mContext = (RecipeUnlockRequirement::Context) (context == nullptr ? 0 : context->integer(0));
+        const json::Value *items = data->get("items");
+        if (items != nullptr && items->mType == json::Value::Type::Array) {
+            for (const std::unique_ptr<json::Value> &item: items->mArray) {
+                const json::Value *type = item->get("type");
+                const json::Value *count = item->get("count");
+                RecipeIngredientEntry entry;
+                entry.mHasItem = true;
+                entry.mCount = count == nullptr ? 1 : count->integer(1);
+                if (type != nullptr && type->string() == "item_tag") {
+                    const json::Value *tag = item->get("itemTag");
+                    if (tag == nullptr)
+                        continue;
+                    entry.mType = RecipeIngredientType::ItemTag;
+                    entry.mItemTag = tag->string();
+                } else {
+                    const json::Value *itemId = item->get("itemId");
+                    if (itemId == nullptr)
+                        continue;
+                    const json::Value *aux = item->get("auxValue");
+                    entry.mItemId = itemId->string();
+                    int32_t suffixAux = -1;
+                    if (stripMetadataSuffix(entry.mItemId, suffixAux) && aux == nullptr)
+                        entry.mAuxValue = suffixAux;
+                    else
+                        entry.mAuxValue = aux == nullptr ? -1 : aux->integer(-1);
+                }
+                requirement.mItems.push_back(std::move(entry));
+            }
+        }
+        storage.mUnlocking[id->string()] = std::move(requirement);
     }
 
     RecipeStorage &getStorage() {
@@ -316,26 +483,58 @@ namespace {
 
         const TagMap tags = loadTags();
         for (const std::unique_ptr<json::Value> &recipe: recipes->mArray) {
+            loadUnlockRequirement(storage, *recipe);
             const json::Value *type = recipe->get("type");
             const json::Value *block = recipe->get("block");
             if (type == nullptr || block == nullptr)
                 continue;
 
             const std::string blockName = block->string();
-            if (blockName == "furnace" || blockName == "campfire" || blockName == "soul_campfire") {
+            if (blockName == "furnace" || blockName == "blast_furnace" || blockName == "smoker"
+                || blockName == "campfire" || blockName == "soul_campfire") {
                 if (type->integer(-1) != 1)
                     continue;
 
-                std::vector<FurnaceRecipeData> &target = blockName == "furnace"
-                                                         ? storage.mFurnaceRecipes
-                                                         : (blockName == "campfire"
-                                                            ? storage.mCampfireRecipes
-                                                            : storage.mSoulCampfireRecipes);
-                loadFurnaceRecipe(storage, target, *recipe, tags);
+                std::vector<FurnaceRecipeData> &target =
+                        blockName == "campfire"          ? storage.mCampfireRecipes
+                        : blockName == "soul_campfire"   ? storage.mSoulCampfireRecipes
+                                                          : storage.mFurnaceRecipes;
+                loadFurnaceRecipe(storage, target, *recipe, tags, blockName);
                 continue;
             }
 
-            if (block->string() != "crafting_table")
+            if (blockName == "smithing_table") {
+                const int kind = type->integer(-1);
+                const auto *id = recipe->get("id");
+                if ((kind != 6 && kind != 7) || id == nullptr)
+                    continue;
+                SmithingRecipeEntry entry;
+                entry.mRecipeId = id->string();
+                entry.mBlockName = blockName;
+                entry.mTemplate = smithingIngredient(recipe->get("template"));
+                entry.mInput = smithingIngredient(recipe->get("base"));
+                entry.mAddition = smithingIngredient(recipe->get("addition"));
+                if (!entry.mTemplate.mHasItem || !entry.mInput.mHasItem || !entry.mAddition.mHasItem)
+                    continue;
+                if (kind == 6) {
+                    const auto *result = recipe->get("result");
+                    const auto *name = result == nullptr ? nullptr : result->get("id");
+                    const auto *network = name == nullptr ? nullptr : ItemNetworkIdTable::find(name->string());
+                    if (network == nullptr)
+                        continue;
+                    entry.mOutput.mRuntimeId = network->mNetworkId;
+                }
+                storage.mSmithing[kind - 6].push_back(std::move(entry));
+                continue;
+            }
+
+            if (blockName == "stonecutter") {
+                if (type->integer(-1) == 1)
+                    loadStonecutterRecipe(storage, *recipe);
+                continue;
+            }
+
+            if (blockName != "crafting_table")
                 continue;
 
             switch (type->integer(-1)) {
@@ -352,6 +551,10 @@ namespace {
         }
         return storage;
     }
+}
+
+const std::vector<SmithingRecipeEntry> &CraftingRecipeTable::getSmithingRecipes(bool trim) {
+    return getStorage().mSmithing[trim ? 1 : 0];
 }
 
 const CraftingRecipeData *CraftingRecipeTable::getRecipes() {
@@ -376,6 +579,14 @@ const FurnaceRecipeData *CraftingRecipeTable::getFurnaceRecipes() {
 
 size_t CraftingRecipeTable::getFurnaceRecipeCount() {
     return getStorage().mFurnaceRecipes.size();
+}
+
+const StonecutterRecipeData *CraftingRecipeTable::getStonecutterRecipes() {
+    return getStorage().mStonecutterRecipes.data();
+}
+
+size_t CraftingRecipeTable::getStonecutterRecipeCount() {
+    return getStorage().mStonecutterRecipes.size();
 }
 
 const FurnaceRecipeData *CraftingRecipeTable::findCampfireRecipe(const std::string &inputId, int32_t inputMeta,
@@ -446,7 +657,20 @@ bool CraftingRecipeTable::isKnownBy(const std::string &recipeId, int32_t protoco
     return found->second.count(recipeId.substr(0, recipeId.find('#'))) != 0;
 }
 
+std::string CraftingRecipeTable::baseRecipeId(const std::string &recipeId) {
+    return recipeId.substr(0, recipeId.find('#'));
+}
+
+const RecipeUnlockRequirement *CraftingRecipeTable::getUnlockRequirement(const std::string &recipeId) {
+    const RecipeStorage &storage = getStorage();
+    const auto found = storage.mUnlocking.find(baseRecipeId(recipeId));
+    return found == storage.mUnlocking.end() ? nullptr : &found->second;
+}
+
 const std::vector<std::string> &CraftingRecipeTable::getItemTags(const std::string &identifier) {
+    if (const CustomItemDefinition *custom = CustomContentRegistry::getInstance().findItem(identifier))
+        return custom->mTags;
+
     static const std::unordered_map<std::string, std::vector<std::string>> TAGS_BY_ITEM = [] {
         std::unordered_map<std::string, std::vector<std::string>> byItem;
         for (const auto &entry: loadTags()) {

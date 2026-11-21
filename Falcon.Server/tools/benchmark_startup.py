@@ -95,7 +95,7 @@ def main():
         return names if index % 2 == 0 else names[::-1]
 
     with tempfile.TemporaryDirectory(prefix="falcon-startup-") as temporary:
-        # Isolate all databases, packs and configuration from the user's server.
+        # isolate databases, packs and configuration from the user's server
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as address:
             address.bind(("127.0.0.1", 0))
             port = address.getsockname()[1]

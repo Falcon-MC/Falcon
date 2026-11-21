@@ -9,10 +9,19 @@
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <random>
 
 FALCON_REGISTER_BLOCK(FarmlandBlock, 245);
+
+// 15/16 high, like a dirt path
+bool FarmlandBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    (void) state;
+    (void) actor;
+    shape = AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 0.9375f, 1.0f);
+    return true;
+}
 
 namespace {
     const char *MOISTURE_STATE = "moisturized_amount";
@@ -22,7 +31,7 @@ namespace {
     const float TRAMPLE_MIN_VOLUME = 0.512f;
 
     bool isWater(const BlockState &state) {
-        return state.mName == "minecraft:water" || state.mName == "minecraft:flowing_water";
+        return state.mName == BlockNames::WATER || state.mName == "minecraft:flowing_water";
     }
 
     float nextFloat() {
@@ -66,7 +75,7 @@ void FarmlandBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, cons
     }
 
     if (!maintainsFarmland(level, position))
-        BlockChangeSystem::change(level, position, BlockState("minecraft:dirt"), BlockChangeCause::Fade, true);
+        BlockChangeSystem::change(level, position, BlockState(BlockNames::DIRT), BlockChangeCause::Fade, true);
 }
 
 void FarmlandBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -121,5 +130,5 @@ bool FarmlandBlock::maintainsFarmland(Level &level, const Vector3i &position) {
 }
 
 void FarmlandBlock::turnToDirt(Level &level, const Vector3i &position) {
-    level.setBlock(position, BlockState("minecraft:dirt"), true);
+    level.setBlock(position, BlockState(BlockNames::DIRT), true);
 }

@@ -11,13 +11,11 @@
 FALCON_REGISTER_BLOCK(TorchBlock, 170);
 
 bool TorchBlock::matches(const std::string &identifier) {
-    return identifier == "minecraft:torch"
-           || BlockIdentifier::startsWith(identifier, "minecraft:colored_torch_")
+    return identifier == "minecraft:torch" || BlockIdentifier::startsWith(identifier, "minecraft:colored_torch_")
            || BlockIdentifier::endsWith(identifier, "_torch");
 }
 
-BlockState TorchBlock::applyPlacementOrientation(const BlockState &state,
-                                                            const BlockPlacementContext &context) const {
+BlockState TorchBlock::applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const {
     using namespace PlacementOrientation;
 
     BlockState result = Block::applyPlacementOrientation(state, context);

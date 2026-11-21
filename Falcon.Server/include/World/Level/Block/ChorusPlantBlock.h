@@ -16,6 +16,5 @@ public:
 
     BlockState updateShape(Level &level, const Vector3i &position, const BlockState &state) const override;
 
-    static BlockState connectedState(const BlockState &state,
-                                     const std::function<const BlockState *(int)> &neighbour);
+    static BlockState connectedState(const BlockState &state, const std::function<const BlockState *(int)> &neighbour);
 };

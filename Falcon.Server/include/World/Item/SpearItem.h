@@ -32,6 +32,9 @@ private:
 
     float getJabDamage(const ItemStack &item) const;
 
+    bool getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                         Vector3f &impulse) const;
+
     void applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const;
 
     Actor *findTarget(ServerNetworkHandler &owner, ServerPlayer &player, float maxDistance) const;

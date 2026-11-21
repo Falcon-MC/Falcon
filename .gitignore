@@ -1,5 +1,7 @@
 *
 !/.gitignore
+!/.clang-format
+!/.clang-format-ignore
 !/.github
 !/.github/**
 !/CMakeLists.txt
@@ -19,3 +21,5 @@
 !/Falcon.Server/**
 /Falcon.Server/benchmarks/
 /Falcon.Server/docs/
+__pycache__/
+.DS_Store

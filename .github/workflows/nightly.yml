@@ -1,0 +1,247 @@
+name: Nightly
+
+# dev built for every platform once its CI passed, published as the "nightly" prerelease: its files are
+# replaced each time, it is never "Latest", and the website and the update check keep pointing at the last
+# release
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+
+# one nightly at a time; a newer passing dev replaces the one waiting
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Resolve the nightly
+    # only a dev whose whole CI passed: a red dev keeps the last good nightly
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-22.04
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Resolve commit and version
+        id: resolve
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          # the release after the last one, so the update check never offers an older version
+          LAST="$(git tag -l 'v*' --sort=-v:refname | head -n 1)"
+          LAST="${LAST#v}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "${LAST:-1.0.0}"
+          VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-nightly.$(git rev-list --count HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Nightly $VERSION from $SHA"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-22.04
+            platform: linux
+            artifact: FalconServer-linux-x64
+            binary: FalconServer
+          - name: windows-x64
+            os: windows-2022
+            platform: windows
+            artifact: FalconServer.exe
+            binary: FalconServer.exe
+          - name: macos-arm64
+            os: macos-15
+            platform: macos
+            artifact: FalconServer-macos-arm64
+            binary: FalconServer
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache zlib1g-dev libssl-dev
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos-15'
+        run: brew install ninja ccache openssl@3
+
+      - name: Install MSYS2
+        if: matrix.os == 'windows-2022'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+
+      - name: Cache the pinned MSYS2 packages
+        if: matrix.os == 'windows-2022'
+        uses: actions/cache@v4
+        with:
+          path: .msys2-packages
+          key: msys2-toolchain-${{ hashFiles('.github/msys2/toolchain.txt') }}
+
+      - name: Install the pinned MSYS2 toolchain
+        if: matrix.os == 'windows-2022'
+        shell: msys2 {0}
+        run: bash .github/msys2/install.sh .msys2-packages
+
+      # the ci run this nightly follows just compiled the same commit: its cache is read, never saved again
+      - name: Restore compiler objects
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ci-ccache-${{ matrix.name }}-${{ needs.prepare.outputs.sha }}
+          restore-keys: ci-ccache-${{ matrix.name }}-
+
+      - name: Configure and build (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          ccache -z
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DZLIB_USE_STATIC_LIBS=ON \
+            -DFALCON_BUILD_VERSION=${{ needs.prepare.outputs.version }}
+          cmake --build build --parallel
+          ccache --show-stats
+
+      - name: Configure and build (macOS)
+        if: matrix.os == 'macos-15'
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          ccache -z
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+            -DFALCON_BUILD_VERSION=${{ needs.prepare.outputs.version }}
+          cmake --build build --parallel
+          ccache --show-stats
+
+      - name: Configure and build (Windows)
+        if: matrix.os == 'windows-2022'
+        shell: msys2 {0}
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: |
+          ccache -z
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DFALCON_BUILD_VERSION=${{ needs.prepare.outputs.version }}
+          cmake --build build --parallel 4
+          ccache --show-stats
+
+      - name: Stage the executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "build/Falcon.Server/${{ matrix.binary }}" "dist/${{ matrix.artifact }}"
+          cd dist
+          if command -v sha256sum > /dev/null; then
+            sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          else
+            shasum -a 256 "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          fi
+
+      - name: Package the internal plugin SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="FalconSDK-${{ matrix.platform }}"
+          cmake -DFALCON_BUILD_DIR=build -DFALCON_SOURCE_DIR=. -DFALCON_SDK_OUTPUT="dist/$SDK" \
+            -DFALCON_SDK_PLATFORM=${{ matrix.platform }} -DFALCON_SDK_VERSION=${{ needs.prepare.outputs.version }} \
+            -P Falcon.Server/cmake/FalconPackageSDK.cmake
+          cd dist
+          cmake -E tar czf "$SDK.tar.gz" "$SDK"
+          rm -rf "$SDK"
+          if command -v sha256sum > /dev/null; then
+            sha256sum "$SDK.tar.gz" > "$SDK.tar.gz.sha256"
+          else
+            shasum -a 256 "$SDK.tar.gz" > "$SDK.tar.gz.sha256"
+          fi
+          ls -lh
+
+      - name: Upload the build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the nightly
+    needs: [prepare, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download the build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Move the nightly tag to the built commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/git/refs/tags/nightly" -X PATCH -f sha="${{ needs.prepare.outputs.sha }}" -F force=true \
+            || gh api "repos/${{ github.repository }}/git/refs" -f ref=refs/tags/nightly -f sha="${{ needs.prepare.outputs.sha }}"
+
+      - name: Replace the nightly release
+        uses: ncipollo/release-action@v1.15.0
+        with:
+          artifacts: "artifacts/*"
+          tag: nightly
+          commit: ${{ needs.prepare.outputs.sha }}
+          name: Falcon nightly (${{ needs.prepare.outputs.version }})
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          removeArtifacts: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            > [!WARNING]
+            > **Development build** of `dev` at [`${{ needs.prepare.outputs.sha }}`](https://github.com/${{ github.repository }}/commit/${{ needs.prepare.outputs.sha }}), built once its CI passed. It is replaced by every newer passing `dev` and may be unstable. For a server you rely on, use the [latest release](https://github.com/${{ github.repository }}/releases/latest).
+
+            **Falcon ${{ needs.prepare.outputs.version }} for Minecraft: Bedrock Edition**
+
+            | Platform | Server | Internal plugin SDK |
+            | --- | --- | --- |
+            | Linux x64 | `FalconServer-linux-x64` | `FalconSDK-linux.tar.gz` |
+            | Windows x64 | `FalconServer.exe` | `FalconSDK-windows.tar.gz` |
+            | macOS Apple Silicon | `FalconServer-macos-arm64` | `FalconSDK-macos.tar.gz` |
+
+            Each file ships with a `.sha256` checksum file. Internal plugins must be rebuilt for every nightly.
+
+            Changes since the last release: [`compare`](https://github.com/${{ github.repository }}/compare/main...${{ needs.prepare.outputs.sha }})

@@ -1,6 +1,8 @@
 #include "World/Level/Block/PointedDripstoneBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockMaterial.h"
+#include "World/Level/Block/BlockRandomOffset.h"
 #include "World/Level/Block/BlockQuery.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -9,6 +11,7 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
+#include "Network/ServerNetworkHandler.h"
 
 #include <string>
 
@@ -17,11 +20,25 @@ FALCON_REGISTER_BLOCK(PointedDripstoneBlock, 323);
 using namespace BlockQuery;
 
 namespace {
-    const char *HANGING = "hanging";
     const char *THICKNESS = "dripstone_thickness";
+    constexpr float TIP_INSET = 0.3125f;
+    constexpr float FRUSTUM_INSET = 0.25f;
+    constexpr float MIDDLE_INSET = 0.1875f;
+    constexpr float BASE_INSET = 0.125f;
+    constexpr float TIP_HEIGHT = 0.6875f;
+    constexpr float OFFSET_RANGE = 0.125f;
+    constexpr uint32_t OFFSET_STEPS = 16;
     const int32_t DRIPSTONE_GROWTH_PER_MILLION = 11378;
-    const int32_t MAX_TIP_SEARCH = 7;
     const int32_t MAX_STALAGMITE_SEARCH = 10;
+    const int32_t MAX_DRIP_DISTANCE = 10;
+    const float WATER_DRIP_CHANCE = 0.42f;
+    const float LAVA_DRIP_CHANCE = 0.07f;
+    // the drop particle of each fluid, aimed at a cauldron
+    const int32_t LEVEL_EVENT_DRIP = 2028;
+    const int32_t DRIP_WATER = 0x1C;
+    const int32_t DRIP_LAVA = 0x1D;
+    // a drop lands this long after leaving the tip, on top of one tick per block
+    const int64_t DRIP_FALL_TICKS = 50;
 
     Vector3i offset(const Vector3i &position, int32_t dy) {
         return Vector3i(position.x, position.y + dy, position.z);
@@ -34,20 +51,29 @@ bool PointedDripstoneBlock::matches(const std::string &identifier) {
 
 void PointedDripstoneBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &state) const {
-    (void) owner;
-
     if (!isHanging(state) || matches(stateAt(level, offset(position, 1)).mName))
         return;
 
+    growFromRoot(level, position);
+
+    CauldronBlock::Liquid fluid;
+    if (!getDripFluid(level, position, fluid))
+        return;
+    if (RandomTickSystem::nextFloat() > (fluid == CauldronBlock::Liquid::Lava ? LAVA_DRIP_CHANCE : WATER_DRIP_CHANCE))
+        return;
+    dripIntoCauldron(owner, level, position, fluid);
+}
+
+void PointedDripstoneBlock::growFromRoot(Level &level, const Vector3i &root) const {
     if (RandomTickSystem::nextInt(1000000) >= DRIPSTONE_GROWTH_PER_MILLION)
         return;
 
-    if (stateAt(level, offset(position, 1)).mName != "minecraft:dripstone_block"
-        || !WaterBlock::isSource(stateAt(level, offset(position, 2))))
+    if (stateAt(level, offset(root, 1)).mName != "minecraft:dripstone_block"
+        || !WaterBlock::isSource(stateAt(level, offset(root, 2))))
         return;
 
     Vector3i tip;
-    if (!findTip(level, position, true, tip) || !canTipGrow(level, tip, true))
+    if (!findTip(level, root, true, tip) || !canTipGrow(level, tip, true))
         return;
 
     if (RandomTickSystem::nextInt(2) == 0)
@@ -56,72 +82,73 @@ void PointedDripstoneBlock::onRandomTick(ServerNetworkHandler &owner, Level &lev
         growStalagmiteBelow(level, tip);
 }
 
-bool PointedDripstoneBlock::isHanging(const BlockState &state) {
-    return state.mStates.getBool(HANGING, false);
+void PointedDripstoneBlock::dripIntoCauldron(ServerNetworkHandler &owner, Level &level, const Vector3i &root,
+                                             CauldronBlock::Liquid fluid) const {
+    Vector3i tip;
+    if (!findTip(level, root, true, tip, MAX_DRIP_DISTANCE))
+        return;
+
+    // the first block below the tip that is not air ends the fall
+    Vector3i cauldron = tip;
+    for (int32_t distance = 1;; ++distance) {
+        cauldron.y = tip.y - distance;
+        if (!isInRange(level, cauldron))
+            return;
+        const BlockState below = stateAt(level, cauldron);
+        if (CauldronBlock::matches(below.mName) && CauldronBlock::canReceiveDrip(level, cauldron, fluid))
+            break;
+        if (!isAirAt(level, cauldron) || distance >= MAX_DRIP_DISTANCE)
+            return;
+    }
+
+    owner.broadcastLevelEvent(level, LEVEL_EVENT_DRIP, Vector3f((float) tip.x, (float) tip.y, (float) tip.z),
+                              fluid == CauldronBlock::Liquid::Lava ? DRIP_LAVA : DRIP_WATER);
+    level.scheduleUpdate(cauldron, (int64_t) (tip.y - cauldron.y) + DRIP_FALL_TICKS);
 }
 
-bool PointedDripstoneBlock::pointsTowards(const BlockState &state, bool hanging) {
-    return matches(state.mName) && isHanging(state) == hanging;
+bool PointedDripstoneBlock::isStalactiteTip(Level &level, const Vector3i &position) {
+    const BlockState state = stateAt(level, position);
+    if (!matches(state.mName) || !isHanging(state) || state.mStates.getString(THICKNESS, "tip") != "tip")
+        return false;
+    // a drop does not form under water
+    BlockMaterialType type;
+    const BlockState extra = level.getBlockStateAtLayer(position.x, position.y, position.z, 1);
+    return !BlockMaterial::find(extra, type) || type != BlockMaterialType::Water;
 }
 
-bool PointedDripstoneBlock::findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip) {
-    const int32_t step = hanging ? -1 : 1;
-    Vector3i current = root;
+bool PointedDripstoneBlock::getDripFluid(Level &level, const Vector3i &stalactite, CauldronBlock::Liquid &fluid) {
+    const BlockState state = stateAt(level, stalactite);
+    if (!matches(state.mName) || !isHanging(state))
+        return false;
 
-    for (int32_t index = 0; index < MAX_TIP_SEARCH; ++index) {
-        const BlockState state = stateAt(level, current);
-        if (!pointsTowards(state, hanging))
+    // the block the column hangs from; the fluid sits on top of it
+    Vector3i root = stalactite;
+    for (int32_t index = 0;; ++index) {
+        if (index >= MAX_DRIP_DISTANCE)
             return false;
-
-        if (state.mStates.getString(THICKNESS, "tip") == "tip") {
-            tip = current;
-            return true;
-        }
-
-        current = offset(current, step);
+        root = offset(root, 1);
+        if (!isInRange(level, root))
+            return false;
+        const BlockState current = stateAt(level, root);
+        if (!matches(current.mName))
+            break;
+        if (!isHanging(current))
+            return false;
     }
 
-    return false;
-}
-
-bool PointedDripstoneBlock::canTipGrow(Level &level, const Vector3i &tip, bool hanging) {
-    const Vector3i target = offset(tip, hanging ? -1 : 1);
-    if (!isInRange(level, target))
+    const Vector3i source = offset(root, 1);
+    if (source.y > level.getMaxY())
         return false;
-
-    const BlockState next = stateAt(level, target);
-    if (LiquidView(next).isLiquid())
+    const BlockState above = stateAt(level, source);
+    BlockMaterialType type;
+    if (!BlockMaterial::find(above, type) || (type != BlockMaterialType::Water && type != BlockMaterialType::Lava)
+        || above.mStates.getInt("liquid_depth", 0) != 0)
         return false;
-
-    return DecorationSupport::isAir(next)
-           || (pointsTowards(next, !hanging) && next.mStates.getString(THICKNESS, "tip") == "tip");
+    fluid = type == BlockMaterialType::Lava ? CauldronBlock::Liquid::Lava : CauldronBlock::Liquid::Water;
+    return true;
 }
 
-void PointedDripstoneBlock::grow(Level &level, const Vector3i &tip, bool hanging) {
-    if (!canTipGrow(level, tip, hanging))
-        return;
-
-    const Vector3i target = offset(tip, hanging ? -1 : 1);
-    const BlockState targetState = stateAt(level, target);
-
-    if (!DecorationSupport::isAir(targetState)) {
-        level.setBlock(tip, DecorationSupport::withState(stateAt(level, tip), THICKNESS, "merge"), false);
-        level.setBlock(target, DecorationSupport::withState(targetState, THICKNESS, "merge"), false);
-        refreshThickness(level, offset(tip, hanging ? 1 : -1), hanging);
-        refreshThickness(level, offset(target, hanging ? -1 : 1), !hanging);
-        return;
-    }
-
-    BlockState placed = VanillaBlocks::POINTED_DRIPSTONE().toBlockState();
-    placed = DecorationSupport::withState(placed, HANGING, hanging ? 1 : 0);
-    placed = DecorationSupport::withState(placed, THICKNESS, "tip");
-    if (!BlockChangeSystem::change(level, target, placed, BlockChangeCause::Grow, true))
-        return;
-    refreshThickness(level, target, hanging);
-    refreshThickness(level, offset(target, hanging ? -1 : 1), !hanging);
-}
-
-void PointedDripstoneBlock::growStalagmiteBelow(Level &level, const Vector3i &tip) {
+void PointedDripstoneBlock::growStalagmiteBelow(Level &level, const Vector3i &tip) const {
     Vector3i current = tip;
 
     for (int32_t index = 0; index < MAX_STALAGMITE_SEARCH; ++index) {
@@ -150,33 +177,29 @@ void PointedDripstoneBlock::growStalagmiteBelow(Level &level, const Vector3i &ti
     }
 }
 
-void PointedDripstoneBlock::refreshThickness(Level &level, const Vector3i &position, bool hanging) {
-    const int32_t step = hanging ? -1 : 1;
-    Vector3i current = position;
-
-    for (int32_t index = 0; index < 4; ++index) {
-        const BlockState state = stateAt(level, current);
-        if (!pointsTowards(state, hanging))
-            return;
-
-        const BlockState ahead = stateAt(level, offset(current, step));
-        std::string thickness;
-
-        if (pointsTowards(ahead, !hanging)) {
-            thickness = "merge";
-        } else if (!pointsTowards(ahead, hanging)) {
-            thickness = "tip";
-        } else {
-            const std::string aheadThickness = ahead.mStates.getString(THICKNESS, "tip");
-            if (aheadThickness == "tip" || aheadThickness == "merge")
-                thickness = "frustum";
-            else
-                thickness = pointsTowards(stateAt(level, offset(current, -step)), hanging) ? "middle" : "base";
-        }
-
-        if (state.mStates.getString(THICKNESS, "tip") != thickness)
-            level.setBlock(current, DecorationSupport::withState(state, THICKNESS, thickness.c_str()), false);
-
-        current = offset(current, -step);
+// the column narrows towards the tip and shifts with its position
+bool PointedDripstoneBlock::getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                                AxisAlignedBB &shape) const {
+    (void) actor;
+    const std::string thickness = state.mStates.getString(THICKNESS, "tip");
+    float inset = TIP_INSET;
+    float bottom = 0.0f;
+    float top = 1.0f;
+    if (thickness == "frustum") {
+        inset = FRUSTUM_INSET;
+    } else if (thickness == "middle") {
+        inset = MIDDLE_INSET;
+    } else if (thickness == "base") {
+        inset = BASE_INSET;
+    } else if (thickness != "merge") {
+        if (isHanging(state))
+            bottom = 1.0f - TIP_HEIGHT;
+        else
+            top = TIP_HEIGHT;
     }
+
+    const Vector3f offset = BlockRandomOffset::horizontal(position.x, position.z, OFFSET_RANGE, OFFSET_STEPS);
+    shape = AxisAlignedBB(inset + offset.x, bottom, inset + offset.z, 1.0f - inset + offset.x, top,
+                          1.0f - inset + offset.z);
+    return true;
 }

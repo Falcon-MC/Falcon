@@ -8,9 +8,15 @@ public:
 
     using NeutralActor::NeutralActor;
 
-    ActorSize getSize() const override { return ActorSize{0.9f, 0.6f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.9f, 0.6f};
+    }
 
-    float getDefaultMaxHealth() const override { return 10.0f; }
+    float getDefaultMaxHealth() const override {
+        return 10.0f;
+    }
 
-    int getExperienceDrop() const override { return 0; }
+    int getExperienceDrop() const override {
+        return 0;
+    }
 };

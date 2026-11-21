@@ -20,12 +20,11 @@ namespace {
             return false;
         }
 
-        return (ingredient.mAuxValue < 0 || item.mDamage == ingredient.mAuxValue)
-               && item.mCount >= ingredient.mCount;
+        return (ingredient.mAuxValue < 0 || item.mDamage == ingredient.mAuxValue) && item.mCount >= ingredient.mCount;
     }
 
     bool matchShaped(const std::vector<ItemStack> &grid, int gridWidth, const CraftingRecipeData &recipe,
-                    const CraftingIngredientData *ingredients, CraftingRecipeMatch &match) {
+                     const CraftingIngredientData *ingredients, CraftingRecipeMatch &match) {
         if (recipe.mWidth <= 0 || recipe.mHeight <= 0 || recipe.mWidth > gridWidth || recipe.mHeight > gridWidth
             || recipe.mIngredientCount < (uint32_t) (recipe.mWidth * recipe.mHeight)) {
             return false;
@@ -39,8 +38,8 @@ namespace {
 
                     for (int y = 0; y < gridWidth && valid; ++y) {
                         for (int x = 0; x < gridWidth; ++x) {
-                            const bool inside = x >= offsetX && x < offsetX + recipe.mWidth
-                                                && y >= offsetY && y < offsetY + recipe.mHeight;
+                            const bool inside = x >= offsetX && x < offsetX + recipe.mWidth && y >= offsetY
+                                                && y < offsetY + recipe.mHeight;
                             const int gridSlot = y * gridWidth + x;
                             if (!inside) {
                                 if (!isAir(grid[(size_t) gridSlot])) {
@@ -76,7 +75,7 @@ namespace {
     }
 
     bool matchShapeless(const std::vector<ItemStack> &grid, int gridWidth, const CraftingRecipeData &recipe,
-                       const CraftingIngredientData *ingredients, CraftingRecipeMatch &match) {
+                        const CraftingIngredientData *ingredients, CraftingRecipeMatch &match) {
         if (recipe.mWidth != 0 || recipe.mHeight != 0 || recipe.mIngredientCount == 0
             || grid.size() != (size_t) gridWidth * gridWidth) {
             return false;
@@ -137,8 +136,7 @@ namespace {
         if (isAir(item) || item.mDefinition == nullptr) {
             return false;
         }
-        return std::string(item.mDefinition->getIdentifier()) == ingredient.mItemId
-               && item.mCount >= ingredient.mCount;
+        return std::string(item.mDefinition->getIdentifier()) == ingredient.mItemId && item.mCount >= ingredient.mCount;
     }
 
     bool matchCustomShaped(const std::vector<ItemStack> &grid, int gridWidth, const CustomRecipe &recipe,
@@ -155,8 +153,8 @@ namespace {
 
                 for (int y = 0; y < gridWidth && valid; ++y) {
                     for (int x = 0; x < gridWidth; ++x) {
-                        const bool inside = x >= offsetX && x < offsetX + recipe.mWidth
-                                            && y >= offsetY && y < offsetY + recipe.mHeight;
+                        const bool inside = x >= offsetX && x < offsetX + recipe.mWidth && y >= offsetY
+                                            && y < offsetY + recipe.mHeight;
                         const int gridSlot = y * gridWidth + x;
                         if (!inside) {
                             if (!isAir(grid[(size_t) gridSlot])) {
@@ -247,8 +245,8 @@ namespace {
     }
 }
 
-bool CraftingManager::matchRecipe(const std::vector<ItemStack> &grid, int gridWidth,
-                                  const CraftingRecipeData &recipe, CraftingRecipeMatch &match) {
+bool CraftingManager::matchRecipe(const std::vector<ItemStack> &grid, int gridWidth, const CraftingRecipeData &recipe,
+                                  CraftingRecipeMatch &match) {
     if (!CraftingGrid::isValidWidth(gridWidth) || grid.size() != (size_t) CraftingGrid::getSize(gridWidth)) {
         return false;
     }
@@ -258,17 +256,14 @@ bool CraftingManager::matchRecipe(const std::vector<ItemStack> &grid, int gridWi
         return false;
     }
 
-    return recipe.mWidth > 0
-           ? matchShaped(grid, gridWidth, recipe, ingredients, match)
-           : matchShapeless(grid, gridWidth, recipe, ingredients, match);
+    return recipe.mWidth > 0 ? matchShaped(grid, gridWidth, recipe, ingredients, match)
+                             : matchShapeless(grid, gridWidth, recipe, ingredients, match);
 }
 
 bool CraftingManager::matchNetworkRecipe(const std::vector<ItemStack> &grid, int gridWidth, int32_t networkId,
                                          const std::vector<ItemStack> &recipeOutputs,
-                                         const std::vector<uint32_t> &recipeSourceIndices,
-                                         CraftingRecipeMatch &match) {
-    if (networkId <= 0 || (size_t) networkId > recipeOutputs.size()
-        || recipeOutputs[(size_t) networkId - 1].isAir()
+                                         const std::vector<uint32_t> &recipeSourceIndices, CraftingRecipeMatch &match) {
+    if (networkId <= 0 || (size_t) networkId > recipeOutputs.size() || recipeOutputs[(size_t) networkId - 1].isAir()
         || (size_t) networkId > recipeSourceIndices.size()) {
         return false;
     }
@@ -286,16 +281,22 @@ bool CraftingManager::matchNetworkRecipe(const std::vector<ItemStack> &grid, int
     return matchRecipe(grid, gridWidth, CraftingRecipeTable::getRecipes()[sourceIndex], match);
 }
 
+int32_t CraftingManager::findNetworkRecipe(const std::vector<ItemStack> &grid, int gridWidth,
+                                           const std::vector<ItemStack> &recipeOutputs,
+                                           const std::vector<uint32_t> &recipeSourceIndices) {
+    CraftingRecipeMatch match;
+    for (size_t index = 0; index < recipeOutputs.size() && index < recipeSourceIndices.size(); ++index) {
+        if (matchNetworkRecipe(grid, gridWidth, (int32_t) index + 1, recipeOutputs, recipeSourceIndices, match))
+            return (int32_t) index + 1;
+    }
+    return 0;
+}
+
 ItemStack CraftingManager::findResult(const std::vector<ItemStack> &grid, int gridWidth,
                                       const std::vector<ItemStack> &recipeOutputs,
                                       const std::vector<uint32_t> &recipeSourceIndices) {
-    CraftingRecipeMatch match;
-    for (size_t index = 0; index < recipeOutputs.size() && index < recipeSourceIndices.size(); ++index) {
-        if (matchNetworkRecipe(grid, gridWidth, (int32_t) index + 1, recipeOutputs, recipeSourceIndices, match)) {
-            return recipeOutputs[index];
-        }
-    }
-    return ItemStack::air();
+    const int32_t networkId = findNetworkRecipe(grid, gridWidth, recipeOutputs, recipeSourceIndices);
+    return networkId > 0 ? recipeOutputs[(size_t) networkId - 1] : ItemStack::air();
 }
 
 bool CraftingManager::matchResult(const std::vector<ItemStack> &grid, int gridWidth, const ItemStack &result,

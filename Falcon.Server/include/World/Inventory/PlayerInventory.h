@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 #include "World/Inventory/Container.h"
 #include "Protocol/Types/ContainerSlotType.h"
 
@@ -15,7 +17,24 @@ public:
     static const int CRAFTING_SIZE = 4;
     static const int CRAFTING_TABLE_SIZE = 9;
     static const int FURNACE_SIZE = 3;
+    static const int ANVIL_SIZE = 2;
+    static const int ANVIL_INPUT = 0;
+    static const int ANVIL_MATERIAL = 1;
+    static const int CARTOGRAPHY_SIZE = 2;
+    static const int CARTOGRAPHY_INPUT = 0;
+    static const int CARTOGRAPHY_ADDITIONAL = 1;
+    static const int TRADE_SIZE = 2;
+    static const int SMITHING_SIZE = 3;
+    static constexpr int GRINDSTONE_SIZE = 2;
+    static constexpr int GRINDSTONE_FIRST_SLOT = 16;
+    // banner, dye and banner pattern, in that order
+    static constexpr int LOOM_SIZE = 3;
+    static constexpr int LOOM_FIRST_SLOT = 9;
+    static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
+    static const int BEACON_PAYMENT_NETWORK_SLOT = 27;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
+    // the body armor is saved right behind the four worn pieces
+    static const int SAVED_BODY_SLOT = SAVED_SIZE;
 
     static const int CONTAINER_ID_INVENTORY = 0;
     static const int CONTAINER_ID_OFFHAND = 119;
@@ -25,6 +44,7 @@ public:
     static const int OFFHAND_NETWORK_SLOT = 1;
     static const int CRAFTING_NETWORK_SLOT_FIRST = 28;
     static const int CRAFTING_TABLE_NETWORK_SLOT_FIRST = 32;
+    static const int SMITHING_FIRST_SLOT = 51;
 
     static const int ARMOR_HEAD = 0;
     static const int ARMOR_TORSO = 1;
@@ -35,9 +55,13 @@ public:
 
     static const ItemStack &getEmptyItem();
 
-    const std::vector<ItemStack> &getContents() const { return mItems; }
+    const std::vector<ItemStack> &getContents() const {
+        return mItems;
+    }
 
-    const std::vector<ItemStack> &getArmorContents() const { return mArmor; }
+    const std::vector<ItemStack> &getArmorContents() const {
+        return mArmor;
+    }
 
     const std::vector<ItemStack> &getCraftingContents() const {
         return mCrafting;
@@ -47,11 +71,17 @@ public:
 
     void setItem(int slot, ItemStack item);
 
-    int getContainerSize() const override { return CONTAINER_SIZE; }
+    int getContainerSize() const override {
+        return CONTAINER_SIZE;
+    }
 
-    const ItemStack &getContainerItem(int slot) const override { return getItem(slot); }
+    const ItemStack &getContainerItem(int slot) const override {
+        return getItem(slot);
+    }
 
-    void setContainerItem(int slot, ItemStack item) override { setItem(slot, std::move(item)); }
+    void setContainerItem(int slot, ItemStack item) override {
+        setItem(slot, std::move(item));
+    }
 
     const ItemStack &getArmor(int slot) const;
 
@@ -61,33 +91,100 @@ public:
 
     void setCraftingItem(int slot, ItemStack item);
 
-    const std::vector<ItemStack> &getCraftingTableContents() const { return mCraftingTable; }
+    const std::vector<ItemStack> &getCraftingTableContents() const {
+        return mCraftingTable;
+    }
 
     const ItemStack &getCraftingTableItem(int slot) const;
 
     void setCraftingTableItem(int slot, ItemStack item);
 
-    const std::vector<ItemStack> &getFurnaceContents() const { return mFurnace; }
+    const std::vector<ItemStack> &getFurnaceContents() const {
+        return mFurnace;
+    }
 
     const ItemStack &getFurnaceItem(int slot) const;
 
     void setFurnaceItem(int slot, ItemStack item);
 
-    const ItemStack &getOffhand() const { return mOffhand; }
+    const ItemStack &getAnvilItem(int slot) const;
+
+    void setAnvilItem(int slot, ItemStack item);
+
+    const ItemStack &getCartographyItem(int slot) const;
+
+    void setCartographyItem(int slot, ItemStack item);
+
+    // the two wanted items of the trade screen
+    const ItemStack &getTradeItem(int slot) const;
+
+    void setTradeItem(int slot, ItemStack item);
+
+    const ItemStack &getStonecutterInput() const {
+        return mStonecutterInput;
+    }
+
+    void setStonecutterInput(ItemStack item);
+
+    const ItemStack &getBeaconPayment() const {
+        return mBeaconPayment;
+    }
+
+    void setBeaconPayment(ItemStack item);
+
+    static int grindstoneIndex(ContainerSlotType container);
+
+    const ItemStack &getGrindstoneItem(int index) const {
+        return mGrindstone[(size_t) index];
+    }
+    void setGrindstoneItem(int index, ItemStack item);
+
+    static int loomIndex(ContainerSlotType container);
+
+    const ItemStack &getLoomItem(int index) const {
+        return mLoom[(size_t) index];
+    }
+    void setLoomItem(int index, ItemStack item);
+
+    static int smithingIndex(ContainerSlotType container);
+
+    const ItemStack &getSmithingItem(int index) const {
+        return mSmithing[(size_t) index];
+    }
+    void setSmithingItem(int index, ItemStack item);
+
+    const ItemStack &getOffhand() const {
+        return mOffhand;
+    }
 
     void setOffhand(ItemStack item);
 
-    const ItemStack &getCursor() const { return mCursor; }
+    // no screen shows it: commands and scripts fill it, as on any mob
+    const ItemStack &getBodyArmor() const {
+        return mBodyArmor;
+    }
+
+    void setBodyArmor(ItemStack item);
+
+    const ItemStack &getCursor() const {
+        return mCursor;
+    }
 
     void setCursor(ItemStack item);
 
-    int getSelectedSlot() const { return mSelectedSlot; }
+    int getSelectedSlot() const {
+        return mSelectedSlot;
+    }
 
     void setSelectedSlot(int slot);
 
-    const ItemStack &getItemInHand() const { return getItem(mSelectedSlot); }
+    const ItemStack &getItemInHand() const {
+        return getItem(mSelectedSlot);
+    }
 
-    void setItemInHand(ItemStack item) { setItem(mSelectedSlot, std::move(item)); }
+    void setItemInHand(ItemStack item) {
+        setItem(mSelectedSlot, std::move(item));
+    }
 
     ItemStack *resolveSlot(ContainerSlotType container, int slot);
 
@@ -115,10 +212,19 @@ private:
     std::vector<ItemStack> mCrafting;
     std::vector<ItemStack> mCraftingTable;
     std::vector<ItemStack> mFurnace;
+    std::vector<ItemStack> mSmithing;
+    std::array<ItemStack, GRINDSTONE_SIZE> mGrindstone{ItemStack::air(), ItemStack::air()};
+    std::array<ItemStack, LOOM_SIZE> mLoom{ItemStack::air(), ItemStack::air(), ItemStack::air()};
+    std::vector<ItemStack> mAnvil;
+    std::vector<ItemStack> mCartography;
+    std::vector<ItemStack> mTrade;
     ItemStack mOffhand;
+    ItemStack mBodyArmor;
     ItemStack mCursor;
     ItemStack mEnchantingInput;
     ItemStack mEnchantingMaterial;
+    ItemStack mStonecutterInput;
+    ItemStack mBeaconPayment;
     int mSelectedSlot;
     int32_t mNextNetId;
 };

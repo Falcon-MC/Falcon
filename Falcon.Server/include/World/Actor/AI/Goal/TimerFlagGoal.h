@@ -9,9 +9,8 @@
 
 class TimerFlagGoal : public Goal {
 public:
-    TimerFlagGoal(ActorFlag flag, int32_t minDuration, int32_t maxDuration, int32_t minCooldown,
-                  int32_t maxCooldown, std::shared_ptr<json::Value> onStart, std::shared_ptr<json::Value> onEnd,
-                  uint8_t controlFlags);
+    TimerFlagGoal(ActorFlag flag, int32_t minDuration, int32_t maxDuration, int32_t minCooldown, int32_t maxCooldown,
+                  std::shared_ptr<json::Value> onStart, std::shared_ptr<json::Value> onEnd, uint8_t controlFlags);
 
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 

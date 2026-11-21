@@ -30,11 +30,15 @@ public:
 
     void loadFolder(const std::string &path, const std::string &label);
 
-    const std::vector<ResourcePack> &getPacks() const { return mPacks; }
+    const std::vector<ResourcePack> &getPacks() const {
+        return mPacks;
+    }
 
     const ResourcePack *findById(const std::string &uuid) const;
 
-    size_t count() const { return mPacks.size(); }
+    size_t count() const {
+        return mPacks.size();
+    }
 
     std::vector<std::string> getLoadedUuids() const;
 
@@ -53,8 +57,7 @@ private:
 
     static bool _extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out);
 
-    static bool _readManifest(const std::string &manifest, std::string &uuid, std::string &version,
-                              std::string &name);
+    static bool _readManifest(const std::string &manifest, std::string &uuid, std::string &version, std::string &name);
 
     static std::string _sha256(const std::string &data);
 

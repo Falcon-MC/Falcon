@@ -34,9 +34,8 @@ namespace {
 
     class Parser {
     public:
-        Parser(const std::string &source, const ServerActor &actor, const MolangContext &context)
-                : mSource(source), mActor(actor), mContext(context) {
-        }
+        Parser(const std::string &source, const ServerActor *actor, const MolangContext &context)
+                : mSource(source), mActor(actor), mContext(context) {}
 
         MolangValue parse() {
             return _ternary();
@@ -244,8 +243,8 @@ namespace {
                 return _query(query, arguments);
 
             if (name == "math.clamp")
-                return MolangValue::ofNumber(std::min(std::max(_argument(arguments, 0), _argument(arguments, 1)),
-                                                      _argument(arguments, 2)));
+                return MolangValue::ofNumber(
+                        std::min(std::max(_argument(arguments, 0), _argument(arguments, 1)), _argument(arguments, 2)));
             if (name == "math.min")
                 return MolangValue::ofNumber(std::min(_argument(arguments, 0), _argument(arguments, 1)));
             if (name == "math.max")
@@ -267,9 +266,8 @@ namespace {
             if (name == "math.random") {
                 const double low = _argument(arguments, 0);
                 const double high = _argument(arguments, 1);
-                return MolangValue::ofNumber(high <= low ? low
-                                                         : std::uniform_real_distribution<double>(low, high)(
-                                                                 molangRandom()));
+                return MolangValue::ofNumber(
+                        high <= low ? low : std::uniform_real_distribution<double>(low, high)(molangRandom()));
             }
             if (name == "math.die_roll") {
                 const int64_t rolls = (int64_t) std::round(_argument(arguments, 0));
@@ -283,9 +281,9 @@ namespace {
             if (name == "math.random_integer") {
                 const int64_t low = (int64_t) std::round(_argument(arguments, 0));
                 const int64_t high = (int64_t) std::round(_argument(arguments, 1));
-                return MolangValue::ofNumber(high <= low ? (double) low
-                                                         : (double) std::uniform_int_distribution<int64_t>(low, high)(
-                                                                 molangRandom()));
+                return MolangValue::ofNumber(
+                        high <= low ? (double) low
+                                    : (double) std::uniform_int_distribution<int64_t>(low, high)(molangRandom()));
             }
 
             return MolangValue::ofNumber(0.0);
@@ -294,13 +292,18 @@ namespace {
         MolangValue _query(const std::string &query, const std::vector<MolangValue> &arguments) const {
             const std::string argument = arguments.empty() ? std::string() : arguments.front().mString;
 
+            if (query == "block_state")
+                return _blockState(argument);
+            if (mActor == nullptr)
+                return MolangValue::ofNumber(0.0);
+
             if (query == "property")
                 return _property(argument);
 
             if (query == "has_property")
-                return MolangValue::ofNumber(mActor.findPropertyDescription(argument) != nullptr ? 1.0 : 0.0);
+                return MolangValue::ofNumber(mActor->findPropertyDescription(argument) != nullptr ? 1.0 : 0.0);
 
-            const MobActor *mob = dynamic_cast<const MobActor *>(&mActor);
+            const MobActor *mob = dynamic_cast<const MobActor *>(mActor);
             if (query == "had_component_group")
                 return MolangValue::ofNumber(mob != nullptr && mob->hasComponentGroup(argument) ? 1.0 : 0.0);
 
@@ -311,8 +314,8 @@ namespace {
                 return MolangValue::ofNumber((double) mContext.mPlayerLevel);
 
             if (query == "is_baby")
-                return MolangValue::ofNumber(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr
-                                             ? 1.0 : 0.0);
+                return MolangValue::ofNumber(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr ? 1.0
+                                                                                                                 : 0.0);
 
             if (query == "variant")
                 return MolangValue::ofNumber(mob == nullptr ? 0.0 : (double) mob->getVariant());
@@ -324,14 +327,14 @@ namespace {
         }
 
         MolangValue _property(const std::string &name) const {
-            const ActorPropertyDescription *descriptor = mActor.findPropertyDescription(name);
+            const ActorPropertyDescription *descriptor = mActor->findPropertyDescription(name);
             if (descriptor == nullptr)
                 return MolangValue::ofNumber(0.0);
 
             if (descriptor->mType == ActorPropertyDescription::Type::Float)
-                return MolangValue::ofNumber(mActor.getFloatProperty(name, descriptor->mDefaultFloat));
+                return MolangValue::ofNumber(mActor->getFloatProperty(name, descriptor->mDefaultFloat));
 
-            const int32_t value = mActor.getIntProperty(name, descriptor->mDefaultInt);
+            const int32_t value = mActor->getIntProperty(name, descriptor->mDefaultInt);
             if (descriptor->mType != ActorPropertyDescription::Type::Enum)
                 return MolangValue::ofNumber((double) value);
 
@@ -340,8 +343,25 @@ namespace {
             return MolangValue::ofString(std::string());
         }
 
+        // booleans read as 1 and 0, like the game's block states
+        MolangValue _blockState(const std::string &name) const {
+            const Tag *value = mContext.mBlockStates == nullptr ? nullptr : mContext.mBlockStates->get(name);
+            if (value == nullptr)
+                return MolangValue::ofNumber(0.0);
+            switch (value->getType()) {
+                case Tag::Type::String:
+                    return MolangValue::ofString(value->asString());
+                case Tag::Type::Byte:
+                    return MolangValue::ofNumber((double) value->asByte());
+                case Tag::Type::Int:
+                    return MolangValue::ofNumber((double) value->asInt());
+                default:
+                    return MolangValue::ofNumber(0.0);
+            }
+        }
+
         const std::string &mSource;
-        const ServerActor &mActor;
+        const ServerActor *mActor;
         const MolangContext &mContext;
         size_t mPosition = 0;
     };
@@ -369,6 +389,13 @@ MolangValue Molang::evaluate(const std::string &expression, const ServerActor &a
 }
 
 MolangValue Molang::evaluate(const std::string &expression, const ServerActor &actor, const MolangContext &context) {
-    Parser parser(expression, actor, context);
+    Parser parser(expression, &actor, context);
+    return parser.parse();
+}
+
+MolangValue Molang::evaluateForBlock(const std::string &expression, const Tag &states) {
+    MolangContext context;
+    context.mBlockStates = &states;
+    Parser parser(expression, nullptr, context);
     return parser.parse();
 }

@@ -40,7 +40,9 @@ enum class MobEffectId : int32_t {
     BadOmen = 28,
     VillageHero = 29,
     Darkness = 30,
+    TrialOmen = 31,
     Weaving = 33,
+    RaidOmen = 36,
     Freezing = 38
 };
 
@@ -54,7 +56,9 @@ struct MobEffectInstance {
     bool mAmbient = false;
     bool mInfinite = false;
 
-    int32_t level() const { return mAmplifier + 1; }
+    int32_t level() const {
+        return mAmplifier + 1;
+    }
 };
 
 const char *getMobEffectName(MobEffectId id);
@@ -69,9 +73,20 @@ public:
 
     virtual void onAdd(Actor &, const MobEffectInstance &) const {}
     virtual void onRemove(Actor &, const MobEffectInstance &) const {}
+
+    // a stronger or longer instance replaces the running one
+    virtual void onRefresh(Actor &actor, const MobEffectInstance &previous, const MobEffectInstance &instance) const {
+        onRemove(actor, previous);
+        onAdd(actor, instance);
+    }
+
     virtual void tick(Actor &, const MobEffectInstance &) const {}
-    virtual int32_t getApplyInterval(const MobEffectInstance &) const { return 1; }
-    virtual bool isInstantaneous() const { return false; }
+    virtual int32_t getApplyInterval(const MobEffectInstance &) const {
+        return 1;
+    }
+    virtual bool isInstantaneous() const {
+        return false;
+    }
 };
 
 class AbsorptionMobEffect final : public MobEffect {
@@ -93,7 +108,9 @@ public:
 
 class InstantaneousMobEffect : public MobEffect {
 public:
-    bool isInstantaneous() const override { return true; }
+    bool isInstantaneous() const override {
+        return true;
+    }
 };
 
 class InstantHealthMobEffect final : public InstantaneousMobEffect {
@@ -140,6 +157,17 @@ public:
     void tick(Actor &, const MobEffectInstance &) const override;
 };
 
+// first application's position kept on the player; removal asks for a raid at the village there
+class RaidOmenMobEffect final : public MobEffect {
+public:
+    void onAdd(Actor &, const MobEffectInstance &) const override;
+    void onRemove(Actor &, const MobEffectInstance &) const override;
+
+    // Actor::addEffect updates a running effect in place, only refreshing its
+    // modifiers: a refreshed omen stores no position and asks for no raid
+    void onRefresh(Actor &, const MobEffectInstance &, const MobEffectInstance &) const override {}
+};
+
 class SlownessMobEffect final : public MobEffect {};
 class SpeedMobEffect final : public MobEffect {};
 class FreezingMobEffect final : public MobEffect {
@@ -154,23 +182,28 @@ public:
     int32_t getApplyInterval(const MobEffectInstance &) const override;
 };
 
-// BDS names retained for effects whose gameplay hooks are not actor-local yet.
+// game names kept for effects whose gameplay hooks aren't actor-local yet
 class AttackDamageMobEffect final : public MobEffect {};
 class InfestedMobEffect final : public MobEffect {};
 class OozingMobEffect final : public MobEffect {};
-class RaidOmenMobEffect final : public MobEffect {};
 class WeavingMobEffect final : public MobEffect {};
 class WindChargedMobEffect final : public MobEffect {};
 
 class MobEffectManager {
 public:
     using EventCallback = std::function<void(const MobEffectInstance &, MobEffectEvent)>;
-    using AddFilter = std::function<bool(Actor &, const MobEffectInstance &)>;
+    // may rewrite the duration; false refuses the effect
+    using AddFilter = std::function<bool(Actor &, MobEffectInstance &)>;
+    using AddListener = std::function<void(Actor &, const MobEffectInstance &)>;
 
     explicit MobEffectManager(Actor &actor) : mActor(actor) {}
 
     static void setAddFilter(AddFilter filter) {
         sAddFilter = std::move(filter);
+    }
+
+    static void setAddListener(AddListener listener) {
+        sAddListener = std::move(listener);
     }
 
     bool add(const MobEffectInstance &instance);
@@ -180,14 +213,24 @@ public:
 
     bool has(MobEffectId id) const;
     const MobEffectInstance *get(MobEffectId id) const;
-    const std::unordered_map<int32_t, MobEffectInstance> &getAll() const { return mEffects; }
+    const std::unordered_map<int32_t, MobEffectInstance> &getAll() const {
+        return mEffects;
+    }
 
-    void setEventCallback(EventCallback callback) { mEventCallback = std::move(callback); }
+    void setEventCallback(EventCallback callback) {
+        mEventCallback = std::move(callback);
+    }
 
     float movementSpeedMultiplier() const;
     void setMovementSpeedBonus(float bonus);
-    float advanceFreezing(bool suppressed);
-    bool hasResistance() const { return has(MobEffectId::Resistance); }
+    float advanceFreezing(bool rising);
+    void resetFreezing();
+    int32_t getFreezingTicks() const {
+        return mFreezingTicks;
+    }
+    bool hasResistance() const {
+        return has(MobEffectId::Resistance);
+    }
 
     bool consumeAttributesDirty() {
         const bool dirty = mAttributesDirty;
@@ -202,6 +245,7 @@ private:
     void emit(const MobEffectInstance &instance, MobEffectEvent event) const;
 
     static inline AddFilter sAddFilter;
+    static inline AddListener sAddListener;
 
     Actor &mActor;
     std::unordered_map<int32_t, MobEffectInstance> mEffects;

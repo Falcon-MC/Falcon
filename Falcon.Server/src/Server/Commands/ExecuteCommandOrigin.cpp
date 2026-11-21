@@ -2,9 +2,17 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 
-ExecuteCommandOrigin::ExecuteCommandOrigin(CommandOrigin &base, ServerPlayer *executor, const Vector3f &position,
+ExecuteCommandOrigin::ExecuteCommandOrigin(CommandOrigin &base, Actor *executor, const Vector3f &position,
                                            const Vector3f &rotation, Level *level)
         : mBase(base), mExecutor(executor), mPosition(position), mRotation(rotation), mLevel(level) {}
+
+bool ExecuteCommandOrigin::isPlayer() const {
+    return dynamic_cast<const ServerPlayer *>(mExecutor) != nullptr;
+}
+
+ServerPlayer *ExecuteCommandOrigin::asPlayer() {
+    return dynamic_cast<ServerPlayer *>(mExecutor);
+}
 
 std::string ExecuteCommandOrigin::getSenderName() const {
     if (mExecutor != nullptr)
@@ -27,4 +35,10 @@ std::string ExecuteCommandOrigin::getLocale() const {
 
 CommandPermission ExecuteCommandOrigin::getCommandPermission() const {
     return mBase.getCommandPermission();
+}
+
+Actor *ExecuteCommandOrigin::getEntity() {
+    if (mExecutor != nullptr)
+        return mExecutor;
+    return mBase.getEntity();
 }

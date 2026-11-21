@@ -6,8 +6,10 @@
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/DynamicPropertyValue.h"
 #include "World/Actor/Movement/PhysicsComponent.h"
+#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/NBT/Tag.h"
+#include "Protocol/PacketCodecContext.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/EntityDataMap.h"
 #include "Protocol/Types/ItemStack.h"
@@ -19,12 +21,19 @@
 #include <vector>
 
 struct CustomActorDefinition;
+class ActorLeash;
+class Container;
 class ServerNetworkHandler;
+namespace json {
+    struct Value;
+}
 class ServerPlayer;
 
 struct ProjectileData {
     int32_t mPotionId = -1;
     float mBaseDamage = 0.0f;
+    // impact_damage.damage rolled at launch; unset (-1) scales mBaseDamage by speed instead
+    int32_t mImpactDamage = -1;
     bool mCritical = false;
     int32_t mPunchLevel = 0;
     int32_t mFlameTicks = 0;
@@ -32,9 +41,12 @@ struct ProjectileData {
     int32_t mImpalingLevel = 0;
     int32_t mPiercingLevel = 0;
     int32_t mLootingLevel = 0;
-    bool mChanneling = false;
     bool mReturning = false;
     bool mHadCollision = false;
+    // arrows and tridents planted in a block: they stay until picked up, the block goes, or 1200 ticks pass
+    bool mStuck = false;
+    int32_t mStuckTicks = 0;
+    Vector3i mStuckBlock;
     bool mPickupCreativeOnly = false;
     ItemStack mPickupItem;
     int32_t mFavoredSlot = -1;
@@ -56,9 +68,21 @@ public:
 
     virtual void tick(ServerNetworkHandler &owner);
 
-    virtual ActorSize getSize() const { return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT}; }
+    // an actor steering its own flight overrides this
+    virtual void tickMovement(ServerNetworkHandler &owner);
 
-    virtual bool isExpired() const { return false; }
+    // every tick between death and removal
+    virtual void tickDeath(ServerNetworkHandler &owner) {
+        (void) owner;
+    }
+
+    virtual ActorSize getSize() const {
+        return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT};
+    }
+
+    virtual bool isExpired() const {
+        return false;
+    }
 
     virtual bool onHurt(ServerNetworkHandler &owner, float amount, ServerPlayer *source) {
         (void) owner;
@@ -108,6 +132,12 @@ public:
         return false;
     }
 
+    // clickPosition comes from the client: any float
+    virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &clickPosition) {
+        (void) clickPosition;
+        return onInteract(owner, player);
+    }
+
     virtual void onStruckByLightning(ServerNetworkHandler &owner) {
         (void) owner;
     }
@@ -116,7 +146,39 @@ public:
         return false;
     }
 
-    virtual void fillSpawnMetadata(EntityDataMap &metadata) const { (void) metadata; }
+    virtual void fillSpawnMetadata(EntityDataMap &metadata) const {
+        (void) metadata;
+    }
+
+    virtual void sendEquipmentTo(ServerNetworkHandler &owner, const ServerPlayer &player) const {
+        (void) owner;
+        (void) player;
+    }
+
+    virtual void loadEquipment(const Tag &data, const PacketCodecContext &context) {
+        (void) data;
+        (void) context;
+    }
+
+    // the minecraft:inventory a player can open: chest vehicles, chested and tamed mounts
+    virtual Container *getEntityContainer() {
+        return nullptr;
+    }
+
+    // minecraft:leashable of the active definition; nullptr: no lead holds this actor
+    virtual const json::Value *getLeashableComponent() const {
+        return nullptr;
+    }
+
+    // the lead of a leashable actor
+    virtual ActorLeash *getActorLeash() {
+        return nullptr;
+    }
+
+    // minecraft:leashable_to: the leads a player holds can be tied to this actor
+    virtual const json::Value *getLeashableToComponent() const {
+        return nullptr;
+    }
 
     virtual int32_t getDeathDuration() const {
         return 25;
@@ -126,14 +188,17 @@ public:
         return EntityEventType::DeathAnimation;
     }
 
-    /**
-     * Damages the actor. On death the drops use lootingLevel; a negative level reads it from the
-     * item source is holding, which is right for melee but not for a projectile, whose level is
-     * captured when it is launched.
-     */
+    // a negative lootingLevel reads the source's held item: right for melee, not for a projectile (captured at launch)
     bool hurt(ServerNetworkHandler &owner, float amount, Actor *attacker, int32_t lootingLevel = -1);
 
-    bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource, int32_t lootingLevel = -1);
+    bool hurt(ServerNetworkHandler &owner, float amount, const ActorDamageSource &damageSource,
+              int32_t lootingLevel = -1);
+
+    // only mobs take fall damage
+    virtual void causeFallDamage(ServerNetworkHandler &owner, float distance) {
+        (void) owner;
+        (void) distance;
+    }
 
     virtual bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) {
         (void) owner;
@@ -147,16 +212,30 @@ public:
         return amount;
     }
 
+    // amount before armor reduces it
+    virtual void hurtArmor(ServerNetworkHandler &owner, float amount, const ActorDamageSource &source) {
+        (void) owner;
+        (void) amount;
+        (void) source;
+    }
+
     virtual void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0);
 
     void tickFire(ServerNetworkHandler &owner);
-
-    void tickSunlightBurn(ServerNetworkHandler &owner);
 
     virtual PhysicsComponent getPhysics() const;
 
     virtual bool hasGravity() const {
         return true;
+    }
+
+    bool collidesAtSnowLayerLook() const override {
+        return isProjectile();
+    }
+
+    // an arrow hitting this actor is used up, whatever its piercing level
+    virtual bool stopsProjectiles() const {
+        return false;
     }
 
     virtual bool isPushable() const {
@@ -167,8 +246,7 @@ public:
         return false;
     }
 
-    virtual bool shieldFromSunlight(ServerNetworkHandler &owner) {
-        (void) owner;
+    virtual bool shieldFromSunlight() const {
         return false;
     }
 
@@ -176,21 +254,47 @@ public:
 
     void markMovementSynced();
 
-    const char *getIdentifier() const override { return mIdentifier.c_str(); }
+    // the last move packet each viewer got, by its runtime id
+    struct MoveSent {
+        int64_t mTick = 0;
+        bool mOnGround = false;
+    };
 
-    const std::string &getTypeId() const { return mIdentifier; }
+    std::unordered_map<uint64_t, MoveSent> &getMovesSent() {
+        return mMovesSent;
+    }
 
-    void setDefinition(const CustomActorDefinition *definition) { mDefinition = definition; }
+    const char *getIdentifier() const override {
+        return mIdentifier.c_str();
+    }
 
-    const CustomActorDefinition *getDefinition() const { return mDefinition; }
+    const std::string &getTypeId() const {
+        return mIdentifier;
+    }
 
-    void setIntProperty(const std::string &name, int32_t value) { mIntProperties[name] = value; }
+    void setDefinition(const CustomActorDefinition *definition) {
+        mDefinition = definition;
+    }
 
-    void setFloatProperty(const std::string &name, float value) { mFloatProperties[name] = value; }
+    const CustomActorDefinition *getDefinition() const {
+        return mDefinition;
+    }
 
-    bool hasIntProperty(const std::string &name) const { return mIntProperties.count(name) != 0; }
+    void setIntProperty(const std::string &name, int32_t value) {
+        mIntProperties[name] = value;
+    }
 
-    bool hasFloatProperty(const std::string &name) const { return mFloatProperties.count(name) != 0; }
+    void setFloatProperty(const std::string &name, float value) {
+        mFloatProperties[name] = value;
+    }
+
+    bool hasIntProperty(const std::string &name) const {
+        return mIntProperties.count(name) != 0;
+    }
+
+    bool hasFloatProperty(const std::string &name) const {
+        return mFloatProperties.count(name) != 0;
+    }
 
     int32_t getIntProperty(const std::string &name, int32_t fallback = 0) const;
 
@@ -204,60 +308,123 @@ public:
 
     bool assignProperty(const ActorPropertyDescription &descriptor, const json::Value &value);
 
-    std::unordered_map<std::string, int32_t> &getIntProperties() { return mIntProperties; }
+    std::unordered_map<std::string, int32_t> &getIntProperties() {
+        return mIntProperties;
+    }
 
-    std::unordered_map<std::string, float> &getFloatProperties() { return mFloatProperties; }
+    std::unordered_map<std::string, float> &getFloatProperties() {
+        return mFloatProperties;
+    }
 
-    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
+    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() {
+        return mDynamicProperties;
+    }
 
-    void setOwnerUniqueId(int64_t owner) { mOwnerUniqueId = owner; }
+    void setOwnerUniqueId(int64_t owner) {
+        mOwnerUniqueId = owner;
+    }
 
-    int64_t getOwnerUniqueId() const { return mOwnerUniqueId; }
+    int64_t getOwnerUniqueId() const {
+        return mOwnerUniqueId;
+    }
 
-    void setOwnerPlayerHandle(uint32_t handle) { mOwnerPlayerHandle = handle; }
+    void setOwnerPlayerHandle(uint32_t handle) {
+        mOwnerPlayerHandle = handle;
+    }
 
-    uint32_t getOwnerPlayerHandle() const { return mOwnerPlayerHandle; }
+    uint32_t getOwnerPlayerHandle() const {
+        return mOwnerPlayerHandle;
+    }
 
-    bool hasOwnerPlayer() const { return mOwnerPlayerHandle != 0xFFFFFFFF; }
+    bool hasOwnerPlayer() const {
+        return mOwnerPlayerHandle != 0xFFFFFFFF;
+    }
 
-    bool isProjectile() const { return mIsProjectile; }
+    bool isProjectile() const {
+        return mIsProjectile;
+    }
 
-    void setProjectile(bool value) { mIsProjectile = value; }
+    void setProjectile(bool value) {
+        mIsProjectile = value;
+    }
 
-    ProjectileData &getProjectileData() { return mProjectileData; }
+    ProjectileData &getProjectileData() {
+        return mProjectileData;
+    }
 
-    const ProjectileData &getProjectileData() const { return mProjectileData; }
+    const ProjectileData &getProjectileData() const {
+        return mProjectileData;
+    }
 
-    int32_t getLifetimeTicks() const { return mLifetimeTicks; }
+    // read from the definition on first use; scripts may change it afterwards
+    ProjectileComponent &getProjectileComponent();
 
-    void addLifetimeTick() { mLifetimeTicks++; }
+    const ProjectileComponent &getProjectileComponent() const;
 
-    void setExperienceValue(int32_t value) { mExperienceValue = value; }
+    int32_t getLifetimeTicks() const {
+        return mLifetimeTicks;
+    }
 
-    int32_t getExperienceValue() const { return mExperienceValue; }
+    void addLifetimeTick() {
+        mLifetimeTicks++;
+    }
 
-    void setPickupDelay(int32_t delay) { mPickupDelay = delay; }
+    // a summoned actor's entity_lifespan in ticks; the client counts it down from actor data 78
+    void setLimitedLife(int32_t ticks) {
+        mLimitedLifeTicks = ticks;
+    }
 
-    int32_t getPickupDelay() const { return mPickupDelay; }
+    int32_t getLimitedLifeTicks() const {
+        return mLimitedLifeTicks;
+    }
+
+    // true on the tick the limited life runs out
+    bool tickLimitedLife() {
+        return mLimitedLifeTicks > 0 && --mLimitedLifeTicks == 0;
+    }
+
+    void setExperienceValue(int32_t value) {
+        mExperienceValue = value;
+    }
+
+    int32_t getExperienceValue() const {
+        return mExperienceValue;
+    }
+
+    void setPickupDelay(int32_t delay) {
+        mPickupDelay = delay;
+    }
+
+    int32_t getPickupDelay() const {
+        return mPickupDelay;
+    }
 
     void decrementPickupDelay() {
         if (mPickupDelay > 0)
             mPickupDelay--;
     }
 
-    int32_t getDeathTicks() const { return mDeathTicks; }
+    int32_t getDeathTicks() const {
+        return mDeathTicks;
+    }
 
-    void addDeathTick() { mDeathTicks++; }
+    void addDeathTick() {
+        mDeathTicks++;
+    }
 
-    const std::string &getNameTag() const { return mNameTag; }
+    const std::string &getNameTag() const {
+        return mNameTag;
+    }
 
     std::string getName() const override {
         return mNameTag.empty() ? Actor::getName() : mNameTag;
     }
 
-    void setNameTag(const std::string &nameTag) { mNameTag = nameTag; }
+    void setNameTag(const std::string &nameTag) {
+        mNameTag = nameTag;
+    }
 
-    bool isPersistent() const {
+    virtual bool isPersistent() const {
         return mPersistent || !mNameTag.empty();
     }
 
@@ -273,32 +440,74 @@ public:
         mFarFromPlayerTicks = ticks;
     }
 
-    std::vector<int64_t> &getPendingPassengers() { return mPendingPassengers; }
+    std::vector<int64_t> &getPendingPassengers() {
+        return mPendingPassengers;
+    }
 
-    virtual bool shouldSave() const { return isAlive() && !mIsProjectile && !hasOwnerPlayer(); }
+    // the minecraft:buoyant wave phase
+    double getBuoyancyTimer() const {
+        return mBuoyancyTimer;
+    }
+
+    void setBuoyancyTimer(double timer) {
+        mBuoyancyTimer = timer;
+    }
+
+    // the last minecraft:pushable_by_entity kick sound
+    int64_t getPushSoundTick() const {
+        return mPushSoundTick;
+    }
+
+    void setPushSoundTick(int64_t tick) {
+        mPushSoundTick = tick;
+    }
+
+    virtual bool shouldSave() const {
+        return isAlive() && !mIsProjectile && !hasOwnerPlayer();
+    }
 
     virtual Tag saveNbt() const;
 
     virtual void loadNbt(const Tag &data);
 
+protected:
+    // the component of an entity whose definition has no minecraft:projectile
+    virtual ProjectileComponent _undefinedProjectileComponent() const {
+        return ProjectileComponent();
+    }
+
+    // null outside the kill() a hurt() runs
+    const ActorDamageSource *getFatalSource() const {
+        return mFatalSource;
+    }
+
 private:
     std::string mIdentifier;
+    double mBuoyancyTimer = 0.0;
+    int64_t mPushSoundTick = INT64_MIN / 2;
     Vector3f mSyncedPosition;
     Vector3f mSyncedRotation;
     bool mMovementSynced = false;
+    std::unordered_map<uint64_t, MoveSent> mMovesSent;
     const CustomActorDefinition *mDefinition = nullptr;
     bool mIsProjectile = false;
     int64_t mOwnerUniqueId = -1;
     uint32_t mOwnerPlayerHandle = 0xFFFFFFFF;
     int32_t mLifetimeTicks = 0;
+    // -1: no limited life
+    int32_t mLimitedLifeTicks = -1;
     int32_t mDeathTicks = 0;
     int32_t mExperienceValue = 0;
     int32_t mPickupDelay = 0;
     ProjectileData mProjectileData;
+    mutable ProjectileComponent mProjectileComponent;
+    mutable bool mProjectileComponentRead = false;
     std::string mNameTag;
     bool mPersistent = true;
     int32_t mFarFromPlayerTicks = 0;
     std::vector<int64_t> mPendingPassengers;
+    // the hit being dealt while kill() runs from hurt(): the death event reports its cause
+    const ActorDamageSource *mFatalSource = nullptr;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

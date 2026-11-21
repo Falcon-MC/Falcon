@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(MaceItem, 30,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:mace";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<MaceItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        MaceItem, 30, [](const std::string &identifier) { return identifier == "minecraft:mace"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<MaceItem>(item); });
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -20,6 +16,7 @@ FALCON_REGISTER_ITEM_CUSTOM(MaceItem, 30,
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +27,7 @@ namespace {
     const float SMASH_HEAVY_DAMAGE = 16.0f;
     const float WIND_BURST_RADIUS = 2.5f;
     const float WIND_BURST_MAX_FALL = 7.5f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const char *WIND_BURST_PARTICLE = "minecraft:wind_explosion_emitter";
 
     float rise(const Actor &actor) {
@@ -40,8 +37,8 @@ namespace {
     void gustActor(ServerNetworkHandler &owner, Actor &target, const Vector3f &origin, int32_t level) {
         const Vector3f position = target.getPosition();
         Vector3f direction(position.x - origin.x, position.y - origin.y, position.z - origin.z);
-        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y +
-                                       direction.z * direction.z);
+        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
+                                       + direction.z * direction.z);
         if (length <= 0.0f || length > WIND_BURST_RADIUS)
             return;
 
@@ -63,28 +60,29 @@ namespace {
     }
 }
 
-MaceItem::MaceItem(const Item &base) : Item(base) {
-}
+MaceItem::MaceItem(const Item &base) : Item(base) {}
 
 int32_t MaceItem::computeSmashDamage(int32_t fallHeight) {
     if ((float) fallHeight < SMASH_MINIMUM_FALL)
         return BASE_ATTACK_DAMAGE;
 
-    int32_t damage = 0;
-    for (int32_t i = 0; i <= fallHeight; ++i) {
-        if (i < 3)
-            damage += 4;
-        else if (i < 8)
-            damage += 2;
-        else
-            damage += 1;
-    }
+    // fall height from the client-reported highest position: clamped, or an unbounded value is summed block by
+    // block on the tick thread
+    if (fallHeight > MAX_SMASH_FALL)
+        fallHeight = MAX_SMASH_FALL;
 
-    return damage;
+    // closed form of the per-block tiers (4 for the first three blocks, 2 up to the eighth, 1 beyond):
+    // cost doesn't grow with the height
+    if (fallHeight <= 2)
+        return 4 * (fallHeight + 1);
+    if (fallHeight <= 7)
+        return 12 + 2 * (fallHeight - 2);
+    return 15 + fallHeight;
 }
 
 float MaceItem::getAttackDamageBonus(const ItemStack &item, ServerPlayer &attacker) const {
-    const float height = rise(attacker);
+    // highest position is client-reported: clamp before it drives damage
+    const float height = std::min(rise(attacker), (float) MAX_SMASH_FALL);
     const int32_t flooredHeight = (int32_t) std::floor(height);
     attacker.updateFallDistance();
 
@@ -163,8 +161,7 @@ void MaceItem::applyWindBurst(ServerNetworkHandler &owner, ServerPlayer &attacke
 
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &target = entry.second;
-        if (&target == &attacker || !target.isSpawned() || target.isDead() ||
-            !target.sharesLevelWith(attacker))
+        if (&target == &attacker || !target.isSpawned() || target.isDead() || !target.sharesLevelWith(attacker))
             continue;
 
         gustActor(owner, target, origin, level);

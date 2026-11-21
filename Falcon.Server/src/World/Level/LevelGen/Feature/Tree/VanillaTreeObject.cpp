@@ -5,69 +5,60 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
 
-    const char *GROWABLE_BLOCKS[] = {
-            "minecraft:air",
-            "minecraft:acacia_leaves",
-            "minecraft:azalea_leaves",
-            "minecraft:birch_leaves",
-            "minecraft:azalea_leaves_flowered",
-            "minecraft:cherry_leaves",
-            "minecraft:dark_oak_leaves",
-            "minecraft:jungle_leaves",
-            "minecraft:mangrove_leaves",
-            "minecraft:oak_leaves",
-            "minecraft:spruce_leaves",
-            "minecraft:pale_oak_leaves",
-            "minecraft:grass_block",
-            "minecraft:dirt",
-            "minecraft:acacia_log",
-            "minecraft:birch_log",
-            "minecraft:oak_log",
-            "minecraft:pale_oak_log",
-            "minecraft:dark_oak_log",
-            "minecraft:jungle_log",
-            "minecraft:mangrove_log",
-            "minecraft:spruce_log",
-            "minecraft:vine",
-            "minecraft:dirt_with_roots",
-            "minecraft:cherry_log",
-            "minecraft:mangrove_roots",
-            "minecraft:mangrove_propagule",
-            "minecraft:acacia_sapling",
-            "minecraft:cherry_sapling",
-            "minecraft:spruce_sapling",
-            "minecraft:bamboo_sapling",
-            "minecraft:oak_sapling",
-            "minecraft:jungle_sapling",
-            "minecraft:dark_oak_sapling",
-            "minecraft:pale_oak_sapling",
-            "minecraft:birch_sapling",
-            "minecraft:fern",
-            "minecraft:short_grass",
-            "minecraft:tall_grass",
-            "minecraft:pale_hanging_moss",
-            "minecraft:closed_eyeblossom",
-            "minecraft:open_eyeblossom",
-            "minecraft:leaf_litter",
-            "minecraft:bamboo"
-    };
+    const char *GROWABLE_BLOCKS[] = {"minecraft:air",
+                                     "minecraft:acacia_leaves",
+                                     "minecraft:azalea_leaves",
+                                     "minecraft:birch_leaves",
+                                     "minecraft:azalea_leaves_flowered",
+                                     "minecraft:cherry_leaves",
+                                     "minecraft:dark_oak_leaves",
+                                     "minecraft:jungle_leaves",
+                                     "minecraft:mangrove_leaves",
+                                     "minecraft:oak_leaves",
+                                     "minecraft:spruce_leaves",
+                                     "minecraft:pale_oak_leaves",
+                                     "minecraft:grass_block",
+                                     "minecraft:dirt",
+                                     "minecraft:acacia_log",
+                                     "minecraft:birch_log",
+                                     "minecraft:oak_log",
+                                     "minecraft:pale_oak_log",
+                                     "minecraft:dark_oak_log",
+                                     "minecraft:jungle_log",
+                                     "minecraft:mangrove_log",
+                                     "minecraft:spruce_log",
+                                     "minecraft:vine",
+                                     "minecraft:dirt_with_roots",
+                                     "minecraft:cherry_log",
+                                     "minecraft:mangrove_roots",
+                                     "minecraft:mangrove_propagule",
+                                     "minecraft:acacia_sapling",
+                                     "minecraft:cherry_sapling",
+                                     "minecraft:spruce_sapling",
+                                     "minecraft:bamboo_sapling",
+                                     "minecraft:oak_sapling",
+                                     "minecraft:jungle_sapling",
+                                     "minecraft:dark_oak_sapling",
+                                     "minecraft:pale_oak_sapling",
+                                     "minecraft:birch_sapling",
+                                     "minecraft:fern",
+                                     "minecraft:short_grass",
+                                     "minecraft:tall_grass",
+                                     "minecraft:pale_hanging_moss",
+                                     "minecraft:closed_eyeblossom",
+                                     "minecraft:open_eyeblossom",
+                                     "minecraft:leaf_litter",
+                                     "minecraft:bamboo"};
 
     const char *LEAF_BLOCKS[] = {
-            "minecraft:acacia_leaves",
-            "minecraft:azalea_leaves",
-            "minecraft:azalea_leaves_flowered",
-            "minecraft:birch_leaves",
-            "minecraft:cherry_leaves",
-            "minecraft:dark_oak_leaves",
-            "minecraft:jungle_leaves",
-            "minecraft:mangrove_leaves",
-            "minecraft:oak_leaves",
-            "minecraft:pale_oak_leaves",
-            "minecraft:spruce_leaves"
-    };
+            "minecraft:acacia_leaves",   "minecraft:azalea_leaves",   "minecraft:azalea_leaves_flowered",
+            "minecraft:birch_leaves",    "minecraft:cherry_leaves",   "minecraft:dark_oak_leaves",
+            "minecraft:jungle_leaves",   "minecraft:mangrove_leaves", "minecraft:oak_leaves",
+            "minecraft:pale_oak_leaves", "minecraft:spruce_leaves"};
 
 }
 
@@ -98,7 +89,7 @@ bool VanillaTreeObject::canBeReplaced(const BlockState &state) {
 }
 
 bool VanillaTreeObject::isAir(const BlockState &state) {
-    return state.mName == "minecraft:air";
+    return state.mName == BlockNames::AIR;
 }
 
 BlockState VanillaTreeObject::withPillarAxis(BlockState state, const char *axis) {
@@ -135,6 +126,6 @@ void VanillaTreeObject::addVinesAroundLog(BlockManager &manager, int32_t x, int3
 }
 
 void VanillaTreeObject::_addVine(BlockManager &manager, int32_t x, int32_t y, int32_t z, int32_t meta) {
-    if (manager.getBlockAt(x, y, z).mName == "minecraft:air")
+    if (manager.getBlockAt(x, y, z).mName == BlockNames::AIR)
         manager.setBlockStateAt(x, y, z, getVineState(meta));
 }

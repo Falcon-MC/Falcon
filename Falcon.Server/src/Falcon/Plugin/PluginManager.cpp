@@ -9,6 +9,7 @@
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginPackets.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/WasmHost.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -106,7 +107,7 @@ void PluginManager::loadAll(const std::string &directory) {
         }
 
         if (!native && description.mRuntime != "internal" && description.mRuntime != "java"
-            && description.mRuntime != "dotnet") {
+            && description.mRuntime != "dotnet" && description.mRuntime != "wasm") {
             LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: the %s runtime is not supported yet",
                       description.mName.c_str(), description.mRuntime.c_str());
             continue;
@@ -141,6 +142,9 @@ void PluginManager::loadAll(const std::string &directory) {
         } else if (plugin->mDescription.mRuntime == "dotnet") {
             if (!DotnetHost::load(*plugin))
                 continue;
+        } else if (plugin->mDescription.mRuntime == "wasm") {
+            if (!WasmHost::load(*plugin))
+                continue;
         } else if (!(internal ? InternalPluginLoader::load(*plugin, mOwner) : _loadNative(*plugin))) {
             continue;
         }
@@ -172,14 +176,13 @@ void PluginManager::loadAll(const std::string &directory) {
 
 bool PluginManager::_loadNative(LoadedPlugin &plugin) {
     const std::string &name = plugin.mDescription.mName;
-    const std::string path = (std::filesystem::path(plugin.mDirectory)
-                              / NativeLibrary::fileName(plugin.mDescription.mMain)).string();
+    const std::string path =
+            (std::filesystem::path(plugin.mDirectory) / NativeLibrary::fileName(plugin.mDescription.mMain)).string();
 
     plugin.mLibrary = std::make_unique<NativeLibrary>();
     std::string error;
     if (!plugin.mLibrary->open(path, error)) {
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s from %s: %s", name.c_str(), path.c_str(),
-                  error.c_str());
+        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s from %s: %s", name.c_str(), path.c_str(), error.c_str());
         return false;
     }
 
@@ -357,9 +360,9 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
     for (const std::string &command: plugin.mCommands)
         mOwner.getCommands().unregisterCommand(command);
     plugin.mCommands.clear();
-    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [&](const Subscription &entry) {
-        return entry.mPlugin == &plugin;
-    }), mSubscriptions.end());
+    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(),
+                                        [&](const Subscription &entry) { return entry.mPlugin == &plugin; }),
+                         mSubscriptions.end());
     _updateSubscribedTypes();
     mPermissions->clearPlugin(plugin);
     mServices.removePlugin(plugin);
@@ -384,9 +387,8 @@ void PluginManager::_updateSubscribedTypes() {
         return;
     }
 
-    mOwner.getNetworkHandler().setOutboundFilter([this](const NetworkIdentifier &id, std::string &data) {
-        return PluginPackets::onSend(*this, id, data);
-    });
+    mOwner.getNetworkHandler().setOutboundFilter(
+            [this](const NetworkIdentifier &id, std::string &data) { return PluginPackets::onSend(*this, id, data); });
 }
 
 void PluginManager::tick() {
@@ -406,25 +408,24 @@ uint64_t PluginManager::subscribeCustom(LoadedPlugin &plugin, const std::string 
     if (handler == nullptr || priority > FALCON_PRIORITY_MONITOR || name.empty())
         return 0;
 
-    return _insertSubscription(Subscription{0, &plugin, FALCON_EVENT_CUSTOM, priority, ignoreCancelled, handler,
-                                            userData, name});
+    return _insertSubscription(
+            Subscription{0, &plugin, FALCON_EVENT_CUSTOM, priority, ignoreCancelled, handler, userData, name});
 }
 
 uint64_t PluginManager::_insertSubscription(Subscription subscription) {
     subscription.mId = mNextSubscriptionId++;
-    const auto position = std::upper_bound(mSubscriptions.begin(), mSubscriptions.end(), subscription,
-                                           [](const Subscription &left, const Subscription &right) {
-                                               return left.mPriority < right.mPriority;
-                                           });
+    const auto position = std::upper_bound(
+            mSubscriptions.begin(), mSubscriptions.end(), subscription,
+            [](const Subscription &left, const Subscription &right) { return left.mPriority < right.mPriority; });
     mSubscriptions.insert(position, subscription);
     _updateSubscribedTypes();
     return subscription.mId;
 }
 
 void PluginManager::unsubscribe(uint64_t id) {
-    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [id](const Subscription &entry) {
-        return entry.mId == id;
-    }), mSubscriptions.end());
+    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(),
+                                        [id](const Subscription &entry) { return entry.mId == id; }),
+                         mSubscriptions.end());
     _updateSubscribedTypes();
 }
 
@@ -502,6 +503,10 @@ void PluginManager::_hookEventBus() {
     });
 
     mChatHook = bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {
+        // the plugin chat event is the public chat only
+        if (source.mTargets != nullptr)
+            return;
+
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_CHAT;
         event.mCancellable = true;

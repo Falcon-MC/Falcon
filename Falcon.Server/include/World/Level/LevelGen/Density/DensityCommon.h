@@ -7,35 +7,13 @@
 #include <cstdint>
 #include <vector>
 
-enum class MarkerType {
-    INTERPOLATED,
-    FLAT_CACHE,
-    CACHE_2D,
-    CACHE_ONCE,
-    CACHE_ALL_IN_CELL
-};
+enum class MarkerType { INTERPOLATED, FLAT_CACHE, CACHE_2D, CACHE_ONCE, CACHE_ALL_IN_CELL };
 
-enum class MappedType {
-    ABS,
-    SQUARE,
-    CUBE,
-    HALF_NEGATIVE,
-    QUARTER_NEGATIVE,
-    INVERT,
-    SQUEEZE
-};
+enum class MappedType { ABS, SQUARE, CUBE, HALF_NEGATIVE, QUARTER_NEGATIVE, INVERT, SQUEEZE };
 
-enum class TwoArgumentType {
-    ADD,
-    MUL,
-    MIN,
-    MAX
-};
+enum class TwoArgumentType { ADD, MUL, MIN, MAX };
 
-enum class RarityValueMapper {
-    TYPE1,
-    TYPE2
-};
+enum class RarityValueMapper { TYPE1, TYPE2 };
 
 class TwoArgumentSimpleFunction {
 public:

@@ -8,10 +8,7 @@ class ServerPlayer;
 
 class OwnerTargetGoal : public Goal {
 public:
-    enum class Mode {
-        OwnerHurtBy,
-        OwnerHurt
-    };
+    enum class Mode { OwnerHurtBy, OwnerHurt };
 
     explicit OwnerTargetGoal(Mode mode);
 

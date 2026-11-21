@@ -1,21 +1,15 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class MobActor;
 
-enum class NavigationMode {
-    Walk,
-    Climb,
-    Swim,
-    Fly
-};
+enum class NavigationMode { Walk, Climb, Swim, Fly };
 
-/**
- * Pathfinding rules of a mob, read from its active `minecraft:navigation.*` component. Defaults are the
- * component defaults, so a field missing from the definition behaves like the game.
- */
+// from the active minecraft:navigation.* component; defaults match the component's
 struct PathOptions {
     NavigationMode mMode = NavigationMode::Walk;
     bool mCanOpenDoors = false;
@@ -37,6 +31,13 @@ struct PathOptions {
     bool mCanPathFromAir = false;
     bool mIsAmphibious = false;
     std::vector<std::string> mBlocksToAvoid;
+    // minecraft:preferred_path: the cost of walking onto each ground block, of a jump, in blocks of walk
+    bool mHasPreferredPath = false;
+    float mDefaultBlockCost = 0.0f;
+    float mJumpCost = 0.0f;
+    // the deepest drop a path takes; -1 leaves the search's own limit
+    int32_t mMaxFallBlocks = -1;
+    std::unordered_map<std::string, float> mBlockCosts;
 
     static PathOptions read(const MobActor &mob);
 

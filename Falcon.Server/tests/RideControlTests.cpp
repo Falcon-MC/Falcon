@@ -1,6 +1,8 @@
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Movement/RideControlSystem.h"
+#include "World/Actor/RideSystem.h"
+#include "World/Actor/Misc/CushionActor.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Server/ServerPaths.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
@@ -37,11 +39,12 @@ namespace {
     }
 }
 
-// Only component fixtures and isolated system steps require private access.
+// private access only for component fixtures and isolated system steps
 class RideControlProbe {
 public:
     static void components(MobActor &mob, const json::Value &definition) {
         mob.mComponents.clear();
+        mob.mRecentComponents.clear();
         for (const std::string &key: definition.mKeys)
             mob.mComponents[key] = definition.get(key);
         mob.mComponentsDirty = false;
@@ -70,7 +73,20 @@ namespace {
         mount._addPassenger(rider.getUniqueId());
         rider._setVehicleId(mount.getUniqueId());
         owner.getActors().emplace(mount.getUniqueId(), std::move(mountOwner));
-        const auto air = json::parse(R"({"minecraft:free_camera_controlled":{"strafe_speed_modifier":1.0},"minecraft:flying_speed":{"value":0.016}})");
+        const auto air = json::parse(
+                R"({"minecraft:free_camera_controlled":{"strafe_speed_modifier":1.0},"minecraft:flying_speed":{"value":0.016}})");
+        RideControlProbe::components(mount, *air);
+        const auto seats = json::parse(R"({"minecraft:rideable":{"seats":{"position":[0.0,1.1,-0.2]}}})");
+        RideControlProbe::components(mount, *seats);
+        const Vector3f riderSeat = RideSystem::syncedSeatOf(mount, rider, 0, 1);
+        near(riderSeat.y, 1.1f + 1.62f, "Player seat omitted the player height offset");
+        near(riderSeat.z, -0.2f, "Player seat moved horizontally");
+        TestMount mobPassenger(1003);
+        near(RideSystem::syncedSeatOf(mount, mobPassenger, 0, 1).y, 1.1f, "Mob seat gained a height offset");
+        // minecraft:cushion seats its rider at [0, 0.0625, 0] and lets it off on top of its 0.249 tall box
+        CushionActor cushion(1004, CushionActor::IDENTIFIER);
+        near(RideSystem::syncedSeatOf(cushion, rider, 0, 1).y, 0.0625f + 1.62f, "Cushion seat left the vanilla height");
+        near(cushion.getDismountPosition(0, 1).y - cushion.getPosition().y, 0.249f, "Cushion dismount left its top");
         RideControlProbe::components(mount, *air);
         PlayerAuthInputPacket packet;
         packet.mMotionY = 1.0f;
@@ -88,8 +104,8 @@ namespace {
         packet.mRawMoveVectorX = 2.0f;
         step();
         const RiderInput &input = mount.getRideControl().mInput;
-        near(input.mRawStrafe * input.mRawStrafe + input.mRawForward * input.mRawForward,
-             1.0f, "Diagonal input exceeded unit length");
+        near(input.mRawStrafe * input.mRawStrafe + input.mRawForward * input.mRawForward, 1.0f,
+             "Diagonal input exceeded unit length");
         packet.mRawMoveVectorX = std::numeric_limits<float>::quiet_NaN();
         packet.mRawMoveVectorY = std::numeric_limits<float>::infinity();
         step();
@@ -123,8 +139,7 @@ namespace {
         RideControlProbe::rotate(mount, -179.0f);
         near(mount.getRotation().y, 179.0f + 2.0f * (43.0f / 90.0f) * 0.7f,
              "Rotation did not take the short path across 180 degrees");
-        packet.mInputData = {(int32_t) PlayerAuthInputData::Sprinting,
-                             (int32_t) PlayerAuthInputData::StopSprinting};
+        packet.mInputData = {(int32_t) PlayerAuthInputData::Sprinting, (int32_t) PlayerAuthInputData::StopSprinting};
         step();
         require(!input.mSprinting, "Stop sprinting did not override sprint flags");
         require(!input.mReceived, "Control request was not consumed");
@@ -132,7 +147,8 @@ namespace {
         RideControlSystem::tick(owner, mount);
         near(mount.getMotion().z, 0.4f, "A missing request replayed old controls");
 
-        const auto ground = json::parse(R"({"minecraft:input_ground_controlled":{},"minecraft:movement":{"value":0.2}})");
+        const auto ground = json::parse(
+                R"({"minecraft:input_ground_controlled":{},"minecraft:movement":{"value":0.2}})");
         RideControlProbe::components(mount, *ground);
         packet = PlayerAuthInputPacket();
         packet.mMotionY = 1.0f;
@@ -149,7 +165,8 @@ namespace {
         step();
         near(mount.getMotion().z, -groundForward * 0.25f, "Ground backward modifier differs from BDS");
 
-        const auto jump = json::parse(R"({"minecraft:input_ground_controlled":{},"minecraft:can_power_jump":{},"minecraft:horse.jump_strength":{"value":0.7}})");
+        const auto jump = json::parse(
+                R"({"minecraft:input_ground_controlled":{},"minecraft:can_power_jump":{},"minecraft:horse.jump_strength":{"value":0.7}})");
         RideControlProbe::components(mount, *jump);
         packet = PlayerAuthInputPacket();
         packet.mInputData = {(int32_t) PlayerAuthInputData::JumpDown};
@@ -172,7 +189,8 @@ namespace {
              "Overheld jump charge did not decay after the tenth tick");
 
 
-        const auto dash = json::parse(R"({"minecraft:input_ground_controlled":{},"minecraft:movement":{"value":0.09},"minecraft:dash_action":{"horizontal_momentum":20.0,"vertical_momentum":0.6,"cooldown_time":0.0}})");
+        const auto dash = json::parse(
+                R"({"minecraft:input_ground_controlled":{},"minecraft:movement":{"value":0.09},"minecraft:dash_action":{"horizontal_momentum":20.0,"vertical_momentum":0.6,"cooldown_time":0.0}})");
         RideControlProbe::components(mount, *dash);
         require(RideControlProbe::dash(owner, mount, 0.5f), "Half-charge dash failed");
         const Vector3f half = mount.getMotion();
@@ -193,7 +211,8 @@ namespace {
         near(mount.getMotion().y, 0.72f, "Dash omitted Jump Boost II");
         mount.setOnGround(false);
         require(!RideControlProbe::dash(owner, mount, 1.0f), "Ground dash accepted an airborne release");
-        const auto passengerDash = json::parse(R"({"minecraft:input_ground_controlled":{},"minecraft:movement":{"value":0.09},"minecraft:dash_action":{"horizontal_momentum":20.0,"vertical_momentum":0.6,"cooldown_time":2.75,"direction":"passenger"}})");
+        const auto passengerDash = json::parse(
+                R"({"minecraft:input_ground_controlled":{},"minecraft:movement":{"value":0.09},"minecraft:dash_action":{"horizontal_momentum":20.0,"vertical_momentum":0.6,"cooldown_time":2.75,"direction":"passenger"}})");
         RideControlProbe::components(mount, *passengerDash);
         mount.getRideControl().mInput.mPitch = 90.0f;
         require(RideControlProbe::dash(owner, mount, 1.0f), "Passenger dash failed");
@@ -204,14 +223,14 @@ namespace {
         require(!RideControlProbe::dash(owner, mount, 1.0f), "Dash ignored its cooldown");
         RideControlSystem::reset(mount);
         require(!RideControlProbe::dash(owner, mount, 1.0f), "Remount reset the dash cooldown");
-
     }
 }
 
 int main() {
     const auto originalRoot = ServerPaths::getRoot();
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-ride-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-ride-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     int result = 0;
     try {
         std::filesystem::create_directories(directory);

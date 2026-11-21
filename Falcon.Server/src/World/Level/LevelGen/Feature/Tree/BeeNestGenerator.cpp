@@ -6,6 +6,7 @@
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/Tree/TreeBlockFace.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <utility>
 
@@ -14,25 +15,15 @@ namespace {
     const char *const ACTOR_IDENTIFIER_TAG = "identifier";
     const int32_t GENERATED_STAY_TICKS = 600;
 
-    const char *FLOWER_BLOCKS[] = {
-            "minecraft:dandelion",
-            "minecraft:poppy",
-            "minecraft:blue_orchid",
-            "minecraft:allium",
-            "minecraft:azure_bluet",
-            "minecraft:red_tulip",
-            "minecraft:orange_tulip",
-            "minecraft:white_tulip",
-            "minecraft:pink_tulip",
-            "minecraft:oxeye_daisy",
-            "minecraft:cornflower",
-            "minecraft:lily_of_the_valley",
-            "minecraft:wither_rose",
-            "minecraft:torchflower",
-            "minecraft:open_eyeblossom",
-            "minecraft:closed_eyeblossom",
-            "minecraft:flowering_azalea"
-    };
+    const char *FLOWER_BLOCKS[] = {"minecraft:dandelion",       "minecraft:poppy",
+                                   "minecraft:blue_orchid",     "minecraft:allium",
+                                   "minecraft:azure_bluet",     "minecraft:red_tulip",
+                                   "minecraft:orange_tulip",    "minecraft:white_tulip",
+                                   "minecraft:pink_tulip",      "minecraft:oxeye_daisy",
+                                   "minecraft:cornflower",      "minecraft:lily_of_the_valley",
+                                   "minecraft:wither_rose",     "minecraft:torchflower",
+                                   "minecraft:open_eyeblossom", "minecraft:closed_eyeblossom",
+                                   "minecraft:flowering_azalea"};
 
     bool isFlower(const std::string &identifier) {
         for (const char *candidate: FLOWER_BLOCKS) {
@@ -54,9 +45,9 @@ bool BeeNestGenerator::place(BlockManager &manager, int32_t x, int32_t y, int32_
         const int32_t nestY = leafY - 1;
         const int32_t nestZ = z + 1;
 
-        if (manager.getBlockAt(x, leafY - 1, z).mName == "minecraft:air"
-            || manager.getBlockAt(x, nestY, nestZ).mName != "minecraft:air"
-            || manager.getBlockAt(x, nestY + 1, nestZ).mName == "minecraft:air")
+        if (manager.getBlockAt(x, leafY - 1, z).mName == BlockNames::AIR
+            || manager.getBlockAt(x, nestY, nestZ).mName != BlockNames::AIR
+            || manager.getBlockAt(x, nestY + 1, nestZ).mName == BlockNames::AIR)
             continue;
 
         placeAt(manager, x, nestY, nestZ, beeCount);

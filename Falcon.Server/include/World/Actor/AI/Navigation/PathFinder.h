@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Navigation/NodeEvaluator.h"
+#include "World/Actor/ActorSize.h"
 #include "Core/Math/Vector3f.h"
 
 #include <array>
@@ -22,10 +23,11 @@ public:
 
     bool findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options, Path &path);
 
-    /**
-     * Straight-line path for swimmers and fliers when nothing blocks the way. It costs a single ray test, so
-     * callers try it before spending one of the per-tick search slots.
-     */
+    // any actor of the given size, a gametest simulated player among them
+    bool findPath(Level &level, const Actor &actor, const ActorSize &size, const Vector3f &target,
+                  const PathOptions &options, Path &path);
+
+    // one ray test: callers try it before spending a per-tick search slot
     bool findDirectPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
                         Path &path);
 
@@ -66,8 +68,7 @@ private:
 
     bool _less(int32_t left, int32_t right) const;
 
-    void _buildPath(int32_t endIndex, bool reachesTarget, const Vector3f &start, const Vector3f &target,
-                    Path &path);
+    void _buildPath(int32_t endIndex, bool reachesTarget, const Vector3f &start, const Vector3f &target, Path &path);
 
     NodeEvaluator mEvaluator;
     std::vector<Node> mNodes;

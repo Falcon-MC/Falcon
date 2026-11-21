@@ -6,11 +6,7 @@ class ServerNetworkHandler;
 
 class SaveCommand : public Command {
 public:
-    enum class Mode {
-        Save,
-        On,
-        Off
-    };
+    enum class Mode { Save, On, Off };
 
     SaveCommand(ServerNetworkHandler &handler, Mode mode);
 
@@ -18,7 +14,9 @@ public:
 
     std::vector<CommandOverloadData> getOverloads() const override;
 
-    CommandPermission getRequiredPermission() const override { return CommandPermission::Owner; }
+    CommandPermission getRequiredPermission() const override {
+        return CommandPermission::GameDirectors;
+    }
 
 private:
     void setAutoSave(CommandOrigin &sender, bool enabled);

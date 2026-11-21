@@ -2,8 +2,7 @@
 
 #include "World/Level/Block/BlockData.h"
 
-GeneratorRoot::GeneratorRoot(Level &level) : BlockManager(level) {
-}
+GeneratorRoot::GeneratorRoot(Level &level) : BlockManager(level) {}
 
 bool GeneratorRoot::canReplace(int32_t x, int32_t y, int32_t z) const {
     const BlockState *cached = getCachedBlock(x, y, z);

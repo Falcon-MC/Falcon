@@ -1,18 +1,10 @@
 #include "World/Level/LevelGen/Feature/Tree/TreeBlockFace.h"
 
-const TreeBlockFace TreeBlockFaces::HORIZONTAL_PLANE[4] = {
-        TreeBlockFace::NORTH,
-        TreeBlockFace::EAST,
-        TreeBlockFace::SOUTH,
-        TreeBlockFace::WEST
-};
+const TreeBlockFace TreeBlockFaces::HORIZONTAL_PLANE[4] = {TreeBlockFace::NORTH, TreeBlockFace::EAST,
+                                                           TreeBlockFace::SOUTH, TreeBlockFace::WEST};
 
-const TreeBlockFace TreeBlockFaces::HORIZONTALS[4] = {
-        TreeBlockFace::SOUTH,
-        TreeBlockFace::WEST,
-        TreeBlockFace::NORTH,
-        TreeBlockFace::EAST
-};
+const TreeBlockFace TreeBlockFaces::HORIZONTALS[4] = {TreeBlockFace::SOUTH, TreeBlockFace::WEST, TreeBlockFace::NORTH,
+                                                      TreeBlockFace::EAST};
 
 int32_t TreeBlockFaces::getXOffset(TreeBlockFace face) {
     switch (face) {

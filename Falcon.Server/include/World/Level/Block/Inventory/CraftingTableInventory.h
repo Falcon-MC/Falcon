@@ -22,13 +22,21 @@ public:
 
     const std::vector<ItemStack> &getContents() const;
 
-    const Vector3i &getHolder() const { return mHolder; }
+    const Vector3i &getHolder() const {
+        return mHolder;
+    }
 
-    int getContainerSize() const override { return SIZE; }
+    int getContainerSize() const override {
+        return SIZE;
+    }
 
-    const ItemStack &getContainerItem(int slot) const override { return getItem(slot); }
+    const ItemStack &getContainerItem(int slot) const override {
+        return getItem(slot);
+    }
 
-    void setContainerItem(int slot, ItemStack item) override { setItem(slot, std::move(item)); }
+    void setContainerItem(int slot, ItemStack item) override {
+        setItem(slot, std::move(item));
+    }
 
 private:
     PlayerInventory &mOwner;

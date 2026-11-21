@@ -1,11 +1,15 @@
 #include "World/Level/Block/BlockPickItem.h"
 
+#include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/BedBlockActor.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/DoubleSlabBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <algorithm>
 #include <string_view>
 #include <unordered_map>
 
@@ -54,19 +58,17 @@ namespace {
                 {"minecraft:standing_sign", "minecraft:oak_sign"},
                 {"minecraft:wall_sign", "minecraft:oak_sign"},
                 {"minecraft:darkoak_standing_sign", "minecraft:dark_oak_sign"},
-                {"minecraft:darkoak_wall_sign", "minecraft:dark_oak_sign"}
-        };
+                {"minecraft:darkoak_wall_sign", "minecraft:dark_oak_sign"}};
         return ITEMS;
     }
 
     bool isUnpickable(std::string_view identifier) {
-        return BlockIdentifier::equalsAny(identifier, {
-                "minecraft:air", "minecraft:fire", "minecraft:soul_fire", "minecraft:portal",
-                "minecraft:end_portal", "minecraft:end_gateway", "minecraft:bubble_column",
-                "minecraft:frosted_ice", "minecraft:invisible_bedrock", "minecraft:moving_block",
-                "minecraft:piston_arm_collision", "minecraft:sticky_piston_arm_collision",
-                "minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava"
-        });
+        return BlockIdentifier::equalsAny(
+                identifier, {"minecraft:air", "minecraft:fire", "minecraft:soul_fire", "minecraft:portal",
+                             "minecraft:end_portal", "minecraft:end_gateway", "minecraft:bubble_column",
+                             "minecraft:frosted_ice", "minecraft:invisible_bedrock", "minecraft:moving_block",
+                             "minecraft:piston_arm_collision", "minecraft:sticky_piston_arm_collision",
+                             "minecraft:water", "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava"});
     }
 
     std::string replaceSuffix(const std::string &identifier, std::string_view suffix, std::string_view replacement) {
@@ -140,4 +142,41 @@ void BlockPickItem::restoreBlockData(BlockActor &actor, const ItemStack &item, c
     }
 
     actor.loadNbt(data, context);
+}
+
+void BlockPickItem::applyActorItemData(ItemStack &item, const BlockActor &actor) {
+    if (const BedBlockActor *bed = dynamic_cast<const BedBlockActor *>(&actor)) {
+        item.mDamage = std::max<int>(bed->getColor(), 0);
+        return;
+    }
+
+    // the pot's saved data without its item, animation and loot table: the sherds
+    if (const DecoratedPotBlockActor *pot = dynamic_cast<const DecoratedPotBlockActor *>(&actor)) {
+        if (pot->getSherds() == nullptr)
+            return;
+        if (!item.mTag.isCompound())
+            item.mTag = Tag::ofCompound();
+        item.mTag.put("sherds", *pot->getSherds());
+        return;
+    }
+
+    if (dynamic_cast<const BannerBlockActor *>(&actor) != nullptr) {
+        const Tag saved = actor.saveNbt();
+        item.mDamage = saved.getInt("Base", 0);
+
+        Tag data = Tag::ofCompound();
+        const std::vector<std::string> &keys = saved.getKeys();
+        const std::vector<Tag> &values = saved.getValues();
+        for (size_t index = 0; index < keys.size(); ++index) {
+            if (!BlockIdentifier::equalsAny(keys[index], {"x", "y", "z", "id", "isMovable", "Base"}))
+                data.put(keys[index], values[index]);
+        }
+
+        if (data.getKeys().empty())
+            return;
+        if (!item.mTag.isCompound())
+            item.mTag = Tag::ofCompound();
+        for (size_t index = 0; index < data.getKeys().size(); ++index)
+            item.mTag.put(data.getKeys()[index], data.getValues()[index]);
+    }
 }

@@ -8,7 +8,16 @@ public:
 
     using NeutralActor::NeutralActor;
 
-    ActorSize getSize() const override { return ActorSize{0.8f, 0.8f}; }
+    // no puff states yet: the full_puff area attack would hurt from a deflated fish
+    bool hasOwnAreaAttack() const override {
+        return true;
+    }
 
-    float getDefaultMaxHealth() const override { return 3.0f; }
+    ActorSize getSize() const override {
+        return ActorSize{0.8f, 0.8f};
+    }
+
+    float getDefaultMaxHealth() const override {
+        return 3.0f;
+    }
 };

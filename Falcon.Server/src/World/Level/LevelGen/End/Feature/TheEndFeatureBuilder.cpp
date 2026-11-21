@@ -1,10 +1,7 @@
 #include "World/Level/LevelGen/End/Feature/TheEndFeatureBuilder.h"
 
-#include "World/Level/LevelGen/End/Feature/ChorusPlantFeature.h"
-#include "World/Level/LevelGen/End/Feature/EndGatewayFeature.h"
-#include "World/Level/LevelGen/End/Feature/EndIslandFeature.h"
 #include "World/Level/LevelGen/End/Feature/EndPodiumFeature.h"
-#include "World/Level/LevelGen/End/Feature/SpikeFeature.h"
+#include "World/Level/LevelGen/End/Feature/TheEndDecorationFeature.h"
 #include "World/Level/LevelGen/End/TheEndNoiseHolder.h"
 #include "World/Level/LevelGen/Feature/ChunkGenerateContext.h"
 #include "World/Level/LevelGen/Feature/GeneratorRoot.h"
@@ -20,11 +17,8 @@ void TheEndFeatureBuilder::apply(Level &level, LevelChunk &chunk, const TheEndNo
     const TheEndSimplexNoise &islandNoise = noiseHolder.getDecorationIslandNoise();
 
     std::vector<IFeaturePtr> features;
-    features.push_back(std::make_shared<SpikeFeature>(seed));
+    features.push_back(std::make_shared<TheEndDecorationFeature>(seed, islandNoise));
     features.push_back(std::make_shared<EndPodiumFeature>());
-    features.push_back(std::make_shared<ChorusPlantFeature>(seed, islandNoise));
-    features.push_back(std::make_shared<EndGatewayFeature>(seed, islandNoise));
-    features.push_back(std::make_shared<EndIslandFeature>(seed, islandNoise));
 
     GeneratorRoot root(level);
     root.setOverflowSink(chunk.getX(), chunk.getZ(), overflow);

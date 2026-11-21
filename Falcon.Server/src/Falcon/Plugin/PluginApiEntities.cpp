@@ -7,6 +7,7 @@
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <string>
 
@@ -74,7 +75,9 @@ namespace {
 
     void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
         Actor *value = entity(target);
-        const Vector3f to = toVector3f(position);
+        Vector3f to = toVector3f(position);
+        if (!PluginEvents::teleport(*value, to, "plugin"))
+            return;
         Level &destinationLevel = destination == nullptr ? owner().getLevelFor(*value) : *level(destination);
 
         if (ServerPlayer *playerValue = asPlayer(value)) {
@@ -144,8 +147,8 @@ namespace {
                 return owner().hurt(*playerValue, amount, damage) == DamageResult::Dealt ? 1 : 0;
             }
 
-            const ActorDamageSource damage = ActorDamageSource::attack(key, playerValue->getName(), *source, source->getName(),
-                                                             source->getPosition());
+            const ActorDamageSource damage = ActorDamageSource::attack(key, playerValue->getName(), *source,
+                                                                       source->getName(), source->getPosition());
             return owner().hurt(*playerValue, amount, damage) == DamageResult::Dealt ? 1 : 0;
         }
 
@@ -175,9 +178,7 @@ namespace {
             return;
 
         const int64_t id = actorValue->getUniqueId();
-        owner().postToMainThread([id] {
-            owner().removeActor(id);
-        });
+        owner().postToMainThread([id] { owner().removeActor(id); });
     }
 
     const char *entityNameTag(FalconEntity *target) {

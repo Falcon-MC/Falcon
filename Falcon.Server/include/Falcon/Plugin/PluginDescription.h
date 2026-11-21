@@ -8,10 +8,8 @@ class PluginDescription {
 public:
     static bool load(const std::string &path, PluginDescription &out, std::string &error);
 
-    /**
-     * A plugin runs on a server of the same major version whose API is at least as recent. The patch only
-     * matters within the same minor version, where it marks functions appended to the end of the API table.
-     */
+    // same major version, server API at least as recent; patch only matters within one minor:
+    // it marks functions appended to the API table
     bool isApiSupported() const;
 
     std::string apiVersionText() const;

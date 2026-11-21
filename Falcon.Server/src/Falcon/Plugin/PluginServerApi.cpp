@@ -17,7 +17,7 @@
 using namespace PluginApiHelpers;
 
 namespace {
-    // Script forms count up from 1; plugin forms start far above so both share a player's callbacks safely.
+    // script forms count up from 1; plugin forms start far above: both share a player's callbacks
     constexpr uint32_t PLUGIN_FORM_ID_BASE = 0x40000000u;
 
     ServerPlayer *spawnedPlayerAt(uint32_t index) {
@@ -101,9 +101,12 @@ namespace {
                 return;
 
             owner().sendModalForm(found->second, formId, form,
-                                  [formId](ServerPlayer &responder, const std::string &response, bool closed) {
-                                      PluginManager *plugins =
-                                          PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FORM_RESPONSE);
+                                  [formId](ServerPlayer &responder, const std::string &response,
+                                           ServerNetworkHandler::ModalFormOutcome outcome) {
+                                      if (outcome == ServerNetworkHandler::ModalFormOutcome::PlayerQuit)
+                                          return;
+                                      PluginManager *plugins = PluginManager::findWithSubscribers(
+                                              FALCON_EVENT_PLAYER_FORM_RESPONSE);
                                       if (plugins == nullptr)
                                           return;
 
@@ -112,7 +115,7 @@ namespace {
                                       answer.mPlayer = &responder;
                                       answer.mFormId = formId;
                                       answer.mFormResponse = response;
-                                      answer.mState = closed;
+                                      answer.mState = outcome != ServerNetworkHandler::ModalFormOutcome::Answered;
                                       plugins->dispatch(answer);
                                   });
         });
@@ -127,18 +130,33 @@ namespace {
         TransferPacket packet;
         packet.mAddress = address;
         packet.mPort = (uint16_t) port;
-        owner().postToMainThread([id, packet] {
-            owner().sendPacketTo(id, packet);
-        });
+        owner().postToMainThread([id, packet] { owner().sendPacketTo(id, packet); });
         return 1;
+    }
+
+    PlayerBossBars::Color bossBarColor(uint32_t color) {
+        return color > (uint32_t) PlayerBossBars::Color::White ? PlayerBossBars::Color::Purple
+                                                               : (PlayerBossBars::Color) color;
+    }
+
+    uint32_t playerAddBossBar(FalconPlayer *target, const char *title, float percent, uint32_t color) {
+        return player(target)->getBossBars().add(title == nullptr ? "" : title, percent, bossBarColor(color));
+    }
+
+    int playerUpdateBossBar(FalconPlayer *target, uint32_t bar, const char *title, float percent, uint32_t color) {
+        return player(target)->getBossBars().update(bar, title == nullptr ? "" : title, percent, bossBarColor(color))
+                       ? 1
+                       : 0;
+    }
+
+    int playerRemoveBossBar(FalconPlayer *target, uint32_t bar) {
+        return player(target)->getBossBars().remove(bar) ? 1 : 0;
     }
 
     void playerKick(FalconPlayer *target, const char *reason) {
         const NetworkIdentifier id = player(target)->getNetworkIdentifier();
         const std::string text = reason == nullptr ? std::string() : std::string(reason);
-        owner().postToMainThread([id, text] {
-            owner()._disconnect(id, text);
-        });
+        owner().postToMainThread([id, text] { owner()._disconnect(id, DisconnectReason::Kicked, text); });
     }
 
     void broadcastMessage(const char *message) {
@@ -208,6 +226,15 @@ namespace {
         PluginServerApi::fillPackets(api);
         PluginServerApi::fillContent(api);
         PluginServerApi::fillServices(api);
+        PluginServerApi::fillMaps(api);
+        PluginServerApi::fillEffects(api);
+        PluginServerApi::fillScoreboard(api);
+        PluginServerApi::fillContainers(api);
+        PluginServerApi::fillData(api);
+        PluginServerApi::fillCommands(api);
+        PluginServerApi::fillWorldQueries(api);
+        PluginServerApi::fillActors(api);
+        PluginServerApi::fillAdmin(api);
         return api;
     }
 }
@@ -226,6 +253,9 @@ void PluginServerApi::fillCore(FalconServerApi &api) {
     api.playerKick = &playerKick;
     api.playerSendForm = &playerSendForm;
     api.playerTransfer = &playerTransfer;
+    api.playerAddBossBar = &playerAddBossBar;
+    api.playerUpdateBossBar = &playerUpdateBossBar;
+    api.playerRemoveBossBar = &playerRemoveBossBar;
     api.broadcastMessage = &broadcastMessage;
     api.subscribe = &subscribe;
     api.unsubscribe = &unsubscribe;

@@ -5,15 +5,71 @@
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Codec/ProtocolCodecRegistry.h"
+#include "World/Level/Level.h"
 
+#include <cctype>
+#include <cmath>
 #include <string>
 
 using namespace PluginApiHelpers;
 
 namespace {
     bool isValidGameMode(FalconGameMode gameMode) {
-        return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE ||
-               gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
+        return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE
+               || gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
+    }
+
+    constexpr size_t MAX_SIMULATED_NAME = 32;
+
+    bool sameName(const std::string &a, const std::string &b) {
+        if (a.size() != b.size())
+            return false;
+        for (size_t index = 0; index < a.size(); index++) {
+            if (std::tolower((unsigned char) a[index]) != std::tolower((unsigned char) b[index]))
+                return false;
+        }
+        return true;
+    }
+
+    // a printable name no one online uses, a loaded level and a place inside its height; as many as the plugin
+    // wants, for load tests
+    FalconPlayer *serverSpawnSimulatedPlayer(const char *name, FalconLevel *destination, FalconVec3 position,
+                                             float yaw, FalconGameMode gameMode) {
+        if (name == nullptr || destination == nullptr || !isValidGameMode(gameMode) || !std::isfinite(yaw)
+            || !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+            return nullptr;
+        const std::string playerName = name;
+        if (playerName.empty() || playerName.size() > MAX_SIMULATED_NAME)
+            return nullptr;
+        for (unsigned char c: playerName) {
+            if (c < 0x20 || c == 0x7f)
+                return nullptr;
+        }
+        Level &target = *level(destination);
+        if (position.y < target.getMinY() || position.y > target.getMaxY())
+            return nullptr;
+
+        ServerNetworkHandler &host = owner();
+        for (auto &entry: host.getPlayers()) {
+            if (sameName(entry.second.getName(), playerName))
+                return nullptr;
+        }
+        return toHandle(&host.spawnSimulatedPlayer(playerName, target,
+                                                   Vector3f((float) position.x, (float) position.y, (float) position.z),
+                                                   yaw, (int32_t) gameMode));
+    }
+
+    int playerIsSimulated(FalconPlayer *target) {
+        return player(target)->isSimulated() ? 1 : 0;
+    }
+
+    // leaves at the end of the tick, as a disconnect
+    int playerRemoveSimulated(FalconPlayer *target) {
+        ServerPlayer *value = player(target);
+        if (!value->isSimulated())
+            return 0;
+        owner().removeSimulatedPlayer(value->getNetworkIdentifier());
+        return 1;
     }
 
     FalconGameMode playerGameMode(FalconPlayer *target) {
@@ -79,7 +135,7 @@ namespace {
         ServerPlayer *value = player(target);
         const bool isOp = operator_ != 0;
         if (isOp)
-            owner().getOpList().addOp(value->getName());
+            owner().getOpList().addOp(value->getName(), value->getXuid());
         else
             owner().getOpList().removeOp(value->getName());
         owner().setPlayerOp(*value, isOp);
@@ -89,6 +145,9 @@ namespace {
 void PluginServerApi::fillPlayers(FalconServerApi &api) {
     api.playerGameMode = &playerGameMode;
     api.playerSetGameMode = &playerSetGameMode;
+    api.serverSpawnSimulatedPlayer = &serverSpawnSimulatedPlayer;
+    api.playerIsSimulated = &playerIsSimulated;
+    api.playerRemoveSimulated = &playerRemoveSimulated;
     api.playerXuid = &playerXuid;
     api.playerProtocolVersion = &playerProtocolVersion;
     api.playerUuid = &playerUuid;

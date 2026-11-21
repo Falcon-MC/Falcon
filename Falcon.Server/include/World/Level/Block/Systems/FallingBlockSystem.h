@@ -32,8 +32,12 @@ public:
 
     static bool isTouchingWater(Level &level, const Vector3i &position);
 
+    // `changed` is the neighbour that changed, null for the block itself
     static void onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                               const BlockState &state);
+                               const BlockState &state, const Vector3i *changed);
+
+    static void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state);
 
     static void onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state);

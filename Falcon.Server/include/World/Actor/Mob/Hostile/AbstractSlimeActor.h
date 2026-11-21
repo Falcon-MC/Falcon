@@ -14,19 +14,29 @@ public:
 
     using HostileActor::HostileActor;
 
+    // the slime attack hurts on contact with the slime as attacker
+    bool hasOwnAreaAttack() const override {
+        return true;
+    }
+
     bool preventsSleep() const override {
         return false;
     }
 
-    int getSizeVariant() const { return mSizeVariant; }
+    int getSizeVariant() const {
+        return mSizeVariant;
+    }
 
     void setSizeVariant(int variant);
 
+    static ActorSize getSizeForVariant(int variant);
     ActorSize getSize() const override;
 
     float getDefaultMaxHealth() const override;
 
-    int getExperienceDrop() const override { return mSizeVariant; }
+    int getExperienceDrop() const override {
+        return mSizeVariant;
+    }
 
     virtual float getContactDamage() const = 0;
 

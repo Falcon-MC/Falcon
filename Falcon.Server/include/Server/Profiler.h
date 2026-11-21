@@ -72,7 +72,9 @@ class Profiler {
 public:
     static const size_t MAX_SAMPLES = 24000;
 
-    bool isActive() const { return mActive; }
+    bool isActive() const {
+        return mActive;
+    }
 
     void start(int64_t tick);
 
@@ -80,8 +82,8 @@ public:
 
     void beginTick(int64_t tick);
 
-    void endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pendingChunkTasks,
-                 uint32_t fluidProcessed, uint32_t fluidScheduled);
+    void endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pendingChunkTasks, uint32_t fluidProcessed,
+                 uint32_t fluidScheduled);
 
     void beginSection(ProfilerSection section);
 
@@ -89,9 +91,13 @@ public:
 
     void recordPlayer(const std::string &name, double milliseconds, uint32_t chunksSent);
 
-    size_t getSampleCount() const { return mSamples.size(); }
+    size_t getSampleCount() const {
+        return mSamples.size();
+    }
 
-    int64_t getStartTick() const { return mStartTick; }
+    int64_t getStartTick() const {
+        return mStartTick;
+    }
 
 private:
     std::string _buildReport() const;

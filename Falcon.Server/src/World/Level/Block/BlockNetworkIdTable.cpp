@@ -8,6 +8,7 @@
 #include "World/Item/ItemNetworkIdTable.h"
 #include "Network/ProtocolData.h"
 #include "Protocol/BlockStateHasher.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <mutex>
@@ -17,7 +18,7 @@
 #include <vector>
 
 namespace {
-    const char *AIR = "minecraft:air";
+    using BlockNames::AIR;
 
     struct OlderPalette {
         std::unordered_set<int32_t> mHashes;

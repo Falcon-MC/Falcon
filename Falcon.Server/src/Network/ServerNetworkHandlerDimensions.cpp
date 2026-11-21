@@ -1,3 +1,4 @@
+#include <chrono>
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
@@ -6,6 +7,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Network/Handler/MapHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ChangeDimensionPacket.h"
@@ -14,6 +16,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 Level &ServerNetworkHandler::getDimension(DimensionType dimension) {
@@ -43,10 +47,8 @@ std::vector<Level *> ServerNetworkHandler::getLevels() {
     return levels;
 }
 
-/**
- * Ticks the overworld of one world. Unlike the other dimensions it ticks every column within
- * `tick-distance` of a player, and only rebuilds that set when the player chunk centres change.
- */
+// unlike other dimensions: every column within `tick-distance` of a player;
+// the set is rebuilt only when player chunk centres change
 void ServerNetworkHandler::_tickOverworld(World &world) {
     Level &level = world.getOverworld();
 
@@ -86,8 +88,10 @@ void ServerNetworkHandler::_tickOverworld(World &world) {
     std::sort(centers.begin(), centers.end());
     centers.erase(std::unique(centers.begin(), centers.end()), centers.end());
 
-    if (world.mActorPersistencePending || tickDistance != world.mActiveTickDistance
-        || centers != world.mActiveCenters) {
+    const bool viewMoved = world.mActiveColumnsStale || tickDistance != world.mActiveTickDistance
+                           || centers != world.mActiveCenters;
+    if (viewMoved) {
+        world.mActiveColumnsStale = false;
         world.mActiveCenters = centers;
         world.mActiveTickDistance = tickDistance;
 
@@ -107,15 +111,21 @@ void ServerNetworkHandler::_tickOverworld(World &world) {
 
         world.getTickingAreas().appendColumns(DimensionType::Overworld, activeColumns);
         level.setActiveColumns(activeColumns);
+    }
 
+    // chunks still on their way keep the actors pending: the columns themselves have not moved
+    if (viewMoved || world.mActorPersistencePending) {
         mProfiler.beginSection(ProfilerSection::ActorPersistence);
-        world.mActorPersistencePending = syncActorPersistence(level, activeColumns);
+        world.mActorPersistencePending = syncActorPersistence(level, level.getActiveColumnOrder());
         mProfiler.endSection(ProfilerSection::ActorPersistence);
     }
 
     mProfiler.beginSection(ProfilerSection::Fluids);
     level.tick();
     mProfiler.endSection(ProfilerSection::Fluids);
+
+    _tickVillages(level);
+    MapHandler::tickFrames(*this, world);
 
     mProfiler.beginSection(ProfilerSection::FluidBroadcast);
     _broadcastFluidChanges(level);
@@ -126,7 +136,7 @@ void ServerNetworkHandler::_broadcastFluidChanges(Level &level) {
     for (const Level::FluidChange &change: level.consumeFluidChanges()) {
         UpdateBlockPacket update;
         update.mBlockPosition = change.position;
-        update.mRuntimeId = (uint32_t) BlockStateHasher::hash(change.state.mName, change.state.mStates);
+        update.mRuntimeId = change.runtimeId;
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = (uint32_t) change.layer;
         BlockActionHandler::broadcastToViewers(*this, level,
@@ -134,6 +144,18 @@ void ServerNetworkHandler::_broadcastFluidChanges(Level &level) {
                                                         (float) change.position.y + 0.5f,
                                                         (float) change.position.z + 0.5f),
                                                update);
+    }
+}
+
+void ServerNetworkHandler::_tickVillages(Level &level) {
+    VillageManager &villages = level.getVillageManager();
+    villages.tick(*this, level, mCurrentTick);
+
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || !player.isIn(level))
+            continue;
+        villages.tickVillagesNear(*this, level, mCurrentTick, player.getPosition(), mProperties.getTickDistance());
     }
 }
 
@@ -172,8 +194,47 @@ void ServerNetworkHandler::_tickDimension(World &world, Level &level) {
     level.setActiveColumns(activeColumns);
     syncActorPersistence(level, activeColumns);
     level.tick();
+    if (level.getDimensionType() == DimensionType::TheEnd)
+        world.getDragonFight().tick(*this, level);
+    _tickVillages(level);
     _broadcastFluidChanges(level);
+    _processChunkUnloads(level);
+}
+
+namespace {
+    const std::chrono::milliseconds LATE_TICK{40};
+    const int32_t PACK_HOLD_TICKS = 100;
+}
+
+// actors leave only with their column: one walking out alone keeps ticking there, its chunk resident
+void ServerNetworkHandler::_processChunkUnloads(Level &level) {
+    std::unordered_set<int64_t> occupied;
+    const auto occupy = [&](const Actor &actor) {
+        if (!actor.isIn(level))
+            return;
+
+        const Vector3f position = actor.getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        occupied.insert(((int64_t) chunkX << 32) | (uint32_t) chunkZ);
+    };
+
+    for (auto &entry: mActors)
+        occupy(*entry.second);
+    for (const std::unique_ptr<ItemActor> &item: mItemEntities)
+        occupy(*item);
+
+    level.setOccupiedColumns(std::move(occupied));
+    level.processDeferredSaves();
     level.processChunkUnloads();
+    // housekeeping waits for a tick that is not already late
+    if (mLastTickLate)
+        mPackHoldTicks = PACK_HOLD_TICKS;
+    else if (mPackHoldTicks > 0)
+        --mPackHoldTicks;
+    // a busy stretch reads the same chunks again and again: packed, they would be unpacked the next tick
+    if (mPackHoldTicks == 0 && std::chrono::steady_clock::now() - mTickStarted < LATE_TICK)
+        level.packIdleChunks();
 }
 
 void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, DimensionType dimension,
@@ -181,8 +242,7 @@ void ServerNetworkHandler::changePlayerDimension(ServerPlayer &player, Dimension
     changePlayerLevel(player, getWorldFor(player).getLevel(dimension), position);
 }
 
-void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destinationLevel,
-                                             const Vector3f &position) {
+void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destinationLevel, const Vector3f &position) {
     if (player.isIn(destinationLevel))
         return;
 
@@ -228,14 +288,23 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     }
 
     Level &previous = getLevelFor(player);
+    World &previousWorld = getWorldFor(player);
+    const Vector3f fromLocation = player.getPosition();
     previous.unregisterAllChunkLoaders(player.getRuntimeId());
 
     player.moveToLevel(destinationLevel);
+    // an awake player leaving the overworld can bring the remaining sleepers up to the threshold
+    _updateSleepingPlayerList(previousWorld);
     player.getVisibleActors().clear();
     player.getVisiblePlayers().clear();
     player.setAwaitingDimensionAck(true);
     player.resetChunkStreaming();
-    player.getChunkStreamState() = ChunkStreamState();
+    ChunkStreamState &stream = player.getChunkStreamState();
+    const uint64_t sendTick = stream.mSendTick;
+    const unsigned sendsThisTick = stream.mSendsThisTick;
+    stream = ChunkStreamState();
+    stream.mSendTick = sendTick;
+    stream.mSendsThisTick = sendsThisTick;
 
     player.setPosition(destination);
     player.clearPendingMove();
@@ -243,17 +312,19 @@ void ServerNetworkHandler::changePlayerLevel(ServerPlayer &player, Level &destin
     if (otherWorld)
         _sendWorldState(player);
 
-    // The client only drops its terrain when the dimension id changes, so a move between two worlds
-    // in the same dimension first goes through another dimension and completes on the first ack.
+    // the client drops terrain only on a dimension id change: same-dimension world moves hop through
+    // another dimension and complete on the first ack
     if (sameDimension) {
         player.setPendingDimensionHop(true);
-        _sendDimensionChange(player, dimension == DimensionType::Overworld ? DimensionType::Nether
-                                                                          : DimensionType::Overworld, destination);
+        _sendDimensionChange(player,
+                             dimension == DimensionType::Overworld ? DimensionType::Nether : DimensionType::Overworld,
+                             destination);
         return;
     }
 
     _sendDimensionChange(player, dimension, destination);
     ChunkStreamHandler::handleTeleport(*this, player);
+    mScriptEngine.onPlayerDimensionChange(player, previous, fromLocation, destinationLevel, destination);
 }
 
 void ServerNetworkHandler::_sendDimensionChange(ServerPlayer &player, DimensionType dimension,

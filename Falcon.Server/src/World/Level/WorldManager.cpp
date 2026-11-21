@@ -62,7 +62,8 @@ std::vector<std::string> WorldManager::listOnDisk() {
 bool WorldManager::exists(const std::string &name) {
     std::error_code error;
     return isValidName(name)
-           && std::filesystem::is_directory(std::filesystem::path(getWorldsDirectory()) / name / DATABASE_FOLDER, error);
+           && std::filesystem::is_directory(std::filesystem::path(getWorldsDirectory()) / name / DATABASE_FOLDER,
+                                            error);
 }
 
 bool WorldManager::isValidName(const std::string &name) {
@@ -72,7 +73,5 @@ bool WorldManager::isValidName(const std::string &name) {
     if (name.find_first_of(FORBIDDEN_CHARACTERS) != std::string::npos)
         return false;
 
-    return std::none_of(name.begin(), name.end(), [](char character) {
-        return (unsigned char) character < 0x20;
-    });
+    return std::none_of(name.begin(), name.end(), [](char character) { return (unsigned char) character < 0x20; });
 }

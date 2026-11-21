@@ -5,6 +5,8 @@
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/RideSystem.h"
+#include "World/Actor/Vehicle/BoatActor.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/FrostedIceBlock.h"
@@ -14,6 +16,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Block/Systems/WaterMoveSystem.h"
 #include "World/Level/Level.h"
+#include "World/Item/ElytraItem.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "Network/Handler/BadPacketHandler.h"
@@ -23,8 +26,10 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
+#include "Scripting/ScriptEngine.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,10 +39,11 @@ namespace {
     LiquidContact liquidContact(Level &level, const ServerPlayer &player, const Vector3f &feet) {
         const ActorFlags &flags = player.getFlags();
         const bool sneaking = player.hasSimulatedVelocity() ? player.isSimulatedSneaking()
-                                                           : flags.get(ActorFlag::Sneaking);
-        return LiquidBlocksFetch::at(level, feet, flags.get(ActorFlag::Swimming)
-                                                 || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling),
-                                    sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT);
+                                                            : flags.get(ActorFlag::Sneaking);
+        return LiquidBlocksFetch::at(
+                level, feet,
+                flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling),
+                sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT);
     }
 
     void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
@@ -52,9 +58,7 @@ namespace {
         plugins->dispatch(event);
     }
 
-    /**
-     * Respiration level N skips losing air on a tick with probability N / (N + 1).
-     */
+    // Respiration N skips the air loss on a tick with probability N / (N + 1)
     bool consumesAir(const ServerPlayer &player) {
         const int32_t respiration = ItemEnchantments::getLevel(
                 player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD), EnchantmentIds::RESPIRATION);
@@ -62,7 +66,7 @@ namespace {
     }
 
     void freezeWaterUnderfoot(Level &level, const ServerPlayer &player, const Vector3f &feetPosition) {
-        if (player.getGameType() == (int32_t) GameType::Spectator)
+        if (player.isSpectator())
             return;
 
         const int32_t frostWalker = ItemEnchantments::getLevel(
@@ -79,11 +83,14 @@ namespace {
 
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
             for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
-                const BlockState water = level.getBlockState(x, y, z);
-                if (water.mName != "minecraft:water" || water.mStates.getInt("liquid_depth", 0) != 0)
+                // a column not loaded is unknown, never read through: that would generate it here
+                const BlockState *water = level.peekBlockPtr(x, y, z);
+                if (water == nullptr || water->mName != BlockNames::WATER
+                    || water->mStates.getInt("liquid_depth", 0) != 0)
                     continue;
 
-                if (level.getBlockState(x, y + 1, z).mName != "minecraft:air")
+                const BlockState *above = level.peekBlockPtr(x, y + 1, z);
+                if (above == nullptr || above->mName != BlockNames::AIR)
                     continue;
 
                 Tag states = Tag::ofCompound();
@@ -96,7 +103,7 @@ namespace {
         }
     }
 
-    const float PLAYER_BASE_OFFSET = 1.62f;
+    using MovementPhysics::PLAYER_BASE_OFFSET;
     const float PLAYER_HALF_WIDTH = 0.3f;
     const float PLAYER_HEIGHT = 1.8f;
     const float GROUND_PROBE_DEPTH = 0.5f;
@@ -115,9 +122,9 @@ namespace {
         int fireProtectionLevel = 0;
         const PlayerInventory &inventory = player.getInventory();
         for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
-            fireProtectionLevel = std::max(fireProtectionLevel,
-                                           ItemEnchantments::getLevel(inventory.getArmor(slot),
-                                                                      EnchantmentIds::FIRE_PROTECTION));
+            fireProtectionLevel = std::max(
+                    fireProtectionLevel,
+                    ItemEnchantments::getLevel(inventory.getArmor(slot), EnchantmentIds::FIRE_PROTECTION));
 
         const int reducedSeconds = (int) (8.0f * (float) fireProtectionLevel * 0.15f);
         const int fireTicks = std::max(1, 8 - std::min(8, reducedSeconds)) * 20;
@@ -157,6 +164,22 @@ namespace {
         return false;
     }
 
+    // every column the player's box touches is in memory
+    bool columnsResident(const Level &level, const Vector3f &feetPosition) {
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH) >> 4;
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH) >> 4;
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH) >> 4;
+
+        for (int32_t chunkX = minX; chunkX <= maxX; ++chunkX) {
+            for (int32_t chunkZ = minZ; chunkZ <= maxZ; ++chunkZ) {
+                if (!level.isChunkResident(chunkX, chunkZ))
+                    return false;
+            }
+        }
+        return true;
+    }
+
     bool applyLandingBehavior(ServerNetworkHandler &owner, ServerPlayer &player, const Block &support,
                               float downwardVelocity) {
         if (!support.onEntityLand(player, downwardVelocity))
@@ -172,20 +195,28 @@ namespace {
     }
 }
 
-bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition) {
+bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition, const Actor *actor) {
     const float shrink = 0.01f;
     const float minX = feetPosition.x - PLAYER_HALF_WIDTH + shrink;
     const float maxX = feetPosition.x + PLAYER_HALF_WIDTH - shrink;
     const float minZ = feetPosition.z - PLAYER_HALF_WIDTH + shrink;
     const float maxZ = feetPosition.z + PLAYER_HALF_WIDTH - shrink;
 
-    const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ,
-                                maxX, feetPosition.y, maxZ);
-    for (const AxisAlignedBB &shape: level.getCollisionBoxes(support)) {
+    const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ, maxX, feetPosition.y, maxZ);
+    for (const AxisAlignedBB &shape: level.getCollisionBoxes(support, actor)) {
         if (shape.intersectsWith(support))
             return true;
     }
     return false;
+}
+
+bool MovementHandler::checkGroundState(Level &level, const Vector3f &previousFeet, const Vector3f &feetPosition,
+                                       const Actor *actor) {
+    if (checkGroundState(level, feetPosition, actor))
+        return true;
+    // Y resolves before X/Z: a move sliding off an edge lands on the column it left
+    return feetPosition.y <= previousFeet.y
+           && checkGroundState(level, Vector3f(previousFeet.x, feetPosition.y, previousFeet.z), actor);
 }
 
 void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3f &feetPosition,
@@ -206,11 +237,15 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     player.setPosition(feetPosition);
 
-    const bool wasOnGround = player.isOnGround();
     Level &level = owner.getLevelFor(player);
-    // Preserve collision output: a proximity probe can report ground during a jump or above shallow water.
+    // an unloaded column is unknown, not air: the probes below would generate it on the tick thread
+    if (!columnsResident(level, feetPosition))
+        return;
+
+    const bool wasOnGround = player.isOnGround();
+    // keep the collision result: a proximity probe can report ground mid-jump or above shallow water
     const bool onGround = player.hasSimulatedGround() ? player.isSimulatedOnGround()
-                                                     : checkGroundState(level, feetPosition);
+                                                      : checkGroundState(level, previous, feetPosition, &player);
     player.setOnGround(onGround);
 
     const LiquidContact water = liquidContact(level, player, feetPosition);
@@ -234,8 +269,9 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
         const Block supportBlock = hasSupport ? Block(support) : Block();
 
         if (!wasOnGround) {
-            const bool landedOnSpecialBlock = hasSupport && applyLandingBehavior(owner, player, supportBlock,
-                                                                                 std::min(0.0f, requestedY));
+            const bool landedOnSpecialBlock = hasSupport
+                                              && applyLandingBehavior(owner, player, supportBlock,
+                                                                      std::min(0.0f, requestedY));
             if (!landedOnSpecialBlock)
                 owner._handleFallDamage(player, hasSupport ? &supportBlock : nullptr);
 
@@ -244,7 +280,8 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
         player.resetFallDistance();
     } else {
-        if (wasOnGround || requestedY > 0.0f || player.getMotion().y > 0.0f)
+        // no simulated velocity: the motion is the client's own delta; it can't clear a fall
+        if (wasOnGround || requestedY > 0.0f || (player.hasSimulatedVelocity() && player.getMotion().y > 0.0f))
             player.resetFallDistance();
 
         if (feetPosition.y > player.getHighestPosition())
@@ -263,7 +300,7 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     WaterMoveSystem::tick(player, contact);
     LavaResetFallDistanceSystem::tick(player, contact);
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     const bool fireResistance = player.hasEffect(MobEffectId::FireResistance);
     if (contact.lava || fireContact.fire)
         ignitePlayer(player);
@@ -272,7 +309,8 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
         if (contact.lava)
             owner.hurt(player, 4.0f, ActorDamageSource::environment("death.attack.lava", player.getName()));
         if (fireContact.fire)
-            owner.hurt(player, fireContact.damage, ActorDamageSource::environment("death.attack.onFire", player.getName()));
+            owner.hurt(player, fireContact.damage,
+                       ActorDamageSource::environment("death.attack.onFire", player.getName()));
     }
 
     tickBreathing(owner, player, contact.eyeInWater);
@@ -287,8 +325,7 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
     const bool turtleHelmet = !helmet.isAir() && helmet.mDefinition != nullptr
                               && helmet.mDefinition->getIdentifier() == TURTLE_HELMET;
 
-    // A turtle helmet worn out of water charges a 10 second timer that keeps the player
-    // breathing after diving in.
+    // a turtle helmet out of water charges a 10 s timer: the player keeps breathing after diving in
     if (breathing && turtleHelmet) {
         player.setTurtleHelmetTicks(TURTLE_HELMET_TICKS);
     } else if (player.getTurtleHelmetTicks() > 0) {
@@ -314,7 +351,8 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
             int air = player.getAirSupply() - 1;
             if (air <= DROWNING_AIR) {
                 air = 0;
-                owner.hurt(player, DROWNING_DAMAGE, ActorDamageSource::environment("death.attack.drown", player.getName()));
+                owner.hurt(player, DROWNING_DAMAGE,
+                           ActorDamageSource::environment("death.attack.drown", player.getName()));
             }
             player.setAirSupply(air);
         }
@@ -326,19 +364,19 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
         owner._sendEntityData(player);
 }
 
-bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id,
-                                     ServerPlayer &player, bool flying, bool deferUntilInput) {
+bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                                    bool flying, bool deferUntilInput) {
     const int32_t gameType = player.getGameType();
     const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
 
     if (flying && !mayFly) {
-        owner._disconnect(id, player.localize("falcon.disconnect.flyingDisabled"));
+        owner._disconnect(id, DisconnectReason::Kicked, player.localize("falcon.disconnect.flyingDisabled"));
         return false;
     }
 
-    // Unticked AuthInput packets predate this un-timestamped ability request.
-    if (deferUntilInput && (player.getMovementInputs().pendingCount() != 0
-                            || player.getMovementInputs().hasPendingFlightRequest())) {
+    // unticked AuthInput packets predate this un-timestamped ability request
+    if (deferUntilInput
+        && (player.getMovementInputs().pendingCount() != 0 || player.getMovementInputs().hasPendingFlightRequest())) {
         player.getMovementInputs().deferFlightRequest(flying);
         return true;
     }
@@ -361,40 +399,166 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
     player.setFlying(flying);
 
     if (!flying)
-        player.setOnGround(MovementHandler::checkGroundState(owner.getLevelFor(player), player.getPosition()));
+        player.setOnGround(MovementHandler::checkGroundState(owner.getLevelFor(player), player.getPosition(), &player));
 
     owner._sendAbilities(player);
     return true;
 }
 
+// reads what the player pressed, never the resulting position: water, pistons and mobs move an idle player, and
+// the client sends this packet every tick whether or not anything was pressed
+static const char *inputModeName(int32_t mode) {
+    switch ((PlayerInputMode) mode) {
+        case PlayerInputMode::Mouse:
+            return "KeyboardAndMouse";
+        case PlayerInputMode::Touch:
+            return "Touch";
+        case PlayerInputMode::Gamepad:
+            return "Gamepad";
+        case PlayerInputMode::MotionController:
+            return "MotionController";
+        default:
+            return nullptr;
+    }
+}
+
+static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    ServerPlayer::InputState &state = player.getInputState();
+    ScriptEngine &scripts = owner.getScriptEngine();
+
+    const int32_t mode = (int32_t) packet.mInputMode;
+    // an undefined device keeps the last one used
+    if (inputModeName(mode) != nullptr && mode != state.mInputMode) {
+        const char *previousMode = inputModeName(state.mInputMode);
+        state.mInputMode = mode;
+        if (previousMode != nullptr)
+            scripts.onPlayerInputModeChange(player, previousMode, inputModeName(mode));
+    }
+
+    state.mTouchOnlyHotbar = packet.hasInputFlag((int32_t) PlayerAuthInputData::HotbarOnlyTouch);
+    state.mMoveX = packet.mRawMoveVectorX;
+    state.mMoveY = packet.mRawMoveVectorY;
+    state.mJumping = packet.hasInputFlag((int32_t) PlayerAuthInputData::Jumping);
+
+    const bool jump = packet.hasInputFlag((int32_t) PlayerAuthInputData::JumpDown);
+    const bool sneak = packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown);
+    const bool jumpChanged = jump != state.mJumpHeld;
+    const bool sneakChanged = sneak != state.mSneakHeld;
+    state.mJumpHeld = jump;
+    state.mSneakHeld = sneak;
+    if (jumpChanged)
+        scripts.onPlayerButtonInput(player, "Jump", jump);
+    if (sneakChanged)
+        scripts.onPlayerButtonInput(player, "Sneak", sneak);
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing))
+        scripts.onPlayerSwingStart(player, "Attack");
+}
+
+static bool isActiveInput(ServerPlayer &player, const PlayerAuthInputPacket &packet) {
+    const bool rotated = player.updateInputRotation(packet.mRotation);
+
+    return rotated || packet.mMotionX != 0.0f || packet.mMotionY != 0.0f || packet.mRawMoveVectorX != 0.0f
+           || packet.mRawMoveVectorY != 0.0f || packet.mHasItemUseTransaction || packet.mHasItemStackRequest
+           || !packet.mPlayerActions.empty() || packet.hasInputFlag((int32_t) PlayerAuthInputData::JumpDown)
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown)
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing)
+           || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem);
+}
+
 void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                             ServerPlayer &player, const PlayerAuthInputPacket &packet) {
-    // BDS LoadingScreenPlayerProtectionsSystem disables movement until loading completes.
+    // LoadingScreenPlayerProtectionsSystem: no movement until loading completes
     if (!player.isSpawned())
         return;
 
-    // Flight transitions belong to this input tick, including replayed inputs.
-    const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
-    const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
-    if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
-        return;
+    if (isActiveInput(player, packet))
+        player.markActive(owner.getCurrentTick());
 
-    // Resolve sprinting before replay so physics and the advertised actor state use the same decision.
-    bool sprinting = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sprinting)
+    // sprint resolved before replay: physics and advertised state agree; the client sprints from StartSprinting
+    // to StopSprinting; the Sprinting bit can miss the tick after a start, and stays set when one tick starts+stops
+    bool sprinting = player.getFlags().get(ActorFlag::Sprinting)
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
         sprinting = false;
 
-    // Player positions on the wire are at eye height; the server works with feet positions.
-    Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET,
-                          packet.mPosition.z);
+    // wire positions are at eye height; the server works in feet positions
+    Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET, packet.mPosition.z);
+    if (player.isAwaitingTeleport())
+        feetPosition = player.getPosition();
+    // the client places and breaks before it moves on the same tick: it already collides with a block it just put
+    // down, and walks into the gap of one it just broke, so the replay must see the world after them
+    // in packet order: a block broken in one hit sends its StartBreak and its destroy on the same input
+    // a one-hit block goes in the item use transaction, but the client lists its abort and the next block's start
+    // among the actions of the same input: validate the destroy while its break is still the current one
+    bool transactionBreakPending = packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 2;
+    const Vector3i transactionBreakPosition = packet.mItemUseTransaction.mBlockPosition;
+    const auto completeTransactionBreak = [&]() {
+        if (!transactionBreakPending || !player.isBreakingBlock()
+            || player.getBreakingBlockPosition() != transactionBreakPosition)
+            return;
+        transactionBreakPending = false;
+        BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
+    };
+    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+        if (action.mAction == PlayerActionType::AbortBreak
+            || ((action.mAction == PlayerActionType::StartBreak
+                 || action.mAction == PlayerActionType::BlockContinueDestroy)
+                && action.mBlockPosition != transactionBreakPosition))
+            completeTransactionBreak();
+        if (action.mAction == PlayerActionType::StartBreak
+            || action.mAction == PlayerActionType::BlockContinueDestroy) {
+            // the client keeps reporting the hit block; restarting on each repeat resets the progress. only a break
+            // in progress on it counts: a ContinueBreak onto a new block marks it without starting a break there
+            if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition
+                && player.isBreakingBlock() && player.getBreakingBlockPosition() == action.mBlockPosition)
+                continue;
+
+            BlockActionHandler::startBreakingBlock(owner, player, action.mBlockPosition, action.mFace);
+            player.setLastBlockAttacked(action.mBlockPosition);
+        } else if (action.mAction == PlayerActionType::ContinueBreak) {
+            if (player.isBreakingBlock() && player.getBreakingBlockPosition() == action.mBlockPosition)
+                player.setBreakingFace(action.mFace);
+
+            player.setLastBlockAttacked(action.mBlockPosition);
+        } else if (action.mAction == PlayerActionType::AbortBreak) {
+            BlockActionHandler::stopBreakingBlock(owner, player);
+            player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::StopBreak) {
+            // StopBreak arrives with the finishing destroy; only AbortBreak cancels: the break stays tracked until validated
+            player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::BlockPredictDestroy
+                   || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
+            BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
+            player.clearLastBlockAttacked();
+        } else if (action.mAction == PlayerActionType::StartItemUseOn) {
+            owner.getScriptEngine().onItemStartUseOn(player, action.mBlockPosition, action.mFace);
+        } else if (action.mAction == PlayerActionType::StopItemUseOn) {
+            owner.getScriptEngine().onItemStopUseOn(player, action.mBlockPosition);
+        }
+    }
+    if (packet.mHasItemUseTransaction) {
+        if (packet.mItemUseTransaction.mActionType == 0)
+            BlockActionHandler::placeBlock(owner, player, packet.mItemUseTransaction);
+        else if (transactionBreakPending)
+            BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
+    }
+
     PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
+
+    // the client keeps its old travel for the input carrying a flight toggle: the new state applies from the next
+    const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
+    const bool startFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartFlying);
+    if ((startFlying || stopFlying) && !requestFlight(owner, id, player, startFlying && !stopFlying))
+        return;
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())
         player.setMotion(packet.mDelta);
-    if (player.isRiding())
+    if (player.isRiding()) {
         RideControlSystem::receiveInput(owner, player, packet);
+        BoatActor::followController(owner, player, feetPosition, packet);
+        MinecartActor::readRider(owner, player, packet);
+    }
 
     if (player.isSpawned()) {
         const int32_t chunkX = (int32_t) std::floor(feetPosition.x) >> 4;
@@ -428,10 +592,14 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             flags.set(ActorFlag::Swimming, false);
     }
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding))
+    // the client sets StartGliding itself; no elytra, no gliding; the flag also disables crits and lunges,
+    // and changes the liquid probe
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartGliding) && ElytraItem::isWearingElytra(player))
         flags.set(ActorFlag::Gliding, true);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
+
+    flags.set(ActorFlag::Emoting, packet.hasInputFlag((int32_t) PlayerAuthInputData::Emoting));
 
     if (player.hasSimulatedVelocity()) {
         flags.set(ActorFlag::Crawling, player.isSimulatedCrawling());
@@ -445,11 +613,13 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);
 
-    if (sneaking != previous.get(ActorFlag::Sneaking))
+    if (sneaking != previous.get(ActorFlag::Sneaking)) {
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
+        owner.getScriptEngine().onEntitySneak(player, sneaking);
+    }
+    recordInput(owner, player, packet);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
-        // Sprint changes the movement attribute as well as actor metadata in BDS (0x140F4D3F0).
-        // This client-requested transition must not reset authoritative validation.
+        // sprint changes the movement attribute too; client-requested: no validation reset
         owner._sendAttributes(player, false);
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
     }
@@ -462,29 +632,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     }
 
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
-        if (action.mAction == PlayerActionType::StartBreak
-            || action.mAction == PlayerActionType::BlockContinueDestroy) {
-            // The client keeps reporting the block it is hitting; restarting the break on each
-            // repeat would reset the break progress.
-            if (player.hasLastBlockAttacked() && player.getLastBlockAttacked() == action.mBlockPosition)
-                continue;
-
-            BlockActionHandler::startBreakingBlock(owner, player, action.mBlockPosition, action.mFace);
-            player.setLastBlockAttacked(action.mBlockPosition);
-        } else if (action.mAction == PlayerActionType::ContinueBreak) {
-            if (player.isBreakingBlock() && player.getBreakingBlockPosition() == action.mBlockPosition)
-                player.setBreakingFace(action.mFace);
-
-            player.setLastBlockAttacked(action.mBlockPosition);
-        } else if (action.mAction == PlayerActionType::AbortBreak ||
-                  action.mAction == PlayerActionType::StopBreak) {
-            BlockActionHandler::stopBreakingBlock(owner, player);
-            player.clearLastBlockAttacked();
-        } else if (action.mAction == PlayerActionType::BlockPredictDestroy ||
-                  action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock) {
-            BlockActionHandler::completeBreakingBlock(owner, player, action.mBlockPosition);
-            player.clearLastBlockAttacked();
-        } else if (action.mAction == PlayerActionType::Jump) {
+        if (action.mAction == PlayerActionType::Jump) {
             if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
@@ -493,14 +641,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         }
     }
 
-    if (packet.mHasItemUseTransaction) {
-        if (packet.mItemUseTransaction.mActionType == 0)
-            BlockActionHandler::placeBlock(owner, player, packet.mItemUseTransaction);
-        else if (packet.mItemUseTransaction.mActionType == 1)
-            owner._useHeldItem(player);
-        else if (packet.mItemUseTransaction.mActionType == 2)
-            BlockActionHandler::completeBreakingBlock(owner, player, packet.mItemUseTransaction.mBlockPosition);
-    }
+    if (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1)
+        owner._useHeldItem(player);
 
     (void) id;
 }

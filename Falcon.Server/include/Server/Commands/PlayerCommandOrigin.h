@@ -12,9 +12,13 @@ public:
 
     std::string getSenderName() const override;
 
-    bool isPlayer() const override { return true; }
+    bool isPlayer() const override {
+        return true;
+    }
 
-    ServerPlayer *asPlayer() override { return &mPlayer; }
+    ServerPlayer *asPlayer() override {
+        return &mPlayer;
+    }
 
     void sendMessage(const std::string &message) override;
 
@@ -22,9 +26,21 @@ public:
 
     std::string getLocale() const override;
 
+    void sendError(const std::string &message) override;
+
     CommandPermission getCommandPermission() const override;
 
+    bool canExecuteCommand(const Command &command) const override;
+
+    ServerPlayer *permissionGroupPlayer() override {
+        return &mPlayer;
+    }
+
     Level *getLevel() override;
+
+    const CommandOriginData &getOriginData() const {
+        return mOrigin;
+    }
 
 private:
     ServerNetworkHandler &mHandler;

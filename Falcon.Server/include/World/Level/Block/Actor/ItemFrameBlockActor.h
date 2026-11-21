@@ -9,7 +9,9 @@ public:
 
     static const int ROTATION_COUNT = 8;
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -17,21 +19,35 @@ public:
 
     Tag getSpawnCompound() const override;
 
-    const ItemStack &getItem() const { return mItem; }
+    const ItemStack &getItem() const {
+        return mItem;
+    }
 
-    void setItem(ItemStack item) { mItem = std::move(item); }
+    void setItem(ItemStack item) {
+        mItem = std::move(item);
+    }
 
-    bool isEmpty() const { return mItem.isAir() || mItem.mCount <= 0; }
+    bool isEmpty() const {
+        return mItem.isAir() || mItem.mCount <= 0;
+    }
 
-    int getRotation() const { return mRotation; }
+    int getRotation() const {
+        return mRotation;
+    }
 
     void setRotation(int rotation);
 
-    float getDropChance() const { return mDropChance; }
+    float getDropChance() const {
+        return mDropChance;
+    }
 
-    void setDropChance(float chance) { mDropChance = chance; }
+    void setDropChance(float chance) {
+        mDropChance = chance;
+    }
 
-    int getAnalogOutput() const { return isEmpty() ? 0 : mRotation + 1; }
+    int getAnalogOutput() const {
+        return isEmpty() ? 0 : mRotation + 1;
+    }
 
 private:
     ItemStack mItem;
@@ -43,5 +59,7 @@ class GlowItemFrameBlockActor final : public ItemFrameBlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "GlowItemFrame";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };

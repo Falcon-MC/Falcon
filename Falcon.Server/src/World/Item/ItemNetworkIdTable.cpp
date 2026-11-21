@@ -20,9 +20,7 @@ namespace {
     const char *TAG_ID = "id";
     const char *TAG_COMPONENTS = "components";
 
-    /**
-     * Suffixes of the items an older version lacks whose base block it has, so they show as that block.
-     */
+    // variants an older version lacks while knowing their base block: shown as that block
     const std::array<const char *, 3> VARIANT_SUFFIXES = {"_double_slab", "_slab", "_stairs"};
 
     Tag loadComponents(const unsigned char *data, size_t size) {
@@ -88,9 +86,9 @@ namespace {
     }
 
     const std::vector<ItemNetworkIdEntry> &entries() {
-        static const std::vector<ItemNetworkIdEntry> loaded = loadEntries(
-                FalconItemData::kItemPaletteJson, FalconItemData::kItemComponentsNbt,
-                FalconItemData::kItemComponentsNbtSize);
+        static const std::vector<ItemNetworkIdEntry> loaded = loadEntries(FalconItemData::kItemPaletteJson,
+                                                                          FalconItemData::kItemComponentsNbt,
+                                                                          FalconItemData::kItemComponentsNbtSize);
         return loaded;
     }
 
@@ -103,8 +101,9 @@ namespace {
         if (it != loaded.end())
             return it->second;
 
-        return loaded.emplace(data.mProtocol, loadEntries(data.mItemPalette, data.mItemComponents,
-                                                          data.mItemComponentsSize)).first->second;
+        return loaded
+                .emplace(data.mProtocol, loadEntries(data.mItemPalette, data.mItemComponents, data.mItemComponentsSize))
+                .first->second;
     }
 
     std::unordered_map<std::string, int32_t> networkIdsByName(const std::vector<ItemNetworkIdEntry> &palette) {

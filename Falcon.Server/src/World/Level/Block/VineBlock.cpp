@@ -171,8 +171,7 @@ void VineBlock::putVine(Level &level, const Vector3i &source, const Vector3i &po
                               true);
 }
 
-void VineBlock::putVineOnHorizontalFace(Level &level, const Vector3i &source, const Vector3i &position,
-                                        int32_t bits) {
+void VineBlock::putVineOnHorizontalFace(Level &level, const Vector3i &source, const Vector3i &position, int32_t bits) {
     for (int32_t horizontal: HORIZONTAL_FACES) {
         if ((bits & vineBit(horizontal)) == vineBit(horizontal)) {
             putVine(level, source, position, bits);

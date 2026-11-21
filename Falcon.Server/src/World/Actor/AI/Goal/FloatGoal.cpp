@@ -32,8 +32,8 @@ void FloatGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     Level &level = owner.getLevelFor(mob);
     const Vector3f position = mob.getPosition();
     const float floatingHeight = mob.getSize().mHeight * EYE_HEIGHT_RATIO;
-    const bool eyesInWater = LiquidBlocksFetch::at(level, Vector3f(position.x, position.y + floatingHeight,
-                                                                   position.z)).water;
+    const bool eyesInWater =
+            LiquidBlocksFetch::at(level, Vector3f(position.x, position.y + floatingHeight, position.z)).water;
 
     if (eyesInWater) {
         mEyesWereInWater = true;
@@ -47,7 +47,8 @@ void FloatGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!LiquidBlocksFetch::at(level, position).water)
         return;
 
-    const bool strong = std::uniform_int_distribution<int32_t>(0, STRONG_BOB_ROLLS - 1)(floatRandom()) == STRONG_BOB_ROLLS - 1;
+    const bool strong = std::uniform_int_distribution<int32_t>(0, STRONG_BOB_ROLLS - 1)(floatRandom())
+                        == STRONG_BOB_ROLLS - 1;
     Vector3f motion = mob.getMotion();
     motion.y += floatingHeight * (strong ? STRONG_BOB_FACTOR : BOB_FACTOR);
     mob.setMotion(motion);

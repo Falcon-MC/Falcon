@@ -6,9 +6,7 @@
 
 class PressurePlateBlock final : public Block {
 public:
-    explicit PressurePlateBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit PressurePlateBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

@@ -27,3 +27,8 @@ std::vector<PotionEffect> getPotionEffects(int32_t potionId);
 int32_t getPotionColor(int32_t potionId);
 
 int32_t findPotionId(const std::string &name);
+
+// the potion's name without namespace, nullptr past the last id
+const char *getPotionName(int32_t potionId);
+
+int32_t getPotionCount();

@@ -71,7 +71,9 @@ namespace {
                 {"mangrove_swamp",                 BiomeIds::MANGROVE_SWAMP},
                 {"cherry_grove",                   BiomeIds::CHERRY_GROVE},
                 {"pale_garden",                    BiomeIds::PALE_GARDEN},
+                {"dappled_forest",                 BiomeIds::DAPPLED_FOREST},
                 {"sulfur_caves",                   BiomeIds::SULFUR_CAVES},
+                {"ice_caves",                      BiomeIds::ICE_CAVES},
                 {"hell",                           NetherBiomeIds::HELL},
                 {"soulsand_valley",                NetherBiomeIds::SOULSAND_VALLEY},
                 {"crimson_forest",                 NetherBiomeIds::CRIMSON_FOREST},
@@ -83,12 +85,169 @@ namespace {
         return map;
     }
 
+    BiomeFeatureEntry featureEntry(const char *identifier, const char *feature) {
+        BiomeFeatureEntry entry;
+        entry.mIdentifier = identifier;
+        entry.mFeature = feature;
+        entry.mEvalOrder = 1;
+        return entry;
+    }
+
+    std::vector<BiomeFeatureEntry> iceCavesFeatures() {
+        return {
+                featureEntry("falcon:ice_caves_surface_feature_rules", "falcon:ice_caves_surface_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_ice_crystal_feature_rules",
+                             "minecraft:ice_crystal_scatter_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_icicle_feature_rules",
+                             "minecraft:icicle_cluster_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_large_icicle_feature_rules",
+                             "minecraft:large_icicle_feature"),
+                featureEntry("minecraft:ice_caves_after_surface_snow_layer_feature_rules",
+                             "minecraft:snow_layer_scatter_feature")
+        };
+    }
+
+    // a rule of the dappled forest's own: uniform x and z over the chunk, y on the heightmap
+    BiomeFeatureEntry heightmapRule(const char *identifier, const char *feature, const char *pass,
+                                    const char *iterations, int32_t numerator, int32_t denominator) {
+        BiomeFeatureEntry entry;
+        entry.mIdentifier = identifier;
+        entry.mFeature = feature;
+        entry.mPass = pass;
+        entry.mEvalOrder = 1;
+        entry.mCoordinates[0] = {1, "0.000000", "16.000000"};
+        entry.mCoordinates[1] = {0, "query.heightmap(variable.worldx, variable.worldz)", ""};
+        entry.mCoordinates[2] = {1, "0.000000", "16.000000"};
+        entry.mChanceNumerator = numerator;
+        entry.mChanceDenominator = denominator;
+        entry.mChancePercent = "100.000000";
+        entry.mIterations = iterations;
+        return entry;
+    }
+
+    // the packet dump sends no generation data for it: the rules whose biome filters pass its tags
+    // (vanilla_1.26.50 feature_rules), in the order every other biome keeps them; its own three come where the
+    // other biomes keep theirs, between gravel and sand and after the tall grass
+    std::vector<BiomeFeatureEntry> dappledForestFeatures(
+            const std::unordered_map<int32_t, std::vector<BiomeFeatureEntry>> &known) {
+        static const char *const SHARED[] = {
+                "minecraft:overworld_after_surface_reeds_feature_rules",
+                "minecraft:overworld_underwater_magma_feature",
+                "minecraft:forest_after_surface_tall_grass_feature_rules",
+                "",
+                "minecraft:overworld_amethyst_geode_feature",
+                "minecraft:overworld_underground_iron_ore_small_feature",
+                "minecraft:overworld_underground_diamond_ore_feature_square",
+                "minecraft:overworld_underground_coal_ore_upper_feature",
+                "minecraft:overworld_underground_andesite_feature",
+                "minecraft:overworld_underground_iron_ore_upper_feature",
+                "minecraft:overworld_underground_gold_ore_feature",
+                "minecraft:overworld_underground_diamond_ore_buried_feature",
+                "minecraft:overworld_underground_andesite_lower_feature",
+                "minecraft:overworld_underground_gravel_ore_feature",
+                "minecraft:overworld_underground_coal_ore_feature",
+                "minecraft:overworld_underground_andesite_upper_feature",
+                "minecraft:overworld_underground_copper_ore_feature",
+                "minecraft:overworld_underground_coal_ore_lower_feature",
+                "minecraft:overworld_underground_diamond_ore_feature",
+                "minecraft:overworld_underground_iron_ore_middle_feature",
+                "minecraft:overworld_underground_diamond_ore_large_feature",
+                "minecraft:overworld_underground_diorite_feature",
+                "minecraft:overworld_underground_diorite_lower_feature",
+                "minecraft:overworld_underground_diorite_upper_feature",
+                "minecraft:overworld_underground_redstone_ore_lower_feature",
+                "minecraft:overworld_underground_dirt_feature",
+                "minecraft:overworld_underground_extra_gravel_ore_feature",
+                "minecraft:overworld_underground_gold_ore_lower_feature",
+                "minecraft:overworld_underground_granite_feature",
+                "minecraft:overworld_underground_granite_lower_feature",
+                "minecraft:overworld_underground_granite_upper_feature",
+                "minecraft:overworld_underground_iron_ore_feature",
+                "minecraft:overworld_underground_lapis_ore_buried_feature",
+                "minecraft:overworld_underground_lapis_ore_feature",
+                "minecraft:overworld_underground_redstone_ore_feature",
+                "minecraft:overworld_underground_tuff_feature",
+                "minecraft:overworld_surface_springs_feature",
+                "minecraft:overworld_surface_gravel_feature",
+                "",
+                "minecraft:minecraft:overworld_surface_sand_feature",
+                "minecraft:overworld_surface_clay_feature",
+                "minecraft:overworld_underground_glow_lichen_feature",
+                "minecraft:overworld_underground_deepslate_feature",
+                "minecraft:overworld_extra_cave_carver_feature",
+                "minecraft:overworld_cave_carver_feature"
+        };
+        std::vector<BiomeFeatureEntry> features;
+        bool afterSurface = true;
+        for (const char *identifier: SHARED) {
+            if (*identifier == '\0') {
+                if (afterSurface) {
+                    features.push_back(heightmapRule(
+                            "minecraft:dappled_forest_after_surface_brown_mushroom_feature_rules",
+                            "minecraft:scatter_brown_mushroom_feature", "after_surface_pass", "1.000000", 1, 2));
+                } else {
+                    features.push_back(heightmapRule("minecraft:scatter_tree_dappled_forest_feature_rules",
+                                                     "minecraft:select_tree_dappled_forest_feature", "surface_pass",
+                                                     "6.000000", 0, 0));
+                    features.push_back(heightmapRule("minecraft:scatter_red_shrub_bush_feature_rules",
+                                                     "minecraft:scatter_red_shrub_bush_feature", "surface_pass",
+                                                     "1.000000", 0, 0));
+                }
+                afterSurface = false;
+                continue;
+            }
+            for (const auto &biome: known) {
+                const auto found = std::find_if(biome.second.begin(), biome.second.end(),
+                                                [&](const BiomeFeatureEntry &entry) {
+                                                    return entry.mIdentifier == identifier;
+                                                });
+                if (found == biome.second.end())
+                    continue;
+                features.push_back(*found);
+                break;
+            }
+        }
+        return features;
+    }
+
     std::string stripNamespace(const std::string &name) {
         const size_t separator = name.find(':');
         if (separator == std::string::npos)
             return name;
 
         return name.substr(separator + 1);
+    }
+
+    uint16_t stringIndex(std::vector<std::string> &strings, const std::string &value) {
+        const std::vector<std::string>::const_iterator found = std::find(strings.begin(), strings.end(), value);
+        if (found != strings.end())
+            return (uint16_t) (found - strings.begin());
+
+        strings.push_back(value);
+        return (uint16_t) (strings.size() - 1);
+    }
+
+    // chunk generation data is left out: the game only sends it with client-side generation, never on here
+    BiomeDefinitionData readDefinition(const Tag &data) {
+        BiomeDefinitionData definition;
+        if (data.contains("id", Tag::Type::Short))
+            definition.mId = (uint16_t) data.get("id")->asShort();
+        if (data.contains("temperature", Tag::Type::Float))
+            definition.mTemperature = data.get("temperature")->asFloat();
+        if (data.contains("downfall", Tag::Type::Float))
+            definition.mDownfall = data.get("downfall")->asFloat();
+        if (data.contains("foliageSnow", Tag::Type::Float))
+            definition.mFoliageSnow = data.get("foliageSnow")->asFloat();
+        if (data.contains("depth", Tag::Type::Float))
+            definition.mDepth = data.get("depth")->asFloat();
+        if (data.contains("scale", Tag::Type::Float))
+            definition.mScale = data.get("scale")->asFloat();
+        if (data.contains("mapWaterColorARGB", Tag::Type::Int))
+            definition.mMapWaterColorArgb = data.get("mapWaterColorARGB")->asInt();
+        if (data.contains("rain", Tag::Type::Byte))
+            definition.mRain = data.get("rain")->asByte() != 0;
+
+        return definition;
     }
 }
 
@@ -103,9 +262,37 @@ std::unordered_map<int32_t, std::unordered_set<std::string>> &BiomeChunkGenDataR
     return map;
 }
 
+std::vector<BiomeDefinitionData> &BiomeChunkGenDataRegistry::_definitions() {
+    static std::vector<BiomeDefinitionData> definitions;
+    return definitions;
+}
+
+std::vector<std::string> &BiomeChunkGenDataRegistry::_definitionStrings() {
+    static std::vector<std::string> strings;
+    return strings;
+}
+
+const std::vector<BiomeDefinitionData> &BiomeChunkGenDataRegistry::getDefinitions() {
+    return _definitions();
+}
+
+const std::vector<std::string> &BiomeChunkGenDataRegistry::getDefinitionStrings() {
+    return _definitionStrings();
+}
+
 bool BiomeChunkGenDataRegistry::hasTag(int32_t biomeId, const std::string &tag) {
     const auto found = _tagsByBiome().find(biomeId);
     return found != _tagsByBiome().end() && found->second.count(tag) != 0;
+}
+
+std::unordered_map<int32_t, int32_t> &BiomeChunkGenDataRegistry::_villageTypes() {
+    static std::unordered_map<int32_t, int32_t> map;
+    return map;
+}
+
+int32_t BiomeChunkGenDataRegistry::getVillageType(int32_t biomeId) {
+    const auto found = _villageTypes().find(biomeId);
+    return found != _villageTypes().end() ? found->second : 4;
 }
 
 int32_t BiomeChunkGenDataRegistry::getBiomeId(const std::string &biomeName) {
@@ -177,12 +364,26 @@ void BiomeChunkGenDataRegistry::initialize() {
         if (indexTag == nullptr || dataTag == nullptr)
             continue;
 
-        const int32_t biomeId = getBiomeId(stringAt((int32_t) indexTag->asShort()));
+        const std::string name = stringAt((int32_t) indexTag->asShort());
+        const Tag *tagsTag = dataTag->get("tags");
+        const Tag *tagList = tagsTag == nullptr ? nullptr : tagsTag->get("tags");
+
+        BiomeDefinitionData definition = readDefinition(*dataTag);
+        // the game puts a biome's tags in the string list before its name
+        if (tagList != nullptr) {
+            std::vector<uint16_t> tagIndexes;
+            for (const Tag &tag: tagList->getList())
+                tagIndexes.push_back(stringIndex(_definitionStrings(), stringAt((int32_t) tag.asShort())));
+            definition.mTagIndexes = tagIndexes;
+        }
+        definition.mName = name;
+        definition.mNameIndex = stringIndex(_definitionStrings(), name);
+        _definitions().push_back(definition);
+
+        const int32_t biomeId = getBiomeId(name);
         if (biomeId < 0)
             continue;
 
-        const Tag *tagsTag = dataTag->get("tags");
-        const Tag *tagList = tagsTag == nullptr ? nullptr : tagsTag->get("tags");
         if (tagList != nullptr) {
             std::unordered_set<std::string> &tags = _tagsByBiome()[biomeId];
             for (const Tag &tag: tagList->getList())
@@ -192,6 +393,10 @@ void BiomeChunkGenDataRegistry::initialize() {
         const Tag *chunkGenDataTag = dataTag->get("chunkGenData");
         if (chunkGenDataTag == nullptr)
             continue;
+
+        const Tag *villageTypeTag = chunkGenDataTag->get("villageType");
+        if (villageTypeTag != nullptr)
+            _villageTypes()[biomeId] = villageTypeTag->asInt();
 
         const Tag *consolidatedTag = chunkGenDataTag->get("consolidatedFeatures");
         if (consolidatedTag == nullptr)
@@ -213,16 +418,68 @@ void BiomeChunkGenDataRegistry::initialize() {
             data.mIdentifier = stringAt((int32_t) identifierTag->asShort());
             data.mFeature = stringAt((int32_t) featureNameTag->asShort());
 
+            const Tag *passTag = featureTag.get("pass");
+            if (passTag != nullptr)
+                data.mPass = stringAt((int32_t) passTag->asShort());
+
             if (scatterTag != nullptr) {
                 const Tag *evalOrderTag = scatterTag->get("evalOrder");
                 if (evalOrderTag != nullptr)
                     data.mEvalOrder = evalOrderTag->asInt();
+
+                const Tag *coordinatesTag = scatterTag->get("coordinates");
+                if (coordinatesTag != nullptr) {
+                    size_t axis = 0;
+                    for (const Tag &coordinateTag: coordinatesTag->getList()) {
+                        if (axis >= 3)
+                            break;
+
+                        BiomeFeatureEntry::Coordinate &coordinate = data.mCoordinates[axis++];
+                        const Tag *distributionTag = coordinateTag.get("distribution");
+                        const Tag *minTag = coordinateTag.get("minValue");
+                        const Tag *maxTag = coordinateTag.get("maxValue");
+                        if (distributionTag != nullptr)
+                            coordinate.mDistribution = distributionTag->asInt();
+                        if (minTag != nullptr)
+                            coordinate.mMin = stringAt((int32_t) minTag->asShort());
+                        if (maxTag != nullptr)
+                            coordinate.mMax = stringAt((int32_t) maxTag->asShort());
+                    }
+                }
+
+                const Tag *numeratorTag = scatterTag->get("chanceNumerator");
+                const Tag *denominatorTag = scatterTag->get("chanceDenominator");
+                const Tag *percentTag = scatterTag->get("chancePercent");
+                const Tag *iterationsTag = scatterTag->get("iterations");
+                if (numeratorTag != nullptr)
+                    data.mChanceNumerator = numeratorTag->asInt();
+                if (denominatorTag != nullptr)
+                    data.mChanceDenominator = denominatorTag->asInt();
+                if (percentTag != nullptr)
+                    data.mChancePercent = stringAt((int32_t) percentTag->asShort());
+                if (iterationsTag != nullptr)
+                    data.mIterations = stringAt((int32_t) iterationsTag->asShort());
             }
 
             features.push_back(data);
         }
 
         _featuresByBiome()[biomeId] = features;
+    }
+
+    if (_featuresByBiome().find(BiomeIds::ICE_CAVES) == _featuresByBiome().end())
+        _featuresByBiome()[BiomeIds::ICE_CAVES] = iceCavesFeatures();
+    if (_featuresByBiome().find(BiomeIds::DAPPLED_FOREST) == _featuresByBiome().end())
+        _featuresByBiome()[BiomeIds::DAPPLED_FOREST] = dappledForestFeatures(_featuresByBiome());
+
+    auto &valley = _featuresByBiome()[NetherBiomeIds::SOULSAND_VALLEY];
+    const char *const fossil = "minecraft:nether_fossil_feature";
+    if (std::none_of(valley.begin(), valley.end(), [fossil](const BiomeFeatureEntry &entry) {
+            return entry.mFeature == fossil;
+        })) {
+        auto rule = heightmapRule("minecraft:soulsand_valley_fossil_surface_feature", fossil, "surface_pass", "1", 1, 2);
+        rule.mCoordinates[1] = {1, "32.000000", "125.000000"};
+        valley.push_back(std::move(rule));
     }
 
     loaded = true;

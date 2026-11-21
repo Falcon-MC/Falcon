@@ -2,17 +2,52 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/CopperSystem.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <random>
+#include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
+    // most sampled blocks (stone, dirt, ores) react to nothing: dropped before the candidate copy;
+    // copper weathering runs through CopperSystem, not the block class
+    bool ticksRandomly(const Block &block) {
+        static std::unordered_map<const Block *, bool> cache;
+        const auto found = cache.find(&block);
+        if (found != cache.end())
+            return found->second;
+
+        const bool ticks = block.hasRandomTick() || !CopperSystem::oxidizedOf(block.getIdentifier()).empty();
+        cache.emplace(&block, ticks);
+        return ticks;
+    }
+
+    // a pack block has no class: it ticks for the scripts' onRandomTick
+    bool isScriptedBlock(const BlockState &state) {
+        const CustomBlockDefinition *custom = CustomContentRegistry::getInstance().findBlock(state.mName);
+        return custom != nullptr && (!custom->mCustomComponents.empty() || !custom->mPermutations.empty());
+    }
+
+    bool stateTicksRandomly(const BlockState &state) {
+        if (state.mName == BlockNames::AIR)
+            return false;
+
+        const Block *block = VanillaBlocks::fromState(state);
+        return block != nullptr ? ticksRandomly(*block) : isScriptedBlock(state);
+    }
+
     struct Candidate {
         Vector3i mPosition;
-        BlockState mState;
+        const Block *mBlock;
+        // set for a pack block, mBlock is null then
+        std::string mCustom;
     };
 
     std::mt19937 &generator() {
@@ -20,10 +55,7 @@ namespace {
         return random;
     }
 
-    /**
-     * Cheap shared LCG for picking random tick positions: one call yields x, y and z from
-     * separate byte lanes, which is far cheaper than a distribution draw per coordinate.
-     */
+    // one call yields x, y and z from separate byte lanes: no distribution draw per coordinate
     uint32_t nextUpdateLcg() {
         static uint32_t state = 0x3c6ef35f;
         state = state * 3 + 0x3c6ef35f;
@@ -39,6 +71,11 @@ int RandomTickSystem::nextInt(int bound) {
     return distribution(generator());
 }
 
+float RandomTickSystem::nextFloat() {
+    std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+    return distribution(generator());
+}
+
 int RandomTickSystem::getFullLight(Level &level, const Vector3i &position) {
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return 0;
@@ -51,10 +88,10 @@ int RandomTickSystem::getFullLight(Level &level, const Vector3i &position) {
     const int localZ = position.z & 15;
 
     const int blockLight = chunk->hasBlockLight() ? chunk->getBlockLight(localX, position.y, localZ) : 0;
-    if (!chunk->hasSkyLight())
+    if (!level.hasSkyLight())
         return blockLight;
 
-    const int skyLight = chunk->getSkyLight(localX, position.y, localZ) - level.getSkyLightSubtracted();
+    const int skyLight = level.getSkyLightAt(position.x, position.y, position.z) - level.getSkyLightSubtracted();
     return skyLight > blockLight ? skyLight : blockLight;
 }
 
@@ -74,20 +111,46 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
     if (speed <= 0)
         return;
 
-    std::vector<Candidate> candidates;
+    // thousands of picks per tick: reused buffer, block pointer instead of a state copy
+    static std::vector<Candidate> candidates;
+    candidates.clear();
 
-    for (const int64_t column: level.getActiveColumns()) {
-        const int32_t chunkX = (int32_t) (column >> 32);
-        const int32_t chunkZ = (int32_t) (column & 0xffffffff);
+    // the sections of a crowd's columns miss the cache one after the other: the chunks are looked up first,
+    // and the sections of the one after next asked for while this one is walked
+    static std::vector<LevelChunk *> chunks;
+    const std::vector<int64_t> &columns = level.getActiveColumnOrder();
+    chunks.clear();
+    chunks.reserve(columns.size());
+    for (const int64_t column: columns)
+        chunks.push_back(level.peekChunkPtr((int32_t) (column >> 32), (int32_t) (column & 0xffffffff)));
 
-        LevelChunk *chunk = level.peekChunkPtr(chunkX, chunkZ);
+    static const size_t PREFETCH_AHEAD = 2;
+    for (size_t position = 0; position < columns.size(); position++) {
+        if (position + PREFETCH_AHEAD < chunks.size() && chunks[position + PREFETCH_AHEAD] != nullptr) {
+            const LevelChunk &ahead = *chunks[position + PREFETCH_AHEAD];
+            for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; index++)
+                ahead.getSubChunk(index).prefetchQueries();
+        }
+
+        LevelChunk *chunk = chunks[position];
         if (chunk == nullptr)
             continue;
+
+        const int64_t column = columns[position];
+        const int32_t chunkX = (int32_t) (column >> 32);
+        const int32_t chunkZ = (int32_t) (column & 0xffffffff);
 
         for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; index++) {
             const SubChunk &subChunk = chunk->getSubChunk(index);
             if (subChunk.isEmpty())
                 continue;
+
+            // inert section (most of the underground): still draw its picks, other sections land on the same blocks
+            if (!subChunk.paletteMatches(SubChunk::PaletteQuery::RandomTick, stateTicksRandomly)) {
+                for (int32_t attempt = 0; attempt < speed; attempt++)
+                    nextUpdateLcg();
+                continue;
+            }
 
             for (int32_t attempt = 0; attempt < speed; attempt++) {
                 const uint32_t lcg = nextUpdateLcg();
@@ -95,36 +158,52 @@ void RandomTickSystem::tick(ServerNetworkHandler &owner, Level &level) {
                 const int localY = (int) ((lcg >> 8) & 0x0f);
                 const int localZ = (int) ((lcg >> 16) & 0x0f);
 
-                const BlockState state = subChunk.getBlock(localX, localY, localZ);
-                if (state.mName == "minecraft:air")
+                const BlockState &state = subChunk.getBlock(localX, localY, localZ);
+                if (state.mName == BlockNames::AIR)
+                    continue;
+
+                const Block *block = VanillaBlocks::fromState(state);
+                if (block != nullptr ? !ticksRandomly(*block) : !isScriptedBlock(state))
                     continue;
 
                 Candidate candidate;
-                candidate.mPosition = Vector3i((chunkX << 4) + localX,
-                                               LevelChunk::MIN_Y + index * 16 + localY,
+                candidate.mPosition = Vector3i((chunkX << 4) + localX, LevelChunk::MIN_Y + index * 16 + localY,
                                                (chunkZ << 4) + localZ);
-                candidate.mState = state;
-                candidates.push_back(candidate);
+                candidate.mBlock = block;
+                if (block == nullptr)
+                    candidate.mCustom = state.mName;
+                candidates.push_back(std::move(candidate));
             }
         }
     }
 
-    // Candidates are collected first and ticked afterwards so block reactions cannot modify
-    // chunks while they are being iterated. Each one is re-read because an earlier tick in
-    // this batch may already have replaced it.
+    // collect then tick: reactions never modify chunks mid-iteration; re-read, an earlier tick may have
+    // replaced it
     for (const Candidate &candidate: candidates) {
-        const Block *block = VanillaBlocks::fromIdentifier(candidate.mState.mName);
-        if (block == nullptr)
+        const Vector3i &position = candidate.mPosition;
+        const BlockState *before = level.peekBlockPtr(position.x, position.y, position.z);
+        if (before == nullptr || VanillaBlocks::fromState(*before) != candidate.mBlock)
             continue;
 
-        const BlockState current = level.getBlockState(candidate.mPosition.x, candidate.mPosition.y,
-                                                       candidate.mPosition.z);
-        if (current.mName != candidate.mState.mName)
+        if (candidate.mBlock == nullptr) {
+            if (before->mName == candidate.mCustom)
+                owner.getScriptEngine().onCustomBlockRandomTick(level, candidate.mCustom, position);
+            continue;
+        }
+
+        // copy: a reaction may rewrite the palette the peeked pointer points into
+        const BlockState current = *before;
+        candidate.mBlock->onRandomTick(owner, level, position, current);
+
+        const BlockState *after = level.peekBlockPtr(position.x, position.y, position.z);
+        if (after == nullptr)
             continue;
 
-        block->onRandomTick(owner, level, candidate.mPosition, current);
-        CopperSystem::onRandomTick(owner, level, candidate.mPosition,
-                                   level.getBlockState(candidate.mPosition.x, candidate.mPosition.y,
-                                                       candidate.mPosition.z));
+        if (*after == current) {
+            CopperSystem::onRandomTick(owner, level, position, current);
+            continue;
+        }
+
+        CopperSystem::onRandomTick(owner, level, position, BlockState(*after));
     }
 }

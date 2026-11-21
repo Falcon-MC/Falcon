@@ -16,6 +16,9 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Types/EntityDataMap.h"
+#include "World/Actor/Movement/MovementConstants.h"
+#include "Core/Math/VectorMath.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -29,7 +32,7 @@ namespace {
     const char *const JUNGLE_FISHING_LOOT = "gameplay/jungle_fishing.json";
     const char *const JUNGLE_TAG = "jungle";
 
-    // Client-side particles for the fish swimming towards the hook, the bite, and a fish teasing the hook.
+    // client-side particles: fish swimming toward the hook, the bite, a fish teasing it
     const EntityEventType FISH_HOOK_BUBBLE = (EntityEventType) 12;
     const EntityEventType FISH_HOOK_HOOK = (EntityEventType) 13;
     const EntityEventType FISH_HOOK_TEASE = (EntityEventType) 14;
@@ -41,7 +44,7 @@ namespace {
     const float CAST_AIM_SPEED = 0.4f;
     const float CAST_POWER = 1.5f;
     const float CAST_SPREAD = 0.0075f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 
     const int32_t WATER_SLICES = 5;
     const float WATER_PULL = 0.04f;
@@ -87,11 +90,10 @@ namespace {
     const float PULL_STRENGTH = 0.1f;
     const float PULL_LIFT = 0.08f;
 
-    // Actors with the WaterAnimal actor type (0x2300) in 1.26.52, which make fish bite sooner.
-    const char *const WATER_ANIMALS[] = {
-            "minecraft:squid", "minecraft:glow_squid", "minecraft:dolphin", "minecraft:cod", "minecraft:salmon",
-            "minecraft:pufferfish", "minecraft:tropicalfish", "minecraft:tadpole", "minecraft:nautilus"
-    };
+    // WaterAnimal actor type (0x2300) in 1.26.52: fish bite sooner
+    const char *const WATER_ANIMALS[] = {"minecraft:squid",        "minecraft:glow_squid", "minecraft:dolphin",
+                                         "minecraft:cod",          "minecraft:salmon",     "minecraft:pufferfish",
+                                         "minecraft:tropicalfish", "minecraft:tadpole",    "minecraft:nautilus"};
 
     std::mt19937 &hookRandom() {
         static std::mt19937 generator(std::random_device{}());
@@ -120,25 +122,19 @@ namespace {
 
     bool containsPoint(const Vector3f &feet, float width, float height, const Vector3f &point) {
         const float halfWidth = width * 0.5f + HIT_GROW;
-        return point.x >= feet.x - halfWidth && point.x <= feet.x + halfWidth
-               && point.y >= feet.y - HIT_GROW && point.y <= feet.y + height + HIT_GROW
-               && point.z >= feet.z - halfWidth && point.z <= feet.z + halfWidth;
+        return point.x >= feet.x - halfWidth && point.x <= feet.x + halfWidth && point.y >= feet.y - HIT_GROW
+               && point.y <= feet.y + height + HIT_GROW && point.z >= feet.z - halfWidth
+               && point.z <= feet.z + halfWidth;
     }
 
-    float distanceSquared(const Vector3f &a, const Vector3f &b) {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        const float dz = a.z - b.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 }
 
 FishingHookActor::FishingHookActor(uint64_t runtimeId, const std::string &identifier)
-        : ServerActor(runtimeId, identifier) {
-}
+        : ServerActor(runtimeId, identifier) {}
 
 void FishingHookActor::fillSpawnMetadata(EntityDataMap &metadata) const {
-    // The client draws the fishing line from the actor named in the owner data.
+    // the client draws the line from the actor in the owner data
     EntityDataEntry entry;
     entry.mId = ActorFlags::OWNER_DATA_ID;
     entry.mFormat = EntityDataFormat::Long;
@@ -147,12 +143,12 @@ void FishingHookActor::fillSpawnMetadata(EntityDataMap &metadata) const {
 }
 
 bool FishingHookActor::isOwnedBy(const ServerPlayer &player) const {
-    return !mExpired && getOwnerUniqueId() == (int64_t) player.getRuntimeId();
+    return !mExpired && getOwnerUniqueId() == player.getUniqueId();
 }
 
 void FishingHookActor::cast(ServerNetworkHandler &owner, ServerPlayer &angler) {
     (void) owner;
-    setOwnerUniqueId((int64_t) angler.getRuntimeId());
+    setOwnerUniqueId(angler.getUniqueId());
     mAnglerUniqueId = angler.getUniqueId();
 
     const Vector3f &rotation = angler.getRotation();
@@ -198,7 +194,8 @@ void FishingHookActor::tick(ServerNetworkHandler &owner) {
 
     const Vector3f &position = getPosition();
     if (level.getLiquidInfo((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
-                            (int32_t) std::floor(position.z)).lava) {
+                            (int32_t) std::floor(position.z))
+                .lava) {
         mExpired = true;
         return;
     }
@@ -215,7 +212,7 @@ void FishingHookActor::tick(ServerNetworkHandler &owner) {
 ServerPlayer *FishingHookActor::_findAngler(ServerNetworkHandler &owner) const {
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &player = entry.second;
-        if ((int64_t) player.getRuntimeId() == getOwnerUniqueId())
+        if (player.getUniqueId() == getOwnerUniqueId())
             return player.isSpawned() && !player.isDead() ? &player : nullptr;
     }
     return nullptr;
@@ -387,7 +384,8 @@ void FishingHookActor::_tickCatching(ServerNetworkHandler &owner, Level &level, 
         _sendFishData(owner, offsetX, offsetZ, &angleDegrees);
 
         if (level.getLiquidInfo((int32_t) std::floor(position.x + offsetX), (int32_t) std::floor(position.y),
-                                (int32_t) std::floor(position.z + offsetZ)).water)
+                                (int32_t) std::floor(position.z + offsetZ))
+                    .water)
             owner.broadcastActorEvent(*this, FISH_HOOK_BUBBLE);
         return;
     }
@@ -410,7 +408,7 @@ void FishingHookActor::_tickCatching(ServerNetworkHandler &owner, Level &level, 
     if (randomFloat() < teaseChance) {
         const float angle = randomFloat() * FISH_ANGLE_RANGE;
         const float distance = randomFloat() * TEASE_DISTANCE_RANGE + TEASE_DISTANCE_BASE;
-        // The binary writes the absolute tease position here, unlike the hook-relative offset while approaching.
+        // absolute tease position here, unlike the hook-relative offset while approaching
         _sendFishData(owner, position.x + distance * std::sin(angle) * FISH_OFFSET_SCALE,
                       position.z + distance * std::cos(angle) * FISH_OFFSET_SCALE, nullptr);
         owner.broadcastActorEvent(*this, FISH_HOOK_TEASE);
@@ -450,11 +448,11 @@ int32_t FishingHookActor::retrieve(ServerNetworkHandler &owner, ServerPlayer &an
     int32_t durability = 0;
     if (mHookedUniqueId != 0) {
         ServerActor *hooked = owner.getActor(mHookedUniqueId);
-        if (hooked != nullptr && hooked->isAlive()) {
+        if (hooked != nullptr && hooked->isAlive() && _allowReel(angler, hooked)) {
             _pullTowards(owner, *hooked, angler);
             durability = DURABILITY_ACTOR;
         }
-    } else if (mNibble > 0) {
+    } else if (mNibble > 0 && _allowReel(angler, nullptr)) {
         _catch(owner, angler);
         durability = DURABILITY_FISH;
     }
@@ -466,6 +464,22 @@ int32_t FishingHookActor::retrieve(ServerNetworkHandler &owner, ServerPlayer &an
     return durability;
 }
 
+bool FishingHookActor::_allowReel(ServerPlayer &angler, Actor *hooked) {
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FISH);
+    if (plugins == nullptr)
+        return true;
+
+    PluginEvent event;
+    event.mType = FALCON_EVENT_PLAYER_FISH;
+    event.mCancellable = true;
+    event.mPlayer = &angler;
+    event.mEntity = this;
+    event.mTarget = hooked;
+    event.mState = hooked == nullptr;
+    plugins->dispatch(event);
+    return !event.mCancelled;
+}
+
 void FishingHookActor::_catch(ServerNetworkHandler &owner, ServerPlayer &angler) {
     Level &level = owner.getLevelFor(*this);
     const Vector3f &position = getPosition();
@@ -474,7 +488,8 @@ void FishingHookActor::_catch(ServerNetworkHandler &owner, ServerPlayer &angler)
     const int32_t z = (int32_t) std::floor(position.z);
     LevelChunk *chunk = level.peekChunkPtr(x >> 4, z >> 4);
     const bool jungle = chunk != nullptr
-                        && BiomeChunkGenDataRegistry::hasTag((int32_t) chunk->getBiomeAt(x & 15, y, z & 15), JUNGLE_TAG);
+                        && BiomeChunkGenDataRegistry::hasTag((int32_t) chunk->getBiomeAt(x & 15, y, z & 15),
+                                                             JUNGLE_TAG);
     const LootTable *table = LootTableRegistry::getInstance().get(jungle ? JUNGLE_FISHING_LOOT : FISHING_LOOT);
     if (table == nullptr)
         return;

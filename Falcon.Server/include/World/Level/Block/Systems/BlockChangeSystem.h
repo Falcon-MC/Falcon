@@ -5,13 +5,7 @@
 
 class Level;
 
-enum class BlockChangeCause {
-    Grow,
-    Spread,
-    Form,
-    Fade,
-    Decay
-};
+enum class BlockChangeCause { Grow, Spread, Form, Fade, Decay };
 
 class BlockChangeSystem {
 public:

@@ -1,4 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/LightningRodBlock.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -7,9 +8,12 @@
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Scripting/ScriptEngine.h"
 
 #include <cmath>
+#include <optional>
 #include <random>
+#include <string>
 
 namespace {
     const int32_t WEATHER_MIN_DURATION = 12000;
@@ -44,6 +48,33 @@ namespace {
         plugins->dispatch(event);
         return !event.mCancelled;
     }
+
+    const char *weatherName(bool raining, bool thundering) {
+        if (!raining)
+            return "Clear";
+        return thundering ? "Thunder" : "Rain";
+    }
+
+    // false when a script cancelled; otherwise raining, thundering and duration hold what scripts chose
+    bool scriptsAllowWeather(ScriptEngine &scripts, const Level &level, bool &raining, bool &thundering,
+                             int32_t &duration) {
+        const std::string previous = weatherName(level.isRaining(), level.isThundering());
+        std::string next = weatherName(raining, thundering);
+        if (next == previous)
+            return true;
+
+        if (scripts.beforeWeatherChange(previous, next, duration))
+            return false;
+        raining = next != "Clear";
+        thundering = next == "Thunder";
+        return true;
+    }
+
+    void notifyWeather(ScriptEngine &scripts, const Level &level, const std::string &previous) {
+        const std::string current = weatherName(level.isRaining(), level.isThundering());
+        if (current != previous)
+            scripts.onWeatherChange("minecraft:overworld", previous, current);
+    }
 }
 
 void ServerNetworkHandler::sendWeatherTo(ServerPlayer &player) {
@@ -74,20 +105,31 @@ void ServerNetworkHandler::setRaining(World &world, bool raining) {
     if (raining != level.isRaining() && !allowsWeatherChange(level, FALCON_EVENT_WEATHER_CHANGE, raining))
         raining = level.isRaining();
 
+    const std::string previous = weatherName(level.isRaining(), level.isThundering());
+    bool thundering = level.isThundering();
+    int32_t duration = raining ? randomBetween(WEATHER_MIN_DURATION, RAIN_SPAN)
+                               : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    if (!scriptsAllowWeather(mScriptEngine, level, raining, thundering, duration)) {
+        raining = level.isRaining();
+        thundering = level.isThundering();
+        duration = raining ? randomBetween(WEATHER_MIN_DURATION, RAIN_SPAN)
+                           : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    }
+
     level.setRainingState(raining);
+    level.setRainTime(duration);
+    if (thundering != level.isThundering()) {
+        level.setThunderingState(thundering);
+        level.setThunderTime(duration);
+    }
 
-    if (raining)
-        level.setRainTime(randomBetween(WEATHER_MIN_DURATION, RAIN_SPAN));
-    else
-        level.setRainTime(randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN));
-
+    notifyWeather(mScriptEngine, level, previous);
     broadcastWeather(world);
 }
 
 void ServerNetworkHandler::setThundering(World &world, bool thundering) {
     Level &level = world.getOverworld();
-    if (thundering != level.isThundering()
-        && !allowsWeatherChange(level, FALCON_EVENT_THUNDER_CHANGE, thundering))
+    if (thundering != level.isThundering() && !allowsWeatherChange(level, FALCON_EVENT_THUNDER_CHANGE, thundering))
         thundering = level.isThundering();
 
     if (thundering && !level.isRaining())
@@ -95,13 +137,25 @@ void ServerNetworkHandler::setThundering(World &world, bool thundering) {
     if (thundering && !level.isRaining())
         thundering = false;
 
+    const std::string previous = weatherName(level.isRaining(), level.isThundering());
+    bool raining = level.isRaining();
+    int32_t duration = thundering ? randomBetween(THUNDER_MIN_DURATION, THUNDER_SPAN)
+                                  : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    if (!scriptsAllowWeather(mScriptEngine, level, raining, thundering, duration)) {
+        raining = level.isRaining();
+        thundering = level.isThundering();
+        duration = thundering ? randomBetween(THUNDER_MIN_DURATION, THUNDER_SPAN)
+                              : randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN);
+    }
+
+    if (raining != level.isRaining()) {
+        level.setRainingState(raining);
+        level.setRainTime(duration);
+    }
     level.setThunderingState(thundering);
+    level.setThunderTime(duration);
 
-    if (thundering)
-        level.setThunderTime(randomBetween(THUNDER_MIN_DURATION, THUNDER_SPAN));
-    else
-        level.setThunderTime(randomBetween(WEATHER_MIN_DURATION, WEATHER_CLEAR_SPAN));
-
+    notifyWeather(mScriptEngine, level, previous);
     broadcastWeather(world);
 }
 
@@ -162,6 +216,8 @@ void ServerNetworkHandler::tickWeather() {
 
 void ServerNetworkHandler::_tickWeather(World &world) {
     Level &level = world.getOverworld();
+    // the levels move before the states change: the game ticks Weather ahead of its server update
+    level.tickWeatherLevels();
     if (level.getGameRules().getBool("doweathercycle")) {
         level.setRainTime(level.getRainTime() - 1);
         if (level.getRainTime() <= 0)
@@ -192,13 +248,22 @@ void ServerNetworkHandler::_tickWeather(World &world) {
         const int32_t targetX = chunkX + offset(weatherRandom());
         const int32_t targetZ = chunkZ + offset(weatherRandom());
 
-        if (!level.canRainAt(targetX, targetZ))
-            continue;
-
         int32_t surfaceY = (int32_t) std::floor(playerPosition.y) + 16;
         while (surfaceY > 0 && !level.isSolidAt(targetX, surfaceY, targetZ))
             --surfaceY;
 
-        strikeLightning(level,Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
+        // a lightning rod near the top block takes the bolt at its own position
+        const std::optional<Vector3i> rod = LightningRodBlock::findAttractingRod(
+                level, Vector3i(targetX, surfaceY + 1, targetZ));
+        if (rod.has_value()) {
+            strikeLightning(level, Vector3f((float) rod->x, (float) rod->y, (float) rod->z));
+            LightningRodBlock::onLightningHit(*this, level, *rod);
+            continue;
+        }
+
+        if (!level.canRainAt(targetX, targetZ))
+            continue;
+
+        strikeLightning(level, Vector3f((float) targetX + 0.5f, (float) (surfaceY + 1), (float) targetZ + 0.5f));
     }
 }

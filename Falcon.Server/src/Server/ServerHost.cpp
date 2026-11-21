@@ -7,10 +7,13 @@
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/Inventory/EnderChestInventoryStore.h"
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Debug/FileLogEndPoint.h"
 #include "Core/Utility/UUID.h"
 #include "World/Item/StringToItemParser.h"
 #include "World/Level/Storage/AutoCompaction.h"
+#include "World/Level/Storage/LevelStorage.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/LevelGen/Overworld/Biome/OverworldBiomeParameters.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/TransportFactory.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -19,12 +22,15 @@
 #include "Server/ServerPaths.h"
 
 #include <algorithm>
+#include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <future>
 #include <random>
 #include <atomic>
 #include <exception>
 #include <stdexcept>
+#include <thread>
 #include "World/Level/WorldManager.h"
 
 namespace {
@@ -33,13 +39,12 @@ namespace {
     const char *const PROFILER_CONFIG_FILE = "bootstrap.json";
     const char *const CDN_CONFIG_FILE = "cdn_config.json";
 
-    const char *const LOADING_WORLD_BANNER =
-            "\n\n"
-            "#####################################################\n"
-            "#                                                   #\n"
-            "#               LOADING VANILLA WORLD               #\n"
-            "#                                                   #\n"
-            "#####################################################";
+    const char *const LOADING_WORLD_BANNER = "\n\n"
+                                             "#####################################################\n"
+                                             "#                                                   #\n"
+                                             "#               LOADING VANILLA WORLD               #\n"
+                                             "#                                                   #\n"
+                                             "#####################################################";
 
     std::string generateSessionId() {
         std::random_device device;
@@ -118,11 +123,112 @@ namespace {
         LOG_INFO(LogAreaID::Server, "%s", LOADING_WORLD_BANNER);
     }
 
-    void logTransportNotice(TransportLayer transport) {
+    // content has no log of its own: packs and scripts are told apart from the server by their log area
+    class ContentLogFileEndPoint : public FileLogEndPoint {
+    public:
+        ContentLogFileEndPoint(const std::string &path, LogLevel minimumLevel)
+                : FileLogEndPoint(path), mMinimumLevel(minimumLevel) {}
+
+        void log(const LogDetails &details) override {
+            if (details.mLevel < mMinimumLevel)
+                return;
+            if (details.mArea == LogAreaID::Script || details.mArea == LogAreaID::Resource)
+                FileLogEndPoint::log(details);
+        }
+
+    private:
+        LogLevel mMinimumLevel;
+    };
+
+    LogLevel toLogLevel(ContentLogLevel level) {
+        switch (level) {
+            case ContentLogLevel::Error:
+                return LogLevel::Error;
+            case ContentLogLevel::Warning:
+                return LogLevel::Warning;
+            case ContentLogLevel::Verbose:
+                return LogLevel::Verbose;
+            default:
+                return LogLevel::Info;
+        }
+    }
+
+    std::shared_ptr<ILogEndPoint> openContentLog(ContentLogLevel level) {
+        const std::string directory = ServerPaths::file("logs");
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        if (error) {
+            LOG_WARN(LogAreaID::Server,
+                     "Content logging to disk is disabled because its directory could not be "
+                     "created: %s",
+                     directory.c_str());
+            return nullptr;
+        }
+
+        char timestamp[32];
+        const std::time_t now = std::time(nullptr);
+        std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d_%H-%M-%S", std::localtime(&now));
+
+        const std::string path = directory + "/ContentLog_" + timestamp;
+        auto endPoint = std::make_shared<ContentLogFileEndPoint>(path + ".txt", toLogLevel(level));
+        if (!endPoint->isOpen()) {
+            LOG_WARN(LogAreaID::Server, "Could not open the content log %s.txt", path.c_str());
+            return nullptr;
+        }
+
+        LOG_INFO(LogAreaID::Server, "Content logging to disk is enabled. Writing log to: %s.txt", path.c_str());
+        return endPoint;
+    }
+
+    // https on the port, plus 443 for 19132 only; http after every https probe ends
+    const unsigned short DEFAULT_GAME_PORT = 19132;
+    const unsigned short HTTPS_PORT = 443;
+
+    // a half-set pair is ignored: only both paths take precedence over ACME
+    bool hasCertificatePair(const PropertiesSettings &properties) {
+        return !properties.getSignalingCertificate().empty() && !properties.getSignalingPrivateKey().empty();
+    }
+
+    // ACME validates on fixed ports whatever the game port: RFC 8737 on 443, RFC 8555 http-01 on 80
+    void logAcmeNotice(const PropertiesSettings &properties, const ServerNetworkHandler &handler, unsigned short port) {
+        const std::string domain = properties.getSignalingAcmeDomain();
+        if (domain.empty() || hasCertificatePair(properties))
+            return;
+
+        const bool tlsAlpn = properties.getSignalingAcmeChallenge() != "http-01";
+        const unsigned short needed = tlsAlpn ? 443 : 80;
+        if (port != needed && handler.getExtraSignalingPort() != needed)
+            LOG_INFO(LogAreaID::Server,
+                     "ACME for %s validates on TCP %u: set signaling-extra-port=%u or forward "
+                     "TCP %u to TCP %u of this server.",
+                     domain.c_str(), (unsigned) needed, (unsigned) needed, (unsigned) needed, (unsigned) port);
+        LOG_INFO(LogAreaID::Server, "%s must resolve to this server's public address.", domain.c_str());
+    }
+
+    void logTransportNotice(TransportLayer transport, const ServerNetworkHandler &handler, unsigned short port,
+                            bool acmePending) {
         LOG_INFO(LogAreaID::Server, "==================== TRANSPORT =======================");
         LOG_INFO(LogAreaID::Server, "Connection type: %s", toString(transport));
-        if (transport == TransportLayer::NetherNet)
-            LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP.");
+        if (transport == TransportLayer::NetherNet) {
+            if (handler.isSignalingSecure()) {
+                LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over HTTPS and HTTP on TCP %u.",
+                         (unsigned) port);
+            } else {
+                LOG_INFO(LogAreaID::Server, "NetherNet serves its signaling endpoint over plain HTTP on TCP %u.",
+                         (unsigned) port);
+                if (acmePending)
+                    LOG_INFO(LogAreaID::Server, "HTTPS starts once the ACME certificate is issued.");
+                // Falcon on 443 refuses TLS at once: no stalled probe left to warn about
+                else if (port == DEFAULT_GAME_PORT && handler.getExtraSignalingPort() != HTTPS_PORT)
+                    LOG_INFO(LogAreaID::Server, "Players first try HTTPS here and on TCP 443 of this host: a firewall "
+                                                "that drops 443 delays every join by 3 s. Set signaling-extra-port=443,"
+                                                " signaling-acme-domain, or signaling-certificate and "
+                                                "signaling-private-key to answer over HTTPS.");
+            }
+            if (handler.getExtraSignalingPort() != 0)
+                LOG_INFO(LogAreaID::Server, "NetherNet signaling also listens on TCP %u.",
+                         (unsigned) handler.getExtraSignalingPort());
+        }
         LOG_INFO(LogAreaID::Server, "======================================================");
     }
 
@@ -136,6 +242,17 @@ namespace {
         LOG_WARN(LogAreaID::Server, "=======================================================");
     }
 
+    void logAnyVersionIgnored() {
+        LOG_ERROR(LogAreaID::Server, "================ ANY VERSION IGNORED ==================");
+        LOG_ERROR(LogAreaID::Server, "any-version is on, but it is ignored: only the newest version can join.");
+        LOG_ERROR(LogAreaID::Server, "The server removes clients that do not behave as the game does, and what the "
+                                     "game does is only known for the newest version. An older client would be "
+                                     "taken for a fake one.");
+        LOG_ERROR(LogAreaID::Server, "To accept older versions, set allow-unofficial-clients=true: this turns the "
+                                     "client checks off.");
+        LOG_ERROR(LogAreaID::Server, "=======================================================");
+    }
+
     void logAnyVersionWarning() {
         LOG_WARN(LogAreaID::Server, "================ ANY VERSION WARNING ==================");
         LOG_WARN(LogAreaID::Server, "any-version is enabled: clients of older protocol versions can join.");
@@ -145,10 +262,33 @@ namespace {
         LOG_WARN(LogAreaID::Server, "=======================================================");
     }
 
-    /**
-     * State that outlives a server in process wide registries. The dedicated server never restarts, but an
-     * embedding host opens one world after another and must not see the previous one's players or packs.
-     */
+    std::exception_ptr loadProperties(PropertiesSettings &properties, const std::string &path,
+                                      const ServerHostOptions &options) {
+        try {
+            for (const auto &entry: options.properties)
+                if (!properties.setProperty(entry.first, entry.second))
+                    throw std::runtime_error("Could not write server property: " + entry.first);
+            if (!properties.load(path))
+                throw std::runtime_error("Could not read server.properties");
+            if (!options.properties.empty() && !properties.getInvalidProperties().empty())
+                throw std::invalid_argument("Invalid server property: " + properties.getInvalidProperties().front());
+            if (!WorldManager::isValidName(properties.getLevelName()))
+                throw std::invalid_argument("Invalid world name");
+        } catch (...) {
+            return std::current_exception();
+        }
+        return nullptr;
+    }
+
+    // start() adopts the database when it opens the world; on any earlier exit it must not keep the lock
+    struct PreopenedLevelGuard {
+        ~PreopenedLevelGuard() {
+            LevelStorage::discardPreopened();
+        }
+    };
+
+    // process-wide registries outlive a server; an embedder opens world after world:
+    // none may see the previous one's players or packs
     void resetProcessState() {
         EnderChestInventoryStore::getInstance().clear();
         CustomContentRegistry::getInstance().reset();
@@ -160,12 +300,16 @@ namespace {
 ServerHost::ServerHost() = default;
 
 ServerHost::~ServerHost() {
-    try { stop(); } catch (...) {}
+    try {
+        stop();
+    } catch (...) {
+    }
     release();
 }
 
 bool ServerHost::acquire() {
-    if (mOwnsProcess) return true;
+    if (mOwnsProcess)
+        return true;
     bool expected = false;
     mOwnsProcess = processOwned.compare_exchange_strong(expected, true);
     return mOwnsProcess;
@@ -182,34 +326,49 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (mHandler != nullptr || !acquire())
         return false;
 
-    // These embedded registries are independent. Join before constructing the handler so
-    // the game only sees fully initialized definitions.
+    // read first: the level database opens while the registries load; a bad file still throws after them
+    const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
+    PropertiesSettings properties(propertiesPath);
+    const std::exception_ptr propertiesError = loadProperties(properties, propertiesPath, options);
+    PreopenedLevelGuard preopenedLevel;
+    if (propertiesError == nullptr)
+        LevelStorage::preopen(WorldManager::getWorldsDirectory(), properties.getLevelName());
+
+    // independent registries; joined before the handler exists: the game sees only complete definitions
     auto entityDefinitions = std::async(std::launch::async, EntityDefinitions::initialize);
     auto biomeData = std::async(std::launch::async, BiomeChunkGenDataRegistry::initialize);
+    // function-local statics built ahead of their first use: a reader blocks until the build finishes
+    auto languages = std::async(std::launch::async, Localization::getInstance);
+    auto biomeParameters = std::async(std::launch::async, OverworldBiomeParameters::shared);
     BlockPaletteRegistry::getInstance().initialize();
     SpawnRules::initialize();
     entityDefinitions.get();
     biomeData.get();
+    if (propertiesError != nullptr)
+        std::rethrow_exception(propertiesError);
 
-    const std::string propertiesPath = ServerPaths::file(PROPERTIES_FILE);
-    PropertiesSettings properties(propertiesPath);
-    for (const auto &entry: options.properties)
-        if (!properties.setProperty(entry.first, entry.second))
-            throw std::runtime_error("Could not write server property: " + entry.first);
-    if (!properties.load(propertiesPath))
-        throw std::runtime_error("Could not read server.properties");
-    if (!options.properties.empty() && !properties.getInvalidProperties().empty())
-        throw std::invalid_argument("Invalid server property: " + properties.getInvalidProperties().front());
-    if (!WorldManager::isValidName(properties.getLevelName()))
-        throw std::invalid_argument("Invalid world name");
-
+    languages.get();
     Localization::setServerLocale(properties.getLanguage());
     logStartupBanner(properties);
 
+    if (properties.getContentLogFileEnabled()) {
+        mContentLogEndPoint = openContentLog(properties.getContentLogLevel());
+        if (mContentLogEndPoint != nullptr)
+            BedrockLog::addEndPoint(mContentLogEndPoint);
+    }
+
     const std::vector<std::string> &invalid = properties.getInvalidProperties();
     if (std::find(invalid.begin(), invalid.end(), "transport=raknet") != invalid.end())
-        LOG_ERROR(LogAreaID::Server, "RakNet is no longer supported, set transport=nethernet in %s. "
-                                     "Falling back to NetherNet.", PROPERTIES_FILE);
+        LOG_ERROR(LogAreaID::Server,
+                  "RakNet is no longer supported, set transport=nethernet in %s. "
+                  "Falling back to NetherNet.",
+                  PROPERTIES_FILE);
+
+    if (properties.getServerAuthoritativeMovementStrict() && !properties.getMovementSimulation())
+        LOG_WARN(LogAreaID::Server,
+                 "server-authoritative-movement-strict has no effect while movement-simulation "
+                 "is false in %s",
+                 PROPERTIES_FILE);
 
     const TransportLayer transport = properties.getTransportLayer();
 
@@ -228,6 +387,7 @@ bool ServerHost::start(const ServerHostOptions &options) {
     const int maxPlayers = properties.isLoaded() ? properties.getMaxPlayers() : options.maxPlayers;
     const std::string serverName = properties.isLoaded() ? properties.getServerName() : options.serverName;
 
+    biomeParameters.get();
     mHandler.reset(new ServerNetworkHandler(serverName, options.subMotd, maxPlayers, transport));
     mHandler->setProtocolVersion(options.protocolVersion, options.gameVersion);
     mHandler->setPluginsEnabled(options.plugins);
@@ -236,7 +396,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     if (properties.getAllowList() && mHandler->getAllowList().isEmpty())
         logAllowListWarning();
 
-    if (properties.getAnyVersion())
+    if (properties.isAnyVersionRequested() && !properties.getAllowUnofficialClients())
+        logAnyVersionIgnored();
+    else if (properties.getAnyVersion())
         logAnyVersionWarning();
 
     unsigned short port = properties.isLoaded() ? properties.getServerPort() : options.port;
@@ -261,7 +423,9 @@ bool ServerHost::start(const ServerHostOptions &options) {
     mPort = mHandler->getBoundPort() != 0 ? mHandler->getBoundPort() : port;
 
     LOG_INFO(LogAreaID::Server, "Server started.");
-    logTransportNotice(transport);
+    logTransportNotice(transport, *mHandler, mPort,
+                       !properties.getSignalingAcmeDomain().empty() && !hasCertificatePair(properties));
+    logAcmeNotice(properties, *mHandler, mPort);
     BedrockLog::flush();
 
     AutoCompaction::start(properties.getAutoCompactionInterval());
@@ -273,32 +437,67 @@ void ServerHost::tick(bool paused) {
         mHandler->tick(paused);
 }
 
+void ServerHost::waitForNextTick(std::chrono::steady_clock::time_point nextTick) {
+    const std::chrono::nanoseconds pollInterval(2000000);
+
+    for (;;) {
+        if (mHandler != nullptr && !mShutDown)
+            mHandler->pumpLoginEvents();
+
+        const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+        if (now >= nextTick)
+            return;
+
+        std::this_thread::sleep_for(std::min<std::chrono::nanoseconds>(nextTick - now, pollInterval));
+    }
+}
+
 void ServerHost::shutdown() {
     if (mHandler == nullptr || mShutDown)
         return;
 
     LOG_INFO(LogAreaID::Server, "Shutting down...");
-    AutoCompaction::stop();
+    // a running compaction keeps its database open: the save does not wait for it
+    AutoCompaction::requestStop();
     mHandler->stopServerListening();
     mHandler->getNetworkHandler().disconnect();
     mShutDown = true;
     BedrockLog::flush();
 }
 
-void ServerHost::stop() {
-    if (mHandler == nullptr)
+void ServerHost::_closeContentLog() {
+    if (mContentLogEndPoint == nullptr)
         return;
 
+    BedrockLog::flush();
+    BedrockLog::removeEndPoint(mContentLogEndPoint);
+    mContentLogEndPoint.reset();
+}
+
+void ServerHost::stop() {
+    if (mHandler == nullptr) {
+        _closeContentLog();
+        return;
+    }
+
     std::exception_ptr error;
-    try { shutdown(); } catch (...) { error = std::current_exception(); }
+    try {
+        shutdown();
+    } catch (...) {
+        error = std::current_exception();
+    }
     for (World *world: mHandler->getWorlds().getWorlds())
         AutoCompaction::untrack(world->getOverworld());
     mHandler.reset();
+    // in process: the next server opens the databases a running compaction holds locked
+    AutoCompaction::stop();
     mShutDown = false;
     mPort = 0;
     resetProcessState();
     BedrockLog::flush();
-    if (error) std::rethrow_exception(error);
+    _closeContentLog();
+    if (error)
+        std::rethrow_exception(error);
 }
 
 bool ServerHost::isRunning() const {

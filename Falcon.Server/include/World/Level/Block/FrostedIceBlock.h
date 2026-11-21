@@ -4,14 +4,17 @@
 
 class FrostedIceBlock : public Block {
 public:
-    explicit FrostedIceBlock(const Block &block) : Block(block) {
-    }
+    explicit FrostedIceBlock(const Block &block) : Block(block) {}
 
     static constexpr const char *IDENTIFIER = "minecraft:frosted_ice";
 
     static bool matches(const std::string &identifier);
 
     static int32_t nextMeltDelay();
+
+    bool isIceMaterial() const override {
+        return true;
+    }
 
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;

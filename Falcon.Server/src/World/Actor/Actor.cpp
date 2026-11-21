@@ -13,24 +13,32 @@
 #include <map>
 
 namespace {
-    const char *const UNDEAD_ACTORS[] = {
-            "minecraft:bogged", "minecraft:drowned", "minecraft:husk", "minecraft:parched",
-            "minecraft:phantom", "minecraft:skeleton", "minecraft:stray", "minecraft:wither",
-            "minecraft:wither_skeleton", "minecraft:zombie", "minecraft:zombie_horse",
-            "minecraft:zombie_pigman", "minecraft:zombie_villager", "minecraft:zombie_villager_v2"
-    };
+    // the game lifts a knocked back mob by 1.2 times the vertical power; players take another path there
+    const float VERTICAL_KNOCKBACK_FACTOR = 1.2f;
+    const char *const UNDEAD_ACTORS[] = {"minecraft:bogged",
+                                         "minecraft:drowned",
+                                         "minecraft:husk",
+                                         "minecraft:parched",
+                                         "minecraft:phantom",
+                                         "minecraft:skeleton",
+                                         "minecraft:stray",
+                                         "minecraft:wither",
+                                         "minecraft:wither_skeleton",
+                                         "minecraft:zombie",
+                                         "minecraft:zombie_horse",
+                                         "minecraft:zombie_pigman",
+                                         "minecraft:zombie_villager",
+                                         "minecraft:zombie_villager_v2"};
 
-    const char *const ARTHROPOD_ACTORS[] = {
-            "minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish", "minecraft:endermite"
-    };
+    const char *const ARTHROPOD_ACTORS[] = {"minecraft:spider", "minecraft:cave_spider", "minecraft:silverfish",
+                                            "minecraft:endermite"};
 
     const char *const FIRE_IMMUNE_ACTORS[] = {
-            "minecraft:blaze", "minecraft:ender_dragon", "minecraft:ghast", "minecraft:magma_cube",
-            "minecraft:strider", "minecraft:wither", "minecraft:wither_skeleton", "minecraft:zoglin",
-            "minecraft:zombie_pigman"
-    };
+            "minecraft:blaze",           "minecraft:ender_dragon", "minecraft:ghast",
+            "minecraft:magma_cube",      "minecraft:strider",      "minecraft:wither",
+            "minecraft:wither_skeleton", "minecraft:zoglin",       "minecraft:zombie_pigman"};
 
-    template<size_t N>
+    template <size_t N>
     bool containsIdentifier(const char *const (&identifiers)[N], const char *identifier) {
         for (const char *candidate: identifiers) {
             if (std::strcmp(candidate, identifier) == 0)
@@ -40,7 +48,8 @@ namespace {
         return false;
     }
 
-    const char *ATTRIBUTE_HEALTH = "minecraft:health";
+    // a string once, not one built at every question about the health
+    const std::string ATTRIBUTE_HEALTH = "minecraft:health";
     const char *ATTRIBUTE_HUNGER = "minecraft:player.hunger";
     const char *ATTRIBUTE_SATURATION = "minecraft:player.saturation";
     const char *ATTRIBUTE_EXHAUSTION = "minecraft:player.exhaustion";
@@ -139,7 +148,9 @@ float Actor::getHealth() const {
 }
 
 void Actor::setHealth(float health) {
+    const float previous = getHealth();
     mAttributes.setClamped(ATTRIBUTE_HEALTH, health);
+    _healthChanged(previous);
 }
 
 float Actor::getMaxHealth() const {
@@ -187,16 +198,41 @@ void Actor::knockBack(float x, float z, float force, float verticalLimit) {
     if (length <= 0.0f || force <= 0.0f)
         return;
 
-    const float resistance = std::clamp(getAttributes().get("minecraft:knockback_resistance"), 0.0f, 1.0f);
-    const float base = force * (1.0f - resistance);
+    // a negative resistance pushes harder
+    const float resistance = getAttributes().get("minecraft:knockback_resistance") + getArmorKnockbackResistance();
+    const float base = force * std::max(1.0f - resistance, 0.0f);
     if (base <= 0.0f)
         return;
 
     const float inverse = 1.0f / length;
     Vector3f motion = getMotion();
     motion.x = motion.x * 0.5f + x * inverse * base;
-    motion.y = std::min(motion.y * 0.5f + base, verticalLimit);
+    const float lift = isPlayer() ? base : base * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(motion.y * 0.5f + lift, verticalLimit);
     motion.z = motion.z * 0.5f + z * inverse * base;
+    setMotion(motion);
+    if (isPlayer())
+        static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
+}
+
+void Actor::knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap,
+                      float slowdownScale) {
+    // a negative resistance pushes harder; the game weakens both powers alike
+    const float resistance = getAttributes().get("minecraft:knockback_resistance") + getArmorKnockbackResistance();
+    const float kept = std::max(1.0f - resistance, 0.0f);
+    const float horizontal = horizontalPower * kept;
+    const float vertical = verticalPower * kept;
+    const float slowdown = std::min(std::max(slowdownScale, 0.0f), 1.0f);
+
+    const float length = std::sqrt(x * x + z * z);
+    const float directionX = length < 0.0001f ? 0.0f : x / length;
+    const float directionZ = length < 0.0001f ? 0.0f : z / length;
+
+    Vector3f motion = getMotion();
+    motion.x = motion.x * slowdown + directionX * horizontal;
+    const float lift = isPlayer() ? vertical : vertical * VERTICAL_KNOCKBACK_FACTOR;
+    motion.y = std::min(lift + motion.y * slowdown, verticalCap);
+    motion.z = motion.z * slowdown + directionZ * horizontal;
     setMotion(motion);
     if (isPlayer())
         static_cast<ServerPlayer *>(this)->scheduleKnockback(motion);
@@ -299,6 +335,9 @@ void Actor::loadTags(const Tag &data) {
 }
 
 int64_t Actor::getVisibleEffectsData() const {
+    if (mEffects.getAll().empty())
+        return 0;
+
     std::map<int32_t, bool> visible;
     for (const auto &entry: mEffects.getAll()) {
         const MobEffectInstance &effect = entry.second;
@@ -386,8 +425,7 @@ void Actor::exhaust(float amount) {
 }
 
 void Actor::_changeFood(float food) {
-    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE)
-                                        : nullptr;
+    PluginManager *plugins = isPlayer() ? PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FOOD_CHANGE) : nullptr;
     if (plugins != nullptr) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_FOOD_CHANGE;
@@ -448,20 +486,19 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
         }
 
         if (mFoodTickTimer % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
-            mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
+            heal(1.0f, HealCause::SelfHeal);
     }
 
     if (mFoodTickTimer == 0) {
         if (food >= 18.0f && naturalRegeneration) {
             if (getHealth() < maxHealth) {
-                mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + 1.0f);
+                heal(1.0f, HealCause::SelfHeal);
                 exhaust(6.0f);
             }
         } else if (food <= 0.0f) {
             const float health = getHealth();
             const bool starve = (difficulty == DIFFICULTY_EASY && health > 10.0f)
-                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f)
-                                || difficulty == DIFFICULTY_HARD;
+                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f) || difficulty == DIFFICULTY_HARD;
 
             if (starve)
                 mPendingStarveDamage = true;
@@ -471,17 +508,19 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
     if (!canSprint())
         mFlags.set(ActorFlag::Sprinting, false);
 
-    return getFood() != previousFood
-           || getSaturation() != previousSaturation
-           || getExhaustion() != previousExhaustion
+    return getFood() != previousFood || getSaturation() != previousSaturation || getExhaustion() != previousExhaustion
            || getHealth() != previousHealth;
 }
 
 void Actor::kill() {
     mIsDead = true;
     mEffects.clear();
+    // a respawn starts thawed
+    mEffects.resetFreezing();
     extinguish();
+    const float previous = getHealth();
     mAttributes.set(ATTRIBUTE_HEALTH, 0.0f);
+    _healthChanged(previous);
     setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     resetFallDistance();
     mNoDamageTicks = 0;
@@ -503,23 +542,43 @@ float Actor::reduceHealth(float amount) {
         amount -= absorbed;
     }
 
-    const float newHealth = getHealth() - amount;
-    mAttributes.setClamped(ATTRIBUTE_HEALTH, newHealth);
+    const float previous = getHealth();
+    mAttributes.setClamped(ATTRIBUTE_HEALTH, previous - amount);
+    _healthChanged(previous);
     return getHealth();
 }
 
-float Actor::heal(float amount) {
+float Actor::heal(float amount, HealCause cause) {
     if (amount <= 0.0f || !isAlive())
         return getHealth();
-    mAttributes.setClamped(ATTRIBUTE_HEALTH, getHealth() + amount);
+    if (sHealFilter && (!sHealFilter(*this, amount, cause) || amount <= 0.0f))
+        return getHealth();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_HEAL)) {
+        static const char *const CAUSES[] = {"heal", "regeneration", "self_heal", "totem"};
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_HEAL;
+        event.mCancellable = true;
+        event.mEntity = this;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(this);
+        event.mAmount = (double) amount;
+        event.mCause = CAUSES[(size_t) cause];
+        plugins->dispatch(event);
+        amount = (float) event.mAmount;
+        if (event.mCancelled || !(amount > 0.0f))
+            return getHealth();
+    }
+    const float previous = getHealth();
+    mAttributes.setClamped(ATTRIBUTE_HEALTH, previous + amount);
+    _healthChanged(previous);
+    if (sHealListener && getHealth() > previous)
+        sHealListener(*this, getHealth() - previous, cause);
     return getHealth();
 }
 
-float Actor::computeFallDamage() const {
+float Actor::computeFallDamage(float distance) const {
     if (hasEffect(MobEffectId::SlowFalling))
         return 0.0f;
 
-    const float distance = getFallDistance();
     const MobEffectInstance *jumpBoost = getEffect(MobEffectId::JumpBoost);
     const float jumpBoostLevel = jumpBoost == nullptr ? 0.0f : (float) jumpBoost->level();
     const float damage = std::ceil(distance - FALL_DAMAGE_THRESHOLD - jumpBoostLevel);

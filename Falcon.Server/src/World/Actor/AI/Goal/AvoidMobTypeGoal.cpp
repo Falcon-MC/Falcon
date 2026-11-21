@@ -6,6 +6,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -21,12 +22,7 @@ namespace {
         return generator;
     }
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 
     bool isAvoidablePlayer(const ServerPlayer &player) {
         const int32_t gameType = player.getGameType();
@@ -43,35 +39,35 @@ AvoidMobTypeGoal::AvoidMobTypeGoal(std::vector<Entry> entries, Options options)
 }
 
 int32_t AvoidMobTypeGoal::_nextSound() const {
-    return std::uniform_int_distribution<int32_t>(mOptions.mMinSoundInterval, mOptions.mMaxSoundInterval)(
-            avoidMobRandom());
+    return std::uniform_int_distribution<int32_t>(mOptions.mMinSoundInterval,
+                                                  mOptions.mMaxSoundInterval)(avoidMobRandom());
 }
 
 bool AvoidMobTypeGoal::_isOutnumbered(ServerNetworkHandler &owner, MobActor &mob, const Entry &entry) const {
     int32_t threats = 0;
-    for (auto &actor: owner.getActors()) {
-        const Actor &candidate = *actor.second;
+    owner.forEachActorNear(mob.getPosition(), entry.mMaxDistance, [&](const Actor &candidate) {
         if (&candidate == &mob || !candidate.isAlive() || !candidate.sharesLevelWith(mob)
             || mob.distanceSquaredTo(candidate) > entry.mMaxDistance * entry.mMaxDistance)
-            continue;
+            return;
         if (entry.mFilters == nullptr || EntityFilter::test(*entry.mFilters, owner, mob, &candidate))
             ++threats;
-    }
+    });
 
     const json::Value *groupSize = mob.getComponent("minecraft:group_size");
     const json::Value *radiusValue = groupSize == nullptr ? nullptr : groupSize->get("radius");
-    const float radius = radiusValue == nullptr ? DEFAULT_GROUP_RADIUS : (float) radiusValue->number(DEFAULT_GROUP_RADIUS);
+    const float radius = radiusValue == nullptr ? DEFAULT_GROUP_RADIUS
+                                                : (float) radiusValue->number(DEFAULT_GROUP_RADIUS);
     const json::Value *groupFilters = groupSize == nullptr ? nullptr : groupSize->get("filters");
 
     int32_t allies = 0;
-    for (auto &actor: owner.getActors()) {
-        const MobActor *ally = dynamic_cast<const MobActor *>(actor.second.get());
+    owner.forEachActorNear(mob.getPosition(), radius, [&](const ServerActor &actor) {
+        const MobActor *ally = dynamic_cast<const MobActor *>(&actor);
         if (ally == nullptr || !ally->isAlive() || !ally->sharesLevelWith(mob)
             || mob.distanceSquaredTo(*ally) > radius * radius)
-            continue;
+            return;
         if (groupFilters == nullptr || EntityFilter::test(*groupFilters, owner, *ally))
             ++allies;
-    }
+    });
     return threats > allies;
 }
 
@@ -99,12 +95,14 @@ const Actor *AvoidMobTypeGoal::_findThreat(ServerNetworkHandler &owner, MobActor
         }
     };
 
-    for (auto &player: owner.getPlayers()) {
-        if (isAvoidablePlayer(player.second))
-            consider(player.second);
-    }
-    for (auto &actor: owner.getActors())
-        consider(*actor.second);
+    float searchRadius = 0.0f;
+    for (const Entry &option: mEntries)
+        searchRadius = std::max(searchRadius, option.mMaxDistance);
+    owner.forEachPlayerNear(mob.getPosition(), searchRadius, [&](const ServerPlayer &player) {
+        if (isAvoidablePlayer(player))
+            consider(player);
+    });
+    owner.forEachActorNear(mob.getPosition(), searchRadius, consider);
 
     return nearest;
 }

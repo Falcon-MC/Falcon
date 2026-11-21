@@ -7,8 +7,8 @@
 namespace {
 
     const BlockState &sweetBerryBushState() {
-        static const BlockState state = DecorationSupport::withState(
-                VanillaBlocks::SWEET_BERRY_BUSH().toBlockState(), "growth", 7);
+        static const BlockState state = DecorationSupport::withState(VanillaBlocks::SWEET_BERRY_BUSH().toBlockState(),
+                                                                     "growth", 7);
         return state;
     }
 

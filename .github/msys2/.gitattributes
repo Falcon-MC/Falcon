@@ -1,0 +1,2 @@
+# the script and the list are read by bash on windows too: a carriage return would end up in every url
+* text eol=lf

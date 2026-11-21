@@ -1,0 +1,18 @@
+name: Verify eggs for manually published releases
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  verify-eggs:
+    # the nightly prerelease is replaced on every passing dev, it has no eggs to verify
+    if: github.event.release.tag_name != 'nightly'
+    uses: Falcon-MC/Pterodactyl/.github/workflows/notify-release.yml@main
+    with:
+      tag: ${{ github.event.release.tag_name }}
+    secrets:
+      AUTOMATION_APP_ID: ${{ secrets.AUTOMATION_APP_ID }}
+      AUTOMATION_APP_PRIVATE_KEY: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}

@@ -16,21 +16,17 @@
 class ILogEndPoint;
 
 struct EmbeddedServerConfig {
-    // Holds server.properties, the worlds folder, player data and packs, like a dedicated server's directory.
+    // laid out like a dedicated server's directory: server.properties, worlds, player data, packs
     std::filesystem::path dataDirectory;
-    // The world to play, a folder under dataDirectory/worlds. It is created when it does not exist yet.
+    // folder under dataDirectory/worlds, created if missing
     std::string levelName;
-    // Extra server.properties values, such as gamemode, difficulty or level-seed.
+    // extra server.properties values (gamemode, difficulty, level-seed...)
     std::map<std::string, std::string> properties;
     std::function<void(LogLevel level, const std::string &message)> log;
 };
 
-/**
- * A server running inside another program, on its own thread, for a single player on the same machine. It
- * listens on the loopback address alone, on a port the system picks, and lets the player in without an Xbox
- * login or encryption. It never loads plugins and never touches the process: no console, no signal handlers,
- * no exit. One runs at a time.
- */
+// own thread, single local player: loopback only, system-picked port, no Xbox login or encryption;
+// no plugins, never touches the process (console, signals, exit); one at a time
 class EmbeddedServer {
 public:
     enum class State { Starting, Running, Stopping, Failed, Stopped };
@@ -48,32 +44,26 @@ public:
 
     EmbeddedServer &operator=(const EmbeddedServer &) = delete;
 
-    /**
-     * Starts the server and waits until it listens or failed to. Returns false when it could not start.
-     */
+    // blocks until listening or failed; false when it could not start
     bool start(const EmbeddedServerConfig &config);
-    // Poll the future and getState() from the UI; start()/stop() are blocking wrappers.
-    // Serialize lifecycle calls. Log callbacks run on the logger thread.
+    // poll the future and getState() from the UI; start()/stop() are blocking wrappers
+    // serialize lifecycle calls; log callbacks run on the logger thread
     std::future<bool> startAsync(const EmbeddedServerConfig &config);
-    // Returns immediately; Stopped/Failed means cleanup has completed.
+    // returns immediately; Stopped/Failed means cleanup is done
     void requestStop();
     State getState() const;
     Progress getProgress() const;
     Error getError() const;
-    // Requests execute on the server thread, including during pause. Futures report
-    // completion or exceptions; pending requests are abandoned when the server stops.
+    // run on the server thread, even while paused; futures carry completion or exceptions;
+    // pending requests are abandoned when the server stops
     std::future<void> executeCommand(std::string command);
     std::future<void> save();
     std::future<std::vector<std::string>> getPlayerNames();
 
-    /**
-     * Saves the world and the player, stops the server and waits for its thread.
-     */
+    // saves world and player, then joins the server thread
     void stop();
 
-    /**
-     * A paused server stops ticking the world, the way the game freezes while its pause menu is open.
-     */
+    // stops ticking the world, like the game's pause menu
     void setPaused(bool paused);
 
     bool isPaused() const;

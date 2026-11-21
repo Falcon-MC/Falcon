@@ -8,8 +8,9 @@ void PlayerLiquidContactSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &contact = context.contact;
 
-    contact.liquid = LiquidBlocksFetch::at(context.level, state.start, (abilities.swimming || abilities.gliding || context.pose.mCrawling),
-                                            context.pose.mHeight);
+    contact.liquid = LiquidBlocksFetch::at(context.level, state.start,
+                                           (abilities.swimming || abilities.gliding || context.pose.mCrawling),
+                                           context.pose.mHeight);
     context.liquidTravel.lava = !abilities.flying && contact.liquid.lava;
     context.waterTravel.active = !abilities.flying && !context.liquidTravel.lava && contact.liquid.water;
 }

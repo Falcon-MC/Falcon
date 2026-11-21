@@ -6,10 +6,12 @@
 #include "World/Level/Block/WaterBlock.h"
 #include "World/Level/Block/Systems/LiquidPhysicsSystem.h"
 #include "World/Level/LevelGen/Biome/BiomeIds.h"
+#include "World/Level/LevelGen/BlockStateSet.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/IFeature.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace DecorationSupport {
 
@@ -39,7 +41,7 @@ namespace DecorationSupport {
     }
 
     bool isAir(const BlockState &state) {
-        return state.mName == "minecraft:air";
+        return state.mName == BlockNames::AIR;
     }
 
     bool isTransparent(const BlockState &state) {
@@ -72,11 +74,43 @@ namespace DecorationSupport {
     }
 
     bool isGrass(const BlockState &state) {
-        return state.mName == "minecraft:grass_block";
+        return state.mName == BlockNames::GRASS_BLOCK;
     }
 
     bool canBeReplaced(const BlockState &state) {
         return isAir(state) || isLiquid(state);
+    }
+
+    bool isNotFeatureReplaceable(const BlockState &state) {
+        static const BlockStateSet TAGGED = {"minecraft:bedrock",
+                                             "minecraft:chest",
+                                             "minecraft:mob_spawner",
+                                             "minecraft:end_portal_frame",
+                                             "minecraft:chiseled_bookshelf",
+                                             "minecraft:trial_spawner",
+                                             "minecraft:vault",
+                                             "minecraft:copper_chest",
+                                             "minecraft:exposed_copper_chest",
+                                             "minecraft:weathered_copper_chest",
+                                             "minecraft:oxidized_copper_chest",
+                                             "minecraft:waxed_copper_chest",
+                                             "minecraft:waxed_exposed_copper_chest",
+                                             "minecraft:waxed_weathered_copper_chest",
+                                             "minecraft:waxed_oxidized_copper_chest",
+                                             "minecraft:oak_shelf",
+                                             "minecraft:spruce_shelf",
+                                             "minecraft:birch_shelf",
+                                             "minecraft:jungle_shelf",
+                                             "minecraft:acacia_shelf",
+                                             "minecraft:dark_oak_shelf",
+                                             "minecraft:mangrove_shelf",
+                                             "minecraft:cherry_shelf",
+                                             "minecraft:pale_oak_shelf",
+                                             "minecraft:bamboo_shelf",
+                                             "minecraft:crimson_shelf",
+                                             "minecraft:warped_shelf",
+                                             "minecraft:poplar_shelf"};
+        return TAGGED.contains(state);
     }
 
     void setBlockKeepingWater(LevelChunk &chunk, int32_t x, int32_t y, int32_t z, const BlockState &state) {
@@ -104,10 +138,8 @@ namespace DecorationSupport {
     }
 
     bool isBiomeForest(int32_t biomeId) {
-        return biomeId == BiomeIds::FOREST
-               || biomeId == BiomeIds::BIRCH_FOREST
-               || biomeId == BiomeIds::BIRCH_FOREST_MUTATED
-               || biomeId == BiomeIds::FLOWER_FOREST
+        return biomeId == BiomeIds::FOREST || biomeId == BiomeIds::BIRCH_FOREST
+               || biomeId == BiomeIds::BIRCH_FOREST_MUTATED || biomeId == BiomeIds::FLOWER_FOREST
                || biomeId == BiomeIds::ROOFED_FOREST;
     }
 
@@ -116,17 +148,12 @@ namespace DecorationSupport {
     }
 
     bool isBiomeStone(int32_t biomeId) {
-        return biomeId == BiomeIds::MESA
-               || biomeId == BiomeIds::MESA_PLATEAU_STONE
-               || biomeId == BiomeIds::MESA_BRYCE
-               || biomeId == BiomeIds::STONE_BEACH
-               || biomeId == BiomeIds::STONY_PEAKS;
+        return biomeId == BiomeIds::MESA || biomeId == BiomeIds::MESA_PLATEAU_STONE || biomeId == BiomeIds::MESA_BRYCE
+               || biomeId == BiomeIds::STONE_BEACH || biomeId == BiomeIds::STONY_PEAKS;
     }
 
     bool isBiomeTaiga(int32_t biomeId) {
-        return biomeId == BiomeIds::TAIGA
-               || biomeId == BiomeIds::COLD_TAIGA
-               || biomeId == BiomeIds::MEGA_TAIGA
+        return biomeId == BiomeIds::TAIGA || biomeId == BiomeIds::COLD_TAIGA || biomeId == BiomeIds::MEGA_TAIGA
                || biomeId == BiomeIds::REDWOOD_TAIGA_MUTATED;
     }
 

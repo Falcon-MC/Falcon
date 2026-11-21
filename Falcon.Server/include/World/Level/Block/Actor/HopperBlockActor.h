@@ -14,13 +14,23 @@ public:
 
     HopperBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
     static bool addOne(Container &container, const ItemStack &item);
+
+    // one item from the container block at `source` into `target`, as a hopper at `puller` takes it
+    static bool pullFrom(ServerNetworkHandler &owner, Level &level, const Vector3i &source, Container &target,
+                         const Vector3i &puller);
+
+    // the dropped items whose position lies in the box go into `target`, as much of each as fits
+    static bool pickUpItems(ServerNetworkHandler &owner, Level &level, float minX, float minY, float minZ, float maxX,
+                            float maxY, float maxZ, Container &target);
 
     bool tick(ServerNetworkHandler &owner) override;
 

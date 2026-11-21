@@ -15,7 +15,9 @@ public:
 
     virtual ~ContainerManagerModel() = default;
 
-    ContainerType getType() const { return mType; }
+    ContainerType getType() const {
+        return mType;
+    }
 
     bool open(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position);
 

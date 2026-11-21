@@ -44,8 +44,8 @@ void PluginActor::tick(ServerNetworkHandler &owner) {
     try {
         entry->mOnTick(PluginApiHelpers::toHandle(static_cast<Actor *>(this)), entry->mUserData);
     } catch (...) {
-        LOG_ERROR(LogAreaID::Server, "[%s] onTick of %s threw an exception",
-                  entry->mPlugin->mDescription.mName.c_str(), getTypeId().c_str());
+        LOG_ERROR(LogAreaID::Server, "[%s] onTick of %s threw an exception", entry->mPlugin->mDescription.mName.c_str(),
+                  getTypeId().c_str());
     }
 }
 
@@ -58,7 +58,8 @@ bool PluginActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) 
 
     try {
         return entry->mOnInteract(PluginApiHelpers::toHandle(static_cast<Actor *>(this)),
-                                  PluginApiHelpers::toHandle(&player), entry->mUserData) != 0;
+                                  PluginApiHelpers::toHandle(&player), entry->mUserData)
+               != 0;
     } catch (...) {
         LOG_ERROR(LogAreaID::Server, "[%s] onInteract of %s threw an exception",
                   entry->mPlugin->mDescription.mName.c_str(), getTypeId().c_str());

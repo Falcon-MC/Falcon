@@ -15,10 +15,9 @@ FALCON_REGISTER_BLOCK(CropBlock, 270);
 using namespace GrowthHelpers;
 
 bool CropBlock::matches(const std::string &identifier) {
-    return BlockIdentifier::equalsAny(identifier, {
-            "minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroot",
-            "minecraft:torchflower_crop", "minecraft:pitcher_crop"
-    });
+    return BlockIdentifier::equalsAny(identifier,
+                                      {"minecraft:wheat", "minecraft:carrots", "minecraft:potatoes",
+                                       "minecraft:beetroot", "minecraft:torchflower_crop", "minecraft:pitcher_crop"});
 }
 
 void CropBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

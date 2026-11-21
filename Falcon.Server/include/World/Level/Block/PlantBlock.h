@@ -13,7 +13,8 @@ enum class PlantSupport {
     SoulSand,
     Mushroom,
     Reeds,
-    Cactus
+    Cactus,
+    CactusFlower
 };
 
 class PlantBlock : public Block {

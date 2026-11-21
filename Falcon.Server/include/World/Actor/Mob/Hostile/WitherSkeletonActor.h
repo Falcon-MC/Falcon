@@ -8,7 +8,11 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{0.7f, 2.4f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.7f, 2.4f};
+    }
 
-    float getDefaultMaxHealth() const override { return 20.0f; }
+    float getDefaultMaxHealth() const override {
+        return 20.0f;
+    }
 };

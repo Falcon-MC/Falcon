@@ -2,6 +2,7 @@
 
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Protocol/Types/ItemStack.h"
 
 #include <falcon/falcon_api.h>
 
@@ -10,7 +11,6 @@
 
 class Actor;
 class CommandOrigin;
-class ItemStack;
 class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -71,5 +71,24 @@ namespace PluginApiHelpers {
 
     inline CommandOrigin *sender(FalconCommandSender *handle) {
         return reinterpret_cast<CommandOrigin *>(handle);
+    }
+
+    // a copy owned by the plugin, without the network id of the slot it came from
+    inline FalconItem *copyOf(const ItemStack &stack) {
+        ItemStack *copy = new ItemStack(stack);
+        copy->mUsingNetId = false;
+        copy->mNetId = 0;
+        return toHandle(copy);
+    }
+
+    inline ItemStack valueOf(FalconItem *handle) {
+        if (handle == nullptr)
+            return ItemStack::air();
+        ItemStack copy = *item(handle);
+        copy.mUsingNetId = false;
+        copy.mNetId = 0;
+        if (copy.isAir() || copy.mCount <= 0)
+            return ItemStack::air();
+        return copy;
     }
 }

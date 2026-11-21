@@ -1,5 +1,7 @@
 #include "World/Actor/Movement/Systems/PlayerCollisionSystem.h"
 #include "World/Actor/Movement/Systems/ClientAcceptanceSystem.h"
+#include "World/Actor/Movement/BlockCollisionEngine.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -8,6 +10,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Level.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <cmath>
 
@@ -37,7 +40,8 @@ namespace MovementPhysics {
         return stuck;
     }
 
-    bool findSupportingBlock(Level &level, const AxisAlignedBB &probe, const Vector3f &feet, Vector3i &found) {
+    bool findSupportingBlock(Level &level, const Actor &actor, const AxisAlignedBB &probe, const Vector3f &feet,
+                             Vector3i &found) {
         const float centerX = std::floor(feet.x) + 0.5f;
         const float centerY = std::floor(feet.y) + 0.5f;
         const float centerZ = std::floor(feet.z) + 0.5f;
@@ -47,9 +51,10 @@ namespace MovementPhysics {
             for (int32_t y = (int32_t) std::floor(probe.mMinY) - 1; y <= (int32_t) std::floor(probe.mMaxY); y++) {
                 for (int32_t z = (int32_t) std::floor(probe.mMinZ); z <= (int32_t) std::floor(probe.mMaxZ); z++) {
                     const BlockState *state = level.peekBlockPtr(x, y, z);
-                    if (state == nullptr || !BlockShape::hasCollision(*state))
+                    if (state == nullptr)
                         continue;
-                    if (!BlockShape::getShapeAt(*state, x, y, z).intersectsWith(probe))
+                    const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, &actor);
+                    if (shape.mMaxY <= shape.mMinY || !shape.intersectsWith(probe))
                         continue;
 
                     const float dx = (float) x - centerX;
@@ -83,13 +88,13 @@ namespace MovementPhysics {
         const int32_t y = (int32_t) std::floor(feet.y - SUPPORT_PROBE_DEPTH);
         const int32_t z = (int32_t) std::floor(feet.z);
         const BlockState *under = level.peekBlockPtr(x, y, z);
-        if (under == nullptr || BlockShape::hasCollision(*under))
+        if (under == nullptr || BlockShape::hasCollision(*under, &player))
             return behaviorAt(level, x, y, z);
 
         const int32_t belowY = (int32_t) std::floor(feet.y) - 1;
         const BlockState *below = level.peekBlockPtr(x, belowY, z);
-        if (below != nullptr && BlockShape::hasCollision(*below)
-            && BlockShape::getShapeAt(*below, x, belowY, z).mMaxY > (float) belowY + 1.0f)
+        if (below != nullptr && BlockShape::hasCollision(*below, &player)
+            && BlockShape::getShapeAt(*below, x, belowY, z, &player).mMaxY > (float) belowY + 1.0f)
             return behaviorAt(level, x, belowY, z);
         return behaviorAt(level, x, y, z);
     }
@@ -104,8 +109,8 @@ namespace MovementPhysics {
         AxisAlignedBB probe = box;
         probe.mMinY -= SUPPORT_PROBE_MARGIN;
         Vector3i found;
-        if (findSupportingBlock(level, probe, feet, found)
-            || findSupportingBlock(level, probe.offset(-requested.x, 0.0f, -requested.z), feet, found)) {
+        if (findSupportingBlock(level, player, probe, feet, found)
+            || findSupportingBlock(level, player, probe.offset(-requested.x, 0.0f, -requested.z), feet, found)) {
             player.setSupportingBlock(found);
             return;
         }
@@ -123,25 +128,25 @@ namespace MovementPhysics {
         return value > 0.0f ? value - EDGE_STEP : value + EDGE_STEP;
     }
 
-    /** Sneaking shortens each axis, then both together, until support remains under the box. */
-    void avoidEdge(Level &level, const AxisAlignedBB &box, Vector3f &velocity) {
+    // sneaking: shorten each axis, then both, until support remains under the box
+    void avoidEdge(Level &level, const Actor &actor, const AxisAlignedBB &box, Vector3f &velocity) {
         const AxisAlignedBB support = box.expand(-EDGE_INSET, 0.0f, -EDGE_INSET);
         const float drop = -STEP_HEIGHT * 1.01f;
         float x = velocity.x;
         float z = velocity.z;
 
         int32_t iterations = 0;
-        while (x != 0.0f && !collides(level, support.offset(x, drop, 0.0f))) {
+        while (x != 0.0f && !collides(level, support.offset(x, drop, 0.0f), &actor)) {
             x = ++iterations >= EDGE_MAX_ITERATIONS ? 0.0f : reduceTowardEdge(x);
         }
 
         iterations = 0;
-        while (z != 0.0f && !collides(level, support.offset(0.0f, drop, z))) {
+        while (z != 0.0f && !collides(level, support.offset(0.0f, drop, z), &actor)) {
             z = ++iterations >= EDGE_MAX_ITERATIONS ? 0.0f : reduceTowardEdge(z);
         }
 
         iterations = 0;
-        while (x != 0.0f && z != 0.0f && !collides(level, support.offset(x, drop, z))) {
+        while (x != 0.0f && z != 0.0f && !collides(level, support.offset(x, drop, z), &actor)) {
             if (++iterations >= EDGE_MAX_ITERATIONS) {
                 x = 0.0f;
                 z = 0.0f;
@@ -162,48 +167,71 @@ void PlayerCollisionSystem::tick(PlayerMovementContext &context) {
     auto &abilities = context.abilities;
     auto &travel = context.travel;
 
-    travel.box = boxAt(state.start, context.pose.mHeight);
+    if (!context.player.findSimulatedBox(state.start, context.pose.mHeight, travel.box))
+        travel.box = boxAt(state.start, context.pose.mHeight);
     Vector3f stuck;
-    travel.isStuck = !abilities.spectator && stuckMultiplier(context.level, context.player, travel.box, stuck);
+    // spectators and creative flight ignore cobweb, powder snow and berry bush slowdown
+    const bool slowdownImmune = abilities.spectator
+                                || (abilities.flying && abilities.gameType == (int32_t) GameType::Creative);
+    travel.isStuck = !slowdownImmune && stuckMultiplier(context.level, context.player, travel.box, stuck);
     if (travel.isStuck) {
         state.velocity.x *= stuck.x;
         state.velocity.y *= stuck.y;
         state.velocity.z *= stuck.z;
     }
 
-    if (!abilities.flying && context.pose.mSneaking && !context.pose.mCrawling && state.onGround && state.velocity.y <= 0.0f)
-        avoidEdge(context.level, travel.box, state.velocity);
+    if (!abilities.flying && context.pose.mSneaking && !context.pose.mCrawling && state.onGround
+        && state.velocity.y <= 0.0f)
+        avoidEdge(context.level, context.player, travel.box, state.velocity);
 
+    bool keepsHorizontalVelocity = false;
     if (abilities.spectator) {
         travel.box = travel.box.offset(state.velocity.x, state.velocity.y, state.velocity.z);
         travel.moved.mMoved = state.velocity;
     } else {
-        travel.moved = ActorCollisionSystem::move(context.level, travel.box, state.velocity, STEP_HEIGHT, state.onGround);
+        const BlockCollisionEngine::Result moved = BlockCollisionEngine::move(
+                context.level, travel.box, state.velocity, STEP_HEIGHT, state.onGround, abilities.flying,
+                context.player.getFlags().get(ActorFlag::PushTowardsClosestSpace), context.autoClimb.scaffoldDescend,
+                context.player.getCollisionRecovery(), &context.player);
+        travel.box = moved.mBox;
+        travel.moved.mRequested = moved.mRequested;
+        travel.moved.mMoved = moved.mMoved;
+        travel.moved.mCollidedX = moved.mCollidedX;
+        travel.moved.mCollidedY = moved.mCollidedY;
+        travel.moved.mCollidedZ = moved.mCollidedZ;
+        travel.moved.mOnGround = moved.mOnGround;
+        keepsHorizontalVelocity = moved.mKeepsHorizontalVelocity;
     }
-    state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY, travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+    state.simulated = BlockCollisionEngine::feetOf(travel.box);
+    context.player.setSimulatedBox(travel.box, state.simulated);
     const bool wasOnGround = state.onGround;
     state.onGround = travel.moved.mOnGround;
     ClientAcceptanceSystem::tick(context);
 
     updateSupportingBlock(context.level, context.player, travel.box, state.simulated, state.onGround, state.velocity);
     const BlockBehavior &under = behaviorUnder(context.level, state.simulated, context.player);
-    if (state.simulated.y == state.start.y && state.onGround && !context.pose.mSneaking && !input.pressingSneak && under.slowsWalking()) {
-        const float vertical = std::fabs(travel.moved.mMoved.y);
-        if (vertical < WALK_SLOWDOWN_LIMIT) {
-            const float slowdown = WALK_SLOWDOWN_BASE + vertical * WALK_SLOWDOWN_PER_VELOCITY;
-            state.velocity.x *= slowdown;
-            state.velocity.z *= slowdown;
-        }
-    }
+    travel.standsOnSlowingBlock = state.onGround && under.slowsWalking();
 
     if (travel.isStuck)
         state.velocity = Vector3f(0.0f, 0.0f, 0.0f);
     context.player.setHorizontalCollision(travel.moved.mCollidedX || travel.moved.mCollidedZ);
 
-    if (travel.moved.mCollidedX)
+    if (travel.moved.mCollidedX && !keepsHorizontalVelocity)
         state.velocity.x = 0.0f;
-    if (travel.moved.mCollidedZ)
+    if (travel.moved.mCollidedZ && !keepsHorizontalVelocity)
         state.velocity.z = 0.0f;
     if (travel.moved.mCollidedY)
-        state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak ? 0.0f : landingVelocity(under, state.velocity.y);
+        state.velocity.y = wasOnGround || state.velocity.y >= 0.0f || input.pressingSneak
+                                   ? 0.0f
+                                   : landingVelocity(under, state.velocity.y);
+
+    // a wall bump on a climbable lifts after the move; that tick skips gravity and vertical drag
+    if (!abilities.flying && !abilities.gliding && !context.waterTravel.active && !context.liquidTravel.lava
+        && (travel.moved.mCollidedX || travel.moved.mCollidedZ)) {
+        const Block *inside = blockAt(context.level, state.simulated.x, state.simulated.y, state.simulated.z);
+        if (inside != nullptr && inside->isClimbable()) {
+            state.velocity.y = CLIMB_SPEED;
+            context.autoClimb.climbing = true;
+        }
+    }
 }

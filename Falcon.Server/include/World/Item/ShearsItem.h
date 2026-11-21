@@ -12,6 +12,9 @@ public:
 
     bool canDestroySpecial(const std::string &blockIdentifier) const override;
 
+    bool onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                      const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const override;
+
     bool wearsOnAttack() const override {
         return false;
     }

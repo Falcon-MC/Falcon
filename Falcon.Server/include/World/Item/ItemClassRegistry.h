@@ -23,13 +23,10 @@ public:
     static void remove(const void *owner);
 };
 
-#define FALCON_REGISTER_ITEM(type, priority)                                             \
-    static const ItemClassRegistry::Registration gItemRegistration##type(                \
-            (priority), &type::matches,                                                  \
-            [](const Item &item) -> std::unique_ptr<Item> {                              \
-                return std::make_unique<type>(item);                                     \
-            })
+#define FALCON_REGISTER_ITEM(type, priority)                                                                           \
+    static const ItemClassRegistry::Registration gItemRegistration##type(                                              \
+            (priority), &type::matches,                                                                                \
+            [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<type>(item); })
 
-#define FALCON_REGISTER_ITEM_CUSTOM(tag, priority, matcher, factory)                     \
-    static const ItemClassRegistry::Registration gItemRegistration##tag(                 \
-            (priority), (matcher), (factory))
+#define FALCON_REGISTER_ITEM_CUSTOM(tag, priority, matcher, factory)                                                   \
+    static const ItemClassRegistry::Registration gItemRegistration##tag((priority), (matcher), (factory))

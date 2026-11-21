@@ -2,25 +2,24 @@
 
 #include "World/Level/Block/BlockState.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cstring>
 
 namespace {
-    const char *DIRT_BLOCKS[] = {
-            "minecraft:dirt",
-            "minecraft:grass_block",
-            "minecraft:podzol",
-            "minecraft:coarse_dirt",
-            "minecraft:mycelium",
-            "minecraft:rooted_dirt",
-            "minecraft:moss_block",
-            "minecraft:pale_moss_block",
-            "minecraft:mud",
-            "minecraft:muddy_mangrove_roots",
-            "minecraft:dirt_with_roots",
-            "minecraft:farmland",
-            "minecraft:grass_path"
-    };
+    const char *DIRT_BLOCKS[] = {"minecraft:dirt",
+                                 "minecraft:grass_block",
+                                 "minecraft:podzol",
+                                 "minecraft:coarse_dirt",
+                                 "minecraft:mycelium",
+                                 "minecraft:rooted_dirt",
+                                 "minecraft:moss_block",
+                                 "minecraft:pale_moss_block",
+                                 "minecraft:mud",
+                                 "minecraft:muddy_mangrove_roots",
+                                 "minecraft:dirt_with_roots",
+                                 "minecraft:farmland",
+                                 "minecraft:grass_path"};
 }
 
 const char *IFeature::identifier() const {
@@ -49,7 +48,7 @@ bool IFeature::isSupportDirt(const BlockState &state) {
 }
 
 bool IFeature::isSupportGrass(const BlockState &state) {
-    return state.mName == "minecraft:grass_block";
+    return state.mName == BlockNames::GRASS_BLOCK;
 }
 
 void IFeature::queueObject(const BlockManager &object) {

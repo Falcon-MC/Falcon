@@ -6,6 +6,7 @@
 #include "World/Level/Storage/Loot/LootRange.h"
 
 #include <memory>
+#include <string>
 #include <vector>
 
 class LootFunction {
@@ -162,6 +163,18 @@ private:
 class ExplorationMapFunction final : public LootFunction {
 public:
     explicit ExplorationMapFunction(const json::Value &definition);
+
+protected:
+    void apply(LootDrop &drop, const LootContext &context) const override;
+
+private:
+    std::string mDestination;
+};
+
+// leather armor in one dye color, sometimes a mix of two or three
+class RandomDyeFunction final : public LootFunction {
+public:
+    explicit RandomDyeFunction(const json::Value &definition);
 
 protected:
     void apply(LootDrop &drop, const LootContext &context) const override;

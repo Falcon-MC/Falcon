@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Inventory/CartographyRecipes.h"
 #include "World/Inventory/CraftingManager.h"
 #include "Protocol/PacketCodecContext.h"
 #include "Protocol/Packets/CreativeContentPacket.h"
@@ -8,7 +9,24 @@
 #include "Protocol/Types/ItemStackRequest.h"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
+
+class MerchantOffers;
+class CraftingDataPacket;
+
+// the offer a request traded for and how many times
+struct TradeCraft {
+    int32_t mOfferIndex = -1;
+    int32_t mCrafts = 0;
+};
+
+// what a paid beacon screen chose
+struct BeaconChoice {
+    bool mPaid = false;
+    int32_t mPrimary = 0;
+    int32_t mSecondary = 0;
+};
 
 class BundleSyncData {
 public:
@@ -18,27 +36,25 @@ public:
     std::vector<ItemStack> mContents;
 };
 
-/**
- * Validates and applies one client item stack request (moves, swaps, drops, crafting,
- * creative picks, bundles) atomically, and builds the response listing the slots the
- * client must resync.
- */
+// one request applied atomically; the response lists the slots the client must resync;
+// beaconLevels: the open beacon's pyramid, -1 while no beacon screen is open
 class ItemStackRequestHandler {
 public:
     static const int RESULT_OK = 0;
     static const int RESULT_ERROR = 1;
 
-    static ItemStackResponseEntry execute(PlayerInventory &inventory, const ItemStackRequest &request,
-                                          const std::vector<CreativeItemData> &creativeItems,
-                                          const std::vector<ItemStack> &recipeOutputs,
-                                          const std::vector<uint32_t> &recipeSourceIndices,
-                                          bool craftingTableOpen,
-                                          bool furnaceOpen,
-                                          Container *openContainer = nullptr,
-                                          std::vector<ItemStack> *outDroppedItems = nullptr,
-                                          const PacketCodecContext *codecContext = nullptr,
-                                          std::vector<BundleSyncData> *outBundles = nullptr,
-                                          int32_t playerXpLevel = 0,
-                                          bool creativeMode = false,
-                                          int32_t *outEnchantLevelsConsumed = nullptr);
+    static ItemStackResponseEntry
+    execute(PlayerInventory &inventory, const ItemStackRequest &request,
+            const std::vector<CreativeItemData> &creativeItems, const std::vector<ItemStack> &recipeOutputs,
+            const std::vector<uint32_t> &recipeSourceIndices, bool craftingTableOpen, bool furnaceOpen,
+            Container *openContainer = nullptr, std::vector<ItemStack> *outDroppedItems = nullptr,
+            const PacketCodecContext *codecContext = nullptr, std::vector<BundleSyncData> *outBundles = nullptr,
+            int32_t playerXpLevel = 0, bool creativeMode = false, int32_t *outEnchantLevelsConsumed = nullptr,
+            bool anvilOpen = false, int32_t *outAnvilLevelsConsumed = nullptr, bool *outAnvilUsed = nullptr,
+            const CartographyRecipes::Maps *cartographyMaps = nullptr, CartographyLock *outCartographyLock = nullptr,
+            const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes = nullptr,
+            ItemStack *outCraftedRecipeItem = nullptr, const MerchantOffers *tradeOffers = nullptr,
+            TradeCraft *outTrade = nullptr, const CraftingDataPacket *smithingRecipes = nullptr,
+            int32_t clientProtocol = 0, bool grindstoneOpen = false, int32_t *outGrindstoneXpCost = nullptr,
+            int32_t beaconLevels = -1, BeaconChoice *outBeacon = nullptr, bool loomOpen = false);
 };

@@ -22,15 +22,10 @@ exit /b 1
 
 break > "%LOG%"
 
+echo [1/3] Checking tools...
 where cmake >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] cmake not found in PATH.
-    exit /b 1
-)
-
-where g++ >nul 2>nul
-if errorlevel 1 (
-    echo [ERROR] g++ not found in PATH. Install MSYS2 UCRT64 and add it to PATH.
     exit /b 1
 )
 
@@ -40,8 +35,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem CXX wins when set; otherwise the MSYS2 UCRT64 g++, the Windows toolchain the project is built with
+if not defined CXX set CXX=g++
+where %CXX% >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] %CXX% not found in PATH. Install MSYS2 UCRT64 and add it to PATH, or set CXX.
+    exit /b 1
+)
+
 echo [2/3] Configuring project with CMake...
-cmake -B build -G Ninja -DCMAKE_CXX_COMPILER=g++ -DCMAKE_MAKE_PROGRAM=ninja >> "%LOG%" 2>&1
+echo       First run fetches leveldb, quickjs and libdatachannel - this can take a while.
+cmake -B build -G Ninja -DCMAKE_MAKE_PROGRAM=ninja >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo [ERROR] CMake configuration failed. See %LOG% for details.
     type "%LOG%"

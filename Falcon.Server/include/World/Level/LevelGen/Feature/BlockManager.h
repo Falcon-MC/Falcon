@@ -17,9 +17,14 @@ public:
 
     const BlockState &getBlockAt(int32_t x, int32_t y, int32_t z);
 
-    const BlockState *getCachedBlock(int32_t x, int32_t y, int32_t z) const;
+    // the second block of the position, the water of a waterlogged block
+    const BlockState &getExtraBlockAt(int32_t x, int32_t y, int32_t z);
+
+    const BlockState *getCachedBlock(int32_t x, int32_t y, int32_t z, int32_t layer = 0) const;
 
     virtual void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
+
+    void setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
 
     bool isCached(int32_t x, int32_t y, int32_t z) const;
 
@@ -29,17 +34,28 @@ public:
 
     void setOverflowSink(int32_t centerChunkX, int32_t centerChunkZ, std::vector<GeneratedBlockChange> *sink);
 
+    void readPendingFrom(const BlockManager *pending) {
+        mPending = pending;
+    }
+
     int32_t getHeightAt(int32_t x, int32_t z);
 
-    Level &getLevel() const { return *mLevel; }
+    Level &getLevel() const {
+        return *mLevel;
+    }
 
     static int64_t hashXYZ(int32_t x, int32_t y, int32_t z);
 
 protected:
+    const BlockState &_getBlockAt(int32_t x, int32_t y, int32_t z, int32_t layer);
+
     Level *mLevel;
-    std::unordered_map<int64_t, BlockState> mCaches;
-    std::unordered_map<int64_t, BlockState> mPlaces;
+    // keyed by hashXYZ, layer in the lowest bit; states interned (SubChunk::intern): recording copies no state,
+    // placing finds the palette entry by address
+    std::unordered_map<int64_t, const BlockState *> mCaches;
+    std::unordered_map<int64_t, const BlockState *> mPlaces;
     std::vector<GeneratedBlockChange> *mOverflowSink = nullptr;
+    const BlockManager *mPending = nullptr;
     int32_t mCenterChunkX = 0;
     int32_t mCenterChunkZ = 0;
 };

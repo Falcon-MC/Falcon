@@ -7,10 +7,7 @@ class BlockManager;
 
 class OreFeature : public IFeature {
 public:
-    enum class ConcentrationType {
-        UNIFORM,
-        TRIANGLE
-    };
+    enum class ConcentrationType { UNIFORM, TRIANGLE };
 
     virtual const BlockState &getState(const BlockState &original) const = 0;
 
@@ -25,8 +22,6 @@ public:
     virtual float getSkipAir() const;
 
     virtual ConcentrationType getConcentration() const;
-
-    virtual bool isRare() const;
 
     virtual bool canBeReplaced(const BlockState &state) const;
 

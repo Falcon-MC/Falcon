@@ -3,21 +3,19 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/Tree/VanillaTreeObject.h"
+#include "World/Level/Block/BlockNames.h"
 
-HugeMushroom::HugeMushroom() : mMushroomType(MushroomType::RANDOM) {
-}
+HugeMushroom::HugeMushroom() : mMushroomType(MushroomType::RANDOM) {}
 
-HugeMushroom::HugeMushroom(MushroomType mushroomType) : mMushroomType(mushroomType) {
-}
+HugeMushroom::HugeMushroom(MushroomType mushroomType) : mMushroomType(mushroomType) {}
 
 bool HugeMushroom::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     MushroomType block = mMushroomType;
     if (block == MushroomType::RANDOM)
         block = random.nextBoolean() ? MushroomType::RED : MushroomType::BROWN;
 
-    const BlockState mushroom = block == MushroomType::BROWN
-                                ? VanillaBlocks::BROWN_MUSHROOM_BLOCK().toBlockState()
-                                : VanillaBlocks::RED_MUSHROOM_BLOCK().toBlockState();
+    const BlockState mushroom = block == MushroomType::BROWN ? VanillaBlocks::BROWN_MUSHROOM_BLOCK().toBlockState()
+                                                             : VanillaBlocks::RED_MUSHROOM_BLOCK().toBlockState();
 
     int32_t i = random.nextInt(3) + 4;
 
@@ -52,7 +50,7 @@ bool HugeMushroom::generate(BlockManager &manager, IRandom &random, int32_t x, i
         return false;
 
     const std::string ground = manager.getBlockAt(x, y - 1, z).mName;
-    if (ground != "minecraft:dirt" && ground != "minecraft:grass_block" && ground != "minecraft:mycelium")
+    if (ground != BlockNames::DIRT && ground != BlockNames::GRASS_BLOCK && ground != "minecraft:mycelium")
         return false;
 
     int32_t k2 = y + i;

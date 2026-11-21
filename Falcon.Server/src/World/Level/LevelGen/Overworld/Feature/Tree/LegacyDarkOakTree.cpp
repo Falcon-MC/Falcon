@@ -6,8 +6,7 @@
 #include <cmath>
 
 LegacyDarkOakTree::LegacyDarkOakTree(float leafStartHeightMultiplier, int32_t baseLeafRadius)
-        : mLeafStartHeightMultiplier(leafStartHeightMultiplier), mBaseLeafRadius(baseLeafRadius) {
-}
+        : mLeafStartHeightMultiplier(leafStartHeightMultiplier), mBaseLeafRadius(baseLeafRadius) {}
 
 TreeWoodType LegacyDarkOakTree::getType() const {
     return TreeWoodType::DARK_OAK;

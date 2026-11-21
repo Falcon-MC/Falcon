@@ -7,6 +7,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -36,7 +37,7 @@ void DragonEggBlock::onTouch(ServerNetworkHandler &owner, ServerPlayer &player, 
 
 bool DragonEggBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                              const BlockState &state) const {
-    if (player.getGameType() == (int32_t) GameType::Creative)
+    if (player.isCreative())
         return false;
 
     teleport(owner, owner.getLevelFor(player), position, state);
@@ -53,7 +54,7 @@ void DragonEggBlock::teleport(ServerNetworkHandler &owner, Level &level, const V
         if (destination.y < level.getMinY() || destination.y > level.getMaxY())
             continue;
 
-        if (level.getBlockState(destination.x, destination.y, destination.z).mName != "minecraft:air")
+        if (level.getBlockState(destination.x, destination.y, destination.z).mName != BlockNames::AIR)
             continue;
 
         const int32_t diffX = position.x - destination.x;
@@ -61,12 +62,11 @@ void DragonEggBlock::teleport(ServerNetworkHandler &owner, Level &level, const V
         const int32_t diffZ = position.z - destination.z;
 
         const int32_t data = (std::abs(diffX) << 16) | (std::abs(diffY) << 8) | std::abs(diffZ)
-                             | ((diffX < 0 ? 1 : 0) << 24) | ((diffY < 0 ? 1 : 0) << 25)
-                             | ((diffZ < 0 ? 1 : 0) << 26);
+                             | ((diffX < 0 ? 1 : 0) << 24) | ((diffY < 0 ? 1 : 0) << 25) | ((diffZ < 0 ? 1 : 0) << 26);
         owner.broadcastLevelEvent(level, PARTICLE_DRAGON_EGG_EVENT,
                                   Vector3f((float) position.x, (float) position.y, (float) position.z), data);
 
-        level.setBlock(position, BlockState("minecraft:air"), false);
+        level.setBlock(position, BlockState(BlockNames::AIR), false);
         level.onBlockBroken(position, state);
 
         level.setBlock(destination, state, false);

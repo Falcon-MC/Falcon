@@ -223,6 +223,10 @@ public:
 
     static Block SULFUR_SPIKE();
 
+    static Block ICE_CRYSTAL();
+
+    static Block ICICLE();
+
     static Block END_BRICKS();
 
     static Block MAGENTA_SHULKER_BOX();
@@ -2969,12 +2973,18 @@ public:
 
     static const Block *fromIdentifier(const std::string &identifier);
 
-    template<typename T>
+    template <typename T>
     static const T *getAs(const std::string &identifier) {
         return dynamic_cast<const T *>(fromIdentifier(identifier));
     }
 
     static const Block *fromTypeId(int32_t typeId);
+
+    // fromIdentifier(state.mName) cached on the state until registrations change; main thread only,
+    // for states whose name never changes in place (chunk palette entries)
+    static const Block *fromState(const BlockState &state);
+
+    static void invalidateResolvedBlocks();
 
     static void refreshOverrides();
 };

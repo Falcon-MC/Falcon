@@ -1,5 +1,7 @@
 #include "World/Level/Block/ScaffoldingBlock.h"
 
+#include "World/Actor/Actor.h"
+#include "World/Actor/ActorFlags.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 
 FALCON_REGISTER_BLOCK(ScaffoldingBlock, 370);
@@ -18,6 +20,7 @@ namespace {
     const char *STABILITY_CHECK = "stability_check";
     const char *STABILITY = "stability";
     const int UNSTABLE_STABILITY = 7;
+    const float SUPPORT_EPSILON = 0.000001f;
 }
 
 bool ScaffoldingBlock::matches(const std::string &identifier) {
@@ -43,8 +46,8 @@ bool ScaffoldingBlock::canPlaceAt(Level &level, const Vector3i &position, int bl
 
     const BlockState clicked = stateAt(level, BlockSupport::supportOf(position, blockFace));
     const BlockState below = belowOf(level, position);
-    if (clicked.mName == getIdentifier() || below.mName == getIdentifier()
-        || DecorationSupport::isAir(below) || DecorationSupport::isSolid(below))
+    if (clicked.mName == getIdentifier() || below.mName == getIdentifier() || DecorationSupport::isAir(below)
+        || DecorationSupport::isSolid(below))
         return true;
 
     for (int side = FACE_NORTH; side <= FACE_EAST; ++side) {
@@ -118,4 +121,31 @@ void ScaffoldingBlock::onNeighbourChanged(ServerNetworkHandler &owner, Level &le
     states.putInt(STABILITY, stability);
     states.putByte(STABILITY_CHECK, 0);
     level.setBlock(position, BlockState(state.mName, states), false);
+}
+
+bool ScaffoldingBlock::getMoverCollisionShapes(const BlockState &state, const Vector3i &position,
+                                               const AxisAlignedBB &mover, bool descending,
+                                               std::vector<AxisAlignedBB> &shapes) const {
+    const float x = (float) position.x;
+    const float y = (float) position.y;
+    const float z = (float) position.z;
+    if (state.mStates.getInt(STABILITY, 0) == UNSTABLE_STABILITY || descending
+        || mover.mMinY < y + 1.0f - SUPPORT_EPSILON)
+        return true;
+    if (mover.mMaxX > x && mover.mMinX < x + 1.0f && mover.mMaxZ > z && mover.mMinZ < z + 1.0f)
+        shapes.push_back(AxisAlignedBB(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f));
+    return true;
+}
+
+bool ScaffoldingBlock::getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                           AxisAlignedBB &shape) const {
+    // placement, explosions and block rays keep the table shape
+    if (actor == nullptr)
+        return false;
+
+    const bool carries = state.mStates.getInt(STABILITY, 0) != UNSTABLE_STABILITY
+                         && !actor->getFlags().get(ActorFlag::Sneaking)
+                         && actor->getPosition().y >= (float) position.y + 1.0f - SUPPORT_EPSILON;
+    shape = carries ? AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f) : AxisAlignedBB(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    return true;
 }

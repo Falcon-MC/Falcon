@@ -6,9 +6,7 @@
 
 class DragonEggBlock final : public Block {
 public:
-    explicit DragonEggBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit DragonEggBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -25,6 +23,5 @@ private:
 
     static constexpr int TELEPORT_VERTICAL_RANGE = 16;
 
-    static void teleport(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                         const BlockState &state);
+    static void teleport(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state);
 };

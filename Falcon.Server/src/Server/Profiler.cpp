@@ -14,57 +14,34 @@
 #endif
 
 namespace {
-    const char *SECTION_NAMES[(int) ProfilerSection::Count] = {
-            "Console commands",
-            "Network drain",
-            "LevelChunk drain",
-            "Fluid physics",
-            "Player tick",
-            "LevelChunk streaming",
-            "Block actors",
-            "Item actors",
-            "Announcement",
-            "Fluid broadcast",
-            "Redstone",
-            "Actor physics",
-            "Actor environment",
-            "Actor projectiles",
-            "Actor persistence",
-            "Sky light",
-            "Weather",
-            "Network pump io",
-            "Network connection",
-            "Network decode",
-            "Network handle packet",
-            "Fire",
-            "LevelChunk population"
-    };
+    const char *SECTION_NAMES[(int) ProfilerSection::Count] = {"Console commands",
+                                                               "Network drain",
+                                                               "LevelChunk drain",
+                                                               "Fluid physics",
+                                                               "Player tick",
+                                                               "LevelChunk streaming",
+                                                               "Block actors",
+                                                               "Item actors",
+                                                               "Announcement",
+                                                               "Fluid broadcast",
+                                                               "Redstone",
+                                                               "Actor physics",
+                                                               "Actor environment",
+                                                               "Actor projectiles",
+                                                               "Actor persistence",
+                                                               "Sky light",
+                                                               "Weather",
+                                                               "Network pump io",
+                                                               "Network connection",
+                                                               "Network decode",
+                                                               "Network handle packet",
+                                                               "Fire",
+                                                               "LevelChunk population"};
 
     const char *SECTION_COLORS[(int) ProfilerSection::Count] = {
-            "#8b8b8b",
-            "#4f9df7",
-            "#7b61ff",
-            "#00b8d4",
-            "#ffb020",
-            "#2dd4a7",
-            "#f2622e",
-            "#e0567c",
-            "#9aa4b2",
-            "#c084fc",
-            "#e02f2f",
-            "#5ed36a",
-            "#37a86b",
-            "#8fd94f",
-            "#d98c00",
-            "#7cc4ff",
-            "#a0a0ff",
-            "#1f6feb",
-            "#79b8ff",
-            "#b392f0",
-            "#f97583",
-            "#ff7043",
-            "#00c2a8"
-    };
+            "#8b8b8b", "#4f9df7", "#7b61ff", "#00b8d4", "#ffb020", "#2dd4a7", "#f2622e", "#e0567c",
+            "#9aa4b2", "#c084fc", "#e02f2f", "#5ed36a", "#37a86b", "#8fd94f", "#d98c00", "#7cc4ff",
+            "#a0a0ff", "#1f6feb", "#79b8ff", "#b392f0", "#f97583", "#ff7043", "#00c2a8"};
 
     bool createDirectory(const std::string &path) {
 #ifdef _WIN32
@@ -161,13 +138,13 @@ void Profiler::beginTick(int64_t tick) {
     mTickStarted = true;
 }
 
-void Profiler::endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pendingChunkTasks,
-                       uint32_t fluidProcessed, uint32_t fluidScheduled) {
+void Profiler::endTick(uint32_t playerCount, uint32_t loadedChunks, uint32_t pendingChunkTasks, uint32_t fluidProcessed,
+                       uint32_t fluidScheduled) {
     if (!mActive || !mTickStarted || mSamples.size() >= MAX_SAMPLES)
         return;
 
-    mCurrent.mTotalMs = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - mTickStart).count();
+    mCurrent.mTotalMs =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mTickStart).count();
     mCurrent.mPlayerCount = playerCount;
     mCurrent.mLoadedChunks = loadedChunks;
     mCurrent.mPendingChunkTasks = pendingChunkTasks;
@@ -189,8 +166,8 @@ void Profiler::endSection(ProfilerSection section) {
         return;
 
     const int index = (int) section;
-    mCurrent.mSectionMs[index] += std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - mSectionStart[index]).count();
+    mCurrent.mSectionMs[index] +=
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mSectionStart[index]).count();
 }
 
 void Profiler::recordPlayer(const std::string &name, double milliseconds, uint32_t chunksSent) {
@@ -281,9 +258,8 @@ std::string Profiler::_buildReport() const {
     for (int i = 0; i < (int) ProfilerSection::Count; ++i)
         sectionOrder.push_back(i);
 
-    std::sort(sectionOrder.begin(), sectionOrder.end(), [&sectionTotals](int left, int right) {
-        return sectionTotals[left] > sectionTotals[right];
-    });
+    std::sort(sectionOrder.begin(), sectionOrder.end(),
+              [&sectionTotals](int left, int right) { return sectionTotals[left] > sectionTotals[right]; });
 
     std::ostringstream out;
 
@@ -315,8 +291,8 @@ std::string Profiler::_buildReport() const {
         << "</style></head><body><div class=\"wrap\">";
 
     out << "<h1>Falcon profiler report</h1>"
-        << "<div class=\"sub\">" << formatNumber(durationSeconds, 1) << " s &middot; "
-        << mSamples.size() << " ticks recorded &middot; starting at tick " << mStartTick << "</div>";
+        << "<div class=\"sub\">" << formatNumber(durationSeconds, 1) << " s &middot; " << mSamples.size()
+        << " ticks recorded &middot; starting at tick " << mStartTick << "</div>";
 
     const char *msptClass = averageMs < 35.0 ? "good" : (averageMs < 50.0 ? "warn" : "bad");
     const char *tpsClass = averageTps > 19.5 ? "good" : (averageTps > 17.0 ? "warn" : "bad");
@@ -326,14 +302,14 @@ std::string Profiler::_buildReport() const {
         << formatNumber(averageTps) << "</div></div>"
         << "<div class=\"card\"><div class=\"k\">Average MSPT</div><div class=\"v " << msptClass << "\">"
         << formatNumber(averageMs) << " ms</div></div>"
-        << "<div class=\"card\"><div class=\"k\">Peak MSPT</div><div class=\"v\">"
-        << formatNumber(peakMs) << " ms</div></div>"
-        << "<div class=\"card\"><div class=\"k\">Lowest MSPT</div><div class=\"v\">"
-        << formatNumber(minMs) << " ms</div></div>"
+        << "<div class=\"card\"><div class=\"k\">Peak MSPT</div><div class=\"v\">" << formatNumber(peakMs)
+        << " ms</div></div>"
+        << "<div class=\"card\"><div class=\"k\">Lowest MSPT</div><div class=\"v\">" << formatNumber(minMs)
+        << " ms</div></div>"
         << "<div class=\"card\"><div class=\"k\">Budget used</div><div class=\"v\">"
         << formatNumber(averageMs / 50.0 * 100.0, 1) << " %</div></div>"
-        << "<div class=\"card\"><div class=\"k\">Peak chunk queue</div><div class=\"v\">"
-        << peakPending << "</div></div>"
+        << "<div class=\"card\"><div class=\"k\">Peak chunk queue</div><div class=\"v\">" << peakPending
+        << "</div></div>"
         << "</div>";
 
     out << "<h2>Tick duration</h2><div class=\"panel\">";
@@ -346,9 +322,8 @@ std::string Profiler::_buildReport() const {
         << "\" width=\"100%\" height=\"260\" preserveAspectRatio=\"none\">";
 
     const double budgetY = chartHeight - (50.0 / chartMax) * chartHeight;
-    out << "<line x1=\"0\" y1=\"" << formatNumber(budgetY, 1) << "\" x2=\"" << (int) chartWidth
-        << "\" y2=\"" << formatNumber(budgetY, 1)
-        << "\" stroke=\"#f2622e\" stroke-width=\"1\" stroke-dasharray=\"4 4\"/>";
+    out << "<line x1=\"0\" y1=\"" << formatNumber(budgetY, 1) << "\" x2=\"" << (int) chartWidth << "\" y2=\""
+        << formatNumber(budgetY, 1) << "\" stroke=\"#f2622e\" stroke-width=\"1\" stroke-dasharray=\"4 4\"/>";
     out << "<text x=\"6\" y=\"" << formatNumber(budgetY - 6.0, 1)
         << "\" fill=\"#f2622e\" font-size=\"11\">50 ms budget (20 TPS)</text>";
 
@@ -381,19 +356,19 @@ std::string Profiler::_buildReport() const {
             << "%;background:" << SECTION_COLORS[index] << "\"></i></div></td></tr>";
     }
 
-    const double accounted = std::max(0.0, totalMs - [&sectionTotals]() {
-        double sum = 0.0;
-        for (int i = 0; i < (int) ProfilerSection::Count; ++i)
-            sum += sectionTotals[i];
-        return sum;
-    }());
+    const double accounted = std::max(
+            0.0, totalMs - [&sectionTotals]() {
+                double sum = 0.0;
+                for (int i = 0; i < (int) ProfilerSection::Count; ++i)
+                    sum += sectionTotals[i];
+                return sum;
+            }());
 
     out << "<tr><td><span class=\"sw\" style=\"background:#3a3f4b\"></span>Unaccounted</td>"
         << "<td class=\"n\">" << formatNumber(accounted / sampleCount, 3) << " ms</td>"
         << "<td class=\"n\">-</td>"
         << "<td class=\"n\">" << formatNumber(accounted, 1) << " ms</td>"
-        << "<td class=\"n\">" << formatNumber(totalMs > 0.0 ? accounted / totalMs * 100.0 : 0.0, 1)
-        << " %</td></tr>";
+        << "<td class=\"n\">" << formatNumber(totalMs > 0.0 ? accounted / totalMs * 100.0 : 0.0, 1) << " %</td></tr>";
 
     out << "</tbody></table></div>";
 
@@ -460,12 +435,11 @@ std::string Profiler::_buildReport() const {
                 << formatNumber(unaccountedMs, 2) << " ms)</td>";
         } else {
             out << "<td><span class=\"sw\" style=\"background:" << SECTION_COLORS[dominant] << "\"></span>"
-                << escapeHtml(SECTION_NAMES[dominant]) << " ("
-                << formatNumber(sample.mSectionMs[dominant], 2) << " ms)</td>";
+                << escapeHtml(SECTION_NAMES[dominant]) << " (" << formatNumber(sample.mSectionMs[dominant], 2)
+                << " ms)</td>";
         }
 
-        out
-            << "<td class=\"n\">" << sample.mPlayerCount << "</td>"
+        out << "<td class=\"n\">" << sample.mPlayerCount << "</td>"
             << "<td class=\"n\">" << sample.mLoadedChunks << "</td>"
             << "<td class=\"n\">" << sample.mPendingChunkTasks << "</td>"
             << "<td class=\"n\">" << sample.mFluidProcessed << "</td>"

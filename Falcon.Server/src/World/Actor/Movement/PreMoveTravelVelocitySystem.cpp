@@ -19,10 +19,11 @@ namespace {
 
 Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerActor &actor,
                                             const PhysicsComponent &physics, const LiquidContact &feet,
-                                            bool eyesInWater) {
+                                            bool eyesInWater, bool buoyant) {
     Vector3f motion = actor.getMotion();
 
-    _applyGravity(motion, physics, feet);
+    if (!physics.mGravityAfterMove)
+        _applyGravity(motion, physics, feet);
 
     if (physics.mPushable) {
         const Vector3f push = ActorPushSystem::computePush(owner, actor, motion);
@@ -30,10 +31,14 @@ Vector3f PreMoveTravelVelocitySystem::apply(ServerNetworkHandler &owner, ServerA
         motion.z += push.z;
     }
 
-    _applyFloating(motion, physics, feet, eyesInWater);
+    // a buoyant actor floats by its own lift; an actor with the friction attributes drags after the move
+    if (!buoyant)
+        _applyFloating(motion, physics, feet, eyesInWater);
     _applyCurrent(motion, feet);
-    _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
-    _applyPassableFriction(motion, physics, feet);
+    if (!physics.mDefinitionFriction)
+        _applyGroundFriction(owner.getLevelFor(actor), actor, motion);
+    if (!physics.mDefinitionFriction || feet.water || feet.lava)
+        _applyPassableFriction(motion, physics, feet);
 
     return motion;
 }
@@ -94,7 +99,23 @@ void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const
     const float factor = feet.lava ? LAVA_FRICTION : feet.water ? waterFriction : AIR_FRICTION;
 
     motion.x = snap(motion.x * factor);
-    if (!feet.bubble)
+    if (!feet.bubble && !physics.mGravityAfterMove)
         motion.y = snap(motion.y * factor);
     motion.z = snap(motion.z * factor);
+}
+
+void PreMoveTravelVelocitySystem::applyVerticalAfterMove(Vector3f &motion, const PhysicsComponent &physics,
+                                                         const LiquidContact &feet, float gravity) {
+    if (physics.mHasGravity && !feet.bubble && !(physics.mSwims && feet.water))
+        motion.y -= gravity;
+    if (feet.bubble)
+        return;
+
+    // the uniform air drag already slowed the vertical speed
+    if (physics.mUniformAirDrag && !feet.water && !feet.lava)
+        return;
+
+    const float waterFriction = physics.mSwims ? SWIMMER_WATER_FRICTION : WATER_FRICTION;
+    const float factor = feet.lava ? LAVA_FRICTION : feet.water ? waterFriction : AIR_FRICTION;
+    motion.y = snap(motion.y * factor);
 }

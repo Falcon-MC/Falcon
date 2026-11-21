@@ -28,7 +28,7 @@ struct LoadedPlugin;
 #define FALCON_INTERNAL_PLUGIN_BUILD_NAME "falcon_internal_plugin_build"
 #define FALCON_INTERNAL_PLUGIN_ENTRY_NAME "falcon_internal_plugin_entry"
 
-#define FALCON_INTERNAL_BUILD \
+#define FALCON_INTERNAL_BUILD                                                                                          \
     {FALCON_BUILD_COMMIT_ID, FALCON_BUILD_NUMBER, FALCON_INTERNAL_COMPILER, &FALCON_BUILD_GUARD}
 
 extern "C" void FALCON_BUILD_GUARD();

@@ -4,18 +4,25 @@
 
 class SweetBerryBushBlock : public Block {
 public:
-    explicit SweetBerryBushBlock(const Block &block) : Block(block) {
-    }
+    explicit SweetBerryBushBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    bool hasRandomTick() const override {
+        return true;
+    }
+
     bool getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const override;
 
     PathHazard getPathHazard() const override {
         return PathHazard::Damaging;
+    }
+
+    bool hearsActorsInside() const override {
+        return true;
     }
 
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,

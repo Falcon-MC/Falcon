@@ -38,12 +38,7 @@ CubicSpline::CubicSpline(DensityFunctionPtr coordinate, std::vector<SplinePoint>
     mMaxValue = max;
 }
 
-/**
- * Cubic Hermite interpolation between the two points around the coordinate, using each
- * point's stored derivative. Outside the first and last point the value is held constant
- * rather than extrapolated. Point values may themselves be density functions, which is how
- * splines nest.
- */
+// held constant outside the first and last point, not extrapolated; point values may be splines themselves
 double CubicSpline::apply(FunctionContext &context) {
     double x = mCoordinate->compute(context);
     int32_t range = _findRangeForLocation(mLocations, x);

@@ -11,34 +11,26 @@ namespace {
 
     const std::array<BlockState, 5> &coralBlocks() {
         static const std::array<BlockState, 5> states = {
-                VanillaBlocks::TUBE_CORAL_BLOCK().toBlockState(),
-                VanillaBlocks::BRAIN_CORAL_BLOCK().toBlockState(),
-                VanillaBlocks::BUBBLE_CORAL_BLOCK().toBlockState(),
-                VanillaBlocks::FIRE_CORAL_BLOCK().toBlockState(),
-                VanillaBlocks::HORN_CORAL_BLOCK().toBlockState()
-        };
+                VanillaBlocks::TUBE_CORAL_BLOCK().toBlockState(), VanillaBlocks::BRAIN_CORAL_BLOCK().toBlockState(),
+                VanillaBlocks::BUBBLE_CORAL_BLOCK().toBlockState(), VanillaBlocks::FIRE_CORAL_BLOCK().toBlockState(),
+                VanillaBlocks::HORN_CORAL_BLOCK().toBlockState()};
         return states;
     }
 
     const std::array<BlockState, 5> &coralFans() {
         static const std::array<BlockState, 5> states = {
-                VanillaBlocks::TUBE_CORAL_FAN().toBlockState(),
-                VanillaBlocks::BRAIN_CORAL_FAN().toBlockState(),
-                VanillaBlocks::BUBBLE_CORAL_FAN().toBlockState(),
-                VanillaBlocks::FIRE_CORAL_FAN().toBlockState(),
-                VanillaBlocks::HORN_CORAL_FAN().toBlockState()
-        };
+                VanillaBlocks::TUBE_CORAL_FAN().toBlockState(), VanillaBlocks::BRAIN_CORAL_FAN().toBlockState(),
+                VanillaBlocks::BUBBLE_CORAL_FAN().toBlockState(), VanillaBlocks::FIRE_CORAL_FAN().toBlockState(),
+                VanillaBlocks::HORN_CORAL_FAN().toBlockState()};
         return states;
     }
 
     const std::array<BlockState, 5> &coralWallFans() {
-        static const std::array<BlockState, 5> states = {
-                VanillaBlocks::TUBE_CORAL_WALL_FAN().toBlockState(),
-                VanillaBlocks::BRAIN_CORAL_WALL_FAN().toBlockState(),
-                VanillaBlocks::BUBBLE_CORAL_WALL_FAN().toBlockState(),
-                VanillaBlocks::FIRE_CORAL_WALL_FAN().toBlockState(),
-                VanillaBlocks::HORN_CORAL_WALL_FAN().toBlockState()
-        };
+        static const std::array<BlockState, 5> states = {VanillaBlocks::TUBE_CORAL_WALL_FAN().toBlockState(),
+                                                         VanillaBlocks::BRAIN_CORAL_WALL_FAN().toBlockState(),
+                                                         VanillaBlocks::BUBBLE_CORAL_WALL_FAN().toBlockState(),
+                                                         VanillaBlocks::FIRE_CORAL_WALL_FAN().toBlockState(),
+                                                         VanillaBlocks::HORN_CORAL_WALL_FAN().toBlockState()};
         return states;
     }
 
@@ -77,9 +69,7 @@ bool CoralFeature::inBounds(int32_t x, int32_t y, int32_t z) {
 bool CoralFeature::canStay(int32_t x, int32_t y, int32_t z, LevelChunk &chunk, Level &level) const {
     (void) level;
 
-    return inBounds(x, y, z)
-           && inBounds(x, y - 1, z)
-           && DecorationSupport::isWater(chunk.getBlock(x, y, z))
+    return inBounds(x, y, z) && inBounds(x, y - 1, z) && DecorationSupport::isWater(chunk.getBlock(x, y, z))
            && isSandState(chunk.getBlock(x, y - 1, z));
 }
 

@@ -5,6 +5,7 @@
 FALCON_REGISTER_BLOCK(SlabBlock, 350);
 
 #include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/LiquidProperties.h"
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
@@ -32,7 +33,9 @@ std::string SlabBlock::getDoubleSlabIdentifier() const {
     return replaceSuffix(getIdentifier(), SLAB_SUFFIX, DOUBLE_SLAB_SUFFIX);
 }
 
-bool SlabBlock::getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+bool SlabBlock::getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+    (void) actor;
+
     shape = isTopSlab(state) ? AxisAlignedBB(0.0f, SLAB_HEIGHT, 0.0f, 1.0f, 1.0f, 1.0f)
                              : AxisAlignedBB(0.0f, 0.0f, 0.0f, 1.0f, SLAB_HEIGHT, 1.0f);
     return true;
@@ -79,4 +82,8 @@ PlacementMergeResult SlabBlock::mergePlacement(Level &level, const Vector3i &cli
 
     state = doubleSlab->toBlockState();
     return PlacementMergeResult::Merged;
+}
+
+uint8_t SlabBlock::getLiquidBlockedFaces(const BlockState &state) const {
+    return (uint8_t) (1 << (isTopSlab(state) ? LiquidFace::UP : LiquidFace::DOWN));
 }

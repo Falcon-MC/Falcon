@@ -1,14 +1,21 @@
 #include "World/Level/Block/Block.h"
 
+#include "World/Level/Block/Actor/BlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/Components/BlockBehavior.h"
 #include "World/Level/Block/Components/BlockBehaviorRegistry.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Inventory/Container.h"
+#include "World/Inventory/PlayerInventory.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 namespace {
@@ -19,12 +26,38 @@ namespace {
             return false;
 
         const BlockState state = level->getBlockState(position.x, position.y, position.z);
-        if (state.mName == "minecraft:air")
+        if (state.mName == BlockNames::AIR)
             return false;
 
         const BlockData *data = BlockDataTable::find(state.mName.c_str());
         return data != nullptr && data->mSolid;
     }
+}
+
+// fullness over 14, plus one once anything is in
+int Block::containerSignal(Level &level, const Vector3i &position) {
+    BlockActor *actor = level.getBlockActors().find(position);
+    Container *container = actor == nullptr ? nullptr : actor->getContainer();
+    return container == nullptr ? 0 : containerSignal(*container);
+}
+
+int Block::containerSignal(const Container &container) {
+    if (container.getContainerSize() <= 0)
+        return 0;
+
+    float fullness = 0.0f;
+    bool any = false;
+    for (int slot = 0; slot < container.getContainerSize(); ++slot) {
+        const ItemStack &item = container.getContainerItem(slot);
+        if (item.isAir() || item.mCount <= 0)
+            continue;
+
+        fullness += (float) item.mCount / (float) std::max(1, PlayerInventory::getMaxStackSize(item));
+        any = true;
+    }
+
+    fullness = fullness / (float) container.getContainerSize() * 14.0f;
+    return (int) std::floor(fullness) + (any ? 1 : 0);
 }
 
 const BlockData *Block::getData() const {
@@ -78,28 +111,36 @@ BlockState Block::applyPlacementOrientation(const BlockState &state, const Block
     if (states.contains("coral_fan_direction"))
         states.putInt("coral_fan_direction", face >= FACE_NORTH ? face - FACE_NORTH : 0);
 
-    if (states.contains("multi_face_direction_bits"))
-        states.putInt("multi_face_direction_bits", 1 << face);
+    // clings to the block that was clicked: the side opposite the clicked face, added to the sides already there
+    if (states.contains("multi_face_direction_bits")) {
+        int bits = multiFaceBit(face ^ 1);
+        if (context.mLevel != nullptr) {
+            const BlockState existing = context.mLevel->getBlockState(context.mBlockPosition.x, context.mBlockPosition.y,
+                                                                     context.mBlockPosition.z);
+            if (existing.mName == state.mName)
+                bits |= existing.mStates.getInt("multi_face_direction_bits", 0);
+        }
+        states.putInt("multi_face_direction_bits", bits);
+    }
 
     if (states.contains("pillar_axis"))
         states.putString("pillar_axis", pillarAxis(face));
 
     if (states.contains("upside_down_bit")) {
-        const bool upsideDown = face == FACE_DOWN
-                                || (face != FACE_UP && context.mClickPosition.y > 0.5f);
+        const bool upsideDown = face == FACE_DOWN || (face != FACE_UP && context.mClickPosition.y > 0.5f);
         states.putByte("upside_down_bit", upsideDown ? 1 : 0);
     }
 
     if (states.contains("minecraft:vertical_half")) {
-        const bool top = face == FACE_DOWN
-                         || (face != FACE_UP && context.mClickPosition.y > 0.5f);
+        const bool top = face == FACE_DOWN || (face != FACE_UP && context.mClickPosition.y > 0.5f);
         states.putString("minecraft:vertical_half", top ? "top" : "bottom");
     }
 
     if (states.contains("hanging")) {
         const bool hanging = face == FACE_DOWN
                              || (face != FACE_UP
-                                 && !isSolidNeighbour(context.mLevel, relativePosition(context.mBlockPosition, FACE_DOWN)));
+                                 && !isSolidNeighbour(context.mLevel,
+                                                      relativePosition(context.mBlockPosition, FACE_DOWN)));
         states.putByte("hanging", hanging ? 1 : 0);
     }
 
@@ -130,8 +171,7 @@ std::vector<BlockPlacementEntry> Block::getPlacementBlocks(Level &level, const V
     return {};
 }
 
-std::vector<Vector3i> Block::getAffectedBlocks(Level &level, const Vector3i &position,
-                                               const BlockState &state) const {
+std::vector<Vector3i> Block::getAffectedBlocks(Level &level, const Vector3i &position, const BlockState &state) const {
     (void) level;
     (void) position;
     (void) state;
@@ -154,8 +194,7 @@ int32_t Block::multifaceCount(const BlockState &state) {
     return count;
 }
 
-std::vector<BlockDrop> Block::grassDrops(const std::string &shearedItem, int32_t shearedCount,
-                                         const ItemStack &tool) {
+std::vector<BlockDrop> Block::grassDrops(const std::string &shearedItem, int32_t shearedCount, const ItemStack &tool) {
     std::vector<BlockDrop> drops;
     if (isShears(tool)) {
         drops.push_back({shearedItem, shearedCount});
@@ -199,4 +238,8 @@ bool Block::onEntityLand(Actor &actor, float downwardVelocity) const {
 
 std::optional<float> Block::getFallDamage(const Actor &actor, float vanillaFallDamage) const {
     return getBehavior().getFallDamage(actor, vanillaFallDamage);
+}
+
+float Block::getFallDistanceMultiplier() const {
+    return getBehavior().getFallDistanceMultiplier();
 }

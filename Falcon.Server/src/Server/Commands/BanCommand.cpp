@@ -27,11 +27,12 @@ bool BanCommand::execute(CommandOrigin &sender, const std::vector<std::string> &
 
     const std::string &name = arguments[0];
     const std::string reason = joinArguments(arguments, 1);
-    mHandler.getBanList().add(name, reason, sender.getSenderName());
+    ServerPlayer *target = mHandler.getPlayerByExactName(name);
+    mHandler.getBanList().add(name, reason, sender.getSenderName(),
+                              target != nullptr ? target->getXuid() : std::string());
 
-    ServerPlayer *target = mHandler.getPlayerByName(name);
     if (target != nullptr) {
-        mHandler._disconnect(target->getNetworkIdentifier(),
+        mHandler._disconnect(target->getNetworkIdentifier(), DisconnectReason::Kicked,
                              reason.empty() ? target->localize("falcon.disconnect.banned")
                                             : target->localize("falcon.disconnect.bannedReason", {reason}));
     }

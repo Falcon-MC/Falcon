@@ -20,8 +20,7 @@ const char *const CommandBlockActor::TAG_TICK_DELAY = "TickDelay";
 const char *const CommandBlockActor::TAG_EXECUTE_ON_FIRST_TICK = "ExecuteOnFirstTick";
 const char *const CommandBlockActor::TAG_IS_MOVABLE = "isMovable";
 
-CommandBlockActorMode CommandBlockActor::modeFromBlockName(const std::string &name)
-{
+CommandBlockActorMode CommandBlockActor::modeFromBlockName(const std::string &name) {
     if (name == "minecraft:repeating_command_block")
         return CommandBlockActorMode::Repeating;
 
@@ -31,8 +30,7 @@ CommandBlockActorMode CommandBlockActor::modeFromBlockName(const std::string &na
     return CommandBlockActorMode::Normal;
 }
 
-Tag CommandBlockActor::saveNbt() const
-{
+Tag CommandBlockActor::saveNbt() const {
     Tag tag = Tag::ofCompound();
     tag.putString(TAG_ID, "CommandBlock");
     tag.putInt("x", mPosition.x);
@@ -62,8 +60,7 @@ Tag CommandBlockActor::saveNbt() const
     return tag;
 }
 
-void CommandBlockActor::loadNbt(const Tag &tag, const PacketCodecContext &context)
-{
+void CommandBlockActor::loadNbt(const Tag &tag, const PacketCodecContext &context) {
     (void) context;
 
     if (!tag.isCompound())
@@ -87,7 +84,6 @@ void CommandBlockActor::loadNbt(const Tag &tag, const PacketCodecContext &contex
     mCustomName = tag.getString(TAG_CUSTOM_NAME, std::string());
 }
 
-Tag CommandBlockActor::getSpawnCompound() const
-{
+Tag CommandBlockActor::getSpawnCompound() const {
     return saveNbt();
 }

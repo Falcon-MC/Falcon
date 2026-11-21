@@ -22,8 +22,8 @@ namespace {
     }
 }
 
-bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const BlockState &state,
-                               BlockChangeCause cause, const Vector3i *source) {
+bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
+                               const Vector3i *source) {
     const FalconEventType type = eventTypeOf(cause);
     PluginManager *plugins = PluginManager::findWithSubscribers(type);
     if (plugins == nullptr)
@@ -44,8 +44,8 @@ bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const Blo
     return !event.mCancelled;
 }
 
-bool BlockChangeSystem::change(Level &level, const Vector3i &position, const BlockState &state,
-                               BlockChangeCause cause, bool update) {
+bool BlockChangeSystem::change(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
+                               bool update) {
     if (!allows(level, position, state, cause))
         return false;
 
@@ -70,8 +70,8 @@ bool BlockChangeSystem::allowsFlow(Level &level, const Vector3i &source, const V
     return !event.mCancelled;
 }
 
-bool BlockChangeSystem::spread(Level &level, const Vector3i &source, const Vector3i &position,
-                               const BlockState &state, bool update) {
+bool BlockChangeSystem::spread(Level &level, const Vector3i &source, const Vector3i &position, const BlockState &state,
+                               bool update) {
     if (!allows(level, position, state, BlockChangeCause::Spread, &source))
         return false;
 

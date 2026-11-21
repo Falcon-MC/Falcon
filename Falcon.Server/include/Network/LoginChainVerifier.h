@@ -3,28 +3,38 @@
 #include <string>
 #include <vector>
 
-/**
- * Verifies the identity a client sends at login, either the signed authentication token or
- * the legacy certificate chain, and extracts the player's name, XUID and public key. A
- * login that is readable but not authenticated is accepted with isSigned() false.
- */
+// signed token or legacy certificate chain; readable but unauthenticated: accepted with isSigned() false
 class LoginChainVerifier {
 public:
     bool verify(const std::string &authJwt, const std::string &clientJwt);
 
-    bool isSigned() const { return mSigned; }
+    bool isSigned() const {
+        return mSigned;
+    }
 
-    const std::string &getIdentity() const { return mIdentity; }
+    const std::string &getIdentity() const {
+        return mIdentity;
+    }
 
-    const std::string &getXuid() const { return mXuid; }
+    const std::string &getXuid() const {
+        return mXuid;
+    }
 
-    const std::string &getDisplayName() const { return mDisplayName; }
+    const std::string &getDisplayName() const {
+        return mDisplayName;
+    }
 
-    const std::string &getTitleId() const { return mTitleId; }
+    const std::string &getTitleId() const {
+        return mTitleId;
+    }
 
-    const std::string &getIdentityPublicKey() const { return mIdentityPublicKey; }
+    const std::string &getIdentityPublicKey() const {
+        return mIdentityPublicKey;
+    }
 
-    const std::string &getFailureReason() const { return mFailureReason; }
+    const std::string &getFailureReason() const {
+        return mFailureReason;
+    }
 
 private:
     static std::vector<std::string> _extractChain(const std::string &authJwt);
@@ -49,7 +59,7 @@ private:
 
     bool _verifySelfSignedToken(const std::string &token, const std::string &clientJwt);
 
-    bool _verifyChain(const std::vector<std::string> &chain);
+    bool _verifyChain(const std::vector<std::string> &chain, const std::string &clientJwt);
 
     void _extractIdentity(const std::string &payload);
 

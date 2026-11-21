@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <vector>
@@ -10,21 +11,13 @@ namespace {
 
     const std::vector<BlockState> &places() {
         static const std::vector<BlockState> states = {
-                VanillaBlocks::SHORT_GRASS().toBlockState(),
-                VanillaBlocks::TALL_GRASS().toBlockState(),
-                VanillaBlocks::DANDELION().toBlockState(),
-                VanillaBlocks::POPPY().toBlockState(),
-                VanillaBlocks::AZURE_BLUET().toBlockState(),
-                VanillaBlocks::OXEYE_DAISY().toBlockState(),
-                VanillaBlocks::ALLIUM().toBlockState(),
-                VanillaBlocks::CORNFLOWER().toBlockState(),
-                VanillaBlocks::BLUE_ORCHID().toBlockState(),
-                VanillaBlocks::LILY_OF_THE_VALLEY().toBlockState(),
-                VanillaBlocks::RED_TULIP().toBlockState(),
-                VanillaBlocks::ORANGE_TULIP().toBlockState(),
-                VanillaBlocks::PINK_TULIP().toBlockState(),
-                VanillaBlocks::WHITE_TULIP().toBlockState()
-        };
+                VanillaBlocks::SHORT_GRASS().toBlockState(), VanillaBlocks::TALL_GRASS().toBlockState(),
+                VanillaBlocks::DANDELION().toBlockState(),   VanillaBlocks::POPPY().toBlockState(),
+                VanillaBlocks::AZURE_BLUET().toBlockState(), VanillaBlocks::OXEYE_DAISY().toBlockState(),
+                VanillaBlocks::ALLIUM().toBlockState(),      VanillaBlocks::CORNFLOWER().toBlockState(),
+                VanillaBlocks::BLUE_ORCHID().toBlockState(), VanillaBlocks::LILY_OF_THE_VALLEY().toBlockState(),
+                VanillaBlocks::RED_TULIP().toBlockState(),   VanillaBlocks::ORANGE_TULIP().toBlockState(),
+                VanillaBlocks::PINK_TULIP().toBlockState(),  VanillaBlocks::WHITE_TULIP().toBlockState()};
         return states;
     }
 
@@ -53,8 +46,8 @@ void LegacyTallGrass::growGrass(BlockManager &manager, int32_t x, int32_t y, int
             if (!random.nextBoolean())
                 continue;
 
-            if (manager.getBlockAt(currentX, newY, currentZ).mName != "minecraft:air"
-                || manager.getBlockAt(currentX, newY - 1, currentZ).mName != "minecraft:grass_block")
+            if (manager.getBlockAt(currentX, newY, currentZ).mName != BlockNames::AIR
+                || manager.getBlockAt(currentX, newY - 1, currentZ).mName != BlockNames::GRASS_BLOCK)
                 continue;
 
             const int32_t ranNumber = javaRound(random.nextGaussian() * 1000);

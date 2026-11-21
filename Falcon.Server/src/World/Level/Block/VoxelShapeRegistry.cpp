@@ -27,7 +27,7 @@ namespace {
 
     std::vector<float> getAxisBoundaries(const std::vector<VoxelBox> &boxes, size_t axis) {
         std::set<float> bounds;
-        for (const VoxelBox &box : boxes) {
+        for (const VoxelBox &box: boxes) {
             bounds.insert(box.mMin[axis]);
             bounds.insert(box.mMax[axis]);
         }
@@ -35,10 +35,9 @@ namespace {
     }
 
     bool isInside(float x, float y, float z, const std::vector<VoxelBox> &boxes) {
-        for (const VoxelBox &box : boxes) {
-            if (x >= box.mMin[0] && x <= box.mMax[0] &&
-                y >= box.mMin[1] && y <= box.mMax[1] &&
-                z >= box.mMin[2] && z <= box.mMax[2])
+        for (const VoxelBox &box: boxes) {
+            if (x >= box.mMin[0] && x <= box.mMax[0] && y >= box.mMin[1] && y <= box.mMax[1] && z >= box.mMin[2]
+                && z <= box.mMax[2])
                 return true;
         }
         return false;
@@ -102,7 +101,7 @@ namespace {
         if (list == nullptr || list->mType != json::Value::Type::Array)
             return boxes;
 
-        for (const std::unique_ptr<json::Value> &box : list->mArray) {
+        for (const std::unique_ptr<json::Value> &box: list->mArray) {
             if (box->mType != json::Value::Type::Array || box->mArray.size() != 2)
                 continue;
 
@@ -126,7 +125,7 @@ namespace {
         std::unordered_set<std::string> names;
         std::vector<SerializableVoxelShape> anonymousShapes;
 
-        for (const std::unique_ptr<json::Value> &entry : root->mArray) {
+        for (const std::unique_ptr<json::Value> &entry: root->mArray) {
             if (entry->mType != json::Value::Type::Object)
                 continue;
 
@@ -144,7 +143,7 @@ namespace {
             packet.mShapes.push_back(std::move(shape));
         }
 
-        for (SerializableVoxelShape &shape : anonymousShapes)
+        for (SerializableVoxelShape &shape: anonymousShapes)
             packet.mShapes.push_back(std::move(shape));
 
         packet.mCustomShapeCount = 0;

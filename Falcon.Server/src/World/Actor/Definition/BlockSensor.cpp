@@ -72,8 +72,7 @@ void BlockSensor::_sense(ServerNetworkHandler &owner, MobActor &mob, const json:
     }
 }
 
-bool BlockSensor::_matchesSource(ServerNetworkHandler &owner, MobActor &mob, const json::Value &sensor,
-                                 Actor &source) {
+bool BlockSensor::_matchesSource(ServerNetworkHandler &owner, MobActor &mob, const json::Value &sensor, Actor &source) {
     const json::Value *sources = sensor.get("sources");
     if (sources == nullptr || (sources->isArray() && sources->mArray.empty()))
         return true;

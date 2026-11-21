@@ -7,6 +7,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -35,8 +36,7 @@ namespace {
     }
 }
 
-TeleportToOwnerGoal::TeleportToOwnerGoal(std::shared_ptr<json::Value> filters) : mFilters(std::move(filters)) {
-}
+TeleportToOwnerGoal::TeleportToOwnerGoal(std::shared_ptr<json::Value> filters) : mFilters(std::move(filters)) {}
 
 bool TeleportToOwnerGoal::_isSafe(Level &level, int32_t x, int32_t y, int32_t z) {
     if (level.peekBlockPtr(x, y, z) == nullptr || !isSolid(level, x, y - 1, z))
@@ -84,8 +84,11 @@ void TeleportToOwnerGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
         if (!_isSafe(level, x, y, z))
             continue;
 
+        Vector3f destination((float) x + 0.5f, (float) y, (float) z + 0.5f);
+        if (!PluginEvents::teleport(mob, destination, "follow_owner"))
+            return;
         mob.getNavigation().stop(mob);
-        mob.teleport(Vector3f((float) x + 0.5f, (float) y, (float) z + 0.5f));
+        mob.teleport(destination);
         return;
     }
 }

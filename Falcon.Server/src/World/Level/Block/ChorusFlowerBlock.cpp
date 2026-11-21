@@ -100,8 +100,7 @@ bool ChorusFlowerBlock::allNeighboursEmpty(Level &level, const Vector3i &positio
 }
 
 bool ChorusFlowerBlock::placeFlower(Level &level, const Vector3i &position, int32_t age) {
-    return BlockChangeSystem::change(level, position,
-                                     DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(),
-                                                                  AGE, age),
-                                     BlockChangeCause::Grow, true);
+    return BlockChangeSystem::change(
+            level, position, DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(), AGE, age),
+            BlockChangeCause::Grow, true);
 }

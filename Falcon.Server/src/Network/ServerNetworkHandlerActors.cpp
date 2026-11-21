@@ -1,12 +1,21 @@
+#include <cstring>
+#include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Explosion.h"
+#include "World/Level/LevelSoundEventIds.h"
+#include "World/Level/Block/Systems/DetectorSystem.h"
 
+#include "World/Actor/Definition/KnockbackRules.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/ActorFlags.h"
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/BandwidthOptimization.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Misc/PaintingActor.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Commands/ServerCommandOrigin.h"
@@ -28,10 +37,8 @@
 #include "Protocol/Packets/CameraInstructionPacket.h"
 #include "Protocol/Packets/MobEffectPacket.h"
 #include "Protocol/Packets/PlayerStartItemCooldownPacket.h"
-#include "Protocol/Packets/RemoveObjectivePacket.h"
-#include "Protocol/Packets/SetDisplayObjectivePacket.h"
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
-#include "Protocol/Packets/SetScorePacket.h"
+#include "Protocol/Packets/TakeItemActorPacket.h"
 #include "Protocol/Packets/SetTitlePacket.h"
 #include "Protocol/Packets/TextPacket.h"
 #include "World/Item/Item.h"
@@ -42,6 +49,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Actor/Misc/ExperienceOrbActor.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
+#include "World/Level/Block/LiquidView.h"
 #include "World/Item/FireworkRocketItem.h"
 #include "World/Item/PotionEffects.h"
 #include "World/Item/StringToItemParser.h"
@@ -56,11 +64,27 @@
 
 #include <algorithm>
 #include "Network/Handler/ChunkStreamHandler.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace {
     const char *const UNDEAD_FAMILY = "undead";
+
+    // a snow layer stops it inside its shape only; other blocks across the whole cell
+    bool blocksProjectile(Level &level, const ServerActor &projectile, const Vector3f &position, int32_t x, int32_t y,
+                          int32_t z) {
+        if (!level.isSolidAt(x, y, z))
+            return false;
+
+        const BlockState *state = level.peekBlockPtr(x, y, z);
+        const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+        if (block == nullptr || !block->shapesCollisionPerActor())
+            return true;
+
+        return BlockShape::isPositionInside(*state, x, y, z, position.x, position.y, position.z, &projectile);
+    }
 
     MobEffectInstance potionEffectInstance(const PotionEffect &effect, float durationScale) {
         MobEffectInstance instance;
@@ -90,7 +114,7 @@ namespace {
         }
 
         for (auto &entry: owner.getPlayers()) {
-            if ((int64_t) entry.second.getRuntimeId() == projectile.getOwnerUniqueId())
+            if (entry.second.getUniqueId() == projectile.getOwnerUniqueId())
                 hitEvent.mAttacker = &entry.second;
         }
 
@@ -108,6 +132,13 @@ namespace {
     const float FIREWORK_VERTICAL_ACCELERATION = 0.04f;
     const int32_t FIREWORK_ITEM_DATA_ID = 16;
     const int32_t PROJECTILE_MAX_LIFETIME = 1200;
+    const int32_t STUCK_ARROW_LIFETIME = 1200;
+    // the player box grown by (1, 0.5, 1) picks up a planted arrow
+    const float ARROW_PICKUP_REACH_XZ = 1.0f;
+    const float ARROW_PICKUP_REACH_Y = 0.5f;
+    // ActorEvent shake, with 7 as its data: the arrow quivers where it lands
+    const uint8_t ACTOR_EVENT_SHAKE = 39;
+    const int32_t ARROW_SHAKE_TIME = 7;
     const float ACTOR_SUFFOCATION_DAMAGE = 1.0f;
     const int32_t LINGERING_CLOUD_WAIT_TIME = 10;
     const int32_t LINGERING_CLOUD_DURATION = 600;
@@ -117,22 +148,16 @@ namespace {
     const float LINGERING_CLOUD_MIN_RADIUS = 1.5f;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PROJECTILE_HIT_GROW = 0.3f;
+    // blocks per axis a projectile sweep reads through the actor index; wider reads every actor once
+    const float SWEEP_INDEX_SPAN = 64.0f;
     const int32_t EXPERIENCE_ORB_PICKUP_DELAY = 10;
 
-    bool intersectsActorBox(const Vector3f &actorPosition, float width, float height, const Vector3f &point) {
-        const float halfWidth = width * 0.5f + PROJECTILE_HIT_GROW;
-
-        const float minX = actorPosition.x - halfWidth;
-        const float maxX = actorPosition.x + halfWidth;
-        const float minY = actorPosition.y - PROJECTILE_HIT_GROW;
-        const float maxY = actorPosition.y + height + PROJECTILE_HIT_GROW;
-        const float minZ = actorPosition.z - halfWidth;
-        const float maxZ = actorPosition.z + halfWidth;
-
-        return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY &&
-               point.z >= minZ && point.z <= maxZ;
+    AxisAlignedBB projectileHitBox(const Vector3f &position, float width, float height) {
+        const float half = width * 0.5f + PROJECTILE_HIT_GROW;
+        return AxisAlignedBB(position.x - half, position.y - PROJECTILE_HIT_GROW, position.z - half,
+                             position.x + half, position.y + height + PROJECTILE_HIT_GROW, position.z + half);
     }
 
     EntityProperties buildActorProperties(ServerActor &actor) {
@@ -162,9 +187,17 @@ namespace {
 
 ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &identifier, const Vector3f &position,
                                               const std::function<void(ServerActor &)> &configure) {
+    // taken first: configure may spawn another actor
+    const bool spawned = mSpawnCause == nullptr;
+    const char *cause = spawned ? "Spawned" : mSpawnCause;
+    mSpawnCause = nullptr;
     const uint64_t runtimeId = allocateRuntimeId();
 
-    std::unique_ptr<ServerActor> actor = ActorClassRegistry::create(runtimeId, identifier);
+    // a summoned tnt is primed like one lit from a block
+    std::unique_ptr<ServerActor> actor = identifier == PrimedTntActor::IDENTIFIER
+                                                 ? std::unique_ptr<ServerActor>(new PrimedTntActor(
+                                                           runtimeId, PrimedTntActor::DEFAULT_FUSE))
+                                                 : ActorClassRegistry::create(runtimeId, identifier);
     actor->setUniqueId(allocateActorUniqueId());
     actor->getAttributes() = ActorAttributes::createActorDefaults();
     actor->moveToLevel(level);
@@ -177,6 +210,10 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     if (configure)
         configure(*actor);
+
+    // an identifier carrying its own spawn event makes the cause Event
+    if (spawned && mob != nullptr && !mob->getSpawnEvent().empty())
+        cause = "Event";
 
     if (mob != nullptr)
         mob->applyDefaults(mProperties.getDifficulty());
@@ -207,12 +244,15 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     ServerActor *result = _registerActor(std::move(actor));
 
     broadcastActorSpawn(*result);
-    mScriptEngine.onEntitySpawn(*result);
+    if (mob != nullptr)
+        mob->upgradeDefinition(*this, false);
+    mScriptEngine.onEntitySpawn(*result, cause);
     return result;
 }
 
-ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier,
-                                                  const Vector3f &position, float scale) {
+ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::string &identifier, const Vector3f &position,
+                                                  float scale) {
+    mSpawnCause = "Born";
     ServerActor *baby = spawnActor(level, identifier, position);
     if (baby == nullptr)
         return nullptr;
@@ -223,9 +263,10 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     baby->getFlags().set(ActorFlag::Baby, true);
 
     EntityDataMap metadata;
-    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID};
-    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits()};
-    for (int index = 0; index < 2; index++) {
+    const int32_t flagIds[] = {ActorFlags::FLAGS_DATA_ID, ActorFlags::FLAGS_2_DATA_ID, ActorFlags::FLAGS_3_DATA_ID};
+    const int64_t flagValues[] = {baby->getFlags().getLowBits(), baby->getFlags().getHighBits(),
+                                  baby->getFlags().getExtendedBits()};
+    for (int index = 0; index < 3; index++) {
         EntityDataEntry entry;
         entry.mId = flagIds[index];
         entry.mFormat = EntityDataFormat::Long;
@@ -243,8 +284,7 @@ ServerActor *ServerNetworkHandler::spawnBabyActor(Level &level, const std::strin
     return baby;
 }
 
-FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state,
-                                                           const Vector3f &position) {
+FallingBlock *ServerNetworkHandler::spawnFallingBlock(Level &level, const BlockState &state, const Vector3f &position) {
     const uint64_t runtimeId = allocateRuntimeId();
 
     std::unique_ptr<FallingBlock> actor(new FallingBlock(runtimeId, state));
@@ -293,8 +333,7 @@ void ServerNetworkHandler::spawnExperienceOrbs(Level &level, const Vector3f &pos
 
         orb->setExperienceValue(value);
         orb->setPickupDelay(EXPERIENCE_ORB_PICKUP_DELAY);
-        orb->setMotion(Vector3f((unit(orbRandom) * 0.2f - 0.1f) * 2.0f,
-                                unit(orbRandom) * 0.4f,
+        orb->setMotion(Vector3f((unit(orbRandom) * 0.2f - 0.1f) * 2.0f, unit(orbRandom) * 0.4f,
                                 (unit(orbRandom) * 0.2f - 0.1f) * 2.0f));
     }
 }
@@ -309,6 +348,16 @@ ServerActor *ServerNetworkHandler::getActorByRuntimeId(uint64_t runtimeId) {
     return it == mActorUniqueIdsByRuntimeId.end() ? nullptr : getActor(it->second);
 }
 
+Actor *ServerNetworkHandler::getEntity(int64_t uniqueId) {
+    if (ServerActor *actor = getActor(uniqueId))
+        return actor;
+    for (auto &entry: mPlayers) {
+        if (entry.second.getUniqueId() == uniqueId)
+            return &entry.second;
+    }
+    return nullptr;
+}
+
 int64_t ServerNetworkHandler::allocateActorUniqueId() {
     return (int64_t) (((uint64_t) getLevel().getWorldStartCount() << 32) | ++mActorUniqueIdCounter);
 }
@@ -320,6 +369,10 @@ ServerActor *ServerNetworkHandler::_registerActor(std::unique_ptr<ServerActor> a
     ServerActor *result = actor.get();
     mActorUniqueIdsByRuntimeId[result->getRuntimeId()] = result->getUniqueId();
     mActors[result->getUniqueId()] = std::move(actor);
+    mActorIndexDirty = true;
+    ++mActorSetSerial;
+    if (mJoinedTracked)
+        mActorChanges.push_back(ActorChange{result, result->getPosition(), true});
     if (!result->getPendingPassengers().empty())
         mVehiclesWithPendingPassengers.insert(result->getUniqueId());
     return result;
@@ -330,9 +383,51 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
     if (it == mActors.end())
         return;
 
+    if (mJoinedTracked)
+        mActorChanges.push_back(ActorChange{it->second.get(), it->second->getPosition(), false});
     mVehiclesWithPendingPassengers.erase(uniqueId);
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
     mActors.erase(it);
+    mActorIndexDirty = true;
+    ++mActorSetSerial;
+}
+
+void ServerNetworkHandler::_refreshActorIndex() {
+    if (!mActorIndexDirty)
+        return;
+
+    mActorIndexDirty = false;
+    // buckets cleared, not freed: no reallocation per tick; empty ones dropped
+    for (auto it = mActorIndex.begin(); it != mActorIndex.end();) {
+        if (it->second.empty()) {
+            it = mActorIndex.erase(it);
+            continue;
+        }
+        it->second.clear();
+        ++it;
+    }
+
+    mActorIndexWidestHalf = 0.0f;
+    mActorIndexWidestBox = 0.0f;
+    mCollidableActors.clear();
+    const std::string *lastType = nullptr;
+    float lastHalf = 0.0f;
+    for (auto &entry: mActors) {
+        if (entry.second->getFlags().get(ActorFlag::Collidable))
+            mCollidableActors.push_back(entry.second.get());
+        const Vector3f position = entry.second->getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        mActorIndex[_actorIndexKey(chunkX, chunkZ)].push_back(entry.second.get());
+        // actors come in runs of one type: the size of the last type asked is kept
+        const std::string &typeId = entry.second->getTypeId();
+        if (lastType == nullptr || *lastType != typeId) {
+            lastType = &typeId;
+            lastHalf = ActorClassRegistry::getSize(typeId).mWidth * 0.5f;
+        }
+        mActorIndexWidestHalf = std::max(mActorIndexWidestHalf, lastHalf);
+        mActorIndexWidestBox = std::max(mActorIndexWidestBox, entry.second->getSize().mWidth * 0.5f);
+    }
 }
 
 void ServerNetworkHandler::_resolvePendingRides() {
@@ -365,6 +460,19 @@ void ServerNetworkHandler::_resolvePendingRides() {
         mVehiclesWithPendingPassengers.erase(vehicleId);
 }
 
+namespace {
+    // the client draws a projectile along its rotation, the reverse of the shooter's (yaw = -yaw, pitch = -pitch);
+    // head yaw follows yaw, or the arrow keeps pointing its spawn way
+    void faceMotion(ServerActor &actor, const Vector3f &motion) {
+        const float horizontal = std::sqrt(motion.x * motion.x + motion.z * motion.z);
+        if (horizontal < 1.0e-6f && std::fabs(motion.y) < 1.0e-6f)
+            return;
+        const float yaw = std::atan2(motion.x, motion.z) / MathConstants::DEGREES_TO_RADIANS_F;
+        const float pitch = std::atan2(motion.y, horizontal) / MathConstants::DEGREES_TO_RADIANS_F;
+        actor.setRotation(Vector3f(pitch, yaw, yaw));
+    }
+}
+
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
                                                    float verticalOffset) {
     const Vector3f &rotation = player.getRotation();
@@ -381,11 +489,43 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
         return nullptr;
 
     projectile->setProjectile(true);
-    projectile->setOwnerUniqueId((int64_t) player.getRuntimeId());
-    projectile->getProjectileData().mLootingLevel =
-            ItemEnchantments::getLevel(player.getInventory().getItemInHand(), EnchantmentIds::LOOTING);
+    projectile->setOwnerUniqueId(player.getUniqueId());
+    projectile->getProjectileData().mLootingLevel = ItemEnchantments::getLevel(player.getInventory().getItemInHand(),
+                                                                               EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
+    faceMotion(*projectile, projectile->getMotion());
+    // the spawn packet went out before the motion was known
+    broadcastActorMove(*projectile);
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
+}
+
+// a projectile spawned without an owner, then shot:
+// the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
+ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
+                                                            const Vector3f &position, const Vector3f &direction) {
+    ServerActor *projectile = spawnActor(level, identifier, position);
+    if (projectile == nullptr)
+        return nullptr;
+
+    projectile->setProjectile(true);
+    ProjectileComponent component;
+    if (ProjectileComponent::find(identifier, projectile->getDefinition(), component)) {
+        static std::mt19937 generator{std::random_device{}()};
+        std::normal_distribution<float> gaussian(0.0f, 1.0f);
+        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
+                                       + direction.z * direction.z);
+        Vector3f motion;
+        if (length >= 0.001f)
+            motion = Vector3f(direction.x / length, direction.y / length, direction.z / length);
+        const float spread = 0.0075f * component.mUncertaintyBase;
+        motion.x = (motion.x + gaussian(generator) * spread) * component.mPower;
+        motion.y = (motion.y + gaussian(generator) * spread) * component.mPower;
+        motion.z = (motion.z + gaussian(generator) * spread) * component.mPower;
+        projectile->setMotion(motion);
+        faceMotion(*projectile, motion);
+        broadcastActorMove(*projectile);
+    }
+    return allowProjectileLaunch(*projectile, nullptr) ? projectile : nullptr;
 }
 
 bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
@@ -402,7 +542,7 @@ bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor 
     if (!launchEvent.mCancelled)
         return true;
 
-    removeActor((int64_t) projectile.getRuntimeId());
+    removeActor(projectile.getUniqueId());
     return false;
 }
 
@@ -416,8 +556,13 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 
         ProjectileData &data = projectile.getProjectileData();
         const bool isTrident = dynamic_cast<const ThrownTridentActor *>(&projectile) != nullptr;
-        playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT_GROUND : LevelSoundEvent::BOW_HIT,
-                       hitPosition);
+        // hit_ground_sound; arrow.json defines none and keeps
+        // its bow.hit
+        const int32_t groundSound = projectile.getProjectileComponent().mHitGroundSound;
+        if (groundSound != LevelSoundEventIds::UNDEFINED)
+            playLevelSound(level, LevelSoundEventIds::nameOf(groundSound), hitPosition);
+        else if (!isTrident)
+            playLevelSound(level, LevelSoundEvent::BOW_HIT, hitPosition);
 
         if (isTrident && data.mLoyaltyLevel > 0) {
             data.mReturning = true;
@@ -425,7 +570,7 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
             return false;
         }
 
-        dropProjectileItem(projectile, hitPosition);
+        data.mStuck = true;
         return true;
     }
 
@@ -437,42 +582,53 @@ bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const 
 }
 
 void ServerNetworkHandler::spawnLingeringCloud(Level &level, const Vector3f &position, int32_t potionId) {
+    AreaEffectCloudSettings settings;
+    settings.mPotionId = potionId;
+    settings.mRadius = 3.0f;
+    settings.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
+    settings.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
+    settings.mWaitTime = LINGERING_CLOUD_WAIT_TIME;
+    settings.mDuration = LINGERING_CLOUD_DURATION;
+    settings.mParticle = AREA_EFFECT_CLOUD_POTION_PARTICLE;
+    spawnAreaEffectCloud(level, position, settings);
+}
+
+ServerActor *ServerNetworkHandler::spawnAreaEffectCloud(Level &level, const Vector3f &position,
+                                                        const AreaEffectCloudSettings &settings) {
     ServerActor *cloud = spawnActor(level, "minecraft:area_effect_cloud", position);
     if (cloud == nullptr)
-        return;
-
-    const float cloudRadius = 3.0f;
+        return nullptr;
 
     EntityDataMap metadata;
 
     EntityDataEntry radius;
     radius.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_RADIUS;
     radius.mFormat = EntityDataFormat::Float;
-    radius.mFloatValue = cloudRadius;
+    radius.mFloatValue = settings.mRadius;
     metadata.mEntries.push_back(radius);
 
     EntityDataEntry particle;
     particle.mId = ACTOR_DATA_AREA_EFFECT_CLOUD_PARTICLE_ID;
     particle.mFormat = EntityDataFormat::Int;
-    particle.mIntValue = AREA_EFFECT_CLOUD_POTION_PARTICLE;
+    particle.mIntValue = settings.mParticle;
     metadata.mEntries.push_back(particle);
 
     EntityDataEntry auxValue;
     auxValue.mId = ACTOR_DATA_POTION_AUX_VALUE;
     auxValue.mFormat = EntityDataFormat::Short;
-    auxValue.mShortValue = (int16_t) potionId;
+    auxValue.mShortValue = (int16_t) settings.mPotionId;
     metadata.mEntries.push_back(auxValue);
 
     EntityDataEntry color;
     color.mId = ACTOR_DATA_POTION_COLOR;
     color.mFormat = EntityDataFormat::Int;
-    color.mIntValue = getPotionColor(potionId);
+    color.mIntValue = settings.mColor.has_value() ? *settings.mColor : getPotionColor(settings.mPotionId);
     metadata.mEntries.push_back(color);
 
     EntityDataEntry width;
     width.mId = ACTOR_DATA_WIDTH;
     width.mFormat = EntityDataFormat::Float;
-    width.mFloatValue = cloudRadius;
+    width.mFloatValue = settings.mRadius;
     metadata.mEntries.push_back(width);
 
     EntityDataEntry height;
@@ -484,23 +640,24 @@ void ServerNetworkHandler::spawnLingeringCloud(Level &level, const Vector3f &pos
     sendActorMetadata(*cloud, metadata);
 
     LingeringCloud state;
-    state.mPotionId = potionId;
+    state.mPotionId = settings.mPotionId;
     state.mAge = 0;
-    state.mWaitTime = LINGERING_CLOUD_WAIT_TIME;
-    state.mDuration = LINGERING_CLOUD_DURATION;
+    state.mWaitTime = settings.mWaitTime;
+    state.mDuration = settings.mDuration;
     state.mNextApply = 0;
-    state.mReapplicationDelay = 0;
-    state.mRadius = cloudRadius;
-    state.mRadiusPerTick = LINGERING_CLOUD_RADIUS_PER_TICK;
-    state.mRadiusOnUse = LINGERING_CLOUD_RADIUS_ON_USE;
+    state.mReapplicationDelay = settings.mReapplicationDelay;
+    state.mRadius = settings.mRadius;
+    state.mRadiusPerTick = settings.mRadiusPerTick;
+    state.mRadiusOnUse = settings.mRadiusOnUse;
     state.mPosition = position;
     state.mDimension = cloud->getDimension();
     state.mWorldId = cloud->getWorldId();
+    state.mOwnerUniqueId = settings.mOwnerUniqueId;
     mLingeringClouds[cloud->getUniqueId()] = state;
+    return cloud;
 }
 
-void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position,
-                                               int32_t data) {
+void ServerNetworkHandler::broadcastLevelEvent(Level &level, int32_t eventId, const Vector3f &position, int32_t data) {
     LevelEventPacket event;
     event.mEventId = eventId;
     event.mPosition = position;
@@ -515,6 +672,87 @@ void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vec
 
     ItemActorHandler::dropItem(*this, getLevelFor(projectile), position, data.mPickupItem,
                                ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
+}
+
+// stops at the last free point of this tick's path, so the arrow shows half sunk in the face it hit
+void ServerNetworkHandler::plantProjectile(ServerActor &projectile, Level &level, const Vector3f &from,
+                                           const Vector3i &block) {
+    ProjectileData &data = projectile.getProjectileData();
+    const Vector3f to = projectile.getPosition();
+    Vector3f resting = from;
+    const int32_t steps = 16;
+    for (int32_t step = 1; step <= steps; ++step) {
+        const float progress = (float) step / (float) steps;
+        const Vector3f sample(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress,
+                              from.z + (to.z - from.z) * progress);
+        if (blocksProjectile(level, projectile, sample, (int32_t) std::floor(sample.x), (int32_t) std::floor(sample.y),
+                             (int32_t) std::floor(sample.z)))
+            break;
+        resting = sample;
+    }
+
+    data.mStuckBlock = block;
+    data.mStuckTicks = 0;
+    data.mCritical = false;
+    projectile.setMotion(Vector3f());
+    projectile.setPosition(resting);
+    broadcastActorMove(projectile);
+
+    ActorEventPacket shake;
+    shake.mRuntimeActorId = projectile.getRuntimeId();
+    shake.mEventId = ACTOR_EVENT_SHAKE;
+    shake.mEventData = ARROW_SHAKE_TIME;
+    shake.mHasFirePosition = false;
+    _sendToViewers(projectile, shake);
+}
+
+// true once the planted projectile is gone: picked up or expired
+bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level &level) {
+    ProjectileData &data = projectile.getProjectileData();
+    if (++data.mStuckTicks >= STUCK_ARROW_LIFETIME)
+        return true;
+
+    const Vector3i &block = data.mStuckBlock;
+    if (!level.isSolidAt(block.x, block.y, block.z)) {
+        // the block went: the arrow falls again
+        data.mStuck = false;
+        return false;
+    }
+
+    const Vector3f &position = projectile.getPosition();
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || player.isDead() || !player.sharesLevelWith(projectile)
+            || player.isSpectator())
+            continue;
+
+        const Vector3f &feet = player.getPosition();
+        const float halfWidth = PLAYER_WIDTH * 0.5f + ARROW_PICKUP_REACH_XZ;
+        if (std::fabs(position.x - feet.x) > halfWidth || std::fabs(position.z - feet.z) > halfWidth
+            || position.y < feet.y - ARROW_PICKUP_REACH_Y || position.y > feet.y + PLAYER_HEIGHT + ARROW_PICKUP_REACH_Y)
+            continue;
+
+        // nothing to give outside creative: the arrow stays until it expires
+        const bool creative = player.isCreative();
+        if (!creative && (data.mPickupCreativeOnly || data.mPickupItem.isAir()))
+            continue;
+
+        if (!creative) {
+            std::vector<int> touched;
+            if (!player.getInventory().addItem(data.mPickupItem, touched))
+                continue;
+            for (int touchedSlot: touched)
+                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, touchedSlot);
+        }
+
+        TakeItemActorPacket take;
+        take.mItemRuntimeActorId = projectile.getRuntimeId();
+        take.mRuntimeActorId = player.getRuntimeId();
+        _sendToViewers(projectile, take);
+        return true;
+    }
+
+    return false;
 }
 
 void ServerNetworkHandler::returnProjectileToOwner(ServerPlayer &player, ServerActor &projectile) {
@@ -545,7 +783,7 @@ float ServerNetworkHandler::computeProjectileDamage(ServerActor &projectile) {
     const Vector3f motion = projectile.getMotion();
     const float speed = std::sqrt(motion.x * motion.x + motion.y * motion.y + motion.z * motion.z);
 
-    int32_t damage = (int32_t) std::ceil(speed * data.mBaseDamage);
+    int32_t damage = data.mImpactDamage >= 0 ? data.mImpactDamage : (int32_t) std::ceil(speed * data.mBaseDamage);
     if (data.mCritical && damage > 0) {
         static std::mt19937 generator{std::random_device{}()};
         std::uniform_int_distribution<int32_t> bonus(0, damage / 2 + 1);
@@ -566,7 +804,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
 
     ServerPlayer *shooter = nullptr;
     for (auto &entry: mPlayers) {
-        if ((int64_t) entry.second.getRuntimeId() == projectile.getOwnerUniqueId())
+        if (entry.second.getUniqueId() == projectile.getOwnerUniqueId())
             shooter = &entry.second;
     }
 
@@ -579,7 +817,7 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimPlayer->getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
-        source.fromOrigin(origin).asProjectile();
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
 
         const DamageResult result = hurt(*victimPlayer, damage, source);
         applyArrowEffect = result == DamageResult::Dealt;
@@ -601,8 +839,12 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
         ServerActor *victimActor = dynamic_cast<ServerActor *>(&target);
         if (victimActor != nullptr) {
             ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", victimActor->getName());
-            source.mAttacker = shooter;
-            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile(), data.mLootingLevel);
+            source.mAttacker = shooter != nullptr ? (Actor *) shooter
+                                                  : (Actor *) getActor(projectile.getOwnerUniqueId());
+            applyArrowEffect = damageActor(*victimActor, damage, source.asProjectile().withDamager(&projectile),
+                                           data.mLootingLevel);
+            if (!isTrident && victimActor->stopsProjectiles())
+                return true;
         }
     }
 
@@ -629,12 +871,16 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     }
 
     Level &level = getLevelFor(projectile);
-    playLevelSound(level, isTrident ? LevelSoundEvent::TRIDENT_HIT : LevelSoundEvent::BOW_HIT, hitPosition);
+    // hit_sound: bow.hit and item.trident.hit in the vanilla definitions
+    const int32_t hitSound = projectile.getProjectileComponent().mHitSound;
+    if (hitSound != LevelSoundEventIds::UNDEFINED)
+        playLevelSound(level, LevelSoundEventIds::nameOf(hitSound), hitPosition);
 
     if (isTrident) {
         data.mHadCollision = true;
 
-        if (data.mChanneling && level.hasSkyLight() && getWorldOf(level).getOverworld().isThundering())
+        if (projectile.getProjectileComponent().mLightning && level.hasSkyLight()
+            && getWorldOf(level).getOverworld().isThundering())
             strikeLightning(level, targetPosition);
 
         if (data.mLoyaltyLevel > 0 && shooter != nullptr) {
@@ -663,6 +909,9 @@ bool ServerNetworkHandler::onThrownProjectileHitActor(ServerActor &projectile, c
     if (hitActor.isProjectile()) {
         const bool handled = onThrownProjectileHit(projectile, hitPosition, nullptr);
         const bool otherHandled = onThrownProjectileHit(hitActor, hitActor.getPosition(), nullptr);
+        // an arrow knocked out of the air is removed, not planted: its item drops
+        if (hitActor.getProjectileData().mStuck)
+            dropProjectileItem(hitActor, hitActor.getPosition());
         removeActor(hitActor.getUniqueId());
         return handled || otherHandled;
     }
@@ -706,6 +955,9 @@ void ServerNetworkHandler::applyPotionEffects(ServerActor &actor, int32_t potion
         if (effect.mId != MobEffectId::InstantHealth && effect.mId != MobEffectId::InstantDamage)
             continue;
 
+        if (!actor.canBeAffected(effect.mId))
+            continue;
+
         if ((effect.mId == MobEffectId::InstantHealth) != undead) {
             actor.heal(4.0f * (float) (1 << effect.mAmplifier));
             syncActorAttributes(actor);
@@ -735,18 +987,30 @@ void ServerNetworkHandler::removeActor(int64_t uniqueId) {
     _unregisterActor(uniqueId);
 }
 
-bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) const {
+bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &actor) {
     if (!player.isSpawned() || !player.sharesLevelWith(actor))
         return false;
 
     const Vector3f position = actor.getPosition();
-    const int64_t hash = ChunkStreamHandler::packChunk((int32_t) std::floor(position.x) >> 4,
-                                                       (int32_t) std::floor(position.z) >> 4);
+    if (!ChunkStreamHandler::isInActorRange(player.getPosition(), position))
+        return false;
 
-    return player.getSentChunks().find(hash) != player.getSentChunks().end();
+    const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+    const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+    // an actor goes out with its chunk: one in a chunk this client has not received floats in the void
+    if (player.getSentChunks().count(ChunkStreamHandler::packChunk(chunkX, chunkZ)) == 0)
+        return false;
+
+    // only chunks the server holds fully loaded hand out their actors
+    return getLevelFor(actor).isChunkPopulated(chunkX, chunkZ);
 }
 
 void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &actor) {
+    if (const auto *painting = dynamic_cast<const PaintingActor *>(&actor)) {
+        painting->sendPaintingSpawn(*this, player);
+        return;
+    }
+
     AddActorPacket packet;
     packet.mUniqueActorId = actor.getUniqueId();
     packet.mRuntimeActorId = (int64_t) actor.getRuntimeId();
@@ -761,6 +1025,14 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
     packet.mAttributes = actor.getAttributes().getAll();
     RideSystem::appendLinks(actor, packet.mActorLinks);
     actor.fillSpawnMetadata(packet.mMetadata);
+    if (actor.getLimitedLifeTicks() > 0) {
+        const int32_t ENTITY_DATA_LIFETIME_TICKS = 78;
+        EntityDataEntry lifetime;
+        lifetime.mId = ENTITY_DATA_LIFETIME_TICKS;
+        lifetime.mFormat = EntityDataFormat::Int;
+        lifetime.mIntValue = actor.getLimitedLifeTicks();
+        packet.mMetadata.mEntries.push_back(lifetime);
+    }
 
     if (!actor.getNameTag().empty()) {
         const int32_t ENTITY_DATA_NAME = 4;
@@ -784,6 +1056,8 @@ void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &ac
 
     if (MobActor *mob = dynamic_cast<MobActor *>(&actor))
         mob->getEquipment().sendTo(*this, player, actor);
+    else
+        actor.sendEquipmentTo(*this, player);
 }
 
 void ServerNetworkHandler::_sendActorRemove(ServerPlayer &player, const ServerActor &actor) {
@@ -804,6 +1078,14 @@ void ServerNetworkHandler::refreshContainerViewers(const Vector3i &position, con
     }
 }
 
+void ServerNetworkHandler::refreshEntityContainerViewers(int64_t actorId, const ServerPlayer *except) {
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (&player != except && player.isSpawned())
+            player.getInventoryManager().refreshEntityContainer(actorId);
+    }
+}
+
 void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
@@ -818,6 +1100,13 @@ void ServerNetworkHandler::broadcastActorSpawn(ServerActor &actor) {
 }
 
 void ServerNetworkHandler::updateActorVisibility() {
+    // every offset the range table holds fits in this many chunks
+    static const int32_t RANGE_CHUNKS = 4;
+    static std::vector<uint64_t> seenIds;
+
+    mActorIndexDirty = true;
+    _refreshActorIndex();
+    ItemActorHandler::indexForViewers(*this);
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;
         if (!player.isSpawned())
@@ -825,20 +1114,44 @@ void ServerNetworkHandler::updateActorVisibility() {
 
         std::unordered_set<uint64_t> &visible = player.getVisibleActors();
 
-        for (auto &actorEntry: mActors) {
-            ServerActor &actor = *actorEntry.second;
-            const bool seen = visible.find(actor.getRuntimeId()) != visible.end();
-            const bool shouldSee = (actor.isAlive() || (actor.isDead() && seen)) && canPlayerSeeActor(player, actor);
+        // the ones seen, then the ones near: never every actor for every player
+        seenIds.assign(visible.begin(), visible.end());
+        for (const uint64_t runtimeId: seenIds) {
+            ServerActor *actor = getActorByRuntimeId(runtimeId);
+            if (actor == nullptr) {
+                // dropped items share the set and its ids, not the actor table
+                ItemActorHandler::hideIfOutOfView(*this, player, runtimeId);
+                continue;
+            }
 
-            if (shouldSee == seen)
+            // an autonomous actor stays known once sent, wherever it goes
+            const bool kept = actor->isAutonomous() && player.sharesLevelWith(*actor);
+            if ((actor->isAlive() || actor->isDead()) && (kept || canPlayerSeeActor(player, *actor)))
                 continue;
 
-            if (shouldSee) {
-                visible.insert(actor.getRuntimeId());
-                _sendActorSpawn(player, actor);
-            } else {
-                visible.erase(actor.getRuntimeId());
-                _sendActorRemove(player, actor);
+            visible.erase(runtimeId);
+            _sendActorRemove(player, *actor);
+        }
+
+        const Vector3f position = player.getPosition();
+        const int32_t centreX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t centreZ = (int32_t) std::floor(position.z) >> 4;
+        for (int32_t chunkX = centreX - RANGE_CHUNKS; chunkX <= centreX + RANGE_CHUNKS; chunkX++) {
+            for (int32_t chunkZ = centreZ - RANGE_CHUNKS; chunkZ <= centreZ + RANGE_CHUNKS; chunkZ++) {
+                ItemActorHandler::showColumnTo(*this, player, chunkX, chunkZ);
+
+                const auto bucket = mActorIndex.find(_actorIndexKey(chunkX, chunkZ));
+                if (bucket == mActorIndex.end())
+                    continue;
+
+                for (ServerActor *actor: bucket->second) {
+                    if (!actor->isAlive() || visible.find(actor->getRuntimeId()) != visible.end()
+                        || !canPlayerSeeActor(player, *actor))
+                        continue;
+
+                    visible.insert(actor->getRuntimeId());
+                    _sendActorSpawn(player, *actor);
+                }
             }
         }
     }
@@ -890,21 +1203,26 @@ void ServerNetworkHandler::changeActorLevel(Actor &actor, Level &destination, co
     traveller->setPosition(position);
     traveller->setMotion(Vector3f(0.0f, 0.0f, 0.0f));
     traveller->resetFallDistance();
+    detachActorIfUnloaded(*traveller, destination);
+}
 
+bool ServerNetworkHandler::detachActorIfUnloaded(ServerActor &actor, Level &level) {
+    const Vector3f &position = actor.getPosition();
     const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t column = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
-    if (getWorldOf(destination).getActorLoadedChunks(destination.getDimensionType()).count(column) != 0)
-        return;
+    if (getWorldOf(level).getActorLoadedChunks(level.getDimensionType()).count(column) != 0)
+        return false;
 
-    if (traveller->shouldSave() && destination.isStorageOpen()) {
-        std::vector<Tag> entities = destination.loadEntities(chunkX, chunkZ);
-        entities.push_back(traveller->saveNbt());
-        destination.saveEntities(chunkX, chunkZ, entities);
+    if (actor.shouldSave() && level.isStorageOpen()) {
+        std::vector<Tag> entities = level.loadEntities(chunkX, chunkZ);
+        entities.push_back(actor.saveNbt());
+        level.saveEntities(chunkX, chunkZ, entities);
     }
 
-    mDetachedActors.push_back(traveller->getUniqueId());
-    destination.releaseChunkIfUnused(chunkX, chunkZ);
+    mDetachedActors.push_back(actor.getUniqueId());
+    level.releaseChunkIfUnused(chunkX, chunkZ);
+    return true;
 }
 
 void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
@@ -913,10 +1231,7 @@ void ServerNetworkHandler::syncActorAttributes(ServerActor &actor) {
     packet.mTick = 0;
     packet.mAttributes = actor.getAttributes().getAll();
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    _sendToViewers(actor, packet);
 }
 
 void ServerNetworkHandler::syncActorScale(ServerActor &actor, float scale) {
@@ -946,6 +1261,27 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
     flags2.mLongValue = actor.getFlags().getHighBits();
     packet.mMetadata.mEntries.push_back(flags2);
 
+
+    EntityDataEntry flags3;
+
+    flags3.mId = ActorFlags::FLAGS_3_DATA_ID;
+
+    flags3.mFormat = EntityDataFormat::Long;
+
+    flags3.mLongValue = actor.getFlags().getExtendedBits();
+    packet.mMetadata.mEntries.push_back(flags3);
+
+
+    EntityDataEntry nameplateDistance;
+
+    nameplateDistance.mId = ActorFlags::NAMEPLATE_RENDER_DISTANCE_DATA_ID;
+
+    nameplateDistance.mFormat = EntityDataFormat::Float;
+
+    nameplateDistance.mFloatValue = actor.getNameplateRenderDistance();
+
+    packet.mMetadata.mEntries.push_back(nameplateDistance);
+
     EntityDataEntry visibleEffects;
     visibleEffects.mId = ActorFlags::VISIBLE_MOB_EFFECTS_DATA_ID;
     visibleEffects.mFormat = EntityDataFormat::Long;
@@ -954,10 +1290,7 @@ void ServerNetworkHandler::syncActorFlags(ServerActor &actor) {
 
     packet.mProperties = buildActorProperties(actor);
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    _sendToViewers(actor, packet);
 }
 
 void ServerNetworkHandler::syncActorFirework(ServerActor &actor) {
@@ -1055,6 +1388,12 @@ void ServerNetworkHandler::knockBack(Actor &actor, float deltaX, float deltaZ, f
     sendActorMotion(actor);
 }
 
+void ServerNetworkHandler::knockBack(Actor &actor, float deltaX, float deltaZ, const KnockbackPreset &preset) {
+    actor.knockBack(deltaX, deltaZ, preset.mHorizontalPower, preset.mVerticalPower, preset.mVerticalVelocityCap,
+                    preset.mSlowdownScale);
+    sendActorMotion(actor);
+}
+
 void ServerNetworkHandler::pushFrom(Actor &actor, const Vector3f &origin, float strength, float lift) {
     const Vector3f position = actor.getPosition();
 
@@ -1101,39 +1440,108 @@ void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::stri
         target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
 }
 
-void ServerNetworkHandler::broadcastActorMove(ServerActor &actor) {
+bool ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported, const ServerPlayer *except) {
     MoveActorAbsolutePacket move;
     move.mRuntimeActorId = (int64_t) actor.getRuntimeId();
     move.mPosition = actor.getPosition();
     move.mPosition.y += actor.getBaseOffset();
     move.mRotation = actor.getRotation();
+    move.mTeleported = teleported;
 
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, move, mCodecContext);
+    BandwidthOptimization::Values values;
+    if (teleported || !BandwidthOptimization::valuesOf(*this, actor, values)) {
+        _sendToViewers(actor, move, except);
+        return true;
     }
+
+    const int64_t tick = getCurrentTick();
+    const bool onGround = actor.isOnGround();
+    const Vector3f position = actor.getPosition();
+    std::unordered_map<uint64_t, ServerActor::MoveSent> &sent = actor.getMovesSent();
+    bool everyone = true;
+    _sendToViewers(actor, move, except, [&](ServerPlayer &player) {
+        ServerActor::MoveSent &last = sent[player.getRuntimeId()];
+        int64_t gap = 0;
+        // a landing or a lift-off goes out at once
+        if (last.mOnGround == onGround) {
+            const Vector3f &viewer = player.getPosition();
+            const float dx = position.x - viewer.x;
+            const float dy = position.y - viewer.y;
+            const float dz = position.z - viewer.z;
+            gap = BandwidthOptimization::allowedGap(values, std::sqrt(dx * dx + dy * dy + dz * dz));
+        }
+        if (tick < last.mTick + gap) {
+            everyone = false;
+            return false;
+        }
+        last.mTick = tick;
+        last.mOnGround = onGround;
+        return true;
+    });
+    return everyone;
+}
+
+void ServerNetworkHandler::_sendToViewers(const ServerActor &actor, const Packet &packet, const ServerPlayer *except,
+                                          const std::function<bool(ServerPlayer &)> &accept) {
+    // kept between calls: a crowd sends one packet an actor a tick
+    static std::vector<NetworkIdentifier> viewers;
+    viewers.clear();
+    const auto consider = [&](ServerPlayer &player) {
+        if (!player.isSpawned() || &player == except)
+            return;
+
+        const std::unordered_set<uint64_t> &visible = player.getVisibleActors();
+        if (visible.find(actor.getRuntimeId()) != visible.end() && (!accept || accept(player)))
+            viewers.push_back(player.getNetworkIdentifier());
+    };
+    if (actor.isAutonomous()) {
+        // known wherever it goes: its viewers can be anywhere
+        for (auto &entry: mPlayers)
+            consider(entry.second);
+    } else {
+        // a viewer was in range at the last visibility pass: one chunk more covers the move since
+        static const int32_t VIEWER_CHUNKS = 6;
+        const Vector3f position = actor.getPosition();
+        forEachPlayerAroundChunk((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4,
+                                 VIEWER_CHUNKS, consider);
+    }
+    mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
 }
 
 void ServerNetworkHandler::playActorAnimation(ServerActor &actor, const std::string &animation) {
     AnimateEntityPacket packet;
     packet.mAnimation = animation;
     packet.mRuntimeActorIds.push_back(actor.getRuntimeId());
+    broadcastToSpawned(packet);
+}
 
+void ServerNetworkHandler::broadcastToSpawned(const Packet &packet) {
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned())
             mNetworkHandler->send(entry.first, packet, mCodecContext);
     }
 }
 
-void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier,
-                                               const Vector3f &position) {
+void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position) {
+    spawnParticleEffect(level, identifier, position, nullptr, nullptr);
+}
+
+void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &identifier, const Vector3f &position,
+                                               const std::string *molangJson, ServerPlayer *viewer) {
     SpawnParticleEffectPacket packet;
     packet.mDimensionId = level.getDimensionId();
     packet.mUniqueActorId = -1;
     packet.mPosition = position;
     packet.mIdentifier = identifier;
-    packet.mHasMolangVariablesJson = false;
+    packet.mHasMolangVariablesJson = molangJson != nullptr;
+    if (molangJson != nullptr)
+        packet.mMolangVariablesJson = *molangJson;
 
+    if (viewer != nullptr) {
+        if (viewer->isSpawned())
+            mNetworkHandler->send(viewer->getNetworkIdentifier(), packet, mCodecContext);
+        return;
+    }
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned() && entry.second.isIn(level))
             mNetworkHandler->send(entry.first, packet, mCodecContext);
@@ -1252,90 +1660,6 @@ void ServerNetworkHandler::syncPlayerAttributes(ServerPlayer &player) {
     _sendAttributes(player);
 }
 
-void ServerNetworkHandler::displayScoreboardObjective(const std::string &slot, const std::string &objectiveId,
-                                                      const std::string &displayName) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = objectiveId;
-    packet.mDisplayName = displayName.empty() ? objectiveId : displayName;
-    packet.mCriteria = "dummy";
-    packet.mSortOrder = 0;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::clearScoreboardDisplay(const std::string &slot) {
-    SetDisplayObjectivePacket packet;
-    packet.mDisplaySlot = slot;
-    packet.mObjectiveId = "";
-    packet.mDisplayName = "";
-    packet.mCriteria = "dummy";
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::setScoreboardScore(const std::string &objectiveId, const std::string &participant,
-                                              int32_t score) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        it = mScoreboardIds.emplace(key, mNextScoreboardId++).first;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mScore = score;
-    info.mType = ScorerType::Fake;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mAction = SetScorePacket::Action::Change;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
-void ServerNetworkHandler::removeScoreboardScore(const std::string &objectiveId, const std::string &participant) {
-    const std::string key = objectiveId + "\x1f" + participant;
-    auto it = mScoreboardIds.find(key);
-    if (it == mScoreboardIds.end())
-        return;
-
-    ScoreInfoEntry info;
-    info.mScoreboardId = it->second;
-    info.mObjectiveId = objectiveId;
-    info.mType = ScorerType::Invalid;
-    info.mName = participant;
-
-    SetScorePacket packet;
-    packet.mInfos.push_back(info);
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-    mScoreboardIds.erase(it);
-}
-
-void ServerNetworkHandler::removeScoreboardObjective(const std::string &objectiveId) {
-    RemoveObjectivePacket packet;
-    packet.mObjectiveId = objectiveId;
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
-}
-
 void ServerNetworkHandler::sendJsonMessage(ServerPlayer &player, const std::string &json) {
     TextPacket packet;
     packet.mType = TextPacket::Type::Json;
@@ -1347,33 +1671,220 @@ void ServerNetworkHandler::playPlayerAnimation(ServerPlayer &player, const std::
     AnimateEntityPacket packet;
     packet.mAnimation = animation;
     packet.mRuntimeActorIds.push_back(player.getRuntimeId());
-
-    for (auto &entry: mPlayers) {
-        if (entry.second.isSpawned())
-            mNetworkHandler->send(entry.first, packet, mCodecContext);
-    }
+    broadcastToSpawned(packet);
 }
 
 
+namespace {
+    // in the world database, not under players/: a player of that name would save over the file
+    const char *const WORLD_DYNAMIC_PROPERTIES_KEY = "falcon_world_dynamic_properties";
+    const char *const LEGACY_WORLD_DYNAMIC_PROPERTIES = "world_dynamic_properties";
+}
 
 void ServerNetworkHandler::loadWorldDynamicProperties() {
+    mWorldDynamicPropertiesUnreadable = false;
+    Level &overworld = mWorlds.getDefault().getOverworld();
     Tag data;
-    if (!mPlayerData.loadData("world_dynamic_properties", data))
-        return;
+    if (!overworld.loadSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false)) {
+        if (overworld.hasSavedData(WORLD_DYNAMIC_PROPERTIES_KEY)) {
+            mWorldDynamicPropertiesUnreadable = true;
+            LOG_WARN(LogAreaID::Server, "The stored world dynamic properties are unreadable: kept as is, not saved");
+            return;
+        }
+        // a player save in its place holds more than this one key: not ours, left to that player
+        Tag legacy;
+        if (!mPlayerData.loadData(LEGACY_WORLD_DYNAMIC_PROPERTIES, legacy) || !legacy.isCompound()
+            || legacy.getKeys().size() != 1 || !legacy.contains("DynamicProperties"))
+            return;
+        if (!overworld.saveSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, legacy, false))
+            return;
+        mPlayerData.removeData(LEGACY_WORLD_DYNAMIC_PROPERTIES);
+        data = std::move(legacy);
+    }
 
     const Tag *properties = data.get("DynamicProperties");
     if (properties != nullptr)
         deserializeDynamicProperties(*properties, mWorldDynamicProperties);
 }
 
-void ServerNetworkHandler::saveWorldDynamicProperties() {
+void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
+    Level &overworld = mWorlds.getDefault().getOverworld();
+    if (!overworld.isStorageOpen() || mWorldDynamicPropertiesUnreadable)
+        return;
     Tag data = Tag::ofCompound();
     data.put("DynamicProperties", serializeDynamicProperties(mWorldDynamicProperties));
-    mPlayerData.saveData("world_dynamic_properties", data);
+    if (!overworld.saveSavedData(WORLD_DYNAMIC_PROPERTIES_KEY, data, false) && checked)
+        throw std::runtime_error("Could not save world dynamic properties");
 }
 
 
+void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &center, double size,
+                                              const ServerActor &source, bool fromTnt) {
+    if (mTickingActors) {
+        mPendingExplosions.push_back(PendingExplosion{&level, center, size, source.getUniqueId(), fromTnt});
+        return;
+    }
+
+    Explosion explosion(*this, level, center, size, &source, fromTnt);
+    explosion.explode();
+}
+
+namespace {
+    const size_t CROWDED_EXPLOSIONS = 16;
+    const size_t APART_EXPLOSIONS = 32;
+
+    ThrownProjectileActor *heldAfterHit(ServerActor &actor) {
+        ThrownProjectileActor *thrown = dynamic_cast<ThrownProjectileActor *>(&actor);
+        return thrown != nullptr && thrown->isHeldAfterHit() ? thrown : nullptr;
+    }
+}
+
+void ServerNetworkHandler::_flushExplosions() {
+    if (mPendingExplosions.empty())
+        return;
+
+    // the order within a tick is no one's to rely on: the explosions that break nothing (in water) go first,
+    // over blocks that stay as they are, and share one read of them
+    const auto quietEnd = std::stable_partition(
+            mPendingExplosions.begin(), mPendingExplosions.end(), [this](const PendingExplosion &pending) {
+                return mActors.find(pending.mSourceId) != mActors.end()
+                       && (Explosion::breaksNothingAt(*pending.mLevel, pending.mCenter)
+                           || (pending.mSize >= 0.1
+                               && Explosion::isReachEmpty(*pending.mLevel, pending.mCenter, pending.mSize)));
+            });
+    const size_t quietCount = (size_t) (quietEnd - mPendingExplosions.begin());
+    // neighbours one after the other: the read of the blocks around one serves the next
+    const auto byPlace = [](const PendingExplosion &left, const PendingExplosion &right) {
+        const int32_t leftX = (int32_t) std::floor(left.mCenter.x) >> 5;
+        const int32_t rightX = (int32_t) std::floor(right.mCenter.x) >> 5;
+        if (leftX != rightX)
+            return leftX < rightX;
+        const int32_t leftZ = (int32_t) std::floor(left.mCenter.z) >> 5;
+        const int32_t rightZ = (int32_t) std::floor(right.mCenter.z) >> 5;
+        if (leftZ != rightZ)
+            return leftZ < rightZ;
+        return ((int32_t) std::floor(left.mCenter.y) >> 4) < ((int32_t) std::floor(right.mCenter.y) >> 4);
+    };
+    // the others too: many of them go off in the air and leave the blocks as they were
+    std::stable_sort(mPendingExplosions.begin(), quietEnd, byPlace);
+    std::stable_sort(quietEnd, mPendingExplosions.end(), byPlace);
+
+    // a block falling or an orb dropping out of one explosion joins the targets of the next ones
+    mActorChanges.clear();
+    mJoinedTracked = true;
+    struct JoinedScope {
+        bool &mTracked;
+        ~JoinedScope() {
+            mTracked = false;
+        }
+    } joinedScope{mJoinedTracked};
+
+    // the sky light of a column an explosion digs into is worked out once, after the last explosion
+    struct SkyLightScope {
+        std::vector<Level *> mLevels;
+        ~SkyLightScope() {
+            for (Level *level: mLevels)
+                level->endSkyLightBatch();
+        }
+    } skyLight;
+    for (const PendingExplosion &pending: mPendingExplosions) {
+        if (std::find(skyLight.mLevels.begin(), skyLight.mLevels.end(), pending.mLevel) == skyLight.mLevels.end()) {
+            skyLight.mLevels.push_back(pending.mLevel);
+            pending.mLevel->beginSkyLightBatch();
+        }
+    }
+
+    ExplosionBatch batch(*this);
+    batch.setFollowingJoins(true);
+
+    // the ones that break nothing: plugins and scripts have their say on each, then every push is worked out
+    // at once on every core, then each explosion ends in turn (damage, items, effects)
+    {
+        Level *quietLevel = quietCount == 0 ? nullptr : mPendingExplosions[0].mLevel;
+        std::vector<std::unique_ptr<Explosion>> quiet;
+        std::vector<ExplosionBatch::QuietBlast> blasts;
+        std::vector<size_t> ranks;
+        for (size_t index = 0; index < quietCount; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            const ServerActor *sourceActor = source == mActors.end() ? nullptr : source->second.get();
+            std::unique_ptr<Explosion> explosion(
+                    new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize, sourceActor, pending.mFromTnt));
+            explosion->setBatch(&batch);
+            if (!explosion->explodeA())
+                continue;
+
+            if (pending.mLevel == quietLevel && sourceActor != nullptr) {
+                ranks.push_back(blasts.size());
+                blasts.push_back(ExplosionBatch::QuietBlast{pending.mCenter, explosion->getSize(), sourceActor});
+            } else {
+                ranks.push_back(SIZE_MAX);
+            }
+            quiet.push_back(std::move(explosion));
+        }
+        if (quietLevel != nullptr)
+            batch.settleQuiet(*quietLevel, blasts);
+        for (size_t index = 0; index < quiet.size(); ++index) {
+            if (ranks[index] != SIZE_MAX)
+                quiet[index]->setSettledAs(ranks[index]);
+            quiet[index]->explodeB();
+        }
+    }
+
+    // the ones left break blocks, one after the other; when they are many their rays and their pushes are
+    // shared out to helper threads kept awake until the last one
+    batch.setCrowded(mPendingExplosions.size() - quietCount >= CROWDED_EXPLOSIONS);
+    std::vector<Vector3f> centers;
+    for (const PendingExplosion &pending: mPendingExplosions)
+        centers.push_back(pending.mCenter);
+
+    // when nothing can call an explosion off (no plugin, no script listening before it), the ones standing
+    // apart are worked out together on every core while this thread ends them one by one
+    size_t apartEnd = quietCount;
+    if (mPendingExplosions.size() - quietCount >= APART_EXPLOSIONS
+        && !getPluginManager().hasSubscribers(FALCON_EVENT_EXPLOSION)
+        && !mScriptEngine.hasSubscribers("before.explosion")) {
+        batch.setCrowded(false);
+        Level *apartLevel = mPendingExplosions[quietCount].mLevel;
+        std::vector<std::unique_ptr<Explosion>> apart;
+        std::vector<Explosion *> apartList;
+        const size_t pendingEnd = mPendingExplosions.size();
+        // the others first in the list, the ones of another level left for the loop below
+        std::stable_partition(mPendingExplosions.begin() + (std::ptrdiff_t) quietCount, mPendingExplosions.end(),
+                              [apartLevel](const PendingExplosion &pending) { return pending.mLevel == apartLevel; });
+        for (size_t index = quietCount; index < pendingEnd && mPendingExplosions[index].mLevel == apartLevel; ++index) {
+            const PendingExplosion pending = mPendingExplosions[index];
+            const auto source = mActors.find(pending.mSourceId);
+            apart.emplace_back(new Explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                                             source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt));
+            apart.back()->setBatch(&batch);
+            apartList.push_back(apart.back().get());
+            apartEnd = index + 1;
+        }
+        batch.runApart(*apartLevel, apartList);
+    }
+
+    // by index: an explosion may queue another
+    for (size_t index = apartEnd; index < mPendingExplosions.size(); ++index) {
+        const PendingExplosion pending = mPendingExplosions[index];
+        if (index < centers.size())
+            batch.setUpcoming(centers.data() + index, centers.size() - index);
+        else
+            batch.setUpcoming(nullptr, 0);
+        const auto source = mActors.find(pending.mSourceId);
+        Explosion explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                            source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt);
+        explosion.setBatch(&batch);
+        explosion.explode();
+    }
+    mPendingExplosions.clear();
+}
+
 void ServerNetworkHandler::tickActors() {
+    mActorIndexDirty = true;
+    mTickingActors = true;
+    // the moves of a crowd leave together at the end of the pass
+    mNetworkHandler->cork();
     std::vector<int64_t> expired;
 
     std::vector<int64_t> tickOrder;
@@ -1395,25 +1906,31 @@ void ServerNetworkHandler::tickActors() {
 
         Level &level = getLevelFor(actor);
         actor.addLifetimeTick();
+        if (actor.tickLimitedLife()) {
+            expired.push_back(actorId);
+            continue;
+        }
         actor.tickCombat(1);
 
         if (actor.isDead()) {
             actor.addDeathTick();
-            if (actor.getDeathTicks() >= actor.getDeathDuration())
+            actor.tickDeath(*this);
+            if (actor.getDeathTicks() >= actor.getDeathDuration() || actor.isExpired())
                 expired.push_back(actorId);
             continue;
         }
 
-        if (ExperienceOrbActor *orb = dynamic_cast<ExperienceOrbActor *>(&actor)) {
-            orb->tick(*this);
-            if (orb->isExpired())
+        if (dynamic_cast<ExperienceOrbActor *>(&actor) != nullptr || dynamic_cast<PaintingActor *>(&actor) != nullptr) {
+            actor.tick(*this);
+            if (actor.isExpired())
                 expired.push_back(actorId);
             continue;
         }
 
         if (!actor.isProjectile()) {
             const ActorSize size = actor.getSize();
-            if (_isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
+            // nothing hurts an invulnerable actor: where its eyes are is not even looked at
+            if (!actor.isInvulnerable() && _isEyeInsideSolidBlock(level, actor.getPosition(), size.mHeight))
                 actor.hurt(*this, ACTOR_SUFFOCATION_DAMAGE,
                            ActorDamageSource::environment("death.attack.inWall", actor.getName()));
 
@@ -1429,8 +1946,7 @@ void ServerNetworkHandler::tickActors() {
                 syncActorFlags(actor);
         }
 
-        ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles,
-                                                actor.isProjectile());
+        ProfilerScopedSection projectileSection(mProfiler, ProfilerSection::ActorProjectiles, actor.isProjectile());
 
         if (dynamic_cast<FireworksRocketActor *>(&actor) != nullptr) {
             ProjectileData &firework = actor.getProjectileData();
@@ -1438,8 +1954,8 @@ void ServerNetworkHandler::tickActors() {
             ServerPlayer *rider = nullptr;
             if (firework.mFireworkAttached) {
                 for (auto &playerEntry: mPlayers) {
-                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId() &&
-                        playerEntry.second.isSpawned())
+                    if (playerEntry.second.getUniqueId() == actor.getOwnerUniqueId()
+                        && playerEntry.second.isSpawned())
                         rider = &playerEntry.second;
                 }
             }
@@ -1478,18 +1994,38 @@ void ServerNetworkHandler::tickActors() {
             continue;
         }
 
+        if (ThrownProjectileActor *held = actor.isProjectile() ? heldAfterHit(actor) : nullptr) {
+            held->tickAfterHit(*this);
+            expired.push_back(actorId);
+            continue;
+        }
+
+        if (actor.isProjectile() && actor.getProjectileData().mStuck) {
+            if (tickPlantedProjectile(actor, level))
+                expired.push_back(actorId);
+            continue;
+        }
+
         if (actor.isProjectile()) {
             Vector3f motion = actor.getMotion();
             const ProjectileActor *projectile = dynamic_cast<const ProjectileActor *>(&actor);
-            const float gravity = projectile != nullptr ? projectile->getGravity() : ProjectileActor::DEFAULT_GRAVITY;
-            const float inertia = projectile != nullptr ? projectile->getInertia() : 1.0f;
+            const ProjectileComponent &settings = actor.getProjectileComponent();
+            const Vector3f &at = actor.getPosition();
+            const int32_t atX = (int32_t) std::floor(at.x);
+            const int32_t atY = (int32_t) std::floor(at.y);
+            const int32_t atZ = (int32_t) std::floor(at.z);
+            // liquid_inertia replaces inertia while the projectile is in water
+            const bool inWater = LiquidView(level.getBlockState(atX, atY, atZ)).isWater()
+                                 || LiquidView(level.getBlockStateAtLayer(atX, atY, atZ, 1)).isWater();
+            const float gravity = settings.mGravity;
+            const float inertia = inWater ? settings.mLiquidInertia : settings.mInertia;
             const bool arrowLike = dynamic_cast<const ArrowActor *>(&actor) != nullptr;
 
             if (arrowLike && actor.getProjectileData().mReturning) {
                 ServerPlayer *shooter = nullptr;
                 for (auto &playerEntry: mPlayers) {
-                    if ((int64_t) playerEntry.second.getRuntimeId() == actor.getOwnerUniqueId() &&
-                        playerEntry.second.isSpawned() && !playerEntry.second.isDead())
+                    if (playerEntry.second.getUniqueId() == actor.getOwnerUniqueId()
+                        && playerEntry.second.isSpawned() && !playerEntry.second.isDead())
                         shooter = &playerEntry.second;
                 }
 
@@ -1530,8 +2066,15 @@ void ServerNetworkHandler::tickActors() {
             position.y += motion.y;
             position.z += motion.z;
 
+            // a script or plugin impulse can make it non finite: no block or actor lookup survives that
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+                expired.push_back(actorId);
+                continue;
+            }
+
             actor.setMotion(motion);
             actor.setPosition(position);
+            faceMotion(actor, motion);
 
             const int32_t blockX = (int32_t) std::floor(position.x);
             const int32_t blockY = (int32_t) std::floor(position.y);
@@ -1543,7 +2086,7 @@ void ServerNetworkHandler::tickActors() {
                 continue;
             }
 
-            if (actor.getLifetimeTicks() > 1 && level.isSolidAt(blockX, blockY, blockZ)) {
+            if (actor.getLifetimeTicks() > 1 && blocksProjectile(level, actor, position, blockX, blockY, blockZ)) {
                 const Vector3f hitPosition((float) blockX + 0.5f, (float) blockY + 0.5f, (float) blockZ + 0.5f);
                 const Vector3i hitBlock(blockX, blockY, blockZ);
                 if (!allowProjectileHit(*this, actor, level, hitPosition, nullptr, &hitBlock)) {
@@ -1552,6 +2095,8 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 const BlockState hitState = level.getBlockState(blockX, blockY, blockZ);
+                if (DetectorSystem::isTarget(hitState))
+                    DetectorSystem::onTargetHit(*this, level, hitBlock, position, previousPosition, actor, arrowLike);
                 const Block *block = VanillaBlocks::fromIdentifier(hitState.mName);
                 if (block != nullptr && block->onProjectileHit(*this, level, hitBlock, hitState, actor)) {
                     expired.push_back(actorId);
@@ -1559,7 +2104,17 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 if (!onThrownProjectileHit(actor, hitPosition, nullptr))
-                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ);
+                    mScriptEngine.onProjectileHitBlock(actor, blockX, blockY, blockZ, previousPosition, position);
+
+                if (actor.getProjectileData().mStuck) {
+                    plantProjectile(actor, level, previousPosition, Vector3i(blockX, blockY, blockZ));
+                    continue;
+                }
+
+                if (heldAfterHit(actor) != nullptr) {
+                    broadcastActorMove(actor);
+                    continue;
+                }
 
                 if (!actor.getProjectileData().mReturning) {
                     expired.push_back(actorId);
@@ -1577,58 +2132,129 @@ void ServerNetworkHandler::tickActors() {
                 const float sweepY = position.y - previousPosition.y;
                 const float sweepZ = position.z - previousPosition.z;
                 const float sweepLength = std::sqrt(sweepX * sweepX + sweepY * sweepY + sweepZ * sweepZ);
-                const int32_t sampleCount = std::max(1, (int32_t) std::ceil(sweepLength / 0.25f));
+                const int64_t sampleCount = std::max<int64_t>(
+                        1, (int64_t) std::min(std::ceil((double) sweepLength / 0.25), 2147483647.0));
 
                 ServerPlayer *hitPlayer = nullptr;
                 ServerActor *hitActor = nullptr;
                 Vector3f contactPosition = position;
 
-                for (int32_t sample = 1; sample <= sampleCount && hitPlayer == nullptr && hitActor == nullptr;
-                     ++sample) {
-                    const float progress = (float) sample / (float) sampleCount;
-                    const Vector3f samplePosition(previousPosition.x + sweepX * progress,
-                                                  previousPosition.y + sweepY * progress,
-                                                  previousPosition.z + sweepZ * progress);
+                // candidates picked once per tick: only a box meeting the sweep's bounds can hold a sample
+                const Vector3f low(std::min(previousPosition.x, position.x), std::min(previousPosition.y, position.y),
+                                   std::min(previousPosition.z, position.z));
+                const Vector3f high(std::max(previousPosition.x, position.x), std::max(previousPosition.y, position.y),
+                                    std::max(previousPosition.z, position.z));
+                const auto meetsSweep = [&low, &high](const AxisAlignedBB &box) {
+                    return box.mMaxX >= low.x && box.mMinX <= high.x && box.mMaxY >= low.y && box.mMinY <= high.y
+                           && box.mMaxZ >= low.z && box.mMinZ <= high.z;
+                };
 
-                    for (auto &playerEntry: mPlayers) {
-                        ServerPlayer &candidate = playerEntry.second;
-                        if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
-                            continue;
-                        if ((int64_t) candidate.getRuntimeId() == actor.getOwnerUniqueId() &&
-                            actor.getLifetimeTicks() < 8)
-                            continue;
+                std::vector<ServerPlayer *> nearPlayers;
+                for (auto &playerEntry: mPlayers) {
+                    ServerPlayer &candidate = playerEntry.second;
+                    if (!candidate.isSpawned() || !candidate.sharesLevelWith(actor))
+                        continue;
+                    if (candidate.getUniqueId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
+                        continue;
+                    if (meetsSweep(projectileHitBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT)))
+                        nearPlayers.push_back(&candidate);
+                }
 
-                        if (intersectsActorBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT,
-                                               samplePosition)) {
-                            hitPlayer = &candidate;
-                            contactPosition = samplePosition;
-                            break;
+                std::vector<std::pair<ServerActor *, AxisAlignedBB>> nearActors;
+                const auto consider = [&](ServerActor &candidate) {
+                    if (&candidate == &actor || !candidate.isAlive() || !candidate.sharesLevelWith(actor))
+                        return;
+
+                    const bool candidateIsProjectile = candidate.isProjectile();
+                    if (candidateIsProjectile && candidate.getProjectileData().mStuck)
+                        return;
+                    if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId()
+                        && candidate.getLifetimeTicks() < 8)
+                        return;
+                    if (projectile != nullptr && projectile->passesThroughOwner()
+                        && candidate.getUniqueId() == actor.getOwnerUniqueId())
+                        return;
+
+                    const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
+                    const auto *painting = dynamic_cast<const PaintingActor *>(&candidate);
+                    const auto box = painting == nullptr
+                                             ? projectileHitBox(candidate.getPosition(), size.mWidth, size.mHeight)
+                                             : painting->getPaintingBounds().expand(PROJECTILE_HIT_GROW,
+                                                                                   PROJECTILE_HIT_GROW,
+                                                                                   PROJECTILE_HIT_GROW);
+                    if (meetsSweep(box))
+                        nearActors.emplace_back(&candidate, box);
+                };
+                // a sweep over many columns reads every actor once rather than every column of the index
+                if (high.x - low.x <= SWEEP_INDEX_SPAN && high.z - low.z <= SWEEP_INDEX_SPAN) {
+                    _refreshActorIndex();
+                    const Vector3f middle((low.x + high.x) * 0.5f, position.y, (low.z + high.z) * 0.5f);
+                    const float reach = std::max(high.x - low.x, high.z - low.z) * 0.5f
+                                        + std::max(mActorIndexWidestHalf, mActorIndexWidestBox) + PROJECTILE_HIT_GROW;
+                    forEachActorNear(middle, reach, consider);
+                } else {
+                    for (auto &actorEntry: mActors)
+                        consider(*actorEntry.second);
+                }
+
+                // the first 0.25 block sample inside a box, from the segment's entry into it; players first on a tie
+                const auto sampleAt = [&](int64_t sample) {
+                    const float progress = (float) ((double) sample / (double) sampleCount);
+                    return Vector3f(previousPosition.x + sweepX * progress, previousPosition.y + sweepY * progress,
+                                    previousPosition.z + sweepZ * progress);
+                };
+                const auto firstSample = [&](const AxisAlignedBB &box) -> int64_t {
+                    double enter = 0.0, leave = 1.0;
+                    const float from[3] = {previousPosition.x, previousPosition.y, previousPosition.z};
+                    const float delta[3] = {sweepX, sweepY, sweepZ};
+                    const float lows[3] = {box.mMinX, box.mMinY, box.mMinZ};
+                    const float highs[3] = {box.mMaxX, box.mMaxY, box.mMaxZ};
+                    for (int axis = 0; axis < 3; ++axis) {
+                        if (delta[axis] == 0.0f) {
+                            if (from[axis] < lows[axis] || from[axis] > highs[axis])
+                                return 0;
+                            continue;
                         }
+                        double slabIn = ((double) lows[axis] - from[axis]) / delta[axis];
+                        double slabOut = ((double) highs[axis] - from[axis]) / delta[axis];
+                        if (slabIn > slabOut)
+                            std::swap(slabIn, slabOut);
+                        enter = std::max(enter, slabIn);
+                        leave = std::min(leave, slabOut);
+                        if (enter > leave)
+                            return 0;
                     }
+                    const int64_t first = std::max<int64_t>(1, (int64_t) std::ceil(enter * (double) sampleCount));
+                    // float rounding at the box edge: the exact test decides between the nearest samples
+                    for (int64_t sample = std::max<int64_t>(1, first - 1); sample <= first + 1 && sample <= sampleCount;
+                         ++sample) {
+                        const auto point = sampleAt(sample);
+                        if (point.x >= box.mMinX && point.x <= box.mMaxX && point.y >= box.mMinY && point.y <= box.mMaxY
+                            && point.z >= box.mMinZ && point.z <= box.mMaxZ)
+                            return sample;
+                    }
+                    return 0;
+                };
 
-                    if (hitPlayer != nullptr)
-                        break;
-
-                    for (auto &actorEntry: mActors) {
-                        ServerActor &candidate = *actorEntry.second;
-                        if (&candidate == &actor || !candidate.isAlive() ||
-                            !candidate.sharesLevelWith(actor))
-                            continue;
-
-                        const bool candidateIsProjectile = candidate.isProjectile();
-                        if (candidateIsProjectile && candidate.getOwnerUniqueId() == actor.getOwnerUniqueId() &&
-                            candidate.getLifetimeTicks() < 8)
-                            continue;
-
-                        const ActorSize size = ActorClassRegistry::getSize(candidate.getTypeId());
-                        if (intersectsActorBox(candidate.getPosition(), size.mWidth, size.mHeight,
-                                               samplePosition)) {
-                            hitActor = &candidate;
-                            contactPosition = samplePosition;
-                            break;
-                        }
+                int64_t hitSample = 0;
+                for (ServerPlayer *candidate: nearPlayers) {
+                    const int64_t sample = firstSample(projectileHitBox(candidate->getPosition(), PLAYER_WIDTH,
+                                                                       PLAYER_HEIGHT));
+                    if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
+                        hitSample = sample;
+                        hitPlayer = candidate;
                     }
                 }
+                for (const auto &candidate: nearActors) {
+                    const int64_t sample = firstSample(candidate.second);
+                    if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
+                        hitSample = sample;
+                        hitPlayer = nullptr;
+                        hitActor = candidate.first;
+                    }
+                }
+                if (hitSample != 0)
+                    contactPosition = sampleAt(hitSample);
 
                 if (hitPlayer != nullptr) {
                     if (!allowProjectileHit(*this, actor, level, contactPosition, hitPlayer, nullptr)) {
@@ -1638,7 +2264,10 @@ void ServerNetworkHandler::tickActors() {
 
                     mScriptEngine.onProjectileHitEntity(actor, *hitPlayer, contactPosition);
                     onThrownProjectileHit(actor, contactPosition, hitPlayer);
-                    expired.push_back(actorId);
+                    if (heldAfterHit(actor) != nullptr)
+                        broadcastActorMove(actor);
+                    else
+                        expired.push_back(actorId);
                     continue;
                 }
 
@@ -1650,7 +2279,10 @@ void ServerNetworkHandler::tickActors() {
 
                     mScriptEngine.onProjectileHitEntity(actor, *hitActor, contactPosition);
                     onThrownProjectileHitActor(actor, contactPosition, *hitActor);
-                    expired.push_back(actorId);
+                    if (heldAfterHit(actor) != nullptr)
+                        broadcastActorMove(actor);
+                    else
+                        expired.push_back(actorId);
                     continue;
                 }
             }
@@ -1677,12 +2309,20 @@ void ServerNetworkHandler::tickActors() {
     }
 
     std::vector<int64_t> expiredClouds;
-    for (auto &entry: mLingeringClouds) {
-        LingeringCloud &cloud = entry.second;
+    // ids first: an effect can kill, and the death's script events can spawn another cloud
+    std::vector<int64_t> cloudIds;
+    cloudIds.reserve(mLingeringClouds.size());
+    for (const auto &entry: mLingeringClouds)
+        cloudIds.push_back(entry.first);
+    for (const int64_t cloudId: cloudIds) {
+        const auto found = mLingeringClouds.find(cloudId);
+        if (found == mLingeringClouds.end())
+            continue;
+        LingeringCloud &cloud = found->second;
         cloud.mAge += 1;
 
-        if (mActors.find(entry.first) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
-            expiredClouds.push_back(entry.first);
+        if (mActors.find(cloudId) == mActors.end() || cloud.mAge > cloud.mWaitTime + cloud.mDuration) {
+            expiredClouds.push_back(cloudId);
             continue;
         }
 
@@ -1701,7 +2341,8 @@ void ServerNetworkHandler::tickActors() {
             for (auto &playerEntry: mPlayers) {
                 ServerPlayer &nearby = playerEntry.second;
                 if (!nearby.isSpawned() || nearby.getDimension() != cloud.mDimension
-                    || nearby.getWorldId() != cloud.mWorldId)
+                    || nearby.getWorldId() != cloud.mWorldId
+                    || nearby.getUniqueId() == cloud.mOwnerUniqueId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();
@@ -1715,10 +2356,12 @@ void ServerNetworkHandler::tickActors() {
                 touched = true;
             }
 
+            std::vector<int64_t> inside;
             for (auto &actorEntry: mActors) {
                 ServerActor &nearby = *actorEntry.second;
-                if (!nearby.isAlive() || nearby.isProjectile() || nearby.isDead() ||
-                    nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId)
+                if (actorEntry.first == cloudId || !nearby.isAlive() || nearby.isProjectile() || nearby.isDead()
+                    || nearby.getDimension() != cloud.mDimension || nearby.getWorldId() != cloud.mWorldId
+                    || nearby.getUniqueId() == cloud.mOwnerUniqueId)
                     continue;
 
                 const Vector3f position = nearby.getPosition();
@@ -1728,7 +2371,14 @@ void ServerNetworkHandler::tickActors() {
                 if (dx * dx + dz * dz > radiusSquared || std::fabs(dy) > 1.0f)
                     continue;
 
-                touched = true;
+                inside.push_back(actorEntry.first);
+            }
+            // applied after the walk: an instant damage can kill and remove the actor
+            for (const int64_t uniqueId: inside) {
+                if (ServerActor *nearby = getActor(uniqueId)) {
+                    applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
+                    touched = true;
+                }
             }
 
             if (touched) {
@@ -1738,12 +2388,12 @@ void ServerNetworkHandler::tickActors() {
         }
 
         if (cloud.mRadius <= LINGERING_CLOUD_MIN_RADIUS) {
-            expiredClouds.push_back(entry.first);
+            expiredClouds.push_back(cloudId);
             continue;
         }
 
         if (cloud.mAge % 10 == 0) {
-            ServerActor *cloudActor = getActor(entry.first);
+            ServerActor *cloudActor = getActor(cloudId);
             if (cloudActor != nullptr) {
                 EntityDataMap metadata;
 
@@ -1763,6 +2413,11 @@ void ServerNetworkHandler::tickActors() {
             }
         }
     }
+
+    mTickingActors = false;
+    // the block updates and drops of the explosions leave with the moves, in one go
+    _flushExplosions();
+    mNetworkHandler->uncork();
 
     for (const int64_t uniqueId: expiredClouds) {
         mLingeringClouds.erase(uniqueId);

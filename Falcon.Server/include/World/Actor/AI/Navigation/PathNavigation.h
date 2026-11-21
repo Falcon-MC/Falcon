@@ -20,6 +20,10 @@ public:
         return !mHasTarget;
     }
 
+    const Path *getPath() const {
+        return mHasTarget && !mNeedsPath ? &mPath : nullptr;
+    }
+
     void setOptions(PathOptions options) {
         mOptions = std::move(options);
     }

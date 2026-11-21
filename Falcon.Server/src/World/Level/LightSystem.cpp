@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/BlockLightProperties.h"
 #include "Core/Math/MathConstants.h"
+#include "World/Level/LevelGen/Feature/FeatureMath.h"
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
@@ -12,16 +13,8 @@
 
 namespace {
     const float SKY_LIGHT_SCALE = 11.0f;
-    const float WEATHER_REDUCTION = 5.0f / 16.0f;
 
-    const int32_t NEIGHBOUR_OFFSETS[6][3] = {
-            {1,  0,  0},
-            {-1, 0,  0},
-            {0,  0,  1},
-            {0,  0,  -1},
-            {0,  -1, 0},
-            {0,  1,  0}
-    };
+    const int32_t NEIGHBOUR_OFFSETS[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}};
 
     struct LightNode {
         int32_t mX;
@@ -29,10 +22,6 @@ namespace {
         int32_t mZ;
         int mLight;
     };
-
-    float clampFloat(float value, float minimum, float maximum) {
-        return std::max(minimum, std::min(maximum, value));
-    }
 
     int attenuation(const BlockState &state) {
         return std::max(1, BlockLightProperties::lightFilter(BlockLightProperties::packed(state)));
@@ -44,9 +33,7 @@ namespace {
 
     class ChunkLightAccess {
     public:
-        explicit ChunkLightAccess(LevelChunk &chunk)
-                : mChunk(chunk) {
-        }
+        explicit ChunkLightAccess(LevelChunk &chunk) : mChunk(chunk) {}
 
         bool contains(int32_t x, int32_t y, int32_t z) const {
             return x >= 0 && x <= 15 && z >= 0 && z <= 15 && y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y;
@@ -70,9 +57,7 @@ namespace {
 
     class LevelLightAccess {
     public:
-        explicit LevelLightAccess(Level &level)
-                : mLevel(level) {
-        }
+        explicit LevelLightAccess(Level &level) : mLevel(level) {}
 
         bool contains(int32_t x, int32_t y, int32_t z) const {
             return y >= LevelChunk::MIN_Y && y <= LevelChunk::MAX_Y && mLevel.peekChunkPtr(x >> 4, z >> 4) != nullptr;
@@ -94,12 +79,9 @@ namespace {
         Level &mLevel;
     };
 
-    /**
-     * Two-pass flood removal. Neighbours dimmer than the removed level were lit by it and are
-     * cleared in turn (re-seeding any that emit light themselves); brighter or equal
-     * neighbours have another source and are queued to spread back into the cleared area.
-     */
-    template<typename Access>
+    // dimmer neighbours were lit by the removed level: cleared too (emitters re-seeded); brighter or equal
+    // ones have another source and spread back in
+    template <typename Access>
     void removeBlockLight(Access &access, std::deque<LightNode> &removal, std::deque<LightNode> &spread) {
         while (!removal.empty()) {
             const LightNode node = removal.front();
@@ -132,7 +114,7 @@ namespace {
         }
     }
 
-    template<typename Access>
+    template <typename Access>
     void spreadBlockLight(Access &access, std::deque<LightNode> &spread) {
         while (!spread.empty()) {
             const LightNode node = spread.front();
@@ -166,8 +148,8 @@ int64_t LightSystem::packPosition(int32_t x, int32_t y, int32_t z) {
 }
 
 float LightSystem::calculateCelestialAngle(int64_t time) {
-    const int32_t dayTime = (int32_t) (time % 24000);
-    float angle = (float) dayTime / 24000.0f - 0.25f;
+    const int32_t dayTime = (int32_t) (time % Level::TICKS_PER_DAY);
+    float angle = (float) dayTime / (float) Level::TICKS_PER_DAY - 0.25f;
 
     if (angle < 0.0f)
         ++angle;
@@ -178,17 +160,30 @@ float LightSystem::calculateCelestialAngle(int64_t time) {
     return angle + (smoothed - angle) / 3.0f;
 }
 
+// the dimension tick writes it to the byte the sleep check reads
 int32_t LightSystem::calculateSkyLightSubtracted(const Level &level, bool includeWeather) {
-    const float rain = includeWeather && level.isRaining() ? 1.0f : 0.0f;
-    const float thunder = includeWeather && level.isThundering() ? 1.0f : 0.0f;
+    // the time of day one tick ahead while the day moves (game rule 1)
+    const float alpha = level.getGameRules().getBool("dodaylightcycle") ? 1.0f : 0.0f;
+    float angle = ((float) ((int32_t) level.getTime() % 24000) + alpha) / 24000.0f + -0.25f;
+    if (angle < 0.0f)
+        angle = angle + 1.0f;
+    if (angle > 1.0f)
+        angle = angle + -1.0f;
+    const float halfCos = FeatureMath::sineAt(3.1415927f * angle * 10430.378f + 16384.0f);
+    const float timeOfDay = ((halfCos + 1.0f) * -0.5f + 1.0f - angle) / 3.0f + angle;
 
-    const float rainFactor = 1.0f - rain * WEATHER_REDUCTION;
-    const float thunderFactor = 1.0f - thunder * WEATHER_REDUCTION;
+    const float turn = timeOfDay * 3.1415927f;
+    const float cosine = FeatureMath::sineAt((turn + turn) * 10430.378f + 16384.0f);
+    const float dark = std::min(1.0f, std::max(0.0f, 1.0f - (cosine + cosine + 0.5f)));
+    float brightness = 1.0f - dark;
 
-    const float angle = calculateCelestialAngle(level.getTime());
-    const float brightness = 0.5f + 2.0f * clampFloat(std::cos(angle * MathConstants::TWO_PI_F), -0.25f, 0.25f);
+    // the weather's fog level has no writer and no wither darkens the sky: both stay neutral
+    if (includeWeather && Dimension::hasWeather(level.getDimensionType())) {
+        brightness *= 1.0f - level.getRainLevel() * 5.0f * 0.0625f;
+        brightness *= 1.0f - level.getLightningLevel() * 5.0f * 0.0625f;
+    }
 
-    return (int32_t) ((1.0f - brightness * rainFactor * thunderFactor) * SKY_LIGHT_SCALE);
+    return (int32_t) ((1.0f - brightness) * SKY_LIGHT_SCALE);
 }
 
 void LightSystem::updateHeightAt(LevelChunk &chunk, int x, int z) {
@@ -222,8 +217,8 @@ void LightSystem::_computeSkyColumn(LevelChunk &chunk, int x, int z) {
     for (int32_t y = LevelChunk::MAX_Y; y >= height; --y)
         chunk.setSkyLight(x, y, z, MAX_LIGHT);
 
-    // Below the heightmap, light loss accumulates: each filtering block adds to the amount
-    // subtracted at every block further down, and the first opaque block cuts it to zero.
+    // below the heightmap the loss accumulates: each filtering block adds to it for every block further
+    // down; the first opaque block cuts to zero
     int light = MAX_LIGHT;
     int nextDecrease = 0;
 
@@ -257,14 +252,14 @@ void LightSystem::computeSkyLight(LevelChunk &chunk) {
         for (int z = 0; z < 16; ++z)
             _computeSkyColumn(chunk, x, z);
     }
+
+    chunk.compactLight();
 }
 
 void LightSystem::computeBlockLight(LevelChunk &chunk) {
     ChunkLightAccess access(chunk);
     std::deque<LightNode> spread;
 
-    // Sub-chunks track whether they contain any emitter, which lets the full scan skip most
-    // of the chunk.
     for (int index = 0; index < LevelChunk::SUB_CHUNK_COUNT; ++index) {
         if (!chunk.getSubChunk(index).hasLightEmitter())
             continue;
@@ -285,6 +280,7 @@ void LightSystem::computeBlockLight(LevelChunk &chunk) {
     }
 
     spreadBlockLight(access, spread);
+    chunk.compactLight();
 }
 
 void LightSystem::onBlockChanged(Level &level, int32_t x, int32_t y, int32_t z) {
@@ -292,16 +288,16 @@ void LightSystem::onBlockChanged(Level &level, int32_t x, int32_t y, int32_t z) 
     if (chunk == nullptr)
         return;
 
-    const int localX = x & 15;
-    const int localZ = z & 15;
-
-    if (chunk->hasHeightmap())
-        updateHeightAt(*chunk, localX, localZ);
-
-    if (chunk->hasSkyLight())
-        _computeSkyColumn(*chunk, localX, localZ);
-
+    relightColumn(*chunk, x & 15, z & 15);
     level.addBlockLightUpdate(x, y, z);
+}
+
+void LightSystem::relightColumn(LevelChunk &chunk, int x, int z) {
+    if (chunk.hasHeightmap())
+        updateHeightAt(chunk, x, z);
+
+    if (chunk.hasSkyLight())
+        _computeSkyColumn(chunk, x, z);
 }
 
 void LightSystem::updateBlockLight(Level &level, std::unordered_set<int64_t> &pending) {
@@ -333,8 +329,7 @@ void LightSystem::updateBlockLight(Level &level, std::unordered_set<int64_t> &pe
         if (newLevel > oldLevel)
             access.setLight(x, y, z, newLevel);
 
-        // Lit neighbours are re-spread too, so light flows into a block that just became
-        // transparent.
+        // lit neighbours re-spread too: light flows into a block just made transparent
         spread.push_back(LightNode{x, y, z, newLevel});
         for (const auto &offset: NEIGHBOUR_OFFSETS) {
             const int32_t neighbourX = x + offset[0];

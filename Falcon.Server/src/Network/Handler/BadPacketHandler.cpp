@@ -18,6 +18,10 @@ namespace {
         return std::isfinite(value) && value >= -1.001f && value <= 1.001f;
     }
 
+    // beyond the world border: never a position the client really reached
+    const double MAX_COORDINATE = 30000000.0;
+    const uint32_t MAX_STALE_INPUT_TICKS = 20;
+
     bool validFace(int32_t face) {
         return face >= 0 && face <= 5;
     }
@@ -33,13 +37,17 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
         outReason = "input tick returned to zero";
         return true;
     }
+    // the client tick always advances; a repeated or older one skips simulation: a client stuck on one tick
+    // would move unvalidated; a few stale ticks in a row tolerated for reordering
+    if (player.getMovementInputs().noteInputTick(tick) > MAX_STALE_INPUT_TICKS) {
+        outReason = "input tick did not advance";
+        return true;
+    }
     if (tick != 0)
         player.markNonZeroClientTickSeen();
 
     const bool jumpBoost = player.hasEffect(MobEffectId::JumpBoost);
-    const bool validVerticalMotion = jumpBoost
-                                     ? std::isfinite(packet.mMotionY)
-                                     : validMoveComponent(packet.mMotionY);
+    const bool validVerticalMotion = jumpBoost ? std::isfinite(packet.mMotionY) : validMoveComponent(packet.mMotionY);
     if (!validMoveComponent(packet.mMotionX) || !validVerticalMotion) {
         outReason = "invalid move vector";
         return true;
@@ -49,7 +57,9 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     const double positionX = (double) packet.mPosition.x;
     const double positionZ = (double) packet.mPosition.z;
 
-    if (!std::isfinite(positionX) || !std::isfinite(positionY) || !std::isfinite(positionZ)) {
+    if (!std::isfinite(positionX) || !std::isfinite(positionY) || !std::isfinite(positionZ)
+        || std::fabs(positionX) > MAX_COORDINATE || std::fabs(positionY) > MAX_COORDINATE
+        || std::fabs(positionZ) > MAX_COORDINATE) {
         outReason = "invalid position";
         return true;
     }
@@ -62,14 +72,14 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     }
 
     for (const PlayerBlockActionData &action: packet.mPlayerActions) {
-        if (action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock &&
-            player.getGameType() != (int32_t) GameType::Creative) {
+        if (action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock
+            && !player.isCreative()) {
             outReason = "creative destroy outside creative";
             return true;
         }
 
-        if (action.mAction != PlayerActionType::AbortBreak && action.mAction != PlayerActionType::StopBreak &&
-            !validFace(action.mFace)) {
+        if (action.mAction != PlayerActionType::AbortBreak && action.mAction != PlayerActionType::StopBreak
+            && !validFace(action.mFace)) {
             outReason = "invalid block action face";
             return true;
         }
@@ -78,8 +88,7 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const PlayerAuthInputPacket
     return false;
 }
 
-bool BadPacketHandler::inspect(ServerPlayer &player, const InventoryTransactionPacket &packet,
-                             std::string &outReason) {
+bool BadPacketHandler::inspect(ServerPlayer &player, const InventoryTransactionPacket &packet, std::string &outReason) {
     if (packet.mTransactionType == InventoryTransactionType::ItemUseOnEntity) {
         if (!hotbarSlot(packet.mHotbarSlot)) {
             outReason = "invalid hotbar slot";
@@ -113,8 +122,8 @@ bool BadPacketHandler::inspect(ServerPlayer &player, const InventoryTransactionP
 bool BadPacketHandler::inspect(ServerPlayer &player, const ItemStackRequestPacket &packet, std::string &outReason) {
     for (const ItemStackRequest &request: packet.mRequests) {
         for (const ItemStackRequestAction &action: request.mActions) {
-            if (action.mType == ItemStackRequestActionType::CraftCreative &&
-                player.getGameType() != (int32_t) GameType::Creative) {
+            if (action.mType == ItemStackRequestActionType::CraftCreative
+                && !player.isCreative()) {
                 outReason = "creative craft outside creative";
                 return true;
             }

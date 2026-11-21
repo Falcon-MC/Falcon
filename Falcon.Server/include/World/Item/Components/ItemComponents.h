@@ -31,7 +31,7 @@ public:
     ItemComponents &operator=(ItemComponents &&) noexcept = default;
 
     template <typename T, typename... Args>
-    T &emplace(Args &&... args) {
+    T &emplace(Args &&...args) {
         static_assert(std::is_base_of_v<ItemComponent, T>);
         auto component = std::make_unique<T>(std::forward<Args>(args)...);
         T &result = *component;
@@ -56,8 +56,12 @@ public:
         return mComponents.find(std::type_index(typeid(T))) != mComponents.end();
     }
 
-    bool empty() const { return mComponents.empty(); }
-    size_t size() const { return mComponents.size(); }
+    bool empty() const {
+        return mComponents.empty();
+    }
+    size_t size() const {
+        return mComponents.size();
+    }
 
 private:
     std::unordered_map<std::type_index, std::unique_ptr<ItemComponent>> mComponents;

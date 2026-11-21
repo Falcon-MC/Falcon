@@ -2,16 +2,13 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
-#include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Protocol/Packets/SetSpawnPositionPacket.h"
 
 #include <cmath>
 #include <string>
 
 SetWorldSpawnCommand::SetWorldSpawnCommand(ServerNetworkHandler &handler)
-        : Command("setworldspawn", "commands.setworldspawn.description", "/setworldspawn [x y z]"),
-          mHandler(handler) {}
+        : Command("setworldspawn", "commands.setworldspawn.description", "/setworldspawn [x y z]"), mHandler(handler) {}
 
 std::vector<CommandOverloadData> SetWorldSpawnCommand::getOverloads() const {
     CommandParamData position;
@@ -58,20 +55,7 @@ bool SetWorldSpawnCommand::execute(CommandOrigin &sender, const std::vector<std:
         return false;
     }
 
-    level.setSpawnPosition(spawn);
-    level.saveLevelDat();
-
-    SetSpawnPositionPacket packet;
-    packet.mSpawnType = SetSpawnPositionPacket::Type::WorldSpawn;
-    packet.mBlockPosition = spawn;
-    packet.mDimensionId = level.getDimensionId();
-    packet.mSpawnPosition = spawn;
-
-    for (auto &entry: mHandler.getPlayers()) {
-        if (entry.second.isSpawned())
-            mHandler.getNetworkHandler().send(entry.first, packet, mHandler.getCodecContext());
-    }
-
+    mHandler.changeWorldSpawn(level, spawn);
     sender.sendTranslation("commands.setworldspawn.success",
                            {std::to_string(spawn.x), std::to_string(spawn.y), std::to_string(spawn.z)});
     return true;

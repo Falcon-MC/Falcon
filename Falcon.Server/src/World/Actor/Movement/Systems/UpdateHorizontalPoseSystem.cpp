@@ -12,12 +12,12 @@ using namespace MovementPhysics;
 namespace MovementPhysics {
 
     bool fits(Level &level, const Vector3f &feet, float height) {
-        // BDS PlayerBoundingBoxStateUpdateSystem (0x140F97340) insets fit probes by 0.01.
+        // PlayerBoundingBoxStateUpdateSystem insets fit probes by 0.01
         return !collides(level, boxAt(feet, height).expand(-0.01f, -0.01f, -0.01f));
     }
 
     PlayerPoseComponent resolvePose(Level &level, const Vector3f &feet, const PlayerAuthInputPacket &packet,
-                           bool wasSneaking, bool wasCrawling) {
+                                    bool wasSneaking, bool wasCrawling) {
         const bool sneakDown = packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown);
         const bool startSneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
         const bool stopSneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking);
@@ -64,9 +64,12 @@ void UpdateHorizontalPoseSystem::tick(PlayerMovementContext &context) {
     auto &input = context.input;
     auto &abilities = context.abilities;
     context.pose = resolvePose(context.level, state.start, input.getPacket(), context.player.isSimulatedSneaking(),
-                                        context.player.isSimulatedCrawling());
-    // BDS PlayerBoundingBoxStateUpdateSystem and SneakTriggerIntentSystem
-    // (0x140F97340/0x140E77100) keep a horizontal pose when neither standing nor crouching fits.
+                               context.player.isSimulatedCrawling());
+    // the client stops swimming once out of water: a StartSwimming outside it isn't trusted
+    if (abilities.swimming && !LiquidBlocksFetch::at(context.level, state.start, true, PLAYER_HEIGHT).water)
+        abilities.swimming = false;
+    // PlayerBoundingBoxStateUpdateSystem, SneakTriggerIntentSystem: horizontal pose
+    // kept when neither standing nor crouching fits
     if (!abilities.flying && !abilities.gliding && !fits(context.level, state.start, PLAYER_HEIGHT)) {
         if (!fits(context.level, state.start, PLAYER_SNEAKING_HEIGHT)
             && fits(context.level, state.start, PLAYER_CRAWLING_HEIGHT)) {
@@ -74,8 +77,8 @@ void UpdateHorizontalPoseSystem::tick(PlayerMovementContext &context) {
                                             || context.player.getFlags().get(ActorFlag::Gliding)
                                             || context.player.isSimulatedCrawling();
             const float previousHeight = context.player.isSimulatedSneaking() ? PLAYER_SNEAKING_HEIGHT : PLAYER_HEIGHT;
-            const LiquidContact previousContact = LiquidBlocksFetch::at(context.level, state.start,
-                                                                        previousHorizontal, previousHeight);
+            const LiquidContact previousContact = LiquidBlocksFetch::at(context.level, state.start, previousHorizontal,
+                                                                        previousHeight);
             abilities.swimming = previousContact.water;
             context.pose.mCrawling = !abilities.swimming;
             context.pose.mSneaking = false;
@@ -91,8 +94,9 @@ void UpdateHorizontalPoseSystem::tick(PlayerMovementContext &context) {
     } else if (context.pose.mCrawling && fits(context.level, state.start, PLAYER_HEIGHT)) {
         context.pose.mCrawling = false;
     }
-    context.pose.mHeight = context.pose.mCrawling ? PLAYER_CRAWLING_HEIGHT
-                         : context.pose.mSneaking ? PLAYER_SNEAKING_HEIGHT : PLAYER_HEIGHT;
+    context.pose.mHeight = context.pose.mCrawling   ? PLAYER_CRAWLING_HEIGHT
+                           : context.pose.mSneaking ? PLAYER_SNEAKING_HEIGHT
+                                                    : PLAYER_HEIGHT;
     context.player.setSimulatedSwimming(abilities.swimming);
     const bool horizontalPose = abilities.swimming || abilities.gliding || context.pose.mCrawling;
     if (horizontalPose)

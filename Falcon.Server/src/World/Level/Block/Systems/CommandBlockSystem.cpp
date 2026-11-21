@@ -6,6 +6,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ServerCommandOrigin.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -25,48 +27,41 @@ namespace {
 
     struct CommandBlockState {
         std::unordered_map<int64_t, CommandBlockActor> mCommandBlocks;
-        std::unordered_map<NetworkIdentifier, std::unordered_map<int64_t, uint64_t>,
-                           NetworkIdentifier::Hasher> mSyncedRevisions;
+        std::unordered_map<NetworkIdentifier, std::unordered_map<int64_t, uint64_t>, NetworkIdentifier::Hasher>
+                mSyncedRevisions;
     };
 
-    std::array<CommandBlockState, Dimension::DIMENSION_COUNT> gStates;
+    std::unordered_map<const Level *, CommandBlockState> gStates;
 
-    CommandBlockState &stateOf(Level &level)
-    {
-        return gStates[level.getDimensionId()];
+    CommandBlockState &stateOf(Level &level) {
+        return gStates[&level];
     }
 
     class CommandBlockOrigin final : public CommandOrigin {
     public:
-        explicit CommandBlockOrigin(const std::string &name) : mName(name)
-        {
-        }
+        CommandBlockOrigin(const std::string &name, Level &level, const Vector3i &position)
+                : mName(name), mLevel(level), mPosition(position) {}
 
-        std::string getSenderName() const override
-        {
+        std::string getSenderName() const override {
             return mName;
         }
 
-        bool isPlayer() const override
-        {
+        bool isPlayer() const override {
             return false;
         }
 
-        ServerPlayer *asPlayer() override
-        {
+        ServerPlayer *asPlayer() override {
             return nullptr;
         }
 
-        void sendMessage(const std::string &message) override
-        {
+        void sendMessage(const std::string &message) override {
             if (!mOutput.empty())
                 mOutput += "\n";
 
             mOutput += message;
         }
 
-        void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) override
-        {
+        void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) override {
             std::string message = key;
             for (const std::string &parameter: parameters)
                 message += " " + parameter;
@@ -74,23 +69,28 @@ namespace {
             sendMessage(message);
         }
 
-        CommandPermission getCommandPermission() const override
-        {
+        CommandPermission getCommandPermission() const override {
             return CommandPermission::Internal;
         }
 
-        const std::string &getOutput() const
-        {
+        bool getSourceBlock(Level *&level, Vector3i &position) override {
+            level = &mLevel;
+            position = mPosition;
+            return true;
+        }
+
+        const std::string &getOutput() const {
             return mOutput;
         }
 
     private:
         std::string mName;
+        Level &mLevel;
+        Vector3i mPosition;
         std::string mOutput;
     };
 
-    Vector3i offsetForFacing(int32_t facing)
-    {
+    Vector3i offsetForFacing(int32_t facing) {
         switch (facing) {
             case 0:
                 return Vector3i(0, -1, 0);
@@ -109,8 +109,7 @@ namespace {
         }
     }
 
-    int32_t facingOf(const BlockState &state)
-    {
+    int32_t facingOf(const BlockState &state) {
         const Tag *facing = state.mStates.get("facing_direction");
         if (facing == nullptr)
             return 0;
@@ -124,24 +123,20 @@ namespace {
         return 0;
     }
 
-    Vector3i addOffset(const Vector3i &position, const Vector3i &offset)
-    {
+    Vector3i addOffset(const Vector3i &position, const Vector3i &offset) {
         return Vector3i(position.x + offset.x, position.y + offset.y, position.z + offset.z);
     }
 
-    Vector3i frontOf(const BlockState &state, const Vector3i &position)
-    {
+    Vector3i frontOf(const BlockState &state, const Vector3i &position) {
         return addOffset(position, offsetForFacing(facingOf(state)));
     }
 
-    Vector3i behindOf(const BlockState &state, const Vector3i &position)
-    {
+    Vector3i behindOf(const BlockState &state, const Vector3i &position) {
         const Vector3i offset = offsetForFacing(facingOf(state));
         return Vector3i(position.x - offset.x, position.y - offset.y, position.z - offset.z);
     }
 
-    void setConditionMet(Level &level, CommandBlockActor &actor, const BlockState &state)
-    {
+    void setConditionMet(Level &level, CommandBlockActor &actor, const BlockState &state) {
         if (!actor.isConditional()) {
             actor.mConditionMet = true;
             return;
@@ -158,8 +153,7 @@ namespace {
         actor.mConditionMet = behindActor != nullptr && behindActor->mSuccessCount > 0;
     }
 
-    bool execute(ServerNetworkHandler &owner, Level &level, CommandBlockActor &actor, int chain)
-    {
+    bool execute(ServerNetworkHandler &owner, Level &level, CommandBlockActor &actor, int chain) {
         const GameRules &rules = owner.getWorldOf(level).getOverworld().getGameRules();
         if (chain > std::min(MAX_CHAIN_LENGTH, rules.getInt("maxcommandchainlength")))
             return false;
@@ -196,7 +190,8 @@ namespace {
 
             if (actor.mConditionMet && (actor.isAuto() || actor.isPowered())) {
                 if (!actor.mCommand.empty() && rules.getBool("commandblocksenabled")) {
-                    CommandBlockOrigin origin(actor.mCustomName.empty() ? std::string("@") : actor.mCustomName);
+                    CommandBlockOrigin origin(actor.mCustomName.empty() ? std::string("@") : actor.mCustomName, level,
+                                              position);
                     const bool success = owner.getCommands().dispatch(origin, actor.mCommand);
                     actor.mSuccessCount = success ? 1 : 0;
 
@@ -227,16 +222,18 @@ namespace {
     }
 }
 
-int64_t CommandBlockSystem::packPosition(const Vector3i &position)
-{
+void CommandBlockSystem::forgetLevel(const Level &level) {
+    gStates.erase(&level);
+}
+
+int64_t CommandBlockSystem::packPosition(const Vector3i &position) {
     const int64_t x = (int64_t) (position.x & 0x3ffffff);
     const int64_t y = (int64_t) (position.y & 0xfff);
     const int64_t z = (int64_t) (position.z & 0x3ffffff);
     return (x << 38) | (y << 26) | z;
 }
 
-CommandBlockActor *CommandBlockSystem::find(Level &level, const Vector3i &position)
-{
+CommandBlockActor *CommandBlockSystem::find(Level &level, const Vector3i &position) {
     std::unordered_map<int64_t, CommandBlockActor> &commandBlocks = stateOf(level).mCommandBlocks;
     const auto it = commandBlocks.find(packPosition(position));
     if (it == commandBlocks.end())
@@ -245,8 +242,7 @@ CommandBlockActor *CommandBlockSystem::find(Level &level, const Vector3i &positi
     return &it->second;
 }
 
-CommandBlockActor &CommandBlockSystem::getOrCreate(Level &level, const Vector3i &position)
-{
+CommandBlockActor &CommandBlockSystem::getOrCreate(Level &level, const Vector3i &position) {
     std::unordered_map<int64_t, CommandBlockActor> &commandBlocks = stateOf(level).mCommandBlocks;
     const int64_t key = packPosition(position);
     const auto it = commandBlocks.find(key);
@@ -263,26 +259,45 @@ CommandBlockActor &CommandBlockSystem::getOrCreate(Level &level, const Vector3i 
     return commandBlocks.emplace(key, actor).first->second;
 }
 
-void CommandBlockSystem::remove(Level &level, const Vector3i &position)
-{
+void CommandBlockSystem::remove(Level &level, const Vector3i &position) {
     stateOf(level).mCommandBlocks.erase(packPosition(position));
 }
 
 void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, ServerPlayer &player,
-                                              const CommandBlockUpdatePacket &packet)
-{
-    if (!packet.mBlock)
-        return;
-
-    if (!player.isOp() && player.getGameType() != (int32_t) GameType::Creative) {
+                                              const CommandBlockUpdatePacket &packet) {
+    // operator-only in the game, screen only in creative: both required, or a non-op creative player
+    // runs commands at the internal permission level
+    if (!player.isOp() || !player.isCreative()) {
         LOG_INFO(LogAreaID::Server, "Rejected command block update from %s: missing permission",
                  player.getName().c_str());
         return;
     }
 
+    if (!packet.mBlock) {
+        // a command block minecart in reach keeps its command, name and output setting
+        auto *minecart = dynamic_cast<MinecartActor *>(owner.getActorByRuntimeId(packet.mMinecartRuntimeActorId));
+        if (minecart == nullptr || minecart->getKind() != MinecartActor::Kind::CommandBlock
+            || !minecart->sharesLevelWith(player)
+            || !BlockActionHandler::canInteractWithBlock(
+                    player, Vector3i((int32_t) std::floor(minecart->getPosition().x),
+                                     (int32_t) std::floor(minecart->getPosition().y),
+                                     (int32_t) std::floor(minecart->getPosition().z))))
+            return;
+        minecart->setCommand(owner, packet.mCommand, packet.mName, packet.mOutputTracked);
+        return;
+    }
+
     Level &level = owner.getLevelFor(player);
     const Vector3i position = packet.mBlockPosition;
-    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+
+    if (!BlockActionHandler::canInteractWithBlock(player, position))
+        return;
+
+    // peek, not get: an out-of-reach or unloaded position would force a synchronous chunk load
+    const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z);
+    if (statePtr == nullptr)
+        return;
+    const BlockState state = *statePtr;
     if (!CommandBlock::matches(state.mName))
         return;
 
@@ -307,9 +322,7 @@ void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, Serve
         execute(owner, level, actor, 0);
 }
 
-void CommandBlockSystem::setPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                    bool powered)
-{
+void CommandBlockSystem::setPowered(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool powered) {
     CommandBlockActor *actor = find(level, position);
     if (actor == nullptr)
         return;
@@ -328,8 +341,7 @@ void CommandBlockSystem::setPowered(ServerNetworkHandler &owner, Level &level, c
         execute(owner, level, *actor, 0);
 }
 
-void CommandBlockSystem::trigger(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int chain)
-{
+void CommandBlockSystem::trigger(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int chain) {
     CommandBlockActor *actor = find(level, position);
     if (actor == nullptr)
         return;
@@ -337,8 +349,7 @@ void CommandBlockSystem::trigger(ServerNetworkHandler &owner, Level &level, cons
     execute(owner, level, *actor, chain);
 }
 
-void CommandBlockSystem::broadcastData(ServerNetworkHandler &owner, Level &level, const CommandBlockActor &actor)
-{
+void CommandBlockSystem::broadcastData(ServerNetworkHandler &owner, Level &level, const CommandBlockActor &actor) {
     const Vector3i actorPosition = actor.getPosition();
     BlockActionHandler::broadcastBlockActorData(owner, level, actor);
 
@@ -348,14 +359,12 @@ void CommandBlockSystem::broadcastData(ServerNetworkHandler &owner, Level &level
     const int64_t chunkKey = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 
     for (auto &entry: owner.getPlayers()) {
-        if (entry.second.isSpawned() && entry.second.isIn(level)
-            && entry.second.getSentChunks().count(chunkKey) != 0)
+        if (entry.second.isSpawned() && entry.second.isIn(level) && entry.second.getSentChunks().count(chunkKey) != 0)
             stateOf(level).mSyncedRevisions[entry.first][key] = actor.mRevision;
     }
 }
 
-void CommandBlockSystem::tickCommandBlocks(ServerNetworkHandler &owner, Level &level)
-{
+void CommandBlockSystem::tickCommandBlocks(ServerNetworkHandler &owner, Level &level) {
     CommandBlockState &commandState = stateOf(level);
     std::unordered_map<int64_t, CommandBlockActor> &commandBlocks = commandState.mCommandBlocks;
     std::vector<Vector3i> stale;

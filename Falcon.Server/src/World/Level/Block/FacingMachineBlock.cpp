@@ -8,7 +8,8 @@
 FALCON_REGISTER_BLOCK(FacingMachineBlock, 160);
 
 bool FacingMachineBlock::matches(const std::string &identifier) {
-    return BlockIdentifier::equalsAny(identifier, {"minecraft:piston", "minecraft:sticky_piston", "minecraft:observer"});
+    return BlockIdentifier::equalsAny(identifier,
+                                      {"minecraft:piston", "minecraft:sticky_piston", "minecraft:observer"});
 }
 
 BlockState FacingMachineBlock::applyPlacementOrientation(const BlockState &state,

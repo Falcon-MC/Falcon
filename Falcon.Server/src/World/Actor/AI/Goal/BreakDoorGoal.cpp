@@ -14,8 +14,7 @@ namespace {
     const float BREAK_DISTANCE_SQUARED = 4.0f;
 }
 
-BreakDoorGoal::BreakDoorGoal(int32_t breakTicks) : mBreakTicks(breakTicks) {
-}
+BreakDoorGoal::BreakDoorGoal(int32_t breakTicks) : mBreakTicks(breakTicks) {}
 
 bool BreakDoorGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     Level &level = owner.getLevelFor(mob);
@@ -62,11 +61,9 @@ bool BreakDoorGoal::_canBreakDoors(ServerNetworkHandler &owner, Level &level) co
     return owner.getProperties().getDifficulty() == Difficulty::Hard && level.getGameRules().getBool("mobgriefing");
 }
 
-void BreakDoorGoal::_broadcastBreakEvent(ServerNetworkHandler &owner, Level &level, int32_t event,
-                                         int32_t data) const {
+void BreakDoorGoal::_broadcastBreakEvent(ServerNetworkHandler &owner, Level &level, int32_t event, int32_t data) const {
     owner.broadcastLevelEvent(level, event,
-                              Vector3f((float) mDoorPosition.x + BLOCK_CENTER,
-                                       (float) mDoorPosition.y + BLOCK_CENTER,
+                              Vector3f((float) mDoorPosition.x + BLOCK_CENTER, (float) mDoorPosition.y + BLOCK_CENTER,
                                        (float) mDoorPosition.z + BLOCK_CENTER),
                               data);
 }

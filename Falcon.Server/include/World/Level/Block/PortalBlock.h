@@ -16,9 +16,7 @@ public:
 
     static constexpr int32_t NETHER_ROOF_LIMIT = 115;
 
-    explicit PortalBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit PortalBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -30,6 +28,10 @@ public:
 
     void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const override;
+
+    bool hearsActorsInside() const override {
+        return true;
+    }
 
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                        const BlockState &state) const override;

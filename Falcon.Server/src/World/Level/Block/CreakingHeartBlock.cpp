@@ -9,6 +9,8 @@
 #include "World/Level/Particle/CreakingHeartTrailParticle.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 #include <initializer_list>
@@ -25,7 +27,7 @@ namespace {
     const char *const PILLAR_AXIS_STATE = "pillar_axis";
     const char *const DEFAULT_AXIS = "y";
     const char *const MULTI_FACE_STATE = "multi_face_direction_bits";
-    const char *const AIR = "minecraft:air";
+    using BlockNames::AIR;
     const char *const PALE_OAK_LOG = "minecraft:pale_oak_log";
     const char *const CREAKING = "minecraft:creaking";
     const char *const INSTANT_DESPAWN_COMPONENT = "minecraft:instant_despawn";
@@ -51,23 +53,15 @@ namespace {
         int32_t mBit;
     };
 
-    const ResinFace RESIN_FACES[] = {
-            {0, -1, 0, 1 << 1},
-            {0, 1, 0, 1 << 0},
-            {0, 0, -1, 1 << 2},
-            {0, 0, 1, 1 << 4},
-            {-1, 0, 0, 1 << 5},
-            {1, 0, 0, 1 << 3}
-    };
+    const ResinFace RESIN_FACES[] = {{0, -1, 0, 1 << 1}, {0, 1, 0, 1 << 0},  {0, 0, -1, 1 << 2},
+                                     {0, 0, 1, 1 << 4},  {-1, 0, 0, 1 << 5}, {1, 0, 0, 1 << 3}};
 
     std::mt19937 &heartRandom() {
         static std::mt19937 generator(std::random_device{}());
         return generator;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool isAir(const BlockState *state) {
         return state != nullptr && state->mName == AIR;
@@ -131,7 +125,8 @@ BlockState CreakingHeartBlock::refreshState(Level &level, const Vector3i &positi
                                             bool bound) {
     const std::string axis = state.mStates.getString(PILLAR_AXIS_STATE, DEFAULT_AXIS);
     const char *next = !bound && !hasRequiredLogs(level, position, axis) ? UPROOTED
-                                                                         : isNaturalNight(level) ? AWAKE : DORMANT;
+                       : isNaturalNight(level)                           ? AWAKE
+                                                                         : DORMANT;
     if (state.mStates.getString(HEART_STATE) == next)
         return state;
 
@@ -147,8 +142,7 @@ bool CreakingHeartBlock::canSpawnCreaking(ServerNetworkHandler &owner, Level &le
     if (state.mStates.getByte(NATURAL_STATE, 0) == 0 || state.mStates.getString(HEART_STATE) != AWAKE)
         return false;
 
-    if (!level.getGameRules().getBool("domobspawning")
-        || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
+    if (!level.getGameRules().getBool("domobspawning") || owner.getProperties().getDifficulty() == Difficulty::Peaceful)
         return false;
 
     for (auto &entry: owner.getPlayers()) {

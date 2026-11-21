@@ -17,29 +17,26 @@ FALCON_REGISTER_ITEM(BundleItem, 20);
 #include <vector>
 
 namespace {
-    const char *BUNDLE_IDENTIFIERS[] = {
-            "minecraft:bundle",
-            "minecraft:white_bundle",
-            "minecraft:light_gray_bundle",
-            "minecraft:gray_bundle",
-            "minecraft:black_bundle",
-            "minecraft:brown_bundle",
-            "minecraft:red_bundle",
-            "minecraft:orange_bundle",
-            "minecraft:yellow_bundle",
-            "minecraft:lime_bundle",
-            "minecraft:green_bundle",
-            "minecraft:cyan_bundle",
-            "minecraft:light_blue_bundle",
-            "minecraft:blue_bundle",
-            "minecraft:purple_bundle",
-            "minecraft:magenta_bundle",
-            "minecraft:pink_bundle"
-    };
+    const char *BUNDLE_IDENTIFIERS[] = {"minecraft:bundle",
+                                        "minecraft:white_bundle",
+                                        "minecraft:light_gray_bundle",
+                                        "minecraft:gray_bundle",
+                                        "minecraft:black_bundle",
+                                        "minecraft:brown_bundle",
+                                        "minecraft:red_bundle",
+                                        "minecraft:orange_bundle",
+                                        "minecraft:yellow_bundle",
+                                        "minecraft:lime_bundle",
+                                        "minecraft:green_bundle",
+                                        "minecraft:cyan_bundle",
+                                        "minecraft:light_blue_bundle",
+                                        "minecraft:blue_bundle",
+                                        "minecraft:purple_bundle",
+                                        "minecraft:magenta_bundle",
+                                        "minecraft:pink_bundle"};
 }
 
-BundleItem::BundleItem(const Item &base) : Item(base) {
-}
+BundleItem::BundleItem(const Item &base) : Item(base) {}
 
 bool BundleItem::matches(const std::string &identifier) {
     for (const char *candidate: BUNDLE_IDENTIFIERS) {

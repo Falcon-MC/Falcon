@@ -10,6 +10,7 @@ FALCON_REGISTER_BLOCK(LeavesBlock, 290);
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -20,7 +21,7 @@ FALCON_REGISTER_BLOCK(LeavesBlock, 290);
 namespace {
     const int LEAVES_SEARCH_DISTANCE = 7;
 
-    // One-in-N chances indexed by Fortune level, clamped to the last entry.
+    // one-in-N chances by Fortune level, clamped to the last entry
     const int32_t SAPLING_CHANCE[] = {20, 16, 12, 10, 10};
     const int32_t STICK_CHANCE[] = {50, 40, 30, 10, 10};
     const int32_t APPLE_CHANCE[] = {200, 180, 160, 120, 40};
@@ -46,8 +47,7 @@ namespace {
                 {"minecraft:orange_poplar_leaves", {"minecraft:poplar_sapling", false}},
                 {"minecraft:red_poplar_leaves", {"minecraft:poplar_sapling", false}},
                 {"minecraft:yellow_poplar_leaves", {"minecraft:poplar_sapling", false}},
-                {"minecraft:mangrove_leaves", {nullptr, false}}
-        };
+                {"minecraft:mangrove_leaves", {nullptr, false}}};
         return loot;
     }
 
@@ -56,10 +56,8 @@ namespace {
     }
 
     bool isLogState(const BlockState &state) {
-        return BlockIdentifier::endsWith(state.mName, "_log")
-               || BlockIdentifier::endsWith(state.mName, "_wood")
-               || BlockIdentifier::endsWith(state.mName, "_stem")
-               || BlockIdentifier::endsWith(state.mName, "_hyphae")
+        return BlockIdentifier::endsWith(state.mName, "_log") || BlockIdentifier::endsWith(state.mName, "_wood")
+               || BlockIdentifier::endsWith(state.mName, "_stem") || BlockIdentifier::endsWith(state.mName, "_hyphae")
                || state.mName == "minecraft:mangrove_roots";
     }
 
@@ -68,9 +66,7 @@ namespace {
     }
 
     bool findLog(Level &level, const Vector3i &position, int distance, std::unordered_set<int64_t> &visited) {
-        static const int OFFSETS[6][3] = {
-                {0, 1, 0}, {0, -1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-        };
+        static const int OFFSETS[6][3] = {{0, 1, 0}, {0, -1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
         const BlockState state = level.getBlockState(position.x, position.y, position.z);
         if (isLogState(state))
@@ -124,7 +120,7 @@ void LeavesBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const 
         return;
     }
 
-    if (!BlockChangeSystem::allows(level, position, BlockState("minecraft:air"), BlockChangeCause::Decay))
+    if (!BlockChangeSystem::allows(level, position, BlockState(BlockNames::AIR), BlockChangeCause::Decay))
         return;
 
     BlockActionHandler::destroyBlock(owner, level, position, state, true, ItemStack::air());

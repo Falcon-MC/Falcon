@@ -3,6 +3,7 @@
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/IcicleBlock.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/FallingBlockSystem.h"
@@ -10,6 +11,7 @@
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/PlaySoundPacket.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -28,24 +30,23 @@ namespace {
     const int32_t ACTOR_DATA_VARIANT = 2;
     const char *ANVIL_DEATH_KEY = "death.attack.anvil";
     const char *DRIPSTONE_DEATH_KEY = "death.attack.stalagmite";
+    const char *ICICLE_DEATH_KEY = "death.attack.fallingBlock";
+    const float ICICLE_DAMAGE_OFFSET = 1.0f;
 }
 
 FallingBlock::FallingBlock(uint64_t runtimeId, const BlockState &blockState)
-        : ServerActor(runtimeId, IDENTIFIER), mBlockState(blockState) {
-}
+        : ServerActor(runtimeId, IDENTIFIER), mBlockState(blockState) {}
 
 bool FallingBlock::_hasAliveLimit() const {
     const std::string &identifier = mBlockState.mName;
 
-    return identifier == "minecraft:sand" || identifier == "minecraft:gravel" ||
-           identifier == "minecraft:anvil";
+    return identifier == "minecraft:sand" || identifier == "minecraft:gravel" || identifier == "minecraft:anvil";
 }
 
 Vector3i FallingBlock::_restingPosition() const {
     const Vector3f position = getPosition();
 
-    return Vector3i((int32_t) std::lround(position.x - 0.5f),
-                    (int32_t) std::lround(position.y),
+    return Vector3i((int32_t) std::lround(position.x - 0.5f), (int32_t) std::lround(position.y),
                     (int32_t) std::lround(position.z - 0.5f));
 }
 
@@ -117,8 +118,7 @@ void FallingBlock::tick(ServerNetworkHandler &owner) {
     const Vector3i currentPosition = _restingPosition();
 
     if (mBreakOnLava) {
-        const BlockState below = level.getBlockState(currentPosition.x, currentPosition.y - 1,
-                                                     currentPosition.z);
+        const BlockState below = level.getBlockState(currentPosition.x, currentPosition.y - 1, currentPosition.z);
         if (FallingBlockSystem::isLava(below.mName)) {
             _destroy(owner, currentPosition, true);
             return;
@@ -151,8 +151,8 @@ void FallingBlock::_dropItem(ServerNetworkHandler &owner) {
 
     std::string identifier = mBlockState.mName;
     const BlockData *data = BlockDataTable::find(identifier.c_str());
-    if (data != nullptr && data->mDropKind == BlockDropKind::Other && data->mDropIdentifier != nullptr &&
-        data->mDropIdentifier[0] != '\0')
+    if (data != nullptr && data->mDropKind == BlockDropKind::Other && data->mDropIdentifier != nullptr
+        && data->mDropIdentifier[0] != '\0')
         identifier = data->mDropIdentifier;
 
     owner.spawnItemActor(owner.getLevelFor(*this), identifier, 1, position);
@@ -172,9 +172,14 @@ void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) 
         ++target.y;
     }
 
+    if (mBlockState.mName == IcicleBlock::IDENTIFIER) {
+        _onIcicleLanded(owner, target);
+        return;
+    }
+
     const BlockState existing = level.getBlockState(position.x, position.y, position.z);
-    const bool blocked = existing.mName != "minecraft:air" && FallingBlockSystem::isTransparent(existing) &&
-                         !BlockSupport::isReplaceable(existing);
+    const bool blocked = existing.mName != BlockNames::AIR && FallingBlockSystem::isTransparent(existing)
+                         && !BlockSupport::isReplaceable(existing);
 
     if (blocked) {
         FallingBlockSystem::spawnDestroyParticle(owner, level, position, mBlockState);
@@ -201,8 +206,8 @@ void FallingBlock::_land(ServerNetworkHandler &owner, const Vector3i &position) 
 
     _place(owner, target, placed);
 
-    if (placed.mName == "minecraft:anvil" || placed.mName == "minecraft:chipped_anvil" ||
-        placed.mName == "minecraft:damaged_anvil") {
+    if (placed.mName == "minecraft:anvil" || placed.mName == "minecraft:chipped_anvil"
+        || placed.mName == "minecraft:damaged_anvil") {
         _onAnvilLanded(owner, target, placed);
         return;
     }
@@ -215,45 +220,48 @@ void FallingBlock::_place(ServerNetworkHandler &owner, const Vector3i &position,
     FallingBlockSystem::setBlockState(owner, owner.getLevelFor(*this), position, state);
 }
 
-void FallingBlock::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &position,
-                                       const BlockState &state) {
-    _damageEntitiesAt(owner, position, ANVIL_DEATH_KEY);
+void FallingBlock::_onAnvilLanded(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
+    _damageEntitiesAt(owner, position, ANVIL_DEATH_KEY, _anvilDamage());
 
     Level &level = owner.getLevelFor(*this);
     if (getFallDistance() > (float) ANVIL_BREAK_FALL_DISTANCE) {
         const std::string next = FallingBlockSystem::getNextAnvilDamage(state.mName);
 
         if (next.empty())
-            FallingBlockSystem::setBlockState(owner, level, position, BlockState("minecraft:air"));
+            FallingBlockSystem::setBlockState(owner, level, position, BlockState(BlockNames::AIR));
         else
             FallingBlockSystem::setBlockState(owner, level, position, BlockState(next));
     }
 
-    const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                 (float) position.z + 0.5f);
+    const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     owner.playNamedSound(level, PlaySoundName::ANVIL_LAND, soundPosition, ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
 }
 
-void FallingBlock::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position,
-                                           const BlockState &state) {
+void FallingBlock::_onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state) {
     (void) state;
 
-    _damageEntitiesAt(owner, position, DRIPSTONE_DEATH_KEY);
+    _damageEntitiesAt(owner, position, DRIPSTONE_DEATH_KEY, _anvilDamage());
 
-    const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                 (float) position.z + 0.5f);
-    owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::POINTED_DRIPSTONE_LAND, soundPosition, ANVIL_LAND_VOLUME,
-                         ANVIL_LAND_PITCH);
+    const Vector3f soundPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+    owner.playNamedSound(owner.getLevelFor(*this), PlaySoundName::POINTED_DRIPSTONE_LAND, soundPosition,
+                         ANVIL_LAND_VOLUME, ANVIL_LAND_PITCH);
 }
 
-void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position,
-                                          const std::string &deathKey) {
-    const float fallDistance = getFallDistance();
-    if (fallDistance <= 0.0f)
+float FallingBlock::_anvilDamage() const {
+    return std::min(ANVIL_MAX_DAMAGE, std::max(0.0f, getFallDistance() * ANVIL_DAMAGE_PER_FALL_DISTANCE));
+}
+
+void FallingBlock::_onIcicleLanded(ServerNetworkHandler &owner, const Vector3i &position) {
+    _damageEntitiesAt(owner, position, ICICLE_DEATH_KEY,
+                      std::max(0.0f, std::floor(getFallDistance()) - ICICLE_DAMAGE_OFFSET));
+    FallingBlockSystem::spawnDestroyParticle(owner, owner.getLevelFor(*this), position, mBlockState);
+}
+
+void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position, const std::string &deathKey,
+                                     float damage) {
+    if (getFallDistance() <= 0.0f)
         return;
 
-    const float damage = std::min(ANVIL_MAX_DAMAGE,
-                                  std::max(0.0f, fallDistance * ANVIL_DAMAGE_PER_FALL_DISTANCE));
     if (damage <= 0.0f)
         return;
 
@@ -285,8 +293,8 @@ void FallingBlock::_damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i
 
     for (auto &entry: owner.getActors()) {
         ServerActor *actor = entry.second.get();
-        if (actor == nullptr || actor == this || !actor->isAlive() || actor->isProjectile() ||
-            !actor->sharesLevelWith(*this))
+        if (actor == nullptr || actor == this || !actor->isAlive() || actor->isProjectile()
+            || !actor->sharesLevelWith(*this))
             continue;
 
         const ActorSize size = actor->getSize();

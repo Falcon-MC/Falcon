@@ -7,11 +7,8 @@
 #include <cmath>
 
 namespace MovementPhysics {
-    /**
-     * Single-precision sine with the client's own range reduction and polynomial. The result
-     * feeds the sine table below, so it has to match the client bit for bit or simulated
-     * positions drift away from the client's prediction and trigger needless corrections.
-     */
+    // the client's own range reduction and polynomial: feeds the sine table below, must match bit for bit or
+    // simulated positions drift from the client's prediction and trigger corrections
     float mojangFloatSin(float value) {
         if (value == 0.0f || std::isnan(value))
             return value;
@@ -41,15 +38,27 @@ namespace MovementPhysics {
         const float squared = reduced * reduced;
         float result;
         if (octant == 1LL || octant == 2LL) {
-            result = 1.0f - 0.5f * squared + squared * squared
-                     * (((((COS_COEFFICIENTS[0] * squared + COS_COEFFICIENTS[1]) * squared + COS_COEFFICIENTS[2])
-                          * squared + COS_COEFFICIENTS[3]) * squared + COS_COEFFICIENTS[4]) * squared
-                        + COS_COEFFICIENTS[5]);
+            result = 1.0f - 0.5f * squared
+                     + squared * squared
+                               * (((((COS_COEFFICIENTS[0] * squared + COS_COEFFICIENTS[1]) * squared
+                                     + COS_COEFFICIENTS[2])
+                                            * squared
+                                    + COS_COEFFICIENTS[3])
+                                           * squared
+                                   + COS_COEFFICIENTS[4])
+                                          * squared
+                                  + COS_COEFFICIENTS[5]);
         } else {
-            result = reduced + reduced * squared
-                     * (((((SIN_COEFFICIENTS[0] * squared + SIN_COEFFICIENTS[1]) * squared + SIN_COEFFICIENTS[2])
-                          * squared + SIN_COEFFICIENTS[3]) * squared + SIN_COEFFICIENTS[4]) * squared
-                        + SIN_COEFFICIENTS[5]);
+            result = reduced
+                     + reduced * squared
+                               * (((((SIN_COEFFICIENTS[0] * squared + SIN_COEFFICIENTS[1]) * squared
+                                     + SIN_COEFFICIENTS[2])
+                                            * squared
+                                    + SIN_COEFFICIENTS[3])
+                                           * squared
+                                   + SIN_COEFFICIENTS[4])
+                                          * squared
+                                  + SIN_COEFFICIENTS[5]);
         }
         return negative ? -result : result;
     }
@@ -67,10 +76,7 @@ namespace MovementPhysics {
         return table;
     }
 
-    /**
-     * The client looks movement trigonometry up in a 65536-entry table rather than calling
-     * sin/cos; 10430.378 is 65536 / 2pi, and cosine is the same table shifted a quarter turn.
-     */
+    // the client looks movement trig up in a 65536-entry table; 10430.378 = 65536 / 2pi, cosine a quarter turn later
     float mojangSin(float radians) {
         return mojangSineTable()[(int) (radians * 10430.378f) & 65535];
     }
@@ -91,8 +97,8 @@ namespace MovementPhysics {
         return packet.hasInputFlag((int32_t) flag);
     }
 
-    bool activeState(bool previous, const PlayerAuthInputPacket &packet,
-                     PlayerAuthInputData start, PlayerAuthInputData stop) {
+    bool activeState(bool previous, const PlayerAuthInputPacket &packet, PlayerAuthInputData start,
+                     PlayerAuthInputData stop) {
         return (previous || input(packet, start)) && !input(packet, stop);
     }
 
@@ -101,8 +107,8 @@ namespace MovementPhysics {
                                                     (int32_t) std::floor(position.z) >> 4);
     }
 
-    bool collides(Level &level, const AxisAlignedBB &box) {
-        for (const AxisAlignedBB &obstacle: level.getCollisionBoxes(box)) {
+    bool collides(Level &level, const AxisAlignedBB &box, const Actor *actor) {
+        for (const AxisAlignedBB &obstacle: level.getCollisionBoxes(box, actor)) {
             if (obstacle.intersectsWith(box))
                 return true;
         }
@@ -128,7 +134,7 @@ namespace MovementPhysics {
         sideways *= force;
         forward *= force;
         const float yaw = yawDegrees * MOJANG_PI / 180.0f;
-        // BDS moveRelative (0x1432674C0) uses sincosf; the jump and look-vector paths use the table.
+        // moveRelative uses sincosf; the jump and look-vector paths use the table
         const float sine = std::sin(yaw);
         const float cosine = std::cos(yaw);
         velocity.x += sideways * cosine - forward * sine;

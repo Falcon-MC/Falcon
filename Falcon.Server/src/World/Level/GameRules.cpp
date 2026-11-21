@@ -6,9 +6,8 @@
 namespace {
     std::string toLower(const std::string &value) {
         std::string result = value;
-        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char character) {
-            return (char) std::tolower(character);
-        });
+        std::transform(result.begin(), result.end(), result.begin(),
+                       [](unsigned char character) { return (char) std::tolower(character); });
         return result;
     }
 
@@ -69,7 +68,7 @@ GameRules::GameRules() {
     _addBool("showdaysplayed", false);
     _addBool("showrecipemessages", true);
     _addBool("locatorbar", true);
-    _addBool("recipesunlock", false);
+    _addBool("recipesunlock", true);
 }
 
 void GameRules::_addBool(const std::string &name, bool value) {

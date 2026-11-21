@@ -4,6 +4,7 @@
 #include "World/Level/Storage/AutoCompaction.h"
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 
@@ -13,8 +14,7 @@
 
 World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
     World &world = mWorlds.add(name, _getServerViewDistance(), seed);
-    const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position,
-                                                        const Packet &packet) {
+    const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position, const Packet &packet) {
         BlockActionHandler::broadcastToViewers(*this, level, position, packet);
     };
 
@@ -46,7 +46,12 @@ World *ServerNetworkHandler::loadWorld(const std::string &name, bool create, int
     if (!create && !WorldManager::exists(name))
         return nullptr;
 
-    return &_openWorld(name, seed);
+    try {
+        return &_openWorld(name, seed);
+    } catch (const std::exception &exception) {
+        LOG_ERROR(LogAreaID::Server, "Could not load world %s: %s", name.c_str(), exception.what());
+        return nullptr;
+    }
 }
 
 bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &error) {
@@ -81,7 +86,25 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
         }
     }
 
+    // a command block or script of this very world may be ticking under this call: torn down once the tick is over
+    const uint32_t id = world->getId();
+    postToMainThread([this, id, name] { _unloadWorldNow(id, name); });
+    return true;
+}
+
+void ServerNetworkHandler::_unloadWorldNow(uint32_t id, const std::string &name) {
+    World *world = mWorlds.find(id);
+    if (world == nullptr || world->getName() != name)
+        return;
+    for (auto &entry: mPlayers) {
+        if (entry.second.getWorldId() == id) {
+            LOG_WARN(LogAreaID::Server, "Kept world %s loaded: a player entered it before it unloaded", name.c_str());
+            return;
+        }
+    }
+
     for (Level *level: world->getLevels()) {
+        PistonSystem::finishMoves(*this, *level);
         std::unordered_set<int64_t> &loadedChunks = world->getActorLoadedChunks(level->getDimensionType());
         for (const int64_t column: loadedChunks) {
             const int32_t chunkX = (int32_t) (column >> 32);
@@ -90,6 +113,7 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
             saveBlockActorsForChunk(*level, chunkX, chunkZ, true);
         }
         loadedChunks.clear();
+        saveStrayActors(*level, loadedChunks);
     }
 
     std::vector<int64_t> stranded;
@@ -119,10 +143,13 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
             ++it;
     }
 
+    for (Level *level: world->getLevels()) {
+        PistonSystem::forgetLevel(*level);
+        mScriptEngine.forgetLevel(*level);
+    }
     world->saveAll();
     AutoCompaction::untrack(world->getOverworld());
     world->close();
     LOG_INFO(LogAreaID::Server, "Unloaded world %s", name.c_str());
-    mWorlds.remove(world->getId());
-    return true;
+    mWorlds.remove(id);
 }

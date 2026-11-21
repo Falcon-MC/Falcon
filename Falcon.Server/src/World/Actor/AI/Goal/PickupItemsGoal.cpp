@@ -1,24 +1,24 @@
 #include "World/Actor/AI/Goal/PickupItemsGoal.h"
 
+#include "World/Actor/Definition/EntityEvents.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Mob/Component/MobShareables.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 namespace {
     const int32_t REPATH_INTERVAL = 10;
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float dx = left.x - right.x;
-        const float dy = left.y - right.y;
-        const float dz = left.z - right.z;
-        return dx * dx + dy * dy + dz * dz;
-    }
+    using VectorMath::distanceSquared;
 }
 
-PickupItemsGoal::PickupItemsGoal(float speed, float maxDistance, float goalRadius, int32_t hurtCooldownTicks)
-        : mSpeed(speed), mMaxDistance(maxDistance), mGoalRadius(goalRadius), mHurtCooldownTicks(hurtCooldownTicks) {
+PickupItemsGoal::PickupItemsGoal(float speed, float maxDistance, float goalRadius, int32_t hurtCooldownTicks,
+                                 bool stopIfHolding, std::shared_ptr<json::Value> onStart,
+                                 std::shared_ptr<json::Value> onEnd)
+        : mSpeed(speed), mMaxDistance(maxDistance), mGoalRadius(goalRadius), mHurtCooldownTicks(hurtCooldownTicks),
+          mStopIfHolding(stopIfHolding), mOnStart(std::move(onStart)), mOnEnd(std::move(onEnd)) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move);
 }
 
@@ -55,6 +55,8 @@ ItemActor *PickupItemsGoal::_currentItem(ServerNetworkHandler &owner) const {
 bool PickupItemsGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     if (owner.getCurrentTick() - mob.getLastHurtTick() < mHurtCooldownTicks)
         return false;
+    if (mStopIfHolding && !mob.getEquipment().getSlot(MobEquipment::MAINHAND).isAir())
+        return false;
 
     const ItemActor *item = _findItem(owner, mob);
     if (item == nullptr)
@@ -67,19 +69,19 @@ bool PickupItemsGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 bool PickupItemsGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const ItemActor *item = _currentItem(owner);
     return item != nullptr && _isAvailable(owner, mob, *item)
-           && owner.getCurrentTick() - mob.getLastHurtTick() >= mHurtCooldownTicks;
+           && owner.getCurrentTick() - mob.getLastHurtTick() >= mHurtCooldownTicks
+           && !(mStopIfHolding && !mob.getEquipment().getSlot(MobEquipment::MAINHAND).isAir());
 }
 
 void PickupItemsGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
-    (void) owner;
-    (void) mob;
     mRepathTicks = 0;
+    EntityEvents::fireTrigger(owner, mob, mOnStart.get());
 }
 
 void PickupItemsGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
-    (void) owner;
     mItemRuntimeId = 0;
     mob.getNavigation().stop(mob);
+    EntityEvents::fireTrigger(owner, mob, mOnEnd.get());
 }
 
 void PickupItemsGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
@@ -102,8 +104,11 @@ void PickupItemsGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
 void PickupItemsGoal::_pickUp(ServerNetworkHandler &owner, MobActor &mob, ItemActor &item) {
     ItemStack single = item.getItem();
     single.mCount = 1;
+    if (owner.getScriptEngine().beforeEntityItemPickup(mob, item, single))
+        return;
     if (!MobShareables::take(owner, mob, single))
         return;
+    owner.getScriptEngine().onEntityItemPickup(mob, single);
 
     ItemStack &remaining = item.getItem();
     remaining.mCount -= 1;

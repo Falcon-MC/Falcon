@@ -1,9 +1,12 @@
 #pragma once
 
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/Dimension/EndDragonFight.h"
 #include "World/Level/Level.h"
+#include "World/Level/PositionTrackingDB.h"
 #include "World/Level/TickingAreaManager.h"
 
+#include <unordered_map>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -13,14 +16,13 @@
 
 class ServerNetworkHandler;
 
-/**
- * One world folder (`worlds/<name>`) with its overworld, Nether and End. Time, weather, game rules, seed and
- * spawn stay on the overworld Level, which is the only dimension that saves level.dat; the Nether and the End
- * share its database.
- */
+// time, weather, game rules, seed and spawn live on the overworld Level, the only one saving level.dat;
+// the Nether and the End share its database
 class World {
 public:
     World(uint32_t id, const std::string &name, int viewDistance, int64_t seed);
+
+    ~World();
 
     World(const World &) = delete;
 
@@ -29,9 +31,9 @@ public:
     bool open(const std::string &worldsDirectory, size_t workerThreads, const Level::PacketBroadcaster &broadcaster,
               ServerNetworkHandler *owner);
 
-    void saveAll();
+    void saveAll(bool wait = false);
 
-    /** Closes the Nether and the End before the overworld, since they write through its database. */
+    // Nether and End first: they write through the overworld database
     void close();
 
     uint32_t getId() const {
@@ -50,12 +52,26 @@ public:
         return *mOverworld;
     }
 
+    // an unknown custom dimension reads as the overworld
     Level &getLevel(DimensionType dimension);
+
+    // opens a registered custom dimension's level: void generation, the overworld's database
+    Level &addCustomLevel(DimensionType dimension);
+
+    bool hasLevel(DimensionType dimension) const;
 
     std::vector<Level *> getLevels();
 
     TickingAreaManager &getTickingAreas() {
         return mTickingAreas;
+    }
+
+    EndDragonFight &getDragonFight() {
+        return *mDragonFight;
+    }
+
+    PositionTrackingDB &getPositionTracking() {
+        return mPositionTracking;
     }
 
     std::unordered_set<int64_t> &getActorLoadedChunks(DimensionType dimension) {
@@ -65,13 +81,26 @@ public:
     std::vector<int64_t> mActiveCenters;
     int mActiveTickDistance = -1;
     bool mActorPersistencePending = true;
-    int32_t mSleepTicks = 0;
+    // a ticking area came or went: the columns are built again even with every player where it was
+    bool mActiveColumnsStale = true;
+    bool mEnoughPlayersSleeping = false;
 
 private:
+    void _saveDragonFight();
+
     uint32_t mId;
     std::unique_ptr<Level> mOverworld;
     std::unique_ptr<Level> mNether;
     std::unique_ptr<Level> mTheEnd;
+    std::unordered_map<int32_t, std::unique_ptr<Level>> mCustomLevels;
+    // what open gave: custom levels open later, after the startup event
+    size_t mWorkerThreads = 0;
+    Level::PacketBroadcaster mBroadcaster;
+    ServerNetworkHandler *mOwner = nullptr;
+    std::unique_ptr<EndDragonFight> mDragonFight;
+    // kept whole: fields the server ignores are written back unchanged
+    Tag mTheEndData = Tag::ofCompound();
     TickingAreaManager mTickingAreas;
-    std::array<std::unordered_set<int64_t>, Dimension::DIMENSION_COUNT> mActorLoadedChunks;
+    PositionTrackingDB mPositionTracking;
+    std::unordered_map<int32_t, std::unordered_set<int64_t>> mActorLoadedChunks;
 };

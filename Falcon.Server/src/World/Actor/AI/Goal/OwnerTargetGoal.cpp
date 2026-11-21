@@ -33,7 +33,8 @@ bool OwnerTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
 
     const Actor *target = MobActor::findActor(owner, runtimeId);
     const MobActor *pet = dynamic_cast<const MobActor *>(target);
-    if (target == nullptr || !mob.canTarget(*target) || (pet != nullptr && pet->getOwnerId() != MobActor::NO_OWNER && pet->getOwnerId() == mob.getOwnerId())) {
+    if (target == nullptr || !mob.canTarget(*target)
+        || (pet != nullptr && pet->getOwnerId() != MobActor::NO_OWNER && pet->getOwnerId() == mob.getOwnerId())) {
         mHandledTick = tick;
         return false;
     }

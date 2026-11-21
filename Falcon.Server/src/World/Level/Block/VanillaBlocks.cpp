@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/BlockTypeIds.h"
+#include "World/Level/Block/NoteBlockInstrument.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Falcon/Plugin/PluginContentRegistry.h"
 
@@ -36,6 +37,8 @@ namespace {
     };
 
     std::atomic<const BlockOverrides *> gBlockOverrides{nullptr};
+    // above the 0 of a fresh BlockState: no state reads as resolved before its first lookup
+    std::atomic<uint32_t> gResolvedBlockGeneration{1};
 
     std::vector<std::unique_ptr<BlockOverrides>> &publishedOverrides() {
         static auto *published = new std::vector<std::unique_ptr<BlockOverrides>>();
@@ -49,14 +52,16 @@ Block VanillaBlocks::fromData(const BlockData &data) {
     registry.initialize();
     const Tag *defaultStates = registry.getDefaultStates(identifier);
 
-    if (defaultStates != nullptr)
-        return Block(data.mTypeId, data.mIdentifier, data.mName, *defaultStates);
+    if (defaultStates == nullptr) {
+        static std::unordered_set<std::string> warnedIdentifiers;
+        if (warnedIdentifiers.insert(identifier).second)
+            LOG_WARN(LogAreaID::Server, "Block palette has no default states for %s", identifier.c_str());
+    }
 
-    static std::unordered_set<std::string> warnedIdentifiers;
-    if (warnedIdentifiers.insert(identifier).second)
-        LOG_WARN(LogAreaID::Server, "Block palette has no default states for %s", identifier.c_str());
-
-    return Block(data.mTypeId, data.mIdentifier, data.mName, Tag::ofCompound());
+    Block block(data.mTypeId, data.mIdentifier, data.mName,
+                defaultStates != nullptr ? *defaultStates : Tag::ofCompound());
+    NoteBlockInstruments::assign(block);
+    return block;
 }
 
 Block VanillaBlocks::CYAN_TERRACOTTA() {
@@ -485,6 +490,14 @@ Block VanillaBlocks::BROWN_STAINED_GLASS_PANE() {
 
 Block VanillaBlocks::SULFUR_SPIKE() {
     return buildFromTypeId(BlockTypeIds::SULFUR_SPIKE);
+}
+
+Block VanillaBlocks::ICE_CRYSTAL() {
+    return buildFromTypeId(BlockTypeIds::ICE_CRYSTAL);
+}
+
+Block VanillaBlocks::ICICLE() {
+    return buildFromTypeId(BlockTypeIds::ICICLE);
 }
 
 Block VanillaBlocks::END_BRICKS() {
@@ -6004,8 +6017,21 @@ const Block *VanillaBlocks::fromIdentifier(const std::string &identifier) {
     }
 
     const auto match = byIdentifier.find(std::string_view(identifier));
-    return match == byIdentifier.end() ? PluginContentRegistry::getInstance().getBlockType(identifier)
-                                       : match->second;
+    return match == byIdentifier.end() ? PluginContentRegistry::getInstance().getBlockType(identifier) : match->second;
+}
+
+const Block *VanillaBlocks::fromState(const BlockState &state) {
+    const uint32_t generation = gResolvedBlockGeneration.load(std::memory_order_relaxed);
+    if (state.hasResolvedBlock(generation))
+        return state.getResolvedBlock();
+
+    const Block *block = fromIdentifier(state.mName);
+    state.cacheResolvedBlock(block, generation);
+    return block;
+}
+
+void VanillaBlocks::invalidateResolvedBlocks() {
+    gResolvedBlockGeneration.fetch_add(1, std::memory_order_relaxed);
 }
 
 const Block *VanillaBlocks::fromTypeId(int32_t typeId) {
@@ -6044,9 +6070,11 @@ void VanillaBlocks::refreshOverrides() {
 
     if (overrides->mByIdentifier.empty()) {
         gBlockOverrides.store(nullptr, std::memory_order_release);
+        invalidateResolvedBlocks();
         return;
     }
 
     gBlockOverrides.store(overrides.get(), std::memory_order_release);
     publishedOverrides().push_back(std::move(overrides));
+    invalidateResolvedBlocks();
 }

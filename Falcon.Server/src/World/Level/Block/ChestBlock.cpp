@@ -16,12 +16,7 @@ namespace {
     const char *CHEST = "minecraft:chest";
     const char *TRAPPED_CHEST = "minecraft:trapped_chest";
 
-    const int32_t NEIGHBOUR_OFFSETS[4][2] = {
-            {1,  0},
-            {-1, 0},
-            {0,  1},
-            {0,  -1}
-    };
+    const int32_t NEIGHBOUR_OFFSETS[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
     std::string facingOf(const BlockState &state) {
         const Tag *states = state.mStates.get("minecraft:cardinal_direction");
@@ -44,8 +39,7 @@ namespace {
     }
 }
 
-ChestBlock::ChestBlock(const Block &base) : Block(base) {
-}
+ChestBlock::ChestBlock(const Block &base) : Block(base) {}
 
 bool ChestBlock::matches(const std::string &identifier) {
     return identifier == CHEST || identifier == TRAPPED_CHEST;
@@ -98,10 +92,10 @@ void ChestBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vecto
     if (chest == nullptr)
         return;
 
+    chest->unpackLoot(owner);
     chest->unpair();
 
-    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                (float) position.z + 0.5f);
+    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     ChestInventory &inventory = chest->getInventory();
     for (int slot = 0; slot < ChestInventory::SIZE; ++slot) {
         const ItemStack &item = inventory.getContainerItem(slot);
@@ -121,7 +115,22 @@ bool ChestBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, c
     if (level.getBlockActors().find<ChestBlockActor>(position) == nullptr)
         pair(level, position);
 
+    ChestBlockActor &chest = getOrCreate(level, position);
+    chest.unpackLoot(owner);
+    if (ChestBlockActor *other = chest.getPair())
+        other->unpackLoot(owner);
+
     ChestContainerManagerModel model;
     model.open(owner, player, position);
     return true;
+}
+
+// ChestBlock::getComparatorSignal: a double chest counts both halves
+int ChestBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) state;
+    return containerSignal(level, position);
+}
+
+const char *ChestBlock::getBlockActorId() const {
+    return ChestBlockActor::BLOCK_ACTOR_ID;
 }

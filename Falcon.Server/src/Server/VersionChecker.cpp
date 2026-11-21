@@ -12,8 +12,7 @@
 
 namespace {
 
-    const char *LATEST_RELEASE_URL =
-            "https://api.github.com/repos/Falcon-MC/Falcon/releases/latest";
+    const char *LATEST_RELEASE_URL = "https://api.github.com/repos/Falcon-MC/Falcon/releases/latest";
 
     std::vector<long long> parseVersion(const std::string &version) {
         std::vector<long long> parts;
@@ -71,8 +70,7 @@ namespace {
             return;
 
         if (compareVersions(latestParts, currentParts) > 0) {
-            LOG_INFO(LogAreaID::Server,
-                     "A newer version of Falcon is available: %s (current version is %s)",
+            LOG_INFO(LogAreaID::Server, "A newer version of Falcon is available: %s (current version is %s)",
                      latest.c_str(), FalconBuildInfo::kVersion);
         }
     }
@@ -80,9 +78,7 @@ namespace {
 }
 
 void VersionChecker::checkForUpdatesAsync() {
-    std::thread worker([]() {
-        runCheck();
-    });
+    std::thread worker([]() { runCheck(); });
 
     worker.detach();
 }

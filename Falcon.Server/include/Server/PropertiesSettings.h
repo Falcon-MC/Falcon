@@ -8,27 +8,11 @@
 #include <unordered_map>
 #include <vector>
 
-enum class Difficulty : int {
-    Peaceful = 0,
-    Easy = 1,
-    Normal = 2,
-    Hard = 3
-};
+enum class Difficulty : int { Peaceful = 0, Easy = 1, Normal = 2, Hard = 3 };
 
-enum class ContentLogLevel : int {
-    Error = 0,
-    Warning = 1,
-    Info = 2,
-    Verbose = 3
-};
+enum class ContentLogLevel : int { Error = 0, Warning = 1, Info = 2, Verbose = 3 };
 
-enum class PropertyKind {
-    String,
-    Bool,
-    Int,
-    Float,
-    Enum
-};
+enum class PropertyKind { String, Bool, Int, Float, Enum };
 
 struct PropertyDefinition {
     const char *mKey;
@@ -39,8 +23,7 @@ struct PropertyDefinition {
     const char *mValues;
 };
 
-// Reads the BDS style server.properties file. Unknown keys are kept so that a rewrite does not
-// lose settings this build does not use yet.
+// BDS-style server.properties; unknown keys kept: a rewrite doesn't lose settings this build ignores
 class PropertiesSettings {
 public:
     static const std::vector<PropertyDefinition> &getDefinitions();
@@ -55,11 +38,14 @@ public:
 
     bool load(const std::string &path);
 
-    bool isLoaded() const { return mLoaded; }
+    bool isLoaded() const {
+        return mLoaded;
+    }
 
-    const std::string &getPath() const { return mPath; }
+    const std::string &getPath() const {
+        return mPath;
+    }
 
-    // raw access
     bool hasProperty(const std::string &key) const;
 
     std::string getString(const std::string &key, const std::string &defaultValue = std::string()) const;
@@ -78,10 +64,13 @@ public:
 
     bool getBool(const char *key) const;
 
-    const std::vector<std::string> &getInvalidProperties() const { return mInvalid; }
+    const std::vector<std::string> &getInvalidProperties() const {
+        return mInvalid;
+    }
 
-    // typed access, named after the properties they map to
-    std::string getServerName() const { return getString("server-name"); }
+    std::string getServerName() const {
+        return getString("server-name");
+    }
 
     std::string getLanguage() const {
         return getString("language");
@@ -89,107 +78,248 @@ public:
 
     GameType getGameType() const;
 
-    bool getForceGameType() const { return getBool("force-gamemode"); }
+    bool getForceGameType() const {
+        return getBool("force-gamemode");
+    }
 
     Difficulty getDifficulty() const;
 
-    bool getAllowCheats() const { return getBool("allow-cheats"); }
+    bool getAllowCheats() const {
+        return getBool("allow-cheats");
+    }
 
-    int getMaxPlayers() const { return getInt("max-players"); }
+    int getMaxPlayers() const {
+        return getInt("max-players");
+    }
 
-    bool getOnlineMode() const { return getBool("online-mode"); }
+    bool getOnlineMode() const {
+        return getBool("online-mode");
+    }
 
     bool getNetworkEncryption() const {
         return getBool("network-encryption");
     }
 
-    bool getAllowList() const { return getBool("allow-list"); }
+    bool getAllowList() const {
+        return getBool("allow-list");
+    }
 
-    unsigned short getServerPort() const { return (unsigned short) getInt("server-port"); }
+    unsigned short getServerPort() const {
+        return (unsigned short) getInt("server-port");
+    }
 
-    unsigned short getServerPortV6() const { return (unsigned short) getInt("server-portv6"); }
+    unsigned short getServerPortV6() const {
+        return (unsigned short) getInt("server-portv6");
+    }
 
-    bool getEnableLanVisibility() const { return getBool("enable-lan-visibility"); }
+    std::string getSignalingCertificate() const {
+        return getString("signaling-certificate");
+    }
 
-    int getViewDistance() const { return getInt("view-distance"); }
+    std::string getSignalingPrivateKey() const {
+        return getString("signaling-private-key");
+    }
 
-    int getTickDistance() const { return getInt("tick-distance"); }
+    unsigned short getSignalingExtraPort() const {
+        return (unsigned short) getInt("signaling-extra-port");
+    }
 
-    int getPlayerIdleTimeout() const { return getInt("player-idle-timeout"); }
+    std::string getSignalingAcmeDomain() const {
+        return getString("signaling-acme-domain");
+    }
 
-    int getMaxThreads() const { return getInt("max-threads"); }
+    std::string getSignalingAcmeEmail() const {
+        return getString("signaling-acme-email");
+    }
 
-    int getAutoSaveInterval() const { return getInt("autosave-interval"); }
+    std::string getSignalingAcmeDirectory() const {
+        return getString("signaling-acme-directory");
+    }
 
-    std::string getLevelName() const { return getString("level-name"); }
+    std::string getSignalingAcmeChallenge() const {
+        return getString("signaling-acme-challenge");
+    }
 
-    std::string getLevelSeed() const { return getString("level-seed"); }
+    bool getEnableLanVisibility() const {
+        return getBool("enable-lan-visibility");
+    }
 
-    /** Extra worlds loaded at start-up, from the comma-separated `worlds-autoload` list. */
+    int getViewDistance() const {
+        return getInt("view-distance");
+    }
+
+    int getTickDistance() const {
+        return getInt("tick-distance");
+    }
+
+    int getPlayerIdleTimeout() const {
+        return getInt("player-idle-timeout");
+    }
+
+    int getMaxThreads() const {
+        return getInt("max-threads");
+    }
+
+    int getAutoSaveInterval() const {
+        return getInt("autosave-interval");
+    }
+
+    std::string getLevelName() const {
+        return getString("level-name");
+    }
+
+    std::string getLevelSeed() const {
+        return getString("level-seed");
+    }
+
+    // comma-separated `worlds-autoload` list
     std::vector<std::string> getAutoloadWorlds() const;
 
     PlayerPermission getDefaultPlayerPermissionLevel() const;
 
-    bool getTexturePackRequired() const { return getBool("texturepack-required"); }
+    bool getTexturePackRequired() const {
+        return getBool("texturepack-required");
+    }
 
-    /**
-     * Whether clients of every supported protocol version may join; otherwise only the newest version is accepted.
-     */
-    bool getAnyVersion() const { return getBool("any-version"); }
+    // false: only the newest protocol may join
+    // client checks are only known for the newest version: other versions are let in only when the
+    // checks are off, whatever the file says
+    bool getAnyVersion() const {
+        return isAnyVersionRequested() && getAllowUnofficialClients();
+    }
 
-    bool getContentLogFileEnabled() const { return getBool("content-log-file-enabled"); }
+    bool isAnyVersionRequested() const {
+        return getBool("any-version");
+    }
 
-    bool getContentLogConsoleOutputEnabled() const { return getBool("content-log-console-output-enabled"); }
+    bool getContentLogFileEnabled() const {
+        return getBool("content-log-file-enabled");
+    }
+
+    bool getContentLogConsoleOutputEnabled() const {
+        return getBool("content-log-console-output-enabled");
+    }
 
     ContentLogLevel getContentLogLevel() const;
 
-    unsigned short getCompressionThreshold() const { return (unsigned short) getInt("compression-threshold"); }
+    unsigned short getCompressionThreshold() const {
+        return (unsigned short) getInt("compression-threshold");
+    }
 
     NetworkSettingsPacket::CompressionAlgorithm getCompressionAlgorithm() const;
 
     ChatRestrictionLevel getChatRestrictionLevel() const;
 
-    bool getDisablePlayerInteraction() const { return getBool("disable-player-interaction"); }
+    bool getDisablePlayerInteraction() const {
+        return getBool("disable-player-interaction");
+    }
 
-    bool getClientSideChunkGenerationEnabled() const { return getBool("client-side-chunk-generation-enabled"); }
+    bool getClientSideChunkGenerationEnabled() const {
+        return getBool("client-side-chunk-generation-enabled");
+    }
 
-    bool getBlockNetworkIdsAreHashes() const { return getBool("block-network-ids-are-hashes"); }
+    // Comma-separated structure names, as StructureFeature registers them.
+    std::string getClientSideChunkGenerationServerStructures() const {
+        return getString("client-side-chunk-generation-server-structures");
+    }
 
-    bool getDisableCustomSkins() const { return getBool("disable-custom-skins"); }
+    /**
+     * server-build-radius-ratio: the share of the view the server builds for client side generation clients, or a
+     * negative value when it is "Disabled" and the ratio follows each client's hardware.
+     */
+    float getServerBuildRadiusRatio() const;
+
+    bool getBlockNetworkIdsAreHashes() const {
+        return getBool("block-network-ids-are-hashes");
+    }
+
+    bool getDisableCustomSkins() const {
+        return getBool("disable-custom-skins");
+    }
+
+    // on, the server reports its version, system, player count and check counts to the Falcon service
+    bool getEmitServerTelemetry() const {
+        return getBool("emit-server-telemetry");
+    }
+
+    // off, a client that does not behave as the game does is refused or removed
+    bool getAllowUnofficialClients() const {
+        return getBool("allow-unofficial-clients");
+    }
+
+    // on, LAN players from a private address may join without the identity assertion the game leaves out there
+    bool getAllowLanWithoutIdentity() const {
+        return getBool("allow-lan-without-identity");
+    }
 
     bool getDisableClientVibrantVisuals() const {
         return getBool("disable-client-vibrant-visuals");
     }
 
-    /** Minimum number of seconds between two skin changes of the same player. */
-    int getSkinChangeCooldown() const { return getInt("skin-change-cooldown"); }
+    // seconds between two skin changes of one player
+    int getSkinChangeCooldown() const {
+        return getInt("skin-change-cooldown");
+    }
 
-    int getSpawnProtection() const { return getInt("spawn-protection"); }
+    int getSpawnProtection() const {
+        return getInt("spawn-protection");
+    }
 
-    int getAutoCompactionInterval() const { return getInt("auto-compaction-interval"); }
+    int getAutoCompactionInterval() const {
+        return getInt("auto-compaction-interval");
+    }
 
-    int getMaxInboundPacketsPerSecond() const { return getInt("max-inbound-packets-per-second"); }
+    int getMaxInboundPacketsPerSecond() const {
+        return getInt("max-inbound-packets-per-second");
+    }
 
-    int getMaxCommandsPerSecond() const { return getInt("max-commands-per-second"); }
+    int getMaxCommandsPerSecond() const {
+        return getInt("max-commands-per-second");
+    }
 
-    int getMaxChatMessagesPerSecond() const { return getInt("max-chat-messages-per-second"); }
+    int getMaxChatMessagesPerSecond() const {
+        return getInt("max-chat-messages-per-second");
+    }
 
-    int getMaxFormResponsesPerSecond() const { return getInt("max-form-responses-per-second"); }
+    int getMaxFormResponsesPerSecond() const {
+        return getInt("max-form-responses-per-second");
+    }
 
-    int getMaxMovementPacketsPerSecond() const { return getInt("max-movement-packets-per-second"); }
+    int getMaxMovementPacketsPerSecond() const {
+        return getInt("max-movement-packets-per-second");
+    }
 
-    int getMaxChatMessageLength() const { return getInt("max-chat-message-length"); }
+    int getMaxChatMessageLength() const {
+        return getInt("max-chat-message-length");
+    }
+
+    int getWasmPluginMemoryMb() const {
+        return getInt("wasm-plugin-memory-mb");
+    }
+
+    int getWasmPluginFuel() const {
+        return getInt("wasm-plugin-fuel");
+    }
+
+    int getWasmPluginDiskMb() const {
+        return getInt("wasm-plugin-disk-mb");
+    }
 
     float getPlayerPositionAcceptanceThreshold() const {
         return getFloat("player-position-acceptance-threshold");
     }
 
-    bool getSimulation() const {
-        return getBool("simulation");
+    // read on every player input: resolved once at load
+    bool getMovementSimulation() const {
+        return mMovementSimulation;
     }
 
     bool getServerAuthoritativeMovementStrict() const {
-        return getBool("server-authoritative-movement-strict");
+        return mServerAuthoritativeMovementStrict;
+    }
+
+    bool getServerAuthoritativeDismountStrict() const {
+        return getBool("server-authoritative-dismount-strict");
     }
 
     float getPlayerMovementActionDirectionThreshold() const {
@@ -214,7 +344,7 @@ public:
 
     bool setProperty(const std::string &key, const std::string &value);
 
-    // Renders the properties this build does not know about, the way BDS reports them at startup.
+    // the way BDS reports them at startup
     std::string getUnknownContents() const;
 
 private:
@@ -228,8 +358,12 @@ private:
 
     void _validate();
 
+    void _resolveMovementSettings();
+
     std::string mPath;
     bool mLoaded;
+    bool mMovementSimulation = false;
+    bool mServerAuthoritativeMovementStrict = false;
     std::unordered_map<std::string, std::string> mProperties;
     std::vector<std::string> mInvalid;
 };

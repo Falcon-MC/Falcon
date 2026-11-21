@@ -17,8 +17,7 @@ bool ContainerManagerModel::open(ServerNetworkHandler &owner, ServerPlayer &play
     return openWindow(owner, player, position);
 }
 
-bool ContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
-                                       const Vector3i &position) {
+bool ContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
     (void) owner;
 
     return player.getInventoryManager().openContainer(mType, position);
