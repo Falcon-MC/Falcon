@@ -550,6 +550,8 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     // a block the held item cannot harvest drops nothing for a player; explosions and pistons still drop it
     const bool harvested = brokenData == nullptr || canHarvest(*brokenData, heldItem);
+    if (const Block *broken = VanillaBlocks::fromState(brokenState))
+        broken->onPlayerWillDestroy(owner, player, level, position, brokenState);
     destroyBlock(owner, level, position, brokenState, !creative && harvested, heldItem, &player);
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);

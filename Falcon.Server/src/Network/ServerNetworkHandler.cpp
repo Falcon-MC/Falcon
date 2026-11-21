@@ -2,6 +2,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Core/Threading/CpuCount.h"
 #include "World/Level/Block/SignEditing.h"
+#include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
 
 #include "Core/Text/StringUtil.h"
@@ -2516,7 +2517,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     if (statePtr == nullptr)
         return;
     const BlockState state = *statePtr;
-    const std::string pickIdentifier = BlockPickItem::identifierFor(state.mName);
+    std::string pickIdentifier = BlockPickItem::identifierFor(state.mName);
+    const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
+    // the game's flower pot gives its plant, and a pot only when empty
+    const auto *pot = dynamic_cast<const FlowerPotBlockActor *>(blockActor);
+    const bool pickedPlant = pot != nullptr && pot->hasPlant();
+    if (pickedPlant)
+        pickIdentifier = BlockPickItem::identifierFor(pot->getPlant().mName);
     if (pickIdentifier.empty())
         return;
 
@@ -2530,8 +2537,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
     picked.mBlockDefinition = std::move(blockDefinition);
     picked.mCount = 1;
 
-    const BlockActor *blockActor = level.getBlockActors().find(packet.mBlockPosition);
-    if (blockActor != nullptr) {
+    if (blockActor != nullptr && !pickedPlant) {
         BlockPickItem::applyActorItemData(picked, *blockActor);
         if (packet.mAddUserData)
             BlockPickItem::attachBlockData(picked, *blockActor);
