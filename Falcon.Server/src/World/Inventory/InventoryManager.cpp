@@ -1054,7 +1054,7 @@ bool InventoryManager::onClientOpenGrindstone(const Vector3i &position) {
     }
     if (!_openWorkbench(ContainerType::Grindstone, position))
         return false;
-    mGrindstoneLevel = &level;
+    mWorkbenchLevel = &level;
     return true;
 }
 
@@ -1063,7 +1063,7 @@ bool InventoryManager::isGrindstoneOpen() const {
 }
 
 bool InventoryManager::isGrindstoneOpenIn(const Level &level) const {
-    return isGrindstoneOpen() && mGrindstoneLevel == &level;
+    return isGrindstoneOpen() && mWorkbenchLevel == &level;
 }
 
 void InventoryManager::syncGrindstoneInputs() {
@@ -1074,6 +1074,40 @@ void InventoryManager::syncGrindstoneInputs() {
         packet.mContainerId = CONTAINER_ID_UI;
         packet.mSlot = PlayerInventory::GRINDSTONE_FIRST_SLOT + index;
         packet.mItem = mPlayer->getInventory().getGrindstoneItem(index);
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
+    }
+}
+
+bool InventoryManager::onClientOpenLoom(const Vector3i &position) {
+    if (mPlayer == nullptr || mOwner == nullptr)
+        return false;
+    const Level &level = mOwner->getLevelFor(*mPlayer);
+    if (isLoomOpen() && !isLoomOpenIn(level)) {
+        onCurrentWindowRemove();
+        return false;
+    }
+    if (!_openWorkbench(ContainerType::Loom, position))
+        return false;
+    mWorkbenchLevel = &level;
+    return true;
+}
+
+bool InventoryManager::isLoomOpen() const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mAnvilWindowType == ContainerType::Loom;
+}
+
+bool InventoryManager::isLoomOpenIn(const Level &level) const {
+    return isLoomOpen() && mWorkbenchLevel == &level;
+}
+
+void InventoryManager::syncLoomInputs() {
+    if (mPlayer == nullptr || mSender == nullptr || !isLoomOpen())
+        return;
+    for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+        InventorySlotPacket packet;
+        packet.mContainerId = CONTAINER_ID_UI;
+        packet.mSlot = PlayerInventory::LOOM_FIRST_SLOT + index;
+        packet.mItem = mPlayer->getInventory().getLoomItem(index);
         mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), packet);
     }
 }
@@ -1189,12 +1223,23 @@ void InventoryManager::_closeAnvil() {
     mClientMapLock = CartographyLock();
     PlayerInventory &inventory = mPlayer->getInventory();
     if (mAnvilWindowType == ContainerType::Grindstone) {
-        mGrindstoneLevel = nullptr;
+        mWorkbenchLevel = nullptr;
         for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
             ItemStack item = inventory.getGrindstoneItem(index);
             if (item.isAir())
                 continue;
             inventory.setGrindstoneItem(index, ItemStack::air());
+            _returnToInventory(std::move(item));
+        }
+        return;
+    }
+    if (mAnvilWindowType == ContainerType::Loom) {
+        mWorkbenchLevel = nullptr;
+        for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+            ItemStack item = inventory.getLoomItem(index);
+            if (item.isAir())
+                continue;
+            inventory.setLoomItem(index, ItemStack::air());
             _returnToInventory(std::move(item));
         }
         return;

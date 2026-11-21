@@ -203,6 +203,20 @@ void PlayerInventory::setGrindstoneItem(int index, ItemStack item) {
     mGrindstone[(size_t) index] = std::move(item);
 }
 
+int PlayerInventory::loomIndex(ContainerSlotType container) {
+    switch (container) {
+        case ContainerSlotType::LoomInput: return 0;
+        case ContainerSlotType::LoomDye: return 1;
+        case ContainerSlotType::LoomMaterial: return 2;
+        default: return -1;
+    }
+}
+
+void PlayerInventory::setLoomItem(int index, ItemStack item) {
+    assignNetId(item);
+    mLoom[(size_t) index] = std::move(item);
+}
+
 int PlayerInventory::smithingIndex(ContainerSlotType container) {
     switch (container) {
         case ContainerSlotType::SmithingTableInput: return 0;
@@ -320,6 +334,13 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
         case ContainerSlotType::GrindstoneAdditional: {
             const int index = grindstoneIndex(container);
             return slot == GRINDSTONE_FIRST_SLOT + index ? &mGrindstone[(size_t) index] : nullptr;
+        }
+
+        case ContainerSlotType::LoomInput:
+        case ContainerSlotType::LoomDye:
+        case ContainerSlotType::LoomMaterial: {
+            const int index = loomIndex(container);
+            return slot == LOOM_FIRST_SLOT + index ? &mLoom[(size_t) index] : nullptr;
         }
 
         case ContainerSlotType::SmithingTableInput:
