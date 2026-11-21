@@ -1240,6 +1240,9 @@ private:
     // the playerItemAttackEntity before event; true when a script cancelled the attack
     bool _scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition);
 
+    bool _attackProjectile(ServerNetworkHandler &owner, ServerActor &target, const Vector3f *hitPosition,
+                           bool checkReach);
+
     bool _hasShieldReady(int64_t currentTick) const;
 
     bool _shouldRaiseShield(int64_t currentTick) const;

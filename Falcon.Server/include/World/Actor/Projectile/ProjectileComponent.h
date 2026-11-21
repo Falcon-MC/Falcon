@@ -28,6 +28,11 @@ struct ProjectileComponent {
     bool mDestroyOnHurt = false;
     bool mLightning = false;
     bool mStopOnHurt = false;
+    // steers toward the shooter's target instead of flying straight
+    bool mHoming = false;
+    // a melee hit sends it back where the attacker looks, once reflect_immunity has passed
+    bool mReflectOnHurt = false;
+    float mReflectImmunity = 0.0f;
     Bounce mShouldBounce = Bounce::No;
     // LevelSoundEvent numbers, UNDEFINED for none
     int32_t mHitSound = LevelSoundEventIds::UNDEFINED;

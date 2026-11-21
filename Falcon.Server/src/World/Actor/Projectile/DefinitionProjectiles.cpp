@@ -1,6 +1,7 @@
 #include "World/Actor/Projectile/ProjectileActor.h"
 
 #include "Core/Json/Json.h"
+#include "Core/Math/MathConstants.h"
 #include "Core/Math/VectorMath.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -9,17 +10,21 @@
 #include "World/Actor/ActorDamageSource.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/MobEffect.h"
+#include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <random>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace {
     // the knockback the arrows' impact_damage gives, shared by every projectile with knockback on
@@ -294,4 +299,230 @@ void DefinitionProjectileActor::tickAfterHit(ServerNetworkHandler &owner) {
         explosion.explode();
     else
         explosion.explodeWithoutBlocks();
+}
+
+namespace {
+    // the game's six directions, by their Facing number: down, up, north, south, west, east
+    const int32_t DIRECTION_STEPS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+    const float HOMING_SPEED = 0.15f;
+    const float HOMING_ACCELERATION = 1.025f;
+    const float HOMING_TURN = 0.2f;
+    const float HOMING_FALL = 0.04f;
+    // a target within 2 blocks of the leg's goal is flown at straight
+    const float HOMING_NEAR_SQUARED = 4.0f;
+    const int32_t HOMING_TRIES = 5;
+
+    std::mt19937 &homingRandom() {
+        static thread_local std::mt19937 random(std::random_device{}());
+        return random;
+    }
+
+    int32_t randomBelow(int32_t bound) {
+        return std::uniform_int_distribution<int32_t>(0, bound - 1)(homingRandom());
+    }
+
+    int32_t axisOf(int32_t direction) {
+        if (direction >= 4)
+            return 0;
+        return direction <= 1 ? 1 : 2;
+    }
+
+    bool isAir(Level &level, int32_t x, int32_t y, int32_t z) {
+        return level.getBlockState(x, y, z).mName == "minecraft:air";
+    }
+
+    float clampUnit(float value) {
+        return std::max(-1.0f, std::min(1.0f, value));
+    }
+}
+
+Actor *DefinitionProjectileActor::_homingTarget(ServerNetworkHandler &owner) const {
+    if (mHomingTarget == -1)
+        return nullptr;
+    for (auto &entry: owner.getPlayers()) {
+        if (entry.second.getUniqueId() == mHomingTarget)
+            return entry.second.isSpawned() && entry.second.isAlive() ? &entry.second : nullptr;
+    }
+    ServerActor *actor = owner.getActor(mHomingTarget);
+    return actor != nullptr && actor->isAlive() ? actor : nullptr;
+}
+
+// the game's move: the leg's goal is the block of the target's middle, unless the target is gone or a
+// creative or spectator player, then the block under the projectile
+void DefinitionProjectileActor::_chooseDirection(ServerNetworkHandler &owner, int32_t axis) {
+    Level &level = owner.getLevelFor(*this);
+    const Vector3f position = getPosition();
+
+    Actor *target = _homingTarget(owner);
+    const auto *player = dynamic_cast<ServerPlayer *>(target);
+    if (player != nullptr && (player->isCreative() || player->isSpectator()))
+        target = nullptr;
+
+    float lift = 0.5f;
+    int32_t goalX = (int32_t) std::floor(position.x);
+    int32_t goalY = (int32_t) std::floor(position.y) - 1;
+    int32_t goalZ = (int32_t) std::floor(position.z);
+    if (target != nullptr) {
+        const auto *sized = dynamic_cast<const ServerActor *>(target);
+        const ActorSize size = sized != nullptr ? sized->getSize()
+                                                : ActorSize{MovementPhysics::PLAYER_WIDTH, MovementPhysics::PLAYER_HEIGHT};
+        lift = std::sqrt(size.mWidth * size.mWidth + size.mHeight * size.mHeight) * 0.5f;
+        const Vector3f at = target->getPosition();
+        goalX = (int32_t) std::floor(at.x);
+        goalY = (int32_t) std::floor(at.y + lift);
+        goalZ = (int32_t) std::floor(at.z);
+    }
+
+    float toX = (float) goalX + 0.5f;
+    float toY = (float) goalY + lift;
+    float toZ = (float) goalZ + 0.5f;
+    int32_t direction = randomBelow(6);
+
+    const float gapX = toX - position.x;
+    const float gapY = toY - position.y;
+    const float gapZ = toZ - position.z;
+    if (gapX * gapX + gapY * gapY + gapZ * gapZ >= HOMING_NEAR_SQUARED) {
+        const int32_t x = (int32_t) std::floor(position.x);
+        const int32_t y = (int32_t) std::floor(position.y);
+        const int32_t z = (int32_t) std::floor(position.z);
+        std::vector<int32_t> open;
+        if (axis != 0) {
+            if (x < goalX && isAir(level, x + 1, y, z))
+                open.push_back(5);
+            else if (x > goalX && isAir(level, x - 1, y, z))
+                open.push_back(4);
+        }
+        if (axis != 1) {
+            if (goalY > y && isAir(level, x, y + 1, z))
+                open.push_back(1);
+            else if (goalY < y && isAir(level, x, y - 1, z))
+                open.push_back(0);
+        }
+        if (axis != 2) {
+            if (z < goalZ && isAir(level, x, y, z + 1))
+                open.push_back(3);
+            else if (z > goalZ && isAir(level, x, y, z - 1))
+                open.push_back(2);
+        }
+
+        if (open.empty()) {
+            for (int32_t tries = HOMING_TRIES; tries > 0; --tries) {
+                const int32_t *step = DIRECTION_STEPS[direction];
+                if (isAir(level, x + step[0], y + step[1], z + step[2]))
+                    break;
+                direction = randomBelow(6);
+            }
+        } else {
+            direction = open[(size_t) randomBelow((int32_t) open.size())];
+        }
+
+        const int32_t *step = DIRECTION_STEPS[direction];
+        toX = position.x + (float) step[0];
+        toY = position.y + (float) step[1];
+        toZ = position.z + (float) step[2];
+    }
+
+    mAxis = axisOf(direction);
+    const float dx = toX - position.x;
+    const float dy = toY - position.y;
+    const float dz = toZ - position.z;
+    const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+    mTargetDelta = length == 0.0f ? Vector3f()
+                                  : Vector3f(dx / length * HOMING_SPEED, dy / length * HOMING_SPEED,
+                                             dz / length * HOMING_SPEED);
+    mFlightSteps = 10 + 10 * randomBelow(5);
+}
+
+// a homing shot starts with the shooter's motion alone
+void DefinitionProjectileActor::launchAt(ServerNetworkHandler &owner, const Actor &shooter, const Actor &target) {
+    if (!getProjectileComponent().mHoming)
+        return;
+    setMotion(shooter.getMotion());
+    mHomingTarget = target.getUniqueId();
+    _chooseDirection(owner, -1);
+}
+
+// toward the leg's goal while the target lives, else falling
+bool DefinitionProjectileActor::steer(ServerNetworkHandler &owner, Vector3f &motion) {
+    if (!getProjectileComponent().mHoming || mHomingTarget == -1)
+        return false;
+
+    if (_homingTarget(owner) != nullptr) {
+        mTargetDelta = Vector3f(clampUnit(mTargetDelta.x * HOMING_ACCELERATION),
+                                clampUnit(mTargetDelta.y * HOMING_ACCELERATION),
+                                clampUnit(mTargetDelta.z * HOMING_ACCELERATION));
+        motion.x += (mTargetDelta.x - motion.x) * HOMING_TURN;
+        motion.y += (mTargetDelta.y - motion.y) * HOMING_TURN;
+        motion.z += (mTargetDelta.z - motion.z) * HOMING_TURN;
+    } else {
+        motion.y -= HOMING_FALL;
+    }
+    return true;
+}
+
+// a leg ends when its steps run out, the way along its axis is blocked, or the target is reached on it
+void DefinitionProjectileActor::afterMove(ServerNetworkHandler &owner) {
+    if (!getProjectileComponent().mHoming || mHomingTarget == -1)
+        return;
+    Actor *target = _homingTarget(owner);
+    if (target == nullptr)
+        return;
+
+    if (mFlightSteps > 0 && --mFlightSteps == 0)
+        _chooseDirection(owner, mAxis);
+    if (mAxis == -1)
+        return;
+
+    const Vector3f position = getPosition();
+    const int32_t x = (int32_t) std::floor(position.x);
+    const int32_t y = (int32_t) std::floor(position.y);
+    const int32_t z = (int32_t) std::floor(position.z);
+    // the game looks the way of the direction numbered as the axis
+    const int32_t *step = DIRECTION_STEPS[mAxis];
+    Level &level = owner.getLevelFor(*this);
+    const BlockState ahead = level.getBlockState(x + step[0], y + step[1], z + step[2]);
+    const BlockData *data = BlockDataTable::find(ahead.mName.c_str());
+    if (ahead.mName != "minecraft:air" && data != nullptr && data->mSolid) {
+        _chooseDirection(owner, mAxis);
+        return;
+    }
+
+    const Vector3f at = target->getPosition();
+    const bool reached = mAxis == 0   ? x == (int32_t) std::floor(at.x)
+                         : mAxis == 1 ? y == (int32_t) std::floor(at.y)
+                                      : z == (int32_t) std::floor(at.z);
+    if (reached)
+        _chooseDirection(owner, mAxis);
+}
+
+// a reflected homing projectile forgets its target
+void DefinitionProjectileActor::reflect(Actor &attacker, const Vector3f &direction) {
+    ProjectileActor::reflect(attacker, direction);
+    mHomingTarget = -1;
+    mAxis = -1;
+}
+
+// the game's order: destroy_on_hurt first, then reflect_on_hurt once reflect_immunity seconds have flown
+bool ProjectileActor::onMeleeHit(ServerNetworkHandler &owner, Actor &attacker) {
+    const ProjectileComponent &settings = getProjectileComponent();
+    if (settings.mDestroyOnHurt) {
+        if (settings.mCritParticleOnHurt)
+            showParticle(owner, owner.getLevelFor(*this), getPosition(), ProjectileComponent::particleType("crit"));
+        owner.removeActor(getUniqueId());
+        return true;
+    }
+    if (!settings.mReflectOnHurt || getLifetimeTicks() < (int32_t) std::floor(settings.mReflectImmunity * 20.0f))
+        return false;
+
+    // the attacker's view: x is the pitch, y the yaw, in degrees
+    const Vector3f rotation = attacker.getRotation();
+    const float pitch = rotation.x * MathConstants::PI_F / 180.0f;
+    const float yaw = rotation.y * MathConstants::PI_F / 180.0f;
+    reflect(attacker, Vector3f(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch)));
+    return true;
+}
+
+void ProjectileActor::reflect(Actor &attacker, const Vector3f &direction) {
+    setMotion(direction);
+    setOwnerUniqueId(attacker.getUniqueId());
 }

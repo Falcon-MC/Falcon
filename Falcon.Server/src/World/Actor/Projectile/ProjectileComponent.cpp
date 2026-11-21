@@ -148,6 +148,9 @@ ProjectileComponent ProjectileComponent::read(const json::Value &component) {
     readFlag(component, "destroy_on_hurt", "destroyOnHurt", projectile.mDestroyOnHurt);
     readFlag(component, "lightning", nullptr, projectile.mLightning);
     readFlag(component, "stop_on_hurt", "stopOnHurt", projectile.mStopOnHurt);
+    readFlag(component, "homing", nullptr, projectile.mHoming);
+    readFlag(component, "reflect_on_hurt", "reflectOnHurt", projectile.mReflectOnHurt);
+    readNumber(component, "reflect_immunity", nullptr, projectile.mReflectImmunity);
     // a sound name the game does not know becomes the undefined sound event
     std::string sound;
     readText(component, "hit_sound", "hitSound", sound);

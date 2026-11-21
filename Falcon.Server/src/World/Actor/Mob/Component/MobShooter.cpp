@@ -257,6 +257,8 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
     }
 
     projectile->setMotion(Vector3f(direction.x * power, direction.y * power, direction.z * power));
+    if (auto *homing = dynamic_cast<DefinitionProjectileActor *>(projectile))
+        homing->launchAt(owner, mob, target);
     if (!owner.allowProjectileLaunch(*projectile, &mob))
         return false;
 
