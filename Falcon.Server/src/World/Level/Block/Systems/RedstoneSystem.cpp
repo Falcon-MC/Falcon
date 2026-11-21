@@ -167,6 +167,7 @@ namespace {
     const int PRESSURE_PLATE_RECHECK_TICKS = 20;
     const int LIT_LAMP_TURN_OFF_DELAY = 4;
     const int OBSERVER_PULSE_TICKS = 2;
+    const char *const OBSERVER_NAME = "minecraft:observer";
     const int COMPARATOR_DELAY = 2;
     const int DIODE_PLACE_DELAY = 1;
     const char *SOUND_POWER_ON = LevelSoundEvent::POWER_ON;
@@ -656,10 +657,10 @@ namespace {
 
         if (powered && !shouldBePowered) {
             level.setBlock(position, diodeUnpoweredState(state), false);
-            RedstoneSystem::updateComparatorOutputLevel(owner, level, position, true);
+            RedstoneSystem::updateComparatorOutputLevel(owner, level, position);
         } else if (!powered && shouldBePowered) {
             level.setBlock(position, diodePoweredState(state), false);
-            RedstoneSystem::updateComparatorOutputLevel(owner, level, position, true);
+            RedstoneSystem::updateComparatorOutputLevel(owner, level, position);
         }
 
         const Vector3i behind = RedstoneFace::relative(position, RedstoneFace::opposite(diodeFacing(state)));
@@ -763,17 +764,6 @@ namespace {
         RedstoneSystem::updateAroundRedstone(owner, level, behind);
     }
 
-    void observerOnNeighborChange(Level &level, const Vector3i &position, int side) {
-        const BlockState state = stateAt(level, position);
-        if (!isA<ObserverBlock>(state))
-            return;
-
-        if (side != observerFacing(state) || level.isUpdateScheduled(position))
-            return;
-
-        level.cancelUpdate(position);
-        level.scheduleUpdate(position, OBSERVER_PULSE_TICKS);
-    }
 }
 
 int64_t RedstoneSystem::packPosition(const Vector3i &position) {
@@ -1062,8 +1052,7 @@ void RedstoneSystem::updateAllAroundRedstone(ServerNetworkHandler &owner, Level 
     }
 }
 
-void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                                 bool observer) {
+void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
     for (int face = RedstoneFace::NORTH; face <= RedstoneFace::EAST; ++face) {
         const Vector3i side = RedstoneFace::relative(position, face);
         if (!isChunkReady(level, side))
@@ -1084,11 +1073,8 @@ void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Le
 
         const BlockState sideState = stateAt(level, side);
 
-        if (isA<ObserverBlock>(sideState)) {
-            if (observer)
-                observerOnNeighborChange(level, side, RedstoneFace::opposite(face));
+        if (isA<ObserverBlock>(sideState))
             continue;
-        }
 
         if (isA<RedstoneDiodeBlock>(sideState)) {
             level.updateAt(side, BlockUpdateType::Redstone);
@@ -1104,17 +1090,36 @@ void RedstoneSystem::updateComparatorOutputLevel(ServerNetworkHandler &owner, Le
             level.updateAt(beyond, BlockUpdateType::Redstone);
     }
 
-    if (!observer)
-        return;
+}
 
-    for (int face = RedstoneFace::DOWN; face <= RedstoneFace::UP; ++face) {
+void RedstoneSystem::onBlockChanged(Level &level, const Vector3i &position) {
+    for (int face = 0; face < RedstoneFace::COUNT; ++face) {
         const Vector3i side = RedstoneFace::relative(position, face);
-        const BlockState *sidePeek = isChunkReady(level, side) ? level.peekBlockPtr(side.x, side.y, side.z) : nullptr;
-        if (sidePeek != nullptr && isPlain(*sidePeek))
+        const BlockState *watcher = level.peekBlockPtr(side.x, side.y, side.z);
+        if (watcher == nullptr || watcher->mName != OBSERVER_NAME)
             continue;
-        if (isA<ObserverBlock>(stateAt(level, side)))
-            observerOnNeighborChange(level, side, RedstoneFace::opposite(face));
+        // it watches the cell its facing points to
+        if (observerFacing(*watcher) != RedstoneFace::opposite(face))
+            continue;
+        if (stateBool(*watcher, "powered_bit", false) || level.isUpdateScheduled(side))
+            continue;
+        level.scheduleUpdate(side, OBSERVER_PULSE_TICKS);
     }
+}
+
+// the game lights a moved observer; one already lit keeps its light and gets a tick here to put it out, since
+// the one it had stayed behind with its old cell
+void RedstoneSystem::onObserverMoved(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+    const BlockState state = stateAt(level, position);
+    if (!isA<ObserverBlock>(state))
+        return;
+    if (stateBool(state, "powered_bit", false)) {
+        if (!level.isUpdateScheduled(position))
+            level.scheduleUpdate(position, OBSERVER_PULSE_TICKS);
+        return;
+    }
+    level.cancelUpdate(position);
+    observerOnScheduled(owner, level, position, state);
 }
 
 void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -1173,7 +1178,7 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
     } else if (lamp != nullptr && !lamp->isLit()) {
         if ((type == BlockUpdateType::Normal || type == BlockUpdateType::Redstone)
             && isGettingPower(owner, level, position)) {
-            updateComparatorOutputLevel(owner, level, position, true);
+            updateComparatorOutputLevel(owner, level, position);
             level.setBlock(position, RedstoneLampBlock::getLitState(state), false);
         }
     } else if (lamp != nullptr) {
@@ -1181,7 +1186,7 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
             && !isGettingPower(owner, level, position)) {
             level.scheduleUpdate(position, LIT_LAMP_TURN_OFF_DELAY);
         } else if (type == BlockUpdateType::Scheduled && !isGettingPower(owner, level, position)) {
-            updateComparatorOutputLevel(owner, level, position, true);
+            updateComparatorOutputLevel(owner, level, position);
             level.setBlock(position, RedstoneLampBlock::getUnlitState(state), false);
         }
     } else if (dynamic_cast<const ObserverBlock *>(block) != nullptr) {
@@ -1294,7 +1299,7 @@ void RedstoneSystem::onRedstonePlaced(ServerNetworkHandler &owner, Level &level,
 
     level.updateAround(position);
     updateAroundRedstone(owner, level, position);
-    updateComparatorOutputLevel(owner, level, position, true);
+    updateComparatorOutputLevel(owner, level, position);
 }
 
 void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -1319,7 +1324,7 @@ void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level,
             level.updateAround(position);
             updateAroundRedstone(owner, level, position);
         }
-        updateComparatorOutputLevel(owner, level, position, true);
+        updateComparatorOutputLevel(owner, level, position);
         return;
     }
 
@@ -1379,7 +1384,7 @@ void RedstoneSystem::onRedstoneBroken(ServerNetworkHandler &owner, Level &level,
 
     level.updateAround(position);
     updateAroundRedstone(owner, level, position);
-    updateComparatorOutputLevel(owner, level, position, true);
+    updateComparatorOutputLevel(owner, level, position);
 }
 
 void RedstoneSystem::onChunkLoaded(ServerNetworkHandler &owner, Level &level, const LevelChunk &chunk) {
@@ -1488,7 +1493,7 @@ void RedstoneSystem::onComparatorActivated(ServerNetworkHandler &owner, Level &l
     states.putByte("output_subtract_bit", stateBool(state, "output_subtract_bit", false) ? 0 : 1);
     level.setBlock(position, BlockState(state.mName, states), false);
 
-    updateComparatorOutputLevel(owner, level, position, true);
+    updateComparatorOutputLevel(owner, level, position);
     comparatorOnChange(owner, level, position);
 }
 
