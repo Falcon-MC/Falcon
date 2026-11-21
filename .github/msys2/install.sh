@@ -14,7 +14,8 @@ while read -r file; do
     [[ -z "$file" || "$file" == \#* ]] && continue
     # the signature comes along so pacman still checks every package
     for part in "$file" "$file.sig"; do
-        [[ -f "$packages/$part" ]] || curl -fsSL --retry 3 -o "$packages/$part" "$mirror/$part"
+        [[ -f "$packages/$part" ]] && continue
+        curl -fsSL --retry 3 -o "$packages/$part" "$mirror/$part" || { printf 'could not download %q\n' "$mirror/$part" >&2; exit 1; }
     done
     files+=("$packages/$file")
 done < "$list"
