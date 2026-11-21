@@ -80,6 +80,27 @@ private:
     bool mHeldAfterHit = false;
 };
 
+// minecraft:projectile on_hit, read from the entity's definition: impact_damage, catch_fire, mob_effect,
+// particle_on_hit and the minecraft:explode its definition_event adds, as the game applies them
+class DefinitionProjectileActor : public ThrownProjectileActor {
+public:
+    using ThrownProjectileActor::ThrownProjectileActor;
+
+    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+    // the explosion the hit added goes off now, its fuse being 0
+    void tickAfterHit(ServerNetworkHandler &owner) override;
+
+protected:
+    // what the hit does to the actor or player struck, before anything that removes the projectile
+    void _hitTarget(ServerNetworkHandler &owner, const Vector3f &hitPosition, Actor &target);
+
+    // what the hit does wherever it lands: the block set alight, the particle, the sound, the explosion held
+    void _hitAnywhere(ServerNetworkHandler &owner, const Vector3f &hitPosition, bool struckActor);
+};
+
 class SnowballActor final : public ThrownProjectileActor {
 public:
     using ThrownProjectileActor::ThrownProjectileActor;
@@ -117,11 +138,17 @@ public:
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
 };
 
-class WindChargeActor final : public ThrownProjectileActor {
+// the impact damage of its definition, then the wind burst
+class WindChargeActor final : public DefinitionProjectileActor {
 public:
-    using ThrownProjectileActor::ThrownProjectileActor;
+    using DefinitionProjectileActor::DefinitionProjectileActor;
 
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
+
+    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+private:
+    void _burst(ServerNetworkHandler &owner, const Vector3f &hitPosition);
 };
 
 class ExperienceBottleActor final : public ThrownProjectileActor {
@@ -188,7 +215,7 @@ private:
 
 // wither_skull.json, wither_skull_dangerous.json: on_hit gives the actor hit its mob_effect, then the
 // definition_event explodes the skull with the minecraft:explode of the group it adds
-class WitherSkullActor final : public ThrownProjectileActor {
+class WitherSkullActor final : public DefinitionProjectileActor {
 public:
     WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size);
 
@@ -209,16 +236,7 @@ public:
         return mDangerous;
     }
 
-    bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
-
-    bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
-
-    // the explode component added by the hit goes off now, its fuse being 0
-    void tickAfterHit(ServerNetworkHandler &owner) override;
-
 private:
-    void _applyEffects(ServerNetworkHandler &owner, Actor &target) const;
-
     bool mDangerous = false;
 };
 
@@ -246,9 +264,9 @@ public:
     }
 };
 
-class ShulkerBulletActor : public ProjectileActor {
+class ShulkerBulletActor final : public DefinitionProjectileActor {
 public:
-    using ProjectileActor::ProjectileActor;
+    using DefinitionProjectileActor::DefinitionProjectileActor;
 
     bool hasGravity() const override {
         return false;
