@@ -55,14 +55,18 @@ class ChunkStreamHandler {
 public:
     static constexpr int32_t FIELD_OF_VIEW_DEGREES = 70;
     static constexpr int32_t TELEPORT_LOAD_COUNT = 8;
+    // with many players online; fewer players are each sent more
     static constexpr unsigned MAX_SENDS_PER_TICK = 16;
-    // pending outbound bytes before more chunks are encoded for this player
+    // pending outbound bytes before more chunks are encoded for this player, with many players online
     static constexpr size_t MAX_QUEUED_CHUNK_BYTES = 256 * 1024;
     // sent chunks the PlayStatus PlayerSpawn waits for
     static constexpr size_t SPAWN_CHUNK_COUNT = 56;
     static constexpr unsigned JOIN_BURST_SENDS_PER_TICK = 2;
 
     static void tick(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    // chunks one player is sent per tick, between MAX_SENDS_PER_TICK and more when few players are online
+    static unsigned getSendsPerTick(ServerNetworkHandler &owner);
 
     static void handleTeleport(ServerNetworkHandler &owner, ServerPlayer &player);
 

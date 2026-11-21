@@ -583,7 +583,8 @@ int main() {
             host.tick(true);
             player.setPosition(Vector3f(0, 140, 0));
             state.mLastLoaderChunk = ChunkStreamHandler::packChunk(0, 0);
-            for (int32_t x = 0; x < 17; ++x) {
+            const size_t budget = ChunkStreamHandler::getSendsPerTick(handler);
+            for (int32_t x = 0; x < (int32_t) budget + 1; ++x) {
                 level.getChunk(x, 0);
                 const int64_t hash = ChunkStreamHandler::packChunk(x, 0);
                 state.mInRadius.insert(hash);
@@ -593,11 +594,11 @@ int main() {
             const size_t before = player.getSentChunkCount();
             ChunkStreamHandler::tick(handler, player);
             ChunkStreamHandler::tick(handler, player);
-            require(player.getSentChunkCount() - before == 16, "Repeated calls exceeded send budget");
+            require(player.getSentChunkCount() - before == budget, "Repeated calls exceeded send budget");
             host.tick(true);
             const size_t after = player.getSentChunkCount() - before;
-            require(after > 16, "Paused network tick did not renew send budget");
-            require(after <= 32, "Paused network tick exceeded send budget after terrain invalidation");
+            require(after > budget, "Paused network tick did not renew send budget");
+            require(after <= budget * 2, "Paused network tick exceeded send budget after terrain invalidation");
             state = ChunkStreamState();
             level.unregisterAllChunkLoaders(player.getRuntimeId());
             player.resetChunkStreaming();

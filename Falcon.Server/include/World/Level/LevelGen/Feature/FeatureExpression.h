@@ -65,6 +65,10 @@ public:
     // a shared expression for the text, or nullptr when it uses anything outside the subset
     static std::shared_ptr<const FeatureExpression> parse(const std::string &text);
 
+    // as parse(), from a per-thread copy of the cache: no lock and no shared count on the decoration hot path;
+    // the expression lives as long as the process
+    static const FeatureExpression *find(const std::string &text);
+
     float evaluate(const Context &context) const;
 
 private:

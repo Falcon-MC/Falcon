@@ -7,8 +7,10 @@
 #include <cstdlib>
 #include <random>
 #include <utility>
+#include <unordered_map>
 
 namespace {
+    const size_t MAX_REMEMBERED_CANDIDATES = 1 << 16;
     const int64_t REGION_X_MULTIPLIER = 341873128712LL;
     const int64_t REGION_Z_MULTIPLIER = 132897987541LL;
     const int32_t SEARCH_RINGS = 100;
@@ -76,8 +78,39 @@ StructureChunkPos StructureFeature::getCandidate(int64_t seed, int32_t regionX, 
         return {regionX * mSpacing + offsetX, regionZ * mSpacing + offsetZ};
     }
 
+    // a region is asked for again by every chunk decorated around it: seeding a twister each time costs more
+    // than the rest of the check
+    struct Key {
+        const StructureFeature *mFeature;
+        int64_t mSeed;
+        int32_t mRegionX;
+        int32_t mRegionZ;
+
+        bool operator==(const Key &other) const {
+            return mFeature == other.mFeature && mSeed == other.mSeed && mRegionX == other.mRegionX
+                   && mRegionZ == other.mRegionZ;
+        }
+    };
+    struct KeyHash {
+        size_t operator()(const Key &key) const {
+            uint64_t hash = (uint64_t) (uintptr_t) key.mFeature * 0x9e3779b97f4a7c15ull;
+            hash ^= (uint64_t) key.mSeed + 0x632be59bd9b4e019ull + (hash << 6) + (hash >> 2);
+            hash ^= (((uint64_t) (uint32_t) key.mRegionX << 32) | (uint32_t) key.mRegionZ) + (hash << 6) + (hash >> 2);
+            return (size_t) hash;
+        }
+    };
+    thread_local std::unordered_map<Key, StructureChunkPos, KeyHash> drawn;
+    const Key key{this, seed, regionX, regionZ};
+    const auto found = drawn.find(key);
+    if (found != drawn.end())
+        return found->second;
+    if (drawn.size() > MAX_REMEMBERED_CANDIDATES)
+        drawn.clear();
+
     std::mt19937 random;
-    return _drawMersenneCandidate(seed, regionX, regionZ, random);
+    const StructureChunkPos candidate = _drawMersenneCandidate(seed, regionX, regionZ, random);
+    drawn.emplace(key, candidate);
+    return candidate;
 }
 
 StructureChunkPos StructureFeature::_drawMersenneCandidate(int64_t seed, int32_t regionX, int32_t regionZ,

@@ -535,14 +535,7 @@ unsigned short ServerNetworkHandler::getExtraSignalingPort() const {
 }
 
 int ServerNetworkHandler::_getServerViewDistance() const {
-    int distance = mProperties.getViewDistance();
-
-    if (distance < 1)
-        distance = 1;
-    if (distance > MAX_VIEW_DISTANCE)
-        distance = MAX_VIEW_DISTANCE;
-
-    return distance;
+    return std::max(mProperties.getViewDistance(), MIN_VIEW_DISTANCE);
 }
 
 size_t ServerNetworkHandler::_getChunkWorkerThreadCount() const {
@@ -2813,8 +2806,8 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
 
     if (granted > maximum)
         granted = maximum;
-    if (granted < 1)
-        granted = 1;
+    if (granted < MIN_VIEW_DISTANCE)
+        granted = MIN_VIEW_DISTANCE;
 
     ChunkRadiusUpdatedPacket radius;
     radius.mRadius = granted;

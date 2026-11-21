@@ -1240,7 +1240,8 @@ private:
 
     PropertiesSettings mProperties;
     static const int DEFAULT_VIEW_DISTANCE = 4;
-    static const int MAX_VIEW_DISTANCE = 12;
+    // the game grants no radius below it and puts no cap above view-distance
+    static const int MIN_VIEW_DISTANCE = 5;
 
 public:
     unsigned getChunksPerTick() const {

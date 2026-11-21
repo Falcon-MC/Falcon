@@ -1441,6 +1441,16 @@ void Level::startWorkers(size_t threadCount) {
     mChunkWorker->start(threadCount);
 }
 
+bool Level::isChunkRequested(int32_t chunkX, int32_t chunkZ) const {
+    return mPendingChunks.count(_packChunk(chunkX, chunkZ)) != 0;
+}
+
+bool Level::canRequestChunk() const {
+    return mChunkWorker != nullptr && mChunkWorker->isRunning() && _generationBacklog() < MAX_GENERATION_BACKLOG
+           && mCompletedChunks.size() < MAX_COMPLETED_BACKLOG
+           && mChunkWorker->getOutstandingGenerationCount() < ChunkWorker::MAX_OUTSTANDING_GENERATION;
+}
+
 bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
