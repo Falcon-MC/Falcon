@@ -75,6 +75,19 @@ namespace nethernet {
 
     }
 
+    // the game caps the length it writes at 1140 but sends the whole signal, so it runs to the end of the packet
+    bool readLanMessage(const std::string &payload, uint64_t &recipientId, std::string &data) {
+        try {
+            ReadOnlyBinaryStream stream(payload);
+            recipientId = stream.getLLong();
+            data = getLengthPrefixedBytes(stream);
+            data += stream.getRemaining();
+        } catch (const std::exception &) {
+            return false;
+        }
+        return true;
+    }
+
     const std::string &DiscoveryCrypto::key() {
         static const std::string value = []() {
             unsigned char seed[8];
@@ -394,9 +407,10 @@ namespace nethernet {
             return;
 
         try {
-            ReadOnlyBinaryStream stream(payload);
-            const uint64_t recipientId = stream.getLLong();
-            const std::string data = getLengthPrefixedBytes(stream);
+            uint64_t recipientId = 0;
+            std::string data;
+            if (!readLanMessage(payload, recipientId, data))
+                return;
 
             if (recipientId != mNetworkId || data.empty() || data == "Ping")
                 return;
@@ -750,9 +764,10 @@ namespace nethernet {
             if (packetId != PACKET_MESSAGE)
                 return;
 
-            ReadOnlyBinaryStream stream(payload);
-            const uint64_t recipientId = stream.getLLong();
-            const std::string data = getLengthPrefixedBytes(stream);
+            uint64_t recipientId = 0;
+            std::string data;
+            if (!readLanMessage(payload, recipientId, data))
+                return;
 
             if (recipientId != mNetworkId || data.empty() || data == "Ping")
                 return;

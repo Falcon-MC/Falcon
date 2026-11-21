@@ -47,6 +47,9 @@ namespace nethernet {
         static const std::string &key();
     };
 
+    // the recipient and the signal of a LAN message packet's payload
+    bool readLanMessage(const std::string &payload, uint64_t &recipientId, std::string &data);
+
     class DiscoveryListener {
     public:
         // localSender: the datagram came from a loopback or private address
