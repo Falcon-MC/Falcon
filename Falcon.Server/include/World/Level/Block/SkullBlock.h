@@ -18,6 +18,10 @@ public:
 
     const char *getBlockActorId() const override;
 
+    // the game's skull tick: a dragon or piglin head moves its mouth while powered
+    void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
+
     // a skull put on a floor faces the player, in 16 steps
     void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                   const BlockState &state, const ItemStack &usedItem, int blockFace) const override;

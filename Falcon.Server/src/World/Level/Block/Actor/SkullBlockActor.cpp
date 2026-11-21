@@ -52,6 +52,20 @@ void SkullBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context
     mMouthTickCount = data.getInt(TAG_MOUTH_TICK_COUNT, 0);
 }
 
+bool SkullBlockActor::tick(ServerNetworkHandler &owner) {
+    (void) owner;
+    if (mDoingAnimation)
+        ++mMouthTickCount;
+    return true;
+}
+
+bool SkullBlockActor::setDoingAnimation(bool doing) {
+    if (mDoingAnimation == doing)
+        return false;
+    mDoingAnimation = doing;
+    return true;
+}
+
 float SkullBlockActor::floorRotation(float yaw) {
     return std::floor(yaw * 16.0f / 360.0f + 0.5f) * ROTATION_STEP;
 }
