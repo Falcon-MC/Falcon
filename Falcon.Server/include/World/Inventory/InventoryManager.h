@@ -86,6 +86,11 @@ public:
     bool isGrindstoneOpenIn(const Level &level) const;
     void syncGrindstoneInputs();
 
+    bool onClientOpenLoom(const Vector3i &position);
+    bool isLoomOpen() const;
+    bool isLoomOpenIn(const Level &level) const;
+    void syncLoomInputs();
+
     bool onClientOpenSmithing(const Vector3i &position);
     bool isSmithingOpen() const;
     void syncSmithingInputs();
@@ -324,7 +329,8 @@ private:
     int mAnvilWindowId = CONTAINER_ID_NONE;
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
-    const Level *mGrindstoneLevel = nullptr;
+    // the world a grindstone or loom window was opened in
+    const Level *mWorkbenchLevel = nullptr;
     CartographyLock mClientMapLock;
     int32_t mStonecutterSelectedRecipe = 0;
     int mContainerWindowId = CONTAINER_ID_NONE;

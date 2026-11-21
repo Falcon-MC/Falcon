@@ -409,6 +409,13 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
         inventory.setSmithingItem(index, ItemStack::air());
     }
 
+    for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+        const ItemStack &item = inventory.getLoomItem(index);
+        if (!item.isAir())
+            dropOnDeath(item);
+        inventory.setLoomItem(index, ItemStack::air());
+    }
+
     dropOnDeath(inventory.getStonecutterInput());
     inventory.setStonecutterInput(ItemStack::air());
 

@@ -27,6 +27,9 @@ public:
     static const int SMITHING_SIZE = 3;
     static constexpr int GRINDSTONE_SIZE = 2;
     static constexpr int GRINDSTONE_FIRST_SLOT = 16;
+    // banner, dye and banner pattern, in that order
+    static constexpr int LOOM_SIZE = 3;
+    static constexpr int LOOM_FIRST_SLOT = 9;
     static const int STONECUTTER_INPUT_NETWORK_SLOT = 3;
     static const int BEACON_PAYMENT_NETWORK_SLOT = 27;
     static const int SAVED_SIZE = CONTAINER_SIZE + ARMOR_SIZE;
@@ -136,6 +139,13 @@ public:
     }
     void setGrindstoneItem(int index, ItemStack item);
 
+    static int loomIndex(ContainerSlotType container);
+
+    const ItemStack &getLoomItem(int index) const {
+        return mLoom[(size_t) index];
+    }
+    void setLoomItem(int index, ItemStack item);
+
     static int smithingIndex(ContainerSlotType container);
 
     const ItemStack &getSmithingItem(int index) const {
@@ -204,6 +214,7 @@ private:
     std::vector<ItemStack> mFurnace;
     std::vector<ItemStack> mSmithing;
     std::array<ItemStack, GRINDSTONE_SIZE> mGrindstone{ItemStack::air(), ItemStack::air()};
+    std::array<ItemStack, LOOM_SIZE> mLoom{ItemStack::air(), ItemStack::air(), ItemStack::air()};
     std::vector<ItemStack> mAnvil;
     std::vector<ItemStack> mCartography;
     std::vector<ItemStack> mTrade;

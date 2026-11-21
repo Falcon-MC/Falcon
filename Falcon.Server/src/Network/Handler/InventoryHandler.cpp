@@ -22,6 +22,7 @@
 #include "World/Level/Block/StonecutterBlock.h"
 #include "World/Level/Block/SmithingTableBlock.h"
 #include "World/Level/Block/GrindstoneBlock.h"
+#include "World/Level/Block/LoomBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Item/EnchantmentHelper.h"
@@ -558,10 +559,18 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     if (leftGrindstone)
         manager.onCurrentWindowRemove();
 
+    const bool loomOpen = manager.isLoomOpenIn(level) && VanillaBlocks::getAs<LoomBlock>(
+            level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName) != nullptr;
+    const bool leftLoom = manager.isLoomOpen() && (!loomOpen || !withinContainerReach(
+            player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                             (float) anvilPosition.z + 0.5f)));
+    if (leftLoom)
+        manager.onCurrentWindowRemove();
+
     const bool leftSmithing = manager.isSmithingOpen() && !withinContainerReach(
             player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
                              (float) anvilPosition.z + 0.5f));
-    const bool leftContainer = leftGrindstone || leftSmithing || hasLeftOpenContainer(owner, player);
+    const bool leftContainer = leftGrindstone || leftLoom || leftSmithing || hasLeftOpenContainer(owner, player);
 
     // the mount window fills the saddle and armor slots without an interaction: their events run after
     const int64_t containerActorId = manager.getContainerActorId();
@@ -658,7 +667,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 &trade, smithingOpen ? &owner.getCachedCraftingData() : nullptr,
                 player.getCodec() ? player.getCodec()->getProtocolVersion() : 0,
                 grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
-                beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice);
+                beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice,
+                loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator);
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && beacon != nullptr && beaconChoice.mPaid) {
             beacon->applyPayment(beaconChoice.mPrimary, beaconChoice.mSecondary);
@@ -808,6 +818,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         owner._sendInventory(player);
         manager.syncSmithingInputs();
         manager.syncGrindstoneInputs();
+        manager.syncLoomInputs();
     }
     if (!leftContainer && (needsResync || renumberedBundles)) {
         manager.refreshOpenContainer(manager.getContainerPosition());
@@ -1131,6 +1142,13 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         if (!item.isAir())
             returned.push_back(item);
         inventory.setGrindstoneItem(index, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+        const ItemStack &item = inventory.getLoomItem(index);
+        if (!item.isAir())
+            returned.push_back(item);
+        inventory.setLoomItem(index, ItemStack::air());
     }
 
     if (!inventory.getStonecutterInput().isAir())
