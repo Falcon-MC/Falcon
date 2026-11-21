@@ -528,6 +528,7 @@ namespace {
         for (size_t index = 0; index < move.mSources.size() && index < move.mMoved.size(); ++index) {
             const Vector3i destination = relative(move.mSources[index], move.mDirection);
             level.setBlock(destination, move.mMoved[index], false);
+            RedstoneSystem::onObserverMoved(owner, level, destination);
 
             std::unique_ptr<BlockActor> &blockActor = move.mActors[index];
             if (blockActor == nullptr)

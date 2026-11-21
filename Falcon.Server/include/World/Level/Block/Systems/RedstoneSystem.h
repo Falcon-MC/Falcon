@@ -79,8 +79,14 @@ public:
     static void updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                         int ignoredFace = RedstoneFace::NONE);
 
-    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                            bool observer);
+    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+
+    // the game's observer: a change in the cell an observer watches schedules its pulse, unless it is already
+    // lit or waiting to be
+    static void onBlockChanged(Level &level, const Vector3i &position);
+
+    // an observer a piston has just set down lights at once
+    static void onObserverMoved(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, BlockUpdateType type);
