@@ -1,5 +1,6 @@
 #include "World/Level/Block/SkullBlock.h"
 
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -9,6 +10,7 @@
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/DispenseSource.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
 
 #include <cmath>
@@ -31,13 +33,27 @@ const char *SkullBlock::getBlockActorId() const {
     return SkullBlockActor::BLOCK_ACTOR_ID;
 }
 
+void SkullBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+    if (state.mName != "minecraft:dragon_head" && state.mName != "minecraft:piglin_head")
+        return;
+    SkullBlockActor *skull = level.getBlockActors().find<SkullBlockActor>(position);
+    if (skull == nullptr)
+        return;
+    if (skull->setDoingAnimation(RedstoneSystem::isGettingPower(owner, level, position)))
+        BlockActionHandler::broadcastBlockActorData(owner, level, *skull);
+}
+
 void SkullBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                           const BlockState &state, const ItemStack &usedItem, int blockFace) const {
     (void) usedItem;
     const float rotation = blockFace == PlacementOrientation::FACE_UP
                                    ? SkullBlockActor::floorRotation(player.getRotation().y)
                                    : 0.0f;
-    SkullBlockActor::place(owner, owner.getLevelFor(player), position, state, rotation);
+    Level &level = owner.getLevelFor(player);
+    SkullBlockActor::place(owner, level, position, state, rotation);
+    // the game reads the power every tick, so a head placed beside a live source moves at once
+    onRedstonePower(owner, level, position, state);
 }
 
 bool WitherSkeletonSkullBlock::matches(const std::string &identifier) {

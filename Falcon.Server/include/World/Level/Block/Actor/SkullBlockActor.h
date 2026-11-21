@@ -26,6 +26,20 @@ public:
         mRotation = rotation;
     }
 
+    // the game's tick: a mouth moving counts its ticks, which the client turns into the animation
+    bool tick(ServerNetworkHandler &owner) override;
+
+    bool isDoingAnimation() const {
+        return mDoingAnimation;
+    }
+
+    int32_t getMouthTickCount() const {
+        return mMouthTickCount;
+    }
+
+    // a powered dragon or piglin head moves its mouth; true when that changed
+    bool setDoingAnimation(bool doing);
+
     // the yaw of a skull placed on a floor, in 16 steps of 22.5 degrees
     static float floorRotation(float yaw);
 
