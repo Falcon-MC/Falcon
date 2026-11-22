@@ -3,6 +3,7 @@
 #include "Falcon/Plugin/LoadedPlugin.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Falcon/Plugin/PluginCommand.h"
+#include "Network/Handler/ChatHandler.h"
 #include "Network/Handler/LoginHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Codec/ProtocolCodecRegistry.h"
@@ -161,6 +162,19 @@ namespace {
         return owner().getCommands().dispatch(sender, commandLine) ? 1 : 0;
     }
 
+    // the public chat as the player typed it: one line, the chat events decide what goes out
+    int playerChat(FalconPlayer *target, const char *message) {
+        ServerPlayer *speaker = player(target);
+        if (!hasText(message) || !speaker->isSpawned())
+            return 0;
+        std::string line(message);
+        line = line.substr(0, line.find('\n'));
+        if (line.find_first_not_of(" \t\r") == std::string::npos)
+            return 0;
+        ChatHandler::broadcastChat(owner(), *speaker, line);
+        return 1;
+    }
+
     bool knownItem(const char *identifier) {
         return hasText(identifier) && owner().getItemDefinitions().getDefinition(identifier) != nullptr;
     }
@@ -269,6 +283,7 @@ void PluginServerApi::fillCommands(FalconServerApi &api) {
     api.commandSetAliases = &commandSetAliases;
     api.serverExecuteCommand = &serverExecuteCommand;
     api.playerExecuteCommand = &playerExecuteCommand;
+    api.playerChat = &playerChat;
     api.registerRecipe = &registerRecipe;
     api.removeRecipe = &removeRecipe;
 }

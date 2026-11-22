@@ -441,6 +441,16 @@ namespace {
 
         api.unsubscribe(joinId);
         api.unsubscribe(quitId);
+
+        MessageProbe chat;
+        chat.replacement = "said for the player";
+        const uint64_t chatId = api.subscribe(handle, FALCON_EVENT_PLAYER_CHAT, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &chat);
+        require(api.playerChat(fixture.playerHandle(), "hello\nsecond line") == 1 && chat.calls == 1
+                        && chat.message == "hello",
+                "a chat line for the player did not go through the chat event, one line only");
+        require(api.playerChat(fixture.playerHandle(), "   ") == 0 && chat.calls == 1, "a blank chat line was said");
+        api.unsubscribe(chatId);
     }
 
     bool hasOutput(ServerNetworkHandler &owner, const std::string &identifier) {

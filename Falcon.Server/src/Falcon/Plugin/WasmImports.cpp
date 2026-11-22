@@ -621,6 +621,12 @@ namespace {
                     if (optionalString(call, 1, hasSound, sound) && target != nullptr)
                         api().playerStopSound(target, hasSound ? sound.c_str() : nullptr);
                 }},
+                {"players", "player-chat", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string message;
+                    const bool read = call.string(1, message);
+                    call.resultS32(read && target != nullptr && api().playerChat(target, message.c_str()) != 0);
+                }},
                 {"players", "player-execute-command", "Iii:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     std::string line;
