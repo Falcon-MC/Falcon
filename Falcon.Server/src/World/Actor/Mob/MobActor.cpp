@@ -397,6 +397,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickShaking(owner);
     _tickCelebration(owner);
     mAnger.tick(owner, *this);
+    mAngerLevel.tick(owner, *this);
     mAdmiration.tick(owner, *this);
     mDweller.tick(owner, *this);
     mEconomy.tick(owner, *this);
@@ -2658,6 +2659,7 @@ Tag MobActor::saveNbt() const {
     for (const std::string &group: mComponentGroups)
         definitions.push_back(Tag::ofString(DEFINITION_ADDED_PREFIX + group));
     data.put(TAG_DEFINITIONS, Tag::ofList(Tag::Type::String, std::move(definitions)));
+    mAngerLevel.save(data);
     data.putInt(TAG_AGE, mAgeTicks);
     // written only when set
     if (mActorVersion != 0)
@@ -2710,6 +2712,7 @@ Tag MobActor::saveNbt() const {
 
 void MobActor::loadNbt(const Tag &data) {
     ServerActor::loadNbt(data);
+    mAngerLevel.load(data);
 
     mSpawnEvent = data.getString(TAG_SPAWN_EVENT, mSpawnEvent);
 

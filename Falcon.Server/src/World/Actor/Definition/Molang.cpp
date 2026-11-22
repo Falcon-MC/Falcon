@@ -317,6 +317,9 @@ namespace {
                 return MolangValue::ofNumber(mob != nullptr && mob->getComponent("minecraft:is_baby") != nullptr ? 1.0
                                                                                                                  : 0.0);
 
+            if (query == "anger_level")
+                return MolangValue::ofNumber(mob == nullptr ? 0.0 : (double) mob->getAngerLevel().getLevel());
+
             if (query == "variant")
                 return MolangValue::ofNumber(mob == nullptr ? 0.0 : (double) mob->getVariant());
 

@@ -19,6 +19,7 @@
 #include "World/Actor/Mob/Component/MobExplode.h"
 #include "World/Actor/ActorLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
+#include "World/Actor/Mob/Component/MobAngerLevel.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/Component/MobEconomy.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
@@ -33,6 +34,7 @@
 #include "Server/PropertiesSettings.h"
 
 #include <cstdint>
+#include <optional>
 #include <random>
 #include <string>
 #include <unordered_map>
@@ -513,6 +515,32 @@ public:
         return mAnger;
     }
 
+    MobAngerLevel &getAngerLevel() {
+        return mAngerLevel;
+    }
+
+    const MobAngerLevel &getAngerLevel() const {
+        return mAngerLevel;
+    }
+
+    // minecraft:suspect_tracking: the block something last disturbed the mob from, and the tick it did
+    const std::optional<Vector3i> &getSuspectPosition() const {
+        return mSuspectPosition;
+    }
+
+    int64_t getSuspectTick() const {
+        return mSuspectTick;
+    }
+
+    void setSuspectPosition(const Vector3i &position, int64_t tick) {
+        mSuspectPosition = position;
+        mSuspectTick = tick;
+    }
+
+    void clearSuspectPosition() {
+        mSuspectPosition.reset();
+    }
+
     // 0 without minecraft:inventory
     int getInventoryCapacity() const;
 
@@ -893,6 +921,9 @@ private:
     mutable float mRolledJumpStrength = -1.0f;
     RideControlState mRideControl;
     MobAnger mAnger;
+    MobAngerLevel mAngerLevel;
+    std::optional<Vector3i> mSuspectPosition;
+    int64_t mSuspectTick = 0;
     MobDweller mDweller;
     MobAddRider mAddRider;
     MobAdmiration mAdmiration;

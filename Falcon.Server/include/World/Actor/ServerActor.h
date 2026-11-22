@@ -22,6 +22,7 @@
 
 struct CustomActorDefinition;
 class ActorLeash;
+class GameEventListener;
 class Container;
 class ServerNetworkHandler;
 namespace json {
@@ -78,6 +79,17 @@ public:
 
     virtual ActorSize getSize() const {
         return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT};
+    }
+
+    // the listener an entity carries for game events, as a block actor can
+    virtual GameEventListener *getGameEventListener() {
+        return nullptr;
+    }
+
+    // another entity's box overlapped this one's and pushed it
+    virtual void onPushedBy(ServerNetworkHandler &owner, int64_t pusherId) {
+        (void) owner;
+        (void) pusherId;
     }
 
     // the collision box against blocks, scaled around its middle; the jump of behavior.jump_around_target shrinks it
