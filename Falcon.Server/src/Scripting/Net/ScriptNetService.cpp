@@ -39,6 +39,22 @@ std::vector<ScriptNetService::Completed> ScriptNetService::pollRequests() {
     return completed;
 }
 
+void ScriptNetService::cancelRequests() {
+    for (std::unique_ptr<Job> &job: mJobs) {
+        job->mCancelled = true;
+        job->mStream.abort();
+    }
+}
+
+size_t ScriptNetService::runningCancelled() const {
+    size_t count = 0;
+    for (const std::unique_ptr<Job> &job: mJobs) {
+        if (job->mCancelled && !job->mDone.load())
+            ++count;
+    }
+    return count;
+}
+
 WebSocketClient &ScriptNetService::openSocket(uint32_t id, const std::string &url,
                                               const HttpsClient::Headers &headers, uint64_t maxMessageBytes) {
     std::unique_ptr<WebSocketClient> &socket = mSockets[id];
