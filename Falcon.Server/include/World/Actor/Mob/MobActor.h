@@ -19,7 +19,9 @@
 #include "World/Actor/Mob/Component/MobExplode.h"
 #include "World/Actor/ActorLeash.h"
 #include "World/Actor/Mob/Component/MobAnger.h"
+#include "World/Actor/Mob/Component/MobAmbientSounds.h"
 #include "World/Actor/Mob/Component/MobAngerLevel.h"
+#include "World/Actor/Mob/Component/MobEffectAura.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/Component/MobEconomy.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
@@ -523,6 +525,10 @@ public:
         return mAngerLevel;
     }
 
+    const MobAmbientSounds &getAmbientSounds() const {
+        return mAmbientSounds;
+    }
+
     // minecraft:suspect_tracking: the block something last disturbed the mob from, and the tick it did
     const std::optional<Vector3i> &getSuspectPosition() const {
         return mSuspectPosition;
@@ -922,6 +928,8 @@ private:
     RideControlState mRideControl;
     MobAnger mAnger;
     MobAngerLevel mAngerLevel;
+    MobAmbientSounds mAmbientSounds;
+    MobEffectAura mEffectAura;
     std::optional<Vector3i> mSuspectPosition;
     int64_t mSuspectTick = 0;
     MobDweller mDweller;

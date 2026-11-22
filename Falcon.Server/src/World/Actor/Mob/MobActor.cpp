@@ -398,6 +398,8 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     _tickCelebration(owner);
     mAnger.tick(owner, *this);
     mAngerLevel.tick(owner, *this);
+    mAmbientSounds.tick(owner, *this);
+    mEffectAura.tick(owner, *this);
     mAdmiration.tick(owner, *this);
     mDweller.tick(owner, *this);
     mEconomy.tick(owner, *this);
@@ -2386,6 +2388,7 @@ void MobActor::fillSpawnMetadata(EntityDataMap &metadata) const {
 
     mLeash.appendSpawnMetadata(metadata);
     _appendDefinitionData(metadata);
+    mAmbientSounds.fillSpawnMetadata(*this, metadata);
 }
 
 void MobActor::_syncOwner(ServerNetworkHandler &owner) {
