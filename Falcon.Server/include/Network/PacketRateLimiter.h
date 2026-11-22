@@ -5,7 +5,18 @@
 #include <cstddef>
 #include <cstdint>
 
-enum class RateLimitedPacket : uint8_t { Inbound, Command, Chat, FormResponse, Movement, ViolationWarning, Count };
+enum class RateLimitedPacket : uint8_t {
+    Inbound,
+    Command,
+    Chat,
+    FormResponse,
+    Movement,
+    ViolationWarning,
+    Sound,
+    Animate,
+    Emote,
+    Count
+};
 
 class PacketRateLimiter {
 public:

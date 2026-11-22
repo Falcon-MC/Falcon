@@ -84,8 +84,11 @@ namespace {
 }
 
 // no saved data, the given place, game mode and yaw, then the usual first spawn
-ServerPlayer &ServerNetworkHandler::spawnSimulatedPlayer(const std::string &name, Level &level,
+ServerPlayer *ServerNetworkHandler::spawnSimulatedPlayer(const std::string &name, Level &level,
                                                          const Vector3f &position, float yaw, int32_t gameType) {
+    // a rehash would break any walk over mPlayers this spawn runs inside; a plain insert keeps its iterators
+    if ((float) (mPlayers.size() + 1) > mPlayers.max_load_factor() * (float) mPlayers.bucket_count())
+        return nullptr;
     const NetworkIdentifier id("simulated-player", ++mSimulatedPlayerCount);
     mNetworkHandler->addLocalSession(id);
     ServerPlayer &player = mPlayers.try_emplace(id, id, allocateRuntimeId(), this).first->second;
@@ -114,7 +117,7 @@ ServerPlayer &ServerNetworkHandler::spawnSimulatedPlayer(const std::string &name
     mEventBus.after().mPlayerJoin.emit(joinEvent);
     PlayerSpawnAfterEvent spawnEvent(player, true);
     mEventBus.after().mPlayerSpawn.emit(spawnEvent);
-    return player;
+    return &player;
 }
 
 void ServerNetworkHandler::removeSimulatedPlayer(const NetworkIdentifier &id) {
@@ -135,6 +138,11 @@ void ServerNetworkHandler::_removeSimulatedPlayers() {
         onConnectionClosed(id, DisconnectFailReason::Disconnected, "");
         mNetworkHandler->removeLocalSession(id);
     }
+}
+
+// no walk over mPlayers is active here; reserve is a no-op once the buckets fit
+void ServerNetworkHandler::_reserveSimulatedSpawns() {
+    mPlayers.reserve(mPlayers.size() + SIMULATED_SPAWN_HEADROOM);
 }
 
 // the input a client would send this tick, played by the same movement pipeline

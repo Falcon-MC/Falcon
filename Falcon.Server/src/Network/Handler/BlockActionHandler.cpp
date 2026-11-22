@@ -321,9 +321,11 @@ namespace {
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = 0;
-        BlockActionHandler::broadcastToViewers(
-                owner, level, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
-                update);
+        // a correction for the requester only: a broadcast would let one client flood every viewer
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), update, owner.getCodecContext());
+        if (isNearPlayer(player,
+                         Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f)))
+            player.awaitMovementChange();
     }
 
     void syncBlocksNearby(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &clicked, int face) {

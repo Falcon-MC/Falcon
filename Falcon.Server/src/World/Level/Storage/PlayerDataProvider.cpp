@@ -175,7 +175,12 @@ std::string PlayerDataProvider::_getArchivePath(const std::string &name, const s
 }
 
 bool PlayerDataProvider::claimData(const std::string &name, const std::string &xuid) const {
-    if (xuid.empty() || !isSafeName(name) || !isSafeName(xuid))
+    // an unsigned login names itself: it must not take over a save an account owns
+    if (xuid.empty()) {
+        Tag data;
+        return !loadData(name, data) || data.getString(TAG_OWNER_XUID, std::string()).empty();
+    }
+    if (!isSafeName(name) || !isSafeName(xuid))
         return true;
 
     const std::string live = _getPlayerDataPath(name);
