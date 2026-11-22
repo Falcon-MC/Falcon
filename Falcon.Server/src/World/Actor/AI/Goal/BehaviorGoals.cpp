@@ -97,6 +97,7 @@
 #include "World/Actor/AI/Goal/TradeInterestGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
+#include "World/Actor/AI/Goal/WardenGoals.h"
 #include "World/Actor/AI/Goal/WitherGoals.h"
 #include "World/Actor/AI/Goal/WorkComposterGoal.h"
 #include "World/Actor/AI/Goal/WorkGoal.h"
@@ -788,6 +789,9 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior.rfind("wither", 0) == 0)
         return WitherGoals::create(mob, behavior, component);
+
+    if (std::unique_ptr<Goal> warden = WardenGoals::create(mob, behavior, component))
+        return warden;
 
     if (behavior == "float")
         return std::make_unique<FloatGoal>();

@@ -27,6 +27,7 @@ namespace {
                                  {"magic", "death.attack.magic"},
                                  {"magma", "death.attack.hotFloor"},
                                  {"projectile", "death.attack.arrow"},
+                                 {"sonic_boom", "death.attack.sonicBoom"},
                                  {"stalagmite", "death.attack.stalagmite"},
                                  {"starve", "death.attack.starve"},
                                  {"suffocation", "death.attack.inWall"},
