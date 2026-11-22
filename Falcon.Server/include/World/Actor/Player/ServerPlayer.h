@@ -992,6 +992,16 @@ public:
 
     void tickItemCooldowns(int64_t currentTick);
 
+    // a catalyst takes what this death drops, unless the inventory is kept or nothing would drop
+    int32_t takeDeathExperience(ServerNetworkHandler &owner) override;
+
+    bool isDeathExperienceTaken() const {
+        return mDeathExperienceTaken;
+    }
+
+    // a respawned player can feed a catalyst again
+    void clearSculkCatalystState();
+
     WardenSpawnTracker &getWardenSpawnTracker() {
         return mWardenSpawnTracker;
     }
@@ -1413,4 +1423,5 @@ private:
     bool mShieldReblockAfterAttack = false;
     int64_t mShieldDisabledUntilTick = 0;
     WardenSpawnTracker mWardenSpawnTracker;
+    bool mDeathExperienceTaken = false;
 };

@@ -1,5 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
@@ -273,6 +274,9 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     if (mFatalSource != nullptr && WitherActor::isWitherDamage(*this, *mFatalSource))
         WitherActor::leaveWitherRose(*this, player);
 
+    // heard before the experience drops: a sculk catalyst near takes it
+    getLevelFor(player).postGameEvent(GameEvents::ENTITY_DIE, player.getPosition(), &player);
+
     const GameRules &rules = getWorldFor(player).getOverworld().getGameRules();
     const bool keepInventory = rules.getBool("keepinventory");
 
@@ -281,7 +285,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
         if (!player.isCreative()) {
             const int droppedExperience = player.getExperience().getXpDropAmount();
-            if (droppedExperience > 0)
+            if (droppedExperience > 0 && !player.isDeathExperienceTaken())
                 spawnExperienceOrbs(getLevelFor(player), player.getPosition(), droppedExperience);
         }
 
@@ -290,6 +294,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
         _sendAttributes(player);
     }
 
+    player.clearSculkCatalystState();
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
 
