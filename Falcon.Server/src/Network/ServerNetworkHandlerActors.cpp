@@ -388,6 +388,13 @@ void ServerNetworkHandler::_unregisterActor(int64_t uniqueId) {
         mActorChanges.push_back(ActorChange{it->second.get(), it->second->getPosition(), false});
     mVehiclesWithPendingPassengers.erase(uniqueId);
     mActorUniqueIdsByRuntimeId.erase(it->second->getRuntimeId());
+    // a walk may be running over the index: the slot goes null, erasing it would shift the walk's vector
+    ServerActor *removed = it->second.get();
+    std::replace(mCollidableActors.begin(), mCollidableActors.end(), removed, (ServerActor *) nullptr);
+    if (mActorIndexWalks > 0) {
+        for (auto &bucket: mActorIndex)
+            std::replace(bucket.second.begin(), bucket.second.end(), removed, (ServerActor *) nullptr);
+    }
     mActors.erase(it);
     mActorIndexDirty = true;
     ++mActorSetSerial;
@@ -1147,7 +1154,7 @@ void ServerNetworkHandler::updateActorVisibility() {
                     continue;
 
                 for (ServerActor *actor: bucket->second) {
-                    if (!actor->isAlive() || visible.find(actor->getRuntimeId()) != visible.end()
+                    if (actor == nullptr || !actor->isAlive() || visible.find(actor->getRuntimeId()) != visible.end()
                         || !canPlayerSeeActor(player, *actor))
                         continue;
 

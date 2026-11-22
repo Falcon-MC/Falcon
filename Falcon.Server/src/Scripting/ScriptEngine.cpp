@@ -1012,6 +1012,7 @@ void ScriptEngine::onCustomBlockFallOn(Actor &actor, Level &level, const std::st
 
 void ScriptEngine::forgetLevel(const Level &level) {
     mRedstonePower.erase(&level);
+    mGameTests.forgetLevel(level);
 }
 
 void ScriptEngine::onCustomBlockRedstone(Level &level, const std::string &blockId, const Vector3i &position,
