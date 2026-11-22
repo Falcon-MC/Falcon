@@ -232,8 +232,16 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     enable_testing()
     # one shared copy of the server for every test: linking the objects into each of them made about
     # 150 executables of 60 MB, 10 GB of build folder for the same code
-    add_library(FalconTestCore SHARED)
-    target_link_libraries(FalconTestCore PUBLIC FalconCore)
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # not on mingw: a dll of the whole server passes the 65535 exports of a pe file, and the -static
+        # tests would each carry a C++ runtime of their own beside the dll's
+        add_library(FalconTestCore INTERFACE)
+        target_sources(FalconTestCore INTERFACE $<TARGET_OBJECTS:FalconCore>)
+        target_link_libraries(FalconTestCore INTERFACE FalconCore)
+    else()
+        add_library(FalconTestCore SHARED)
+        target_link_libraries(FalconTestCore PUBLIC FalconCore)
+    endif()
     add_executable(FalconEmbeddedTests tests/EmbeddedServerTests.cpp)
     target_link_libraries(FalconEmbeddedTests PRIVATE FalconTestCore)
     add_executable(FalconStartupTests tests/StartupTests.cpp)

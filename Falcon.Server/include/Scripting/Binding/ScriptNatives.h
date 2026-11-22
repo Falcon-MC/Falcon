@@ -23,6 +23,15 @@ using ScriptHandleCounts = std::unordered_map<std::string, int64_t>;
 
 // opaque of every object the scripting layer hands out: scripts only see the official members
 struct ScriptNative {
+    ScriptNative() = default;
+
+    // a copy is a plain value: only the object a js handle owns is counted, once
+    ScriptNative(const ScriptNative &) {}
+
+    ScriptNative &operator=(const ScriptNative &) {
+        return *this;
+    }
+
     virtual ~ScriptNative() {
         if (mHandleCount != nullptr)
             --*mHandleCount;

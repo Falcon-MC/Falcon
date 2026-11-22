@@ -309,8 +309,11 @@ public:
                 if (bucket == mActorIndex.end())
                     continue;
 
-                for (ServerActor *actor: bucket->second)
-                    visit(*actor);
+                // by position, null skipped: a visitor may remove an actor, which empties its slot
+                for (size_t index = 0; index < bucket->second.size(); ++index) {
+                    if (ServerActor *actor = bucket->second[index])
+                        visit(*actor);
+                }
             }
         }
     }
@@ -340,8 +343,10 @@ public:
     void forEachCollidableActor(Visitor &&visit) {
         if (mActorIndexWalks == 0)
             _refreshActorIndex();
-        for (size_t index = 0; index < mCollidableActors.size(); ++index)
-            visit(*mCollidableActors[index]);
+        for (size_t index = 0; index < mCollidableActors.size(); ++index) {
+            if (ServerActor *actor = mCollidableActors[index])
+                visit(*actor);
+        }
     }
 
     // half the width of the widest actor, as each reports it, from the index of the tick
@@ -897,7 +902,16 @@ public:
         // a walk nested in a visitor keeps the index: a refresh clears the outer walk's buckets
         if (mPlayerIndexWalks == 0)
             _refreshPlayerIndex();
-        ++mPlayerIndexWalks;
+        // scoped: a visitor that throws must not leave the index frozen
+        struct WalkScope {
+            int32_t &mWalks;
+            explicit WalkScope(int32_t &walks) : mWalks(walks) {
+                ++mWalks;
+            }
+            ~WalkScope() {
+                --mWalks;
+            }
+        } scope(mPlayerIndexWalks);
         for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
             for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
                 const auto bucket = mPlayerIndex.find(_actorIndexKey(chunkX, chunkZ));
@@ -909,7 +923,6 @@ public:
                     visit(*bucket->second[index]);
             }
         }
-        --mPlayerIndexWalks;
     }
 
     void _refreshActorIndex();

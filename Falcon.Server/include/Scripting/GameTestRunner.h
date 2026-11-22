@@ -92,6 +92,9 @@ public:
 
     Outcome stopAll();
 
+    // the level unloads: its tests stop and its ledger goes, a later level may reuse the address
+    void forgetLevel(const Level &level);
+
     // the structure block holding a looked at block: its name and the block relative to it
     Outcome position(Level &level, const Vector3i &target);
 

@@ -10,11 +10,6 @@ on:
     branches: [dev]
   workflow_dispatch:
 
-# one nightly at a time; a newer passing dev replaces the one waiting
-concurrency:
-  group: nightly
-  cancel-in-progress: true
-
 permissions:
   contents: write
 
@@ -23,6 +18,10 @@ jobs:
     name: Resolve the nightly
     # only a dev whose whole CI passed: a red dev keeps the last good nightly
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # a newer passing dev replaces the nightly still resolving or building
+    concurrency:
+      group: nightly-build
+      cancel-in-progress: true
     runs-on: ubuntu-22.04
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
@@ -39,7 +38,8 @@ jobs:
           set -euo pipefail
           SHA="$(git rev-parse HEAD)"
           # the release after the last one, so the update check never offers an older version
-          LAST="$(git tag -l 'v*' --sort=-v:refname | head -n 1)"
+          # release tags only: a v-prefixed branch name or an rc suffix would break the arithmetic
+          LAST="$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           LAST="${LAST#v}"
           IFS=. read -r MAJOR MINOR PATCH <<< "${LAST:-1.0.0}"
           VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))-nightly.$(git rev-list --count HEAD)"
@@ -50,6 +50,9 @@ jobs:
   build:
     name: Build ${{ matrix.name }}
     needs: prepare
+    concurrency:
+      group: nightly-build-${{ matrix.name }}
+      cancel-in-progress: true
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -201,6 +204,10 @@ jobs:
   publish:
     name: Publish the nightly
     needs: [prepare, build]
+    # never cancelled once started: the tag moves and the files are replaced in steps
+    concurrency:
+      group: nightly-publish
+      cancel-in-progress: false
     runs-on: ubuntu-22.04
     steps:
       - name: Download the build artifacts
