@@ -621,6 +621,12 @@ namespace {
                     if (optionalString(call, 1, hasSound, sound) && target != nullptr)
                         api().playerStopSound(target, hasSound ? sound.c_str() : nullptr);
                 }},
+                {"players", "player-chat", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string message;
+                    const bool read = call.string(1, message);
+                    call.resultS32(read && target != nullptr && api().playerChat(target, message.c_str()) != 0);
+                }},
                 {"players", "player-execute-command", "Iii:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     std::string line;
@@ -1721,6 +1727,10 @@ namespace {
                     if (call.string(0, message) && current != nullptr)
                         api().eventSetMessage(current, message.c_str());
                 }},
+                {"event", "event-message-is-default", ":i", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    call.resultS32(current != nullptr && api().eventMessageIsDefault(current) != 0);
+                }},
                 {"event", "event-entity", "i:", [](Call &call) {
                     FalconEvent *current = event(call);
                     returnEntity(call, 0, current == nullptr ? nullptr : api().eventEntity(current));
@@ -2004,6 +2014,17 @@ namespace {
                     }
                     const int added = api().commandAddOverload(self(call), command.c_str(), parameters.data(), count);
                     call.resultS32(added != 0 ? 1 : 0);
+                }},
+                {"commands", "command-set-aliases", "iiii:i", [](Call &call) {
+                    std::string command;
+                    std::vector<std::string> aliases;
+                    if (!call.string(0, command) || !call.stringList(call.u32(2), call.u32(3), aliases))
+                        return;
+                    std::vector<const char *> names;
+                    for (const std::string &alias: aliases)
+                        names.push_back(alias.c_str());
+                    call.resultS32(api().commandSetAliases(self(call), command.c_str(), names.data(),
+                                                           (uint32_t) names.size()) != 0);
                 }},
                 {"commands", "execute-command", "ii:i", [](Call &call) {
                     std::string line;

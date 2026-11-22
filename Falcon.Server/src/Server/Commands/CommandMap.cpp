@@ -40,6 +40,26 @@ void CommandMap::unregisterCommand(const std::string &name) {
                     mCommands.end());
 }
 
+void CommandMap::setAliases(Command &command, const std::vector<std::string> &aliases) {
+    const std::string name = toLowerCase(command.getName());
+    for (auto it = mByName.begin(); it != mByName.end();) {
+        if (it->second == &command && it->first != name)
+            it = mByName.erase(it);
+        else
+            ++it;
+    }
+
+    std::vector<std::string> kept;
+    for (const std::string &alias: aliases) {
+        const std::string key = toLowerCase(alias);
+        if (key.empty() || key.find(' ') != std::string::npos || mByName.count(key) != 0)
+            continue;
+        mByName[key] = &command;
+        kept.push_back(key);
+    }
+    command.setAliases(std::move(kept));
+}
+
 Command *CommandMap::getCommand(const std::string &name) const {
     auto it = mByName.find(toLowerCase(name));
     return it == mByName.end() ? nullptr : it->second;

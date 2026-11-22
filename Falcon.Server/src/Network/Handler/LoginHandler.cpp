@@ -1558,7 +1558,12 @@ void LoginHandler::handleSetLocalPlayerAsInitialized(ServerNetworkHandler &owner
     if (!player.getFogStack().empty())
         FogStack::send(owner, player);
 
-    owner.broadcastTranslation("multiplayer.player.joined", {player.getName()});
+    PlayerJoinMessageBeforeEvent message(player, "§e" + player.getName() + " joined the game");
+    owner.getEventBus().before().mPlayerJoinMessage.emit(message);
+    if (message.mDefault)
+        owner.broadcastTranslation("multiplayer.player.joined", {player.getName()});
+    else if (!message.mMessage.empty())
+        owner.broadcastSystemMessage(message.mMessage);
 }
 
 void LoginHandler::checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &player) {

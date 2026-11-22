@@ -349,7 +349,108 @@ namespace {
         require(api.playerExecuteCommand(fixture.playerHandle(), "probe slow") == 1 && probe.calls == 2 && probe.player,
                 "the player did not run the command");
         require(api.serverExecuteCommand("") == 0, "an empty line ran");
+
+        const char *aliases[3] = {"pr", "PROBER", "kick"};
+        require(api.commandSetAliases(handle, "probe", aliases, 3) == 1, "the aliases were refused");
+        require(api.commandSetAliases(PluginManager::toHandle(other), "probe", aliases, 1) == 0,
+                "another plugin gave the command aliases");
+        require(api.serverExecuteCommand("pr fast") == 1 && probe.calls == 3, "an alias did not run the command");
+        require(api.serverExecuteCommand("prober slow") == 1 && probe.calls == 4,
+                "an alias in another case did not run the command");
+        require(fixture.owner.getCommands().getCommand("kick") != command, "an alias took another command's name");
+        require(command->getAliases() == std::vector<std::string>{"pr", "prober"}, "the aliases were not kept");
+        const char *replacement[1] = {"pb"};
+        require(api.commandSetAliases(handle, "probe", replacement, 1) == 1, "the new aliases were refused");
+        require(fixture.owner.getCommands().getCommand("pr") == nullptr
+                        && fixture.owner.getCommands().getCommand("pb") == command,
+                "the old aliases stayed in place of the new ones");
         fixture.owner.getCommands().unregisterCommand("probe");
+        require(fixture.owner.getCommands().getCommand("pb") == nullptr, "an alias outlived its command");
+    }
+
+    struct MessageProbe {
+        int calls = 0;
+        std::string message;
+        bool isDefault = false;
+        std::string reason;
+        const char *replacement = nullptr;
+    };
+
+    void messageHandler(FalconEvent *event, void *userData) {
+        const FalconServerApi &api = PluginServerApi::get();
+        auto &probe = *static_cast<MessageProbe *>(userData);
+        probe.calls++;
+        probe.message = api.eventMessage(event);
+        probe.isDefault = api.eventMessageIsDefault(event) != 0;
+        probe.reason = api.eventCause(event);
+        if (probe.replacement != nullptr)
+            api.eventSetMessage(event, probe.replacement);
+    }
+
+    void joinAndLeaveMessages(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Greeter";
+        listener.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(listener);
+        MessageProbe join;
+        MessageProbe quit;
+        const uint64_t joinId = api.subscribe(handle, FALCON_EVENT_PLAYER_JOIN, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &join);
+        const uint64_t quitId = api.subscribe(handle, FALCON_EVENT_PLAYER_QUIT, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &quit);
+        EventBus &bus = fixture.owner.getEventBus();
+
+        PlayerJoinMessageBeforeEvent untouched(*fixture.player, "§eTester joined the game");
+        bus.before().mPlayerJoinMessage.emit(untouched);
+        require(join.calls == 1 && join.message == "§eTester joined the game" && join.isDefault,
+                "the join event did not carry the game's message");
+        require(untouched.mDefault, "a message left alone stopped being the game's own");
+
+        join.replacement = "§aTester is here";
+        PlayerJoinMessageBeforeEvent replaced(*fixture.player, "§eTester joined the game");
+        bus.before().mPlayerJoinMessage.emit(replaced);
+        require(!replaced.mDefault && replaced.mMessage == "§aTester is here", "the join message was not replaced");
+
+        join.replacement = "";
+        PlayerJoinMessageBeforeEvent silenced(*fixture.player, "§eTester joined the game");
+        bus.before().mPlayerJoinMessage.emit(silenced);
+        require(!silenced.mDefault && silenced.mMessage.empty(), "the join message was not emptied");
+
+        quit.replacement = "§cTester went away";
+        PlayerLeaveMessageBeforeEvent leaving(*fixture.player, "§eTester left the game", "Kicked by an operator");
+        bus.before().mPlayerLeaveMessage.emit(leaving);
+        require(quit.calls == 1 && quit.isDefault && quit.message == "§eTester left the game",
+                "the quit event did not carry the game's message");
+        require(quit.reason == "Kicked by an operator", "the quit event lost the reason");
+        require(!leaving.mDefault && leaving.mMessage == "§cTester went away", "the leave message was not replaced");
+
+        // a simulated player goes through the real join and leave, kicked with a reason
+        join.replacement = nullptr;
+        quit.replacement = nullptr;
+        FalconPlayer *bot = api.serverSpawnSimulatedPlayer("Greeted", fixture.levelHandle(),
+                                                           FalconVec3{4.5, 100.0, 4.5}, 0.0f,
+                                                           FALCON_GAME_MODE_SURVIVAL);
+        require(bot != nullptr, "the greeted player was refused");
+        require(join.calls == 4 && join.message == "§eGreeted joined the game" && join.isDefault,
+                "joining did not fire the join event before the message");
+        const NetworkIdentifier botId = reinterpret_cast<ServerPlayer *>(bot)->getNetworkIdentifier();
+        fixture.owner._disconnect(botId, DisconnectReason::Kicked, "Too loud");
+        ServerTickProbe::removeSimulated(fixture.owner);
+        require(quit.calls == 2 && quit.message == "§eGreeted left the game" && quit.reason == "Too loud",
+                "leaving did not fire the quit event with the kick reason");
+
+        api.unsubscribe(joinId);
+        api.unsubscribe(quitId);
+
+        MessageProbe chat;
+        chat.replacement = "said for the player";
+        const uint64_t chatId = api.subscribe(handle, FALCON_EVENT_PLAYER_CHAT, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &chat);
+        require(api.playerChat(fixture.playerHandle(), "hello\nsecond line") == 1 && chat.calls == 1
+                        && chat.message == "hello",
+                "a chat line for the player did not go through the chat event, one line only");
+        require(api.playerChat(fixture.playerHandle(), "   ") == 0 && chat.calls == 1, "a blank chat line was said");
+        api.unsubscribe(chatId);
     }
 
     bool hasOutput(ServerNetworkHandler &owner, const std::string &identifier) {
@@ -854,6 +955,7 @@ namespace {
         containers(api, fixture);
         persistentData(api, fixture);
         commands(api, fixture);
+        joinAndLeaveMessages(api, fixture);
         recipes(api, fixture);
         world(api, fixture);
         entitiesAndPlayers(api, fixture);
