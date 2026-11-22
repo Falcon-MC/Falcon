@@ -173,9 +173,14 @@ namespace {
 
     void maps(Bench &bench) {
         GridRecipes::Craft out;
+        // the result takes the id of the map one scale up, which already exists in the chain
         MapItemSavedData data(7);
+        MapItemSavedData parent(70);
+        data.setParentMapId(70);
         CartographyRecipes::Maps access;
-        access.mGetMap = [&data](int64_t mapId) { return mapId == 7 ? &data : nullptr; };
+        access.mGetMap = [&data, &parent](int64_t mapId) {
+            return mapId == 7 ? &data : mapId == 70 ? &parent : nullptr;
+        };
         access.mExpand = [](int64_t, bool) { return (int64_t) 70; };
 
         const auto filled = [&bench]() {
