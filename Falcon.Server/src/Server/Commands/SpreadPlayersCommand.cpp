@@ -186,23 +186,23 @@ bool SpreadPlayersCommand::execute(CommandOrigin &sender, const std::vector<std:
         for (size_t index = 0; index < points.size(); ++index) {
             float awayX = 0.0f;
             float awayZ = 0.0f;
-            int32_t near = 0;
+            int32_t neighbours = 0;
             for (size_t other = 0; other < points.size(); ++other) {
                 if (other == index)
                     continue;
                 const float apart = distance(points[other], points[index]);
                 closest = std::min(closest, apart);
                 if (apart < spreadDistance) {
-                    ++near;
+                    ++neighbours;
                     awayX += points[other].mX - points[index].mX;
                     awayZ += points[other].mZ - points[index].mZ;
                 }
             }
 
             Point point = points[index];
-            if (near > 0) {
-                awayX /= (float) near;
-                awayZ /= (float) near;
+            if (neighbours > 0) {
+                awayX /= (float) neighbours;
+                awayZ /= (float) neighbours;
                 const float length = std::sqrt(awayX * awayX + awayZ * awayZ);
                 if (length <= 0.0f) {
                     point = randomPoint();
