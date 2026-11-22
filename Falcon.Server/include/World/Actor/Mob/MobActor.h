@@ -139,6 +139,9 @@ public:
 
     void kill(ServerNetworkHandler &owner, ServerPlayer *source = nullptr, int32_t lootingLevel = 0) override;
 
+    // a catalyst takes what the death would drop, worked out as if a player had made the kill
+    int32_t takeDeathExperience(ServerNetworkHandler &owner) override;
+
     // now instead of on the first tick; at most once
     void startDefinition(ServerNetworkHandler &owner);
 
@@ -730,7 +733,7 @@ private:
 
     void _tickAttackCooldown(ServerNetworkHandler &owner);
 
-    int _experienceReward(const char *key, const ServerPlayer *player) const;
+    int _experienceReward(const char *key, const ServerPlayer *player, bool lastHitByPlayer = false) const;
 
     int _deathExperience(const ServerPlayer *killer) const;
 
@@ -955,4 +958,5 @@ private:
     mutable DefinitionPhysics mDefinitionPhysics;
     mutable bool mDefinitionPhysicsStale = true;
     mutable PushableByEntityPresets mPushPresets;
+    bool mDeathExperienceTaken = false;
 };
