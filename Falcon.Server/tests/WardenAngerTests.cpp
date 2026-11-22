@@ -184,7 +184,8 @@ namespace {
         ServerTickProbe::advance(arena.mOwner, WardenActor::VIBRATION_COOLDOWN);
 
         arena.mLevel.postGameEvent(GameEvents::BLOCK_PLACE, Vector3f(6.5f, FLOOR_Y + 1.5f, 0.5f), &pig);
-        for (int32_t tick = 0; tick < 20; tick++) {
+        // checked on arrival: anger cools a point a second after
+        for (int32_t tick = 0; tick < 20 && !warden.getLastVibration().has_value(); tick++) {
             ServerTickProbe::advance(arena.mOwner);
             arena.mOwner.tickActors();
         }
