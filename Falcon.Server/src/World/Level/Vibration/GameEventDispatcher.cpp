@@ -1,3 +1,5 @@
+#include "Network/ServerNetworkHandler.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Level/Level.h"
 #include "World/Level/Vibration/GameEvent.h"
 #include "World/Level/Vibration/GameEventListener.h"
@@ -31,6 +33,14 @@ void Level::postGameEvent(const GameEvent &event, const Vector3f &position, Acto
                     listeners.push_back(listener);
             });
         }
+    }
+    // the entities carrying one: the warden and the allay
+    if (mOwner != nullptr) {
+        mOwner->forEachActorNear(position, NOTIFY_RADIUS, [this, &listeners](ServerActor &actor) {
+            GameEventListener *listener = actor.getGameEventListener();
+            if (listener != nullptr && &mOwner->getLevelFor(actor) == this)
+                listeners.push_back(listener);
+        });
     }
 
     for (GameEventListener *listener: listeners) {

@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <limits>
+#include <vector>
 
 namespace {
     const float PLAYER_WIDTH = 0.6f;
@@ -61,6 +62,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
     float negativeZ = UNSET;
     bool touched = false;
     Vector3f kick(0.0f, 0.0f, 0.0f);
+    std::vector<int64_t> pushers;
 
     // the box or the ball reach first: the presets' filters only run for a pusher in contact
     const auto inContact = [&](const Actor &pusher, const AxisAlignedBB &box, float width) {
@@ -102,6 +104,7 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
 
         _accumulate(self, box, positiveX, negativeX, positiveZ, negativeZ);
         touched = true;
+        pushers.push_back(pusher.getUniqueId());
     };
 
     // box test before the virtual checks: getPhysics() on a mob resolves several definition components,
@@ -137,6 +140,9 @@ Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &
         pushBy(player, box, PLAYER_WIDTH, player.getMotion());
     });
 
+    // told after the walk: a reaction may add or remove actors
+    for (const int64_t pusher: pushers)
+        actor.onPushedBy(owner, pusher);
     if (!touched)
         return kick;
 
