@@ -335,6 +335,9 @@ namespace {
                     if (call.string(0, name))
                         returnPlayer(call, 2, api().findPlayer(name.c_str()));
                 }},
+                {"server", "server-entity", "Ii:", [](Call &call) {
+                    returnEntity(call, 1, api().serverEntity(call.u64(0)));
+                }},
                 {"server", "broadcast-message", "ii:", [](Call &call) {
                     std::string message;
                     if (call.string(0, message))

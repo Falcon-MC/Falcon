@@ -73,6 +73,13 @@ namespace {
         return toVec3(entity(target)->getRotation());
     }
 
+    // a player first: players keep their own runtime id index
+    FalconEntity *serverEntity(uint64_t runtimeId) {
+        if (ServerPlayer *player = owner().getPlayerByRuntimeId(runtimeId))
+            return toHandle(static_cast<Actor *>(player));
+        return toHandle(owner().getActorByRuntimeId(runtimeId));
+    }
+
     void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
         Actor *value = entity(target);
         Vector3f to = toVector3f(position);
@@ -273,6 +280,7 @@ void PluginServerApi::fillEntities(FalconServerApi &api) {
     api.entityPlayer = &entityPlayer;
     api.entityType = &entityType;
     api.entityRuntimeId = &entityRuntimeId;
+    api.serverEntity = &serverEntity;
     api.entityLevel = &entityLevel;
     api.entityPosition = &entityPosition;
     api.entityRotation = &entityRotation;

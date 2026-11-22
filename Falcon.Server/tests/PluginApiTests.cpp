@@ -565,6 +565,10 @@ namespace {
         FalconEntity *zombie = api.levelSpawnEntity(level, "minecraft:zombie", FalconVec3{6.5, 100.0, 6.5});
         require(zombie != nullptr, "no zombie spawned");
 
+        require(api.serverEntity(api.entityRuntimeId(zombie)) == zombie, "the zombie was not found by its runtime id");
+        require(api.serverEntity(api.entityRuntimeId(body)) == body, "the player was not found by their runtime id");
+        require(api.serverEntity(0xFFFFFFFFull) == nullptr, "an unknown runtime id found something");
+
         api.entitySetNameTag(zombie, "Bob");
         uint32_t savedLength = 0;
         const uint8_t *saved = api.entityNbt(zombie, &savedLength);
