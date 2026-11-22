@@ -14,6 +14,13 @@ if(FALCON_BUILD_EMBEDDED_TESTS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
+# the windows server is shipped as a single exe, so zlib and openssl go inside it rather than beside it as dlls.
+# set before libdatachannel looks openssl up, the first lookup decides for the whole build
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(ZLIB_USE_STATIC_LIBS ON)
+    set(OPENSSL_USE_STATIC_LIBS ON)
+endif()
+
 include(FetchContent)
 
 set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
