@@ -253,8 +253,8 @@ namespace {
     }
 
     // "@k" and "@k[key=value,...]"; only type, name, c and scores: an unknown argument invalidates the selector
-    // instead of widening it to every target
-    SelectorFilter parseSelector(const std::string &selector) {
+    // instead of widening it to every target; scores off: they read objectives a low sender can't see
+    SelectorFilter parseSelector(const std::string &selector, bool scores) {
         SelectorFilter filter;
         if (selector.size() < 2 || selector[0] != '@')
             return filter;
@@ -342,7 +342,7 @@ namespace {
                 if (filter.mLimit == 0)
                     return filter;
             } else if (key == "scores") {
-                if (negated || !parseScores(value, filter.mScores))
+                if (negated || !scores || !parseScores(value, filter.mScores))
                     return filter;
             } else {
                 return filter;
@@ -515,7 +515,8 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
         return targets;
     }
 
-    const SelectorFilter filter = parseSelector(selector);
+    const SelectorFilter filter =
+            parseSelector(selector, sender.getCommandPermission() >= CommandPermission::GameDirectors);
     if (!filter.mValid || !matchesType(filter, "minecraft:player"))
         return targets;
 
@@ -591,7 +592,8 @@ std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrig
                                                                      const std::string &selector) {
     std::vector<ServerActor *> targets;
 
-    const SelectorFilter filter = parseSelector(selector);
+    const SelectorFilter filter =
+            parseSelector(selector, sender.getCommandPermission() >= CommandPermission::GameDirectors);
     // @s of an entity that is not a player: the executing actor itself
     if (filter.mValid && filter.mKind == 's') {
         ServerActor *self = dynamic_cast<ServerActor *>(sender.getEntity());

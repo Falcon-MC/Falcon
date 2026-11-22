@@ -33,6 +33,11 @@ public:
 
     virtual bool canExecuteCommand(const Command &command) const;
 
+    // the console and operators; scripts, blocks and pack functions never run server management commands
+    virtual bool canManageServer() const {
+        return false;
+    }
+
     virtual void sendMessage(const std::string &message) = 0;
 
     virtual void sendTranslation(const std::string &key, const std::vector<std::string> &parameters) = 0;

@@ -396,7 +396,6 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot)
         dropOnDeath(inventory.getCraftingTableItem(slot));
 
-    // clear() leaves the anvil, cartography, stonecutter, enchanting and beacon slots alone
     for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
         dropOnDeath(inventory.getAnvilItem(slot));
         inventory.setAnvilItem(slot, ItemStack::air());
@@ -405,6 +404,18 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     for (int slot = 0; slot < PlayerInventory::CARTOGRAPHY_SIZE; ++slot) {
         dropOnDeath(inventory.getCartographyItem(slot));
         inventory.setCartographyItem(slot, ItemStack::air());
+    }
+
+    for (int slot = 0; slot < PlayerInventory::TRADE_SIZE; ++slot) {
+        dropOnDeath(inventory.getTradeItem(slot));
+        inventory.setTradeItem(slot, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+        const ItemStack &item = inventory.getGrindstoneItem(index);
+        if (!item.isAir())
+            dropOnDeath(item);
+        inventory.setGrindstoneItem(index, ItemStack::air());
     }
 
     for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
@@ -427,6 +438,7 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     dropOnDeath(inventory.getBeaconPayment());
     inventory.setBeaconPayment(ItemStack::air());
 
+    // clear() leaves the enchanting slots alone
     for (const ContainerSlotType type: {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
         ItemStack *slot = inventory.resolveSlot(type, 0);
         if (slot == nullptr)

@@ -126,6 +126,8 @@ public:
 
     const Vector3i &getAnvilPosition() const;
 
+    bool isWorkbenchOpenIn(const Level &level) const;
+
     bool openContainer(ContainerType type, const Vector3i &position);
 
     bool isCraftingTableOpen() const {
@@ -330,7 +332,7 @@ private:
     int mAnvilWindowId = CONTAINER_ID_NONE;
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
-    // the world a grindstone or loom window was opened in
+    // the world the workbench window was opened in
     const Level *mWorkbenchLevel = nullptr;
     CartographyLock mClientMapLock;
     int32_t mStonecutterSelectedRecipe = 0;

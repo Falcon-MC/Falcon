@@ -10,6 +10,10 @@ public:
 
     bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) override;
 
+    bool managesServer() const override {
+        return true;
+    }
+
     CommandPermission getRequiredPermission() const override {
         return CommandPermission::GameDirectors;
     }

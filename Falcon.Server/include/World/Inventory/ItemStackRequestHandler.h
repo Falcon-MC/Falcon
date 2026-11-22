@@ -57,5 +57,6 @@ public:
             TradeCraft *outTrade = nullptr, const CraftingDataPacket *smithingRecipes = nullptr,
             int32_t clientProtocol = 0, bool grindstoneOpen = false, int32_t *outGrindstoneXpCost = nullptr,
             int32_t beaconLevels = -1, BeaconChoice *outBeacon = nullptr, bool loomOpen = false,
-            const CartographyRecipes::Maps *craftingMaps = nullptr);
+            const CartographyRecipes::Maps *craftingMaps = nullptr,
+            CartographyExpansion *outCartographyExpansion = nullptr);
 };

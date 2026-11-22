@@ -34,6 +34,10 @@ public:
         return mBase.canExecuteCommand(command);
     }
 
+    bool canManageServer() const override {
+        return mBase.canManageServer();
+    }
+
     ServerPlayer *permissionGroupPlayer() override {
         return mBase.permissionGroupPlayer();
     }

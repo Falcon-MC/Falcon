@@ -336,7 +336,8 @@ std::optional<bool> PluginPermissions::_groupPermission(const ServerPlayer &play
 }
 
 std::optional<bool> PluginPermissions::commandPermission(const ServerPlayer &player, const Command &command) const {
-    if (command.getRequiredPermission() > CommandPermission::GameDirectors)
+    // a group never grants server management: op status does
+    if (command.getRequiredPermission() > CommandPermission::GameDirectors || command.managesServer())
         return std::nullopt;
     return _groupPermission(player, "falcon.command." + command.getName());
 }

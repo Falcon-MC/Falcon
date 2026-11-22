@@ -32,6 +32,11 @@ public:
 
     bool canExecuteCommand(const Command &command) const override;
 
+    // the permission level still decides: only an operator gets past it
+    bool canManageServer() const override {
+        return true;
+    }
+
     ServerPlayer *permissionGroupPlayer() override {
         return &mPlayer;
     }

@@ -19,6 +19,8 @@ public:
     struct Craft {
         ItemStack mResult = ItemStack::air();
         std::vector<int32_t> mRequiredBySlot;
+        // set by map extending: applied with CartographyRecipes::applyExpansion once the craft holds
+        CartographyExpansion mExpansion;
     };
 
     // a new stack of an item, air for an unknown one

@@ -15,7 +15,7 @@ public:
               mPermissions(permissions), mLocale(caller.getLocale()),
               mPermission(caller.getCommandPermission()), mPosition(caller.getPosition()),
               mRotation(caller.getRotation()), mLevel(caller.getLevel()), mEntity(caller.getEntity()),
-              mWithoutCheats(caller.canUseCommandsWithoutCheats()) {
+              mWithoutCheats(caller.canUseCommandsWithoutCheats()), mManagesServer(caller.canManageServer()) {
         mHasBlock = caller.getSourceBlock(mBlockLevel, mBlock);
     }
 
@@ -82,6 +82,10 @@ public:
         return mWithoutCheats;
     }
 
+    bool canManageServer() const override {
+        return mManagesServer;
+    }
+
 private:
     std::string mName;
     bool mIsPlayer;
@@ -96,6 +100,7 @@ private:
     Level *mLevel;
     Actor *mEntity;
     bool mWithoutCheats;
+    bool mManagesServer;
     bool mHasBlock = false;
     Level *mBlockLevel = nullptr;
     Vector3i mBlock;

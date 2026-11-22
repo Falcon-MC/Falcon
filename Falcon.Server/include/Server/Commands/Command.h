@@ -25,6 +25,11 @@ public:
         return CommandPermission::GameDirectors;
     }
 
+    // op, stop and the like: the level alone is not enough, the origin must manage the server
+    virtual bool managesServer() const {
+        return false;
+    }
+
     virtual std::vector<CommandOverloadData> getOverloads() const;
 
     virtual size_t getRawArgumentIndex() const {

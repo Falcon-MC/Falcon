@@ -128,8 +128,9 @@ bool CloneCommand::execute(CommandOrigin &sender, const std::vector<std::string>
         return false;
     }
 
-    // the game measures the spans between the corners, not the blocks counted
-    const int64_t volume = (int64_t) size.x * size.y * size.z;
+    // blocks counted: spans between the corners make a flat area free
+    const int64_t volume = ((int64_t) high.x - low.x + 1) * ((int64_t) high.y - low.y + 1)
+                           * ((int64_t) high.z - low.z + 1);
     const int64_t limit = (int64_t) (level->getMaxY() - level->getMinY() + 1) * BLOCKS_PER_HEIGHT;
     if (volume > limit) {
         sender.sendTranslation("commands.clone.tooManyBlocks", {std::to_string(volume), std::to_string(limit)});

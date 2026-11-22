@@ -10,7 +10,8 @@ namespace {
     const std::string FORMAT_PREFIX = "\xC2\xA7";
 }
 
-ServerCommandOrigin::ServerCommandOrigin(ServerNetworkHandler *handler) : mHandler(handler) {}
+ServerCommandOrigin::ServerCommandOrigin(ServerNetworkHandler *handler, CommandPermission permission)
+        : mHandler(handler), mPermission(permission) {}
 
 Level *ServerCommandOrigin::getLevel() {
     return mHandler == nullptr ? nullptr : &mHandler->getLevel();

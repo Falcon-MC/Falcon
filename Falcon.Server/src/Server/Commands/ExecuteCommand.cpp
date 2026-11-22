@@ -307,6 +307,11 @@ bool ExecuteCommand::testBlocks(CommandOrigin &sender, const Context &context,
 
 bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vector<std::string> &arguments,
                          size_t index, int32_t &successes) {
+    // every step counts, not only run: chained selectors fan out without bound otherwise
+    if (mExecuted >= MAX_COMMANDS)
+        return false;
+    ++mExecuted;
+
     if (index >= arguments.size()) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
@@ -319,11 +324,6 @@ bool ExecuteCommand::run(CommandOrigin &sender, Context context, const std::vect
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }
-
-        if (mExecuted >= MAX_COMMANDS)
-            return false;
-
-        ++mExecuted;
 
         ExecuteCommandOrigin origin(sender, context.mExecutor, context.mPosition, context.mRotation, context.mLevel);
 

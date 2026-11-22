@@ -1071,7 +1071,8 @@ void ServerNetworkHandler::tick(bool paused) {
     mProfiler.endSection(ProfilerSection::Announcement);
 
     if (!mFunctions.getTickFunctions().empty()) {
-        ServerCommandOrigin server(this);
+        // pack content: game director level, never the console's
+        ServerCommandOrigin server(this, CommandPermission::GameDirectors);
         mFunctions.tick(server, mCommands, getCommandChainLimit());
     }
 

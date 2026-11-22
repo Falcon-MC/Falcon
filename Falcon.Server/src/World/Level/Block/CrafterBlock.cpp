@@ -85,6 +85,25 @@ namespace {
         return results;
     }
 
+    // the maps live on the world's overworld
+    CartographyRecipes::Maps mapsOf(Level &mapLevel) {
+        CartographyRecipes::Maps maps;
+        maps.mGetMap = [&mapLevel](int64_t mapId) { return mapLevel.getMapData(mapId); };
+        maps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
+            return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
+        };
+        return maps;
+    }
+
+    // the crafter takes one of every filled slot: a recipe leaving one out would destroy it
+    bool usesEverySlot(const std::vector<ItemStack> &grid, const std::vector<int32_t> &required) {
+        for (size_t slot = 0; slot < grid.size(); ++slot) {
+            if (!grid[slot].isAir() && (slot >= required.size() || required[slot] == 0))
+                return false;
+        }
+        return true;
+    }
+
     // whatever fits goes one item at a time into the container in front
     bool insertInFront(ServerNetworkHandler &owner, Level &level, const Vector3i &front,
                        std::vector<ItemStack> &results) {
@@ -139,11 +158,13 @@ void CrafterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, 
 
     SimpleContainerInventory &inventory = crafter->getInventory();
     const Vector3f corner((float) position.x, (float) position.y, (float) position.z);
-    std::vector<ItemStack> results = craftResults(owner, *crafter);
+    CartographyExpansion expansion;
+    std::vector<ItemStack> results = craftResults(owner, *crafter, &expansion);
     if (results.empty()) {
         owner.playLevelSound(level, SOUND_FAIL, corner);
         return;
     }
+    CartographyRecipes::applyExpansion(expansion, mapsOf(owner.getWorldOf(level).getOverworld()));
 
     const int facing = facingOf(state);
     const Vector3i front(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
@@ -193,7 +214,8 @@ void CrafterBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, 
     RedstoneSystem::queueRedstoneNotification(level, position);
 }
 
-std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter) {
+std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, const CrafterBlockActor &crafter,
+                                                  CartographyExpansion *outExpansion) {
     const SimpleContainerInventory &inventory = crafter.getInventory();
     std::vector<ItemStack> grid;
     for (int slot = 0; slot < CrafterBlockActor::SIZE; ++slot)
@@ -205,16 +227,12 @@ std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, c
 
     // the game's crafter takes every crafting table recipe, the multi recipes too
     BannerRecipes::Craft craft;
-    if (BannerRecipes::duplicate(grid, craft) || BannerRecipes::decorateShield(grid, craft))
+    if ((BannerRecipes::duplicate(grid, craft) || BannerRecipes::decorateShield(grid, craft))
+        && usesEverySlot(grid, craft.mRequiredBySlot))
         return {craft.mResult};
 
-    // only a map growing reads the maps, kept by the world's overworld
-    Level &mapLevel = owner.getWorldOf(crafter.getLevel()).getOverworld();
-    CartographyRecipes::Maps maps;
-    maps.mGetMap = [&mapLevel](int64_t mapId) { return mapLevel.getMapData(mapId); };
-    maps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
-        return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
-    };
+    // only a map growing reads the maps
+    const CartographyRecipes::Maps maps = mapsOf(owner.getWorldOf(crafter.getLevel()).getOverworld());
     const GridRecipes::Make make = [&owner](const std::string &identifier, int32_t count) {
         return owner.createItemStack(identifier, count);
     };
@@ -232,6 +250,8 @@ std::vector<ItemStack> CrafterBlock::craftResults(ServerNetworkHandler &owner, c
                 }
             }
         }
+        if (outExpansion != nullptr)
+            *outExpansion = made.mExpansion;
         return {made.mResult};
     }
     return {};
