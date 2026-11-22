@@ -11,6 +11,12 @@
 #include <random>
 
 namespace {
+    // the block a path ends on: a walking path stops on the middle of it, the target is its corner
+    Vector3f endBlockOf(const Path &path) {
+        const Vector3f &last = path.last();
+        return Vector3f(std::floor(last.x), std::floor(last.y), std::floor(last.z));
+    }
+
     const int32_t MAX_TRAVEL_TICKS = 1200;
     const int32_t MAX_STAY_TICKS = 1200;
     // the walk repaths when its path runs out, else when the travel ticks fall on a multiple of a number rolled
@@ -74,7 +80,7 @@ void BaseMoveToBlockGoal::moveToTarget(MobActor &mob) {
 bool BaseMoveToBlockGoal::canContinueToUse(ServerNetworkHandler &owner, MobActor &mob) {
     const float radiusSquared = mSettings.mGoalRadius * mSettings.mGoalRadius;
     const Path *path = mob.getNavigation().getPath();
-    if (path != nullptr && !path->isEmpty() && squaredDistance(path->last(), targetPoint()) > radiusSquared)
+    if (path != nullptr && !path->isEmpty() && squaredDistance(endBlockOf(*path), targetPoint()) > radiusSquared)
         return false;
     if (mGiveUpLeft != 0 || mStayTicks > MAX_STAY_TICKS || mTravelTicks > MAX_TRAVEL_TICKS)
         return false;
@@ -124,7 +130,7 @@ bool BaseMoveToBlockGoal::_canReach(ServerNetworkHandler &owner, MobActor &mob, 
     if (!PathFinder::get().findPath(owner.getLevelFor(mob), mob, point, mob.getNavigation().getOptions(), path)
         || path.isEmpty())
         return false;
-    return squaredDistance(path.last(), point) <= mSettings.mGoalRadius * mSettings.mGoalRadius;
+    return squaredDistance(endBlockOf(path), point) <= mSettings.mGoalRadius * mSettings.mGoalRadius;
 }
 
 bool BaseMoveToBlockGoal::_tryCandidate(ServerNetworkHandler &owner, MobActor &mob, const Vector3i &origin,

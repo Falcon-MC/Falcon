@@ -353,9 +353,15 @@ void PathFinder::_buildPath(int32_t endIndex, bool reachesTarget, const Vector3f
     }
     std::reverse(mChain.begin(), mChain.end());
 
+    // a walking path ends on the middle of its last block, as the game's does: the target itself can sit on a block
+    // edge, where the mob stops and slides off
     const Vector3f &last = mChain.empty() ? start : mChain.back();
-    if (reachesTarget && !mEvaluator.hasBarrier(last, target))
+    if (reachesTarget && mEvaluator.getOptions().isVolumetric() && !mEvaluator.hasBarrier(last, target))
         mChain.push_back(target);
+    // already on the target's block: the path is that block alone
+    if (mChain.empty() && reachesTarget && !mNodes.empty())
+        mChain.emplace_back((float) mNodes[0].mX + BLOCK_CENTER, (float) mNodes[0].mY,
+                            (float) mNodes[0].mZ + BLOCK_CENTER);
 
     Vector3f anchor = start;
     const int32_t count = (int32_t) mChain.size();
