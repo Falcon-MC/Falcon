@@ -23,9 +23,6 @@ namespace {
     const int8_t HEIGHT_TOO_LOW = -1;
     const int8_t HEIGHT_TOO_HIGH = 16;
 
-    // not a game limit: each client-chosen offset may cost a sub-chunk encode on the main thread
-    const size_t MAX_OFFSETS_PER_REQUEST = 512;
-
     // per-column top block relative to this sub-chunk; -1/16 mean below/above;
     // all columns on one side: the protocol sends just the type, no 256-byte map
     std::string buildHeightMap(const std::vector<int32_t> &tops, int32_t baseY, HeightMapDataType &type) {
@@ -77,13 +74,13 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
     const ChunkStreamState &state = player.getChunkStreamState();
     const bool wrongDimension = packet.mDimension != level.getDimensionId();
 
-    const size_t count = std::min(packet.mPositionOffsets.size(), MAX_OFFSETS_PER_REQUEST);
+    // the game batches every pending sub-chunk of a frame into one request, uncapped: only repeats are dropped,
+    // the view radius bounds the rest
     std::vector<SubChunkData> entries;
-    entries.reserve(count);
+    entries.reserve(packet.mPositionOffsets.size());
     std::set<std::tuple<int32_t, int32_t, int32_t>> seen;
 
-    for (size_t i = 0; i < count; i++) {
-        const Vector3i &offset = packet.mPositionOffsets[i];
+    for (const Vector3i &offset: packet.mPositionOffsets) {
         if (!seen.emplace(offset.x, offset.y, offset.z).second)
             continue;
 
