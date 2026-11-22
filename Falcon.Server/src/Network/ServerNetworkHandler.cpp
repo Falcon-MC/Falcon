@@ -2643,6 +2643,11 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
 
 ItemActor *ServerNetworkHandler::dropItem(Level &level, const Vector3f &position, const ItemStack &item,
                                           const Vector3f &motion, int pickupDelay) {
+    if (mDropCapture != nullptr) {
+        if (!item.isAir() && item.mCount > 0)
+            mDropCapture->mItems.push_back(item);
+        return nullptr;
+    }
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_SPAWN)) {
         ItemStack spawned = item;
         PluginEvent event;

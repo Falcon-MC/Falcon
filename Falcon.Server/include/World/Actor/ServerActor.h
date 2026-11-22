@@ -511,6 +511,13 @@ protected:
         return mFatalSource;
     }
 
+    // the loot and experience a death gathered for the death event, which drops them once plugins saw them
+    void holdDeathDrops(std::vector<ItemStack> items, int32_t experience) {
+        mDeathDrops = std::move(items);
+        mDeathExperience = experience;
+        mDeathDropsHeld = true;
+    }
+
 private:
     std::string mIdentifier;
     float mCollisionScale = 1.0f;
@@ -540,6 +547,9 @@ private:
     std::vector<int64_t> mPendingPassengers;
     // the hit being dealt while kill() runs from hurt(): the death event reports its cause
     const ActorDamageSource *mFatalSource = nullptr;
+    std::vector<ItemStack> mDeathDrops;
+    int32_t mDeathExperience = 0;
+    bool mDeathDropsHeld = false;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

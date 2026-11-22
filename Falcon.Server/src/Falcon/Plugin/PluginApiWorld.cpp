@@ -14,6 +14,10 @@
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Protocol/Types/ItemStack.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/BlockData.h"
+#include "World/Item/ItemData.h"
 
 #include <memory>
 #include <string>
@@ -175,7 +179,21 @@ namespace {
         if (!resolveState(withNamespace(name), statesJson, state))
             return 0;
 
-        return SetBlockCommand::placeBlock(owner(), *value, toVector3i(position), state, "replace") ? 1 : 0;
+        const Vector3i at = toVector3i(position);
+        if (!SetBlockCommand::placeBlock(owner(), *value, at, state, "replace"))
+            return 0;
+
+        // a chest or a sign a plugin places holds items or text at once, as one a player places does
+        const Block *placed = VanillaBlocks::fromState(state);
+        const char *actorId = placed == nullptr ? nullptr : placed->getBlockActorId();
+        BlockActorStore &actors = value->getBlockActors();
+        if (actorId != nullptr && actors.find(at) == nullptr) {
+            if (std::unique_ptr<BlockActor> created = BlockActorStore::create(actorId)) {
+                created->setPosition(at);
+                actors.insert(std::move(created));
+            }
+        }
+        return 1;
     }
 
     // the hash clients know the state by: Falcon sends every block by it
@@ -186,6 +204,47 @@ namespace {
         if (!resolveState(withNamespace(name), statesJson, state))
             return 0;
         return (uint32_t) state.getHash();
+    }
+
+    int serverItemInfo(const char *identifier, FalconItemInfo *out) {
+        if (identifier == nullptr || out == nullptr)
+            return 0;
+        const ItemData *data = ItemDataTable::find(withNamespace(identifier));
+        if (data == nullptr)
+            return 0;
+        out->name = data->mName;
+        out->maxStackSize = (uint32_t) std::max(1, data->mMaxStackSize);
+        out->maxDurability = data->mMaxDurability;
+        out->toolType = (uint32_t) data->mToolType;
+        out->toolTier = (uint32_t) std::max(0, data->mToolTier);
+        out->attackDamage = data->mAttackDamage;
+        out->armorSlot = (uint32_t) data->mArmorSlot;
+        out->armorPoints = data->mArmorPoints;
+        out->armorToughness = data->mArmorToughness;
+        out->nutrition = data->mNutrition;
+        out->saturation = data->mSaturation;
+        return 1;
+    }
+
+    int serverBlockInfo(const char *identifier, FalconBlockInfo *out) {
+        if (identifier == nullptr || out == nullptr)
+            return 0;
+        const std::string name = withNamespace(identifier);
+        const BlockData *data = BlockDataTable::find(name.c_str());
+        if (data == nullptr)
+            return 0;
+        out->name = data->mName;
+        out->hardness = data->mHardness;
+        out->blastResistance = data->mResistance;
+        out->toolType = (uint32_t) data->mToolType;
+        out->toolTier = (uint32_t) data->mToolTier;
+        out->lightEmission = data->mLightEmission;
+        out->transparent = data->mTransparent ? 1 : 0;
+        out->solid = data->mSolid ? 1 : 0;
+        out->flameEncouragement = data->mBurnChance;
+        out->flammability = data->mBurnAbility;
+        out->maxStackSize = (uint32_t) std::max(1, data->mMaxStackSize);
+        return 1;
     }
 
     int levelBreakBlock(FalconLevel *handle, FalconBlockPos position, int dropItems) {
@@ -338,6 +397,8 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelGetBlockStates = &levelGetBlockStates;
     api.levelSetBlock = &levelSetBlock;
     api.serverBlockNetworkId = &serverBlockNetworkId;
+    api.serverItemInfo = &serverItemInfo;
+    api.serverBlockInfo = &serverBlockInfo;
     api.levelBreakBlock = &levelBreakBlock;
     api.levelIsChunkLoaded = &levelIsChunkLoaded;
     api.levelHighestBlockY = &levelHighestBlockY;

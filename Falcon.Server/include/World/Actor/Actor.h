@@ -368,6 +368,20 @@ public:
 
     void knockBack(float x, float z, float force = 0.4f, float verticalLimit = 0.4f);
 
+    // the push a plugin set for the hit being dealt: the next knockback this tick uses it in place of its own, the
+    // others of that hit are skipped; tickCombat forgets it
+    void setKnockbackOverride(float horizontal, float vertical) {
+        mKnockbackOverride = true;
+        mKnockbackOverrideUsed = false;
+        mKnockbackHorizontal = horizontal;
+        mKnockbackVertical = vertical;
+    }
+
+    void clearKnockbackOverride() {
+        mKnockbackOverride = false;
+        mKnockbackOverrideUsed = false;
+    }
+
     // the game's knockback with its own powers, as minecraft:apply_knockback_rules sets them; (x, z) points away
     // from the attacker
     void knockBack(float x, float z, float horizontalPower, float verticalPower, float verticalCap, float slowdownScale);
@@ -571,4 +585,8 @@ protected:
     int mSpawnInvulnerabilityTicks = 0;
     int mAttackTime = 0;
     float mLastDamageAmount = 0.0f;
+    bool mKnockbackOverride = false;
+    bool mKnockbackOverrideUsed = false;
+    float mKnockbackHorizontal = 0.0f;
+    float mKnockbackVertical = 0.0f;
 };

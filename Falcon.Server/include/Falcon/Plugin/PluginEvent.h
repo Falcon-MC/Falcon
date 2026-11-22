@@ -68,4 +68,13 @@ struct PluginEvent {
     std::string mFormResponse;
     bool mHasEffect = false;
     FalconEffect mEffect{};
+    // what a break or a death drops, and the experience; null for the events that drop nothing
+    std::vector<ItemStack> *mDrops = nullptr;
+    int32_t *mExperience = nullptr;
+    // a death: whether the player keeps their items and experience
+    bool *mKeepInventory = nullptr;
+    bool *mKeepExperience = nullptr;
+    // a hit: the push it gives
+    float *mKnockbackHorizontal = nullptr;
+    float *mKnockbackVertical = nullptr;
 };

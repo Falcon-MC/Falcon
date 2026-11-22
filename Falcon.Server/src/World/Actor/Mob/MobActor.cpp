@@ -2934,8 +2934,18 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (fatal != nullptr && WitherActor::isWitherDamage(owner, *fatal))
         WitherActor::leaveWitherRose(owner, *this);
 
-    if (dropsRewardsOnDeath())
-        dropDeathRewards(owner, source, lootingLevel);
+    if (dropsRewardsOnDeath()) {
+        // plugins listening for the death see the loot first: it is gathered here and drops after their event
+        if (PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_DEATH) != nullptr) {
+            ServerNetworkHandler::DropCapture capture;
+            ServerNetworkHandler::DropCapture *previous = owner.setDropCapture(&capture);
+            dropDeathRewards(owner, source, lootingLevel);
+            owner.setDropCapture(previous);
+            holdDeathDrops(std::move(capture.mItems), capture.mExperience);
+        } else {
+            dropDeathRewards(owner, source, lootingLevel);
+        }
+    }
 
     ServerActor::kill(owner, source, lootingLevel);
 }

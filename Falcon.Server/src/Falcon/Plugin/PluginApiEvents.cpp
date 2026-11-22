@@ -5,6 +5,7 @@
 
 #include "Core/Json/Json.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -322,6 +323,87 @@ namespace {
     }
 }
 
+namespace {
+    uint32_t eventDropCount(FalconEvent *target) {
+        const PluginEvent *source = event(target);
+        return source->mDrops == nullptr ? 0 : (uint32_t) source->mDrops->size();
+    }
+
+    FalconItem *eventDropAt(FalconEvent *target, uint32_t index) {
+        PluginEvent *source = event(target);
+        if (source->mDrops == nullptr || index >= source->mDrops->size())
+            return nullptr;
+        return toHandle(&(*source->mDrops)[index]);
+    }
+
+    void eventSetDrops(FalconEvent *target, FalconItem *const *items, uint32_t count) {
+        PluginEvent *source = event(target);
+        if (source->mMonitor || source->mDrops == nullptr || (items == nullptr && count > 0))
+            return;
+        std::vector<ItemStack> drops;
+        drops.reserve(count);
+        for (uint32_t index = 0; index < count; ++index) {
+            if (items[index] != nullptr && !item(items[index])->isAir())
+                drops.push_back(*item(items[index]));
+        }
+        *source->mDrops = std::move(drops);
+    }
+
+    int32_t eventExperience(FalconEvent *target) {
+        const PluginEvent *source = event(target);
+        return source->mExperience == nullptr ? 0 : *source->mExperience;
+    }
+
+    void eventSetExperience(FalconEvent *target, int32_t experience) {
+        PluginEvent *source = event(target);
+        if (!source->mMonitor && source->mExperience != nullptr)
+            *source->mExperience = std::max(0, experience);
+    }
+
+    int eventKeepInventory(FalconEvent *target) {
+        const PluginEvent *source = event(target);
+        return source->mKeepInventory != nullptr && *source->mKeepInventory ? 1 : 0;
+    }
+
+    void eventSetKeepInventory(FalconEvent *target, int keepInventory) {
+        PluginEvent *source = event(target);
+        if (!source->mMonitor && source->mKeepInventory != nullptr)
+            *source->mKeepInventory = keepInventory != 0;
+    }
+
+    int eventKeepExperience(FalconEvent *target) {
+        const PluginEvent *source = event(target);
+        return source->mKeepExperience != nullptr && *source->mKeepExperience ? 1 : 0;
+    }
+
+    void eventSetKeepExperience(FalconEvent *target, int keepExperience) {
+        PluginEvent *source = event(target);
+        if (!source->mMonitor && source->mKeepExperience != nullptr)
+            *source->mKeepExperience = keepExperience != 0;
+    }
+
+    int eventKnockback(FalconEvent *target, float *horizontal, float *vertical) {
+        const PluginEvent *source = event(target);
+        if (source->mKnockbackHorizontal == nullptr || source->mKnockbackVertical == nullptr)
+            return 0;
+        if (horizontal != nullptr)
+            *horizontal = *source->mKnockbackHorizontal;
+        if (vertical != nullptr)
+            *vertical = *source->mKnockbackVertical;
+        return 1;
+    }
+
+    void eventSetKnockback(FalconEvent *target, float horizontal, float vertical) {
+        PluginEvent *source = event(target);
+        if (source->mMonitor || source->mKnockbackHorizontal == nullptr || source->mKnockbackVertical == nullptr)
+            return;
+        if (!std::isfinite(horizontal) || !std::isfinite(vertical))
+            return;
+        *source->mKnockbackHorizontal = std::max(0.0f, horizontal);
+        *source->mKnockbackVertical = std::max(0.0f, vertical);
+    }
+}
+
 void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventType = &eventType;
     api.eventIsCancellable = &eventIsCancellable;
@@ -379,4 +461,15 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventFormId = &eventFormId;
     api.eventFormResponse = &eventFormResponse;
     api.eventEffect = &eventEffect;
+    api.eventDropCount = &eventDropCount;
+    api.eventDropAt = &eventDropAt;
+    api.eventSetDrops = &eventSetDrops;
+    api.eventExperience = &eventExperience;
+    api.eventSetExperience = &eventSetExperience;
+    api.eventKeepInventory = &eventKeepInventory;
+    api.eventSetKeepInventory = &eventSetKeepInventory;
+    api.eventKeepExperience = &eventKeepExperience;
+    api.eventSetKeepExperience = &eventSetKeepExperience;
+    api.eventKnockback = &eventKnockback;
+    api.eventSetKnockback = &eventSetKnockback;
 }
