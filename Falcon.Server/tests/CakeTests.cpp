@@ -328,6 +328,32 @@ namespace {
                 "a candle cake did not puff over its candle");
     }
 
+    // a wind burst puts out a lit candle or candle cake with its smoke, and leaves an unlit one be
+    void wind(Arena &arena) {
+        const Vector3i candle = arena.place(58, arena.block("minecraft:candle"));
+        BlockState lit = arena.at(candle);
+        lit.mStates.putByte("lit", 1);
+        arena.mLevel->setBlock(candle, lit, false);
+        bool reacted = false;
+        const std::vector<Vector3f> puffs = arena.smokeOf([&] {
+            reacted = VanillaBlocks::fromState(arena.at(candle))
+                              ->onWindBurst(arena.mOwner, *arena.mLevel, candle, arena.at(candle));
+        });
+        require(reacted && !arena.lit(candle), "a wind burst did not put the candle out");
+        require(puffs.size() == 1, "the wind put the candle out without its smoke");
+        require(!VanillaBlocks::fromState(arena.at(candle))
+                         ->onWindBurst(arena.mOwner, *arena.mLevel, candle, arena.at(candle)),
+                "a wind burst reacted to an unlit candle");
+
+        const Vector3i cake = arena.place(60, arena.block("minecraft:candle_cake"));
+        BlockState litCake = arena.at(cake);
+        litCake.mStates.putByte("lit", 1);
+        arena.mLevel->setBlock(cake, litCake, false);
+        VanillaBlocks::fromState(arena.at(cake))->onWindBurst(arena.mOwner, *arena.mLevel, cake, arena.at(cake));
+        require(!arena.lit(cake) && arena.at(cake).mName == "minecraft:candle_cake",
+                "a wind burst did not put the candle cake out");
+    }
+
     // a fire charge lights a candle or a candle cake and is used up; a lit one keeps the charge and sets no fire
     void fireCharge(Arena &arena) {
         const Vector3i candle = arena.place(50, arena.block("minecraft:candle"));
@@ -389,6 +415,7 @@ int main() {
             smoke(arena);
             fireCharge(arena);
             projectiles(arena);
+            wind(arena);
         }
         // a second arena only once the first has closed the world
         peaceful(directory);

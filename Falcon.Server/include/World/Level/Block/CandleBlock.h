@@ -26,6 +26,13 @@ public:
 
     static bool isBurning(const ServerActor &projectile);
 
+    // a lit one goes out, as from an empty hand but from no one
+    bool onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                     const BlockState &state) const override;
+
+    static bool putOutByWind(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                             const BlockState &state);
+
     // flint and steel, or any item with Fire Aspect but a book
     static bool isLighter(const ItemStack &item);
 
