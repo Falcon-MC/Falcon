@@ -116,6 +116,14 @@ namespace {
         require(out.mResult.mTag.getInt("customColor", 0) == GridRecipes::starColor({1, 15}),
                 "the star does not show its dyes' colour");
 
+        // a fire charge makes a large ball, a gold nugget a star
+        for (const auto &shape: {std::make_pair(std::string("minecraft:fire_charge"), GridRecipes::SHAPE_LARGE),
+                                 std::make_pair(std::string("minecraft:gold_nugget"), GridRecipes::SHAPE_STAR)}) {
+            require(bench.craft(Kind::Firework, bench.grid({"minecraft:gunpowder", "minecraft:red_dye", shape.first}), out)
+                            && out.mResult.mTag.get("FireworksItem")->getByte("FireworkType", -1) == shape.second,
+                    shape.first + " did not give its shape");
+        }
+
         // dyes on a star: the same star, faded
         std::vector<ItemStack> fade = bench.grid({"", "minecraft:blue_dye"});
         fade[0] = starOf(bench, GridRecipes::SHAPE_LARGE, {2});
@@ -126,6 +134,8 @@ namespace {
                         && explosion->get("FireworkFade")->asByteArray() == std::vector<int8_t>({4})
                         && explosion->getByte("FireworkTrail", 0) == 1,
                 "the faded star lost its own look");
+        fade[2] = bench.item("minecraft:diamond");
+        require(!bench.craft(Kind::Firework, fade, out), "a diamond went into a fade");
 
         const std::vector<std::vector<std::string>> refused = {
                 {"minecraft:gunpowder", "minecraft:gunpowder", "minecraft:gunpowder", "minecraft:gunpowder",
@@ -193,6 +203,9 @@ namespace {
         data.setLocked(true);
         require(!bench.craft(Kind::MapExtending, extend, out, &access), "a locked map grew");
         data.setLocked(false);
+        extend[8] = bench.item("minecraft:stick");
+        require(!bench.craft(Kind::MapExtending, extend, out, &access), "a map grew in a stick and seven paper");
+        extend[8] = bench.item("minecraft:paper");
         std::swap(extend[4], extend[0]);
         require(!bench.craft(Kind::MapExtending, extend, out, &access), "a map off the middle grew");
 
