@@ -36,6 +36,11 @@ public:
     static void removeSimulated(ServerNetworkHandler &owner) {
         owner._removeSimulatedPlayers();
     }
+
+    // what the start of a tick does for the spawns that tick may make
+    static void reserveSpawns(ServerNetworkHandler &owner) {
+        owner._reserveSimulatedSpawns();
+    }
 };
 
 namespace {
@@ -767,11 +772,16 @@ namespace {
         require(api.serverSpawnSimulatedPlayer("Bot_2", nullptr, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
                 "a missing level was taken");
 
-        // no cap: as many as a load test wants
+        // no cap over time: a tick takes a bounded number of spawns, the next tick takes more
         std::vector<FalconPlayer *> crowd;
         for (int index = 0; index < 250; index++) {
-            FalconPlayer *extra = api.serverSpawnSimulatedPlayer(("Crowd_" + std::to_string(index)).c_str(), level, at,
-                                                                0.0f, FALCON_GAME_MODE_SURVIVAL);
+            const std::string name = "Crowd_" + std::to_string(index);
+            FalconPlayer *extra = api.serverSpawnSimulatedPlayer(name.c_str(), level, at, 0.0f,
+                                                                FALCON_GAME_MODE_SURVIVAL);
+            if (extra == nullptr) {
+                ServerTickProbe::reserveSpawns(fixture.owner);
+                extra = api.serverSpawnSimulatedPlayer(name.c_str(), level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL);
+            }
             require(extra != nullptr, "a simulated player past 200 was refused");
             crowd.push_back(extra);
         }
@@ -792,22 +802,23 @@ namespace {
         require(permissions.updateGroups({"set", "member", "test.read", "true"}), "could not set a default node");
         require(permissions.updateGroups({"inherit", "moderator", "member"}), "could not inherit the member group");
         require(!permissions.updateGroups({"inherit", "member", "moderator"}), "an inheritance cycle was accepted");
-        require(permissions.updateGroups({"set", "moderator", "falcon.command.kick", "true"}),
+        require(permissions.updateGroups({"set", "moderator", "falcon.command.weather", "true"}),
                 "could not set a command node");
         require(permissions.updateGroups({"set", "moderator", "falcon.command.permissiongroup", "true"}),
                 "could not record a console command node");
         require(permissions.updateGroups({"assign", "12345", "moderator"}), "could not assign a player");
         require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "default group was ignored");
 
-        const auto *kick = fixture.owner.getCommands().getCommand("kick");
+        // a group grants game commands, never server management such as kick
+        const auto *weather = fixture.owner.getCommands().getCommand("weather");
         const auto *admin = fixture.owner.getCommands().getCommand("permissiongroup");
-        require(kick != nullptr && admin != nullptr, "the test commands were not registered");
+        require(weather != nullptr && admin != nullptr, "the test commands were not registered");
         PlayerCommandOrigin sender(fixture.owner, *fixture.player, CommandOriginData{});
-        require(!sender.canExecuteCommand(*kick), "an unassigned player received a group command");
+        require(!sender.canExecuteCommand(*weather), "an unassigned player received a group command");
         fixture.player->setXuid("12345");
         fixture.player->setName("Renamed");
         PluginPermissions reloaded(fixture.owner.getEventBus());
-        require(reloaded.commandPermission(*fixture.player, *kick) == true, "the XUID assignment was not saved");
+        require(reloaded.commandPermission(*fixture.player, *weather) == true, "the XUID assignment was not saved");
         require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "inherited plugin node was ignored");
         LoadedPlugin plugin;
         permissions.setPermission(plugin, *fixture.player, "test.read", false);
@@ -817,15 +828,16 @@ namespace {
         require(permissions.registerPermission("test.legacy", FALCON_PERMISSION_DEFAULT_TRUE),
                 "an existing plugin permission default could not be registered");
         require(api.playerHasPermission(fixture.playerHandle(), "test.legacy"), "the plugin default was ignored");
-        require(sender.canExecuteCommand(*kick) && !sender.canExecuteCommand(*admin),
+        require(sender.canExecuteCommand(*weather) && !sender.canExecuteCommand(*admin),
                 "the group did not grant exactly the permitted command level");
         ExecuteCommandOrigin chained(sender, nullptr, Vector3f(), Vector3f(), fixture.level);
-        require(chained.canExecuteCommand(*kick) && !chained.canExecuteCommand(*admin),
+        require(chained.canExecuteCommand(*weather) && !chained.canExecuteCommand(*admin),
                 "execute did not preserve the source command permissions");
-        require(permissions.updateGroups({"set", "member", "falcon.command.kick", "false"}),
+        require(permissions.updateGroups({"set", "member", "falcon.command.weather", "false"}),
                 "could not set an inherited denial");
         fixture.player->setOp(true);
-        require(!sender.canExecuteCommand(*kick), "an inherited denial did not take precedence over operator access");
+        require(!sender.canExecuteCommand(*weather),
+                "an inherited denial did not take precedence over operator access");
         fixture.player->setOp(false);
         fixture.player->setXuid("");
         fixture.player->setName("Tester");

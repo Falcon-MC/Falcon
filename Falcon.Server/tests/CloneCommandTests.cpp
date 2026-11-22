@@ -78,9 +78,9 @@ namespace {
                         && console.mLast == "commands.clone.success|2" && nameAt(level, 30, 65, 0) == "minecraft:air",
                 "filtered copied other blocks: " + console.mLast);
 
-        // the volume is the spans between the corners: 100 x 100 x 100 past 384 x 2048
+        // the volume is the blocks counted, corners included: 101 x 101 x 101 past 384 x 2048
         require(!commands.dispatch(console, "clone 0 0 0 100 100 100 0 101 0")
-                        && console.mLast == "commands.clone.tooManyBlocks|1000000|786432",
+                        && console.mLast == "commands.clone.tooManyBlocks|1030301|786432",
                 "a copy past the limit was not refused: " + console.mLast);
         require(!commands.dispatch(console, "clone 0 64 0 1 65 0 500 64 0")
                         && console.mLast == "commands.generic.outOfWorld",
