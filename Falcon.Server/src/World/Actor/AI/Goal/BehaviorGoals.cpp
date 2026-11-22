@@ -68,6 +68,7 @@
 #include "World/Actor/AI/Goal/PickupItemsGoal.h"
 #include "World/Actor/AI/Goal/PlayGoal.h"
 #include "World/Actor/AI/Goal/PlaceBlockGoal.h"
+#include "World/Actor/AI/Goal/PlayerRideTamedGoal.h"
 #include "World/Actor/AI/Goal/RamAttackGoal.h"
 #include "World/Actor/AI/Goal/RandomHoverGoal.h"
 #include "World/Actor/AI/Goal/RandomLookAroundGoal.h"
@@ -790,6 +791,9 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "float")
         return std::make_unique<FloatGoal>();
+
+    if (behavior == "player_ride_tamed")
+        return std::make_unique<PlayerRideTamedGoal>();
 
     if (behavior == "panic") {
         PanicGoal::Settings settings;
