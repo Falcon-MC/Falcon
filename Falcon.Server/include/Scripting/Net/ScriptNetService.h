@@ -36,6 +36,11 @@ public:
     // the exchanges finished since the last call
     std::vector<Completed> pollRequests();
 
+    // aborts every request; their threads count in runningCancelled() until they end
+    void cancelRequests();
+
+    size_t runningCancelled() const;
+
     WebSocketClient &openSocket(uint32_t id, const std::string &url, const HttpsClient::Headers &headers,
                                 uint64_t maxMessageBytes);
 
@@ -61,6 +66,7 @@ private:
         NetStream mStream;
         std::thread mThread;
         std::atomic<bool> mDone{false};
+        bool mCancelled = false;
         HttpsClient::Response mResponse;
     };
 

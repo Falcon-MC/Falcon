@@ -509,6 +509,8 @@ namespace {
     // the content type of the structure serializer
     const char *const STRUCTURE_CONTENT_TYPE = "application/x-minecraft-nbt; type=structure";
     const char *const BODY_TOO_LARGE = "HTTP request or Web Socket message body exceeds allowed size.";
+    // a script timeout of 0 would let a silent server hold a worker thread forever
+    const uint32_t DEFAULT_REQUEST_TIMEOUT_SECONDS = 30;
 
     struct PacketName {
         MinecraftPacketIds mId;
@@ -964,9 +966,11 @@ namespace {
             return invalid;
 
         ScriptNetService &state = api.netService();
-        if (config.mMaxConcurrentRequests.has_value() && state.mPending.size() >= *config.mMaxConcurrentRequests)
+        // a cancelled request holds its thread until the abort lands
+        const size_t inFlight = state.mPending.size() + state.runningCancelled();
+        if (config.mMaxConcurrentRequests.has_value() && inFlight >= *config.mMaxConcurrentRequests)
             return refusal(ctx, "HttpRequestLimitExceededError", "Maximum concurrent HTTP requests exceeded.",
-                           fieldsOf(ctx, {{"inFlightRequests", JS_NewFloat64(ctx, (double) state.mPending.size())},
+                           fieldsOf(ctx, {{"inFlightRequests", JS_NewFloat64(ctx, (double) inFlight)},
                                           {"maxConcurrentRequests",
                                            JS_NewFloat64(ctx, (double) *config.mMaxConcurrentRequests)}}));
 
@@ -979,7 +983,7 @@ namespace {
         double timeout = 0.0;
         JS_ToFloat64(ctx, &timeout, argv[5]);
         outgoing.mTimeoutSeconds = std::isfinite(timeout) && timeout > 0.0 ? (uint32_t) std::min(timeout, 4294967295.0)
-                                                                           : 0;
+                                                                           : DEFAULT_REQUEST_TIMEOUT_SECONDS;
 
         const ScriptStructureRef *structure = api.native<ScriptStructureRef>(argv[4]);
         if (structure != nullptr) {
@@ -1011,7 +1015,9 @@ namespace {
     }
 
     JSValue cancelAll(JSContext *ctx, JSValueConst, int, JSValueConst *) {
-        apiOf(ctx).netService().mPending.clear();
+        ScriptNetService &service = apiOf(ctx).netService();
+        service.mPending.clear();
+        service.cancelRequests();
         return JS_UNDEFINED;
     }
 
@@ -1171,6 +1177,10 @@ namespace ScriptNetBinding {
             if (!iequals(allowed.mAuthority, uri.mAuthority))
                 continue;
             if (!allowed.mPath.empty() && uri.mPath.compare(0, allowed.mPath.size(), allowed.mPath) != 0)
+                continue;
+            // "/api" allows "/api/x" but not "/apix"
+            if (!allowed.mPath.empty() && allowed.mPath.back() != '/' && uri.mPath.size() > allowed.mPath.size()
+                && uri.mPath[allowed.mPath.size()] != '/')
                 continue;
             return UriCheck::Allowed;
         }
