@@ -21,6 +21,8 @@ struct PluginEvent {
     bool mMonitor = false;
     ServerPlayer *mPlayer = nullptr;
     std::string *mMessage = nullptr;
+    // the join or leave message is still the game's own translation
+    bool mMessageDefault = false;
     Actor *mEntity = nullptr;
     Actor *mAttacker = nullptr;
     Vector3i mBlockPosition;

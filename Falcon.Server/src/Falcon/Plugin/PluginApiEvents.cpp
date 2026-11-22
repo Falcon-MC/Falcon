@@ -47,6 +47,11 @@ namespace {
         if (source->mMonitor || source->mMessage == nullptr || message == nullptr)
             return;
         *source->mMessage = message;
+        source->mMessageDefault = false;
+    }
+
+    int eventMessageIsDefault(FalconEvent *target) {
+        return event(target)->mMessageDefault ? 1 : 0;
     }
 
     FalconEntity *eventEntity(FalconEvent *target) {
@@ -325,6 +330,7 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventPlayer = &eventPlayer;
     api.eventMessage = &eventMessage;
     api.eventSetMessage = &eventSetMessage;
+    api.eventMessageIsDefault = &eventMessageIsDefault;
     api.eventEntity = &eventEntity;
     api.eventAttacker = &eventAttacker;
     api.eventBlockPosition = &eventBlockPosition;

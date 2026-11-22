@@ -7,6 +7,7 @@
 #include "Protocol/Types/CommandData.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 class Server;
@@ -72,6 +73,11 @@ public:
 
     const std::vector<std::string> &getAliases() const {
         return mAliases;
+    }
+
+    // the command map's setAliases keeps its lookup in step
+    void setAliases(std::vector<std::string> aliases) {
+        mAliases = std::move(aliases);
     }
 
 protected:

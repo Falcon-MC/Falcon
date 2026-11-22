@@ -63,10 +63,14 @@ class BeforeEvents {
 public:
     EventSignal<PlayerChatBeforeEvent> mChatSend;
     EventSignal<PlayerBreakBlockBeforeEvent> mPlayerBreakBlock;
+    EventSignal<PlayerJoinMessageBeforeEvent> mPlayerJoinMessage;
+    EventSignal<PlayerLeaveMessageBeforeEvent> mPlayerLeaveMessage;
 
     void clear() {
         mChatSend.clear();
         mPlayerBreakBlock.clear();
+        mPlayerJoinMessage.clear();
+        mPlayerLeaveMessage.clear();
     }
 };
 

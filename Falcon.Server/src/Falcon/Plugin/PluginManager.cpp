@@ -40,8 +40,8 @@ PluginManager::~PluginManager() {
         mOwner.getNetworkHandler().setOutboundFilter(nullptr);
 
     EventBus &bus = mOwner.getEventBus();
-    bus.after().mPlayerJoin.unsubscribe(mJoinHook);
-    bus.after().mPlayerLeave.unsubscribe(mQuitHook);
+    bus.before().mPlayerJoinMessage.unsubscribe(mJoinHook);
+    bus.before().mPlayerLeaveMessage.unsubscribe(mQuitHook);
     bus.before().mChatSend.unsubscribe(mChatHook);
 
     disableAll();
@@ -485,21 +485,26 @@ void PluginManager::dispatch(PluginEvent &event) {
 void PluginManager::_hookEventBus() {
     EventBus &bus = mOwner.getEventBus();
 
-    mJoinHook = bus.after().mPlayerJoin.subscribe([this](PlayerJoinAfterEvent &source) {
+    // before the join and leave messages go out, so a plugin can replace them
+    mJoinHook = bus.before().mPlayerJoinMessage.subscribe([this](PlayerJoinMessageBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_JOIN;
         event.mPlayer = &source.mPlayer;
+        event.mMessage = &source.mMessage;
+        event.mMessageDefault = source.mDefault;
         dispatch(event);
+        source.mDefault = event.mMessageDefault;
     });
 
-    mQuitHook = bus.after().mPlayerLeave.subscribe([this](PlayerLeaveAfterEvent &source) {
-        if (source.mPlayer == nullptr)
-            return;
-
+    mQuitHook = bus.before().mPlayerLeaveMessage.subscribe([this](PlayerLeaveMessageBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_QUIT;
-        event.mPlayer = source.mPlayer;
+        event.mPlayer = &source.mPlayer;
+        event.mMessage = &source.mMessage;
+        event.mMessageDefault = source.mDefault;
+        event.mCause = source.mReason;
         dispatch(event);
+        source.mDefault = event.mMessageDefault;
     });
 
     mChatHook = bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {

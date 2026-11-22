@@ -1292,10 +1292,13 @@ void ServerNetworkHandler::onNewIncomingConnection(const NetworkIdentifier &id, 
 
 void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                                               const std::string &message) {
-    (void) message;
-
     mRateLimiters.erase(id);
     mClientProbes.forget(id);
+    std::string leaveReason = message.empty() ? std::string("Client disconnect") : message;
+    if (const auto kicked = mLeaveReasons.find(id); kicked != mLeaveReasons.end()) {
+        leaveReason = kicked->second;
+        mLeaveReasons.erase(kicked);
+    }
     for (size_t index = 0; index < mPendingRemovals.size();) {
         if (mPendingRemovals[index].mId == id)
             mPendingRemovals.erase(mPendingRemovals.begin() + (long) index);
@@ -1333,7 +1336,13 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         EnderChestInventoryStore::getInstance().remove(player->getUniqueId());
 
         if (player->isSpawned()) {
-            broadcastTranslation("multiplayer.player.left", {player->getName()});
+            PlayerLeaveMessageBeforeEvent leaveMessage(*player, "§e" + player->getName() + " left the game",
+                                                       leaveReason);
+            mEventBus.before().mPlayerLeaveMessage.emit(leaveMessage);
+            if (leaveMessage.mDefault)
+                broadcastTranslation("multiplayer.player.left", {player->getName()});
+            else if (!leaveMessage.mMessage.empty())
+                broadcastSystemMessage(leaveMessage.mMessage);
             _removeFromPlayerList(*player);
 
             PlayerLeaveAfterEvent leaveEvent(player->getName(), player);
@@ -1714,6 +1723,9 @@ ServerPlayer *ServerNetworkHandler::_getPlayer(const NetworkIdentifier &id) {
 void ServerNetworkHandler::_disconnect(const NetworkIdentifier &id, DisconnectReason reason,
                                        const std::string &message) {
     ServerPlayer *simulated = _getPlayer(id);
+    // what the leave event gives as the reason, once the connection closes
+    if (!message.empty() && simulated != nullptr)
+        mLeaveReasons[id] = message;
     if (simulated != nullptr && simulated->isSimulated()) {
         removeSimulatedPlayer(id);
         return;

@@ -15,6 +15,9 @@ public:
 
     Command *getCommand(const std::string &name) const;
 
+    // in place of the command's aliases; one another command already answers to is skipped
+    void setAliases(Command &command, const std::vector<std::string> &aliases);
+
     bool dispatch(CommandOrigin &sender, const std::string &commandLine);
 
     std::vector<Command *> getCommands() const;

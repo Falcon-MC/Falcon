@@ -128,6 +128,25 @@ namespace {
         return 1;
     }
 
+    int commandSetAliases(FalconPlugin *source, const char *command, const char *const *aliases, uint32_t count) {
+        if (!hasText(command) || (count > 0 && aliases == nullptr))
+            return 0;
+
+        PluginCommand *target = commandOf(*plugin(source), lower(command));
+        if (target == nullptr)
+            return 0;
+
+        std::vector<std::string> names;
+        names.reserve(count);
+        for (uint32_t index = 0; index < count; ++index) {
+            if (aliases[index] != nullptr)
+                names.emplace_back(aliases[index]);
+        }
+        owner().getCommands().setAliases(*target, names);
+        resendCommands();
+        return 1;
+    }
+
     int serverExecuteCommand(const char *commandLine) {
         if (!hasText(commandLine))
             return 0;
@@ -247,6 +266,7 @@ namespace {
 
 void PluginServerApi::fillCommands(FalconServerApi &api) {
     api.commandAddOverload = &commandAddOverload;
+    api.commandSetAliases = &commandSetAliases;
     api.serverExecuteCommand = &serverExecuteCommand;
     api.playerExecuteCommand = &playerExecuteCommand;
     api.registerRecipe = &registerRecipe;

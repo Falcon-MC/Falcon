@@ -1360,6 +1360,8 @@ private:
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
+    // the message a player was disconnected with, kept until the connection closes
+    std::unordered_map<NetworkIdentifier, std::string, NetworkIdentifier::Hasher> mLeaveReasons;
     ClientProbeTracker mClientProbes;
 
     // a client the attestation service asked to remove, kept until it has said what platform it is on
