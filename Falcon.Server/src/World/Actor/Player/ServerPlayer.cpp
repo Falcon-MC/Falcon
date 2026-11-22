@@ -1027,6 +1027,7 @@ Tag ServerPlayer::saveNbt(const std::string &levelName) const {
 
     data.putFloat(TAG_HEALTH, mAttributes.get("minecraft:health"));
     data.putInt(TAG_AIR, mAirSupply);
+    mWardenSpawnTracker.save(data);
     data.putString(TAG_LEVEL, levelName);
     data.putInt("DimensionId", Dimension::toId(mDimension));
     data.putInt(TAG_GAME_MODE, mGameType);
@@ -1122,6 +1123,7 @@ void ServerPlayer::loadNbt(const Tag &data, const PacketCodecContext &context) {
 
     loadTags(data);
     mRecipeUnlocks.load(data);
+    mWardenSpawnTracker.load(data);
     FogStack::load(mFogStack, data);
 
     mPosition = Vector3f(listValue(data, TAG_POS, 0, mPosition.x), listValue(data, TAG_POS, 1, mPosition.y),

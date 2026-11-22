@@ -31,6 +31,7 @@
 #include "World/Actor/Player/PlayerBossBars.h"
 #include "World/Actor/Player/PlayerRaidState.h"
 #include "World/Actor/Player/SimulatedPlayerController.h"
+#include "World/Actor/Player/WardenSpawnTracker.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
@@ -991,6 +992,10 @@ public:
 
     void tickItemCooldowns(int64_t currentTick);
 
+    WardenSpawnTracker &getWardenSpawnTracker() {
+        return mWardenSpawnTracker;
+    }
+
     bool hasLastRightClick() const {
         return mHasLastRightClick;
     }
@@ -1407,4 +1412,5 @@ private:
     int32_t mShieldInterruptTicks = 0;
     bool mShieldReblockAfterAttack = false;
     int64_t mShieldDisabledUntilTick = 0;
+    WardenSpawnTracker mWardenSpawnTracker;
 };
