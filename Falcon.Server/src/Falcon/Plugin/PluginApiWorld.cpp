@@ -178,6 +178,16 @@ namespace {
         return SetBlockCommand::placeBlock(owner(), *value, toVector3i(position), state, "replace") ? 1 : 0;
     }
 
+    // the hash clients know the state by: Falcon sends every block by it
+    uint32_t serverBlockNetworkId(const char *name, const char *statesJson) {
+        if (name == nullptr)
+            return 0;
+        BlockState state;
+        if (!resolveState(withNamespace(name), statesJson, state))
+            return 0;
+        return (uint32_t) state.getHash();
+    }
+
     int levelBreakBlock(FalconLevel *handle, FalconBlockPos position, int dropItems) {
         Level *value = level(handle);
         if (!isInside(*value, position))
@@ -327,6 +337,7 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelGetBlock = &levelGetBlock;
     api.levelGetBlockStates = &levelGetBlockStates;
     api.levelSetBlock = &levelSetBlock;
+    api.serverBlockNetworkId = &serverBlockNetworkId;
     api.levelBreakBlock = &levelBreakBlock;
     api.levelIsChunkLoaded = &levelIsChunkLoaded;
     api.levelHighestBlockY = &levelHighestBlockY;
