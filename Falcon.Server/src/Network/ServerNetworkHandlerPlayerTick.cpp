@@ -124,6 +124,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     player.tickCombat(1);
     player.tickItemCooldowns(mCurrentTick);
+    player.getWardenSpawnTracker().tick();
     player.tickShield(*this);
     player.tickSpinAttack(*this);
     ElytraItem::tickGliding(*this, player);
