@@ -155,3 +155,11 @@ bool CartographyRecipes::isLocking(const ItemStack &input, const ItemStack &addi
            && MapItem::getMapId(input) == originalId && input.mDamage != (int32_t) MapItemType::Locked
            && is(additional, GLASS_PANE);
 }
+
+bool CartographyRecipes::extendMap(const ItemStack &input, const Maps &maps, ItemStack &result) {
+    return MapItem::isFilledMap(input) && extend(input, maps, result);
+}
+
+bool CartographyRecipes::upgradeMap(const ItemStack &input, ItemStack &result) {
+    return upgrade(input, result);
+}

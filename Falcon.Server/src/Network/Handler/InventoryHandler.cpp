@@ -668,7 +668,8 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 player.getCodec() ? player.getCodec()->getProtocolVersion() : 0,
                 grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
                 beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice,
-                loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator);
+                loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator,
+                cartographyOpen ? nullptr : &cartographyMaps);
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && beacon != nullptr && beaconChoice.mPaid) {
             beacon->applyPayment(beaconChoice.mPrimary, beaconChoice.mSecondary);

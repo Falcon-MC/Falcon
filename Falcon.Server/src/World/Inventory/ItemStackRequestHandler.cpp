@@ -7,6 +7,7 @@
 #include "World/Inventory/BundleInventory.h"
 #include "World/Inventory/BannerRecipes.h"
 #include "World/Inventory/CartographyRecipes.h"
+#include "World/Inventory/GridRecipes.h"
 #include "World/Inventory/GrindstoneRepair.h"
 #include "World/Inventory/StonecutterRecipes.h"
 #include "World/Actor/Trade/MerchantOffers.h"
@@ -21,6 +22,7 @@
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
+#include <functional>
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -98,6 +100,8 @@ namespace {
         int32_t mAnvilInputConsumed = 0;
         int32_t mAnvilMaterialConsumed = 0;
         const CartographyRecipes::Maps *mCartographyMaps = nullptr;
+        // the maps a crafting grid recipe reads, given away from the cartography table
+        const CartographyRecipes::Maps *mCraftingMaps = nullptr;
         bool mCartographyActive = false;
         int32_t mCartographyInputRequired = 0;
         int32_t mCartographyAdditionalRequired = 0;
@@ -1121,9 +1125,19 @@ namespace {
         return true;
     }
 
+    struct MultiCraft {
+        ItemStack mResult = ItemStack::air();
+        std::vector<int32_t> mRequiredBySlot;
+    };
+
     // the grid decides the result, as the client only names the recipe
-    bool craftBannerRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+    using GridSolver = std::function<bool(const std::vector<ItemStack> &, MultiCraft &)>;
+
+    bool craftFromGrid(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
+                       bool repeatable, const GridSolver &solve) {
         const int repetitions = action.mNumberOfRequestedCrafts <= 0 ? 1 : action.mNumberOfRequestedCrafts;
+        if (repetitions > 1 && !repeatable)
+            return false;
         bool tableHasItems = false;
         for (const ItemStack &item: inventory.getCraftingTableContents()) {
             if (!item.isAir()) {
@@ -1137,8 +1151,8 @@ namespace {
         const int gridWidth = tableHasItems ? 3 : 2;
         const std::vector<ItemStack> &grid = tableHasItems ? inventory.getCraftingTableContents()
                                                            : inventory.getCraftingContents();
-        BannerRecipes::Craft craft;
-        if (!BannerRecipes::craft(BannerRecipes::kindOf(action.mRecipeNetworkId), grid, craft))
+        MultiCraft craft;
+        if (!solve(grid, craft))
             return false;
 
         std::vector<int32_t> required = craft.mRequiredBySlot;
@@ -1163,6 +1177,46 @@ namespace {
         return true;
     }
 
+    bool craftBannerRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        const BannerRecipes::Kind kind = BannerRecipes::kindOf(action.mRecipeNetworkId);
+        const GridSolver solve = [&](const std::vector<ItemStack> &grid, MultiCraft &out) {
+            BannerRecipes::Craft craft;
+            if (!BannerRecipes::craft(kind, grid, craft))
+                return false;
+            out.mResult = std::move(craft.mResult);
+            out.mRequiredBySlot = std::move(craft.mRequiredBySlot);
+            return true;
+        };
+        return craftFromGrid(inventory, context, action, true, solve);
+    }
+
+    // results with their own map or a single source item are made one at a time
+    bool craftGridRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action) {
+        const GridRecipes::Kind kind = GridRecipes::kindOf(action.mRecipeNetworkId);
+        if (context.mCodecContext == nullptr)
+            return false;
+        const PacketCodecContext &codec = *context.mCodecContext;
+        const GridRecipes::Make make = [&codec](const std::string &identifier, int32_t count) {
+            ItemStack stack;
+            stack.mDefinition = codec.getItemDefinitions().getDefinition(identifier);
+            if (stack.mDefinition == nullptr)
+                return ItemStack::air();
+            stack.mBlockDefinition = codec.getBlockDefinitions().getDefinition(identifier);
+            stack.mCount = count;
+            return stack;
+        };
+        const bool repeatable = kind == GridRecipes::Kind::Firework || kind == GridRecipes::Kind::DecoratedPot;
+        return craftFromGrid(inventory, context, action, repeatable,
+                             [&](const std::vector<ItemStack> &grid, MultiCraft &out) {
+                                 GridRecipes::Craft craft;
+                                 if (!GridRecipes::craft(kind, grid, make, context.mCraftingMaps, craft))
+                                     return false;
+                                 out.mResult = std::move(craft.mResult);
+                                 out.mRequiredBySlot = std::move(craft.mRequiredBySlot);
+                                 return true;
+                             });
+    }
+
     bool craftRecipe(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                      std::vector<TouchedSlot> &touched) {
         if (context.mCraftRecipeSeen) {
@@ -1176,6 +1230,8 @@ namespace {
 
         if (BannerRecipes::kindOf(action.mRecipeNetworkId) != BannerRecipes::Kind::None)
             return craftBannerRecipe(inventory, context, action);
+        if (GridRecipes::kindOf(action.mRecipeNetworkId) != GridRecipes::Kind::None)
+            return craftGridRecipe(inventory, context, action);
 
         if (context.mRecipeOutputs == nullptr) {
             return false;
@@ -1501,7 +1557,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
         int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost, int32_t beaconLevels,
-        BeaconChoice *outBeacon, bool loomOpen) {
+        BeaconChoice *outBeacon, bool loomOpen, const CartographyRecipes::Maps *craftingMaps) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1529,6 +1585,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mGrindstoneOpen = grindstoneOpen;
     context.mLoomOpen = loomOpen;
     context.mCartographyMaps = cartographyMaps;
+    context.mCraftingMaps = craftingMaps;
     context.mStonecutterRecipes = stonecutterRecipes;
     context.mSmithingRecipes = smithingRecipes;
     context.mClientProtocol = clientProtocol;
