@@ -1,5 +1,6 @@
 #include "Falcon/Plugin/LoadedPlugin.h"
 #include "Falcon/Plugin/PluginCommand.h"
+#include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginEvents.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
@@ -1000,6 +1001,96 @@ namespace {
         fixture.player->setName("Tester");
     }
 
+    struct DeathProbe {
+        uint32_t drops = 0;
+        std::string firstDrop;
+        int keptByRule = -1;
+    };
+
+    void deathHandler(FalconEvent *event, void *userData) {
+        const FalconServerApi &api = PluginServerApi::get();
+        auto &probe = *static_cast<DeathProbe *>(userData);
+        probe.drops = api.eventDropCount(event);
+        FalconItem *first = api.eventDropAt(event, 0);
+        probe.firstDrop = first == nullptr ? "" : api.itemIdentifier(first);
+        probe.keptByRule = api.eventKeepInventory(event);
+        api.eventSetKeepInventory(event, 1);
+    }
+
+    // a plugin reads what an item or a block type is, and what an event drops, and changes it
+    void dropsAndTypes(const FalconServerApi &api, Fixture &fixture) {
+        FalconItemInfo sword{};
+        require(api.serverItemInfo("minecraft:diamond_sword", &sword) == 1, "the sword has no info");
+        require(sword.maxStackSize == 1 && sword.maxDurability == 1561 && sword.toolType == 1 && sword.toolTier == 6
+                        && sword.attackDamage == 7 && std::string(sword.name) == "Diamond Sword",
+                "the sword's info is wrong");
+        FalconItemInfo apple{};
+        require(api.serverItemInfo("apple", &apple) == 1 && apple.nutrition == 4, "the apple is not food");
+        FalconBlockInfo stone{};
+        require(api.serverBlockInfo("minecraft:stone", &stone) == 1 && stone.hardness == 1.5f && stone.toolType == 3
+                        && stone.solid == 1,
+                "the stone's info is wrong");
+        require(api.serverItemInfo("minecraft:not_an_item", &apple) == 0
+                        && api.serverBlockInfo("minecraft:not_a_block", &stone) == 0,
+                "an unknown type has info");
+
+        require(api.levelSetBlock(fixture.levelHandle(), FalconBlockPos{5, 101, 5}, "minecraft:chest", "{}") == 1,
+                "the chest was not placed");
+        require(api.levelContainerSize(fixture.levelHandle(), FalconBlockPos{5, 101, 5}) == 27,
+                "a chest a plugin placed holds nothing");
+
+        std::vector<ItemStack> drops;
+        int32_t experience = 3;
+        float horizontal = 0.4f;
+        float vertical = 0.4f;
+        PluginEvent synthetic;
+        synthetic.mDrops = &drops;
+        synthetic.mExperience = &experience;
+        synthetic.mKnockbackHorizontal = &horizontal;
+        synthetic.mKnockbackVertical = &vertical;
+        FalconEvent *event = reinterpret_cast<FalconEvent *>(&synthetic);
+        FalconItem *diamonds = api.itemCreate("minecraft:diamond", 2);
+        FalconItem *set[] = {diamonds, nullptr};
+        api.eventSetDrops(event, set, 2);
+        api.itemDestroy(diamonds);
+        require(api.eventDropCount(event) == 1 && api.itemCount(api.eventDropAt(event, 0)) == 2, "the drops were not set");
+        api.eventSetExperience(event, -5);
+        require(api.eventExperience(event) == 0, "the experience went below zero");
+        float readHorizontal = 0.0f, readVertical = 0.0f;
+        api.eventSetKnockback(event, 1.0f, 0.2f);
+        require(api.eventKnockback(event, &readHorizontal, &readVertical) == 1 && readHorizontal == 1.0f
+                        && readVertical == 0.2f,
+                "the knockback was not set");
+        PluginEvent none;
+        require(api.eventKnockback(reinterpret_cast<FalconEvent *>(&none), &readHorizontal, &readVertical) == 0
+                        && api.eventDropCount(reinterpret_cast<FalconEvent *>(&none)) == 0,
+                "an event without them carries drops or a push");
+
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Keeper";
+        listener.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(listener);
+        DeathProbe probe;
+        const uint64_t id = api.subscribe(handle, FALCON_EVENT_PLAYER_DEATH, FALCON_PRIORITY_NORMAL, 0, &deathHandler,
+                                          &probe);
+        fixture.player->getInventory().clear();
+        FalconItem *emeralds = api.itemCreate("minecraft:emerald", 7);
+        api.playerSetInventoryItem(fixture.playerHandle(), 4, emeralds);
+        api.itemDestroy(emeralds);
+        // an earlier check killed the player and turned keepInventory on: they live again, and the rule drops
+        require(api.levelSetGameRule(fixture.levelHandle(), "keepinventory", "false") == 1, "keepinventory stayed on");
+        fixture.player->setDead(false);
+        fixture.player->setHealth(20.0f);
+        fixture.owner.killPlayer(*fixture.player, "death.attack.generic", {"Tester"});
+        api.unsubscribe(id);
+        require(probe.keptByRule == 0, "the event did not follow the keepInventory rule");
+        require(probe.drops == 1 && probe.firstDrop == "minecraft:emerald", "the death did not show what would drop");
+        FalconItem *kept = api.playerInventoryItem(fixture.playerHandle(), 4);
+        require(kept != nullptr && std::string(api.itemIdentifier(kept)) == "minecraft:emerald" && api.itemCount(kept) == 7,
+                "the kept inventory was not given back");
+        api.itemDestroy(kept);
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -1022,6 +1113,7 @@ namespace {
         uniqueId(api, fixture);
         pluginWindows(api, fixture);
         permissionGroups(api, fixture);
+        dropsAndTypes(api, fixture);
     }
 }
 

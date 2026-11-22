@@ -21,6 +21,7 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/DeathInfoPacket.h"
@@ -179,7 +180,16 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     damageEvent.mAttacker = source.mAttacker;
     damageEvent.mAmount = amount;
     damageEvent.mCause = key;
+    // a hit from an attacker pushes: plugins see the game's push and may change it
+    float knockbackHorizontal = 0.4f;
+    float knockbackVertical = 0.4f;
+    if (source.mAttacker != nullptr) {
+        damageEvent.mKnockbackHorizontal = &knockbackHorizontal;
+        damageEvent.mKnockbackVertical = &knockbackVertical;
+    }
     PluginManager::getInstance().dispatch(damageEvent);
+    if (source.mAttacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
+        player.setKnockbackOverride(knockbackHorizontal, knockbackVertical);
     if (damageEvent.mCancelled)
         return DamageResult::Ignored;
 
@@ -278,25 +288,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     getLevelFor(player).postGameEvent(GameEvents::ENTITY_DIE, player.getPosition(), &player);
 
     const GameRules &rules = getWorldFor(player).getOverworld().getGameRules();
-    const bool keepInventory = rules.getBool("keepinventory");
-
-    if (!keepInventory) {
-        _dropInventoryOnDeath(player);
-
-        if (!player.isCreative()) {
-            const int droppedExperience = player.getExperience().getXpDropAmount();
-            if (droppedExperience > 0 && !player.isDeathExperienceTaken())
-                spawnExperienceOrbs(getLevelFor(player), player.getPosition(), droppedExperience);
-        }
-
-        player.getExperience().reset();
-        player.syncExperience();
-        _sendAttributes(player);
-    }
-
-    player.clearSculkCatalystState();
-    _sendHealth(player);
-    _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
+    const bool ruleKeepsInventory = rules.getBool("keepinventory");
 
     const std::string key = deathMessageKey.empty() ? "death.attack.generic" : deathMessageKey;
     const std::vector<std::string> parameters = deathMessageParameters.empty()
@@ -309,7 +301,20 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     deathEvent.mPlayer = &player;
     deathEvent.mEntity = &player;
     deathEvent.mMessage = &deathMessage;
-    PluginManager::getInstance().dispatch(deathEvent);
+
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_DEATH);
+    if (plugins == nullptr) {
+        if (!ruleKeepsInventory) {
+            _dropInventoryOnDeath(player);
+            _dropExperienceOnDeath(player, player.isCreative() ? 0 : player.getExperience().getXpDropAmount());
+        }
+    } else {
+        _killPlayerWithPlugins(*plugins, player, deathEvent, ruleKeepsInventory);
+    }
+
+    player.clearSculkCatalystState();
+    _sendHealth(player);
+    _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
 
     if (rules.getBool("showdeathmessages")) {
         if (deathMessage == key)
@@ -334,6 +339,79 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     mNetworkHandler->send(player.getNetworkIdentifier(), info, mCodecContext);
 
     LOG_INFO(LogAreaID::Server, "%s died", player.getName().c_str());
+}
+
+// the death of a player plugins listen to: they see what will drop and whether the player keeps it, and change it
+void ServerNetworkHandler::_killPlayerWithPlugins(PluginManager &plugins, ServerPlayer &player, PluginEvent &deathEvent,
+                                                  bool ruleKeepsInventory) {
+    PlayerInventory &inventory = player.getInventory();
+
+    // the inventory as it was, given back when a plugin keeps it after the rule dropped it
+    std::vector<ItemStack> items, armor;
+    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
+        items.push_back(inventory.getItem(slot));
+    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
+        armor.push_back(inventory.getArmor(slot));
+    const ItemStack offhand = inventory.getOffhand();
+    const ItemStack bodyArmor = inventory.getBodyArmor();
+
+    DropCapture capture;
+    if (!ruleKeepsInventory) {
+        DropCapture *previous = setDropCapture(&capture);
+        _dropInventoryOnDeath(player);
+        setDropCapture(previous);
+    }
+
+    bool keepInventory = ruleKeepsInventory;
+    bool keepExperience = ruleKeepsInventory;
+    int32_t experience = player.isCreative() || player.isDeathExperienceTaken() ? 0 : player.getExperience().getXpDropAmount();
+    deathEvent.mDrops = &capture.mItems;
+    deathEvent.mExperience = &experience;
+    deathEvent.mKeepInventory = &keepInventory;
+    deathEvent.mKeepExperience = &keepExperience;
+    plugins.dispatch(deathEvent);
+    deathEvent.mDrops = nullptr;
+    deathEvent.mExperience = nullptr;
+    deathEvent.mKeepInventory = nullptr;
+    deathEvent.mKeepExperience = nullptr;
+
+    if (keepInventory && !ruleKeepsInventory) {
+        for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
+            inventory.setItem(slot, items[(size_t) slot]);
+        for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
+            inventory.setArmor(slot, armor[(size_t) slot]);
+        inventory.setOffhand(offhand);
+        inventory.setBodyArmor(bodyArmor);
+        _sendInventory(player);
+    } else if (!keepInventory) {
+        if (ruleKeepsInventory) {
+            // a plugin drops what the rule kept: the inventory goes with what it set
+            DropCapture kept;
+            DropCapture *previous = setDropCapture(&kept);
+            _dropInventoryOnDeath(player);
+            setDropCapture(previous);
+            for (ItemStack &item: kept.mItems)
+                capture.mItems.push_back(std::move(item));
+        }
+        Level &level = getLevelFor(player);
+        const Vector3f position = player.getPosition();
+        const Vector3f dropPosition(position.x, position.y + ITEM_DROP_HEIGHT, position.z);
+        for (const ItemStack &item: capture.mItems)
+            dropItem(level, dropPosition, item, ItemActorHandler::randomDropAroundMotion(),
+                     ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+    }
+
+    if (!keepExperience)
+        _dropExperienceOnDeath(player, experience);
+}
+
+void ServerNetworkHandler::_dropExperienceOnDeath(ServerPlayer &player, int32_t experience) {
+    // a sculk catalyst near took it already
+    if (experience > 0 && !player.isDeathExperienceTaken())
+        spawnExperienceOrbs(getLevelFor(player), player.getPosition(), experience);
+    player.getExperience().reset();
+    player.syncExperience();
+    _sendAttributes(player);
 }
 
 void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &item) {

@@ -13,6 +13,7 @@
 #include "World/Level/Storage/FalconDataVersion.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/ItemActorHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -227,7 +228,16 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     damageEvent.mAttacker = attacker;
     damageEvent.mAmount = amount;
     damageEvent.mCause = damageSource.mDeathMessageKey;
+    // a hit from an attacker pushes: plugins see the game's push and may change it
+    float knockbackHorizontal = 0.4f;
+    float knockbackVertical = 0.4f;
+    if (attacker != nullptr) {
+        damageEvent.mKnockbackHorizontal = &knockbackHorizontal;
+        damageEvent.mKnockbackVertical = &knockbackVertical;
+    }
     PluginManager::getInstance().dispatch(damageEvent);
+    if (attacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
+        setKnockbackOverride(knockbackHorizontal, knockbackVertical);
     if (damageEvent.mCancelled)
         return false;
 
@@ -304,7 +314,23 @@ void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_
     event.mType = FALCON_EVENT_ENTITY_DEATH;
     event.mEntity = this;
     event.mAttacker = source;
+    if (mDeathDropsHeld) {
+        event.mDrops = &mDeathDrops;
+        event.mExperience = &mDeathExperience;
+    }
     PluginManager::getInstance().dispatch(event);
+
+    if (mDeathDropsHeld) {
+        mDeathDropsHeld = false;
+        Level &level = owner.getLevelFor(*this);
+        const Vector3f position = getPosition();
+        for (const ItemStack &drop: mDeathDrops)
+            owner.dropItem(level, position, drop, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+        owner.spawnExperienceOrbs(level, position, mDeathExperience);
+        mDeathDrops.clear();
+        mDeathExperience = 0;
+    }
 
     if (mFatalSource != nullptr) {
         owner.getScriptEngine().onEntityDie(*this, *mFatalSource);

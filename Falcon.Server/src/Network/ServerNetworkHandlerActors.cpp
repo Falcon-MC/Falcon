@@ -323,6 +323,10 @@ PrimedTntActor *ServerNetworkHandler::spawnPrimedTnt(Level &level, const Vector3
 void ServerNetworkHandler::spawnExperienceOrbs(Level &level, const Vector3f &position, int amount) {
     if (amount <= 0)
         return;
+    if (mDropCapture != nullptr) {
+        mDropCapture->mExperience += amount;
+        return;
+    }
 
     static std::mt19937 orbRandom(0x1F123BB5u);
     std::uniform_real_distribution<float> unit(0.0f, 1.0f);

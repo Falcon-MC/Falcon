@@ -187,6 +187,7 @@ void Actor::tickCombat(int tickDiff) {
     if (tickDiff <= 0)
         return;
 
+    clearKnockbackOverride();
     mNoDamageTicks = std::max(0, mNoDamageTicks - tickDiff);
     mAttackTime = std::max(0, mAttackTime - tickDiff);
     if (mNoDamageTicks == 0)
@@ -194,6 +195,13 @@ void Actor::tickCombat(int tickDiff) {
 }
 
 void Actor::knockBack(float x, float z, float force, float verticalLimit) {
+    if (mKnockbackOverride) {
+        if (mKnockbackOverrideUsed)
+            return;
+        mKnockbackOverrideUsed = true;
+        force = mKnockbackHorizontal;
+        verticalLimit = mKnockbackVertical;
+    }
     const float length = std::sqrt(x * x + z * z);
     if (length <= 0.0f || force <= 0.0f)
         return;

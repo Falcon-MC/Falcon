@@ -533,28 +533,48 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
         return;
     }
 
-    PluginEvent pluginEvent;
-    pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
-    pluginEvent.mCancellable = true;
-    pluginEvent.mPlayer = &player;
-    pluginEvent.mBlockPosition = position;
-    pluginEvent.mBlockName = brokenState.mName;
-    PluginManager::getInstance().dispatch(pluginEvent);
-    if (pluginEvent.mCancelled) {
-        sendCurrentBlockState(owner, player, position);
-        return;
-    }
-
     const std::string brokenIdentifier = brokenState.mName;
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
     const bool creative = player.isCreative();
     const ItemStack heldItem = player.getInventory().getItemInHand();
-
     // a block the held item cannot harvest drops nothing for a player; explosions and pistons still drop it
     const bool harvested = brokenData == nullptr || canHarvest(*brokenData, heldItem);
+    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
+
+    // plugins listening see the drops and the experience, worked out once, and may change them
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_BREAK);
+    std::vector<ItemStack> drops;
+    int32_t experience = 0;
+    if (plugins != nullptr) {
+        if (!creative && harvested && level.getGameRules().getBool("dotiledrops"))
+            drops = blockDrops(owner, &level, position, brokenState, heldItem);
+        if (!creative && !silkTouch && harvested)
+            experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+
+        PluginEvent pluginEvent;
+        pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
+        pluginEvent.mCancellable = true;
+        pluginEvent.mPlayer = &player;
+        pluginEvent.mBlockPosition = position;
+        pluginEvent.mBlockName = brokenState.mName;
+        pluginEvent.mDrops = &drops;
+        pluginEvent.mExperience = &experience;
+        plugins->dispatch(pluginEvent);
+        if (pluginEvent.mCancelled) {
+            sendCurrentBlockState(owner, player, position);
+            return;
+        }
+    }
+
     if (const Block *broken = VanillaBlocks::fromState(brokenState))
         broken->onPlayerWillDestroy(owner, player, level, position, brokenState);
-    destroyBlock(owner, level, position, brokenState, !creative && harvested, heldItem, &player);
+    destroyBlock(owner, level, position, brokenState, plugins == nullptr && !creative && harvested, heldItem, &player);
+    if (plugins != nullptr) {
+        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        for (const ItemStack &drop: drops)
+            owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
@@ -567,13 +587,11 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     brokenEvent.mItemAfterBreak = player.getInventory().getItemInHand();
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
 
-    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
-    if (!creative && !silkTouch && harvested) {
-        const int experience = ExperienceValues::getOreDropExperience(brokenState.mName);
-        if (experience > 0) {
-            const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-            owner.spawnExperienceOrbs(level, orbPosition, experience);
-        }
+    if (plugins == nullptr && !creative && !silkTouch && harvested)
+        experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+    if (experience > 0) {
+        const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        owner.spawnExperienceOrbs(level, orbPosition, experience);
     }
 
     player.exhaust(0.005f);

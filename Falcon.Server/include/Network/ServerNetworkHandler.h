@@ -73,6 +73,7 @@ class CommandBlockUpdatePacket;
 class Item;
 class NetherNetInstance;
 class PluginManager;
+struct PluginEvent;
 class PlayerMovementRegistry;
 struct KnockbackPreset;
 
@@ -802,6 +803,20 @@ public:
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
 
+    // what dropItem and spawnExperienceOrbs keep in place of spawning while a capture is set: a death gathers its
+    // drops so plugins see them before they fall
+    struct DropCapture {
+        std::vector<ItemStack> mItems;
+        int32_t mExperience = 0;
+    };
+
+    // the capture before, given back so captures nest
+    DropCapture *setDropCapture(DropCapture *capture) {
+        DropCapture *previous = mDropCapture;
+        mDropCapture = capture;
+        return previous;
+    }
+
     // single entry point for player damage, in order: game mode and spawn invulnerability, damage game rules,
     // scripts and plugins, invulnerability window, shields, armor, Resistance, totem, then death
     DamageResult hurt(ServerPlayer &player, float amount, const ActorDamageSource &source);
@@ -1210,6 +1225,9 @@ private:
     bool _isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height);
 
     void _dropInventoryOnDeath(ServerPlayer &player);
+    void _killPlayerWithPlugins(PluginManager &plugins, ServerPlayer &player, PluginEvent &deathEvent,
+                                bool ruleKeepsInventory);
+    void _dropExperienceOnDeath(ServerPlayer &player, int32_t experience);
 
     void _respawnPlayer(ServerPlayer &player);
 
@@ -1437,6 +1455,7 @@ private:
     ScriptEngine mScriptEngine;
     // the hit hurt() is dealing while killPlayer runs: the death event reports its cause
     const ActorDamageSource *mFatalSource = nullptr;
+    DropCapture *mDropCapture = nullptr;
     const char *mSpawnCause = nullptr;
     BehaviorPackManager mBehaviorPacks;
     FunctionManager mFunctions;
