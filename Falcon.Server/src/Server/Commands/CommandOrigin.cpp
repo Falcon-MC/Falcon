@@ -39,5 +39,7 @@ void CommandOrigin::sendError(const std::string &message) {
 }
 
 bool CommandOrigin::canExecuteCommand(const Command &command) const {
+    if (command.managesServer() && !canManageServer())
+        return false;
     return getCommandPermission() >= command.getRequiredPermission();
 }

@@ -51,4 +51,9 @@ void MovementInputSystem::tick(PlayerMovementContext &context) {
     const float scale = IMPULSE_SCALE / std::max(1.0f, length);
     input.sideways = sideways * scale;
     input.forward = forward * scale;
+    // movement (2) or lateral movement (4) locked: a client that walks anyway is corrected back
+    if (context.player.isInputLocked(2) || context.player.isInputLocked(4)) {
+        input.sideways = 0.0f;
+        input.forward = 0.0f;
+    }
 }

@@ -537,17 +537,12 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     cartographyMaps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
         return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
     };
-    // the client draws the copy id and sends it in MapCreateLockedCopyPacket; reusing it keeps its item in step
-    cartographyMaps.mAllocateLockId = [&mapLevel, &manager](int64_t mapId) {
-        const CartographyLock &requested = manager.getClientMapLock();
-        if (requested.mOriginalId == mapId && requested.mCopyId != MapItemSavedData::INVALID_ID
-            && mapLevel.getMapData(requested.mCopyId) == nullptr)
-            return requested.mCopyId;
-
-        // the game draws the id of the locked copy at random
-        int64_t copyId = (int64_t) (uint32_t) MapItem::random()();
-        while (copyId == MapItemSavedData::INVALID_ID || mapLevel.getMapData(copyId) != nullptr)
-            copyId = (int64_t) (uint32_t) MapItem::random()();
+    // the client's copy id from MapCreateLockedCopyPacket is ignored: it could claim an id the counter hands a
+    // later map, and creating that map would replace the copy
+    cartographyMaps.mAllocateLockId = [&owner, &mapLevel](int64_t) {
+        int64_t copyId = owner.allocateActorUniqueId();
+        while (mapLevel.getMapData(copyId) != nullptr)
+            copyId = owner.allocateActorUniqueId();
         return copyId;
     };
 
@@ -567,10 +562,17 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     if (leftLoom)
         manager.onCurrentWindowRemove();
 
-    const bool leftSmithing = manager.isSmithingOpen() && !withinContainerReach(
+    const bool leftSmithing = manager.isSmithingOpen() && (!manager.isWorkbenchOpenIn(level) || !withinContainerReach(
             player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
-                             (float) anvilPosition.z + 0.5f));
-    const bool leftContainer = leftGrindstone || leftLoom || leftSmithing || hasLeftOpenContainer(owner, player);
+                             (float) anvilPosition.z + 0.5f)));
+
+    const bool leftWorkbench =
+            (manager.isAnvilOpen() || manager.isCartographyOpen() || manager.isStonecutterOpen())
+            && (!manager.isWorkbenchOpenIn(level) || !withinContainerReach(
+                    player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                                     (float) anvilPosition.z + 0.5f)));
+    if (leftWorkbench)
+        manager.onCurrentWindowRemove();
 
     // the mount window fills the saddle and armor slots without an interaction: their events run after
     const int64_t containerActorId = manager.getContainerActorId();
@@ -582,6 +584,18 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                              : nullptr;
     if (trader != nullptr && trader->getEconomy().getTradingPlayer() != player.getUniqueId())
         trader = nullptr;
+
+    // the same bound as opening the screen: a trader left behind or in another world closes it
+    const bool leftTrade = trader != nullptr
+                           && (!trader->sharesLevelWith(player)
+                               || trader->distanceSquaredTo(player) > ENTITY_INTERACT_REACH * ENTITY_INTERACT_REACH);
+    if (leftTrade) {
+        manager.onCurrentWindowRemove();
+        trader = nullptr;
+    }
+
+    const bool leftContainer = leftGrindstone || leftLoom || leftSmithing || leftWorkbench || leftTrade
+                               || hasLeftOpenContainer(owner, player);
 
     BeaconBlockActor *beacon = nullptr;
     if (manager.isContainerOpen() && manager.getCurrentWindowType() == ContainerType::Beacon
@@ -609,6 +623,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         int32_t grindstoneXpCost = -1;
         BeaconChoice beaconChoice;
         CartographyLock cartographyLock;
+        CartographyExpansion cartographyExpansion;
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
                                                 == CartographyTableBlock::IDENTIFIER;
@@ -669,7 +684,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
                 beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice,
                 loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator,
-                cartographyOpen ? nullptr : &cartographyMaps);
+                cartographyOpen ? nullptr : &cartographyMaps, &cartographyExpansion);
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK)
+            CartographyRecipes::applyExpansion(cartographyExpansion, cartographyMaps);
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && beacon != nullptr && beaconChoice.mPaid) {
             beacon->applyPayment(beaconChoice.mPrimary, beaconChoice.mSecondary);
@@ -696,8 +714,12 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             && cartographyLock.mCopyId != MapItemSavedData::INVALID_ID
             && mapLevel.getMaps().copyAndLockMap(mapLevel.getMapStorage(), cartographyLock.mOriginalId,
                                                  cartographyLock.mCopyId)
-                       != nullptr)
+                       != nullptr) {
+            // the client's item still names the id it drew: the response carries no tag
+            if (manager.getClientMapLock().mCopyId != cartographyLock.mCopyId)
+                needsResync = true;
             manager.setClientMapLock(CartographyLock());
+        }
 
         // the item is enchanted now: its other options go with it, the next ones are rolled for what it became
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && craftsEnchant(request))

@@ -336,7 +336,7 @@ bool GridRecipes::mapExtending(const std::vector<ItemStack> &grid, const Cartogr
     }
 
     ItemStack result;
-    if (!CartographyRecipes::extendMap(grid[middle], maps, result))
+    if (!CartographyRecipes::extendMap(grid[middle], maps, result, craft.mExpansion))
         return false;
     craft.mResult = std::move(result);
     craft.mRequiredBySlot = oneOfEach(grid);

@@ -129,8 +129,10 @@ bool FillCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
                         continue;
 
                     const BlockState &target = mode == "hollow" && !shell ? air : state;
-                    // an unchanged block neither counts nor updates its neighbours
-                    if (level->getBlockState(x, y, z) == target)
+                    // an unchanged block neither counts nor updates its neighbours; peek: a chunk not loaded
+                    // is not placed into, and reading it would load or generate it
+                    const BlockState *current = level->peekBlockPtr(x, y, z);
+                    if (current == nullptr || *current == target)
                         continue;
                     const Block *block = VanillaBlocks::fromIdentifier(target.mName);
                     const bool randomTick = block != nullptr && block->hasRandomTick();

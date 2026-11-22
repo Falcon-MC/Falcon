@@ -535,6 +535,21 @@ void PlayerInventory::clear() {
     for (ItemStack &item: mTrade) {
         item = ItemStack::air();
     }
+
+    for (ItemStack &item: mSmithing) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mGrindstone) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mLoom) {
+        item = ItemStack::air();
+    }
+
+    mStonecutterInput = ItemStack::air();
+    mBeaconPayment = ItemStack::air();
 }
 
 void PlayerInventory::assignNetId(ItemStack &item) {

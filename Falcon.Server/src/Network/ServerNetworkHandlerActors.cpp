@@ -1347,7 +1347,8 @@ void ServerNetworkHandler::runQueuedActorCommands() {
     std::vector<QueuedActorCommand> queued;
     queued.swap(mQueuedActorCommands);
 
-    ServerCommandOrigin base(this);
+    // pack content: game director level, never the console's
+    ServerCommandOrigin base(this, CommandPermission::GameDirectors);
     for (const QueuedActorCommand &entry: queued) {
         ExecuteCommandOrigin origin(base, nullptr, entry.mPosition, entry.mRotation, entry.mLevel);
         mCommands.dispatch(origin, entry.mCommand);

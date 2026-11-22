@@ -1054,10 +1054,7 @@ bool InventoryManager::onClientOpenGrindstone(const Vector3i &position) {
         onCurrentWindowRemove();
         return false;
     }
-    if (!_openWorkbench(ContainerType::Grindstone, position))
-        return false;
-    mWorkbenchLevel = &level;
-    return true;
+    return _openWorkbench(ContainerType::Grindstone, position);
 }
 
 bool InventoryManager::isGrindstoneOpen() const {
@@ -1088,10 +1085,7 @@ bool InventoryManager::onClientOpenLoom(const Vector3i &position) {
         onCurrentWindowRemove();
         return false;
     }
-    if (!_openWorkbench(ContainerType::Loom, position))
-        return false;
-    mWorkbenchLevel = &level;
-    return true;
+    return _openWorkbench(ContainerType::Loom, position);
 }
 
 bool InventoryManager::isLoomOpen() const {
@@ -1143,8 +1137,9 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     if (mPlayer == nullptr || mSender == nullptr)
         return false;
 
+    const Level *level = mOwner == nullptr ? nullptr : &mOwner->getLevelFor(*mPlayer);
     if (mAnvilWindowId != CONTAINER_ID_NONE)
-        return mAnvilWindowType == type && mAnvilPosition == position;
+        return mAnvilWindowType == type && mAnvilPosition == position && mWorkbenchLevel == level;
 
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
         || mFurnaceWindowId != CONTAINER_ID_NONE || mContainerWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
@@ -1157,6 +1152,7 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     mAnvilWindowId = windowId;
     mAnvilWindowType = type;
     mAnvilPosition = position;
+    mWorkbenchLevel = level;
     mCurrentWindowType = type;
     mStonecutterSelectedRecipe = 0;
 
@@ -1167,6 +1163,10 @@ bool InventoryManager::_openWorkbench(ContainerType type, const Vector3i &positi
     open.mUniqueActorId = -1;
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
     return true;
+}
+
+bool InventoryManager::isWorkbenchOpenIn(const Level &level) const {
+    return mAnvilWindowId != CONTAINER_ID_NONE && mWorkbenchLevel == &level;
 }
 
 bool InventoryManager::isAnvilOpen() const {
@@ -1223,9 +1223,9 @@ void InventoryManager::_closeAnvil() {
         return;
 
     mClientMapLock = CartographyLock();
+    mWorkbenchLevel = nullptr;
     PlayerInventory &inventory = mPlayer->getInventory();
     if (mAnvilWindowType == ContainerType::Grindstone) {
-        mWorkbenchLevel = nullptr;
         for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
             ItemStack item = inventory.getGrindstoneItem(index);
             if (item.isAir())
@@ -1236,7 +1236,6 @@ void InventoryManager::_closeAnvil() {
         return;
     }
     if (mAnvilWindowType == ContainerType::Loom) {
-        mWorkbenchLevel = nullptr;
         for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
             ItemStack item = inventory.getLoomItem(index);
             if (item.isAir())

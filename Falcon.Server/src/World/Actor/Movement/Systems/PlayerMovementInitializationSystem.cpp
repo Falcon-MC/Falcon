@@ -22,6 +22,9 @@ void PlayerMovementInitializationSystem::tick(PlayerMovementContext &context) {
                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::StartJumping)
                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AutoJumpingInWater)
                      || input.getPacket().hasInputFlag((int32_t) PlayerAuthInputData::AscendBlock);
+    // movement (2) or jump (6) locked: no jump in the replay; a client that jumps anyway is corrected back
+    if (context.player.isInputLocked(2) || context.player.isInputLocked(6))
+        input.jumpHeld = false;
     // DecrementNoJumpDelaySystem runs before the jump systems
     if (state.jumpDelay > 0)
         --state.jumpDelay;

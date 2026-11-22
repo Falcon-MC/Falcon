@@ -108,6 +108,7 @@ namespace {
         int32_t mCartographyInputConsumed = 0;
         int32_t mCartographyAdditionalConsumed = 0;
         CartographyLock mCartographyLock;
+        CartographyExpansion mCartographyExpansion;
         const std::unordered_map<int32_t, uint32_t> *mStonecutterRecipes = nullptr;
         const CraftingDataPacket *mSmithingRecipes = nullptr;
         int32_t mClientProtocol = 0;
@@ -626,6 +627,12 @@ namespace {
             return false;
         }
 
+        // a created output can hold several stacks: the count is saved as one byte
+        if (source->mCount > PlayerInventory::getMaxStackSize(*source)
+            || destination->mCount > PlayerInventory::getMaxStackSize(*destination)) {
+            return false;
+        }
+
         std::swap(*source, *destination);
 
         inventory.assignNetId(*source);
@@ -924,6 +931,7 @@ namespace {
         context.mCartographyInputRequired = result.mInputCost;
         context.mCartographyAdditionalRequired = result.mAdditionalCost;
         context.mCartographyLock = result.mLock;
+        context.mCartographyExpansion = result.mExpansion;
         return true;
     }
 
@@ -1213,6 +1221,7 @@ namespace {
                                      return false;
                                  out.mResult = std::move(craft.mResult);
                                  out.mRequiredBySlot = std::move(craft.mRequiredBySlot);
+                                 context.mCartographyExpansion = craft.mExpansion;
                                  return true;
                              });
     }
@@ -1557,7 +1566,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         const std::unordered_map<int32_t, uint32_t> *stonecutterRecipes, ItemStack *outCraftedRecipeItem,
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
         int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost, int32_t beaconLevels,
-        BeaconChoice *outBeacon, bool loomOpen, const CartographyRecipes::Maps *craftingMaps) {
+        BeaconChoice *outBeacon, bool loomOpen, const CartographyRecipes::Maps *craftingMaps,
+        CartographyExpansion *outCartographyExpansion) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1744,6 +1754,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
 
     if (outCartographyLock != nullptr)
         *outCartographyLock = context.mCartographyLock;
+
+    if (outCartographyExpansion != nullptr)
+        *outCartographyExpansion = context.mCartographyExpansion;
 
     if (outTrade != nullptr && context.mTradeActive)
         *outTrade = context.mTrade;
