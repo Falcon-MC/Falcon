@@ -25,6 +25,7 @@ class Level;
 class LiquidPhysicsSystem;
 class MobActor;
 class ServerActor;
+class ItemActor;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -397,6 +398,17 @@ public:
         (void) level;
         (void) position;
         (void) state;
+        return false;
+    }
+
+    // a dropped item ran into the block; true when the block took over its motion
+    virtual bool onItemHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           ItemActor &item) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) item;
         return false;
     }
 

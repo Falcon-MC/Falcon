@@ -28,6 +28,10 @@ public:
     bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
                          ServerActor &projectile) const override;
 
+    // a thrown item bounces off it, away from its middle, and rings it the way it faces
+    bool onItemHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                   ItemActor &item) const override;
+
     // rings as the power comes on
     void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state) const override;
