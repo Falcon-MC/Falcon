@@ -433,8 +433,12 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
 
     // a gamertag can change hands: the save under it must be this account's before it is read or written
     if (!owner.getPlayerDataProvider().claimData(player.getName(), player.getXuid())) {
-        LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
-                  player.getName().c_str());
+        if (player.getXuid().empty())
+            LOG_WARN(LogAreaID::Server, "Refused an unsigned login onto the save of the account named %s",
+                     player.getName().c_str());
+        else
+            LOG_ERROR(LogAreaID::Server, "Could not set aside the save another account left under the name %s",
+                      player.getName().c_str());
         owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.internalError.cantConnect");
         owner.erasePlayer(id);
         return;
@@ -498,9 +502,11 @@ void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdent
     if (scripts.isHoldingJoin(id))
         return;
     // asyncPlayerJoin: the login goes on once every subscriber's promise settled
-    const bool held = scripts.holdPlayerJoin(player, [&owner, id]() {
+    const bool held = scripts.holdPlayerJoin(player, [&owner, id, session = &player]() {
+        // the same session, still waiting for this join: not a reconnect from the same address and port
         const auto it = owner.getPlayers().find(id);
-        if (it != owner.getPlayers().end())
+        if (it != owner.getPlayers().end() && &it->second == session
+            && it->second.getLoginState() < ServerPlayer::LoginState::LoggedIn)
             _finishLogin(owner, id, it->second);
     });
     if (!held)

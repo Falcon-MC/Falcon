@@ -36,6 +36,9 @@
 #include <cstdlib>
 
 namespace {
+    // not a game limit: the client lists a few actions per input; each one may run a break check
+    const size_t MAX_PLAYER_ACTIONS = 32;
+
     LiquidContact liquidContact(Level &level, const ServerPlayer &player, const Vector3f &feet) {
         const ActorFlags &flags = player.getFlags();
         const bool sneaking = player.hasSimulatedVelocity() ? player.isSimulatedSneaking()
@@ -501,7 +504,9 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         transactionBreakPending = false;
         BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
     };
-    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+    const size_t actionCount = std::min(packet.mPlayerActions.size(), MAX_PLAYER_ACTIONS);
+    for (size_t index = 0; index < actionCount; ++index) {
+        const PlayerBlockActionData &action = packet.mPlayerActions[index];
         if (action.mAction == PlayerActionType::AbortBreak
             || ((action.mAction == PlayerActionType::StartBreak
                  || action.mAction == PlayerActionType::BlockContinueDestroy)
@@ -632,7 +637,8 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         owner._useHeldItem(player);
     }
 
-    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+    for (size_t index = 0; index < actionCount; ++index) {
+        const PlayerBlockActionData &action = packet.mPlayerActions[index];
         if (action.mAction == PlayerActionType::Jump) {
             if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);

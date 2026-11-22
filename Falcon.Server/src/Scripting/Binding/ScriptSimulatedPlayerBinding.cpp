@@ -54,10 +54,12 @@ namespace {
         int32_t gameType = 0, rotation = 0;
         JS_ToInt32(ctx, &gameType, argv[6]);
         JS_ToInt32(ctx, &rotation, argv[7]);
-        ServerPlayer &player = api->host().spawnSimulatedPlayer(toString(ctx, argv[5]), level, position,
+        ServerPlayer *player = api->host().spawnSimulatedPlayer(toString(ctx, argv[5]), level, position,
                                                                 floatOf(ctx, argv[4]), gameType);
-        player.getSimulatedController()->setTestRotation(rotation);
-        return api->makePlayer(player);
+        if (player == nullptr)
+            return JS_UNDEFINED;
+        player->getSimulatedController()->setTestRotation(rotation);
+        return api->makePlayer(*player);
     }
 
     JSValue spRemove(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv) {

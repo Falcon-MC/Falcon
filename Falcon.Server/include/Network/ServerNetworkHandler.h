@@ -659,8 +659,9 @@ public:
 
     int64_t allocateActorUniqueId();
 
-    // gametest: a player with no client, fed inputs by the server; nothing is sent to it
-    ServerPlayer &spawnSimulatedPlayer(const std::string &name, Level &level, const Vector3f &position, float yaw,
+    // gametest: a player with no client, fed inputs by the server; nothing is sent to it;
+    // null once this tick's spawn headroom is used up
+    ServerPlayer *spawnSimulatedPlayer(const std::string &name, Level &level, const Vector3f &position, float yaw,
                                        int32_t gameType);
 
     // leaves at the next safe point of the tick, as a closed connection would
@@ -1236,6 +1237,7 @@ private:
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
     void _updateServerAnnouncement();
+    void _updateDiscoveryProperties();
 
     void _updateJoinBurst();
 
@@ -1307,7 +1309,14 @@ private:
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;
-    // the name and player limit are read by the transport threads answering status queries
+    // copies of the properties the discovery answer needs: mProperties belongs to the main thread
+    struct DiscoveryProperties {
+        std::string mLevelName;
+        GameType mGameType = GameType::Survival;
+        bool mOnlineMode = false;
+    };
+    DiscoveryProperties mDiscoveryProperties;
+    // the announcement and discovery properties are read by the transport threads answering status queries
     mutable std::mutex mAnnouncementMutex;
     int mMaxPlayers;
     bool mIsListening;
@@ -1363,6 +1372,9 @@ private:
 
     void _tickSimulatedPlayer(ServerPlayer &player);
     void _removeSimulatedPlayers();
+    void _reserveSimulatedSpawns();
+    // spawns a tick may make without a rehash of mPlayers: they can run inside a walk over it
+    static constexpr size_t SIMULATED_SPAWN_HEADROOM = 64;
     unsigned long long mSimulatedPlayerCount = 0;
     std::vector<NetworkIdentifier> mSimulatedRemovals;
 
@@ -1395,9 +1407,13 @@ private:
         std::string mProperty;
         DataStoreChangeValue mValue;
         int32_t mUpdateCount = 0;
+        // the update count last resent to a stale client write: one resend per count
+        int32_t mResentUpdateCount = 0;
         std::unordered_map<std::string, int32_t> mPathUpdateCounts;
         std::unordered_set<std::string> mWritable;
         DataDrivenScreenCallbacks mCallbacks;
+        // a programmatic close reason is only believed once the server sent the close
+        bool mCloseRequested = false;
     };
 
     std::unordered_map<NetworkIdentifier, std::unordered_map<int32_t, DataDrivenScreen>, NetworkIdentifier::Hasher>

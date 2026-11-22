@@ -166,6 +166,13 @@ void ServerNetworkHandler::closeDataDrivenScreen(ServerPlayer &player, int32_t f
     if (!player.isSpawned())
         return;
 
+    auto playerScreens = mDataDrivenScreens.find(player.getNetworkIdentifier());
+    if (playerScreens != mDataDrivenScreens.end()) {
+        auto it = playerScreens->second.find(formId);
+        if (it != playerScreens->second.end())
+            it->second.mCloseRequested = true;
+    }
+
     ClientboundDataDrivenUICloseScreenPacket close;
     close.mHasFormId = true;
     close.mFormId = formId;
@@ -225,7 +232,10 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const Serverbound
         return;
 
     if (screen->mUpdateCount > update.mUpdateCount) {
+        if (screen->mResentUpdateCount == screen->mUpdateCount)
+            return;
         screen->mUpdateCount++;
+        screen->mResentUpdateCount = screen->mUpdateCount;
         screen->mPathUpdateCounts.clear();
         _sendDataStoreChange(id, screen->mProperty, screen->mUpdateCount, screen->mValue);
         return;
@@ -283,11 +293,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const Serverbound
     if (it == playerScreens->second.end())
         return;
 
+    // an unknown reason reads as a programmatic close: only a close the server sent is reported as one
+    DataDrivenScreenOutcome outcome = (DataDrivenScreenOutcome) packet.mCloseReason;
+    const bool programmatic = outcome == DataDrivenScreenOutcome::ProgrammaticClose
+                              || outcome == DataDrivenScreenOutcome::ProgrammaticCloseAll;
+    if ((programmatic && !it->second.mCloseRequested) || outcome > DataDrivenScreenOutcome::InvalidForm)
+        outcome = DataDrivenScreenOutcome::ClientCanceled;
+
     DataDrivenScreenCallbacks callbacks = std::move(it->second.mCallbacks);
     playerScreens->second.erase(it);
     if (playerScreens->second.empty())
         mDataDrivenScreens.erase(playerScreens);
 
     if (callbacks.mOnClose)
-        callbacks.mOnClose((DataDrivenScreenOutcome) packet.mCloseReason);
+        callbacks.mOnClose(outcome);
 }

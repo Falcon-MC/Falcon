@@ -438,6 +438,7 @@ ServerNetworkHandler::ServerNetworkHandler(const std::string &serverName, const 
           mAllowList(ServerPaths::file("allowlist.json")), mBanList(ServerPaths::file("banned-players.json")),
           mIpBanList(ServerPaths::file("banned-ips.json")) {
     mPlayerMovementRegistry = std::make_unique<PlayerMovementRegistry>();
+    _reserveSimulatedSpawns();
     mWorlds.add("Bedrock level", DEFAULT_VIEW_DISTANCE, 0);
 
     configureNetherNetSctp();
@@ -585,8 +586,11 @@ std::string ServerNetworkHandler::getMotd() const {
 }
 
 void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::string &gameVersion) {
-    mAnnouncement.mProtocolVersion = protocolVersion;
-    mAnnouncement.mGameVersion = gameVersion;
+    {
+        std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+        mAnnouncement.mProtocolVersion = protocolVersion;
+        mAnnouncement.mGameVersion = gameVersion;
+    }
 
     if (mIsListening)
         _updateServerAnnouncement();
@@ -594,6 +598,7 @@ void ServerNetworkHandler::setProtocolVersion(int protocolVersion, const std::st
 
 void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
     mProperties = properties;
+    _updateDiscoveryProperties();
     mPlayerIdleTimeoutTicks = (int64_t) mProperties.getPlayerIdleTimeout() * TICKS_PER_MINUTE;
 
     // encryption is what proves a client holds the key in its token: without it a login seen once replays
@@ -619,14 +624,14 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
                 std::lock_guard<std::mutex> lock(mAnnouncementMutex);
                 data.mServerName = mAnnouncement.mServerName;
                 data.mMaxPlayerCount = mAnnouncement.mMaxPlayers;
+                data.mProtocol = mAnnouncement.mProtocolVersion;
+                data.mGameVersion = mAnnouncement.mGameVersion;
+                data.mLevelName = mDiscoveryProperties.mLevelName;
+                data.mGameType = (int32_t) mDiscoveryProperties.mGameType;
+                data.mAcceptsOnlineAuth = mDiscoveryProperties.mOnlineMode;
+                data.mAcceptsSelfSignedAuth = !mDiscoveryProperties.mOnlineMode;
             }
-            data.mProtocol = mAnnouncement.mProtocolVersion;
-            data.mGameVersion = mAnnouncement.mGameVersion;
-            data.mLevelName = mProperties.getLevelName();
-            data.mGameType = (int32_t) mProperties.getGameType();
             data.mPlayerCount = getActivePlayerCount();
-            data.mAcceptsOnlineAuth = mProperties.getOnlineMode();
-            data.mAcceptsSelfSignedAuth = !mProperties.getOnlineMode();
             return data;
         });
 
@@ -999,6 +1004,7 @@ void ServerNetworkHandler::tick(bool paused) {
 
     mNetworkHandler->runEvents();
     _removeSimulatedPlayers();
+    _reserveSimulatedSpawns();
     mPlayerIndexDirty = true;
 
     for (World *world: mWorlds.getWorlds())
@@ -1239,6 +1245,13 @@ void ServerNetworkHandler::_updateServerAnnouncement() {
     mAnnouncement.mCurrentPlayers = getActivePlayerCount();
 }
 
+void ServerNetworkHandler::_updateDiscoveryProperties() {
+    std::lock_guard<std::mutex> lock(mAnnouncementMutex);
+    mDiscoveryProperties.mLevelName = mProperties.getLevelName();
+    mDiscoveryProperties.mGameType = mProperties.getGameType();
+    mDiscoveryProperties.mOnlineMode = mProperties.getOnlineMode();
+}
+
 bool ServerNetworkHandler::onValidateIncomingConnection(const NetworkIdentifier &id) {
     (void) id;
     return true;
@@ -1289,6 +1302,14 @@ void ServerNetworkHandler::onConnectionClosed(const NetworkIdentifier &id, Disco
         else
             index++;
     }
+    // a reconnect from the same address and port must not log in with this login
+    for (auto it = mLoginsAwaitingKeys.begin(); it != mLoginsAwaitingKeys.end();) {
+        if (it->mId == id)
+            it = mLoginsAwaitingKeys.erase(it);
+        else
+            ++it;
+    }
+    mScriptEngine.forgetPlayerJoins(id);
 
     ServerPlayer *player = _getPlayer(id);
     World *playerWorld = player != nullptr ? &getWorldFor(*player) : nullptr;
@@ -1404,6 +1425,11 @@ void ServerNetworkHandler::closeAllForms(ServerPlayer &player) {
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
 
     // no form id closes every data-driven screen; each comes back as ProgrammaticCloseAll
+    auto playerScreens = mDataDrivenScreens.find(player.getNetworkIdentifier());
+    if (playerScreens != mDataDrivenScreens.end()) {
+        for (auto &entry: playerScreens->second)
+            entry.second.mCloseRequested = true;
+    }
     ClientboundDataDrivenUICloseScreenPacket closeScreens;
     mNetworkHandler->send(player.getNetworkIdentifier(), closeScreens, mCodecContext);
 }
@@ -1514,6 +1540,10 @@ bool ServerNetworkHandler::_allowPacket(const NetworkIdentifier &id, RateLimited
         rates[(size_t) RateLimitedPacket::FormResponse] = mProperties.getMaxFormResponsesPerSecond();
         rates[(size_t) RateLimitedPacket::Movement] = mProperties.getMaxMovementPacketsPerSecond();
         rates[(size_t) RateLimitedPacket::ViolationWarning] = 1;
+        // relayed to every viewer: one a tick covers a held swing; an emote plays for seconds
+        rates[(size_t) RateLimitedPacket::Sound] = 20;
+        rates[(size_t) RateLimitedPacket::Animate] = 20;
+        rates[(size_t) RateLimitedPacket::Emote] = 2;
         limiter = mRateLimiters.emplace(id, PacketRateLimiter(rates)).first;
     }
 
@@ -2067,9 +2097,15 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerActio
         case PlayerActionType::StopSleep:
             stopSleep(*player);
             return;
-        case PlayerActionType::StartItemUseOn:
-            mScriptEngine.onItemStartUseOn(*player, packet.mBlockPosition, packet.mFace);
+        case PlayerActionType::StartItemUseOn: {
+            // scripts read the block: one in reach and loaded, peeked so a far position loads nothing
+            const Vector3i &position = packet.mBlockPosition;
+            if (!BlockActionHandler::canInteractWithBlock(*player, position)
+                || getLevelFor(*player).peekBlockPtr(position.x, position.y, position.z) == nullptr)
+                return;
+            mScriptEngine.onItemStartUseOn(*player, position, packet.mFace);
             return;
+        }
         case PlayerActionType::StopItemUseOn:
             mScriptEngine.onItemStopUseOn(*player, packet.mBlockPosition);
             return;
@@ -2109,7 +2145,7 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetPlayerGa
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned() || packet.mRuntimeActorId != player->getRuntimeId()
-        || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256)
+        || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256 || !_allowPacket(id, RateLimitedPacket::Emote))
         return;
 
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EMOTE)) {
@@ -2146,19 +2182,50 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const AnimatePack
         return;
     if (packet.mAction != AnimatePacket::Action::SwingArm && !player->isRiding())
         return;
+    if (!_allowPacket(id, RateLimitedPacket::Animate))
+        return;
 
     const Vector3f &position = player->getPosition();
     BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), position, packet, player);
+}
+
+namespace {
+    // a Falcon choice, not a game value: a little past the creative block reach
+    const float SOUND_RELAY_RADIUS = 16.0f;
+
+    // a position the client named, pulled back onto the sphere around the origin; a non-finite one is the origin
+    Vector3f clampToRadius(const Vector3f &position, const Vector3f &origin, float radius) {
+        const float dx = position.x - origin.x;
+        const float dy = position.y - origin.y;
+        const float dz = position.z - origin.z;
+        const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (!std::isfinite(distance))
+            return origin;
+        if (distance <= radius)
+            return position;
+        const float scale = radius / distance;
+        return Vector3f(origin.x + dx * scale, origin.y + dy * scale, origin.z + dz * scale);
+    }
 }
 
 // sounds the client plays itself (attacks, swimming, eating...) reach the players around it
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const LevelSoundEventPacket &packet) {
     ServerPlayer *player = _getPlayer(id);
     if (player == nullptr || !player->isSpawned() || packet.mSound.empty() || packet.mSound.size() > 256
-        || packet.mActorType.size() > 256)
+        || packet.mActorType.size() > 256 || !_allowPacket(id, RateLimitedPacket::Sound))
         return;
+
+    // a client only makes sounds near itself, as itself; others hear them at their usual falloff
+    const Vector3f &origin = player->getPosition();
+    LevelSoundEventPacket sound = packet;
+    sound.mPosition = clampToRadius(packet.mPosition, origin, SOUND_RELAY_RADIUS);
+    if (sound.mHasFirePosition)
+        sound.mFirePosition = clampToRadius(packet.mFirePosition, origin, SOUND_RELAY_RADIUS);
+    if (sound.mActorUniqueId != -1)
+        sound.mActorUniqueId = player->getUniqueId();
+    sound.mDisableRelativeVolume = false;
     // sent to whoever views the sender, not the position it names: a client cannot reach far players with it
-    BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), player->getPosition(), packet, player);
+    BlockActionHandler::broadcastToViewers(*this, getLevelFor(*player), origin, sound, player);
 }
 
 void ServerNetworkHandler::handle(const NetworkIdentifier &id, const SetDefaultGameTypePacket &packet) {
@@ -2680,6 +2747,7 @@ void ServerNetworkHandler::setDefaultGameType(GameType gameType) {
     static const char *const NAMES[] = {"survival", "creative", "adventure"};
     const int index = (int) gameType;
     mProperties.setProperty("gamemode", index >= 0 && index < 3 ? NAMES[index] : "spectator");
+    _updateDiscoveryProperties();
 }
 
 void ServerNetworkHandler::setDifficulty(const std::string &difficulty) {

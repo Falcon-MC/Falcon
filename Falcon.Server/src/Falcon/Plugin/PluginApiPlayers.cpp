@@ -54,9 +54,9 @@ namespace {
             if (sameName(entry.second.getName(), playerName))
                 return nullptr;
         }
-        return toHandle(&host.spawnSimulatedPlayer(playerName, target,
-                                                   Vector3f((float) position.x, (float) position.y, (float) position.z),
-                                                   yaw, (int32_t) gameMode));
+        return toHandle(host.spawnSimulatedPlayer(playerName, target,
+                                                  Vector3f((float) position.x, (float) position.y, (float) position.z),
+                                                  yaw, (int32_t) gameMode));
     }
 
     int playerIsSimulated(FalconPlayer *target) {

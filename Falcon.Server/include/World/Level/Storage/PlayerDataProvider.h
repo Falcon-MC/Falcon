@@ -21,8 +21,8 @@ public:
     static constexpr const char *TAG_OWNER_XUID = "FalconOwnerXuid";
 
     // makes the save under this name the one of this account: another account's is set aside under its
-    // own xuid and this account's earlier one brought back. false when that could not be done, and
-    // nothing may then be saved under the name
+    // own xuid and this account's earlier one brought back. false when that could not be done, or when an
+    // empty xuid meets a save an account owns, and nothing may then be saved under the name
     bool claimData(const std::string &name, const std::string &xuid) const;
 
     // no path separators, no traversal; every name used as a file goes through it

@@ -14,6 +14,7 @@ namespace {
     struct Transcript {
         std::vector<unsigned char> mRecords;
         std::string mFingerprint;
+        uint64_t mOpened = 0;
     };
 
     // type, length, sequence, fragment offset, fragment length
@@ -27,6 +28,7 @@ namespace {
 
     std::mutex gMutex;
     std::unordered_map<const void *, Transcript> gSessions;
+    uint64_t gNextOpened = 0;
 
     std::string fingerprintOf(const unsigned char *certificate, size_t size) {
         unsigned char digest[EVP_MAX_MD_SIZE];
@@ -69,9 +71,18 @@ namespace {
         std::lock_guard<std::mutex> lock(gMutex);
         // a first hello opens a new session on a pointer that may have served another
         if (sent && data[0] == CLIENT_HELLO && data[4] == 0 && data[5] == 0) {
-            if (gSessions.size() >= MAX_SESSIONS)
-                gSessions.clear();
-            gSessions[session] = Transcript();
+            // full: the oldest goes, a burst of hellos must not wipe the handshakes in progress
+            if (gSessions.size() >= MAX_SESSIONS && gSessions.find(session) == gSessions.end()) {
+                auto oldest = gSessions.begin();
+                for (auto it = gSessions.begin(); it != gSessions.end(); ++it) {
+                    if (it->second.mOpened < oldest->second.mOpened)
+                        oldest = it;
+                }
+                gSessions.erase(oldest);
+            }
+            Transcript &opened = gSessions[session];
+            opened = Transcript();
+            opened.mOpened = gNextOpened++;
         }
 
         const auto found = gSessions.find(session);

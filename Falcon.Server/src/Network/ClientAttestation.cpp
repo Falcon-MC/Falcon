@@ -167,16 +167,7 @@ void ClientAttestation::inspect(const nethernet::Connection &connection) {
     append(evidence, Section::JoinRequest, withoutServerAddress(connection.getRemoteRequest()));
     append(evidence, Section::Candidates, candidatesWithoutAddresses(connection.getRemoteCandidates()));
     append(evidence, Section::Channels, connection.getRemoteChannels());
-
-    {
-        std::lock_guard<std::mutex> lock(mMutex);
-        if (mStopping || mQuestions.size() >= MAX_QUESTIONS)
-            return;
-        mQuestions.push_back(Question{connection.getNetworkIdentifier(), std::move(evidence)});
-        if (!mWorker.joinable())
-            mWorker = std::thread([this]() { _run(); });
-    }
-    mWake.notify_one();
+    _ask(connection.getNetworkIdentifier(), std::move(evidence));
 }
 
 void ClientAttestation::inspectSession(const NetworkIdentifier &id,
@@ -191,10 +182,25 @@ void ClientAttestation::inspectSession(const NetworkIdentifier &id,
 
     std::string evidence;
     append(evidence, Section::Batches, counts);
+    _ask(id, std::move(evidence));
+}
 
+void ClientAttestation::_ask(const NetworkIdentifier &id, std::string evidence) {
     {
         std::lock_guard<std::mutex> lock(mMutex);
-        if (mStopping || mQuestions.size() >= MAX_QUESTIONS)
+        if (mStopping)
+            return;
+
+        // one question per client: a newer one replaces what is still waiting, a client cannot fill the queue alone
+        for (Question &question: mQuestions) {
+            if (question.mId == id) {
+                question.mEvidence = std::move(evidence);
+                return;
+            }
+        }
+
+        // full: the question is dropped and the client stays, as when the answer is late
+        if (mQuestions.size() >= MAX_QUESTIONS)
             return;
         mQuestions.push_back(Question{id, std::move(evidence)});
         if (!mWorker.joinable())
