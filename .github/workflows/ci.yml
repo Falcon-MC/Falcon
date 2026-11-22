@@ -129,6 +129,16 @@ jobs:
           cmake --build build --parallel 4
           ccache --show-stats
 
+      - name: Check the executable runs without MSYS2
+        if: matrix.os == 'windows-2022'
+        shell: msys2 {0}
+        run: |
+          # a dll of the toolchain imported by the exe is missing on a machine without MSYS2
+          if objdump -p build/Falcon.Server/FalconServer.exe | grep -iE "DLL Name: lib"; then
+            echo "FalconServer.exe needs dlls from MSYS2"
+            exit 1
+          fi
+
   tests:
     name: Tests linux-x64
     runs-on: ubuntu-22.04
