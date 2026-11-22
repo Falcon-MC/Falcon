@@ -316,6 +316,20 @@ add.mMetadata.mEntries.push_back(flags3);
 
         motion.y -= ITEM_GRAVITY;
 
+        // the block an item runs into may send it off itself, as a bell does
+        const auto hits = [&](int32_t x, int32_t y, int32_t z) {
+            const BlockState *state = level.peekBlockPtr(x, y, z);
+            const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+            if (block == nullptr)
+                return false;
+            const BlockState copy = *state;
+            actor.setMotion(motion);
+            if (!block->onItemHit(owner, level, Vector3i(x, y, z), copy, actor))
+                return false;
+            broadcastItemActorMove(owner, actor);
+            return true;
+        };
+
         Vector3f next = position;
 
         const int32_t currentY = (int32_t) std::floor(position.y);
@@ -323,8 +337,11 @@ add.mMetadata.mEntries.push_back(flags3);
 
         if (motion.x != 0.0f) {
             const float candidateX = position.x + motion.x;
-            if (blocksItem(level, actor, (int32_t) std::floor(candidateX), currentY, currentZ, position.y))
+            if (blocksItem(level, actor, (int32_t) std::floor(candidateX), currentY, currentZ, position.y)) {
+                if (hits((int32_t) std::floor(candidateX), currentY, currentZ))
+                    return;
                 motion.x = 0.0f;
+            }
             else
                 next.x = candidateX;
         }
@@ -332,8 +349,11 @@ add.mMetadata.mEntries.push_back(flags3);
         if (motion.z != 0.0f) {
             const float candidateZ = position.z + motion.z;
             if (blocksItem(level, actor, (int32_t) std::floor(next.x), currentY, (int32_t) std::floor(candidateZ),
-                           position.y))
+                           position.y)) {
+                if (hits((int32_t) std::floor(next.x), currentY, (int32_t) std::floor(candidateZ)))
+                    return;
                 motion.z = 0.0f;
+            }
             else
                 next.z = candidateZ;
         }
@@ -346,6 +366,7 @@ add.mMetadata.mEntries.push_back(flags3);
 
         bool solid = level.isSolidAt(blockX, blockY, blockZ);
         float landing = solid ? itemFloor(level, actor, blockX, blockY, blockZ) : 0.0f;
+        int32_t landingY = blockY;
         // a fall can cross a low floor such as a snow layer's look in one tick: land on the first one crossed
         if (motion.y < 0.0f) {
             for (int32_t y = (int32_t) std::floor(position.y); y > blockY; --y) {
@@ -355,15 +376,20 @@ add.mMetadata.mEntries.push_back(flags3);
                 if (position.y >= floor && next.y < floor) {
                     solid = true;
                     landing = floor;
+                    landingY = y;
                     break;
                 }
             }
         }
         if (motion.y < 0.0f && solid && next.y < landing) {
+            if (hits(blockX, landingY, blockZ))
+                return;
             next.y = landing;
             motion = Vector3f(0.0f, 0.0f, 0.0f);
             actor.setOnGround(true);
         } else if (motion.y > 0.0f && solid) {
+            if (hits(blockX, blockY, blockZ))
+                return;
             next.y = position.y;
             motion.y = 0.0f;
         } else {

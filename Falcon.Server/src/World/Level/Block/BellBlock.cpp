@@ -14,6 +14,7 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Vibration/GameEvent.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 
 #include <cmath>
@@ -29,6 +30,8 @@ namespace {
     // how far around the bell's block the mobs hear it
     const float ALERT_REACH_XZ = 32.0f;
     const float ALERT_REACH_Y = 12.0f;
+    const float ITEM_BOUNCE_MIN_SPEED = 0.0005f;
+    const float ITEM_BOUNCE_MIN_DISTANCE = 0.0001f;
 
     // the ring direction the bell swings to for each axis the player faces
     const int32_t RING_DIRECTION[] = {2, 3, 0, 1};
@@ -105,6 +108,33 @@ bool BellBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, const
         return false;
     ring(owner, level, position, state, state.mStates.getInt("direction", 0), nullptr);
     return false;
+}
+
+bool BellBlock::onItemHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                          const BlockState &state, ItemActor &item) const {
+    // an item at rest or sliding along one axis only does not ring it
+    const Vector3f motion = item.getMotion();
+    if (std::fabs(motion.x) <= ITEM_BOUNCE_MIN_SPEED || std::fabs(motion.y) <= ITEM_BOUNCE_MIN_SPEED
+        || std::fabs(motion.z) <= ITEM_BOUNCE_MIN_SPEED)
+        return false;
+
+    const Vector3f &at = item.getPosition();
+    float normalX = at.x - ((float) position.x + 0.5f);
+    float normalY = at.y - ((float) position.y + 0.5f);
+    float normalZ = at.z - ((float) position.z + 0.5f);
+    const float length = std::sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+    if (length < ITEM_BOUNCE_MIN_DISTANCE) {
+        normalX = normalY = normalZ = 0.0f;
+    } else {
+        normalX /= length;
+        normalY /= length;
+        normalZ /= length;
+    }
+    const float along = motion.x * normalX + motion.y * normalY + motion.z * normalZ;
+    item.setMotion(Vector3f(motion.x - 2.0f * along * normalX, motion.y - 2.0f * along * normalY,
+                            motion.z - 2.0f * along * normalZ));
+    ring(owner, level, position, state, state.mStates.getInt("direction", 0), &item);
+    return true;
 }
 
 void BellBlock::onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

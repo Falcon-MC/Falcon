@@ -1,4 +1,6 @@
+#include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/AI/Goal/HideGoal.h"
@@ -25,6 +27,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <cmath>
 #include <string>
 
 namespace {
@@ -181,6 +184,38 @@ namespace {
         require(!arena.ringing(other), "a wind charge's hit rang the bell");
     }
 
+    // a thrown item bounces off it, away from its middle, and rings it the way it faces; a sliding one does not
+    void thrownItems(Arena &arena) {
+        // away from the redstone block the placing case left at 37
+        const Vector3i bell = arena.bell(44, "hanging", 3);
+        ItemActor *item = ItemActorHandler::dropItem(arena.mOwner, *arena.mLevel, Vector3f(43.9f, 100.5f, 0.5f),
+                                                     arena.mOwner.createItemStack("minecraft:stone", 1),
+                                                     Vector3f(0.3f, 0.0f, 0.05f), 10);
+        require(item != nullptr, "no item dropped");
+        require(!arena.block(bell).onItemHit(arena.mOwner, *arena.mLevel, bell, arena.at(bell), *item)
+                        && !arena.ringing(bell),
+                "an item moving on two axes rang the bell");
+
+        item->setMotion(Vector3f(0.3f, -0.1f, 0.05f));
+        require(arena.block(bell).onItemHit(arena.mOwner, *arena.mLevel, bell, arena.at(bell), *item),
+                "a thrown item did not bounce off the bell");
+        require(arena.ringing(bell) && arena.actor(bell)->getDirection() == 3, "a thrown item did not ring the bell");
+        const Vector3f &bounced = item->getMotion();
+        require(std::fabs(bounced.x + 0.3f) < 0.001f && std::fabs(bounced.y + 0.1f) < 0.001f
+                        && std::fabs(bounced.z - 0.05f) < 0.001f,
+                "the item did not bounce away from the bell's middle");
+
+        // the item's own fall runs into the bell
+        const Vector3i other = arena.bell(48, "standing", 1);
+        ItemActor *thrown = ItemActorHandler::dropItem(arena.mOwner, *arena.mLevel, Vector3f(47.7f, 100.3f, 0.5f),
+                                                       arena.mOwner.createItemStack("minecraft:stone", 1),
+                                                       Vector3f(0.5f, 0.2f, 0.05f), 10);
+        require(thrown != nullptr, "no item thrown");
+        ItemActorHandler::tickItemActors(arena.mOwner);
+        require(arena.ringing(other), "an item flying into a bell did not ring it");
+        require(thrown->getMotion().x < 0.0f, "an item flying into a bell did not bounce back");
+    }
+
     // a burst rings it the way it faces, but not while it still swings
     void windBurst(Arena &arena) {
         const Vector3i bell = arena.bell(34, "hanging", 2);
@@ -279,6 +314,7 @@ int main() {
         redstone(arena);
         projectiles(arena);
         windBurst(arena);
+        thrownItems(arena);
         alert(arena);
         toBed(arena);
         hiding(arena);
