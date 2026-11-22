@@ -125,6 +125,19 @@ bool CandleBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, con
     return false;
 }
 
+bool CandleBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+    return putOutByWind(owner, level, position, state);
+}
+
+bool CandleBlock::putOutByWind(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                               const BlockState &state) {
+    if (state.mStates.getByte(LIT, 0) == 0)
+        return false;
+    extinguish(owner, level, position, state, nullptr);
+    return true;
+}
+
 bool CandleBlock::canBeLit(Level &level, const Vector3i &position, const BlockState &state) {
     if (state.mStates.getByte(LIT, 0) != 0)
         return false;

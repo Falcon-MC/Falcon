@@ -47,6 +47,9 @@ public:
     bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
                          ServerActor &projectile) const override;
 
+    bool onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                     const BlockState &state) const override;
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 

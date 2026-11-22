@@ -29,8 +29,6 @@ namespace {
     const float REACH_PER_POWER = 2.0f;
     const float MOB_EYE_RATIO = 0.85f;
     const char *const AIR = "minecraft:air";
-    const char *const LIT = "lit";
-    const char *const EXTINGUISH_SOUND = "extinguish.candle";
 
     float numberOf(const json::Value &object, const char *key, float fallback) {
         const json::Value *value = object.get(key);
@@ -48,28 +46,6 @@ namespace {
 
     bool isLiquid(const std::string &name) {
         return isWater(name) || name == "minecraft:lava" || name == "minecraft:flowing_lava";
-    }
-
-    bool endsWith(const std::string &value, const char *suffix) {
-        const size_t length = std::char_traits<char>::length(suffix);
-        return value.size() >= length && value.compare(value.size() - length, length, suffix) == 0;
-    }
-
-    // lit candles and candle cakes go out
-    bool extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
-        if (!endsWith(state.mName, "candle") && !endsWith(state.mName, "candle_cake"))
-            return false;
-        if (!state.mStates.contains(LIT) || state.mStates.getByte(LIT, 0) == 0)
-            return false;
-
-        Tag states = state.mStates;
-        states.putByte(LIT, 0);
-        const BlockState out(state.mName, states);
-        level.setBlock(position, out, true);
-        BlockActionHandler::broadcastBlockUpdate(owner, level, position, out);
-        owner.playLevelSound(level, EXTINGUISH_SOUND,
-                             Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f));
-        return true;
     }
 
     AxisAlignedBB boxOf(const Vector3f &feet, float width, float height) {
@@ -234,8 +210,6 @@ void WindBurst::burst(ServerNetworkHandler &owner, Level &level, const Vector3f 
         if (state == nullptr)
             continue;
         const BlockState copy = *state;
-        if (extinguish(owner, level, position, copy))
-            continue;
         if (const Block *block = VanillaBlocks::fromIdentifier(copy.mName))
             block->onWindBurst(owner, level, position, copy);
     }

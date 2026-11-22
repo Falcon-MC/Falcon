@@ -124,6 +124,11 @@ bool CandleCakeBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level,
     return false;
 }
 
+bool CandleCakeBlock::onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state) const {
+    return CandleBlock::putOutByWind(owner, level, position, state);
+}
+
 std::string CandleCakeBlock::candleOf(const std::string &candleCakeIdentifier) {
     const std::string suffix = CANDLE_CAKE_SUFFIX;
     if (candleCakeIdentifier.size() <= suffix.size())
