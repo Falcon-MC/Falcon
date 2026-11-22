@@ -16,6 +16,7 @@
 #include <vector>
 
 enum class Difficulty : int;
+class ServerNetworkHandler;
 class Level;
 
 // the EntityHealCause values
@@ -366,6 +367,21 @@ public:
 
     void tickCombat(int tickDiff = 1);
 
+    // a sculk catalyst handles each death once
+    bool isHandledBySculkCatalyst() const {
+        return mHandledBySculkCatalyst;
+    }
+
+    void setHandledBySculkCatalyst() {
+        mHandledBySculkCatalyst = true;
+    }
+
+    // the experience this death drops, taken: it is not dropped any more; 0 when there is none to take
+    virtual int32_t takeDeathExperience(ServerNetworkHandler &owner) {
+        (void) owner;
+        return 0;
+    }
+
     void knockBack(float x, float z, float force = 0.4f, float verticalLimit = 0.4f);
 
     // the push a plugin set for the hit being dealt: the next knockback this tick uses it in place of its own, the
@@ -533,6 +549,7 @@ public:
     float computeFallDamage(float distance) const;
 
 protected:
+    bool mHandledBySculkCatalyst = false;
     void _changeFood(float food);
 
     static inline HealFilter sHealFilter;

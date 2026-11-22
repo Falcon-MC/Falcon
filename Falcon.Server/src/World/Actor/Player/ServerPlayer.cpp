@@ -1247,3 +1247,16 @@ void ServerPlayer::recordCamera(const CameraInstructionPacket &packet) {
     if (packet.mHasClear && packet.mClear)
         mCameraState.mPreset = "minecraft:first_person";
 }
+
+int32_t ServerPlayer::takeDeathExperience(ServerNetworkHandler &owner) {
+    if (mDeathExperienceTaken || isCreative()
+        || owner.getWorldFor(*this).getOverworld().getGameRules().getBool("keepinventory"))
+        return 0;
+    mDeathExperienceTaken = true;
+    return getExperience().getXpDropAmount();
+}
+
+void ServerPlayer::clearSculkCatalystState() {
+    mDeathExperienceTaken = false;
+    mHandledBySculkCatalyst = false;
+}

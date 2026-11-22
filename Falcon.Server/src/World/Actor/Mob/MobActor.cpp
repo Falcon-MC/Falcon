@@ -28,6 +28,7 @@
 #include "World/Level/Explosion.h"
 #include "World/Level/Block/BlockShape.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
@@ -2934,6 +2935,9 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     if (fatal != nullptr && WitherActor::isWitherDamage(owner, *fatal))
         WitherActor::leaveWitherRose(owner, *this);
 
+    // heard before anything drops: a sculk catalyst near takes the experience
+    owner.getLevelFor(*this).postGameEvent(GameEvents::ENTITY_DIE, getPosition(), this);
+
     if (dropsRewardsOnDeath()) {
         // plugins listening for the death see the loot first: it is gathered here and drops after their event
         if (PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_DEATH) != nullptr) {
@@ -2950,6 +2954,15 @@ void MobActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t l
     ServerActor::kill(owner, source, lootingLevel);
 }
 
+int32_t MobActor::takeDeathExperience(ServerNetworkHandler &owner) {
+    if (mDeathExperienceTaken || !dropsRewardsOnDeath()
+        || !owner.getWorldFor(*this).getOverworld().getGameRules().getBool("domobloot"))
+        return 0;
+    mDeathExperienceTaken = true;
+    const int reward = _experienceReward("on_death", nullptr, true);
+    return reward >= 0 ? reward : getExperienceDrop();
+}
+
 void MobActor::dropDeathRewards(ServerNetworkHandler &owner, ServerPlayer *killer, int32_t lootingLevel) {
     if (!owner.getWorldFor(*this).getOverworld().getGameRules().getBool("domobloot"))
         return;
@@ -2960,11 +2973,11 @@ void MobActor::dropDeathRewards(ServerNetworkHandler &owner, ServerPlayer *kille
     mEquipment.dropOnDeath(owner, level, *this, killer != nullptr, lootingLevel);
     mLeash.detach(owner, *this, true);
 
-    if (experience > 0)
+    if (experience > 0 && !mDeathExperienceTaken)
         owner.spawnExperienceOrbs(level, getPosition(), experience);
 }
 
-int MobActor::_experienceReward(const char *key, const ServerPlayer *player) const {
+int MobActor::_experienceReward(const char *key, const ServerPlayer *player, bool lastHitByPlayer) const {
     const json::Value *reward = getComponent(EXPERIENCE_REWARD_COMPONENT);
     const json::Value *formula = reward == nullptr ? nullptr : reward->get(key);
     if (formula == nullptr)
@@ -2974,7 +2987,7 @@ int MobActor::_experienceReward(const char *key, const ServerPlayer *player) con
         return std::max(0, (int) std::lround(formula->number(0.0)));
 
     MolangContext context;
-    context.mLastHitByPlayer = player != nullptr;
+    context.mLastHitByPlayer = player != nullptr || lastHitByPlayer;
     context.mPlayerLevel = player == nullptr ? 0 : player->getExperience().getXpLevel();
     return std::max(0, (int) std::lround(Molang::evaluate(formula->mString, *this, context).mNumber));
 }

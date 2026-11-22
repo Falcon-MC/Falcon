@@ -1,5 +1,6 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Actor/Mob/Hostile/WitherActor.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
@@ -283,6 +284,9 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     if (mFatalSource != nullptr && WitherActor::isWitherDamage(*this, *mFatalSource))
         WitherActor::leaveWitherRose(*this, player);
 
+    // heard before the experience drops: a sculk catalyst near takes it
+    getLevelFor(player).postGameEvent(GameEvents::ENTITY_DIE, player.getPosition(), &player);
+
     const GameRules &rules = getWorldFor(player).getOverworld().getGameRules();
     const bool ruleKeepsInventory = rules.getBool("keepinventory");
 
@@ -308,6 +312,7 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
         _killPlayerWithPlugins(*plugins, player, deathEvent, ruleKeepsInventory);
     }
 
+    player.clearSculkCatalystState();
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
 
@@ -359,7 +364,7 @@ void ServerNetworkHandler::_killPlayerWithPlugins(PluginManager &plugins, Server
 
     bool keepInventory = ruleKeepsInventory;
     bool keepExperience = ruleKeepsInventory;
-    int32_t experience = player.isCreative() ? 0 : player.getExperience().getXpDropAmount();
+    int32_t experience = player.isCreative() || player.isDeathExperienceTaken() ? 0 : player.getExperience().getXpDropAmount();
     deathEvent.mDrops = &capture.mItems;
     deathEvent.mExperience = &experience;
     deathEvent.mKeepInventory = &keepInventory;
@@ -401,7 +406,8 @@ void ServerNetworkHandler::_killPlayerWithPlugins(PluginManager &plugins, Server
 }
 
 void ServerNetworkHandler::_dropExperienceOnDeath(ServerPlayer &player, int32_t experience) {
-    if (experience > 0)
+    // a sculk catalyst near took it already
+    if (experience > 0 && !player.isDeathExperienceTaken())
         spawnExperienceOrbs(getLevelFor(player), player.getPosition(), experience);
     player.getExperience().reset();
     player.syncExperience();
