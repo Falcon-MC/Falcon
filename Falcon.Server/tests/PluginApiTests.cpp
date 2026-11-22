@@ -830,6 +830,58 @@ namespace {
     }
 
     // packets such as UpdateAbilities name the player by this id, which outlives the session's runtime id
+    void windowClosed(FalconPlayer *, uint32_t window, void *userData) {
+        auto &closes = *static_cast<std::vector<uint32_t> *>(userData);
+        closes.push_back(window);
+    }
+
+    void pluginWindows(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin owned;
+        owned.mDescription.mName = "Menus";
+        owned.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(owned);
+        std::vector<uint32_t> closes;
+        const FalconWindowDescriptor chest{0, FalconBlockPos{2, 102, 2}, -1, 27, &windowClosed, &closes};
+        const uint32_t window = api.playerOpenWindow(handle, fixture.playerHandle(), &chest);
+        require(window != 0, "the window did not open");
+        require(api.playerOpenWindow(handle, fixture.playerHandle(), &chest) == 0, "a second window opened over the first");
+        const FalconWindowDescriptor empty{0, FalconBlockPos{2, 102, 2}, -1, 0, &windowClosed, &closes};
+        require(api.playerOpenWindow(handle, fixture.playerHandle(), &empty) == 0, "a window without slots opened");
+
+        FalconItem *diamonds = api.itemCreate("minecraft:diamond", 5);
+        require(api.playerSetWindowItem(fixture.playerHandle(), window, 3, diamonds) == 1, "the slot was not set");
+        require(api.playerSetWindowItem(fixture.playerHandle(), window, 27, diamonds) == 0, "a slot past the size was set");
+        api.itemDestroy(diamonds);
+        FalconItem *read = api.playerWindowItem(fixture.playerHandle(), window, 3);
+        require(read != nullptr && std::string(api.itemIdentifier(read)) == "minecraft:diamond" && api.itemCount(read) == 5,
+                "the slot did not read back");
+        api.itemDestroy(read);
+        require(fixture.player->getInventoryManager().getContainer() != nullptr, "the window is not the open container");
+
+        api.playerCloseWindow(fixture.playerHandle(), window + 1);
+        require(closes.empty(), "another window id closed the window");
+        api.playerCloseWindow(fixture.playerHandle(), window);
+        require(closes == std::vector<uint32_t>{window}, "the close handler did not run once with the window");
+        require(api.playerWindowItem(fixture.playerHandle(), window, 3) == nullptr, "a closed window still read");
+        // the client confirms the close before another window opens
+        fixture.player->getInventoryManager().onClientRemoveWindow(window);
+        const uint32_t again = api.playerOpenWindow(handle, fixture.playerHandle(), &chest);
+        require(again != 0, "a window did not open once the first closed");
+        api.playerCloseWindow(fixture.playerHandle(), again);
+        fixture.player->getInventoryManager().onClientRemoveWindow(again);
+        require(closes.size() == 2, "the second window's handler did not run");
+
+        const uint32_t chestId = api.serverBlockNetworkId("minecraft:chest", "{\"minecraft:cardinal_direction\":\"north\"}");
+        require(api.levelSetBlock(fixture.levelHandle(), FalconBlockPos{3, 101, 3}, "minecraft:chest",
+                                  "{\"minecraft:cardinal_direction\":\"north\"}") == 1,
+                "the chest was not placed");
+        require(chestId != 0 && chestId == (uint32_t) fixture.level->getBlockState(3, 101, 3).getHash(),
+                "the chest's network id is not the one Falcon sends it by");
+        require(api.serverBlockNetworkId("minecraft:not_a_block", "{}") == 0, "an unknown block has a network id");
+        require(api.serverBlockNetworkId("chest", "{\"minecraft:cardinal_direction\":\"north\"}") == chestId,
+                "the namespace changed the id");
+    }
+
     void uniqueId(const FalconServerApi &api, Fixture &fixture) {
         fixture.player->setUniqueId(-4242);
         require(api.playerUniqueId(fixture.playerHandle()) == -4242, "the player's unique id was not the one they keep");
@@ -968,6 +1020,7 @@ namespace {
         worldEvents(api, fixture);
         simulatedPlayers(api, fixture);
         uniqueId(api, fixture);
+        pluginWindows(api, fixture);
         permissionGroups(api, fixture);
     }
 }

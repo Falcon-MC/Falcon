@@ -109,6 +109,8 @@ ServerPlayer *ServerNetworkHandler::spawnSimulatedPlayer(const std::string &name
     player.setSessionInspected();
     player.setSpawnChunksReady(true);
     player.setLoginState(ServerPlayer::LoginState::StartGameSent);
+    // windows open for it as for a client: a plugin's menu, a chest a script opens
+    player.getInventoryManager().attach(&player, this);
 
     _addToPlayerList(player);
     LoginHandler::handleSetLocalPlayerAsInitialized(*this, player);

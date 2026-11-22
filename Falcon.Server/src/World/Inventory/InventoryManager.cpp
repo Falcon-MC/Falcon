@@ -1391,6 +1391,8 @@ void InventoryManager::refreshOpenContainer(const Vector3i &position) {
 }
 
 Container *InventoryManager::getContainer() {
+    if (mPluginWindow != nullptr)
+        return isContainerOpen() ? mPluginWindow.get() : nullptr;
     if (mContainerActorId != -1) {
         ServerActor *actor = mOwner == nullptr ? nullptr : mOwner->getActor(mContainerActorId);
         return actor == nullptr || !isContainerOpen() ? nullptr : actor->getEntityContainer();
@@ -1515,6 +1517,44 @@ bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType typ
     return true;
 }
 
+int InventoryManager::openPluginWindow(std::shared_ptr<Container> container, ContainerType type,
+                                      const Vector3i &position, int64_t actorId, std::function<void()> onClosed) {
+    if (container == nullptr || mPlayer == nullptr || mSender == nullptr || mOwner == nullptr)
+        return CONTAINER_ID_NONE;
+    if (mContainerWindowId != CONTAINER_ID_NONE || mMainInventoryWindowId != CONTAINER_ID_NONE
+        || mCraftingTableWindowId != CONTAINER_ID_NONE || mFurnaceWindowId != CONTAINER_ID_NONE
+        || mAnvilWindowId != CONTAINER_ID_NONE || mTradeWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        return CONTAINER_ID_NONE;
+
+    const int windowId = _getNewWindowId();
+    mContainerWindowId = windowId;
+    mContainerActorId = actorId;
+    mContainerPosition = position;
+    mCurrentWindowType = type;
+    mPluginWindow = std::move(container);
+    mPluginWindowClosed = std::move(onClosed);
+
+    ContainerOpenPacket open;
+    open.mWindowId = (int8_t) windowId;
+    open.mType = type;
+    open.mBlockPosition = position;
+    open.mUniqueActorId = actorId;
+    mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
+    _sendContentPackets(windowId, *mPluginWindow);
+    return windowId;
+}
+
+Container *InventoryManager::getPluginWindow(int windowId) {
+    if (mPluginWindow == nullptr || windowId == CONTAINER_ID_NONE || windowId != mContainerWindowId)
+        return nullptr;
+    return mPluginWindow.get();
+}
+
+void InventoryManager::refreshPluginWindow() {
+    if (mPluginWindow != nullptr && isContainerOpen())
+        _sendContentPackets(mContainerWindowId, *mPluginWindow);
+}
+
 void InventoryManager::refreshEntityContainer(int64_t actorId) {
     if (mContainerActorId == -1 || mContainerActorId != actorId)
         return;
@@ -1526,6 +1566,16 @@ void InventoryManager::refreshEntityContainer(int64_t actorId) {
 // the entity container window fires entityContainerClosed, a block one closes its block actor
 void InventoryManager::_closeContainerWindow() {
     clearEnchantOptions();
+    if (mPluginWindow != nullptr) {
+        // reset first: the plugin may open another window from its handler
+        std::function<void()> onClosed = std::move(mPluginWindowClosed);
+        mPluginWindow.reset();
+        mPluginWindowClosed = nullptr;
+        mContainerActorId = -1;
+        if (onClosed)
+            onClosed();
+        return;
+    }
     if (mContainerActorId == -1) {
         _closeBlockContainer();
         return;

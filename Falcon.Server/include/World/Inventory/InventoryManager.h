@@ -6,6 +6,8 @@
 #include "Protocol/Types/ContainerType.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <functional>
+#include <memory>
 #include <string>
 
 #include <cstdint>
@@ -181,6 +183,17 @@ public:
     // a ContainerOpenPacket naming the actor; false while another window is open or it has no container
     bool openEntityContainer(ServerActor &actor, ContainerType type);
 
+    // a plugin's container, drawn from a block or an actor the client knows: no block actor holds it. The window id,
+    // CONTAINER_ID_NONE while another window is open; onClosed runs once it closes
+    int openPluginWindow(std::shared_ptr<Container> container, ContainerType type, const Vector3i &position,
+                         int64_t actorId, std::function<void()> onClosed);
+
+    // the plugin window with that id, nullptr once it closed
+    Container *getPluginWindow(int windowId);
+
+    // resends the plugin window after the plugin changed a slot
+    void refreshPluginWindow();
+
     // the trade screen opens from UpdateTradePacket alone, no ContainerOpenPacket
     bool openTrade(int64_t traderId, UpdateTradePacket &packet);
 
@@ -339,6 +352,8 @@ private:
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     int64_t mContainerActorId = -1;
+    std::shared_ptr<Container> mPluginWindow;
+    std::function<void()> mPluginWindowClosed;
     int mTradeWindowId = CONTAINER_ID_NONE;
     int64_t mTradeActorId = -1;
     std::vector<std::pair<const Level *, int64_t>> mTouchedColumns;
