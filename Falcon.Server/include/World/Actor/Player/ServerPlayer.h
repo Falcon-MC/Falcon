@@ -155,6 +155,14 @@ public:
         mName = name;
     }
 
+    const std::optional<std::string> &getPluginNameTag() const {
+        return mPluginNameTag;
+    }
+
+    void setPluginNameTag(std::string nameTag) {
+        mPluginNameTag = std::move(nameTag);
+    }
+
     const std::string &getUuid() const {
         return mUuid;
     }
@@ -1284,6 +1292,7 @@ private:
     std::unordered_map<std::string, int> mPackChunkRequests;
     std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
+    std::optional<std::string> mPluginNameTag;
     std::string mUuid;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
     int64_t mLastItemUseTick = -1000;

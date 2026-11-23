@@ -25,6 +25,8 @@ public:
 
     bool registerPermission(const std::string &node, FalconPermissionDefault defaultValue);
 
+    std::optional<bool> permissionOverride(const ServerPlayer &player, const std::string &node) const;
+
     bool hasPermission(const ServerPlayer &player, const std::string &node) const;
 
     void setPermission(LoadedPlugin &plugin, const ServerPlayer &player, const std::string &node, bool value);

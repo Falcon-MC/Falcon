@@ -122,6 +122,30 @@ namespace {
         return formId;
     }
 
+    int playerCloseForms(FalconPlayer *target) {
+        if (target == nullptr)
+            return 0;
+        const NetworkIdentifier id = player(target)->getNetworkIdentifier();
+        owner().postToMainThread([id] {
+            auto &players = owner().getPlayers();
+            const auto found = players.find(id);
+            if (found != players.end())
+                owner().closeAllForms(found->second);
+        });
+        return 1;
+    }
+
+    int playerSetNameTag(FalconPlayer *target, const char *nameTag) {
+        if (target == nullptr || nameTag == nullptr)
+            return 0;
+        owner().updatePlayerNameTag(*player(target), nameTag);
+        return 1;
+    }
+
+    int playerPing(FalconPlayer *target) {
+        return target == nullptr ? -1 : owner().getNetworkHandler().getAveragePing(player(target)->getNetworkIdentifier());
+    }
+
     int playerTransfer(FalconPlayer *target, const char *address, uint32_t port) {
         if (address == nullptr || *address == '\0' || port == 0 || port > 65535)
             return 0;
@@ -252,6 +276,9 @@ void PluginServerApi::fillCore(FalconServerApi &api) {
     api.playerSendMessage = &playerSendMessage;
     api.playerKick = &playerKick;
     api.playerSendForm = &playerSendForm;
+    api.playerCloseForms = &playerCloseForms;
+    api.playerSetNameTag = &playerSetNameTag;
+    api.playerPing = &playerPing;
     api.playerTransfer = &playerTransfer;
     api.playerAddBossBar = &playerAddBossBar;
     api.playerUpdateBossBar = &playerUpdateBossBar;

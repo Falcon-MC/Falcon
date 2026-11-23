@@ -737,6 +737,7 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         mPluginManager->loadAll(ServerPaths::file("plugins"));
     CustomContentRegistry::getInstance().freeze();
     mPluginManager->enableAll();
+    CustomContentRegistry::getInstance().freezeItems();
 
     if (!mNetworkHandler->host(definition)) {
         LOG_ERROR(LogAreaID::Network, "Failed to bind UDP port %u", definition.mPort);
@@ -1863,8 +1864,22 @@ void ServerNetworkHandler::_sendEntityData(ServerPlayer &player) {
     mNetworkHandler->sendToMany(recipients, entityData, mCodecContext);
 }
 
+void ServerNetworkHandler::updatePlayerNameTag(ServerPlayer &player, std::string nameTag) {
+    player.setPluginNameTag(std::move(nameTag));
+    if (isTransportReady() && player.isSpawned())
+        _sendEntityData(player);
+}
+
 EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     EntityDataMap metadata;
+
+    if (const auto &nameTag = player.getPluginNameTag()) {
+        EntityDataEntry name;
+        name.mId = 4;
+        name.mFormat = EntityDataFormat::String;
+        name.mStringValue = *nameTag;
+        metadata.mEntries.push_back(std::move(name));
+    }
 
     EntityDataEntry flags;
     flags.mId = ActorFlags::FLAGS_DATA_ID;

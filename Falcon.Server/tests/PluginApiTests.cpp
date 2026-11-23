@@ -45,6 +45,17 @@ public:
     static void reserveSpawns(ServerNetworkHandler &owner) {
         owner._reserveSimulatedSpawns();
     }
+
+    static void flushPostedTasks(ServerNetworkHandler &owner) {
+        std::vector<std::function<void()>> tasks;
+        tasks.swap(owner.mMainThreadTasks);
+        for (const auto &task: tasks)
+            task();
+    }
+
+    static EntityDataMap playerMetadata(ServerNetworkHandler &owner, ServerPlayer &player) {
+        return owner._buildPlayerData(player);
+    }
 };
 
 namespace {
@@ -998,6 +1009,38 @@ namespace {
         require(api.findPlayer("Bot_1") == nullptr, "the simulated player is still online");
     }
 
+    void playerCompatibility(const FalconServerApi &api, Fixture &fixture) {
+        require(api.playerSetNameTag(fixture.playerHandle(), "New tag") == 1, "the name tag was refused");
+        require(fixture.player->getName() == "Tester", "the name tag changed the login identity");
+        const EntityDataMap metadata = ServerTickProbe::playerMetadata(fixture.owner, *fixture.player);
+        const auto tag = std::find_if(metadata.mEntries.begin(), metadata.mEntries.end(), [](const auto &entry) {
+            return entry.mId == 4 && entry.mFormat == EntityDataFormat::String;
+        });
+        require(tag != metadata.mEntries.end() && tag->mStringValue == "New tag", "the tag was not in spawn metadata");
+
+        LoadedPlugin plugin;
+        plugin.mEnabled = true;
+        std::vector<uint32_t> packets;
+        const auto send = api.subscribe(
+                PluginManager::toHandle(plugin), FALCON_EVENT_DATA_PACKET_SEND, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *data) {
+                    const uint32_t id = PluginServerApi::get().eventPacketId(event);
+                    if (id == (uint32_t) MinecraftPacketIds::ModalFormRequest
+                        || id == (uint32_t) MinecraftPacketIds::ClientboundCloseForm)
+                        static_cast<std::vector<uint32_t> *>(data)->push_back(id);
+                }, &packets);
+        const auto first = api.playerSendForm(fixture.playerHandle(), "{}");
+        const int close = api.playerCloseForms(fixture.playerHandle());
+        const auto second = api.playerSendForm(fixture.playerHandle(), "{}");
+        ServerTickProbe::flushPostedTasks(fixture.owner);
+        api.unsubscribe(send);
+        require(first != 0 && second != 0 && close == 1, "a queued form operation was refused");
+        require(packets == std::vector<uint32_t>{(uint32_t) MinecraftPacketIds::ModalFormRequest,
+                                                  (uint32_t) MinecraftPacketIds::ClientboundCloseForm,
+                                                  (uint32_t) MinecraftPacketIds::ModalFormRequest},
+                "form close bypassed the queue");
+    }
+
     void permissionGroups(const FalconServerApi &api, Fixture &fixture) {
         auto &permissions = fixture.owner.getPluginManager().getPermissions();
         require(permissions.updateGroups({"create", "member"}), "could not create member group");
@@ -1012,6 +1055,8 @@ namespace {
                 "could not record a console command node");
         require(permissions.updateGroups({"assign", "12345", "moderator"}), "could not assign a player");
         require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "default group was ignored");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.read") == 1, "no explicit group grant");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.unknown") == 0, "a missing node was explicit");
 
         // a group grants game commands, never server management such as kick
         const auto *weather = fixture.owner.getCommands().getCommand("weather");
@@ -1027,6 +1072,7 @@ namespace {
         LoadedPlugin plugin;
         permissions.setPermission(plugin, *fixture.player, "test.read", false);
         require(!api.playerHasPermission(fixture.playerHandle(), "test.read"), "a plugin denial was ignored");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.read") == -1, "no explicit plugin denial");
         permissions.clearPlugin(plugin);
         require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "the inherited node was not restored");
         require(permissions.registerPermission("test.legacy", FALCON_PERMISSION_DEFAULT_TRUE),
@@ -1040,6 +1086,8 @@ namespace {
         require(permissions.updateGroups({"set", "member", "falcon.command.weather", "false"}),
                 "could not set an inherited denial");
         fixture.player->setOp(true);
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.unknown") == 0, "operator fallback was explicit");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "falcon.command.weather") == -1, "group denial was lost");
         require(!sender.canExecuteCommand(*weather),
                 "an inherited denial did not take precedence over operator access");
         fixture.player->setOp(false);
@@ -1257,6 +1305,7 @@ namespace {
         uniqueId(api, fixture);
         pluginWindows(api, fixture);
         permissionGroups(api, fixture);
+        playerCompatibility(api, fixture);
         dropsAndTypes(api, fixture);
         pluginDrawnEntities(api, fixture);
     }

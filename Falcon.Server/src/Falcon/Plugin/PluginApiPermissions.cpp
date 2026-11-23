@@ -24,6 +24,15 @@ namespace {
         return permissions().hasPermission(*player(target), node) ? 1 : 0;
     }
 
+    int playerPermissionOverride(FalconPlayer *target, const char *node) {
+        if (target == nullptr || node == nullptr || *node == '\0')
+            return 0;
+        const auto decision = permissions().permissionOverride(*player(target), node);
+        if (!decision)
+            return 0;
+        return *decision ? 1 : -1;
+    }
+
     void playerSetPermission(FalconPlugin *source, FalconPlayer *target, const char *node, int value) {
         if (source == nullptr || target == nullptr || node == nullptr)
             return;
@@ -51,6 +60,7 @@ namespace {
 void PluginServerApi::fillPermissions(FalconServerApi &api) {
     api.registerPermission = &registerPermission;
     api.playerHasPermission = &playerHasPermission;
+    api.playerPermissionOverride = &playerPermissionOverride;
     api.playerSetPermission = &playerSetPermission;
     api.playerUnsetPermission = &playerUnsetPermission;
     api.senderHasPermission = &senderHasPermission;

@@ -29,7 +29,7 @@ bool PluginPermissions::registerPermission(const std::string &node, FalconPermis
     return mDefaults.emplace(node, defaultValue).second;
 }
 
-bool PluginPermissions::hasPermission(const ServerPlayer &player, const std::string &node) const {
+std::optional<bool> PluginPermissions::permissionOverride(const ServerPlayer &player, const std::string &node) const {
     const auto group = _groupPermission(player, node);
     if (group == false)
         return false;
@@ -46,8 +46,12 @@ bool PluginPermissions::hasPermission(const ServerPlayer &player, const std::str
         }
     }
 
-    if (group == true)
-        return true;
+    return group;
+}
+
+bool PluginPermissions::hasPermission(const ServerPlayer &player, const std::string &node) const {
+    if (const auto decision = permissionOverride(player, node))
+        return *decision;
 
     const auto registered = mDefaults.find(node);
     if (registered == mDefaults.end() || registered->second == FALCON_PERMISSION_DEFAULT_OPERATOR)
