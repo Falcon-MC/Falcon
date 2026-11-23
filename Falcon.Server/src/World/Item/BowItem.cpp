@@ -63,7 +63,7 @@ bool BowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, con
     if (force < 0.1f || elapsedTicks < BOW_MINIMUM_TICKS)
         return false;
 
-    ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, force);
+    ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, force, 0.0f, &item);
     if (arrow == nullptr)
         return false;
 

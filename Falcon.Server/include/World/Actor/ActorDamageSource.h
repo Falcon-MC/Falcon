@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
 
 #include <optional>
 #include <string>
@@ -36,6 +37,11 @@ public:
 
     ActorDamageSource &withoutCooldown() {
         mRespectCooldown = false;
+        return *this;
+    }
+
+    ActorDamageSource &fromBlock(std::optional<Vector3i> block) {
+        mBlock = block;
         return *this;
     }
 
@@ -76,6 +82,7 @@ public:
     Actor *mAttacker = nullptr;
     Actor *mDamager = nullptr;
     std::optional<Vector3f> mOrigin;
+    std::optional<Vector3i> mBlock;
     bool mProjectile = false;
     bool mApplyArmor = true;
     bool mRespectCooldown = true;

@@ -398,7 +398,7 @@ public:
     static constexpr float THROWN_PROJECTILE_DROP = -0.3f;
 
     ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
-                                 float verticalOffset = 0.0f);
+                                 float verticalOffset = 0.0f, const ItemStack *weapon = nullptr);
 
     // no shooter: the definition's power and uncertainty_base aim it along direction
     ServerActor *spawnDispensedProjectile(Level &level, const std::string &identifier, const Vector3f &position,
@@ -529,7 +529,10 @@ public:
 
     bool damageActor(ServerActor &actor, float amount, const ActorDamageSource &source, int32_t lootingLevel = -1);
 
-    void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey);
+    void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey,
+                   std::optional<Vector3i> block = std::nullopt);
+    int32_t allowCombustion(Actor &victim, int32_t duration, Actor *source = nullptr,
+                           std::optional<Vector3i> block = std::nullopt);
 
     void sendActorMotion(Actor &actor);
 
@@ -1367,6 +1370,12 @@ private:
         bool mFromTnt;
     };
     std::vector<PendingExplosion> mPendingExplosions;
+    struct ConfiguredExplosion {
+        PendingExplosion mExplosion;
+        bool mBreakBlocks;
+        double mFireChance;
+    };
+    std::vector<ConfiguredExplosion> mConfiguredExplosions;
     std::chrono::steady_clock::time_point mTickStarted;
     bool mLastTickLate = false;
     int32_t mPackHoldTicks = 0;

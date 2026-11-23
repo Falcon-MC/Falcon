@@ -1,4 +1,7 @@
 #include "World/Level/Block/RespawnAnchorBlock.h"
+#include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginManager.h"
+#include "Core/Json/Json.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockClassRegistry.h"
@@ -61,7 +64,7 @@ namespace {
     }
 
     bool holdsSpawnPoint(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
-        return player.hasSpawnPoint() && player.getSpawnDimension() == DimensionType::Nether
+        return player.hasSpawnPoint() && player.getSpawnDimension() == player.getDimension()
                && player.getSpawnPoint() == position && player.getSpawnWorld() == owner.getWorldFor(player).getName();
     }
 }
@@ -127,13 +130,39 @@ std::optional<Vector3f> RespawnAnchorBlock::findRespawnPosition(Level &level, co
     return Vector3f((float) standUp->x + 0.5f, (float) standUp->y, (float) standUp->z + 0.5f);
 }
 
-void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 ServerPlayer *player) {
+    double radius = EXPLOSION_RADIUS;
+    bool breaksBlocks = true;
+    double fireChance = 1.0 / 3.0;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_PRE_EXPLODE)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BLOCK_PRE_EXPLODE;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mPlayer = player;
+        event.mBlockPosition = position;
+        event.mAmount = radius;
+        plugins->dispatch(event);
+        if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0.0)
+            return;
+        radius = event.mAmount;
+        if (const auto data = json::parse(event.mCustomData); data != nullptr && data->isObject()) {
+            if (const auto *blocks = data->get("breaks"); blocks != nullptr && blocks->mType == json::Value::Type::Boolean)
+                breaksBlocks = blocks->mBoolean;
+            if (const auto *fire = data->get("fire"); fire != nullptr && fire->isNumber())
+                fireChance = std::clamp(fire->number(), 0.0, 1.0);
+        }
+    }
     level.setBlock(position, BlockState(BlockNames::AIR), true);
 
-    Explosion explosion(owner, level, centerOf(position), EXPLOSION_RADIUS, nullptr, false);
-    explosion.setIncendiary(true);
+    Explosion explosion(owner, level, centerOf(position), radius, nullptr, false);
+    explosion.setFireChance(fireChance);
     explosion.setInWater(isSurroundedByWater(level, position));
-    explosion.explode();
+    if (breaksBlocks)
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
 }
 
 bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -152,16 +181,34 @@ bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &p
     if (charge <= 0)
         return glowstone;
 
-    if (player.getDimension() != DimensionType::Nether) {
+    enum class Action { Explode, SetSpawn };
+    Action action = player.getDimension() == DimensionType::Nether ? Action::SetSpawn : Action::Explode;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_RESPAWN_ANCHOR_USE)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_RESPAWN_ANCHOR_USE;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mPlayer = &player;
+        event.mBlockPosition = position;
+        event.mAmount = (double) action;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return true;
+        if (event.mAmount == (double) Action::SetSpawn)
+            action = Action::SetSpawn;
+        else if (event.mAmount == (double) Action::Explode)
+            action = Action::Explode;
+    }
+    if (action == Action::Explode) {
         if (level.getGameRules().getBool("respawnblocksexplode"))
-            explode(owner, level, position);
+            explode(owner, level, position, &player);
         return true;
     }
 
     if (holdsSpawnPoint(owner, player, position))
         return glowstone;
 
-    player.setSpawnPoint(position, player.getSpawnStandPositionHere(), DimensionType::Nether,
+    player.setSpawnPoint(position, player.getSpawnStandPositionHere(), player.getDimension(),
                          owner.getWorldFor(player).getName());
     owner.playLevelSound(level, SOUND_SET_SPAWN, centerOf(position));
     player.sendTranslation("§7%tile.respawn_anchor.respawnSet", {});

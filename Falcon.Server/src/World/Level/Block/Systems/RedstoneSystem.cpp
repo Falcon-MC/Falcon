@@ -39,6 +39,8 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginWorldEventData.h"
+#include "Core/Json/Json.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -669,7 +671,7 @@ namespace {
     }
 
     int pressurePlateComputeStrength(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                     const BlockState &state) {
+                                     const BlockState &state, std::vector<uint64_t> *activators) {
         const float minX = (float) position.x + 0.125f;
         const float maxX = (float) position.x + 0.875f;
         const float minY = (float) position.y;
@@ -686,8 +688,11 @@ namespace {
 
             const Vector3f &feet = player.getPosition();
             if (feet.x >= minX && feet.x <= maxX && feet.y >= minY && feet.y <= maxY && feet.z >= minZ
-                && feet.z <= maxZ)
+                && feet.z <= maxZ) {
                 ++count;
+                if (activators != nullptr)
+                    activators->push_back(player.getRuntimeId());
+            }
         }
 
         for (auto &entry: owner.getActors()) {
@@ -697,8 +702,11 @@ namespace {
 
             const Vector3f &feet = actor->getPosition();
             if (feet.x >= minX && feet.x <= maxX && feet.y >= minY && feet.y <= maxY && feet.z >= minZ
-                && feet.z <= maxZ)
+                && feet.z <= maxZ) {
                 ++count;
+                if (activators != nullptr)
+                    activators->push_back(actor->getRuntimeId());
+            }
         }
 
         if (count == 0)
@@ -713,16 +721,58 @@ namespace {
         if (!isA<PressurePlateBlock>(state))
             return;
 
-        int strength = pressurePlateComputeStrength(owner, level, position, state);
-        if (oldStrength != strength)
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PRESSURE_PLATE_UPDATE);
+        std::vector<uint64_t> activators;
+        int strength = pressurePlateComputeStrength(owner, level, position, state, plugins != nullptr ? &activators : nullptr);
+        Tag states = state.mStates;
+        states.putInt("redstone_signal", strength);
+        BlockState updated(state.mName, states);
+        if (plugins != nullptr && (oldStrength > 0 || !activators.empty())) {
+            std::string entities = "[";
+            for (const uint64_t id: activators) {
+                if (entities.size() > 1)
+                    entities += ',';
+                entities += std::to_string(id);
+            }
+            entities += ']';
+
+            PluginEvent event;
+            event.mType = FALCON_EVENT_PRESSURE_PLATE_UPDATE;
+            event.mCancellable = true;
+            event.mLevel = &level;
+            event.mBlockPosition = position;
+            event.mAmount = strength;
+            event.mPreviousAmount = oldStrength;
+            const std::string original = "{\"block\":" + PluginWorldEventData::encodeBlock(updated)
+                                         + ",\"entities\":" + entities + "}";
+            event.mCustomData = original;
+            plugins->dispatch(event);
+            if (event.mCancelled) {
+                if (oldStrength > 0)
+                    level.scheduleUpdate(position, PRESSURE_PLATE_RECHECK_TICKS);
+                return;
+            }
+            if (event.mCustomData != original) {
+                const auto value = json::parse(event.mCustomData);
+                const auto *block = value != nullptr ? value->get("block") : nullptr;
+                if (block == nullptr || !PluginWorldEventData::decodeBlock(*block, updated))
+                    return;
+                strength = isA<PressurePlateBlock>(updated) ? updated.mStates.getInt("redstone_signal") : 0;
+            }
+        }
+
+        if (oldStrength != strength) {
             strength = redstoneChange(level, position, oldStrength, strength);
+            if (isA<PressurePlateBlock>(updated)) {
+                Tag adjusted = updated.mStates;
+                adjusted.putInt("redstone_signal", strength);
+                updated = BlockState(updated.mName, adjusted);
+            }
+        }
         const bool wasPowered = oldStrength > 0;
         const bool powered = strength > 0;
 
-        if (oldStrength != strength) {
-            Tag states = state.mStates;
-            states.putInt("redstone_signal", strength);
-            const BlockState updated = BlockState(state.mName, states);
+        if (!(updated == state)) {
             level.setBlock(position, updated, false);
             owner.getScriptEngine().onPressurePlate(level, position, oldStrength, strength, source);
 

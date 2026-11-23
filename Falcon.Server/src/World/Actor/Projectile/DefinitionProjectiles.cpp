@@ -177,10 +177,13 @@ namespace {
         }
     }
 
-    void burn(ServerNetworkHandler &owner, Actor &target, float seconds) {
+    void burn(ServerNetworkHandler &owner, Actor &source, Actor &target, float seconds) {
         if (target.isFireImmune() || target.hasEffect(MobEffectId::FireResistance))
             return;
-        target.setFireTicks((int) (seconds * (float) TICKS_PER_SECOND));
+        const int32_t duration = owner.allowCombustion(target, (int32_t) (seconds * TICKS_PER_SECOND), &source);
+        if (duration <= 0)
+            return;
+        target.setFireTicks(duration);
         target.setOnFire(true);
         if (auto *actor = dynamic_cast<ServerActor *>(&target))
             owner.syncActorFlags(*actor);
@@ -225,11 +228,11 @@ void DefinitionProjectileActor::_hitTarget(ServerNetworkHandler &owner, const Ve
             owner.knockBack(target, position.x - hitPosition.x, position.z - hitPosition.z, IMPACT_KNOCKBACK);
         }
         if (dealt && onHit.mIgnitesTarget)
-            burn(owner, target, getProjectileComponent().mOnFireTime);
+            burn(owner, *this, target, getProjectileComponent().mOnFireTime);
     }
 
     if (onHit.mIgnitesBlock && target.isAlive())
-        burn(owner, target, getProjectileComponent().mOnFireTime);
+        burn(owner, *this, target, getProjectileComponent().mOnFireTime);
 
     if (onHit.mEffects != nullptr && target.isAlive())
         applyEffects(owner, *onHit.mEffects, target);

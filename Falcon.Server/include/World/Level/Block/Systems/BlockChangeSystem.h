@@ -3,7 +3,11 @@
 #include "World/Level/Block/BlockState.h"
 #include "Core/Math/Vector3i.h"
 
+#include <utility>
+#include <vector>
+
 class Level;
+class ServerPlayer;
 
 enum class BlockChangeCause { Grow, Spread, Form, Fade, Decay };
 
@@ -17,6 +21,13 @@ public:
 
     static bool spread(Level &level, const Vector3i &source, const Vector3i &position, const BlockState &state,
                        bool update);
+
+    using StructureBlocks = std::vector<std::pair<Vector3i, BlockState>>;
+
+    static bool prepareStructure(Level &level, const Vector3i &origin, StructureBlocks &blocks,
+                                 ServerPlayer *player = nullptr);
+
+    static void applyStructure(Level &level, const StructureBlocks &blocks, bool update);
 
     static bool allowsFlow(Level &level, const Vector3i &source, const Vector3i &position, const BlockState &liquid);
 };

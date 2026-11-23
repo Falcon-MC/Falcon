@@ -180,6 +180,13 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     damageEvent.mAttacker = source.mAttacker;
     damageEvent.mAmount = amount;
     damageEvent.mCause = key;
+    if (source.mBlock) {
+        damageEvent.mLevel = &getLevelFor(player);
+        damageEvent.mBlockPosition = *source.mBlock;
+        const auto &position = *source.mBlock;
+        if (const BlockState *block = damageEvent.mLevel->peekBlockPtr(position.x, position.y, position.z))
+            damageEvent.mBlockName = block->mName;
+    }
     // a hit from an attacker pushes: plugins see the game's push and may change it
     float knockbackHorizontal = 0.4f;
     float knockbackVertical = 0.4f;

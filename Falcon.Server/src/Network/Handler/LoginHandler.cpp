@@ -33,6 +33,7 @@
 #include "Network/LoginChainVerifier.h"
 #include "World/Level/Storage/PlayerDataProvider.h"
 #include "Network/Handler/NetworkHandler.h"
+#include "Network/Crypto/Base64.h"
 #include "Core/Text/StringUtil.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
@@ -290,6 +291,12 @@ namespace {
     }
 }
 
+namespace {
+    int32_t clientPort(const NetworkIdentifier &id) {
+        return id.getType() == NetworkIdentifier::Type::RakNet ? id.getSystemAddress().GetPort() : 0;
+    }
+}
+
 void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                const LoginPacket &packet) {
     if (player.getCodec() == nullptr || packet.mProtocolVersion != player.getCodec()->getProtocolVersion()) {
@@ -308,6 +315,33 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
+    bool requireAuthentication = owner.getProperties().getOnlineMode();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_LOGIN_ATTEMPT)) {
+        std::string reason = "disconnectionScreen.noReason";
+        std::string clientData = request.getClientData();
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_LOGIN_ATTEMPT;
+        event.mCancellable = true;
+        event.mMessage = &reason;
+        event.mState = requireAuthentication;
+        event.mPreviousAmount = clientPort(id);
+        event.mAmount = requireAuthentication ? 1.0 : 0.0;
+        event.mPacketData = &clientData;
+        const SerializedSkin &skin = request.getSkin();
+        event.mCustomData = "[\"" + Base64::encode(request.getDisplayName()) + "\",\""
+                            + Base64::encode(request.getIdentity()) + "\",\"" + Base64::encode(request.getXuid())
+                            + "\",\"" + Base64::encode(request.getLanguageCode()) + "\",\""
+                            + Base64::encode(id.getAddress()) + "\",\"" + Base64::encode(skin.mSkinId) + "\",\""
+                            + Base64::encode(skin.mSkinData.mData) + "\"]";
+        plugins->dispatch(event);
+        if (event.mCancelled) {
+            owner._disconnect(id, DisconnectReason::NotAllowed, reason);
+            owner.erasePlayer(id);
+            return;
+        }
+        requireAuthentication = requireAuthentication || event.mAmount != 0.0;
+    }
+
     LoginChainVerifier verifier;
     const bool verified = verifier.verify(packet.mAuthJwt, packet.mClientJwt);
 
@@ -319,7 +353,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    if (owner.getProperties().getOnlineMode() && !verifier.isSigned()) {
+    if (requireAuthentication && !verifier.isSigned()) {
         LOG_WARN(LogAreaID::Network, "%s failed Xbox Live authentication", id.getAddress().c_str());
         owner._disconnect(id, DisconnectReason::NotAuthenticated, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
@@ -388,6 +422,12 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
+    SerializedSkin skin = request.getSkin();
+    ServerNetworkHandler::boundSkin(skin);
+    player.setSkin(skin);
+    player.setLocale(request.getLanguageCode());
+    player.setBuildPlatform(request.getBuildPlatform());
+
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN)) {
         std::string kickMessage = "disconnectionScreen.noReason";
         PluginEvent preLogin;
@@ -395,6 +435,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         preLogin.mCancellable = true;
         preLogin.mPlayer = &player;
         preLogin.mMessage = &kickMessage;
+        preLogin.mAmount = clientPort(id);
         preLogin.mClientData = &request.getClientData();
         plugins->dispatch(preLogin);
         if (preLogin.mCancelled) {
@@ -405,10 +446,11 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         }
     }
 
-    // one session per account: two would load the same save, and the last to leave would write over the other.
-    // this login is refused; a signed login of the same account also closes the older one, its save landing
-    // before the next attempt reads it. a name alone proves nothing: the session holding it stays
+    // Only a verified account can take over its session. Close and save it before the new session reads the save.
     bool alreadyOnline = false;
+    std::vector<NetworkIdentifier> takeovers;
+    PluginManager *duplicates = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_DUPLICATE_LOGIN);
+    std::string duplicateMessage = "disconnectionScreen.loggedinOtherLocation";
     const std::string loweredName = StringUtil::toLowerCase(player.getName());
     for (auto &entry: owner.getPlayers()) {
         const ServerPlayer &other = entry.second;
@@ -419,16 +461,38 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         if (!sameAccount && StringUtil::toLowerCase(other.getName()) != loweredName)
             continue;
 
-        alreadyOnline = true;
-        if (sameAccount)
-            owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation,
-                              "disconnectionScreen.loggedinOtherLocation");
+        bool replaceExisting = sameAccount;
+        if (duplicates != nullptr) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_PLAYER_DUPLICATE_LOGIN;
+            event.mCancellable = true;
+            event.mPlayer = &player;
+            event.mTarget = const_cast<ServerPlayer *>(&other);
+            event.mMessage = &duplicateMessage;
+            event.mState = sameAccount;
+            event.mAmount = clientPort(id);
+            duplicates->dispatch(event);
+            replaceExisting = sameAccount && !event.mCancelled;
+        }
+        if (replaceExisting && duplicates != nullptr) {
+            takeovers.push_back(entry.first);
+        } else {
+            alreadyOnline = true;
+            if (replaceExisting)
+                owner._disconnect(entry.first, DisconnectReason::LoggedInOtherLocation, duplicateMessage);
+        }
     }
     if (alreadyOnline) {
         LOG_INFO(LogAreaID::Server, "Player %s logged in from another location", player.getName().c_str());
-        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, "disconnectionScreen.loggedinOtherLocation");
+        owner._disconnect(id, DisconnectReason::LoggedInOtherLocation, duplicateMessage);
         owner.erasePlayer(id);
         return;
+    }
+
+    for (const NetworkIdentifier &prior: takeovers) {
+        owner._disconnect(prior, DisconnectReason::LoggedInOtherLocation, duplicateMessage);
+        static_cast<NetworkHandler::Listener &>(owner).onConnectionClosed(
+                prior, DisconnectFailReason::Disconnected, duplicateMessage);
     }
 
     // a gamertag can change hands: the save under it must be this account's before it is read or written
@@ -444,14 +508,9 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    SerializedSkin skin = request.getSkin();
-    ServerNetworkHandler::boundSkin(skin);
-    player.setSkin(skin);
-    player.setBuildPlatform(request.getBuildPlatform());
     // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
     player.setClientSideGenerationCompatible(
             ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
-    player.setLocale(request.getLanguageCode());
     ServerPlayer::ClientDevice &device = player.getClientDevice();
     const std::string &clientData = request.getClientData();
     device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
@@ -524,7 +583,16 @@ void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdenti
     status.mStatus = PlayStatusPacket::Status::LoginSuccess;
     owner.getNetworkHandler().send(id, status, owner.getCodecContext());
 
-    player.setResourcePackOffer(owner.getResourcePacks().getOffer(owner.getProperties().getTexturePackRequired()));
+    auto proposedOffer = owner.getResourcePacks().getOffer(owner.getProperties().getTexturePackRequired());
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_RESOURCE_PACK_OFFER)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_RESOURCE_PACK_OFFER;
+        event.mPlayer = &player;
+        event.mState = proposedOffer->mRequired;
+        event.mResourcePackOffer = &proposedOffer;
+        plugins->dispatch(event);
+    }
+    player.setResourcePackOffer(std::move(proposedOffer));
     const auto &offer = *player.getResourcePackOffer();
     ResourcePacksInfoPacket packs;
     packs.mForcedToAccept = offer.mRequired;
@@ -654,6 +722,14 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
         player.setGameType((int32_t) owner.getProperties().getGameType());
     player.setHungerEnabled(player.isSurvival()
                             || player.isAdventure());
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_CREATION)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_CREATION;
+        event.mPlayer = &player;
+        event.mAmount = clientPort(id);
+        plugins->dispatch(event);
+    }
 
     Level &world = owner.getWorldFor(player).getOverworld();
     StartGamePacket startGame;

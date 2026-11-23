@@ -36,6 +36,8 @@ LiquidContact LiquidBlocksFetch::at(Level &level, const Vector3f &feet, bool hor
                     if (lava ? !info.lava : !info.water && !info.bubble)
                         continue;
                     if (lava) {
+                        if (!contact.lava)
+                            contact.lavaBlock = Vector3i(x, y, z);
                         contact.lava = true;
                     } else {
                         contact.water = true;

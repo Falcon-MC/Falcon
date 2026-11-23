@@ -1,6 +1,9 @@
 #include "Network/Handler/InventoryHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Json/Json.h"
+#include "Network/Crypto/Base64.h"
+#include "World/Item/EnchantmentData.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/InventoryManager.h"
@@ -54,6 +57,59 @@
 #include <utility>
 
 namespace {
+    std::string encodeEnchantOptions(const std::vector<EnchantOptionData> &options) {
+        std::string json = "[";
+        for (const auto &option: options) {
+            if (json.size() > 1)
+                json += ',';
+            json += '[' + std::to_string(option.mCost) + ",\"" + Base64::encode(option.mEnchantName) + "\",[";
+            bool first = true;
+            for (const auto &enchant: option.mEnchants0) {
+                if (!first)
+                    json += ',';
+                first = false;
+                json += '[' + std::to_string(enchant.mType) + ',' + std::to_string(enchant.mLevel) + ']';
+            }
+            json += "]]";
+        }
+        return json + ']';
+    }
+
+    bool decodeEnchantOptions(const std::string &data, std::vector<EnchantOptionData> &result) {
+        const auto list = json::parse(data);
+        if (list == nullptr || !list->isArray() || list->mArray.size() > 3)
+            return false;
+
+        for (const auto &entry: list->mArray) {
+            if (entry == nullptr || !entry->isArray() || entry->mArray.size() != 3)
+                return false;
+            const auto &fields = entry->mArray;
+            const int32_t cost = fields[0]->integer(-1);
+            if (cost < 0 || cost > 32767 || !fields[1]->isString() || !fields[2]->isArray()
+                || fields[2]->mArray.size() > 64)
+                return false;
+
+            EnchantOptionData option;
+            option.mCost = cost;
+            const std::string &encodedName = fields[1]->mString;
+            if (encodedName.size() > 44'000
+                || (!encodedName.empty() && !Base64::decode(encodedName, option.mEnchantName))
+                || option.mEnchantName.size() > 32767)
+                return false;
+            for (const auto &enchant: fields[2]->mArray) {
+                if (enchant == nullptr || !enchant->isArray() || enchant->mArray.size() != 2)
+                    return false;
+                const int32_t id = enchant->mArray[0]->integer(-1);
+                const int32_t level = enchant->mArray[1]->integer(-1);
+                if (EnchantmentTable::findById(id) == nullptr || level <= 0 || level > 32767)
+                    return false;
+                option.mEnchants0.push_back({id, level});
+            }
+            result.push_back(std::move(option));
+        }
+        return true;
+    }
+
     void returnToInventory(ServerPlayer &player, ItemStack &item) {
         std::vector<int> touchedSlots;
         item.mCount = player.getInventory().addItemPartial(item, touchedSlots);
@@ -239,78 +295,16 @@ namespace {
         return returned;
     }
 
-    bool isCraft(const ItemStackRequestAction &action) {
-        if (action.mType == ItemStackRequestActionType::CraftCreative)
-            return true;
-
-        return (action.mType == ItemStackRequestActionType::CraftRecipe
-                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
-               && action.mRecipeNetworkId < EnchantmentHelper::RECIPE_ID_BASE;
-    }
-
-    ItemStack craftResult(ServerNetworkHandler &owner, const ItemStackRequestAction &action) {
-        if (action.mType == ItemStackRequestActionType::CraftCreative) {
-            for (const CreativeItemData &entry: owner.getCreativeItems()) {
-                if (entry.mNetId == action.mCreativeItemNetworkId)
-                    return entry.mItem;
-            }
-            return ItemStack::air();
-        }
-
-        const std::vector<ItemStack> &outputs = owner.getRecipeOutputs();
-        const int32_t netId = action.mRecipeNetworkId;
-        if (netId <= 0 || (size_t) netId > outputs.size())
-            return ItemStack::air();
-
-        return outputs[(size_t) netId - 1];
-    }
-
     bool allowRequest(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request) {
         PluginManager &plugins = owner.getPluginManager();
         const bool transactions = plugins.hasSubscribers(FALCON_EVENT_INVENTORY_TRANSACTION);
-        const bool crafts = plugins.hasSubscribers(FALCON_EVENT_CRAFT_ITEM);
-        const bool enchants = plugins.hasSubscribers(FALCON_EVENT_ITEM_ENCHANT);
-        if (!transactions && !crafts && !enchants)
+        if (!transactions)
             return true;
 
         const PlayerInventory &inventory = player.getInventory();
         Container *openContainer = player.getInventoryManager().getContainer();
 
         for (const ItemStackRequestAction &action: request.mActions) {
-            int32_t enchantCost = 0;
-            if (enchants && action.mType == ItemStackRequestActionType::CraftRecipe
-                && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE
-                && EnchantmentHelper::peekOptionCost(action.mRecipeNetworkId, enchantCost)) {
-                ItemStack enchanted = itemAt(inventory, openContainer, ContainerSlotType::EnchantingInput, 0);
-                PluginEvent enchantEvent;
-                enchantEvent.mType = FALCON_EVENT_ITEM_ENCHANT;
-                enchantEvent.mCancellable = true;
-                enchantEvent.mPlayer = &player;
-                enchantEvent.mItem = &enchanted;
-                enchantEvent.mAmount = (double) enchantCost;
-                plugins.dispatch(enchantEvent);
-                if (enchantEvent.mCancelled)
-                    return false;
-                continue;
-            }
-
-            if (isCraft(action)) {
-                if (!crafts)
-                    continue;
-
-                ItemStack result = craftResult(owner, action);
-                PluginEvent craftEvent;
-                craftEvent.mType = FALCON_EVENT_CRAFT_ITEM;
-                craftEvent.mCancellable = true;
-                craftEvent.mPlayer = &player;
-                craftEvent.mItem = &result;
-                craftEvent.mAmount = (double) std::max(1, action.mNumberOfRequestedCrafts);
-                plugins.dispatch(craftEvent);
-                if (craftEvent.mCancelled)
-                    return false;
-                continue;
-            }
-
             const char *name = transactionName(action.mType);
             if (!transactions || name == nullptr)
                 continue;
@@ -684,7 +678,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
                 beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice,
                 loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator,
-                cartographyOpen ? nullptr : &cartographyMaps, &cartographyExpansion);
+                cartographyOpen ? nullptr : &cartographyMaps, &cartographyExpansion, &player);
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK)
             CartographyRecipes::applyExpansion(cartographyExpansion, cartographyMaps);
@@ -869,6 +863,34 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
     if (!current.isAir())
         packet.mOptions = EnchantmentHelper::getEnchantOptions(
                 owner.getLevelFor(player), manager.getContainerPosition(), current, manager.getEnchantSeed());
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ENCHANTING_OPTIONS)) {
+        ItemStack proposedInput = current;
+        const ItemStack *material = player.getInventory().resolveSlot(ContainerSlotType::EnchantingMaterial, 0);
+        ItemStack lapis = material == nullptr ? empty : *material;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_ENCHANTING_OPTIONS;
+        event.mCancellable = true;
+        event.mPlayer = &player;
+        event.mLevel = &owner.getLevelFor(player);
+        event.mBlockPosition = manager.getContainerPosition();
+        event.mItem = &proposedInput;
+        event.mResult = &lapis;
+        const std::string original = encodeEnchantOptions(packet.mOptions);
+        event.mCustomData = original;
+        plugins->dispatch(event);
+
+        std::vector<EnchantOptionData> modified;
+        if (event.mCancelled
+            || (event.mCustomData != original && decodeEnchantOptions(event.mCustomData, modified))) {
+            std::vector<int32_t> obsolete;
+            for (const auto &option: packet.mOptions)
+                obsolete.push_back(option.mEnchantNetId);
+            EnchantmentHelper::discardOptions(obsolete);
+            packet.mOptions = event.mCancelled ? std::vector<EnchantOptionData>() : std::move(modified);
+            EnchantmentHelper::registerOptions(packet.mOptions);
+        }
+    }
 
     std::vector<int32_t> offered;
     for (const EnchantOptionData &option: packet.mOptions)

@@ -13,6 +13,7 @@
 #include <stdexcept>
 
 World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
+    const bool newWorld = !WorldManager::exists(name);
     World &world = mWorlds.add(name, _getServerViewDistance(), seed);
     const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position, const Packet &packet) {
         BlockActionHandler::broadcastToViewers(*this, level, position, packet);
@@ -25,6 +26,16 @@ World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
     }
     AutoCompaction::track(world.getOverworld());
     LOG_INFO(LogAreaID::Server, "Loaded world %s", name.c_str());
+
+    if (newWorld) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_INIT)) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_WORLD_INIT;
+            event.mWorldName = name;
+            event.mLevel = &world.getOverworld();
+            plugins->dispatch(event);
+        }
+    }
 
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_LOAD)) {
         PluginEvent loadEvent;

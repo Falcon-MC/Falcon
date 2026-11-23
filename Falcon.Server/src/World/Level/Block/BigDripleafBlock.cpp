@@ -1,4 +1,5 @@
 #include "World/Level/Block/BigDripleafBlock.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include "Core/Math/VectorMath.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -50,6 +51,21 @@ namespace {
     }
 
     // the water the block replaces stays around it, in the second layer
+    void applyGrowth(ServerNetworkHandler &owner, Level &level, const BlockChangeSystem::StructureBlocks &blocks) {
+        for (const auto &[position, state]: blocks) {
+            const BlockState previous = level.getBlockState(position.x, position.y, position.z);
+            level.setBlock(position, state, false);
+            if (LiquidView(previous).isWater() && isDripleaf(&state)) {
+                level.setBlockStateAtLayer(position.x, position.y, position.z, 1, previous);
+                BlockActionHandler::broadcastBlockUpdate(owner, level, position, previous, 1);
+            }
+        }
+        for (const auto &[position, state]: blocks) {
+            (void) state;
+            level.updateAround(position);
+        }
+    }
+
     bool place(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
         const BlockState previous = level.getBlockState(position.x, position.y, position.z);
         if (!BlockChangeSystem::change(level, position, state, BlockChangeCause::Grow, true))
@@ -116,6 +132,17 @@ bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, 
     // a refused growth leaves the small dripleaf whole
     if (height == 0 || !BlockChangeSystem::allows(level, position, head, BlockChangeCause::Grow))
         return false;
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
+        BlockChangeSystem::StructureBlocks blocks;
+        if (upperHalf != nullptr && upperHalf->y >= position.y + height)
+            blocks.emplace_back(*upperHalf, BlockState(BlockNames::AIR));
+        for (int32_t dy = 0; dy < height; ++dy)
+            blocks.emplace_back(offsetY(position, dy), dy + 1 == height ? head : stem);
+        if (!BlockChangeSystem::prepareStructure(level, position, blocks))
+            return false;
+        applyGrowth(owner, level, blocks);
+        return true;
+    }
     if (upperHalf != nullptr)
         level.setBlock(*upperHalf, BlockState(BlockNames::AIR), true);
 
@@ -262,6 +289,16 @@ bool BigDripleafBlock::onFertilized(ServerNetworkHandler &owner, Level &level, c
         return false;
 
     const BlockState head = level.getBlockState(leaf.x, leaf.y, leaf.z);
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
+        const BlockState newHead = withParts(head, true, Tilt::None);
+        if (!BlockChangeSystem::allows(level, above, newHead, BlockChangeCause::Grow))
+            return false;
+        BlockChangeSystem::StructureBlocks blocks{{above, newHead}, {leaf, withParts(head, false, Tilt::None)}};
+        if (!BlockChangeSystem::prepareStructure(level, leaf, blocks))
+            return false;
+        applyGrowth(owner, level, blocks);
+        return true;
+    }
     if (!place(owner, level, above, withParts(head, true, Tilt::None)))
         return false;
     level.setBlock(leaf, withParts(head, false, Tilt::None), true);

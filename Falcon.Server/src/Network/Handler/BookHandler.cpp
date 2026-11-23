@@ -1,6 +1,7 @@
 #include "Network/Handler/BookHandler.h"
 
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/BookEditPacket.h"
 
 #include <algorithm>
@@ -108,6 +109,27 @@ void BookHandler::handleEdit(ServerNetworkHandler &owner, ServerPlayer &player, 
         edited.mTag = Tag::ofCompound();
     }
     edited.mTag.put("pages", Tag::ofList(Tag::Type::Compound, std::move(pages)));
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EDIT_BOOK)) {
+        ItemStack original = held;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_EDIT_BOOK;
+        event.mCancellable = true;
+        event.mPlayer = &player;
+        event.mItem = &original;
+        event.mResult = &edited;
+        event.mAmount = (double) packet.mAction;
+        event.mChunkX = first;
+        event.mChunkZ = second;
+        plugins->dispatch(event);
+        if (event.mCancelled) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
+            return;
+        }
+        if (edited.isAir() || (edited.mDefinition->getIdentifier() != "minecraft:writable_book"
+                               && edited.mDefinition->getIdentifier() != "minecraft:written_book"))
+            return;
+    }
 
     player.getInventory().setItem(slot, std::move(edited));
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);

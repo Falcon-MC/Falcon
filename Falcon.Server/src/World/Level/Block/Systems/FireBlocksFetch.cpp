@@ -30,7 +30,7 @@ FireContact FireBlocksFetch::at(Level &level, const Vector3f &feet) {
                 if (state == nullptr || VanillaBlocks::getAs<FireBlock>(state->mName) == nullptr)
                     continue;
 
-                return FireContact{true, state->mName == "minecraft:soul_fire" ? 2.0f : 1.0f};
+                return FireContact{true, state->mName == "minecraft:soul_fire" ? 2.0f : 1.0f, Vector3i(x, y, z)};
             }
         }
     }

@@ -1,3 +1,5 @@
+#include "Falcon/Plugin/PluginManager.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Inventory/ItemStackRequestHandler.h"
 
 #include "Core/Debug/BedrockLog.h"
@@ -120,6 +122,17 @@ namespace {
         // a grid recipe produced this output: the item the player crafted, for playerCraftRecipe
         ItemStack mCraftedRecipeOutput;
         bool mCraftedRecipe = false;
+        bool mObserveCraft = false;
+        bool mObserveEnchant = false;
+        int mCraftRepetitions = 1;
+        int mCraftRecipeId = 0;
+        std::vector<ItemStack> mCraftInputs;
+        std::vector<std::pair<int32_t, int32_t>> mCraftSlots;
+        ItemStack mEnchantInput;
+        ItemStack mEnchantOutput;
+        int32_t mEnchantRequiredLevel = 0;
+        int32_t mEnchantCost = 0;
+        int32_t mEnchantOptionId = 0;
         const MerchantOffers *mTradeOffers = nullptr;
         int32_t mBeaconLevels = -1;
         bool mBeaconActive = false;
@@ -779,7 +792,7 @@ namespace {
         std::vector<EnchantmentInstance> enchantments;
         int32_t consumeCost = 0;
         int32_t requiredLevel = 0;
-        if (!EnchantmentHelper::takeOption(action.mRecipeNetworkId, enchantments, consumeCost, requiredLevel))
+        if (!EnchantmentHelper::readOption(action.mRecipeNetworkId, enchantments, consumeCost, requiredLevel))
             return false;
 
         ItemStack *input = inventory.resolveSlot(ContainerSlotType::EnchantingInput, 0);
@@ -807,9 +820,17 @@ namespace {
         }
         ItemEnchantments::write(enchanted, enchantments);
 
+        if (context.mObserveEnchant) {
+            context.mEnchantInput = *input;
+            context.mEnchantInput.mCount = 1;
+            context.mEnchantOutput = enchanted;
+            context.mEnchantRequiredLevel = requiredLevel;
+            context.mEnchantCost = consumeCost;
+        }
         context.mCreatedOutput = std::move(enchanted);
         context.mCreatedOutputActive = true;
         context.mEnchantActive = true;
+        context.mEnchantOptionId = action.mRecipeNetworkId;
         context.mEnchantMaterialRequired = context.mCreativeMode ? 0 : consumeCost;
 
         if (!context.mCreativeMode)
@@ -1141,6 +1162,21 @@ namespace {
     // the grid decides the result, as the client only names the recipe
     using GridSolver = std::function<bool(const std::vector<ItemStack> &, MultiCraft &)>;
 
+    void captureCraftInputs(RequestContext &context, const std::vector<ItemStack> &grid,
+                            const std::vector<int32_t> &required, int repetitions) {
+        if (!context.mObserveCraft)
+            return;
+        context.mCraftRepetitions = repetitions;
+        for (size_t slot = 0; slot < required.size(); ++slot) {
+            if (required[slot] <= 0)
+                continue;
+            ItemStack ingredient = grid[slot];
+            context.mCraftSlots.emplace_back((int32_t) slot, ingredient.mCount);
+            ingredient.mCount = required[slot];
+            context.mCraftInputs.push_back(std::move(ingredient));
+        }
+    }
+
     bool craftFromGrid(PlayerInventory &inventory, RequestContext &context, const ItemStackRequestAction &action,
                        bool repeatable, const GridSolver &solve) {
         const int repetitions = action.mNumberOfRequestedCrafts <= 0 ? 1 : action.mNumberOfRequestedCrafts;
@@ -1175,6 +1211,8 @@ namespace {
         context.mCreatedOutput = craft.mResult;
         context.mCreatedOutput.mCount = craft.mResult.mCount * repetitions;
         context.mCreatedOutputActive = true;
+        captureCraftInputs(context, grid, required, repetitions);
+        context.mCraftRecipeId = action.mRecipeNetworkId;
         context.mCraftingMatch = CraftingRecipeMatch{nullptr, craft.mRequiredBySlot};
         context.mCraftingRequired = std::move(required);
         context.mCraftingConsumed.assign(context.mCraftingRequired.size(), 0);
@@ -1297,6 +1335,8 @@ namespace {
         context.mCreatedOutput = output;
         context.mCreatedOutput.mCount = output.mCount * repetitions;
         context.mCreatedOutputActive = true;
+        captureCraftInputs(context, grid, required, repetitions);
+        context.mCraftRecipeId = netId;
         context.mCraftingMatch = std::move(match);
         context.mCraftingRequired = std::move(required);
         context.mCraftingConsumed.assign(context.mCraftingRequired.size(), 0);
@@ -1567,7 +1607,7 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         const MerchantOffers *tradeOffers, TradeCraft *outTrade, const CraftingDataPacket *smithingRecipes,
         int32_t clientProtocol, bool grindstoneOpen, int32_t *outGrindstoneXpCost, int32_t beaconLevels,
         BeaconChoice *outBeacon, bool loomOpen, const CartographyRecipes::Maps *craftingMaps,
-        CartographyExpansion *outCartographyExpansion) {
+        CartographyExpansion *outCartographyExpansion, ServerPlayer *eventPlayer) {
     ItemStackResponseEntry entry;
     entry.mRequestId = request.mRequestId;
     entry.mResult = RESULT_OK;
@@ -1601,6 +1641,9 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     context.mClientProtocol = clientProtocol;
     context.mTradeOffers = tradeOffers;
     context.mBeaconLevels = beaconLevels;
+    context.mObserveCraft = eventPlayer != nullptr && PluginManager::findWithSubscribers(FALCON_EVENT_CRAFT_ITEM) != nullptr;
+    context.mObserveEnchant = eventPlayer != nullptr && PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_ENCHANT) != nullptr;
+
 
     if (openContainer != nullptr) {
         const int containerSize = openContainer->getContainerSize();
@@ -1704,6 +1747,52 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
         return entry;
     }
 
+    if (context.mObserveCraft && context.mCraftingActive) {
+        ItemStack output = context.mCraftedRecipeOutput;
+        output.mCount *= context.mCraftRepetitions;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_CRAFT_ITEM;
+        event.mCancellable = true;
+        event.mPlayer = eventPlayer;
+        event.mItem = &output;
+        event.mResult = &output;
+        event.mAmount = context.mCraftRepetitions;
+        event.mPreviousAmount = context.mCraftRecipeId;
+        event.mDrops = &context.mCraftInputs;
+        const auto *recipe = context.mCraftingMatch.mRecipe;
+        event.mCustomData = "[" + std::to_string(context.mCraftingGridWidth) + ","
+                            + std::to_string(recipe != nullptr ? recipe->mWidth : 0) + ",[";
+        bool first = true;
+        for (const auto &[slot, count]: context.mCraftSlots) {
+            if (!first)
+                event.mCustomData += ',';
+            first = false;
+            event.mCustomData += '[' + std::to_string(slot) + ',' + std::to_string(count) + ']';
+        }
+        event.mCustomData += "]]";
+        PluginManager::getInstance().dispatch(event);
+        if (event.mCancelled) {
+            entry.mResult = RESULT_ERROR;
+            return entry;
+        }
+    }
+
+    if (context.mObserveEnchant && context.mEnchantActive) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ITEM_ENCHANT;
+        event.mCancellable = true;
+        event.mPlayer = eventPlayer;
+        event.mItem = &context.mEnchantInput;
+        event.mResult = &context.mEnchantOutput;
+        event.mAmount = context.mEnchantCost;
+        event.mPreviousAmount = context.mEnchantRequiredLevel;
+        PluginManager::getInstance().dispatch(event);
+        if (event.mCancelled) {
+            entry.mResult = RESULT_ERROR;
+            return entry;
+        }
+    }
+
     for (const std::unique_ptr<BundleView> &view: context.mBundles) {
         ItemStack *owner = findBundleOwner(working, context, view->mId, view->mOwnerContainer, view->mOwnerSlot);
         if (owner == nullptr || isBundleIdShared(working, context, view->mId)) {
@@ -1733,6 +1822,8 @@ ItemStackResponseEntry ItemStackRequestHandler::execute(
     }
 
     inventory = std::move(working);
+    if (context.mEnchantActive)
+        EnchantmentHelper::discardOptions({context.mEnchantOptionId});
     if (outDroppedItems != nullptr) {
         outDroppedItems->insert(outDroppedItems->end(), localDroppedItems.begin(), localDroppedItems.end());
     }

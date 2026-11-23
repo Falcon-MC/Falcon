@@ -1,12 +1,14 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
 
 class Level;
 
 struct LiquidContact {
     bool water = false;
     bool lava = false;
+    Vector3i lavaBlock;
     bool bubble = false;
     bool dragDown = false;
     bool eyeSubmerged = false;

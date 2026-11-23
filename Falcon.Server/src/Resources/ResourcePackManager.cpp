@@ -516,6 +516,46 @@ std::shared_ptr<const ResourcePackOffer> ResourcePackManager::getOffer(bool serv
     return offer;
 }
 
+std::shared_ptr<const ResourcePackOffer> ResourcePackManager::replaceOffer(
+        const ResourcePackOffer &current, const FalconResourcePackOfferEntry *entries, uint32_t count, bool required) {
+    constexpr size_t MAX_ARCHIVE_BYTES = 128 * 1024 * 1024;
+    constexpr size_t MAX_MANIFEST_BYTES = 1024 * 1024;
+    auto offer = std::make_shared<ResourcePackOffer>();
+    offer->mRequired = required;
+    offer->mPacks.reserve(count);
+
+    size_t total = 0;
+    ResourcePackManager archives;
+    for (uint32_t i = 0; i < count; ++i) {
+        const auto &entry = entries[i];
+        const auto &archive = entry.archive;
+        const std::string key = archive.contentKey != nullptr ? archive.contentKey : "";
+        ResourcePack pack;
+        if (archive.size == 0) {
+            const auto *existing = entry.id != nullptr ? current.findById(entry.id) : nullptr;
+            if (existing == nullptr)
+                return nullptr;
+            pack = *existing;
+            pack.mContentKey = key;
+        } else {
+            if (archive.data == nullptr || archive.size > MAX_ARCHIVE_BYTES - total)
+                return nullptr;
+            total += archive.size;
+            if (!archives._loadPackBytes(std::string(archive.data, archive.size), "login offer", key,
+                                         MAX_MANIFEST_BYTES))
+                return nullptr;
+            pack = std::move(archives.mPacks.back());
+            archives.mPacks.pop_back();
+            if (entry.id != nullptr && pack.mUuidString != entry.id)
+                return nullptr;
+        }
+        if (offer->findById(pack.mUuidString) != nullptr)
+            return nullptr;
+        offer->mPacks.push_back(std::move(pack));
+    }
+    return offer;
+}
+
 std::vector<std::string> ResourcePackManager::getLoadedUuids() const {
     std::vector<std::string> uuids;
     uuids.reserve(mPacks.size());

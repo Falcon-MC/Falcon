@@ -13,6 +13,7 @@ FALCON_REGISTER_BLOCK(SaplingBlock, 280);
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <chrono>
 #include <string>
@@ -83,6 +84,16 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
         return false;
 
     const std::vector<Vector3i> changed = manager.getChanged();
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
+        BlockChangeSystem::StructureBlocks blocks;
+        blocks.reserve(changed.size());
+        for (const Vector3i &at: changed)
+            blocks.emplace_back(at, manager.getBlockAt(at.x, at.y, at.z));
+        if (!BlockChangeSystem::prepareStructure(level, position, blocks))
+            return false;
+        BlockChangeSystem::applyStructure(level, blocks, false);
+        return true;
+    }
     manager.applySubChunkUpdate();
 
     for (const Vector3i &changedPosition: changed) {

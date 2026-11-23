@@ -572,6 +572,16 @@ namespace {
 
                             ItemActor *kept = theirs.mCount >= mine.mCount ? other : self;
                             ItemActor *gone = kept == other ? self : other;
+                            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_MERGE)) {
+                                PluginEvent event;
+                                event.mType = FALCON_EVENT_ITEM_MERGE;
+                                event.mCancellable = true;
+                                event.mEntity = gone;
+                                event.mTarget = kept;
+                                plugins->dispatch(event);
+                                if (event.mCancelled || gone->isRemoved() || kept->isRemoved())
+                                    continue;
+                            }
                             ItemStack stack = kept->getItem();
                             stack.mCount += gone->getItem().mCount;
                             kept->setItem(stack);
@@ -740,7 +750,21 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
         if (index >= actors.size() || actors[index].get() != &actor)
             continue;
 
-        if (actor.isRemoved() || (actor.isExpired() && despawns(actor.getItem()))) {
+        bool expired = !actor.isRemoved() && actor.isExpired() && despawns(actor.getItem());
+        if (expired) {
+            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_DESPAWN)) {
+                PluginEvent event;
+                event.mType = FALCON_EVENT_ITEM_DESPAWN;
+                event.mCancellable = true;
+                event.mEntity = &actor;
+                plugins->dispatch(event);
+                if (event.mCancelled) {
+                    actor.setAge(0);
+                    expired = false;
+                }
+            }
+        }
+        if (actor.isRemoved() || expired) {
             broadcastItemActorRemove(owner, actor);
             owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
             // taken out of the list in one sweep below: an explosion removes thousands a tick, and each
