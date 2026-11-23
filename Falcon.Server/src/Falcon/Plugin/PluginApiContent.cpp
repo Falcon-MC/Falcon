@@ -7,10 +7,33 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <string>
+#include <vector>
 
 using namespace PluginApiHelpers;
 
 namespace {
+    int resourcePacksReplace(FalconPlugin *pluginHandle, const FalconResourcePackDescriptor *packs, uint32_t count,
+                             int required) {
+        constexpr uint32_t MAX_PACKS = 128;
+        constexpr size_t MAX_BYTES = 128 * 1024 * 1024;
+        if (pluginHandle == nullptr || count > MAX_PACKS || (count != 0 && packs == nullptr))
+            return 0;
+
+        size_t total = 0;
+        std::vector<std::pair<std::string, std::string>> archives;
+        archives.reserve(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            const auto &pack = packs[i];
+            if (pack.data == nullptr || pack.size == 0 || pack.size > MAX_BYTES - total)
+                return 0;
+            total += pack.size;
+            archives.emplace_back(std::string(pack.data, pack.size),
+                                  pack.contentKey == nullptr ? std::string() : std::string(pack.contentKey));
+        }
+        return owner().getResourcePacks().replacePluginPacks(plugin(pluginHandle)->mDescription.mName,
+                                                           std::move(archives), required != 0) ? 1 : 0;
+    }
+
     std::string textOr(const char *value, const std::string &fallback) {
         if (value == nullptr || value[0] == '\0')
             return fallback;
@@ -184,4 +207,5 @@ void PluginServerApi::fillContent(FalconServerApi &api) {
     api.registerCustomItem = &registerCustomItem;
     api.registerCustomBlock = &registerCustomBlock;
     api.registerCustomEntity = &registerCustomEntity;
+    api.resourcePacksReplace = &resourcePacksReplace;
 }

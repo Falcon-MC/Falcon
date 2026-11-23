@@ -3,7 +3,10 @@
 #include "Core/Utility/UUID.h"
 
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 class ResourcePack {
@@ -20,6 +23,13 @@ public:
     std::vector<std::string> mDependencyUuids;
 };
 
+struct ResourcePackOffer {
+    std::vector<ResourcePack> mPacks;
+    bool mRequired = false;
+
+    const ResourcePack *findById(const std::string &uuid) const;
+};
+
 class ResourcePackManager {
 public:
     void loadFromDirectory(const std::string &directory);
@@ -34,7 +44,10 @@ public:
         return mPacks;
     }
 
-    const ResourcePack *findById(const std::string &uuid) const;
+    bool replacePluginPacks(const std::string &owner, std::vector<std::pair<std::string, std::string>> archives,
+                            bool required);
+
+    std::shared_ptr<const ResourcePackOffer> getOffer(bool serverRequired);
 
     size_t count() const {
         return mPacks.size();
@@ -47,7 +60,7 @@ public:
 private:
     bool _loadPackFile(const std::string &path, const std::string &fileName);
 
-    bool _loadPackBytes(std::string data, const std::string &label, const std::string &contentKey);
+    bool _loadPackBytes(std::string data, const std::string &label, const std::string &contentKey, size_t maxManifestSize = SIZE_MAX);
 
     void _loadFolder(const std::string &path, const std::string &label);
 
@@ -55,11 +68,13 @@ private:
 
     static bool _readWholeFile(const std::string &path, std::string &out);
 
-    static bool _extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out);
+    static bool _extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out, size_t maxSize);
 
     static bool _readManifest(const std::string &manifest, std::string &uuid, std::string &version, std::string &name);
 
     static std::string _sha256(const std::string &data);
 
     std::vector<ResourcePack> mPacks;
+    std::map<std::string, ResourcePackOffer> mPluginStacks;
+    std::shared_ptr<const ResourcePackOffer> mCachedOffer;
 };

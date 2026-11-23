@@ -6,6 +6,7 @@
 #include "Resources/PackDependencies.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -142,17 +143,19 @@ bool ResourcePackManager::_readWholeFile(const std::string &path, std::string &o
     return file.good();
 }
 
-bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out) {
+bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out,
+                                           size_t maxSize) {
     if (zip.size() < 22)
         return false;
 
     size_t eocd = std::string::npos;
-    for (size_t i = zip.size() - 22; i + 4 <= zip.size(); i--) {
-        if (readU32(zip, i) == 0x06054b50) {
+    const size_t minOffset = zip.size() - std::min<size_t>(zip.size(), 22 + 65535);
+    for (size_t i = zip.size() - 22;; --i) {
+        if (readU32(zip, i) == 0x06054b50 && readU16(zip, i + 20) == zip.size() - i - 22) {
             eocd = i;
             break;
         }
-        if (i == 0)
+        if (i == minOffset)
             break;
     }
 
@@ -160,10 +163,10 @@ bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::st
         return false;
 
     const uint16_t entryCount = readU16(zip, eocd + 10);
-    uint32_t offset = readU32(zip, eocd + 16);
+    size_t offset = readU32(zip, eocd + 16);
 
     for (uint16_t entry = 0; entry < entryCount; entry++) {
-        if (offset + 46 > zip.size() || readU32(zip, offset) != 0x02014b50)
+        if (offset > eocd || eocd - offset < 46 || readU32(zip, offset) != 0x02014b50)
             return false;
 
         const uint16_t method = readU16(zip, offset + 10);
@@ -172,7 +175,9 @@ bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::st
         const uint16_t nameLength = readU16(zip, offset + 28);
         const uint16_t extraLength = readU16(zip, offset + 30);
         const uint16_t commentLength = readU16(zip, offset + 32);
-        const uint32_t localOffset = readU32(zip, offset + 42);
+        const size_t localOffset = readU32(zip, offset + 42);
+        if (nameLength + extraLength + commentLength > eocd - offset - 46)
+            return false;
 
         const std::string name = zip.substr(offset + 46, nameLength);
         offset += 46 + nameLength + extraLength + commentLength;
@@ -181,15 +186,17 @@ bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::st
                              && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0;
         if (!matches)
             continue;
+        if (uncompressedSize > maxSize || (method == 0 && compressedSize > maxSize))
+            return false;
 
-        if (localOffset + 30 > zip.size() || readU32(zip, localOffset) != 0x04034b50)
+        if (localOffset > eocd || eocd - localOffset < 30 || readU32(zip, localOffset) != 0x04034b50)
             return false;
 
         const uint16_t localNameLength = readU16(zip, localOffset + 26);
         const uint16_t localExtraLength = readU16(zip, localOffset + 28);
         const size_t dataStart = localOffset + 30 + localNameLength + localExtraLength;
 
-        if (dataStart + compressedSize > zip.size())
+        if (dataStart > eocd || compressedSize > eocd - dataStart)
             return false;
 
         const std::string raw = zip.substr(dataStart, compressedSize);
@@ -215,9 +222,12 @@ bool ResourcePackManager::_readManifest(const std::string &manifest, std::string
         return false;
 
     uuid = findJsonString(header, "uuid");
+    std::transform(uuid.begin(), uuid.end(), uuid.begin(), [](unsigned char c) { return (char) std::tolower(c); });
+    if (uuid != Uuid::fromString(uuid).toString())
+        return false;
     version = extractVersion(header);
     name = findJsonString(header, "name");
-    return !uuid.empty();
+    return true;
 }
 
 std::string ResourcePackManager::_sha256(const std::string &data) {
@@ -226,9 +236,10 @@ std::string ResourcePackManager::_sha256(const std::string &data) {
     return std::string(reinterpret_cast<const char *>(digest), SHA256_DIGEST_LENGTH);
 }
 
-bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &label, const std::string &contentKey) {
+bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &label, const std::string &contentKey,
+                                         size_t maxManifestSize) {
     std::string manifest;
-    if (!_extractZipEntry(data, "manifest.json", manifest)) {
+    if (!_extractZipEntry(data, "manifest.json", manifest, maxManifestSize)) {
         LOG_WARN(LogAreaID::Resource, "Resource pack %s has no readable manifest.json", label.c_str());
         return false;
     }
@@ -264,6 +275,7 @@ bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &la
         LOG_INFO(LogAreaID::Resource, "Resource pack %s is encrypted (loaded content key)", pack.mName.c_str());
 
     mPacks.push_back(std::move(pack));
+    mCachedOffer.reset();
     return true;
 }
 
@@ -374,6 +386,7 @@ void ResourcePackManager::_loadAddon(const std::string &data) {
 
 void ResourcePackManager::loadFromDirectory(const std::string &directory) {
     mPacks.clear();
+    mCachedOffer.reset();
 
     std::error_code error;
     if (!std::filesystem::exists(directory, error)) {
@@ -440,18 +453,67 @@ bool ResourcePackManager::loadCdnConfig(const std::string &path) {
         }
 
         pack->mCdnUrl = url->mString;
+        mCachedOffer.reset();
         LOG_INFO(LogAreaID::Resource, "CDN URL for resource pack %s: %s", pack->mName.c_str(), pack->mCdnUrl.c_str());
     }
 
     return true;
 }
 
-const ResourcePack *ResourcePackManager::findById(const std::string &uuid) const {
+const ResourcePack *ResourcePackOffer::findById(const std::string &uuid) const {
     for (const ResourcePack &pack: mPacks) {
         if (pack.mUuidString == uuid)
             return &pack;
     }
     return nullptr;
+}
+
+bool ResourcePackManager::replacePluginPacks(const std::string &owner,
+                                             std::vector<std::pair<std::string, std::string>> archives,
+                                             bool required) {
+    ResourcePackManager staged;
+    for (auto &[data, key]: archives) {
+        if (!staged._loadPackBytes(std::move(data), owner, key, 1024 * 1024))
+            return false;
+    }
+
+    for (const auto &pack: staged.mPacks) {
+        const auto conflicts = [&](const ResourcePack &active) {
+            return active.mUuid == pack.mUuid
+                   && (active.mSha256 != pack.mSha256 || active.mContentKey != pack.mContentKey);
+        };
+        if (std::any_of(mPacks.begin(), mPacks.end(), conflicts))
+            return false;
+        for (const auto &[source, stack]: mPluginStacks) {
+            if (source != owner && std::any_of(stack.mPacks.begin(), stack.mPacks.end(), conflicts))
+                return false;
+        }
+    }
+
+    if (staged.mPacks.empty() && !required)
+        mPluginStacks.erase(owner);
+    else
+        mPluginStacks.insert_or_assign(owner, ResourcePackOffer{std::move(staged.mPacks), required});
+    mCachedOffer.reset();
+    return true;
+}
+
+std::shared_ptr<const ResourcePackOffer> ResourcePackManager::getOffer(bool serverRequired) {
+    const bool required = serverRequired || std::any_of(mPluginStacks.begin(), mPluginStacks.end(), [](const auto &stack) {
+        return stack.second.mRequired;
+    });
+    if (mCachedOffer != nullptr && mCachedOffer->mRequired == required)
+        return mCachedOffer;
+
+    auto offer = std::make_shared<ResourcePackOffer>(ResourcePackOffer{mPacks, required});
+    for (const auto &[source, stack]: mPluginStacks) {
+        for (const auto &pack: stack.mPacks) {
+            if (offer->findById(pack.mUuidString) == nullptr)
+                offer->mPacks.push_back(pack);
+        }
+    }
+    mCachedOffer = offer;
+    return offer;
 }
 
 std::vector<std::string> ResourcePackManager::getLoadedUuids() const {
@@ -483,5 +545,7 @@ size_t ResourcePackManager::pruneUnsatisfied(const std::vector<std::string> &ava
         removed++;
     }
 
+    if (removed != 0)
+        mCachedOffer.reset();
     return removed;
 }
