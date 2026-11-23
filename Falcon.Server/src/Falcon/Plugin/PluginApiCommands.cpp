@@ -82,6 +82,9 @@ namespace {
             case FALCON_COMMAND_PARAM_JSON:
                 out = Command::makeTypedParameter(source.name, CommandParamType::Json, optional);
                 return true;
+            case FALCON_COMMAND_PARAM_RAWTEXT:
+                out = Command::makeTypedParameter(source.name, CommandParamType::RawText, optional);
+                return true;
             case FALCON_COMMAND_PARAM_ENUM: {
                 if (source.valueCount == 0 || source.values == nullptr)
                     return false;
@@ -145,6 +148,14 @@ namespace {
         }
         owner().getCommands().setAliases(*target, names);
         resendCommands();
+        return 1;
+    }
+
+    int playerSendCommands(FalconPlayer *target) {
+        ServerPlayer *recipient = player(target);
+        if (recipient == nullptr || !recipient->isSpawned() || recipient->isSimulated() || !owner().isTransportReady())
+            return 0;
+        owner()._sendAvailableCommands(*recipient);
         return 1;
     }
 
@@ -284,6 +295,7 @@ void PluginServerApi::fillCommands(FalconServerApi &api) {
     api.serverExecuteCommand = &serverExecuteCommand;
     api.playerExecuteCommand = &playerExecuteCommand;
     api.playerChat = &playerChat;
+    api.playerSendCommands = &playerSendCommands;
     api.registerRecipe = &registerRecipe;
     api.removeRecipe = &removeRecipe;
 }
