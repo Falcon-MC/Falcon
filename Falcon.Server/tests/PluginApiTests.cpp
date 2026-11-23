@@ -7,6 +7,7 @@
 #include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/AvailableCommandsPacket.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
@@ -345,6 +346,49 @@ namespace {
                 "the enum values were lost");
         require(overloads[0].mParameters[1].mType == CommandParamType::Int && overloads[0].mParameters[1].mOptional,
                 "the int parameter was lost");
+        const FalconCommandParameter rest{"message", FALCON_COMMAND_PARAM_RAWTEXT, 1, nullptr, 0};
+        require(api.commandAddOverload(handle, "probe", &rest, 1) == 1, "the raw text overload was refused");
+        const std::vector<CommandOverloadData> both = command->getOverloads();
+        require(both.size() == 2 && both[1].mParameters.size() == 1
+                        && both[1].mParameters[0].mType == CommandParamType::RawText && both[1].mParameters[0].mOptional,
+                "the raw text parameter was lost");
+
+        struct CommandPacketProbe {
+            FalconPlayer *recipient = nullptr;
+            std::string payload;
+        } sent;
+        const uint64_t sendId = api.subscribe(
+                handle, FALCON_EVENT_DATA_PACKET_SEND, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *userData) {
+                    const FalconServerApi &api = PluginServerApi::get();
+                    if (api.eventPacketId(event) != static_cast<uint32_t>(MinecraftPacketIds::AvailableCommands))
+                        return;
+                    auto &sent = *static_cast<CommandPacketProbe *>(userData);
+                    sent.recipient = api.eventPlayer(event);
+                    uint32_t length = 0;
+                    const uint8_t *payload = api.eventPacketData(event, &length);
+                    sent.payload.assign(reinterpret_cast<const char *>(payload), length);
+                    api.eventSetCancelled(event, 1);
+                },
+                &sent);
+        const int didSend = api.playerSendCommands(fixture.playerHandle());
+        api.unsubscribe(sendId);
+        require(didSend == 1 && sent.recipient == fixture.playerHandle() && !sent.payload.empty(),
+                "available commands did not reach the plugin send event");
+        AvailableCommandsPacket packet;
+        ReadOnlyBinaryStream stream(sent.payload);
+        packet.read(stream, fixture.owner.getCodecContext());
+        const auto advertised = std::find_if(packet.mCommands.begin(), packet.mCommands.end(),
+                                             [](const CommandData &entry) { return entry.mName == "probe"; });
+        require(advertised != packet.mCommands.end() && advertised->mOverloads.size() == 2
+                        && advertised->mOverloads[1].mParameters.size() == 1
+                        && advertised->mOverloads[1].mParameters[0].mType == CommandParamType::RawText
+                        && advertised->mOverloads[1].mParameters[0].mOptional,
+                "the outgoing list lost the optional raw text overload");
+
+        fixture.player->setLoginState(ServerPlayer::LoginState::StartGameSent);
+        require(api.playerSendCommands(fixture.playerHandle()) == 0, "commands went to a player not in the world");
+        fixture.player->setLoginState(ServerPlayer::LoginState::Spawned);
 
         require(api.serverExecuteCommand("probe fast 3") == 1 && probe.calls == 1 && !probe.player,
                 "the console did not run the command");
