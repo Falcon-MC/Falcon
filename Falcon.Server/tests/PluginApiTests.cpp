@@ -146,6 +146,19 @@ namespace {
                 "a value above the maximum was accepted");
         require(api.entitySetAttribute(body, "minecraft:movement", std::nanf("")) == 0, "nan was accepted");
         require(api.entitySetAttribute(body, "minecraft:nothing", 1.0f) == 0, "an unknown attribute was set");
+        FalconAttribute previousHealth{};
+        require(api.entityAttribute(body, "minecraft:health", &previousHealth) == 1, "health was not reported");
+        require(api.entitySetMaxHealth(body, 22) == 1, "maximum health was not set");
+        FalconAttribute health{};
+        require(api.entityAttribute(body, "minecraft:health", &health) == 1 && health.maximum == 22.0f,
+                "increased maximum health was not reported");
+        require(api.entitySetMaxHealth(body, 10) == 1, "maximum health was not lowered");
+        require(api.entityAttribute(body, "minecraft:health", &health) == 1 && health.maximum == 10.0f &&
+                        health.value <= 10.0f,
+                "current health was not clamped after lowering the maximum");
+        require(api.entitySetMaxHealth(body, std::nanf("")) == 0, "nan maximum health was accepted");
+        require(api.entitySetMaxHealth(body, previousHealth.maximum) == 1, "maximum health was not restored");
+        require(api.entitySetAttribute(body, "minecraft:health", previousHealth.value) == 1, "health was not restored");
     }
 
     // nobody listens on the fixture's connection: these only have to reach the send path without failing
