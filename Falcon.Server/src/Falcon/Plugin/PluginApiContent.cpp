@@ -21,7 +21,7 @@ namespace {
         return identifier.substr(identifier.find(':') + 1);
     }
 
-    bool acceptIdentifier(LoadedPlugin *owner, const char *kind, const char *value) {
+    bool acceptIdentifier(LoadedPlugin *owner, const char *kind, const char *value, bool frozen) {
         const char *name = owner->mDescription.mName.c_str();
         if (value == nullptr || value[0] == '\0') {
             LOG_ERROR(LogAreaID::Server, "[%s] Cannot register a custom %s without an identifier", name, kind);
@@ -43,9 +43,9 @@ namespace {
         }
 
         CustomContentRegistry &content = CustomContentRegistry::getInstance();
-        if (content.isFrozen()) {
+        if (frozen) {
             LOG_ERROR(LogAreaID::Server,
-                      "[%s] Cannot register custom %s %s: custom content must be registered in onLoad", name, kind,
+                      "[%s] Cannot register custom %s %s: custom content registration has closed", name, kind,
                       value);
             return false;
         }
@@ -68,7 +68,7 @@ namespace {
         LoadedPlugin *owner = plugin(source);
         if (owner == nullptr || descriptor == nullptr)
             return 0;
-        if (!acceptIdentifier(owner, "item", descriptor->identifier))
+        if (!acceptIdentifier(owner, "item", descriptor->identifier, CustomContentRegistry::getInstance().areItemsFrozen()))
             return 0;
 
         CustomItemDefinition definition;
@@ -104,7 +104,7 @@ namespace {
         LoadedPlugin *owner = plugin(source);
         if (owner == nullptr || descriptor == nullptr)
             return 0;
-        if (!acceptIdentifier(owner, "block", descriptor->identifier))
+        if (!acceptIdentifier(owner, "block", descriptor->identifier, CustomContentRegistry::getInstance().isFrozen()))
             return 0;
 
         CustomBlockDefinition definition;
@@ -149,7 +149,7 @@ namespace {
         LoadedPlugin *owner = plugin(source);
         if (owner == nullptr || descriptor == nullptr)
             return 0;
-        if (!acceptIdentifier(owner, "entity", descriptor->identifier))
+        if (!acceptIdentifier(owner, "entity", descriptor->identifier, CustomContentRegistry::getInstance().isFrozen()))
             return 0;
 
         PluginContentRegistry::EntityEntry entry;

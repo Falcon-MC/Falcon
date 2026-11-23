@@ -1072,6 +1072,7 @@ public:
     void sendModalForm(ServerPlayer &player, uint32_t formId, const std::string &formData,
                        ModalFormCallback callback = {});
     void closeAllForms(ServerPlayer &player);
+    void updatePlayerNameTag(ServerPlayer &player, std::string nameTag);
 
     // the screen binds to propertyPrefix + id in the minecraft store; writable lists the paths the client may set.
     // returns the form id, 0 when the player is not spawned

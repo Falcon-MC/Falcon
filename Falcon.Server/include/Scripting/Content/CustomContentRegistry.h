@@ -316,6 +316,14 @@ public:
         return mFrozen;
     }
 
+    void freezeItems() {
+        mItemsFrozen = true;
+    }
+
+    bool areItemsFrozen() const {
+        return mItemsFrozen;
+    }
+
     // a host running world after world loads the next world's packs from scratch
     void reset();
 
@@ -350,4 +358,5 @@ private:
     std::unordered_map<std::string, uint8_t> mNeighborListeners;
     bool mUpcomingCreatorFeatures = false;
     bool mFrozen = false;
+    bool mItemsFrozen = false;
 };

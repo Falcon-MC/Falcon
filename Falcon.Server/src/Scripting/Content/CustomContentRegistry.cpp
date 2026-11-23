@@ -442,7 +442,7 @@ bool CustomContentRegistry::hasIdentifier(const std::string &identifier) const {
 
 const CustomItemDefinition *CustomContentRegistry::registerItem(const CustomItemDefinition &item,
                                                                 ItemDefinitionRegistry &items) {
-    if (mFrozen || hasIdentifier(item.mIdentifier) || items.getDefinition(item.mIdentifier) != nullptr)
+    if (mItemsFrozen || hasIdentifier(item.mIdentifier) || items.getDefinition(item.mIdentifier) != nullptr)
         return nullptr;
 
     _registerItem(item, items);
