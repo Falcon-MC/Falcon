@@ -1042,16 +1042,25 @@ namespace {
                         || id == (uint32_t) MinecraftPacketIds::ClientboundCloseForm)
                         static_cast<std::vector<uint32_t> *>(data)->push_back(id);
                 }, &packets);
+        std::vector<uint32_t> cancelled;
+        const auto response = api.subscribe(
+                PluginManager::toHandle(plugin), FALCON_EVENT_PLAYER_FORM_RESPONSE, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *data) {
+                    const auto &api = PluginServerApi::get();
+                    if (api.eventState(event))
+                        static_cast<std::vector<uint32_t> *>(data)->push_back(api.eventFormId(event));
+                }, &cancelled);
         const auto first = api.playerSendForm(fixture.playerHandle(), "{}");
         const int close = api.playerCloseForms(fixture.playerHandle());
         const auto second = api.playerSendForm(fixture.playerHandle(), "{}");
         ServerTickProbe::flushPostedTasks(fixture.owner);
         api.unsubscribe(send);
+        api.unsubscribe(response);
         require(first != 0 && second != 0 && close == 1, "a queued form operation was refused");
-        require(packets == std::vector<uint32_t>{(uint32_t) MinecraftPacketIds::ModalFormRequest,
-                                                  (uint32_t) MinecraftPacketIds::ClientboundCloseForm,
+        require(packets == std::vector<uint32_t>{(uint32_t) MinecraftPacketIds::ClientboundCloseForm,
                                                   (uint32_t) MinecraftPacketIds::ModalFormRequest},
-                "form close bypassed the queue");
+                "a form discarded before close reached the client");
+        require(cancelled == std::vector<uint32_t>{first}, "the discarded form did not receive cancellation");
     }
 
     void permissionGroups(const FalconServerApi &api, Fixture &fixture) {
