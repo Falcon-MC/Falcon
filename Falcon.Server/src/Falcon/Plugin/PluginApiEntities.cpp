@@ -6,9 +6,11 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginActor.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Falcon/Plugin/PluginEvents.h"
 
+#include <cmath>
 #include <string>
 
 using namespace PluginApiHelpers;
@@ -83,7 +85,9 @@ namespace {
     void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
         Actor *value = entity(target);
         Vector3f to = toVector3f(position);
-        if (!PluginEvents::teleport(*value, to, "plugin"))
+        // the plugin drawing it keeps it where its own copy is: that is no teleport to tell anyone of
+        const ServerActor *drawn = asActor(value);
+        if ((drawn == nullptr || !drawn->isDrawnByPlugin()) && !PluginEvents::teleport(*value, to, "plugin"))
             return;
         Level &destinationLevel = destination == nullptr ? owner().getLevelFor(*value) : *level(destination);
 
@@ -275,7 +279,42 @@ namespace {
     }
 }
 
+namespace {
+    PluginActor *asPluginActor(FalconEntity *target) {
+        return target == nullptr ? nullptr : dynamic_cast<PluginActor *>(entity(target));
+    }
+
+    int entitySetPluginDrawn(FalconEntity *target, int pluginDrawn) {
+        PluginActor *actor = asPluginActor(target);
+        if (actor == nullptr)
+            return 0;
+        if (actor->isDrawnByPlugin() == (pluginDrawn != 0))
+            return 1;
+        // whoever saw it drawn by Falcon forgets it; the next visibility pass shows it again when Falcon draws it
+        if (pluginDrawn != 0)
+            owner().broadcastActorRemove(*actor);
+        actor->setDrawnByPlugin(pluginDrawn != 0);
+        return 1;
+    }
+
+    int entityIsPluginDrawn(FalconEntity *target) {
+        const PluginActor *actor = asPluginActor(target);
+        return actor != nullptr && actor->isDrawnByPlugin() ? 1 : 0;
+    }
+
+    int entitySetSize(FalconEntity *target, float width, float height) {
+        PluginActor *actor = asPluginActor(target);
+        if (actor == nullptr || !(width > 0.0f) || !(height > 0.0f) || !std::isfinite(width) || !std::isfinite(height))
+            return 0;
+        actor->setSize(width, height);
+        return 1;
+    }
+}
+
 void PluginServerApi::fillEntities(FalconServerApi &api) {
+    api.entitySetPluginDrawn = &entitySetPluginDrawn;
+    api.entityIsPluginDrawn = &entityIsPluginDrawn;
+    api.entitySetSize = &entitySetSize;
     api.playerEntity = &playerEntity;
     api.entityPlayer = &entityPlayer;
     api.entityType = &entityType;

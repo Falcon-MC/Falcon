@@ -172,6 +172,11 @@ public:
         (void) owner;
     }
 
+    // shown to clients by a plugin's own packets: none of Falcon's go out for it
+    virtual bool isDrawnByPlugin() const {
+        return false;
+    }
+
     virtual bool isInvulnerable() const {
         return false;
     }
