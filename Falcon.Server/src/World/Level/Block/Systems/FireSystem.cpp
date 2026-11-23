@@ -273,12 +273,14 @@ namespace {
         if (actor.isDead() || actor.isProjectile() || actor.hasEffect(MobEffectId::FireResistance))
             return;
 
-        actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
-                   ActorDamageSource::environment("death.attack.inFire", actor.getName()));
+        owner.hurtActor(actor, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", block);
 
         if (actor.getFireTicks() < FireSystem::COMBUST_TICKS) {
-            actor.setFireTicks(FireSystem::COMBUST_TICKS);
-            owner.syncActorFlags(actor);
+            const int32_t duration = owner.allowCombustion(actor, FireSystem::COMBUST_TICKS, nullptr, block);
+            if (duration > actor.getFireTicks()) {
+                actor.setFireTicks(duration);
+                owner.syncActorFlags(actor);
+            }
         }
     }
 
@@ -300,11 +302,13 @@ namespace {
         if (!isFireAt(level, block))
             return;
 
-        owner.hurt(player, FireSystem::CONTACT_DAMAGE,
-                   ActorDamageSource::environment("death.attack.inFire", player.getName()));
+        owner.hurtActor(player, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", block);
 
-        if (player.getFireTicks() < FireSystem::COMBUST_TICKS)
-            player.setFireTicks(FireSystem::COMBUST_TICKS);
+        if (player.getFireTicks() < FireSystem::COMBUST_TICKS) {
+            const int32_t duration = owner.allowCombustion(player, FireSystem::COMBUST_TICKS, nullptr, block);
+            if (duration > player.getFireTicks())
+                player.setFireTicks(duration);
+        }
     }
 }
 

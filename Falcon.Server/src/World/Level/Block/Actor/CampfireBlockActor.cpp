@@ -1,5 +1,7 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 
+#include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Inventory/ItemStackNbt.h"
 #include "World/Item/CraftingRecipeTable.h"
@@ -150,17 +152,34 @@ bool CampfireBlockActor::tick(ServerNetworkHandler &owner) {
             continue;
 
         std::shared_ptr<ItemDefinition> output = owner.getItemDefinitions().getDefinition(recipe->mOutputItemId);
+        ItemStack cooked = ItemStack::air();
+        if (output != nullptr) {
+            cooked.mDefinition = std::move(output);
+            cooked.mBlockDefinition = owner.getBlockDefinitions().getDefinition(recipe->mOutputItemId);
+            cooked.mDamage = 0;
+            cooked.mCount = item.mCount;
+        }
+
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_CAMPFIRE_COOK)) {
+            ItemStack input = item;
+            PluginEvent event;
+            event.mType = FALCON_EVENT_CAMPFIRE_COOK;
+            event.mCancellable = true;
+            event.mLevel = mLevel;
+            event.mBlockPosition = mPosition;
+            event.mSourceSlot = slot;
+            event.mItem = &input;
+            event.mResult = &cooked;
+            plugins->dispatch(event);
+            if (event.mCancelled)
+                continue;
+        }
         mInventory.setContainerItem(slot, ItemStack::air());
         mCookTimes[slot] = 0;
         changed = true;
-        if (output == nullptr)
+        if (cooked.isAir())
             continue;
 
-        ItemStack cooked = ItemStack::air();
-        cooked.mDefinition = std::move(output);
-        cooked.mBlockDefinition = owner.getBlockDefinitions().getDefinition(recipe->mOutputItemId);
-        cooked.mDamage = 0;
-        cooked.mCount = item.mCount;
         ItemActorHandler::dropItem(owner, *mLevel, dropPositionOf(mPosition), cooked,
                                    ItemActorHandler::randomDropMotion(), ItemActorHandler::DROP_PICKUP_DELAY);
     }

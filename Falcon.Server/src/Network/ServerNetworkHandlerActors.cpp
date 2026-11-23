@@ -23,6 +23,7 @@
 #include "World/Actor/FreezingSystem.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Math/MathConstants.h"
+#include "Core/Json/Json.h"
 #include "Protocol/Packets/AddActorPacket.h"
 #include "Protocol/Packets/AnimateEntityPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
@@ -69,6 +70,9 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <limits>
+#include <charconv>
+#include <utility>
 
 namespace {
     const char *const UNDEAD_FAMILY = "undead";
@@ -486,7 +490,7 @@ namespace {
 }
 
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
-                                                   float verticalOffset) {
+                                                   float verticalOffset, const ItemStack *weapon) {
     const Vector3f &rotation = player.getRotation();
     const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
     const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
@@ -505,6 +509,46 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     projectile->getProjectileData().mLootingLevel = ItemEnchantments::getLevel(player.getInventory().getItemInHand(),
                                                                                EnchantmentIds::LOOTING);
     projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
+    if (weapon != nullptr) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_SHOOT_BOW)) {
+            const int64_t arrowId = projectile->getUniqueId();
+            const uint64_t arrowRuntimeId = projectile->getRuntimeId();
+            ItemStack bow = *weapon;
+            PluginEvent event;
+            event.mType = FALCON_EVENT_ENTITY_SHOOT_BOW;
+            event.mCancellable = true;
+            event.mPlayer = &player;
+            event.mEntity = &player;
+            event.mTarget = projectile;
+            event.mItem = &bow;
+            event.mAmount = speed;
+            plugins->dispatch(event);
+            if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0) {
+                removeActor(arrowId);
+                return nullptr;
+            }
+            projectile = getActorByRuntimeId(arrowRuntimeId);
+            if (!event.mCustomData.empty()) {
+                uint64_t replacementId = 0;
+                const char *end = event.mCustomData.data() + event.mCustomData.size();
+                const auto parsed = std::from_chars(event.mCustomData.data(), end, replacementId);
+                auto *replacement = parsed.ec == std::errc() && parsed.ptr == end
+                                    ? getActorByRuntimeId(replacementId) : nullptr;
+                if (replacement != nullptr && replacement->sharesLevelWith(player)) {
+                    if (replacementId != arrowRuntimeId)
+                        removeActor(arrowId);
+                    projectile = replacement;
+                }
+            }
+            if (projectile == nullptr)
+                return nullptr;
+            projectile->setOwnerUniqueId(player.getUniqueId());
+            const float force = (float) std::min(event.mAmount, 128.0);
+            const Vector3f motion = projectile->getMotion();
+            const float scale = speed > 0 ? force / speed : 0;
+            projectile->setMotion(Vector3f(motion.x * scale, motion.y * scale, motion.z * scale));
+        }
+    }
     faceMotion(*projectile, projectile->getMotion());
     // the spawn packet went out before the motion was known
     broadcastActorMove(*projectile);
@@ -872,8 +916,10 @@ bool ServerNetworkHandler::onArrowProjectileHitTarget(ServerActor &projectile, c
     const float knockback = ARROW_KNOCKBACK + PUNCH_KNOCKBACK_PER_LEVEL * (float) data.mPunchLevel;
     knockBack(target, targetPosition.x - hitPosition.x, targetPosition.z - hitPosition.z, knockback);
 
-    if (data.mFlameTicks > 0 && !target.hasEffect(MobEffectId::FireResistance)) {
-        target.setFireTicks(data.mFlameTicks);
+    const int32_t flameTicks = data.mFlameTicks > 0 && !target.hasEffect(MobEffectId::FireResistance)
+                              ? allowCombustion(target, data.mFlameTicks, &projectile) : 0;
+    if (flameTicks > 0) {
+        target.setFireTicks(flameTicks);
         target.setOnFire(true);
 
         ServerActor *burningActor = dynamic_cast<ServerActor *>(&target);
@@ -1449,14 +1495,38 @@ bool ServerNetworkHandler::damageActor(ServerActor &actor, float amount, const A
     return actor.hurt(*this, amount, source, lootingLevel);
 }
 
-void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey) {
+int32_t ServerNetworkHandler::allowCombustion(Actor &victim, int32_t duration, Actor *source,
+                                               std::optional<Vector3i> block) {
+    const FalconEventType type = block ? FALCON_EVENT_ENTITY_COMBUST_BY_BLOCK : FALCON_EVENT_ENTITY_COMBUST_BY_ENTITY;
+    PluginManager *plugins = PluginManager::findWithSubscribers(type);
+    if (plugins == nullptr)
+        return duration;
+
+    PluginEvent event;
+    event.mType = type;
+    event.mCancellable = true;
+    event.mEntity = &victim;
+    event.mAttacker = source;
+    event.mAmount = duration / 20.0;
+    if (block) {
+        event.mLevel = &getLevelFor(victim);
+        event.mBlockPosition = *block;
+    }
+    plugins->dispatch(event);
+    if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount <= 0)
+        return 0;
+    return (int32_t) std::min(event.mAmount * 20, (double) std::numeric_limits<int32_t>::max());
+}
+
+void ServerNetworkHandler::hurtActor(Actor &actor, float amount, const std::string &deathMessageKey,
+                                      std::optional<Vector3i> block) {
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor)) {
-        hurt(*player, amount, ActorDamageSource::environment(deathMessageKey, player->getName()));
+        hurt(*player, amount, ActorDamageSource::environment(deathMessageKey, player->getName()).fromBlock(block));
         return;
     }
 
     if (ServerActor *target = dynamic_cast<ServerActor *>(&actor))
-        target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()));
+        target->hurt(*this, amount, ActorDamageSource::environment(deathMessageKey, target->getName()).fromBlock(block));
 }
 
 bool ServerNetworkHandler::broadcastActorMove(ServerActor &actor, bool teleported, const ServerPlayer *except) {
@@ -1739,13 +1809,50 @@ void ServerNetworkHandler::saveWorldDynamicProperties(bool checked) {
 
 void ServerNetworkHandler::explodeAfterActors(Level &level, const Vector3f &center, double size,
                                               const ServerActor &source, bool fromTnt) {
+    bool breakBlocks = true;
+    double fireChance = 0;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_PRE_EXPLODE)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_PRE_EXPLODE;
+        event.mCancellable = true;
+        event.mEntity = const_cast<ServerActor *>(&source);
+        event.mLevel = &level;
+        event.mPosition = center;
+        event.mAmount = size;
+        event.mState = true;
+        plugins->dispatch(event);
+        if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount <= 0)
+            return;
+        size = std::min(event.mAmount, 128.0);
+        breakBlocks = event.mState;
+        fireChance = event.mPreviousAmount;
+        if (!event.mCustomData.empty()) {
+            const auto data = json::parse(event.mCustomData);
+            if (data != nullptr) {
+                if (const auto *value = data->get("breakBlocks"))
+                    breakBlocks = value->boolean(breakBlocks);
+                if (const auto *value = data->get("fireChance"))
+                    fireChance = value->number(fireChance);
+            }
+        }
+        fireChance = std::isfinite(fireChance) ? std::clamp(fireChance, 0.0, 1.0) : 0;
+    }
+
     if (mTickingActors) {
-        mPendingExplosions.push_back(PendingExplosion{&level, center, size, source.getUniqueId(), fromTnt});
+        const PendingExplosion pending{&level, center, size, source.getUniqueId(), fromTnt};
+        if (breakBlocks && fireChance == 0)
+            mPendingExplosions.push_back(pending);
+        else
+            mConfiguredExplosions.push_back({pending, breakBlocks, fireChance});
         return;
     }
 
     Explosion explosion(*this, level, center, size, &source, fromTnt);
-    explosion.explode();
+    explosion.setFireChance(fireChance);
+    if (breakBlocks)
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
 }
 
 namespace {
@@ -1759,6 +1866,17 @@ namespace {
 }
 
 void ServerNetworkHandler::_flushExplosions() {
+    for (const ConfiguredExplosion &configured: std::exchange(mConfiguredExplosions, {})) {
+        const PendingExplosion &pending = configured.mExplosion;
+        const auto source = mActors.find(pending.mSourceId);
+        Explosion explosion(*this, *pending.mLevel, pending.mCenter, pending.mSize,
+                            source == mActors.end() ? nullptr : source->second.get(), pending.mFromTnt);
+        explosion.setFireChance(configured.mFireChance);
+        if (configured.mBreakBlocks)
+            explosion.explode();
+        else
+            explosion.explodeWithoutBlocks();
+    }
     if (mPendingExplosions.empty())
         return;
 
@@ -2370,6 +2488,7 @@ void ServerNetworkHandler::tickActors() {
 
             bool touched = false;
             const float radiusSquared = cloud.mRadius * cloud.mRadius;
+            std::vector<uint64_t> insidePlayers;
 
             for (auto &playerEntry: mPlayers) {
                 ServerPlayer &nearby = playerEntry.second;
@@ -2385,8 +2504,7 @@ void ServerNetworkHandler::tickActors() {
                 if (dx * dx + dz * dz > radiusSquared || std::fabs(dy) > 1.0f)
                     continue;
 
-                applyPotionEffects(nearby, cloud.mPotionId, 0.25f);
-                touched = true;
+                insidePlayers.push_back(nearby.getRuntimeId());
             }
 
             std::vector<int64_t> inside;
@@ -2406,6 +2524,60 @@ void ServerNetworkHandler::tickActors() {
 
                 inside.push_back(actorEntry.first);
             }
+            if (!insidePlayers.empty() || !inside.empty()) {
+                if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_AREA_EFFECT_CLOUD_APPLY)) {
+                    ServerActor *cloudActor = getActor(cloudId);
+                    if (cloudActor == nullptr)
+                        continue;
+                    std::string ids = "[";
+                    const auto append = [&ids](uint64_t id) {
+                        if (ids.size() > 1)
+                            ids += ',';
+                        ids += std::to_string(id);
+                    };
+                    for (const uint64_t id: insidePlayers)
+                        append(id);
+                    for (const int64_t id: inside) {
+                        if (ServerActor *actor = getActor(id))
+                            append(actor->getRuntimeId());
+                    }
+                    ids += ']';
+                    std::string effects = "[";
+                    for (const PotionEffect &effect: getPotionEffects(cloud.mPotionId)) {
+                        if (effects.size() > 1)
+                            effects += ',';
+                        const auto instance = potionEffectInstance(effect, 0.25f);
+                        effects += '[' + std::to_string((int) instance.mId) + ',' + std::to_string(instance.mDuration)
+                                   + ',' + std::to_string(instance.mAmplifier) + ']';
+                    }
+                    effects += ']';
+
+                    PluginEvent event;
+                    event.mType = FALCON_EVENT_AREA_EFFECT_CLOUD_APPLY;
+                    event.mCancellable = true;
+                    event.mEntity = cloudActor;
+                    event.mLevel = &getLevelFor(*cloudActor);
+                    event.mCustomData = "{\"entities\":" + ids + ",\"effects\":" + effects
+                                        + ",\"age\":" + std::to_string(cloud.mAge)
+                                        + ",\"maxAge\":" + std::to_string(cloud.mWaitTime + cloud.mDuration)
+                                        + ",\"radius\":" + std::to_string(cloud.mRadius)
+                                        + ",\"radiusChangeOnUse\":" + std::to_string(cloud.mRadiusOnUse)
+                                        + ",\"radiusChangePerTick\":" + std::to_string(cloud.mRadiusPerTick)
+                                        + ",\"reapplicationDelay\":" + std::to_string(cloud.mReapplicationDelay) + '}';
+                    plugins->dispatch(event);
+                    if (event.mCancelled || getActor(cloudId) == nullptr) {
+                        insidePlayers.clear();
+                        inside.clear();
+                    }
+                }
+            }
+            for (const uint64_t id: insidePlayers) {
+                if (ServerPlayer *nearby = getPlayerByRuntimeId(id)) {
+                    applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
+                    touched = true;
+                }
+            }
+
             // applied after the walk: an instant damage can kill and remove the actor
             for (const int64_t uniqueId: inside) {
                 if (ServerActor *nearby = getActor(uniqueId)) {

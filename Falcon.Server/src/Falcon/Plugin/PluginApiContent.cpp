@@ -12,6 +12,35 @@
 using namespace PluginApiHelpers;
 
 namespace {
+    uint32_t eventResourcePackCount(FalconEvent *handle) {
+        const auto *offer = event(handle)->mResourcePackOffer;
+        return offer != nullptr ? (uint32_t) (*offer)->mPacks.size() : 0;
+    }
+
+    int eventResourcePackAt(FalconEvent *handle, uint32_t index, FalconOfferedResourcePack *out) {
+        const auto *offer = event(handle)->mResourcePackOffer;
+        if (offer == nullptr || out == nullptr || index >= (*offer)->mPacks.size())
+            return 0;
+        const ResourcePack &pack = (*offer)->mPacks[index];
+        *out = {pack.mUuidString.c_str(), pack.mName.c_str(), pack.mVersion.c_str(), pack.mContentKey.c_str(),
+                pack.mSha256.c_str(), pack.mSize, pack.mData.data(), pack.mData.size()};
+        return 1;
+    }
+
+    int eventReplaceResourcePackOffer(FalconEvent *handle, const FalconResourcePackOfferEntry *packs, uint32_t count,
+                                      int required) {
+        PluginEvent *source = event(handle);
+        if (source->mMonitor || source->mResourcePackOffer == nullptr || count > 128 || (count != 0 && packs == nullptr))
+            return 0;
+        auto &offer = *source->mResourcePackOffer;
+        auto replacement = ResourcePackManager::replaceOffer(*offer, packs, count, required != 0);
+        if (replacement == nullptr)
+            return 0;
+        offer = std::move(replacement);
+        source->mState = offer->mRequired;
+        return 1;
+    }
+
     int resourcePacksReplace(FalconPlugin *pluginHandle, const FalconResourcePackDescriptor *packs, uint32_t count,
                              int required) {
         constexpr uint32_t MAX_PACKS = 128;
@@ -208,4 +237,7 @@ void PluginServerApi::fillContent(FalconServerApi &api) {
     api.registerCustomBlock = &registerCustomBlock;
     api.registerCustomEntity = &registerCustomEntity;
     api.resourcePacksReplace = &resourcePacksReplace;
+    api.eventResourcePackCount = &eventResourcePackCount;
+    api.eventResourcePackAt = &eventResourcePackAt;
+    api.eventReplaceResourcePackOffer = &eventReplaceResourcePackOffer;
 }

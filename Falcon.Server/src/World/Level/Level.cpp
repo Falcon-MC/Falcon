@@ -606,7 +606,8 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     LevelChunk chunk(chunkX, chunkZ);
     chunk.setDimension(mDimension);
 
-    if (!mStorage.isOpen() || !mStorage.loadChunk(chunk))
+    const bool generated = !mStorage.isOpen() || !mStorage.loadChunk(chunk);
+    if (generated)
         _generate(chunk);
 
     if (mStorage.isOpen() && mPendingChunks.find(key) == mPendingChunks.end()) {
@@ -624,13 +625,15 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
 
     mPendingChunks.erase(key);
 
-    auto result = mChunks.emplace(key, std::move(chunk));
-    _loadPendingTicks(result.first->second);
+    LevelChunk &inserted = mChunks.emplace(key, std::move(chunk)).first->second;
+    _loadPendingTicks(inserted);
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
     if (mOwner != nullptr)
-        RedstoneSystem::onChunkLoaded(*mOwner, *this, result.first->second);
-    return result.first->second;
+        RedstoneSystem::onChunkLoaded(*mOwner, *this, inserted);
+    if (generated && inserted.isPopulated())
+        _dispatchChunkEvent(FALCON_EVENT_CHUNK_POPULATE, chunkX, chunkZ, true);
+    return inserted;
 }
 
 LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
@@ -644,7 +647,10 @@ LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
     chunk.setDimension(mDimension);
     _generate(chunk);
 
-    return mChunks.emplace(key, std::move(chunk)).first->second;
+    LevelChunk &inserted = mChunks.emplace(key, std::move(chunk)).first->second;
+    if (inserted.isPopulated())
+        _dispatchChunkEvent(FALCON_EVENT_CHUNK_POPULATE, chunkX, chunkZ, true);
+    return inserted;
 }
 
 LevelChunk &Level::insertChunk(LevelChunk chunk) {
@@ -1554,6 +1560,7 @@ size_t Level::drainCompletedChunks() {
         const bool canReplace = !canInsert && result.mReplacesResident && !resident->second.isPopulated();
 
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
+            const bool populated = result.mChunk->isPopulated() && (canReplace || result.mGenerated);
             if (canInsert) {
                 LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
                 _loadPendingTicks(inserted);
@@ -1570,6 +1577,8 @@ size_t Level::drainCompletedChunks() {
             _refreshChunkShapes(result.mX, result.mZ);
             _queueCompletedSaves(result.mX, result.mZ);
             _storeGeneratedContent(result);
+            if (populated)
+                _dispatchChunkEvent(FALCON_EVENT_CHUNK_POPULATE, result.mX, result.mZ, true);
         } else {
             // overtaken by a synchronous getChunk(), or discarded at shutdown: keep the spilled blocks it carried
             _restoreSpilledChanges(key, std::move(result.mSpilledChanges));

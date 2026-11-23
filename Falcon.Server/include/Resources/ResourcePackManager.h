@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Utility/UUID.h"
+#include <falcon/falcon_api.h>
 
 #include <cstdint>
 #include <map>
@@ -48,6 +49,10 @@ public:
                             bool required);
 
     std::shared_ptr<const ResourcePackOffer> getOffer(bool serverRequired);
+
+    static std::shared_ptr<const ResourcePackOffer> replaceOffer(
+            const ResourcePackOffer &current, const FalconResourcePackOfferEntry *entries, uint32_t count,
+            bool required);
 
     size_t count() const {
         return mPacks.size();

@@ -21,7 +21,6 @@ bool MagmaBlock::matches(const std::string &identifier) {
 
 void MagmaBlock::onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                           const BlockState &state) const {
-    (void) position;
     (void) state;
 
     if (actor.isFireImmune() || actor.hasEffect(MobEffectId::FireResistance)
@@ -34,7 +33,7 @@ void MagmaBlock::onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vecto
             return;
     }
 
-    owner.hurtActor(actor, HOT_FLOOR_DAMAGE, "death.attack.hotFloor");
+    owner.hurtActor(actor, HOT_FLOOR_DAMAGE, "death.attack.hotFloor", position);
 }
 
 // water changing just above asks for a column two ticks later on the second queue; the snow and

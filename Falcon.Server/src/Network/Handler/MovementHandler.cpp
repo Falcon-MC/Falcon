@@ -24,6 +24,8 @@
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginWorldEventData.h"
+#include "Core/Json/Json.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Scripting/ScriptEngine.h"
@@ -61,6 +63,20 @@ namespace {
         plugins->dispatch(event);
     }
 
+    bool allowPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(type);
+        if (plugins == nullptr)
+            return true;
+
+        PluginEvent event;
+        event.mType = type;
+        event.mCancellable = true;
+        event.mPlayer = &player;
+        event.mState = state;
+        plugins->dispatch(event);
+        return !event.mCancelled;
+    }
+
     // Respiration N skips the air loss on a tick with probability N / (N + 1)
     bool consumesAir(const ServerPlayer &player) {
         const int32_t respiration = ItemEnchantments::getLevel(
@@ -68,7 +84,7 @@ namespace {
         return respiration <= 0 || std::rand() % (respiration + 1) == 0;
     }
 
-    void freezeWaterUnderfoot(Level &level, const ServerPlayer &player, const Vector3f &feetPosition) {
+    void freezeWaterUnderfoot(Level &level, ServerPlayer &player, const Vector3f &feetPosition) {
         if (player.isSpectator())
             return;
 
@@ -77,31 +93,63 @@ namespace {
         if (frostWalker <= 0)
             return;
 
-        const int32_t radius = 2 + frostWalker;
+        int32_t radius = 2 + frostWalker;
         const int32_t centerX = (int32_t) std::floor(feetPosition.x);
         const int32_t y = (int32_t) std::floor(feetPosition.y) - 1;
         const int32_t centerZ = (int32_t) std::floor(feetPosition.z);
         if (y < level.getMinY() || y >= level.getMaxY())
             return;
 
+        Tag properties = Tag::ofCompound();
+        properties.putInt("age", 0);
+        BlockState target(FrostedIceBlock::IDENTIFIER, properties);
+        BlockState liquid(BlockNames::WATER);
+        bool customLiquid = false;
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_FROST_WALKER)) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_ENTITY_FROST_WALKER;
+            event.mCancellable = true;
+            event.mPlayer = &player;
+            event.mEntity = &player;
+            event.mLevel = &level;
+            event.mAmount = radius;
+            event.mBlockPosition = Vector3i(centerX, y, centerZ);
+            const std::string original = "{\"liquid\":" + PluginWorldEventData::encodeBlock(liquid)
+                                         + ",\"target\":" + PluginWorldEventData::encodeBlock(target) + "}";
+            event.mCustomData = original;
+            plugins->dispatch(event);
+            if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0)
+                return;
+            radius = (int32_t) std::min(event.mAmount, 64.0);
+            if (event.mCustomData != original) {
+                const auto data = json::parse(event.mCustomData);
+                const auto *liquidData = data != nullptr ? data->get("liquid") : nullptr;
+                const auto *targetData = data != nullptr ? data->get("target") : nullptr;
+                if (liquidData == nullptr || targetData == nullptr
+                    || !PluginWorldEventData::decodeBlock(*liquidData, liquid)
+                    || !PluginWorldEventData::decodeBlock(*targetData, target))
+                    return;
+                customLiquid = true;
+            }
+        }
+
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
             for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
                 // a column not loaded is unknown, never read through: that would generate it here
                 const BlockState *water = level.peekBlockPtr(x, y, z);
-                if (water == nullptr || water->mName != BlockNames::WATER
-                    || water->mStates.getInt("liquid_depth", 0) != 0)
+                if (water == nullptr || (customLiquid ? !(*water == liquid)
+                                                       : water->mName != BlockNames::WATER
+                                                               || water->mStates.getInt("liquid_depth", 0) != 0))
                     continue;
 
                 const BlockState *above = level.peekBlockPtr(x, y + 1, z);
                 if (above == nullptr || above->mName != BlockNames::AIR)
                     continue;
 
-                Tag states = Tag::ofCompound();
-                states.putInt("age", 0);
-
                 const Vector3i position(x, y, z);
-                level.setBlock(position, BlockState(FrostedIceBlock::IDENTIFIER, states), false);
-                level.scheduleUpdate(position, FrostedIceBlock::nextMeltDelay());
+                level.setBlock(position, target, false);
+                if (target.mName == FrostedIceBlock::IDENTIFIER)
+                    level.scheduleUpdate(position, FrostedIceBlock::nextMeltDelay());
             }
         }
     }
@@ -121,7 +169,7 @@ namespace {
     const float DROWNING_DAMAGE = 2.0f;
     const int AIR_REFILL_PER_TICK = 5;
 
-    void ignitePlayer(ServerPlayer &player) {
+    void ignitePlayer(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block) {
         int fireProtectionLevel = 0;
         const PlayerInventory &inventory = player.getInventory();
         for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
@@ -131,7 +179,10 @@ namespace {
 
         const int reducedSeconds = (int) (8.0f * (float) fireProtectionLevel * 0.15f);
         const int fireTicks = std::max(1, 8 - std::min(8, reducedSeconds)) * 20;
-        player.setFireTicks(std::max(player.getFireTicks(), fireTicks));
+        if (player.getFireTicks() < fireTicks) {
+            const int32_t duration = owner.allowCombustion(player, fireTicks, nullptr, block);
+            player.setFireTicks(std::max(player.getFireTicks(), duration));
+        }
     }
 
     bool findSupportBlock(Level &level, const Vector3f &feetPosition, BlockState &support) {
@@ -307,14 +358,13 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     const bool creative = player.isCreative();
     const bool fireResistance = player.hasEffect(MobEffectId::FireResistance);
     if (contact.lava || fireContact.fire)
-        ignitePlayer(player);
+        ignitePlayer(owner, player, contact.lava ? contact.lavaBlock : fireContact.fireBlock);
 
     if (!creative && !fireResistance) {
         if (contact.lava)
-            owner.hurt(player, 4.0f, ActorDamageSource::environment("death.attack.lava", player.getName()));
+            owner.hurtActor(player, 4.0f, "death.attack.lava", contact.lavaBlock);
         if (fireContact.fire)
-            owner.hurt(player, fireContact.damage,
-                       ActorDamageSource::environment("death.attack.onFire", player.getName()));
+            owner.hurtActor(player, fireContact.damage, "death.attack.onFire", fireContact.fireBlock);
     }
 
     tickBreathing(owner, player, contact.eyeInWater);
@@ -454,7 +504,8 @@ static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const
         scripts.onPlayerButtonInput(player, "Jump", jump);
     if (sneakChanged)
         scripts.onPlayerButtonInput(player, "Sneak", sneak);
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing))
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing)
+        && allowPlayerState(player, FALCON_EVENT_PLAYER_MISS_SWING, true))
         scripts.onPlayerSwingStart(player, "Attack");
 }
 
@@ -604,6 +655,14 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         flags.set(ActorFlag::Gliding, true);
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
+
+    for (const auto &[flag, type]: {std::pair{ActorFlag::Swimming, FALCON_EVENT_PLAYER_TOGGLE_SWIM},
+                                     std::pair{ActorFlag::Gliding, FALCON_EVENT_PLAYER_TOGGLE_GLIDE}}) {
+        const bool wasActive = previous.get(flag);
+        const bool active = flags.get(flag);
+        if (active != wasActive && !allowPlayerState(player, type, active))
+            flags.set(flag, wasActive);
+    }
 
     flags.set(ActorFlag::Emoting, packet.hasInputFlag((int32_t) PlayerAuthInputData::Emoting));
 

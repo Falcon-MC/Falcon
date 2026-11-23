@@ -1,4 +1,5 @@
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/PluginWorldEventData.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
@@ -148,12 +149,7 @@ namespace {
         return hold(value->getBlockState(position.x, position.y, position.z).mName);
     }
 
-    const char *levelGetBlockStates(FalconLevel *handle, FalconBlockPos position) {
-        Level *value = level(handle);
-        if (!isInside(*value, position))
-            return hold("{}");
-
-        const BlockState state = value->getBlockState(position.x, position.y, position.z);
+    std::string blockPropertiesToJson(const BlockState &state) {
         const std::vector<std::string> &keys = state.mStates.getKeys();
         const std::vector<Tag> &values = state.mStates.getValues();
 
@@ -164,7 +160,15 @@ namespace {
             result += "\"" + json::escape(keys[index]) + "\":" + stateValueToJson(values[index]);
         }
         result += "}";
-        return hold(result);
+        return result;
+    }
+
+    const char *levelGetBlockStates(FalconLevel *handle, FalconBlockPos position) {
+        Level *value = level(handle);
+        if (!isInside(*value, position))
+            return hold("{}");
+
+        return hold(blockPropertiesToJson(value->getBlockState(position.x, position.y, position.z)));
     }
 
     int levelSetBlock(FalconLevel *handle, FalconBlockPos position, const char *name, const char *statesJson) {
@@ -314,6 +318,20 @@ namespace {
         return FalconVec3{(double) spawn.x, (double) spawn.y, (double) spawn.z};
     }
 
+    int levelSetSpawnPosition(FalconLevel *handle, FalconBlockPos position) {
+        if (handle == nullptr)
+            return 0;
+
+        Level &target = *level(handle);
+        if (position.y < target.getMinY() || position.y > target.getMaxY()
+            || position.x < -30'000'000 || position.x > 30'000'000
+            || position.z < -30'000'000 || position.z > 30'000'000)
+            return 0;
+
+        owner().changeWorldSpawn(target, toVector3i(position));
+        return 1;
+    }
+
     FalconEntity *levelSpawnEntity(FalconLevel *handle, const char *identifier, FalconVec3 position) {
         if (identifier == nullptr)
             return nullptr;
@@ -389,6 +407,36 @@ namespace {
     }
 }
 
+std::string PluginWorldEventData::encodeBlock(const BlockState &state) {
+    return "{\"identifier\":\"" + json::escape(state.mName) + "\",\"states\":" + blockPropertiesToJson(state) + "}";
+}
+
+bool PluginWorldEventData::decodeBlock(const json::Value &value, BlockState &state) {
+    if (!value.isObject())
+        return false;
+    const auto *identifier = value.get("identifier");
+    const auto *properties = value.get("states");
+    if (identifier == nullptr || !identifier->isString() || properties == nullptr)
+        return false;
+    if (properties->isString())
+        return resolveState(identifier->mString, properties->mString.c_str(), state);
+    if (!properties->isObject())
+        return false;
+    if (!SetBlockCommand::resolveBlock(identifier->mString, state))
+        return false;
+
+    for (const auto &entry: properties->mObject) {
+        if (!applyStateValue(state.mStates, entry.first, *entry.second))
+            return false;
+    }
+    return isKnownPermutation(state.mName, state.mStates);
+}
+
+bool PluginWorldEventData::decodeBlock(const std::string &payload, BlockState &state) {
+    const auto value = json::parse(payload);
+    return value != nullptr && decodeBlock(*value, state);
+}
+
 void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.serverLevel = &serverLevel;
     api.levelDimension = &levelDimension;
@@ -409,6 +457,7 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelIsThundering = &levelIsThundering;
     api.levelSetThundering = &levelSetThundering;
     api.levelSpawnPosition = &levelSpawnPosition;
+    api.levelSetSpawnPosition = &levelSetSpawnPosition;
     api.levelSpawnEntity = &levelSpawnEntity;
     api.levelDropItem = &levelDropItem;
     api.levelStrikeLightning = &levelStrikeLightning;

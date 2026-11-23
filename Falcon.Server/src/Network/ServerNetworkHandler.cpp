@@ -1,5 +1,7 @@
 #include <chrono>
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Crypto/Base64.h"
+#include "Core/Json/Json.h"
 #include "Core/Threading/CpuCount.h"
 #include "World/Level/Block/SignEditing.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
@@ -404,6 +406,61 @@ namespace {
 
         const size_t expectedSize = (size_t) skin.mSkinData.mWidth * (size_t) skin.mSkinData.mHeight * 4;
         return skin.mSkinData.mData.size() == expectedSize;
+    }
+
+    std::string skinEventData(const SerializedSkin &skin) {
+        std::string geometryName;
+        if (auto patch = json::parse(skin.mSkinResourcePatch)) {
+            const json::Value *geometry = patch->get("geometry");
+            const json::Value *entry = geometry == nullptr ? nullptr : geometry->get("default");
+            if (entry != nullptr)
+                geometryName = entry->string();
+        }
+        return "[\"" + Base64::encode(skin.mSkinId) + "\",\"" + Base64::encode(skin.mSkinData.mData)
+               + "\",\"" + Base64::encode(skin.mCapeData.mData) + "\",\"" + Base64::encode(geometryName)
+               + "\",\"" + Base64::encode(skin.mGeometryData) + "\"]";
+    }
+
+    bool applySkinEvent(const std::string &payload, SerializedSkin &skin) {
+        const auto data = json::parse(payload);
+        if (data == nullptr || !data->isArray() || data->mArray.size() != 5)
+            return false;
+        for (const auto &value: data->mArray) {
+            if (!value->isString())
+                return false;
+        }
+        const auto &fields = data->mArray;
+        std::string id;
+        std::string image;
+        std::string cape;
+        std::string geometryName;
+        std::string geometry;
+        if (fields[0]->mString.size() > 44'000 || fields[1]->mString.size() > 90'000
+            || fields[2]->mString.size() > 11'000 || fields[3]->mString.size() > 44'000
+            || fields[4]->mString.size() > 350'000 || !Base64::decode(fields[0]->mString, id) || id.empty()
+            || id.size() > INT16_MAX || !Base64::decode(fields[1]->mString, image)
+            || (!fields[2]->mString.empty() && !Base64::decode(fields[2]->mString, cape))
+            || (!fields[3]->mString.empty() && !Base64::decode(fields[3]->mString, geometryName))
+            || (!fields[4]->mString.empty() && !Base64::decode(fields[4]->mString, geometry)))
+            return false;
+        int32_t width = 64;
+        int32_t height = 64;
+        if (image.size() == 64 * 32 * 4)
+            height = 32;
+        else if (image.size() == 128 * 128 * 4)
+            width = height = 128;
+        else if (image.size() != 64 * 64 * 4)
+            return false;
+        if (!cape.empty() && cape.size() != 64 * 32 * 4)
+            return false;
+        skin.mSkinId = id;
+        skin.mFullSkinId = id;
+        skin.mSkinData = SkinImageData{width, height, std::move(image)};
+        const bool hasCape = !cape.empty();
+        skin.mCapeData = SkinImageData{hasCape ? 64 : 0, hasCape ? 32 : 0, std::move(cape)};
+        skin.mSkinResourcePatch = "{\"geometry\":{\"default\":\"" + json::escape(geometryName) + "\"}}";
+        skin.mGeometryData = std::move(geometry);
+        return true;
     }
 
     void normalizeSkin(SerializedSkin &skin) {
@@ -2402,6 +2459,21 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const PlayerSkinP
         && currentSkin.mSkinData.mData == skin.mSkinData.mData)
         return;
 
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_CHANGE_SKIN)) {
+        const std::string oldData = skinEventData(currentSkin);
+        const std::string proposed = skinEventData(skin);
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_CHANGE_SKIN;
+        event.mCancellable = true;
+        event.mPlayer = player;
+        event.mCustomData = "[" + oldData + "," + proposed + "]";
+        const std::string original = event.mCustomData;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+        if (event.mCustomData != original && !applySkinEvent(event.mCustomData, skin))
+            return;
+    }
     player->setSkin(skin);
     player->markSkinChanged();
 
@@ -2631,6 +2703,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const BlockPickRe
             BlockPickItem::attachBlockData(picked, *blockActor);
     }
 
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_BLOCK_PICK)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_BLOCK_PICK;
+        event.mCancellable = true;
+        event.mPlayer = player;
+        event.mLevel = &level;
+        event.mBlockPosition = packet.mBlockPosition;
+        event.mResult = &picked;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+    }
     putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
 }
 
@@ -2651,7 +2735,19 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ActorPickRe
         if (dx * dx + dy * dy + dz * dz > 10000.0f)
             return;
 
-        putPickedItem(*player, actor->getItem(), packet.mHotbarSlot);
+        ItemStack picked = actor->getItem();
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ENTITY_PICK)) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_PLAYER_ENTITY_PICK;
+            event.mCancellable = true;
+            event.mPlayer = player;
+            event.mEntity = actor.get();
+            event.mResult = &picked;
+            plugins->dispatch(event);
+            if (event.mCancelled)
+                return;
+        }
+        putPickedItem(*player, std::move(picked), packet.mHotbarSlot);
         return;
     }
 }
@@ -2799,6 +2895,19 @@ void ServerNetworkHandler::setCommandsEnabled(bool enabled) {
 
 void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {
     static const char *const NAMES[] = {"peaceful", "easy", "normal", "hard"};
+    const Difficulty previous = mProperties.getDifficulty();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_DIFFICULTY_CHANGE)) {
+        for (World *world: mWorlds.getWorlds()) {
+            for (Level *level: world->getLevels()) {
+                PluginEvent event;
+                event.mType = FALCON_EVENT_WORLD_DIFFICULTY_CHANGE;
+                event.mLevel = level;
+                event.mPreviousAmount = (int) previous;
+                event.mAmount = (int) difficulty;
+                plugins->dispatch(event);
+            }
+        }
+    }
     setDifficulty(NAMES[(size_t) difficulty]);
 
     SetDifficultyPacket packet;
@@ -2810,8 +2919,16 @@ void ServerNetworkHandler::changeDifficulty(Difficulty difficulty) {
 }
 
 void ServerNetworkHandler::changeWorldSpawn(Level &level, const Vector3i &spawn) {
+    const Vector3i previous = level.getSpawnPosition();
     level.setSpawnPosition(spawn);
     level.saveLevelDat();
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_SPAWN_CHANGE)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_SPAWN_CHANGE;
+        event.mLevel = &level;
+        event.mFrom = Vector3f((float) previous.x, (float) previous.y, (float) previous.z);
+        plugins->dispatch(event);
+    }
 
     SetSpawnPositionPacket packet;
     packet.mSpawnType = SetSpawnPositionPacket::Type::WorldSpawn;
@@ -2924,7 +3041,18 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const RequestChun
     }
     player->setServerBuildRatio(ratio);
 
+    const int oldDistance = player->getChunkStreamState().mRadius;
     player->getChunkStreamState().mRadius = granted;
+    if (oldDistance != granted) {
+        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_VIEW_DISTANCE_CHANGE)) {
+            PluginEvent event;
+            event.mType = FALCON_EVENT_PLAYER_VIEW_DISTANCE_CHANGE;
+            event.mPlayer = player;
+            event.mPreviousAmount = oldDistance == 0 ? -1 : oldDistance;
+            event.mAmount = granted;
+            plugins->dispatch(event);
+        }
+    }
     ChunkStreamHandler::handleViewDistanceChange(*this, *player);
     _sendChunks(*player);
     _checkTerrainReady(*player);

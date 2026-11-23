@@ -6,6 +6,7 @@
 #include <falcon/falcon_api.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@ class Actor;
 class ItemStack;
 class Level;
 class ServerPlayer;
+struct ResourcePackOffer;
 
 struct PluginEvent {
     FalconEventType mType = 0;
@@ -77,4 +79,5 @@ struct PluginEvent {
     // a hit: the push it gives
     float *mKnockbackHorizontal = nullptr;
     float *mKnockbackVertical = nullptr;
+    std::shared_ptr<const ResourcePackOffer> *mResourcePackOffer = nullptr;
 };

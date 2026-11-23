@@ -228,6 +228,13 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     damageEvent.mAttacker = attacker;
     damageEvent.mAmount = amount;
     damageEvent.mCause = damageSource.mDeathMessageKey;
+    if (damageSource.mBlock) {
+        damageEvent.mLevel = &owner.getLevelFor(*this);
+        damageEvent.mBlockPosition = *damageSource.mBlock;
+        const auto &position = *damageSource.mBlock;
+        if (const BlockState *block = damageEvent.mLevel->peekBlockPtr(position.x, position.y, position.z))
+            damageEvent.mBlockName = block->mName;
+    }
     // a hit from an attacker pushes: plugins see the game's push and may change it
     float knockbackHorizontal = 0.4f;
     float knockbackVertical = 0.4f;
