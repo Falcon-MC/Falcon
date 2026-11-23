@@ -1015,7 +1015,12 @@ bool ServerNetworkHandler::canPlayerSeeActor(ServerPlayer &player, const Actor &
         return false;
 
     // only chunks the server holds fully loaded hand out their actors
-    return getLevelFor(actor).isChunkPopulated(chunkX, chunkZ);
+    if (!getLevelFor(actor).isChunkPopulated(chunkX, chunkZ))
+        return false;
+
+    // a plugin draws it itself: never in a visible set, so no spawn, move or data of Falcon's goes out for it
+    const auto *drawn = dynamic_cast<const ServerActor *>(&actor);
+    return drawn == nullptr || !drawn->isDrawnByPlugin();
 }
 
 void ServerNetworkHandler::_sendActorSpawn(ServerPlayer &player, ServerActor &actor) {
@@ -1931,6 +1936,12 @@ void ServerNetworkHandler::tickActors() {
             actor.tickDeath(*this);
             if (actor.getDeathTicks() >= actor.getDeathDuration() || actor.isExpired())
                 expired.push_back(actorId);
+            continue;
+        }
+
+        // a plugin moves, burns and hurts the actor it draws: blocks, freezing and effects stay out of it
+        if (actor.isDrawnByPlugin()) {
+            actor.tick(*this);
             continue;
         }
 

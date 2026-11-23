@@ -2,6 +2,7 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Codec/ProtocolCodecRegistry.h"
@@ -147,7 +148,15 @@ namespace {
     }
 }
 
+namespace {
+    int playerHasChunk(FalconPlayer *target, int32_t chunkX, int32_t chunkZ) {
+        ServerPlayer *value = player(target);
+        return value->getSentChunks().count(ChunkStreamHandler::packChunk(chunkX, chunkZ)) != 0 ? 1 : 0;
+    }
+}
+
 void PluginServerApi::fillPlayers(FalconServerApi &api) {
+    api.playerHasChunk = &playerHasChunk;
     api.playerGameMode = &playerGameMode;
     api.playerSetGameMode = &playerSetGameMode;
     api.serverSpawnSimulatedPlayer = &serverSpawnSimulatedPlayer;

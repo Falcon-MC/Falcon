@@ -1,9 +1,11 @@
 #include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginActor.h"
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginEvents.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Commands/CommandMap.h"
@@ -1091,6 +1093,104 @@ namespace {
         api.itemDestroy(kept);
     }
 
+    void countTeleports(FalconEvent *event, void *userData) {
+        (void) event;
+        ++*static_cast<int *>(userData);
+    }
+
+    // an entity its plugin draws: Falcon sends nothing for it and leaves it where it is put, hits still find it
+    void pluginDrawnEntities(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin painter;
+        painter.mDescription.mName = "Painter";
+        painter.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(painter);
+        FalconCustomEntityDescriptor descriptor{};
+        descriptor.identifier = "painter:ghost";
+        descriptor.width = 0.6f;
+        descriptor.height = 1.8f;
+        require(api.registerCustomEntity(handle, &descriptor) == 1, "the custom entity was refused");
+
+        FalconEntity *ghost = api.levelSpawnEntity(fixture.levelHandle(), "painter:ghost", FalconVec3{4.5, 110.0, 4.5});
+        require(ghost != nullptr, "the custom entity did not spawn");
+        auto *actor = dynamic_cast<PluginActor *>(reinterpret_cast<Actor *>(ghost));
+        require(actor != nullptr, "the custom entity is not a plugin actor");
+        fixture.player->getSentChunks().insert(ChunkStreamHandler::packChunk(0, 0));
+        LevelChunk *chunk = fixture.level->peekChunkPtr(0, 0);
+        require(chunk != nullptr, "the fixture's chunk is gone");
+        chunk->setPopulated(true);
+        const bool seenBefore = fixture.owner.canPlayerSeeActor(*fixture.player, *actor);
+
+        require(api.entitySetPluginDrawn(api.playerEntity(fixture.playerHandle()), 1) == 0,
+                "a player was handed to a plugin to draw");
+        require(api.entitySetPluginDrawn(ghost, 1) == 1 && api.entityIsPluginDrawn(ghost) == 1,
+                "the custom entity is not drawn by its plugin");
+        require(seenBefore, "the custom entity was not shown before its plugin drew it");
+        require(!fixture.owner.canPlayerSeeActor(*fixture.player, *actor), "Falcon still shows an entity its plugin draws");
+
+        for (int tick = 0; tick < 5; ++tick)
+            actor->tick(fixture.owner);
+        require(actor->getPosition().y == 110.0f, "an entity its plugin draws fell on its own");
+
+        int teleports = 0;
+        const uint64_t id = api.subscribe(handle, FALCON_EVENT_ENTITY_TELEPORT, FALCON_PRIORITY_NORMAL, 0,
+                                          &countTeleports, &teleports);
+        api.entityTeleport(ghost, nullptr, FalconVec3{8.5, 110.0, 8.5});
+        api.unsubscribe(id);
+        require(teleports == 0 && actor->getPosition().x == 8.5f, "moving a drawn entity was taken for a teleport");
+
+        require(api.entitySetSize(ghost, 3.0f, 2.0f) == 1, "the size was refused");
+        require(api.entitySetSize(ghost, 0.0f, 2.0f) == 0 && api.entitySetSize(ghost, std::nanf(""), 1.0f) == 0,
+                "a broken size was accepted");
+        require(actor->getSize().mWidth == 3.0f && actor->getSize().mHeight == 2.0f, "the size did not apply");
+        // only a box three wide reaches across to x 10
+        FalconEntity *found[4] = {};
+        bool reached = false;
+        const uint32_t count = api.levelEntitiesInBox(fixture.levelHandle(), FalconVec3{9.9, 110.0, 8.0},
+                                                      FalconVec3{10.5, 111.0, 9.0}, found, 4);
+        for (uint32_t index = 0; index < count && index < 4; ++index)
+            reached = reached || found[index] == ghost;
+        require(reached, "the entity's new box is not found");
+
+        PluginActor reloaded(9001, "painter:ghost");
+        reloaded.loadNbt(actor->saveNbt());
+        require(reloaded.isDrawnByPlugin() && reloaded.getSize().mWidth == 3.0f,
+                "a saved entity forgot it is drawn by its plugin");
+        require(api.entitySetPluginDrawn(ghost, 0) == 1 && api.entityIsPluginDrawn(ghost) == 0,
+                "Falcon did not take the drawing back");
+
+        require(api.levelSetBlock(fixture.levelHandle(), FalconBlockPos{6, 101, 6}, "minecraft:stone", "{}") == 1,
+                "the stone was not placed");
+        FalconBox boxes[8] = {};
+        const uint32_t boxCount = api.levelCollisionBoxes(fixture.levelHandle(), FalconVec3{5.5, 100.5, 5.5},
+                                                          FalconVec3{7.5, 102.5, 7.5}, boxes, 8);
+        bool stone = false;
+        for (uint32_t index = 0; index < boxCount && index < 8; ++index)
+            stone = stone
+                    || (boxes[index].min.x == 6.0 && boxes[index].min.y == 101.0 && boxes[index].min.z == 6.0
+                        && boxes[index].max.x == 7.0 && boxes[index].max.y == 102.0 && boxes[index].max.z == 7.0);
+        require(stone, "the stone's box is not among " + std::to_string(boxCount));
+        require(api.levelCollisionBoxes(fixture.levelHandle(), FalconVec3{5.5, 100.5, 5.5}, FalconVec3{7.5, 102.5, 7.5},
+                                        nullptr, 0)
+                        == boxCount,
+                "counting the boxes gave another number");
+
+        require(api.playerHasChunk(fixture.playerHandle(), 0, 0) == 1, "the sent chunk is not held");
+        require(api.playerHasChunk(fixture.playerHandle(), 5, 5) == 0, "an unsent chunk is held");
+
+        FalconItem *sword = api.itemCreate("minecraft:diamond_sword", 1);
+        FalconItem *stoneItem = api.itemCreate("minecraft:stone", 1);
+        int32_t swordBlock = -1;
+        int32_t stoneBlock = 0;
+        const int32_t swordId = api.itemNetworkId(sword, &swordBlock);
+        const int32_t stoneId = api.itemNetworkId(stoneItem, &stoneBlock);
+        require(swordId != 0 && swordBlock == 0, "the sword has no network id, or a block");
+        require(stoneId != 0 && stoneId != swordId && stoneBlock != 0, "the stone item has no block network id");
+        require(api.itemNetworkId(nullptr, nullptr) == 0, "no item has a network id");
+        api.itemDestroy(sword);
+        api.itemDestroy(stoneItem);
+        api.entityRemove(ghost);
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
@@ -1114,6 +1214,7 @@ namespace {
         pluginWindows(api, fixture);
         permissionGroups(api, fixture);
         dropsAndTypes(api, fixture);
+        pluginDrawnEntities(api, fixture);
     }
 }
 
