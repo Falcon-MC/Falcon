@@ -524,14 +524,16 @@ void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdenti
     status.mStatus = PlayStatusPacket::Status::LoginSuccess;
     owner.getNetworkHandler().send(id, status, owner.getCodecContext());
 
+    player.setResourcePackOffer(owner.getResourcePacks().getOffer(owner.getProperties().getTexturePackRequired()));
+    const auto &offer = *player.getResourcePackOffer();
     ResourcePacksInfoPacket packs;
-    packs.mForcedToAccept = owner.getProperties().getTexturePackRequired();
+    packs.mForcedToAccept = offer.mRequired;
     packs.mWorldTemplateVersion = "";
     packs.mHasAddonPacks = false;
     packs.mScriptingEnabled = false;
     packs.mVibrantVisualsForceDisabled = owner.getProperties().getDisableClientVibrantVisuals();
 
-    for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
+    for (const ResourcePack &pack: offer.mPacks) {
         ResourcePacksInfoPacket::Entry entry;
         entry.mPackId = pack.mUuid;
         entry.mPackVersion = pack.mVersion;
@@ -550,11 +552,14 @@ void LoginHandler::_finishLogin(ServerNetworkHandler &owner, const NetworkIdenti
 void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                     ServerPlayer &player,
                                                     const ResourcePackClientResponsePacket &packet) {
+    const auto *offer = player.getResourcePackOffer();
+    if (offer == nullptr)
+        return;
     switch (packet.mStatus) {
         case ResourcePackClientResponsePacket::Status::SendPacks: {
             for (const std::string &requested: packet.mPackIds) {
                 const std::string uuid = requested.substr(0, requested.find('_'));
-                const ResourcePack *pack = owner.getResourcePacks().findById(uuid);
+                const ResourcePack *pack = offer->findById(uuid);
                 if (pack == nullptr)
                     continue;
 
@@ -573,12 +578,12 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
 
         case ResourcePackClientResponsePacket::Status::HaveAllPacks: {
             ResourcePackStackPacket stack;
-            stack.mForcedToAccept = owner.getProperties().getTexturePackRequired();
+            stack.mForcedToAccept = offer->mRequired;
             stack.mGameVersion = owner.getAnnouncement().mGameVersion;
             stack.mExperiments = enabledExperiments(owner);
             stack.mExperimentsPreviouslyToggled = true;
 
-            for (const ResourcePack &pack: owner.getResourcePacks().getPacks()) {
+            for (const ResourcePack &pack: offer->mPacks) {
                 ResourcePackStackPacket::Entry entry;
                 entry.mPackId = pack.mUuidString;
                 entry.mPackVersion = pack.mVersion;
@@ -591,6 +596,7 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
 
         case ResourcePackClientResponsePacket::Status::Completed:
             sendStartGame(owner, player);
+            player.setResourcePackOffer(nullptr);
             break;
 
         case ResourcePackClientResponsePacket::Status::Refused:
@@ -604,7 +610,10 @@ void LoginHandler::handleResourcePackClientResponse(ServerNetworkHandler &owner,
 
 void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                   const ResourcePackChunkRequestPacket &packet) {
-    const ResourcePack *pack = owner.getResourcePacks().findById(packet.mPackId.toString());
+    const auto requester = owner.getPlayers().find(id);
+    if (requester == owner.getPlayers().end() || requester->second.getResourcePackOffer() == nullptr)
+        return;
+    const ResourcePack *pack = requester->second.getResourcePackOffer()->findById(packet.mPackId.toString());
     if (pack == nullptr) {
         LOG_WARN(LogAreaID::Network, "Client requested unknown resource pack %s", packet.mPackId.toString().c_str());
         return;
@@ -615,9 +624,7 @@ void LoginHandler::handleResourcePackChunkRequest(ServerNetworkHandler &owner, c
         return;
 
     // each answer is a megabyte: a chunk goes out a few times per login at most
-    const auto requester = owner.getPlayers().find(id);
-    if (requester == owner.getPlayers().end()
-        || !requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
+    if (!requester->second.countPackChunkRequest(pack->mUuidString, packet.mChunkIndex))
         return;
 
     const uint64_t remaining = pack->mSize - offset;
@@ -666,7 +673,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     startGame.mCommandsEnabled = owner.getProperties().getAllowCheats();
     // a world without commands keeps its achievements: the client then reports them to Xbox Live itself
     startGame.mAchievementsDisabled = owner.getProperties().getAllowCheats();
-    startGame.mTexturePacksRequired = owner.getProperties().getTexturePackRequired();
+    const auto *offer = player.getResourcePackOffer();
+    startGame.mTexturePacksRequired = offer != nullptr ? offer->mRequired : owner.getProperties().getTexturePackRequired();
     startGame.mDefaultPlayerPermission = owner.getProperties().getDefaultPlayerPermissionLevel();
     startGame.mChatRestrictionLevel = owner.getProperties().getChatRestrictionLevel();
     startGame.mDisablingPlayerInteractions = owner.getProperties().getDisablePlayerInteraction();

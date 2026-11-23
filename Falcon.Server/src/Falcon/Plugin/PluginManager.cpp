@@ -366,6 +366,7 @@ void PluginManager::_disable(LoadedPlugin &plugin) {
     _updateSubscribedTypes();
     mPermissions->clearPlugin(plugin);
     mServices.removePlugin(plugin);
+    mOwner.getResourcePacks().replacePluginPacks(plugin.mDescription.mName, {}, false);
 
     if (plugin.mDescription.mRuntime == "internal")
         InternalPluginLoader::unload(plugin);

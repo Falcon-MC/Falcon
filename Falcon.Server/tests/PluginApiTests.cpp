@@ -5,6 +5,7 @@
 #include "Falcon/Plugin/PluginEvents.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Core/Archive/ZipArchive.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
@@ -1022,6 +1023,31 @@ namespace {
         require(api.findPlayer("Bot_1") == nullptr, "the simulated player is still online");
     }
 
+    void pluginResourcePacks(const FalconServerApi &api, Fixture &fixture) {
+        constexpr char uuid[] = "a3d60853-adde-4a23-a8a9-5e50aa433a77";
+        ZipWriter writer;
+        writer.addFile("manifest.json", R"({"header":{"uuid":"a3d60853-adde-4a23-a8a9-5e50aa433a77","version":[1,2,3],"name":"Fixture"}})");
+        const std::string archive = writer.finish();
+        const FalconResourcePackDescriptor good{archive.data(), (uint32_t) archive.size(), "fixture-key"};
+        LoadedPlugin plugin;
+        plugin.mDescription.mName = "resource-fixture";
+        auto *handle = PluginManager::toHandle(plugin);
+        require(api.resourcePacksReplace(handle, &good, 1, 1) == 1, "valid plugin resource pack was rejected");
+        auto &packs = fixture.owner.getResourcePacks();
+        const auto held = packs.getOffer(false);
+        const auto *pack = held->findById(uuid);
+        require(held->mRequired && pack != nullptr && pack->mVersion == "1.2.3" && pack->mData == archive
+                && pack->mContentKey == "fixture-key", "plugin resource pack was not published to the offer");
+
+        const FalconResourcePackDescriptor invalid{"bad", 3, nullptr};
+        require(api.resourcePacksReplace(handle, &invalid, 1, 0) == 0, "invalid pack was accepted");
+        require(packs.getOffer(false) == held, "a rejected replacement changed the active offer");
+        require(api.resourcePacksReplace(handle, nullptr, 0, 0) == 1, "plugin pack was not removed");
+        require(packs.getOffer(false)->findById(uuid) == nullptr && !packs.getOffer(false)->mRequired,
+                "removed plugin pack stayed in new offers");
+        require(held->findById(uuid) == pack && held->mRequired, "a replacement changed an in-flight offer");
+    }
+
     void playerCompatibility(const FalconServerApi &api, Fixture &fixture) {
         require(api.playerSetNameTag(fixture.playerHandle(), "New tag") == 1, "the name tag was refused");
         require(fixture.player->getName() == "Tester", "the name tag changed the login identity");
@@ -1328,6 +1354,7 @@ namespace {
         pluginWindows(api, fixture);
         permissionGroups(api, fixture);
         playerCompatibility(api, fixture);
+        pluginResourcePacks(api, fixture);
         dropsAndTypes(api, fixture);
         pluginDrawnEntities(api, fixture);
     }

@@ -46,6 +46,8 @@ class CameraInstructionPacket;
 class SharedPacket;
 class ServerNetworkHandler;
 
+struct ResourcePackOffer;
+
 class ServerPlayer : public Actor {
 public:
     bool canFreeze() const override {
@@ -99,6 +101,14 @@ public:
 
     SimulatedPlayerController *getSimulatedController() {
         return mSimulated.get();
+    }
+
+    void setResourcePackOffer(std::shared_ptr<const ResourcePackOffer> offer) {
+        mResourcePackOffer = std::move(offer);
+    }
+
+    const ResourcePackOffer *getResourcePackOffer() const {
+        return mResourcePackOffer.get();
     }
 
     LoginState getLoginState() const {
@@ -1290,6 +1300,7 @@ private:
     NetworkIdentifier mId;
     LoginState mLoginState;
     std::unordered_map<std::string, int> mPackChunkRequests;
+    std::shared_ptr<const ResourcePackOffer> mResourcePackOffer;
     std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
     std::optional<std::string> mPluginNameTag;
