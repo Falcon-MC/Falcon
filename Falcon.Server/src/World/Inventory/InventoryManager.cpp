@@ -922,6 +922,19 @@ void InventoryManager::onCurrentWindowRemove() {
     close.mWindowId = (int8_t) currentWindowId;
     close.mType = mCurrentWindowType;
     close.mServerInitiated = true;
+    if (mPluginWindow != nullptr) {
+        if (mHasPendingCloseWindow)
+            return;
+        mPendingCloseWindowId = currentWindowId;
+        mHasPendingCloseWindow = true;
+        const auto closing = mPluginWindow;
+        mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), close);
+        if (mPluginWindow == closing) {
+            _closeContainerWindow();
+            mContainerWindowId = CONTAINER_ID_NONE;
+        }
+        return;
+    }
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), close);
 
     mPendingCloseWindowId = currentWindowId;
@@ -1518,7 +1531,7 @@ bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType typ
 }
 
 int InventoryManager::openPluginWindow(std::shared_ptr<Container> container, ContainerType type,
-                                      const Vector3i &position, int64_t actorId, std::function<void()> onClosed) {
+                                      const Vector3i &position, int64_t actorId, std::function<void(int)> onClosed) {
     if (container == nullptr || mPlayer == nullptr || mSender == nullptr || mOwner == nullptr)
         return CONTAINER_ID_NONE;
     if (mContainerWindowId != CONTAINER_ID_NONE || mMainInventoryWindowId != CONTAINER_ID_NONE
@@ -1539,8 +1552,10 @@ int InventoryManager::openPluginWindow(std::shared_ptr<Container> container, Con
     open.mType = type;
     open.mBlockPosition = position;
     open.mUniqueActorId = actorId;
+    const auto opened = mPluginWindow;
     mSender->sendPacketTo(mPlayer->getNetworkIdentifier(), open);
-    _sendContentPackets(windowId, *mPluginWindow);
+    if (mPluginWindow == opened)
+        _sendContentPackets(windowId, *opened);
     return windowId;
 }
 
@@ -1567,13 +1582,13 @@ void InventoryManager::refreshEntityContainer(int64_t actorId) {
 void InventoryManager::_closeContainerWindow() {
     clearEnchantOptions();
     if (mPluginWindow != nullptr) {
-        // reset first: the plugin may open another window from its handler
-        std::function<void()> onClosed = std::move(mPluginWindowClosed);
+        const int windowId = mContainerWindowId;
+        auto onClosed = std::move(mPluginWindowClosed);
         mPluginWindow.reset();
         mPluginWindowClosed = nullptr;
         mContainerActorId = -1;
         if (onClosed)
-            onClosed();
+            onClosed(windowId);
         return;
     }
     if (mContainerActorId == -1) {

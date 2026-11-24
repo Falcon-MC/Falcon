@@ -1066,6 +1066,69 @@ namespace {
                 "the namespace changed the id");
     }
 
+    void wasmWindowsAndMetadata(Fixture &fixture) {
+        constexpr char module[] = R"((module
+          (import "falcon:plugin/server@1.0.6" "find-player" (func $find (param i32 i32 i32)))
+          (import "falcon:plugin/server@1.0.6" "server-item-info" (func $info (param i32 i32 i32)))
+          (import "falcon:plugin/players@1.0.6" "player-open-window"
+            (func $open (param i64 i32 i32 i32 i32 i64 i32 i32 i32) (result i32)))
+          (import "falcon:plugin/players@1.0.6" "player-set-name-tag"
+            (func $tag (param i64 i32 i32) (result i32)))
+          (memory (export "memory") 1)
+          (data (i32.const 128) "Tester")
+          (data (i32.const 144) "minecraft:diamond_sword")
+          (data (i32.const 176) "Window closed")
+          (global $player (mut i64) (i64.const 0))
+          (global $window (mut i32) (i32.const 0))
+          (global $closed (mut i32) (i32.const 0))
+          (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32)
+            (i32.const 256))
+          (func (export "falcon:plugin/plugin@1.0.6#on-enable") (result i32)
+            (call $info (i32.const 144) (i32.const 23) (i32.const 16))
+            (if (i32.ne (i32.load8_u (i32.const 16)) (i32.const 1))
+              (then (return (i32.const 0))))
+            (if (i32.ne (i32.load (i32.const 32)) (i32.const 1561))
+              (then (return (i32.const 0))))
+            (call $find (i32.const 128) (i32.const 6) (i32.const 0))
+            (if (i32.ne (i32.load8_u (i32.const 0)) (i32.const 1))
+              (then (return (i32.const 0))))
+            (global.set $player (i64.load (i32.const 8)))
+            (global.set $window (call $open (global.get $player) (i32.const 0)
+              (i32.const 2) (i32.const 102) (i32.const 2) (i64.const -1)
+              (i32.const 27) (i32.const 1) (i32.const 42)))
+            (i32.ne (global.get $window) (i32.const 0)))
+          (func (export "falcon:plugin/plugin@1.0.6#on-window-close") (param $handler i32) (param $who i64) (param $id i32)
+            (global.set $closed
+              (i32.and (i32.eq (local.get $handler) (i32.const 42))
+                (i32.and (i64.eq (local.get $who) (global.get $player))
+                         (i32.eq (local.get $id) (global.get $window))))))
+          (func (export "falcon:plugin/plugin@1.0.6#on-disable")
+            (if (global.get $closed)
+              (then (drop (call $tag (global.get $player) (i32.const 176) (i32.const 13))))))))";
+        const auto root = ServerPaths::getRoot() / "wasm-fixture";
+        const auto directory = root / "WasmWindows";
+        std::filesystem::create_directories(directory);
+        std::ofstream(directory / "plugin.json")
+                << R"({"name":"WasmWindows","version":"1.0.0","main":"windows.wasm","runtime":"wasm"})";
+        wasm_byte_vec_t wasm;
+        require(wasmtime_wat2wasm(module, sizeof(module) - 1, &wasm) == nullptr, "the window module did not assemble");
+        std::ofstream(directory / "windows.wasm", std::ios::binary).write(wasm.data, (std::streamsize) wasm.size);
+        wasm_byte_vec_delete(&wasm);
+
+        auto &plugins = fixture.owner.getPluginManager();
+        plugins.loadAll(root.string());
+        plugins.enableAll();
+        auto &inventories = fixture.player->getInventoryManager();
+        const int window = inventories.getContainerWindowId();
+        require(inventories.getPluginWindow(window) != nullptr, "the Wasm plugin did not read item info and open a window");
+
+        plugins.disableAll();
+        require(inventories.getPluginWindow(window) == nullptr, "the disabled Wasm plugin left a window open");
+        require(fixture.player->getPluginNameTag() == "Window closed",
+                "Wasm did not receive the correct close callback before on-disable");
+        inventories.onClientRemoveWindow(window);
+    }
+
     void uniqueId(const FalconServerApi &api, Fixture &fixture) {
         fixture.player->setUniqueId(-4242);
         require(api.playerUniqueId(fixture.playerHandle()) == -4242, "the player's unique id was not the one they keep");
@@ -1466,6 +1529,7 @@ namespace {
         simulatedPlayers(api, fixture);
         uniqueId(api, fixture);
         pluginWindows(api, fixture);
+        wasmWindowsAndMetadata(fixture);
         permissionGroups(api, fixture);
         playerCompatibility(api, fixture);
         pluginResourcePacks(api, fixture);

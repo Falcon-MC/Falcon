@@ -115,24 +115,29 @@ namespace {
 
 namespace {
     uint32_t playerOpenWindow(FalconPlugin *source, FalconPlayer *target, const FalconWindowDescriptor *descriptor) {
-        (void) source;
-        if (descriptor == nullptr || descriptor->size == 0 || descriptor->size > 255)
+        if (source == nullptr || target == nullptr || !plugin(source)->mEnabled || descriptor == nullptr || descriptor->size == 0
+            || descriptor->size > 255)
             return 0;
         InventoryManager &inventories = player(target)->getInventoryManager();
-        // the window id is only known once it is open, and the close handler names it
-        auto window = std::make_shared<int>(InventoryManager::CONTAINER_ID_NONE);
+        LoadedPlugin &owner = *plugin(source);
+        const uint64_t playerId = player(target)->getRuntimeId();
+        if (!owner.mWindowPlayers.insert(playerId).second)
+            return 0;
+
         const FalconWindowCloseHandler onClose = descriptor->onClose;
         void *userData = descriptor->userData;
         const int opened = inventories.openPluginWindow(
                 std::make_shared<SimpleContainerInventory>((int) descriptor->size),
                 (ContainerType) descriptor->containerType, toVector3i(descriptor->position), descriptor->actorUniqueId,
-                [target, window, onClose, userData] {
+                [&owner, playerId, target, onClose, userData](int windowId) {
+                    owner.mWindowPlayers.erase(playerId);
                     if (onClose != nullptr)
-                        onClose(target, (uint32_t) *window, userData);
+                        onClose(target, (uint32_t) windowId, userData);
                 });
-        if (opened == InventoryManager::CONTAINER_ID_NONE)
+        if (opened == InventoryManager::CONTAINER_ID_NONE) {
+            owner.mWindowPlayers.erase(playerId);
             return 0;
-        *window = opened;
+        }
         return (uint32_t) opened;
     }
 

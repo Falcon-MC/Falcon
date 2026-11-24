@@ -1,5 +1,6 @@
 #include "Falcon/Plugin/PluginManager.h"
 
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Network/ServerNetworkHandler.h"
@@ -346,15 +347,29 @@ void PluginManager::disableAll() {
 }
 
 void PluginManager::_disable(LoadedPlugin &plugin) {
-    if (plugin.mEnabled && plugin.mCallbacks.onDisable != nullptr) {
+    const bool wasEnabled = plugin.mEnabled;
+    plugin.mEnabled = false;
+
+    // Close windows before onDisable can release the callback's state.
+    const std::vector<uint64_t> windows(plugin.mWindowPlayers.begin(), plugin.mWindowPlayers.end());
+    for (uint64_t id: windows) {
+        if (!plugin.mWindowPlayers.contains(id))
+            continue;
+        if (ServerPlayer *player = MobActor::findPlayer(mOwner, id)) {
+            auto &inventories = player->getInventoryManager();
+            if (inventories.getPluginWindow(inventories.getContainerWindowId()) != nullptr)
+                inventories.onCurrentWindowRemove();
+        }
+    }
+    plugin.mWindowPlayers.clear();
+
+    if (wasEnabled && plugin.mCallbacks.onDisable != nullptr) {
         try {
             plugin.mCallbacks.onDisable(plugin.mCallbacks.userData);
         } catch (...) {
             LOG_ERROR(LogAreaID::Server, "[%s] onDisable threw an exception", plugin.mDescription.mName.c_str());
         }
     }
-
-    plugin.mEnabled = false;
     mScheduler.cancelAll(plugin);
 
     for (const std::string &command: plugin.mCommands)

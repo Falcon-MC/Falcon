@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 struct LoadedPlugin {
@@ -14,6 +15,7 @@ struct LoadedPlugin {
     std::string mDirectory;
     std::string mDataFolder;
     std::vector<std::string> mCommands;
+    std::unordered_set<uint64_t> mWindowPlayers;
     std::unique_ptr<NativeLibrary> mLibrary;
     FalconPluginCallbacks mCallbacks{};
     std::shared_ptr<void> mInstance;
