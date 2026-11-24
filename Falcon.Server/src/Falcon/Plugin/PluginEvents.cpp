@@ -7,7 +7,7 @@
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Level.h"
 
-bool PluginEvents::teleport(Actor &actor, Vector3f &to, const char *cause) {
+bool PluginEvents::teleport(Actor &actor, Vector3f &to, const char *cause, Level **destination) {
     ServerPlayer *player = dynamic_cast<ServerPlayer *>(&actor);
     const FalconEventType type = player != nullptr ? FALCON_EVENT_PLAYER_TELEPORT : FALCON_EVENT_ENTITY_TELEPORT;
     PluginManager *plugins = PluginManager::findWithSubscribers(type);
@@ -19,6 +19,7 @@ bool PluginEvents::teleport(Actor &actor, Vector3f &to, const char *cause) {
     event.mCancellable = true;
     event.mPlayer = player;
     event.mEntity = &actor;
+    event.mLevel = destination == nullptr ? nullptr : *destination;
     event.mFrom = actor.getPosition();
     event.mTo = to;
     event.mCause = cause;
@@ -27,6 +28,8 @@ bool PluginEvents::teleport(Actor &actor, Vector3f &to, const char *cause) {
         return false;
     if (event.mToChanged)
         to = event.mTo;
+    if (destination != nullptr)
+        *destination = event.mLevel;
     return true;
 }
 

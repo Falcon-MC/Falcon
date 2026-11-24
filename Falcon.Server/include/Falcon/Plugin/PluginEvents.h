@@ -11,7 +11,7 @@ class ServerPlayer;
 // plugin events fired from more than one place of the server
 namespace PluginEvents {
     // FALCON_EVENT_PLAYER_TELEPORT or _ENTITY_TELEPORT; false when cancelled, to takes the plugin's destination
-    bool teleport(Actor &actor, Vector3f &to, const char *cause);
+    bool teleport(Actor &actor, Vector3f &to, const char *cause, Level **destination = nullptr);
 
     // FALCON_EVENT_PLAYER_BUCKET_FILL or _EMPTY, before the world changes; false when cancelled
     bool bucket(ServerPlayer &player, Level &level, const Vector3i &position, bool fill, const ItemStack &bucket);
