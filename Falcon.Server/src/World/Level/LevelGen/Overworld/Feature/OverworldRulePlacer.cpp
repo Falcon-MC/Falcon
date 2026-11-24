@@ -2555,12 +2555,67 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mPlaced.mSingleBlock = &SINGLE_BLOCKS[12];
     // jigsaw feature pieces, drawn from the post process random of their chunk
     if (entry.mPass.empty()) {
+        // Saplings use standing trees only. The two jungle variants omit canopy vines and cocoa.
+        static const TreeDefinition JUNGLE_PLAIN = [] {
+            TreeDefinition result = JUNGLE_TREES[0];
+            result.mTree.mVineChance = 0;
+            result.mTree.mCanopyVineNumerator = 0;
+            result.mTree.mCanopyVineDenominator = 0;
+            result.mTree.mCanopyVineSteps = 0;
+            return result;
+        }();
+        static const TreeDefinition JUNGLE_VINES = [] {
+            TreeDefinition result = JUNGLE_PLAIN;
+            result.mTree.mVineChance = 100;
+            return result;
+        }();
+        static const ScatterDefinition OPTIONAL_JUNGLE_VINES = optional(
+                "minecraft:optional_undecorated_jungle_tree_with_vines_feature", tree(JUNGLE_VINES), 12);
+        static const AggregateDefinition STANDING_JUNGLE = {"minecraft:select_undecorated_jungle_tree_feature",
+                                                            {scatter(OPTIONAL_JUNGLE_VINES), tree(JUNGLE_PLAIN)},
+                                                            2};
+        static const TreeDefinition PALE_OAK = [] {
+            TreeDefinition result = ROOFED_TREES[0];
+            result.mTree.mIdentifier = "minecraft:pale_oak_tree_feature";
+            result.mTree.mLog = &VanillaBlocks::PALE_OAK_LOG;
+            result.mTree.mLeaves = &VanillaBlocks::PALE_OAK_LEAVES;
+            return result;
+        }();
+        static const AggregateDefinition PLANTED_OAK = {
+                "minecraft:select_standing_oak_tree_feature", {scatter(OPTIONAL_TREES[1]), tree(TREES[0])}, 2};
+        static const WeightedDefinition OAK_SAPLING = {"minecraft:random_oak_tree_from_sapling_feature",
+                                                       {{aggregate(PLANTED_OAK), 9}, {tree(TREES[2]), 1}}};
+        static const AggregateDefinition OAK_NEST = {
+                "minecraft:oak_tree_with_beehive_feature", {tree(TREES[0]), BEEHIVE_SEARCH}, 1};
+        static const AggregateDefinition FANCY_NEST = {
+                "minecraft:fancy_oak_tree_with_beehive_feature", {tree(TREES[2]), BEEHIVE_SEARCH}, 1};
+        static const AggregateDefinition BIRCH_NEST = {
+                "minecraft:birch_tree_with_beehive_feature", {tree(TREES[4]), BEEHIVE_SEARCH}, 1};
+        static const WeightedDefinition OAK_SAPLING_NEST = {
+                "minecraft:random_oak_tree_with_beehive_from_sapling_feature",
+                {{aggregate(OAK_NEST), 9}, {aggregate(FANCY_NEST), 1}}};
+        static const WeightedDefinition POPLAR_SAPLING = {
+                "minecraft:select_poplar_tree_feature",
+                {{tree(POPLAR_TREES[1]), 1}, {tree(POPLAR_TREES[0]), 1}, {tree(POPLAR_TREES[2]), 1}}};
         static const auto function = [](bool (*place)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &)) {
             Placed placed;
             placed.mFunction = place;
             return placed;
         };
-        static const std::pair<const char *, Placed> JIGSAW_FEATURES[] = {
+        static const std::pair<const char *, Placed> NAMED_FEATURES[] = {
+                {OAK_SAPLING.mIdentifier, weightedOf(OAK_SAPLING)},
+                {OAK_SAPLING_NEST.mIdentifier, weightedOf(OAK_SAPLING_NEST)},
+                {BIRCH_NEST.mIdentifier, aggregate(BIRCH_NEST)},
+                {CHERRY_WITH_BEEHIVE.mIdentifier, aggregate(CHERRY_WITH_BEEHIVE)},
+                {TREES[4].mTree.mIdentifier, tree(TREES[4])},
+                {STANDING_SPRUCE.mIdentifier, aggregate(STANDING_SPRUCE)},
+                {MEGA_TREES[0].mTree.mIdentifier, tree(MEGA_TREES[0])},
+                {STANDING_JUNGLE.mIdentifier, aggregate(STANDING_JUNGLE)},
+                {MEGA_JUNGLE_TREE.mTree.mIdentifier, tree(MEGA_JUNGLE_TREE)},
+                {SELECT_ROOFED.mIdentifier, aggregate(SELECT_ROOFED)},
+                {PALE_OAK.mTree.mIdentifier, tree(PALE_OAK)},
+                {CHERRY_TREE.mTree.mIdentifier, tree(CHERRY_TREE)},
+                {POPLAR_SAPLING.mIdentifier, weightedOf(POPLAR_SAPLING)},
                 {"minecraft:select_oak_tree_feature", aggregate(SELECT_OAK)},
                 {"minecraft:select_spruce_tree_feature", aggregate(SELECT_SPRUCE)},
                 {"minecraft:pine_tree_feature", tree(TREES[9])},
@@ -2572,9 +2627,9 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                 {"minecraft:pumpkin_pile_feature", function(&BlockPileFeature::placePumpkin)},
                 {"minecraft:snow_pile_feature", function(&BlockPileFeature::placeSnow)},
                 {"minecraft:ice_pile_feature", function(&BlockPileFeature::placeIce)}};
-        for (const auto &jigsaw: JIGSAW_FEATURES) {
-            if (entry.mFeature == jigsaw.first)
-                feature.mPlaced = jigsaw.second;
+        for (const auto &named: NAMED_FEATURES) {
+            if (entry.mFeature == named.first)
+                feature.mPlaced = named.second;
         }
     }
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
