@@ -115,8 +115,8 @@ namespace MovementPhysics {
         return false;
     }
 
-    AxisAlignedBB boxAt(const Vector3f &feet, float height) {
-        const float half = PLAYER_WIDTH * 0.5f;
+    AxisAlignedBB boxAt(const Vector3f &feet, float height, float width) {
+        const float half = width * 0.5f;
         return AxisAlignedBB(feet.x - half, feet.y, feet.z - half, feet.x + half, feet.y + height, feet.z + half);
     }
 

@@ -71,7 +71,6 @@ namespace {
         return dx * dx + dy * dy + dz * dz <= MOVEMENT_BLOCK_RANGE * MOVEMENT_BLOCK_RANGE;
     }
 
-    using MovementPhysics::PLAYER_BASE_OFFSET;
     const double BREAK_SPEED_CHANGE_EPSILON = 0.0001;
     const double BREAK_PROGRESS_EPSILON = 0.000001;
     // progress counts server ticks from the tick after the start, not input ticks:
@@ -475,7 +474,7 @@ bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vecto
     const float maxDistance = player.isCreative() ? 13.0f : 7.0f;
 
     const Vector3f feet = player.getPosition();
-    const Vector3f eyePosition(feet.x, feet.y + PLAYER_BASE_OFFSET, feet.z);
+    const Vector3f eyePosition(feet.x, feet.y + player.getBaseOffset(), feet.z);
     const Vector3f target((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
     const float dx = target.x - eyePosition.x;

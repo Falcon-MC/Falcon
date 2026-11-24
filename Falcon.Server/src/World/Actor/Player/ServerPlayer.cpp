@@ -113,12 +113,9 @@ namespace {
     }
 
     constexpr float MAX_REACH = 8.0f;
-    using MovementPhysics::PLAYER_EYE_HEIGHT;
     constexpr float FACING_MIN_DISTANCE = 1.0e-4f;
     constexpr float SPIN_ATTACK_DAMAGE = 8.0f;
     constexpr float SPIN_ATTACK_REACH = 1.0f;
-    constexpr float PLAYER_WIDTH = 0.6f;
-    constexpr float PLAYER_HEIGHT = 1.8f;
     constexpr int ATTACK_COOLDOWN_TICKS = 10;
 
     void broadcastEvent(ServerNetworkHandler &owner, const Actor &actor, EntityEventType eventType) {
@@ -197,6 +194,17 @@ bool ServerPlayer::canStandOnPowderSnow() const {
     return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
 }
 
+float ServerPlayer::getBodyHeight() const {
+    if (!hasScaleOverride())
+        return MovementPhysics::PLAYER_HEIGHT;
+    if (getFlags().get(ActorFlag::Swimming) || getFlags().get(ActorFlag::Gliding)
+        || getFlags().get(ActorFlag::Crawling))
+        return MovementPhysics::PLAYER_CRAWLING_HEIGHT * getScale();
+    if (getFlags().get(ActorFlag::Sneaking))
+        return MovementPhysics::PLAYER_SNEAKING_HEIGHT * getScale();
+    return MovementPhysics::PLAYER_HEIGHT * getScale();
+}
+
 float ServerPlayer::getArmorKnockbackResistance() const {
     float resistance = 0.0f;
     for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
@@ -257,7 +265,7 @@ Vector3f ServerPlayer::getLookDirection() const {
 
 bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const {
     const float threshold = std::clamp(owner.getProperties().getPlayerMovementActionDirectionThreshold(), 0.0f, 1.0f);
-    const Vector3f eye(getPosition().x, getPosition().y + PLAYER_EYE_HEIGHT, getPosition().z);
+    const Vector3f eye(getPosition().x, getPosition().y + getEyeHeight(), getPosition().z);
     const float half = width * 0.5f;
     const Vector3f closest(std::clamp(eye.x, targetFeet.x - half, targetFeet.x + half),
                            std::clamp(eye.y, targetFeet.y, targetFeet.y + height),
@@ -277,7 +285,7 @@ bool ServerPlayer::_scriptsCancelAttack(ServerNetworkHandler &owner, Actor &targ
     bool aimed = false;
     if (hitPosition != nullptr && std::isfinite(hitPosition->x) && std::isfinite(hitPosition->y)
         && std::isfinite(hitPosition->z)) {
-        const Vector3f delta(hitPosition->x - getPosition().x, hitPosition->y - (getPosition().y + PLAYER_EYE_HEIGHT),
+        const Vector3f delta(hitPosition->x - getPosition().x, hitPosition->y - (getPosition().y + getEyeHeight()),
                              hitPosition->z - getPosition().z);
         const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
         if (length > 0.0f) {
@@ -416,7 +424,7 @@ bool ServerPlayer::attackActor(ServerNetworkHandler &owner, uint64_t targetRunti
     if (checkReach && delta.x * delta.x + delta.y * delta.y + delta.z * delta.z > MAX_REACH * MAX_REACH)
         return false;
 
-    if (checkReach && !_isFacing(owner, victim->getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+    if (checkReach && !_isFacing(owner, victim->getPosition(), victim->getBodyWidth(), victim->getBodyHeight()))
         return false;
 
     owner.getScriptEngine().onPlayerSwingStart(*this, "Attack");
@@ -682,11 +690,11 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
 
     const Vector3f position = getPosition();
 
-    const auto reaches = [&position](const Vector3f &target, float width, float height) {
-        const float halfWidth = width * 0.5f + PLAYER_WIDTH * 0.5f + SPIN_ATTACK_REACH;
+    const auto reaches = [this, &position](const Vector3f &target, float width, float height) {
+        const float halfWidth = (width + getBodyWidth()) * 0.5f + SPIN_ATTACK_REACH;
         if (std::fabs(target.x - position.x) > halfWidth || std::fabs(target.z - position.z) > halfWidth)
             return false;
-        return target.y + height >= position.y && target.y <= position.y + PLAYER_HEIGHT;
+        return target.y + height >= position.y && target.y <= position.y + getBodyHeight();
     };
 
     for (auto &entry: owner.getActors()) {
@@ -711,7 +719,7 @@ void ServerPlayer::tickSpinAttack(ServerNetworkHandler &owner) {
             || target.isSpectator())
             continue;
 
-        if (reaches(target.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT))
+        if (reaches(target.getPosition(), target.getBodyWidth(), target.getBodyHeight()))
             owner.hurt(target, SPIN_ATTACK_DAMAGE,
                        ActorDamageSource::attack("death.attack.player", target.getName(), *this, getName(), position)
                                .withoutArmor()

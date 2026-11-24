@@ -56,8 +56,8 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
         travel.moved.mMoved.x += moved.mMoved.x;
         travel.moved.mMoved.y += moved.mMoved.y;
         travel.moved.mMoved.z += moved.mMoved.z;
-        state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY,
-                                   travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+        state.simulated = Vector3f(travel.box.mMinX + context.pose.mWidth * 0.5f, travel.box.mMinY,
+                                   travel.box.mMinZ + context.pose.mWidth * 0.5f);
         const bool horizontalCollision = input(context.input.getPacket(), PlayerAuthInputData::HorizontalCollision);
         const bool verticalCollision = input(context.input.getPacket(), PlayerAuthInputData::VerticalCollision);
         if (!horizontalCollision) {

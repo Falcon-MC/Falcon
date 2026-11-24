@@ -1937,6 +1937,23 @@ void ServerNetworkHandler::updatePlayerNameTag(ServerPlayer &player, std::string
 EntityDataMap ServerNetworkHandler::_buildPlayerData(ServerPlayer &player) {
     EntityDataMap metadata;
 
+    if (player.hasScaleOverride()) {
+        constexpr int32_t BOUNDING_BOX_WIDTH = 53;
+        constexpr int32_t BOUNDING_BOX_HEIGHT = 54;
+        const std::pair<int32_t, float> dimensions[] = {
+            {ActorFlags::SCALE_DATA_ID, player.getScale()},
+            {BOUNDING_BOX_WIDTH, player.getBodyWidth()},
+            {BOUNDING_BOX_HEIGHT, player.getBodyHeight()},
+        };
+        for (const auto &[id, value]: dimensions) {
+            EntityDataEntry entry;
+            entry.mId = id;
+            entry.mFormat = EntityDataFormat::Float;
+            entry.mFloatValue = value;
+            metadata.mEntries.push_back(entry);
+        }
+    }
+
     if (const auto &nameTag = player.getPluginNameTag()) {
         EntityDataEntry name;
         name.mId = 4;

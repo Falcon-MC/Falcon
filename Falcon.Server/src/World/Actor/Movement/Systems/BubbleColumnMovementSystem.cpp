@@ -15,7 +15,7 @@ void BubbleColumnMovementSystem::tick(PlayerMovementContext &context) {
         return;
 
     // the client pushes once per bubble column cell in the body, harder at the column's top
-    const AxisAlignedBB box = boxAt(state.start, context.pose.mHeight);
+    const AxisAlignedBB box = boxAt(state.start, context.pose.mHeight, context.pose.mWidth);
     for (int32_t x = (int32_t) std::floor(box.mMinX); x < (int32_t) std::ceil(box.mMaxX); x++) {
         for (int32_t y = (int32_t) std::floor(box.mMinY); y < (int32_t) std::ceil(box.mMaxY); y++) {
             for (int32_t z = (int32_t) std::floor(box.mMinZ); z < (int32_t) std::ceil(box.mMaxZ); z++) {
