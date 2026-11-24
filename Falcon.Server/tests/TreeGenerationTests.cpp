@@ -1,4 +1,9 @@
 #include "Core/Debug/BedrockLog.h"
+#include "Network/ServerNetworkHandler.h"
+#include "World/Level/World.h"
+#include "World/Level/Block/SaplingBlock.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Item/VanillaItems.h"
 #include "Core/Debug/ContentLogEndPoint.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -480,6 +485,96 @@ namespace {
                 "the plain roofed tree replaces leaf litter");
         require(is(blocks, 4, GROUND + 1, 4, &VanillaBlocks::DARK_OAK_LOG), "the litter gives way to the trunk");
     }
+    void plantedSaplings() {
+        ServerNetworkHandler owner("Sapling growth", "", 1);
+        Level &level = owner.getWorlds().getDefault().getOverworld();
+        NetworkIdentifier id;
+        ServerPlayer player(id, 45);
+        player.moveToLevel(level);
+        player.setGameType(1);
+        int plot = 0;
+        const auto plant = [&](const std::string &wood, int width, int offset = 8) {
+            const Vector3i origin(32 * ++plot + offset, 265, 8);
+            for (int cx = (origin.x - 12) >> 4; cx <= (origin.x + 12) >> 4; ++cx) {
+                for (int cz = -1; cz <= 1; ++cz) {
+                    if (!level.isChunkResident(cx, cz))
+                        level.insertChunk(LevelChunk(cx, cz)).setPopulated(true);
+                }
+            }
+            for (int dx = -3; dx <= 4; ++dx) {
+                for (int dz = -3; dz <= 4; ++dz)
+                    level.setBlockState(origin.x + dx, origin.y - 1, origin.z + dz, BlockState("minecraft:dirt"));
+            }
+            for (int dx = 0; dx < width; ++dx) {
+                for (int dz = 0; dz < width; ++dz)
+                    level.setBlockState(origin.x + dx, origin.y, origin.z + dz,
+                                        BlockState("minecraft:" + wood + "_sapling"));
+            }
+            return origin;
+        };
+        const auto meal = [&](const Vector3i &at, ServerPlayer *who) {
+            const auto *boneMeal = VanillaItems::fromIdentifier("minecraft:bone_meal");
+            require(boneMeal != nullptr, "missing bone meal");
+            if (who == nullptr)
+                return boneMeal->fertilizeBlock(owner, level, at);
+            return boneMeal->onUseOnBlock(owner, *who, owner.createItemStack("minecraft:bone_meal", 1), at, 1, {});
+        };
+
+        for (const std::string wood: {"oak", "birch", "spruce", "jungle", "acacia", "cherry", "poplar"}) {
+            const auto at = plant(wood, 1);
+            require(meal(at, &player), "single sapling rejected bone meal");
+            if (level.getBlockState(at.x, at.y, at.z).mName != "minecraft:" + wood + "_log")
+                throw std::runtime_error("wrong trunk for single " + wood);
+        }
+        for (const std::string wood: {"spruce", "jungle", "dark_oak", "pale_oak"}) {
+            for (int corner = 0; corner < 4; ++corner) {
+                const auto at = plant(wood, 2);
+                const Vector3i clicked(at.x + corner % 2, at.y, at.z + corner / 2);
+                require(meal(clicked, &player), "square rejected bone meal");
+                for (int cell = 0; cell < 4; ++cell) {
+                    if (level.getBlockState(at.x + cell % 2, at.y, at.z + cell / 2).mName
+                        != "minecraft:" + wood + "_log")
+                        throw std::runtime_error("missing trunk for " + wood + " square from corner "
+                                                 + std::to_string(corner));
+                }
+            }
+        }
+        for (const std::string wood: {"dark_oak", "pale_oak"}) {
+            const auto at = plant(wood, 2);
+            level.setBlockState(at.x + 1, at.y, at.z + 1, BlockState("minecraft:oak_sapling"));
+            require(!meal(at, &player) && !meal(at, nullptr), "mixed square accepted bone meal");
+            level.setBlockState(at.x + 1, at.y, at.z + 1, BlockState("minecraft:" + wood + "_sapling"));
+            level.setBlockState(at.x, at.y + 1, at.z, BlockState("minecraft:stone"));
+            meal(at, &player);
+            for (int cell = 0; cell < 4; ++cell)
+                require(level.getBlockState(at.x + cell % 2, at.y, at.z + cell / 2).mName
+                                == "minecraft:" + wood + "_sapling",
+                        "a blocked tree lost a sapling");
+        }
+        const auto planted = plant("acacia", 1);
+        bool sawStage = false;
+        for (int attempt = 0; attempt < 128; ++attempt) {
+            const auto state = level.getBlockState(planted.x, planted.y, planted.z);
+            if (state.mName == "minecraft:acacia_log")
+                break;
+            sawStage |= state.mStates.getByte("age_bit") != 0;
+            require(meal(planted, nullptr), "valid acacia refused ordinary bone meal");
+        }
+        require(sawStage && level.getBlockState(planted.x, planted.y, planted.z).mName == "minecraft:acacia_log",
+                "ordinary bone meal did not advance both growth stages");
+        const auto at = plant("dark_oak", 2, 15);
+        const auto *sapling = VanillaBlocks::getAs<SaplingBlock>("minecraft:dark_oak_sapling");
+        bool aged = false;
+        for (int tick = 0; tick < 512; ++tick) {
+            const auto state = level.getBlockState(at.x, at.y, at.z);
+            if (state.mName == "minecraft:dark_oak_log")
+                break;
+            aged |= state.mStates.getByte("age_bit") != 0;
+            sapling->onRandomTick(owner, level, at, state);
+        }
+        require(aged && level.getBlockState(at.x + 1, at.y, at.z + 1).mName == "minecraft:dark_oak_log",
+                "natural growth did not advance from sapling to a square tree");
+    }
 }
 
 int main() {
@@ -497,6 +592,7 @@ int main() {
         }
     };
 
+    check("planted saplings", plantedSaplings);
     check("roofed tree trunk", roofedTrunk);
     check("roofed tree canopy", roofedCanopy);
     check("roofed tree with vines needs room", vinesNeedRoom);

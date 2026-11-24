@@ -122,20 +122,6 @@ bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const 
                                      player);
 }
 
-bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                  const BlockState &state, ServerPlayer *player) {
-    if (state.mStates.getByte("age_bit") == 0) {
-        Tag states = state.mStates;
-        states.putByte("age_bit", 1);
-        return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
-                                         false, player);
-    }
-
-    const auto *sapling = VanillaBlocks::getAs<SaplingBlock>(state.mName);
-    return sapling != nullptr && sapling->tryGrow(owner, level, position, state, player)
-           && level.getBlockState(position.x, position.y, position.z).mName != state.mName;
-}
-
 bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 ServerPlayer *player) {
     if (level.getBlockState(position.x, position.y + 1, position.z).mName != BlockNames::AIR)
@@ -170,13 +156,13 @@ bool BoneMealItem::fertilize(ServerNetworkHandler &owner, Level &level, const Ve
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     if (isCrop(state))
         return applyToCrop(owner, level, position, state, player);
-    if (SaplingBlock::matches(state.mName))
-        return applyToSapling(owner, level, position, state, player);
     if (state.mName == BlockNames::GRASS_BLOCK)
         return applyToGrass(owner, level, position, player);
     if (NyliumBlock::matches(state.mName))
         return applyToNylium(owner, level, position, state, player);
     const Block *block = VanillaBlocks::fromState(state);
+    if (const auto *sapling = dynamic_cast<const SaplingBlock *>(block))
+        return sapling->fertilize(level, position, state, player);
     if (const auto *leaf = dynamic_cast<const BigDripleafBlock *>(block))
         return leaf->fertilize(owner, level, position, player);
     if (const auto *leaf = dynamic_cast<const SmallDripleafBlock *>(block))
