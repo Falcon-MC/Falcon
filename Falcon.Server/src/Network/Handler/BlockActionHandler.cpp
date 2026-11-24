@@ -2,6 +2,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
+#include "World/Item/FarmSeedItem.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -1322,6 +1323,12 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
                 || std::find(placer->mPlacerUseOn.begin(), placer->mPlacerUseOn.end(), clickedState.mName)
                            != placer->mPlacerUseOn.end()))
             placerDefinition = owner.getBlockDefinitions().getDefinition(placer->mPlacerBlock);
+    }
+
+    if (!placerDefinition && !heldItem.mBlockDefinition && !onCooldown && face == PlacementOrientation::FACE_UP) {
+        const Tag *seed = FarmSeedItem::getSeedComponent(heldItem);
+        if (seed != nullptr && FarmSeedItem::plantsOn(*seed, clickedState.mName))
+            placerDefinition = owner.getBlockDefinitions().getDefinition(seed->getString("crop_result"));
     }
 
     const bool bucket = BucketItem::isBucket(heldItem);

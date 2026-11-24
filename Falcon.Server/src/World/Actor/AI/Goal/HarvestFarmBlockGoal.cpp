@@ -1,7 +1,7 @@
 #include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
 
 #include "World/Actor/Mob/MobActor.h"
-#include "World/Item/ItemNetworkIdTable.h"
+#include "World/Item/FarmSeedItem.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/CropBlock.h"
@@ -14,29 +14,9 @@
 
 namespace {
     const char *const GRIEFING_RULE = "mobgriefing";
-    const char *const SEED_COMPONENT = "minecraft:seed";
     const char *const GROWTH_STATE = "growth";
     // the game takes a crop as ripe at growth 7 alone
     const int32_t RIPE_GROWTH = 7;
-
-    const Tag *seedOf(const ItemStack &item) {
-        if (item.isAir() || item.mCount <= 0)
-            return nullptr;
-        const ItemNetworkIdEntry *entry = ItemNetworkIdTable::find(item.mDefinition->getIdentifier());
-        const Tag *components = entry == nullptr ? nullptr : entry->mComponents.get("components");
-        return components == nullptr ? nullptr : components->get(SEED_COMPONENT);
-    }
-
-    bool plantsOn(const Tag &seed, const std::string &block) {
-        const Tag *plantAt = seed.get("plant_at");
-        if (plantAt == nullptr || !plantAt->isList())
-            return false;
-        for (const Tag &name: plantAt->getList()) {
-            if (name.asString() == block)
-                return true;
-        }
-        return false;
-    }
 
     bool isRipeCrop(const BlockState &state) {
         return CropBlock::matches(state.mName) && state.mStates.getInt(GROWTH_STATE, 0) == RIPE_GROWTH;
@@ -56,7 +36,7 @@ HarvestFarmBlockGoal::HarvestFarmBlockGoal(Settings settings, Timing timing)
 int HarvestFarmBlockGoal::findSeedSlot(const MobActor &mob) {
     const MobEquipment &equipment = mob.getEquipment();
     for (int slot = 0; slot < equipment.getInventorySize(); ++slot) {
-        if (seedOf(equipment.getInventoryItem(slot)) != nullptr)
+        if (FarmSeedItem::getSeedComponent(equipment.getInventoryItem(slot)) != nullptr)
             return slot;
     }
     return -1;
@@ -65,12 +45,12 @@ int HarvestFarmBlockGoal::findSeedSlot(const MobActor &mob) {
 bool HarvestFarmBlockGoal::plantSeed(ServerNetworkHandler &owner, MobActor &mob, int slot, const Vector3i &farmland) {
     MobEquipment &equipment = mob.getEquipment();
     ItemStack item = equipment.getInventoryItem(slot);
-    const Tag *seed = seedOf(item);
+    const Tag *seed = FarmSeedItem::getSeedComponent(item);
     Level &level = owner.getLevelFor(mob);
     const BlockState *ground = level.peekBlockPtr(farmland.x, farmland.y, farmland.z);
     const BlockState *space = above(level, farmland);
     if (seed == nullptr || ground == nullptr || space == nullptr || space->mName != BlockNames::AIR
-        || !plantsOn(*seed, ground->mName))
+        || !FarmSeedItem::plantsOn(*seed, ground->mName))
         return false;
 
     const std::string crop = seed->getString("crop_result");
