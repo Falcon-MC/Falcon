@@ -25,6 +25,10 @@ namespace {
         return Vector3f((float) value.x, (float) value.y, (float) value.z);
     }
 
+    bool isFinite(const Vector3f &value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    }
+
     ServerPlayer *asPlayer(Actor *value) {
         return dynamic_cast<ServerPlayer *>(value);
     }
@@ -89,34 +93,58 @@ namespace {
         return nullptr;
     }
 
-    void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
+    int entityTeleportWithRotation(FalconEntity *target, FalconLevel *destination, FalconVec3 position,
+                                   const FalconVec3 *rotation) {
+        if (target == nullptr)
+            return 0;
         Actor *value = entity(target);
         Vector3f to = toVector3f(position);
+        const Vector3f facing = rotation == nullptr ? value->getRotation() : toVector3f(*rotation);
+        if (!isFinite(to) || !isFinite(facing))
+            return 0;
+
+        Level *destinationLevel = destination == nullptr ? &owner().getLevelFor(*value) : level(destination);
         // the plugin drawing it keeps it where its own copy is: that is no teleport to tell anyone of
         const ServerActor *drawn = asActor(value);
-        if ((drawn == nullptr || !drawn->isDrawnByPlugin()) && !PluginEvents::teleport(*value, to, "plugin"))
-            return;
-        Level &destinationLevel = destination == nullptr ? owner().getLevelFor(*value) : *level(destination);
+        if ((drawn == nullptr || !drawn->isDrawnByPlugin())
+            && !PluginEvents::teleport(*value, to, "plugin", &destinationLevel))
+            return 0;
+        if (!isFinite(to))
+            return 0;
 
         if (ServerPlayer *playerValue = asPlayer(value)) {
-            if (!playerValue->isIn(destinationLevel))
-                owner().changePlayerLevel(*playerValue, destinationLevel, to);
-            else
-                playerValue->teleport(owner(), to);
-            return;
+            if (!playerValue->isIn(*destinationLevel)) {
+                owner().changePlayerLevel(*playerValue, *destinationLevel, to);
+                if (!playerValue->isIn(*destinationLevel))
+                    return 0;
+                if (rotation != nullptr)
+                    playerValue->setRotation(facing);
+                return 1;
+            }
+            if (rotation != nullptr)
+                playerValue->setRotation(facing);
+            playerValue->teleport(owner(), to);
+            return 1;
         }
 
         ServerActor *actorValue = asActor(value);
         if (actorValue == nullptr)
-            return;
+            return 0;
 
-        if (!actorValue->isIn(destinationLevel)) {
-            owner().changeActorLevel(*actorValue, destinationLevel, to);
-            return;
+        if (rotation != nullptr)
+            actorValue->setRotation(facing);
+        if (!actorValue->isIn(*destinationLevel)) {
+            owner().changeActorLevel(*actorValue, *destinationLevel, to);
+            return actorValue->isIn(*destinationLevel);
         }
 
         actorValue->teleport(to);
         owner().broadcastActorMove(*actorValue);
+        return 1;
+    }
+
+    void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
+        entityTeleportWithRotation(target, destination, position, nullptr);
     }
 
     FalconVec3 entityMotion(FalconEntity *target) {
@@ -364,6 +392,7 @@ void PluginServerApi::fillEntities(FalconServerApi &api) {
     api.entityPosition = &entityPosition;
     api.entityRotation = &entityRotation;
     api.entityTeleport = &entityTeleport;
+    api.entityTeleportWithRotation = &entityTeleportWithRotation;
     api.entityMotion = &entityMotion;
     api.entitySetMotion = &entitySetMotion;
     api.entityHealth = &entityHealth;

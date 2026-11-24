@@ -81,10 +81,11 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
     ServerPlayer &target = *targets.front();
     for (ServerPlayer *victim: victims) {
         Vector3f destination = target.getPosition();
-        if (!PluginEvents::teleport(*victim, destination, "command"))
+        Level *level = &mHandler.getLevelFor(target);
+        if (!PluginEvents::teleport(*victim, destination, "command", &level))
             continue;
-        if (!victim->sharesLevelWith(target))
-            mHandler.changePlayerLevel(*victim, mHandler.getLevelFor(target), destination);
+        if (!victim->isIn(*level))
+            mHandler.changePlayerLevel(*victim, *level, destination);
         else
             victim->teleport(mHandler, destination);
 
@@ -103,9 +104,13 @@ bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vecto
             return false;
         }
 
-        if (!PluginEvents::teleport(*victim, destination, "command"))
+        Level *level = &mHandler.getLevelFor(*victim);
+        if (!PluginEvents::teleport(*victim, destination, "command", &level))
             continue;
-        victim->teleport(mHandler, destination);
+        if (!victim->isIn(*level))
+            mHandler.changePlayerLevel(*victim, *level, destination);
+        else
+            victim->teleport(mHandler, destination);
         sender.sendTranslation("commands.tp.success.coordinates",
                                {victim->getName(), formatCoordinate(destination.x), formatCoordinate(destination.y),
                                 formatCoordinate(destination.z)});

@@ -300,6 +300,15 @@ namespace {
         return 1;
     }
 
+    int levelLoadChunk(FalconLevel *handle, int32_t chunkX, int32_t chunkZ) {
+        static constexpr int32_t MAX_CHUNK_COORDINATE = 30'000'000 >> 4;
+        if (handle == nullptr || chunkX < -MAX_CHUNK_COORDINATE || chunkX > MAX_CHUNK_COORDINATE
+            || chunkZ < -MAX_CHUNK_COORDINATE || chunkZ > MAX_CHUNK_COORDINATE)
+            return 0;
+        level(handle)->getChunk(chunkX, chunkZ);
+        return 1;
+    }
+
     int levelIsChunkLoaded(FalconLevel *handle, int32_t chunkX, int32_t chunkZ) {
         return level(handle)->isChunkResident(chunkX, chunkZ) ? 1 : 0;
     }
@@ -492,6 +501,7 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.serverBlockInfo = &serverBlockInfo;
     api.levelBreakBlock = &levelBreakBlock;
     api.levelIsChunkLoaded = &levelIsChunkLoaded;
+    api.levelLoadChunk = &levelLoadChunk;
     api.levelHighestBlockY = &levelHighestBlockY;
     api.levelTime = &levelTime;
     api.levelSetTime = &levelSetTime;

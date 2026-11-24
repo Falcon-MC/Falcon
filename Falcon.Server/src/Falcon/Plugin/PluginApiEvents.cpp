@@ -144,6 +144,15 @@ namespace {
         return toHandle(event(target)->mLevel);
     }
 
+    int eventSetTeleportLevel(FalconEvent *target, FalconLevel *destination) {
+        PluginEvent *source = event(target);
+        if (source->mMonitor || source->mLevel == nullptr || destination == nullptr
+            || (source->mType != FALCON_EVENT_PLAYER_TELEPORT && source->mType != FALCON_EVENT_ENTITY_TELEPORT))
+            return 0;
+        source->mLevel = level(destination);
+        return 1;
+    }
+
     FalconEntity *eventTarget(FalconEvent *target) {
         return toHandle(event(target)->mTarget);
     }
@@ -429,6 +438,7 @@ void PluginServerApi::fillEvents(FalconServerApi &api) {
     api.eventPacketData = &eventPacketData;
     api.eventSetPacketData = &eventSetPacketData;
     api.eventLevel = &eventLevel;
+    api.eventSetTeleportLevel = &eventSetTeleportLevel;
     api.eventTarget = &eventTarget;
     api.eventPosition = &eventPosition;
     api.eventBlockCount = &eventBlockCount;
