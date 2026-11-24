@@ -312,8 +312,10 @@ namespace {
         const bool spectator = gameType == (int32_t) GameType::Spectator;
         if (ability == "instabuild")
             return creative;
-        if (ability == "invulnerable" || ability == "mayfly")
+        if (ability == "invulnerable")
             return creative || spectator;
+        if (ability == "mayfly")
+            return player.canToggleFlight();
         if (ability == "flying")
             return player.isFlying();
         if (ability == "operator_commands" || ability == "teleport")

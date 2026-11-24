@@ -178,6 +178,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     damageEvent.mCancellable = true;
     damageEvent.mEntity = &player;
     damageEvent.mAttacker = source.mAttacker;
+    damageEvent.mTarget = source.mDamager;
     damageEvent.mAmount = amount;
     damageEvent.mCause = key;
     if (source.mBlock) {

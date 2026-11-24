@@ -378,13 +378,19 @@ namespace {
         return toHandle(static_cast<Actor *>(spawned));
     }
 
-    void levelDropItem(FalconLevel *handle, FalconVec3 position, FalconItem *dropped) {
-        if (dropped == nullptr)
-            return;
+    FalconEntity *levelSpawnItem(FalconLevel *handle, FalconVec3 position, FalconItem *dropped,
+                                 const FalconVec3 *motion, int32_t pickupDelay) {
+        if (handle == nullptr || dropped == nullptr)
+            return nullptr;
 
         const ItemStack copy = *item(dropped);
-        owner().dropItem(*level(handle), toVector3f(position), copy, ItemActorHandler::randomDropMotion(),
-                         ItemActorHandler::DROP_PICKUP_DELAY);
+        const Vector3f initialMotion = motion == nullptr ? ItemActorHandler::randomDropMotion() : toVector3f(*motion);
+        return toHandle(static_cast<Actor *>(owner().dropItem(*level(handle), toVector3f(position), copy,
+                                                              initialMotion, pickupDelay)));
+    }
+
+    void levelDropItem(FalconLevel *handle, FalconVec3 position, FalconItem *dropped) {
+        levelSpawnItem(handle, position, dropped, nullptr, ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
     void levelStrikeLightning(FalconLevel *handle, FalconVec3 position) {
@@ -497,6 +503,7 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelSetSpawnPosition = &levelSetSpawnPosition;
     api.levelSpawnEntity = &levelSpawnEntity;
     api.levelDropItem = &levelDropItem;
+    api.levelSpawnItem = &levelSpawnItem;
     api.levelStrikeLightning = &levelStrikeLightning;
     api.levelCreateExplosion = &levelCreateExplosion;
     api.serverWorldCount = &serverWorldCount;

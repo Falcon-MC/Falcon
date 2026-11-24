@@ -36,6 +36,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <optional>
 
 namespace {
     // not a game limit: the client lists a few actions per input; each one may run a break check
@@ -63,7 +64,7 @@ namespace {
         plugins->dispatch(event);
     }
 
-    bool allowPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
+    bool allowPlayerState(ServerPlayer &player, FalconEventType type, bool state, double detail = 0) {
         PluginManager *plugins = PluginManager::findWithSubscribers(type);
         if (plugins == nullptr)
             return true;
@@ -73,6 +74,7 @@ namespace {
         event.mCancellable = true;
         event.mPlayer = &player;
         event.mState = state;
+        event.mAmount = detail;
         plugins->dispatch(event);
         return !event.mCancelled;
     }
@@ -420,11 +422,11 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 
 bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                     bool flying, bool deferUntilInput) {
-    const int32_t gameType = player.getGameType();
-    const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
-
-    if (flying && !mayFly) {
-        owner._disconnect(id, DisconnectReason::Kicked, player.localize("falcon.disconnect.flyingDisabled"));
+    if (flying != player.isFlying() && !player.canToggleFlight()) {
+        if (flying && !player.hasFlightOverride())
+            owner._disconnect(id, DisconnectReason::Kicked, player.localize("falcon.disconnect.flyingDisabled"));
+        else
+            owner._sendAbilities(player);
         return false;
     }
 
@@ -443,7 +445,7 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
             flightEvent.mPlayer = &player;
             flightEvent.mState = flying;
             plugins->dispatch(flightEvent);
-            if (flightEvent.mCancelled) {
+            if (flightEvent.mCancelled || !player.canToggleFlight()) {
                 owner._sendAbilities(player);
                 return false;
             }
@@ -531,11 +533,34 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     // sprint resolved before replay: physics and advertised state agree; the client sprints from StartSprinting
     // to StopSprinting; the Sprinting bit can miss the tick after a start, and stays set when one tick starts+stops
-    bool sprinting = player.getFlags().get(ActorFlag::Sprinting)
+    const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
+    bool sprinting = wasSprinting
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
         sprinting = false;
+    if (sprinting != wasSprinting && !allowPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting))
+        sprinting = wasSprinting && player.canSprint();
+
+    const bool wasSneaking = player.getFlags().get(ActorFlag::Sneaking);
+    const bool sneakPressed = packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown)
+                              || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
+    bool sneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking) || sneakPressed;
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
+        sneaking = false;
+    std::optional<PlayerAuthInputPacket> adjustedPose;
+    if (sneaking != wasSneaking && !allowPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking,
+                                                    sneakPressed ? 1 : -1)) {
+        adjustedPose = packet;
+        std::erase_if(adjustedPose->mInputData, [](int32_t flag) {
+            return flag == (int32_t) PlayerAuthInputData::Sneaking || flag == (int32_t) PlayerAuthInputData::SneakDown
+                    || flag == (int32_t) PlayerAuthInputData::StartSneaking
+                    || flag == (int32_t) PlayerAuthInputData::StopSneaking;
+        });
+        if (wasSneaking)
+            adjustedPose->mInputData.push_back((int32_t) PlayerAuthInputData::SneakDown);
+        sneaking = wasSneaking;
+    }
 
     // wire positions are at eye height; the server works in feet positions
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET, packet.mPosition.z);
@@ -601,7 +626,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
     }
 
-    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
+    PlayerMovementSimulator::apply(owner, id, player, adjustedPose ? *adjustedPose : packet, feetPosition, sprinting);
 
     // the client keeps its old travel for the input carrying a flight toggle: the new state applies from the next
     const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
@@ -630,13 +655,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     flags.set(ActorFlag::Sprinting, sprinting);
 
-    bool sneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking)
-                    || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
-
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
-        sneaking = false;
-
-    if (player.hasSimulatedVelocity())
+    if (!adjustedPose && player.hasSimulatedVelocity())
         sneaking = player.isSimulatedSneaking();
     flags.set(ActorFlag::Sneaking, sneaking);
 
@@ -678,15 +697,12 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
         owner._sendEntityData(player);
 
-    if (sneaking != previous.get(ActorFlag::Sneaking)) {
-        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
+    if (sneaking != previous.get(ActorFlag::Sneaking))
         owner.getScriptEngine().onEntitySneak(player, sneaking);
-    }
     recordInput(owner, player, packet);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
         // sprint changes the movement attribute too; client-requested: no validation reset
         owner._sendAttributes(player, false);
-        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
     }
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);

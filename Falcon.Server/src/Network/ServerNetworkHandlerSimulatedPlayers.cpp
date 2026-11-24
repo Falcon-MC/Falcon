@@ -104,6 +104,8 @@ ServerPlayer *ServerNetworkHandler::spawnSimulatedPlayer(const std::string &name
     player.setPosition(position);
     player.setRotation(Vector3f(0.0f, yaw, yaw));
     player.setGameType(gameType);
+    if (player.isSpectator())
+        player.setFlying(true);
     player.setHungerEnabled(player.isSurvival() || player.isAdventure());
     player.setLoggedInTick(mCurrentTick);
     player.setSessionInspected();

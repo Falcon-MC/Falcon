@@ -8,7 +8,9 @@ FALCON_REGISTER_ITEM(BoneMealItem, 100);
 #include "World/Level/Block/CropBlock.h"
 #include "World/Level/Block/NetherWartBlock.h"
 #include "World/Level/Block/NyliumBlock.h"
+#include "World/Level/Block/BigDripleafBlock.h"
 #include "World/Level/Block/SaplingBlock.h"
+#include "World/Level/Block/SmallDripleafBlock.h"
 #include "World/Level/Block/StemBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
@@ -59,10 +61,10 @@ namespace {
 
     class TrackingBlockManager : public BlockManager {
     public:
-        explicit TrackingBlockManager(Level &level) : BlockManager(level), mLevel(level) {}
+        TrackingBlockManager(Level &level, ServerPlayer *player) : BlockManager(level), mLevel(level), mPlayer(player) {}
 
         void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state) override {
-            if (!BlockChangeSystem::allows(mLevel, Vector3i(x, y, z), state, BlockChangeCause::Grow))
+            if (!BlockChangeSystem::allows(mLevel, Vector3i(x, y, z), state, BlockChangeCause::Grow, nullptr, mPlayer))
                 return;
 
             BlockManager::setBlockStateAt(x, y, z, state);
@@ -75,6 +77,7 @@ namespace {
 
     private:
         Level &mLevel;
+        ServerPlayer *mPlayer;
         std::vector<Vector3i> mChanged;
     };
 
@@ -101,7 +104,7 @@ bool BoneMealItem::matches(const std::string &identifier) {
 }
 
 bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                               const BlockState &state) {
+                               const BlockState &state, ServerPlayer *player) {
     const char *growthState = growthStateOf(state);
     const int maxGrowth = maxGrowthOf(state);
     const int32_t growth = state.mStates.getInt(growthState);
@@ -115,31 +118,30 @@ bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const 
 
     Tag states = state.mStates;
     states.putInt(growthState, grown);
-    return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false);
+    return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false,
+                                     player);
 }
 
 bool BoneMealItem::applyToSapling(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                  const BlockState &state) {
+                                  const BlockState &state, ServerPlayer *player) {
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
         return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
-                                         false);
+                                         false, player);
     }
 
-    const Block *block = VanillaBlocks::fromIdentifier(state.mName);
-    if (block == nullptr)
-        return false;
-
-    block->onRandomTick(owner, level, position, state);
-    return level.getBlockState(position.x, position.y, position.z).mName != state.mName;
+    const auto *sapling = VanillaBlocks::getAs<SaplingBlock>(state.mName);
+    return sapling != nullptr && sapling->tryGrow(owner, level, position, state, player)
+           && level.getBlockState(position.x, position.y, position.z).mName != state.mName;
 }
 
-bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                ServerPlayer *player) {
     if (level.getBlockState(position.x, position.y + 1, position.z).mName != BlockNames::AIR)
         return false;
 
-    TrackingBlockManager manager(level);
+    TrackingBlockManager manager(level, player);
     SimpleRandom random(randomSeed());
     LegacyTallGrass::growGrass(manager, position.x, position.y, position.z, random);
 
@@ -147,7 +149,7 @@ bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const
 }
 
 bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                 const BlockState &state) {
+                                 const BlockState &state, ServerPlayer *player) {
     const Vector3i above(position.x, position.y + 1, position.z);
     if (level.getBlockState(above.x, above.y, above.z).mName != BlockNames::AIR)
         return false;
@@ -161,20 +163,24 @@ bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, cons
     else
         grown = crimson ? "minecraft:crimson_roots" : "minecraft:warped_roots";
 
-    return BlockChangeSystem::change(level, above, BlockState(grown), BlockChangeCause::Grow, false);
+    return BlockChangeSystem::change(level, above, BlockState(grown), BlockChangeCause::Grow, false, player);
 }
 
-bool BoneMealItem::fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+bool BoneMealItem::fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ServerPlayer *player) {
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     if (isCrop(state))
-        return applyToCrop(owner, level, position, state);
+        return applyToCrop(owner, level, position, state, player);
     if (SaplingBlock::matches(state.mName))
-        return applyToSapling(owner, level, position, state);
+        return applyToSapling(owner, level, position, state, player);
     if (state.mName == BlockNames::GRASS_BLOCK)
-        return applyToGrass(owner, level, position);
+        return applyToGrass(owner, level, position, player);
     if (NyliumBlock::matches(state.mName))
-        return applyToNylium(owner, level, position, state);
+        return applyToNylium(owner, level, position, state, player);
     const Block *block = VanillaBlocks::fromState(state);
+    if (const auto *leaf = dynamic_cast<const BigDripleafBlock *>(block))
+        return leaf->fertilize(owner, level, position, player);
+    if (const auto *leaf = dynamic_cast<const SmallDripleafBlock *>(block))
+        return leaf->fertilize(owner, level, position, state, player);
     return block != nullptr && block->onFertilized(owner, level, position, state);
 }
 
@@ -187,7 +193,7 @@ bool BoneMealItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &playe
         return false;
 
     Level &level = owner.getLevelFor(player);
-    if (!fertilize(owner, level, blockPosition))
+    if (!fertilize(owner, level, blockPosition, &player))
         return false;
 
     player.startItemCooldown(item, owner.getCurrentTick(), USE_COOLDOWN_TICKS);

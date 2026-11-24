@@ -29,10 +29,17 @@ bool SmallDripleafBlock::getDrops(const BlockState &state, const ItemStack &tool
 // the upper half passes the bone meal down; the lower half becomes the bottom of a big dripleaf
 bool SmallDripleafBlock::onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                       const BlockState &state) const {
+    return fertilize(owner, level, position, state, nullptr);
+}
+
+bool SmallDripleafBlock::fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                  const BlockState &state, ServerPlayer *player) const {
     if (DoubleBlock::isUpperHalf(state)) {
         const Vector3i lower(position.x, position.y - 1, position.z);
         const BlockState *below = level.peekBlockPtr(lower.x, lower.y, lower.z);
         const Block *block = below == nullptr ? nullptr : VanillaBlocks::fromState(*below);
+        if (const auto *small = dynamic_cast<const SmallDripleafBlock *>(block))
+            return small->fertilize(owner, level, lower, *below, player);
         return block != nullptr && block->onFertilized(owner, level, lower, *below);
     }
 
@@ -40,5 +47,5 @@ bool SmallDripleafBlock::onFertilized(ServerNetworkHandler &owner, Level &level,
     const BlockState *above = level.peekBlockPtr(upper.x, upper.y, upper.z);
     const bool hasUpper = above != nullptr && above->mName == BlockNames::SMALL_DRIPLEAF_BLOCK;
     return BigDripleafBlock::growFromSmall(owner, level, position, state.mStates.getString(STATE_DIRECTION, "south"),
-                                           hasUpper ? &upper : nullptr);
+                                           hasUpper ? &upper : nullptr, player);
 }

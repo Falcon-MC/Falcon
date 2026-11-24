@@ -720,6 +720,8 @@ void LoginHandler::sendStartGame(ServerNetworkHandler &owner, ServerPlayer &play
     owner._loadPlayerData(player);
     if (owner.getProperties().getForceGameType())
         player.setGameType((int32_t) owner.getProperties().getGameType());
+    if (player.isSpectator())
+        player.setFlying(true);
     player.setHungerEnabled(player.isSurvival()
                             || player.isAdventure());
 
@@ -862,8 +864,6 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
 
     if (isSpectator) {
         abilityValues |= 1u << (int) PlayerAbility::Invulnerable;
-        abilityValues |= 1u << (int) PlayerAbility::Flying;
-        abilityValues |= 1u << (int) PlayerAbility::MayFly;
         abilityValues |= 1u << (int) PlayerAbility::NoClip;
     } else {
         abilityValues |= 1u << (int) PlayerAbility::Build;
@@ -875,10 +875,8 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
         if (!isAdventure)
             abilityValues |= 1u << (int) PlayerAbility::AttackPlayers;
 
-        if (isCreative) {
-            abilityValues |= 1u << (int) PlayerAbility::MayFly;
+        if (isCreative)
             abilityValues |= 1u << (int) PlayerAbility::Instabuild;
-        }
     }
 
     if (player.isOp()) {
@@ -895,6 +893,8 @@ PlayerAbilityData LoginHandler::buildAbilities(ServerNetworkHandler &owner, cons
         }
     }
 
+    if (player.canToggleFlight())
+        abilityValues |= 1u << (int) PlayerAbility::MayFly;
     if (player.isFlying())
         abilityValues |= 1u << (int) PlayerAbility::Flying;
 

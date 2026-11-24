@@ -475,6 +475,21 @@ namespace {
 
 ContainerBlock::ContainerBlock(const Block &base) : Block(base) {}
 
+bool ContainerBlock::hearsActorsInside() const {
+    const std::string &name = getIdentifier();
+    return name == "minecraft:campfire" || name == "minecraft:soul_campfire";
+}
+
+void ContainerBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                                   const BlockState &state) const {
+    if (state.mStates.getByte("extinguished") != 0 || actor.isFireImmune()
+        || actor.hasEffect(MobEffectId::FireResistance))
+        return;
+
+    const float damage = state.mName == "minecraft:soul_campfire" ? 2.0f : 1.0f;
+    owner.hurtActor(actor, damage, "death.attack.inFire", position);
+}
+
 bool ContainerBlock::onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                   const BlockState &state, int face, const Vector3f &clickPosition) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);

@@ -32,7 +32,7 @@ public:
     // a column of 2 to 5 blocks where a small dripleaf stood, as far as the space above allows;
     // upperHalf is cleared only once the growth is allowed. false: nothing grew
     static bool growFromSmall(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const std::string &direction, const Vector3i *upperHalf);
+                               const std::string &direction, const Vector3i *upperHalf, ServerPlayer *player = nullptr);
 
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
 
@@ -60,6 +60,8 @@ public:
 
     bool onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
+
+    bool fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ServerPlayer *player) const;
 
 private:
     static bool canGrowInto(const BlockState &state);

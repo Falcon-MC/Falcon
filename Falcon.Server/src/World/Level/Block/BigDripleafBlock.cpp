@@ -66,9 +66,10 @@ namespace {
         }
     }
 
-    bool place(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state) {
+    bool place(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+               ServerPlayer *player) {
         const BlockState previous = level.getBlockState(position.x, position.y, position.z);
-        if (!BlockChangeSystem::change(level, position, state, BlockChangeCause::Grow, true))
+        if (!BlockChangeSystem::change(level, position, state, BlockChangeCause::Grow, true, player))
             return false;
         if (LiquidView(previous).isWater()) {
             level.setBlockStateAtLayer(position.x, position.y, position.z, 1, previous);
@@ -113,7 +114,7 @@ bool BigDripleafBlock::canGrowInto(const BlockState &state) {
 }
 
 bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                     const std::string &direction, const Vector3i *upperHalf) {
+                                     const std::string &direction, const Vector3i *upperHalf, ServerPlayer *player) {
     const int32_t limit = RandomTickSystem::nextInt(4) + 2;
     int32_t height = 0;
     while (height < limit && position.y + height <= level.getMaxY()) {
@@ -130,7 +131,7 @@ bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, 
     const BlockState stem = withParts(base, false, Tilt::None);
 
     // a refused growth leaves the small dripleaf whole
-    if (height == 0 || !BlockChangeSystem::allows(level, position, head, BlockChangeCause::Grow))
+    if (height == 0 || !BlockChangeSystem::allows(level, position, head, BlockChangeCause::Grow, nullptr, player))
         return false;
     if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
         BlockChangeSystem::StructureBlocks blocks;
@@ -138,7 +139,7 @@ bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, 
             blocks.emplace_back(*upperHalf, BlockState(BlockNames::AIR));
         for (int32_t dy = 0; dy < height; ++dy)
             blocks.emplace_back(offsetY(position, dy), dy + 1 == height ? head : stem);
-        if (!BlockChangeSystem::prepareStructure(level, position, blocks))
+        if (!BlockChangeSystem::prepareStructure(level, position, blocks, player))
             return false;
         applyGrowth(owner, level, blocks);
         return true;
@@ -149,7 +150,7 @@ bool BigDripleafBlock::growFromSmall(ServerNetworkHandler &owner, Level &level, 
     // each new leaf turns the one under it into a stem
     for (int32_t dy = 0; dy < height; ++dy) {
         const Vector3i at = offsetY(position, dy);
-        if (!place(owner, level, at, head))
+        if (!place(owner, level, at, head, player))
             return dy > 0;
         const Vector3i below = offsetY(at, -1);
         if (isDripleaf(level.peekBlockPtr(below.x, below.y, below.z)))
@@ -276,6 +277,11 @@ bool BigDripleafBlock::getCollisionShape(const BlockState &state, const Actor *a
 bool BigDripleafBlock::onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) const {
     (void) state;
+    return fertilize(owner, level, position, nullptr);
+}
+
+bool BigDripleafBlock::fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 ServerPlayer *player) const {
     int32_t top = position.y;
     while (top + 1 <= level.getMaxY() && isDripleaf(level.peekBlockPtr(position.x, top + 1, position.z)))
         ++top;
@@ -291,15 +297,15 @@ bool BigDripleafBlock::onFertilized(ServerNetworkHandler &owner, Level &level, c
     const BlockState head = level.getBlockState(leaf.x, leaf.y, leaf.z);
     if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
         const BlockState newHead = withParts(head, true, Tilt::None);
-        if (!BlockChangeSystem::allows(level, above, newHead, BlockChangeCause::Grow))
+        if (!BlockChangeSystem::allows(level, above, newHead, BlockChangeCause::Grow, nullptr, player))
             return false;
         BlockChangeSystem::StructureBlocks blocks{{above, newHead}, {leaf, withParts(head, false, Tilt::None)}};
-        if (!BlockChangeSystem::prepareStructure(level, leaf, blocks))
+        if (!BlockChangeSystem::prepareStructure(level, leaf, blocks, player))
             return false;
         applyGrowth(owner, level, blocks);
         return true;
     }
-    if (!place(owner, level, above, withParts(head, true, Tilt::None)))
+    if (!place(owner, level, above, withParts(head, true, Tilt::None), player))
         return false;
     level.setBlock(leaf, withParts(head, false, Tilt::None), true);
     return true;
