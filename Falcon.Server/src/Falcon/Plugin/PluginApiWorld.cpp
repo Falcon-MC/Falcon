@@ -200,6 +200,41 @@ namespace {
         return 1;
     }
 
+    const char *levelGetBlockLayer(FalconLevel *handle, FalconBlockPos position, uint32_t layer,
+                                   const char **statesJson) {
+        Level *value = level(handle);
+        const Vector3i at = toVector3i(position);
+        if (layer > 1 || !isInside(*value, position) || !value->isChunkResident(at.x >> 4, at.z >> 4))
+            return nullptr;
+
+        const BlockState state = value->getBlockStateAtLayer(at.x, at.y, at.z, (int) layer);
+        if (statesJson != nullptr)
+            *statesJson = hold(blockPropertiesToJson(state));
+        return hold(state.mName);
+    }
+
+    int levelSetBlockLayer(FalconLevel *handle, FalconBlockPos position, uint32_t layer,
+                           const char *name, const char *statesJson) {
+        if (layer == 0)
+            return levelSetBlock(handle, position, name, statesJson);
+
+        Level *value = level(handle);
+        const Vector3i at = toVector3i(position);
+        if (layer != 1 || name == nullptr || !isInside(*value, position) || !value->isChunkResident(at.x >> 4, at.z >> 4))
+            return 0;
+
+        BlockState state;
+        if (!resolveState(withNamespace(name), statesJson, state))
+            return 0;
+
+        const BlockState previous = value->getBlockStateAtLayer(at.x, at.y, at.z, 1);
+        value->setBlockStateAtLayer(at.x, at.y, at.z, 1, state);
+        const BlockState current = value->getBlockStateAtLayer(at.x, at.y, at.z, 1);
+        if (current != previous)
+            BlockActionHandler::broadcastBlockUpdate(owner(), *value, at, current, 1);
+        return 1;
+    }
+
     // the hash clients know the state by: Falcon sends every block by it
     uint32_t serverBlockNetworkId(const char *name, const char *statesJson) {
         if (name == nullptr)
@@ -444,6 +479,8 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelGetBlock = &levelGetBlock;
     api.levelGetBlockStates = &levelGetBlockStates;
     api.levelSetBlock = &levelSetBlock;
+    api.levelGetBlockLayer = &levelGetBlockLayer;
+    api.levelSetBlockLayer = &levelSetBlockLayer;
     api.serverBlockNetworkId = &serverBlockNetworkId;
     api.serverItemInfo = &serverItemInfo;
     api.serverBlockInfo = &serverBlockInfo;
