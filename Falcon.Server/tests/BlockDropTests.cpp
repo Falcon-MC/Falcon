@@ -1,4 +1,8 @@
 #include "Network/Handler/BlockActionHandler.h"
+#include "Protocol/Types/ItemUseTransaction.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/PlayerInventory.h"
+#include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
 #include "World/Level/Block/Actor/BannerBlockActor.h"
 #include "World/Level/Block/Actor/BedBlockActor.h"
@@ -42,6 +46,49 @@ namespace {
             return item.mDefinition == nullptr ? std::string() : item.mDefinition->getIdentifier();
         }
     };
+
+    void carrots() {
+        Fixture fixture;
+        Tag states = Tag::ofCompound();
+        for (int age = 0; age <= 7; ++age) {
+            states.putInt("growth", age);
+            const auto drops = fixture.drops(BlockState("minecraft:carrots", states));
+            require(drops.size() == 1 && Fixture::name(drops[0]) == "minecraft:carrot", "crop dropped a block item");
+            if (age == 7)
+                require(drops[0].mCount >= 1 && drops[0].mCount <= 4, "mature carrot yield out of range");
+            else
+                require(drops[0].mCount == 1, "immature plant dropped extra carrots");
+        }
+
+        const Vector3i soil(104, 110, 104);
+        fixture.mLevel.insertChunk(LevelChunk(6, 6)).setPopulated(true);
+        NetworkIdentifier id;
+        ServerPlayer &player = fixture.mOwner.getPlayers().try_emplace(id, id, 4001).first->second;
+        player.moveToLevel(fixture.mLevel);
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.setPosition(Vector3f(104.5f, 111.f, 102.5f));
+        player.getInventoryManager().attach(&player, &fixture.mOwner);
+        player.getInventory().setItem(0, fixture.mOwner.createItemStack("minecraft:carrot", 2));
+        ItemUseTransaction use;
+        use.mBlockPosition = soil;
+        use.mBlockFace = 1;
+        use.mClickPosition = Vector3f(0.5f, 1.f, 0.5f);
+        use.mPlayerPosition = player.getPosition();
+        use.mItemInHand = player.getInventory().getItemInHand();
+        use.mClientInteractPrediction = ItemUsePredictedResult::Success;
+        fixture.mLevel.setBlockState(soil.x, soil.y, soil.z, BlockState("minecraft:dirt"));
+        BlockActionHandler::placeBlock(fixture.mOwner, player, use);
+        require(fixture.mLevel.getBlockState(soil.x, soil.y + 1, soil.z).mName == "minecraft:air"
+                        && player.getInventory().getItemInHand().mCount == 2,
+                "carrot planted on dirt");
+        use.mClickPosition = Vector3f(0.6f, 1.f, 0.5f);
+        fixture.mLevel.setBlockState(soil.x, soil.y, soil.z, BlockState("minecraft:farmland"));
+        BlockActionHandler::placeBlock(fixture.mOwner, player, use);
+        const auto planted = fixture.mLevel.getBlockState(soil.x, soil.y + 1, soil.z);
+        require(planted.mName == "minecraft:carrots" && planted.mStates.getInt("growth") == 0,
+                "carrot did not plant a fresh crop on farmland");
+        require(player.getInventory().getItemInHand().mCount == 1, "planting did not consume one carrot");
+    }
 
     void undyedShulkerBox() {
         Fixture fixture;
@@ -138,6 +185,7 @@ namespace {
 
 int main() {
     try {
+        carrots();
         undyedShulkerBox();
         wallSign();
         bedColor();

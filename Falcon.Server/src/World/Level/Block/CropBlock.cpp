@@ -35,3 +35,29 @@ void CropBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Ve
     BlockChangeSystem::change(level, position, withState(state, getGrowthState(), growth + 1), BlockChangeCause::Grow,
                               false);
 }
+
+namespace {
+    class CarrotCropBlock final : public CropBlock {
+    public:
+        using CropBlock::CropBlock;
+
+        static bool matches(const std::string &identifier) {
+            return identifier == "minecraft:carrots";
+        }
+
+        bool getDrops(const BlockState &state, const ItemStack &, int32_t fortune,
+                      std::vector<BlockDrop> &drops) const override {
+            int count = 1;
+            if (state.mStates.getInt("growth") == getMaxGrowth()) {
+                for (int roll = 0; roll < 3 + fortune; ++roll) {
+                    if (RandomTickSystem::nextInt(15) <= getMaxGrowth())
+                        ++count;
+                }
+            }
+            drops.push_back({"minecraft:carrot", count});
+            return true;
+        }
+    };
+}
+
+FALCON_REGISTER_BLOCK(CarrotCropBlock, 269);

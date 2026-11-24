@@ -11,6 +11,9 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    static const Tag *getSeedComponent(const ItemStack &item);
+    static bool plantsOn(const Tag &seed, const std::string &block);
+
     bool isFarmerCompost() const override {
         return true;
     }
