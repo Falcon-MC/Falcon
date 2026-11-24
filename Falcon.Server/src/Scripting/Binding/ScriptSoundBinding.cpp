@@ -1,5 +1,7 @@
 #include "Scripting/Binding/ScriptApi.h"
 
+#include "Falcon/Plugin/PluginPackets.h"
+
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ClientboundUpdateSoundDataPacket.h"
@@ -9,6 +11,8 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "World/Level/MusicEvents.h"
+
+#include <falcon/falcon_api.h>
 
 #include <cmath>
 
@@ -434,10 +438,10 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
     packet.mHasServerSoundHandle = true;
     packet.mServerSoundHandle = state->mHandle;
 
+    std::vector<NetworkIdentifier> viewers;
     if (recipient != nullptr) {
         state->mRecipient = mPlayers.acquire(recipient->getNetworkIdentifier());
-        state->mListeners.push_back(state->mRecipient);
-        mHost.sendPacketTo(recipient->getNetworkIdentifier(), packet);
+        viewers.push_back(recipient->getNetworkIdentifier());
     } else {
         for (auto &entry: mHost.getPlayers()) {
             if (!entry.second.isSpawned() || !entry.second.isIn(level))
@@ -450,10 +454,13 @@ JSValue ScriptApi::playSound(Level &level, ServerPlayer *recipient, const std::s
             }
             if (options.mBroadcast && !ChunkStreamHandler::isPositionRelevant(entry.second, level, block))
                 continue;
-            state->mListeners.push_back(mPlayers.acquire(entry.first));
-            mHost.sendPacketTo(entry.first, packet);
+            viewers.push_back(entry.first);
         }
     }
+
+    for (const auto &id: PluginPackets::broadcastWorldEffect(mHost, level, position, packet,
+                                                             FALCON_EVENT_WORLD_SOUND, std::move(viewers)))
+        state->mListeners.push_back(mPlayers.acquire(id));
 
     if ((state->mHasDuration && state->mLoopCount >= 0) || state->mLoopCount < 0) {
         state->mLastRealTime = std::chrono::steady_clock::now();

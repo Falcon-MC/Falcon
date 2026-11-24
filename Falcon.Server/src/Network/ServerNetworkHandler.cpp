@@ -734,12 +734,13 @@ void ServerNetworkHandler::setProperties(const PropertiesSettings &properties) {
 
     for (World *world: mWorlds.getWorlds())
         mWorlds.remove(world->getId());
-    _openWorld(properties.getLevelName(), levelSeed);
+    mStartingWorlds.clear();
+    _openWorld(properties.getLevelName(), levelSeed, true);
     loadScoreboard();
 
     for (const std::string &name: properties.getAutoloadWorlds()) {
         if (mWorlds.find(name) == nullptr && WorldManager::isValidName(name))
-            _openWorld(name, randomSeed());
+            _openWorld(name, randomSeed(), true);
     }
 
     _logPackStack();
@@ -808,6 +809,12 @@ bool ServerNetworkHandler::startServerListening(const ConnectionDefinition &defi
         mAnnouncement.mMaxPlayers = mMaxPlayers;
     }
     mIsListening = true;
+
+    // the startup worlds already exist when plugins register their listeners
+    for (const auto &[id, created]: std::exchange(mStartingWorlds, {})) {
+        if (World *world = mWorlds.find(id))
+            _dispatchWorldOpen(*world, created);
+    }
 
     _updateServerAnnouncement();
     _queueSpawnWarmup();

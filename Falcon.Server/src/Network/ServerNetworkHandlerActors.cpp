@@ -62,6 +62,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Falcon/Plugin/PluginPackets.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <algorithm>
@@ -1027,6 +1028,70 @@ void ServerNetworkHandler::applyPotionEffects(ServerActor &actor, int32_t potion
     }
 }
 
+void ServerNetworkHandler::_applyCloudEffects(ServerPlayer &player, const std::vector<MobEffectInstance> &effects) {
+    for (const MobEffectInstance &effect: effects) {
+        if (effect.mId == MobEffectId::InstantHealth) {
+            player.heal(std::ldexp(4.0f, std::min(effect.mAmplifier, 30)));
+        } else if (effect.mId == MobEffectId::InstantDamage) {
+            hurt(player, std::ldexp(6.0f, std::min(effect.mAmplifier, 30)),
+                 ActorDamageSource::environment("death.attack.magic", player.getName()).withoutArmor().withoutCooldown());
+        } else {
+            player.addEffect(effect);
+        }
+    }
+}
+
+void ServerNetworkHandler::_applyCloudEffects(ServerActor &actor, const std::vector<MobEffectInstance> &effects) {
+    const auto *mob = dynamic_cast<const MobActor *>(&actor);
+    const auto families = mob != nullptr ? mob->getFamilies() : std::vector<std::string>();
+    const bool undead = std::find(families.begin(), families.end(), UNDEAD_FAMILY) != families.end();
+    for (const MobEffectInstance &effect: effects) {
+        if (effect.mId != MobEffectId::InstantHealth && effect.mId != MobEffectId::InstantDamage) {
+            actor.addEffect(effect);
+        } else if (actor.canBeAffected(effect.mId)) {
+            if ((effect.mId == MobEffectId::InstantHealth) != undead) {
+                actor.heal(std::ldexp(4.0f, std::min(effect.mAmplifier, 30)));
+                syncActorAttributes(actor);
+            } else {
+                damageActor(actor, std::ldexp(6.0f, std::min(effect.mAmplifier, 30)),
+                            ActorDamageSource::environment("death.attack.magic", actor.getName()).withoutArmor());
+            }
+        }
+    }
+}
+
+namespace {
+    std::optional<std::vector<MobEffectInstance>> decodeCloudEffects(const std::string &payload) {
+        const auto data = json::parse(payload);
+        const auto *list = data != nullptr ? data->get("effects") : nullptr;
+        if (list == nullptr || !list->isArray() || list->mArray.size() > MAX_MOB_EFFECT_ID)
+            return std::nullopt;
+
+        std::vector<MobEffectInstance> effects;
+        for (const auto &entry: list->mArray) {
+            if (!entry->isArray() || entry->mArray.size() != 5)
+                return std::nullopt;
+            const auto &fields = entry->mArray;
+            const double id = fields[0]->number(-1);
+            const double duration = fields[1]->number(-2);
+            const double amplifier = fields[2]->number(-1);
+            if (!std::isfinite(id) || id < 1 || id > MAX_MOB_EFFECT_ID || !isKnownMobEffect((int32_t) id)
+                || !std::isfinite(duration) || duration < -1 || duration > INT32_MAX
+                || !std::isfinite(amplifier) || amplifier < 0 || amplifier > 255)
+                return std::nullopt;
+            MobEffectInstance effect;
+            effect.mId = (MobEffectId) (int32_t) id;
+            effect.mInfinite = duration == -1;
+            effect.mDuration = effect.mInfinite ? -1 : (int32_t) duration;
+            effect.mAmplifier = (int32_t) amplifier;
+            effect.mParticles = fields[3]->boolean(true);
+            effect.mAmbient = fields[4]->boolean(false);
+            effects.push_back(effect);
+        }
+        return effects;
+    }
+}
+
 void ServerNetworkHandler::removeActor(int64_t uniqueId) {
     auto it = mActors.find(uniqueId);
     if (it == mActors.end())
@@ -1626,6 +1691,16 @@ void ServerNetworkHandler::spawnParticleEffect(Level &level, const std::string &
     if (molangJson != nullptr)
         packet.mMolangVariablesJson = *molangJson;
 
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_PARTICLE) != nullptr) {
+        std::vector<NetworkIdentifier> viewers;
+        for (auto &entry: mPlayers) {
+            if (entry.second.isSpawned() && entry.second.isIn(level) && (viewer == nullptr || &entry.second == viewer))
+                viewers.push_back(entry.first);
+        }
+        PluginPackets::broadcastWorldEffect(*this, level, position, packet, FALCON_EVENT_WORLD_PARTICLE, std::move(viewers));
+        return;
+    }
+
     if (viewer != nullptr) {
         if (viewer->isSpawned())
             mNetworkHandler->send(viewer->getNetworkIdentifier(), packet, mCodecContext);
@@ -1675,6 +1750,16 @@ void ServerNetworkHandler::playNamedSound(Level &level, const std::string &sound
     packet.mPosition = position;
     packet.mVolume = volume;
     packet.mPitch = pitch;
+
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_SOUND) != nullptr) {
+        std::vector<NetworkIdentifier> viewers;
+        for (auto &entry: mPlayers) {
+            if (entry.second.isSpawned() && entry.second.isIn(level))
+                viewers.push_back(entry.first);
+        }
+        PluginPackets::broadcastWorldEffect(*this, level, position, packet, FALCON_EVENT_WORLD_SOUND, std::move(viewers));
+        return;
+    }
 
     for (auto &entry: mPlayers) {
         if (entry.second.isSpawned() && entry.second.isIn(level))
@@ -1734,6 +1819,11 @@ void ServerNetworkHandler::playSoundFor(ServerPlayer &player, const std::string 
     packet.mPosition = position;
     packet.mVolume = volume;
     packet.mPitch = pitch;
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_SOUND) != nullptr) {
+        PluginPackets::broadcastWorldEffect(*this, getLevelFor(player), position, packet, FALCON_EVENT_WORLD_SOUND,
+                                            {player.getNetworkIdentifier()});
+        return;
+    }
     mNetworkHandler->send(player.getNetworkIdentifier(), packet, mCodecContext);
 }
 
@@ -2543,12 +2633,20 @@ void ServerNetworkHandler::tickActors() {
                     }
                     ids += ']';
                     std::string effects = "[";
-                    for (const PotionEffect &effect: getPotionEffects(cloud.mPotionId)) {
+                    const auto encode = [&effects](const MobEffectInstance &instance) {
                         if (effects.size() > 1)
                             effects += ',';
-                        const auto instance = potionEffectInstance(effect, 0.25f);
                         effects += '[' + std::to_string((int) instance.mId) + ',' + std::to_string(instance.mDuration)
-                                   + ',' + std::to_string(instance.mAmplifier) + ']';
+                                   + ',' + std::to_string(instance.mAmplifier)
+                                   + (instance.mParticles ? ",true" : ",false")
+                                   + (instance.mAmbient ? ",true]" : ",false]");
+                    };
+                    if (cloud.mEffects) {
+                        for (const auto &instance: *cloud.mEffects)
+                            encode(instance);
+                    } else {
+                        for (const auto &effect: getPotionEffects(cloud.mPotionId))
+                            encode(potionEffectInstance(effect, 0.25f));
                     }
                     effects += ']';
 
@@ -2564,8 +2662,15 @@ void ServerNetworkHandler::tickActors() {
                                         + ",\"radiusChangeOnUse\":" + std::to_string(cloud.mRadiusOnUse)
                                         + ",\"radiusChangePerTick\":" + std::to_string(cloud.mRadiusPerTick)
                                         + ",\"reapplicationDelay\":" + std::to_string(cloud.mReapplicationDelay) + '}';
+                    const std::string original = event.mCustomData;
                     plugins->dispatch(event);
-                    if (event.mCancelled || getActor(cloudId) == nullptr) {
+                    if (getActor(cloudId) == nullptr)
+                        continue;
+                    if (event.mCustomData != original) {
+                        if (auto changed = decodeCloudEffects(event.mCustomData))
+                            cloud.mEffects = std::move(changed);
+                    }
+                    if (event.mCancelled) {
                         insidePlayers.clear();
                         inside.clear();
                     }
@@ -2573,7 +2678,10 @@ void ServerNetworkHandler::tickActors() {
             }
             for (const uint64_t id: insidePlayers) {
                 if (ServerPlayer *nearby = getPlayerByRuntimeId(id)) {
-                    applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
+                    if (cloud.mEffects)
+                        _applyCloudEffects(*nearby, *cloud.mEffects);
+                    else
+                        applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
                     touched = true;
                 }
             }
@@ -2581,7 +2689,10 @@ void ServerNetworkHandler::tickActors() {
             // applied after the walk: an instant damage can kill and remove the actor
             for (const int64_t uniqueId: inside) {
                 if (ServerActor *nearby = getActor(uniqueId)) {
-                    applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
+                    if (cloud.mEffects)
+                        _applyCloudEffects(*nearby, *cloud.mEffects);
+                    else
+                        applyPotionEffects(*nearby, cloud.mPotionId, 0.25f);
                     touched = true;
                 }
             }
