@@ -79,6 +79,15 @@
 #include <unordered_set>
 #include <vector>
 
+struct PendingPlayerLogin {
+    bool mHandshakeReady = false;
+    bool mUsesAccountKey = false;
+    std::string mClientData;
+    std::string mName;
+    std::string mUuid;
+    std::string mXuid;
+};
+
 namespace {
     const int64_t RESOURCE_PACK_CHUNK_SIZE = 1024 * 1024;
     using MovementPhysics::PLAYER_BASE_OFFSET;
@@ -360,37 +369,66 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
+    auto pending = std::make_shared<PendingPlayerLogin>();
+    pending->mName = verifier.getDisplayName();
+    pending->mUuid = verifier.getIdentity();
     if (verifier.isSigned()) {
-        player.setName(verifier.getDisplayName());
-        player.setUuid(verifier.getIdentity());
-        player.setXuid(verifier.getXuid());
+        pending->mXuid = verifier.getXuid();
     } else {
-        const std::string &name = verifier.getDisplayName().empty() ? request.getDisplayName()
-                                                                    : verifier.getDisplayName();
-        const std::string &uuid = verifier.getIdentity().empty() ? request.getIdentity() : verifier.getIdentity();
-
-        player.setName(name);
-        player.setUuid(uuid);
-        player.setXuid("");
+        if (pending->mName.empty())
+            pending->mName = request.getDisplayName();
+        if (pending->mUuid.empty())
+            pending->mUuid = request.getIdentity();
     }
 
-    player.setPlayFabId(request.getPlayFabId());
-
-    // the name becomes a file name and a log line: an unverified one is whatever the client typed
-    if (!PlayerDataProvider::isSafeName(player.getName())) {
-        LOG_WARN(LogAreaID::Network, "%s logged in with an unusable name", id.getAddress().c_str());
+    if (!PlayerDataProvider::isSafeName(pending->mName)) {
         owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.invalidName");
         owner.erasePlayer(id);
         return;
     }
-
-    // an unsigned login picks its own uuid, and it ends up in the log and the player list
-    if (!isUuidShaped(player.getUuid())) {
-        LOG_WARN(LogAreaID::Network, "%s logged in with a malformed uuid", id.getAddress().c_str());
+    if (!isUuidShaped(pending->mUuid)) {
         owner._disconnect(id, DisconnectReason::NotAllowed, "disconnectionScreen.notAuthenticated");
         owner.erasePlayer(id);
         return;
     }
+
+    SerializedSkin skin = request.getSkin();
+    ServerNetworkHandler::boundSkin(skin);
+    player.setSkin(skin);
+    player.setLocale(request.getLanguageCode());
+    player.setBuildPlatform(request.getBuildPlatform());
+
+    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
+    player.setClientSideGenerationCompatible(
+            ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
+    ServerPlayer::ClientDevice &device = player.getClientDevice();
+    const std::string &clientData = request.getClientData();
+    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
+    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
+    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
+    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
+    player.readSyncedClientOptions(request.getClientData());
+
+    player.setPlayFabId(request.getPlayFabId());
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN))
+        pending->mClientData = request.getClientData();
+    player.mPendingLogin = std::move(pending);
+    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
+        startEncryption(owner, id, player, verifier.getIdentityPublicKey());
+        return;
+    }
+    admitLogin(owner, id, player, false);
+}
+
+void LoginHandler::admitLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                             bool accountKeyProven) {
+    auto pending = std::move(player.mPendingLogin);
+    if (!pending)
+        return;
+
+    player.setName(pending->mName);
+    player.setUuid(pending->mUuid);
+    player.setXuid(pending->mXuid);
 
     owner.getBanList().bindXuid(player.getName(), player.getXuid());
     const BanEntry *ban = owner.getBanList().find(player.getName(), player.getXuid());
@@ -401,8 +439,8 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         const Localization &localization = Localization::getInstance();
         owner._disconnect(id, DisconnectReason::NotAllowed,
                           ban->mReason.empty()
-                                  ? localization.translate(request.getLanguageCode(), "falcon.disconnect.banned")
-                                  : localization.translate(request.getLanguageCode(), "falcon.disconnect.bannedReason",
+                                  ? localization.translate(player.getLocale(), "falcon.disconnect.banned")
+                                  : localization.translate(player.getLocale(), "falcon.disconnect.bannedReason",
                                                            {ban->mReason}));
         owner.erasePlayer(id);
         return;
@@ -422,12 +460,6 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    SerializedSkin skin = request.getSkin();
-    ServerNetworkHandler::boundSkin(skin);
-    player.setSkin(skin);
-    player.setLocale(request.getLanguageCode());
-    player.setBuildPlatform(request.getBuildPlatform());
-
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_PRE_LOGIN)) {
         std::string kickMessage = "disconnectionScreen.noReason";
         PluginEvent preLogin;
@@ -436,7 +468,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         preLogin.mPlayer = &player;
         preLogin.mMessage = &kickMessage;
         preLogin.mAmount = clientPort(id);
-        preLogin.mClientData = &request.getClientData();
+        preLogin.mClientData = &pending->mClientData;
         plugins->dispatch(preLogin);
         if (preLogin.mCancelled) {
             LOG_INFO(LogAreaID::Server, "Player %s was refused by a plugin", player.getName().c_str());
@@ -461,7 +493,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         if (!sameAccount && StringUtil::toLowerCase(other.getName()) != loweredName)
             continue;
 
-        bool replaceExisting = sameAccount;
+        bool replaceExisting = sameAccount && accountKeyProven;
         if (duplicates != nullptr) {
             PluginEvent event;
             event.mType = FALCON_EVENT_PLAYER_DUPLICATE_LOGIN;
@@ -472,7 +504,7 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
             event.mState = sameAccount;
             event.mAmount = clientPort(id);
             duplicates->dispatch(event);
-            replaceExisting = sameAccount && !event.mCancelled;
+            replaceExisting = replaceExisting && !event.mCancelled;
         }
         if (replaceExisting && duplicates != nullptr) {
             takeovers.push_back(entry.first);
@@ -508,22 +540,6 @@ void LoginHandler::handleLogin(ServerNetworkHandler &owner, const NetworkIdentif
         return;
     }
 
-    // the game reads the flag as a JSON bool that defaults to true when the client leaves it out.
-    player.setClientSideGenerationCompatible(
-            ConnectionRequest::findJsonBool(request.getClientData(), "CompatibleWithClientSideChunkGen", true));
-    ServerPlayer::ClientDevice &device = player.getClientDevice();
-    const std::string &clientData = request.getClientData();
-    device.mMemoryTier = std::max(0, std::min(4, ConnectionRequest::findJsonInt(clientData, "MemoryTier", 0)));
-    device.mMaxViewDistance = ConnectionRequest::findJsonInt(clientData, "MaxViewDistance", 0);
-    device.mGraphicsMode = ConnectionRequest::findJsonInt(clientData, "GraphicsMode", 1);
-    device.mPlatformType = ConnectionRequest::findJsonInt(clientData, "PlatformType", 0);
-    player.readSyncedClientOptions(request.getClientData());
-
-    if (requiresEncryption(owner.getProperties().getNetworkEncryption(), verifier.isSigned())) {
-        startEncryption(owner, id, player, verifier.getIdentityPublicKey());
-        return;
-    }
-
     completeLogin(owner, id, player);
 }
 
@@ -542,18 +558,27 @@ void LoginHandler::startEncryption(ServerNetworkHandler &owner, const NetworkIde
 
     owner.getNetworkHandler().send(id, handshake, owner.getCodecContext());
     owner.getNetworkHandler().flush(id);
-    owner.getNetworkHandler().enableEncryption(id, key);
+    owner.getNetworkHandler().enableEncryption(id, key, clientPublicKey);
     player.setLoginState(ServerPlayer::LoginState::EncryptionHandshake);
+}
+
+void LoginHandler::encryptionEnabled(ServerPlayer &player, bool usesAccountKey) {
+    if (player.mPendingLogin && player.getLoginState() == ServerPlayer::LoginState::EncryptionHandshake) {
+        player.mPendingLogin->mHandshakeReady = true;
+        player.mPendingLogin->mUsesAccountKey = usesAccountKey;
+    }
 }
 
 void LoginHandler::handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                  ServerPlayer &player) {
-    if (player.getLoginState() != ServerPlayer::LoginState::EncryptionHandshake) {
+    if (player.getLoginState() != ServerPlayer::LoginState::EncryptionHandshake || !player.mPendingLogin
+        || !player.mPendingLogin->mHandshakeReady) {
         owner._disconnect(id, DisconnectReason::UnexpectedPacket, "disconnectionScreen.unexpectedPacket");
+        owner.erasePlayer(id);
         return;
     }
 
-    completeLogin(owner, id, player);
+    admitLogin(owner, id, player, player.mPendingLogin->mUsesAccountKey);
 }
 
 void LoginHandler::completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player) {

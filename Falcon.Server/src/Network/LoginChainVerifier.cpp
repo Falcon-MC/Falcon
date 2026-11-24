@@ -2,6 +2,8 @@
 
 #include "Network/AuthKeyProvider.h"
 #include "Network/ConnectionRequest.h"
+#include "Network/NetherNet/NetherNetDescription.h"
+#include "Network/NetherNet/NetherNetIdentity.h"
 #include "Core/Debug/BedrockLog.h"
 
 #include <cstdint>
@@ -119,6 +121,21 @@ namespace {
         return verifyDigest(key, EVP_sha256(), message, rawSignature);
     }
 
+}
+
+bool LoginChainVerifier::verifiesTransportOffer(const std::string &offer, const std::string &loginPublicKey) {
+    nethernet::IdentityData identity;
+    std::string failure;
+    if (!nethernet::Description::parseIdentity(offer, identity, failure) || !identity.isValid())
+        return false;
+    const auto fingerprints = nethernet::Description::parseFingerprints(offer);
+    if (fingerprints.empty())
+        return false;
+    EVP_PKEY *key = parseKey(loginPublicKey);
+    const bool matches = nethernet::Identity::verifyDetached(
+            key, identity.mAssertionFingerprints, nethernet::Description::generateFingerprintsPayload(fingerprints));
+    EVP_PKEY_free(key);
+    return matches;
 }
 
 std::vector<std::string> LoginChainVerifier::_extractChain(const std::string &authJwt) {

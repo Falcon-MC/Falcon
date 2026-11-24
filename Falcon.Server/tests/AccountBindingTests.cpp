@@ -1,5 +1,9 @@
 #include "Core/NBT/Tag.h"
 #include "Network/Handler/LoginHandler.h"
+#include "Network/ConnectionRequest.h"
+#include "Network/LoginChainVerifier.h"
+#include "Network/NetherNet/NetherNetDescription.h"
+#include "Network/NetherNet/NetherNetIdentity.h"
 #include "Server/BanList.h"
 #include "Server/OpList.h"
 #include "World/Level/Storage/PlayerDataProvider.h"
@@ -22,6 +26,28 @@ namespace {
         std::filesystem::remove_all(directory);
         std::filesystem::create_directories(directory);
         return directory;
+    }
+
+    void transportIdentityMatchesLoginKey() {
+        nethernet::Identity client;
+        nethernet::Identity other;
+        require(client.generate("example.test") && other.generate("example.test"), "could not create test identities");
+        const auto publicKey = [](const nethernet::Identity &identity) {
+            return ConnectionRequest::findJsonString(ConnectionRequest::readJwtPayload(identity.getToken()), "cpk");
+        };
+        const std::string fingerprints = "a=fingerprint:sha-256 11:22:33:44\r\n";
+        nethernet::IdentityData assertion;
+        assertion.mIdpDomain = "example.test";
+        assertion.mIdpProtocol = "default";
+        assertion.mAssertionToken = client.getToken();
+        assertion.mAssertionFingerprints = client.signDetached(nethernet::Description::generateFingerprintsPayload(
+                nethernet::Description::parseFingerprints(fingerprints)));
+        const std::string offer = fingerprints + "a=identity:" + nethernet::Description::encodeIdentity(assertion);
+        require(LoginChainVerifier::verifiesTransportOffer(offer, publicKey(client)), "account signature was lost");
+        require(!LoginChainVerifier::verifiesTransportOffer(offer, publicKey(other)),
+                "a different account key was accepted");
+        require(!LoginChainVerifier::verifiesTransportOffer(fingerprints, publicKey(client)),
+                "an unsigned transport was treated as account-bound");
     }
 
     void operatorsFollowTheAccount(const std::filesystem::path &directory) {
@@ -121,6 +147,7 @@ namespace {
 int main() {
     try {
         const std::filesystem::path directory = scratch();
+        transportIdentityMatchesLoginKey();
         operatorsFollowTheAccount(directory);
         bansFollowTheAccount(directory);
         playerNamesNeverLeaveTheDirectory(directory);

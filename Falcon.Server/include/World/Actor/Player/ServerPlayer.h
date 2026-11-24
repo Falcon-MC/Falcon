@@ -48,6 +48,7 @@ class SharedPacket;
 class ServerNetworkHandler;
 
 struct ResourcePackOffer;
+struct PendingPlayerLogin;
 
 class ServerPlayer : public Actor {
 public:
@@ -1350,6 +1351,8 @@ private:
     static const int MAX_PACK_CHUNK_REQUESTS = 3;
 
     NetworkIdentifier mId;
+    friend class LoginHandler;
+    std::shared_ptr<PendingPlayerLogin> mPendingLogin;
     LoginState mLoginState;
     std::unordered_map<std::string, int> mPackChunkRequests;
     std::shared_ptr<const ResourcePackOffer> mResourcePackOffer;

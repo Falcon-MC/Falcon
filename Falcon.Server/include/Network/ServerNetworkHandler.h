@@ -1101,6 +1101,8 @@ private:
     void onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                             const std::string &message) override;
 
+    void onEncryptionEnabled(const NetworkIdentifier &id, bool usesAccountKey) override;
+
     void onDataReceived(const NetworkIdentifier &id, const std::string &data) override;
 
     void onConnectionFailed(const NetworkIdentifier &id) override;
