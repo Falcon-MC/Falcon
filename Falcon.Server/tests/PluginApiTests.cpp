@@ -5,10 +5,12 @@
 #include "Falcon/Plugin/PluginEvents.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/WasmHost.h"
 #include "Core/Archive/ZipArchive.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/AvailableCommandsPacket.h"
+#include "Protocol/Types/ItemDefinition.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
@@ -28,9 +30,12 @@
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 
+#include <wasmtime.h>
+
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -56,6 +61,16 @@ public:
 
     static EntityDataMap playerMetadata(ServerNetworkHandler &owner, ServerPlayer &player) {
         return owner._buildPlayerData(player);
+    }
+
+    static void useItem(ServerNetworkHandler &owner, ServerPlayer &player) {
+        owner.mCurrentTick += 10;
+        owner._useHeldItem(player);
+    }
+
+    static void advanceItemUse(ServerNetworkHandler &owner, ServerPlayer &player, int64_t ticks) {
+        owner.mCurrentTick += ticks;
+        owner._tickItemUse(player);
     }
 };
 
@@ -91,6 +106,103 @@ namespace {
             return reinterpret_cast<FalconLevel *>(level);
         }
     };
+
+    void customItems(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin plugin;
+        plugin.mDescription.mName = "CustomItems";
+        plugin.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(plugin);
+        FalconCustomItemDescriptor legacy{};
+        legacy.identifier = "test:legacy";
+        legacy.maxStackSize = 12;
+        require(api.registerCustomItem(handle, &legacy) == 1, "legacy descriptor was rejected");
+        require(CustomContentRegistry::getInstance().findItem(legacy.identifier)->mMaxStackSize == 12,
+                "legacy descriptor defaults changed");
+
+        FalconCustomItemDescriptorV2 snack{};
+        snack.item.identifier = "test:snack";
+        snack.item.maxStackSize = 16;
+        snack.components = "[]";
+        snack.componentsSize = 2;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 0, "a non-object was accepted");
+        snack.components = "{";
+        snack.componentsSize = 1;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 0, "malformed components were accepted");
+        snack.componentsSize = FALCON_CUSTOM_ITEM_COMPONENTS_MAX_BYTES + 1;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 0, "oversized component bytes were accepted");
+        require(CustomContentRegistry::getInstance().findItem(snack.item.identifier) == nullptr,
+                "a rejected registration reserved the identifier");
+
+        constexpr char components[] = R"({
+            "minecraft:food": {"nutrition": 4, "saturation_modifier": 0.5},
+            "minecraft:use_modifiers": {"use_duration": 1.0},
+            "minecraft:use_animation": "eat",
+            "minecraft:max_stack_size": 8
+        })";
+        snack.components = components;
+        snack.componentsSize = sizeof(components) - 1;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 1, "the component descriptor was rejected");
+        const ItemStack stack = fixture.owner.createItemStack(snack.item.identifier, 2);
+        require(!stack.isAir(), "the component item is unavailable in the inventory");
+        const Tag *wireComponents = stack.mDefinition->getComponentData().get("components");
+        const Tag *food = wireComponents == nullptr ? nullptr : wireComponents->get("minecraft:food");
+        require(food != nullptr && food->getInt("nutrition", 0) == 4, "food was omitted from the client definition");
+        require(ServerNetworkHandler::useDurationTicksFor(stack) == 20, "use duration did not come from the component");
+        require(CustomContentRegistry::getInstance().findItem(snack.item.identifier)->mMaxStackSize == 8,
+                "the explicit stack-size component did not override the descriptor");
+
+        ServerPlayer &player = *fixture.player;
+        player.getInventory().setItemInHand(stack);
+        player.setFood(20.0f);
+        ServerTickProbe::useItem(fixture.owner, player);
+        require(!player.getFlags().get(ActorFlag::UsingItem), "the snack could be eaten at full hunger");
+        player.setFood(12.0f);
+        player.setSaturation(0.0f);
+        ServerTickProbe::useItem(fixture.owner, player);
+        require(player.getFlags().get(ActorFlag::UsingItem), "the snack did not enter the normal use path");
+        ServerTickProbe::advanceItemUse(fixture.owner, player, 19);
+        require(player.getFood() == 12.0f && player.getInventory().getItemInHand().mCount == 2,
+                "the snack was consumed before its use duration");
+        ServerTickProbe::advanceItemUse(fixture.owner, player, 1);
+        require(player.getFood() == 16.0f && player.getSaturation() == 4.0f
+                        && player.getInventory().getItemInHand().mCount == 1,
+                "the snack did not apply its food component and consume one item");
+        player.getInventory().clear();
+    }
+
+    void wasmCustomItems() {
+        constexpr char module[] = R"((module
+          (import "falcon:plugin/content@1.0.6" "register-custom-item-with-components"
+            (func $register (param i32) (result i32)))
+          (memory (export "memory") 1)
+          (data (i32.const 128) "test:wasm_item")
+          (data (i32.const 160) "{\22minecraft:food\22:{\22nutrition\22:3}}")
+          (func (export "falcon:plugin/plugin@1.0.6#on-enable") (result i32)
+            (i32.store (i32.const 0) (i32.const 128))
+            (i32.store (i32.const 4) (i32.const 14))
+            (i32.store (i32.const 60) (i32.const 160))
+            (i32.store (i32.const 64) (i32.const 34))
+            (call $register (i32.const 0))))
+        )";
+        LoadedPlugin plugin;
+        plugin.mDescription.mName = "WasmItems";
+        plugin.mDescription.mVersion = "1.0.0";
+        plugin.mDescription.mMain = "items.wasm";
+        const auto directory = ServerPaths::getRoot() / "plugins" / "WasmItems";
+        plugin.mDirectory = directory.string();
+        plugin.mDataFolder = (directory / "data").string();
+        std::filesystem::create_directories(plugin.mDataFolder);
+
+        wasm_byte_vec_t wasm;
+        require(wasmtime_wat2wasm(module, sizeof(module) - 1, &wasm) == nullptr, "the item module did not assemble");
+        std::ofstream(directory / plugin.mDescription.mMain, std::ios::binary)
+                .write(wasm.data, (std::streamsize) wasm.size);
+        wasm_byte_vec_delete(&wasm);
+        require(WasmHost::load(plugin), "the item module did not load");
+        require(plugin.mCallbacks.onEnable(plugin.mCallbacks.userData) == 1, "the Wasm components were rejected");
+        const auto *item = CustomContentRegistry::getInstance().findItem("test:wasm_item");
+        require(item != nullptr && item->mIsFood && item->mNutrition == 3, "the Wasm food payload was not registered");
+    }
 
     void effects(const FalconServerApi &api, Fixture &fixture) {
         FalconEntity *body = api.playerEntity(fixture.playerHandle());
@@ -1335,6 +1447,8 @@ namespace {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
         require(api.size == sizeof(FalconServerApi), "the table size is not the header's");
+        customItems(api, fixture);
+        wasmCustomItems();
         attributes(api, fixture);
         effects(api, fixture);
         soundsAndParticles(api, fixture);

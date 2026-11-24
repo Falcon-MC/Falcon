@@ -1,11 +1,13 @@
 #include "Falcon/Plugin/PluginServerApi.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Falcon/Plugin/PluginContentRegistry.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -116,7 +118,8 @@ namespace {
                   owner->mDescription.mName.c_str(), kind, identifier.c_str());
     }
 
-    int registerCustomItem(FalconPlugin *source, const FalconCustomItemDescriptor *descriptor) {
+    int registerCustomItemDefinition(FalconPlugin *source, const FalconCustomItemDescriptor *descriptor,
+                                     const json::Value *components) {
         LoadedPlugin *owner = plugin(source);
         if (owner == nullptr || descriptor == nullptr)
             return 0;
@@ -134,6 +137,8 @@ namespace {
         definition.mHandEquipped = descriptor->handEquipped != 0;
         // the descriptor has no field for it: plugin items keep going in the off hand
         definition.mAllowOffHand = true;
+        CustomContentRegistry::readItemComponents(definition, components);
+        definition.mMaxStackSize = std::clamp(definition.mMaxStackSize, 1, 64);
 
         const CustomItemDefinition *stored = CustomContentRegistry::getInstance().registerItem(
                 definition, PluginApiHelpers::owner().getItemDefinitions());
@@ -150,6 +155,26 @@ namespace {
         PluginContentRegistry::getInstance().addItem(
                 Item(stored->mNetworkId, stored->mIdentifier, stored->mDisplayName, stored->mMaxStackSize), entry);
         return 1;
+    }
+
+    int registerCustomItem(FalconPlugin *source, const FalconCustomItemDescriptor *descriptor) {
+        return registerCustomItemDefinition(source, descriptor, nullptr);
+    }
+
+    int registerCustomItemWithComponents(FalconPlugin *source, const FalconCustomItemDescriptorV2 *descriptor) {
+        if (descriptor == nullptr)
+            return 0;
+        if (descriptor->componentsSize == 0)
+            return registerCustomItem(source, &descriptor->item);
+        if (descriptor->components == nullptr || descriptor->componentsSize > FALCON_CUSTOM_ITEM_COMPONENTS_MAX_BYTES)
+            return 0;
+
+        const std::string text(descriptor->components, descriptor->componentsSize);
+        const auto components = json::parse(text);
+        if (components == nullptr || !components->isObject())
+            return 0;
+
+        return registerCustomItemDefinition(source, &descriptor->item, components.get());
     }
 
     int registerCustomBlock(FalconPlugin *source, const FalconCustomBlockDescriptor *descriptor) {
@@ -234,6 +259,7 @@ namespace {
 
 void PluginServerApi::fillContent(FalconServerApi &api) {
     api.registerCustomItem = &registerCustomItem;
+    api.registerCustomItemWithComponents = &registerCustomItemWithComponents;
     api.registerCustomBlock = &registerCustomBlock;
     api.registerCustomEntity = &registerCustomEntity;
     api.resourcePacksReplace = &resourcePacksReplace;
