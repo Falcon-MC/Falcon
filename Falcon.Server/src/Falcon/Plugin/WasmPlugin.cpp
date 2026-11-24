@@ -41,6 +41,7 @@ namespace {
             {"on-block-break", "iIiii:"},
             {"on-entity-tick", "iI:"},
             {"on-entity-interact", "iII:i"},
+            {"on-window-close", "iIi:"},
     };
 
     char typeLetter(const wasm_valtype_t *type) {
@@ -544,6 +545,17 @@ const char *WasmPlugin::runService(Binding &binding, const char *request) {
         }
     }
     return binding.mResponse.c_str();
+}
+
+std::shared_ptr<WasmPlugin::WindowClose> WasmPlugin::addWindowClose(uint32_t handler) {
+    auto close = std::make_shared<WindowClose>(WindowClose{*this, handler});
+    mWindowCloses.emplace(close.get(), close);
+    return close;
+}
+
+std::shared_ptr<WasmPlugin::WindowClose> WasmPlugin::takeWindowClose(WindowClose *close) {
+    auto entry = mWindowCloses.extract(close);
+    return entry.empty() ? nullptr : std::move(entry.mapped());
 }
 
 WasmPlugin::Binding &WasmPlugin::addBinding() {

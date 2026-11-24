@@ -186,7 +186,7 @@ public:
     // a plugin's container, drawn from a block or an actor the client knows: no block actor holds it. The window id,
     // CONTAINER_ID_NONE while another window is open; onClosed runs once it closes
     int openPluginWindow(std::shared_ptr<Container> container, ContainerType type, const Vector3i &position,
-                         int64_t actorId, std::function<void()> onClosed);
+                         int64_t actorId, std::function<void(int)> onClosed);
 
     // the plugin window with that id, nullptr once it closed
     Container *getPluginWindow(int windowId);
@@ -353,7 +353,7 @@ private:
     Vector3i mContainerPosition;
     int64_t mContainerActorId = -1;
     std::shared_ptr<Container> mPluginWindow;
-    std::function<void()> mPluginWindowClosed;
+    std::function<void(int)> mPluginWindowClosed;
     int mTradeWindowId = CONTAINER_ID_NONE;
     int64_t mTradeActorId = -1;
     std::vector<std::pair<const Level *, int64_t>> mTouchedColumns;
