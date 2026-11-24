@@ -8,6 +8,9 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortune,
+                  std::vector<BlockDrop> &drops) const override;
+
 protected:
     const char *getGrowthState() const override {
         return "age";

@@ -36,7 +36,12 @@ bool FarmSeedItem::plantsOn(const Tag &seed, const std::string &block) {
     if (plantAt == nullptr || !plantAt->isList())
         return false;
     for (const Tag &name: plantAt->getList()) {
-        if (name.asString() == block)
+        std::string candidate = name.asString();
+        if (candidate.find(':') == std::string::npos)
+            candidate = "minecraft:" + candidate;
+        if (candidate == "minecraft:grass")
+            candidate = "minecraft:grass_block";
+        if (candidate == block)
             return true;
     }
     return false;
