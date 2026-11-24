@@ -6,12 +6,10 @@ FALCON_REGISTER_ITEM(BoneMealItem, 100);
 
 #include "World/Level/Block/BlockIdentifier.h"
 #include "World/Level/Block/CropBlock.h"
-#include "World/Level/Block/NetherWartBlock.h"
 #include "World/Level/Block/NyliumBlock.h"
 #include "World/Level/Block/BigDripleafBlock.h"
 #include "World/Level/Block/SaplingBlock.h"
 #include "World/Level/Block/SmallDripleafBlock.h"
-#include "World/Level/Block/StemBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 #include "World/Level/Block/Systems/RandomTickSystem.h"
@@ -45,19 +43,6 @@ namespace {
     }
 
     using VectorMath::centerOf;
-
-    const char *growthStateOf(const BlockState &state) {
-        return state.mName == "minecraft:nether_wart" ? "age" : "growth";
-    }
-
-    int maxGrowthOf(const BlockState &state) {
-        return state.mName == "minecraft:nether_wart" ? 3 : 7;
-    }
-
-    bool isCrop(const BlockState &state) {
-        return CropBlock::matches(state.mName) || StemBlock::matches(state.mName)
-               || NetherWartBlock::matches(state.mName);
-    }
 
     class TrackingBlockManager : public BlockManager {
     public:
@@ -103,25 +88,6 @@ bool BoneMealItem::matches(const std::string &identifier) {
     return identifier == "minecraft:bone_meal";
 }
 
-bool BoneMealItem::applyToCrop(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                               const BlockState &state, ServerPlayer *player) {
-    const char *growthState = growthStateOf(state);
-    const int maxGrowth = maxGrowthOf(state);
-    const int32_t growth = state.mStates.getInt(growthState);
-
-    if (growth >= maxGrowth)
-        return false;
-
-    int32_t grown = growth + 2 + RandomTickSystem::nextInt(3);
-    if (grown > maxGrowth)
-        grown = maxGrowth;
-
-    Tag states = state.mStates;
-    states.putInt(growthState, grown);
-    return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false,
-                                     player);
-}
-
 bool BoneMealItem::applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 ServerPlayer *player) {
     if (level.getBlockState(position.x, position.y + 1, position.z).mName != BlockNames::AIR)
@@ -154,8 +120,8 @@ bool BoneMealItem::applyToNylium(ServerNetworkHandler &owner, Level &level, cons
 
 bool BoneMealItem::fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ServerPlayer *player) {
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
-    if (isCrop(state))
-        return applyToCrop(owner, level, position, state, player);
+    if (const auto *crop = VanillaBlocks::getAs<CropBlock>(state.mName))
+        return crop->growBy(level, position, state, 2 + RandomTickSystem::nextInt(3), player);
     if (state.mName == BlockNames::GRASS_BLOCK)
         return applyToGrass(owner, level, position, player);
     if (NyliumBlock::matches(state.mName))

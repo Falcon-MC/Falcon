@@ -60,3 +60,12 @@ bool SweetBerryBushBlock::getStuckMultiplier(const Actor &actor, Vector3f &multi
     multiplier = STUCK_MULTIPLIER;
     return true;
 }
+
+bool SweetBerryBushBlock::getDrops(const BlockState &state, const ItemStack &, int32_t fortune,
+                                   std::vector<BlockDrop> &drops) const {
+    const int growth = state.mStates.getInt(GROWTH);
+    if (growth >= 2)
+        drops.push_back({"minecraft:sweet_berries",
+                         growth - 1 + RandomTickSystem::nextInt(2) + RandomTickSystem::nextInt(fortune + 1)});
+    return true;
+}

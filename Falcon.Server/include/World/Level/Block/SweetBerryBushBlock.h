@@ -8,6 +8,9 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortune,
+                  std::vector<BlockDrop> &drops) const override;
+
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 

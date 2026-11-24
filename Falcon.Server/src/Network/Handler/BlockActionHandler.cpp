@@ -3,6 +3,7 @@
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
 #include "World/Item/FarmSeedItem.h"
+#include "World/Level/Block/CropBlock.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -690,7 +691,9 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
 
         ItemStack drop;
         drop.mDefinition = owner.getItemDefinitions().getDefinition(parsed->second);
-        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsed->second);
+        // Several crops share a name with the harvest item, which carries no block runtime ID.
+        if (parsed->second != brokenState.mName || dynamic_cast<const CropBlock *>(brokenBlock) == nullptr)
+            drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsed->second);
         drop.mCount = count;
 
         if (brokenBlock != nullptr && level != nullptr)
@@ -1307,11 +1310,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         }
     }
 
-    if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success) {
-        return true;
-    }
-
     const ItemStack &heldItem = inventory.getItemInHand();
+    const Tag *seed = FarmSeedItem::getSeedComponent(heldItem);
+    const bool cocoaBeans = heldItem.mDefinition != nullptr
+                            && heldItem.mDefinition->getIdentifier() == "minecraft:cocoa_beans";
+    // Planting is an item use. The client may omit a successful block-placement prediction.
+    if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success && seed == nullptr && !cocoaBeans)
+        return true;
 
     // a pack item with minecraft:block_placer places that block, on the blocks it lists when it lists any
     std::shared_ptr<BlockDefinition> placerDefinition;
@@ -1325,10 +1330,20 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
             placerDefinition = owner.getBlockDefinitions().getDefinition(placer->mPlacerBlock);
     }
 
-    if (!placerDefinition && !heldItem.mBlockDefinition && !onCooldown && face == PlacementOrientation::FACE_UP) {
-        const Tag *seed = FarmSeedItem::getSeedComponent(heldItem);
-        if (seed != nullptr && FarmSeedItem::plantsOn(*seed, clickedState.mName))
-            placerDefinition = owner.getBlockDefinitions().getDefinition(seed->getString("crop_result"));
+    if (seed != nullptr) {
+        if (onCooldown || PlacementOrientation::faceFromName(seed->getString("plant_at_face")) != face
+            || !(FarmSeedItem::plantsOn(*seed, clickedState.mName)
+                 || (seed->getBool("plant_at_any_solid_surface") && BlockSupport::isSolid(clickedState))))
+            return false;
+        placerDefinition = owner.getBlockDefinitions().getDefinition(seed->getString("crop_result"));
+        if (!placerDefinition)
+            return false;
+    } else if (dynamic_cast<const CropBlock *>(heldBlock) != nullptr && heldItem.mDefinition != nullptr
+               && BlockPickItem::identifierFor(heldBlock->getIdentifier()) != heldItem.mDefinition->getIdentifier()) {
+        // Wheat and beetroot share their identifiers with crops, but only their seeds can plant them.
+        return false;
+    } else if (!onCooldown && cocoaBeans) {
+        placerDefinition = owner.getBlockDefinitions().getDefinition("minecraft:cocoa");
     }
 
     const bool bucket = BucketItem::isBucket(heldItem);
@@ -1363,8 +1378,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (!isBlockChangeAllowed(level, target, player) || PistonSystem::isMovingInto(level, target))
         return false;
 
-    const BlockDefinition &definition = heldItem.mBlockDefinition != nullptr ? *heldItem.mBlockDefinition
-                                                                             : *placerDefinition;
+    const BlockDefinition &definition = placerDefinition != nullptr ? *placerDefinition : *heldItem.mBlockDefinition;
 
     BlockState mergedState(definition.getIdentifier(), definition.getState());
     PlacementMergeResult mergeResult = PlacementMergeResult::None;

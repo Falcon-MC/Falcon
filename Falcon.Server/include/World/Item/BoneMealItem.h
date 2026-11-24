@@ -26,9 +26,6 @@ private:
     static bool fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           ServerPlayer *player = nullptr);
 
-    static bool applyToCrop(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                            const BlockState &state, ServerPlayer *player);
-
     static bool applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ServerPlayer *player);
 
     static bool applyToNylium(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
