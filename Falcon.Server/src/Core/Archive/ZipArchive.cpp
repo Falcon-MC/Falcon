@@ -48,7 +48,9 @@ bool ZipArchive::readEntry(std::string_view input, uint16_t method, size_t expec
         return false;
     struct EndInflate {
         z_stream &stream;
-        ~EndInflate() { inflateEnd(&stream); }
+        ~EndInflate() {
+            inflateEnd(&stream);
+        }
     } end{stream};
 
     stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(input.data()));
