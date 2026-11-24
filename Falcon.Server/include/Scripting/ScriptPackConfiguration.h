@@ -34,7 +34,7 @@ struct ScriptPackConfig {
 
     const std::string *findSecret(const std::string &name) const;
 
-    // without permissions.json every module is allowed
+    // a pack without a permissions file inherits the default module rules
     bool allowsModule(const std::string &module) const;
 
     ScriptNetModuleConfig netConfig() const;

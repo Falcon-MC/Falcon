@@ -65,13 +65,14 @@ public:
 private:
     bool _loadPackFile(const std::string &path, const std::string &fileName);
 
-    bool _loadPackBytes(std::string data, const std::string &label, const std::string &contentKey, size_t maxManifestSize = SIZE_MAX);
+    bool _loadPackBytes(std::string data, const std::string &label, const std::string &contentKey,
+                        size_t maxManifestSize = 1024 * 1024);
 
     void _loadFolder(const std::string &path, const std::string &label);
 
     void _loadAddon(const std::string &data);
 
-    static bool _readWholeFile(const std::string &path, std::string &out);
+    static bool _readWholeFile(const std::string &path, std::string &out, size_t maxBytes = SIZE_MAX);
 
     static bool _extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out, size_t maxSize);
 

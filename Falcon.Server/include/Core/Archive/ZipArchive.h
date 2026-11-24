@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct ZipEntry {
@@ -11,7 +13,12 @@ struct ZipEntry {
 
 class ZipArchive {
 public:
-    static bool listEntries(const std::string &zip, std::vector<ZipEntry> &out);
+    static constexpr size_t MAX_ENTRY_BYTES = 128 * 1024 * 1024;
+    static constexpr size_t MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
+
+    static bool listEntries(const std::string &zip, std::vector<ZipEntry> &out, size_t budget = MAX_ARCHIVE_BYTES);
+
+    static bool readEntry(std::string_view input, uint16_t method, size_t expected, size_t limit, std::string &out);
 
     static bool extractToDirectory(const std::string &zip, const std::string &destinationDirectory);
 
