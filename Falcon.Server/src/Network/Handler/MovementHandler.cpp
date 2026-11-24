@@ -710,23 +710,21 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
         dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
 
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem)) {
-        player.clearAwaitingConsumableRelease();
-        owner._useHeldItem(player);
-    }
-
+    bool startsUsingItem = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem);
     for (size_t index = 0; index < actionCount; ++index) {
         const PlayerBlockActionData &action = packet.mPlayerActions[index];
         if (action.mAction == PlayerActionType::Jump) {
             if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
-            player.clearAwaitingConsumableRelease();
-            owner._useHeldItem(player);
+            startsUsingItem = true;
         }
     }
 
-    if (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1)
+    if (startsUsingItem)
+        player.clearAwaitingConsumableRelease();
+    // a single click can carry both a start signal and a use-in-air transaction
+    if (startsUsingItem || (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1))
         owner._useHeldItem(player);
 
     (void) id;

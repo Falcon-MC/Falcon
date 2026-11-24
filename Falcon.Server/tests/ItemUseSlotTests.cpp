@@ -1,7 +1,10 @@
+#include "Network/Handler/MovementHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Projectile/FishingHookActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -24,6 +27,27 @@ namespace {
     void require(bool condition, const std::string &message) {
         if (!condition)
             throw std::runtime_error(message);
+    }
+
+    void checkFishingInput(ServerNetworkHandler &owner, ServerPlayer &player) {
+        player.getInventory().setItemInHand(owner.createItemStack("minecraft:fishing_rod", 1));
+        player.setLastChunkPosition(0, 0);
+        PlayerAuthInputPacket input;
+        input.mPosition = Vector3f(0.5f, 101.62f, 0.5f);
+        input.mInputData = {(int32_t) PlayerAuthInputData::StartUsingItem};
+        input.mHasItemUseTransaction = true;
+        input.mItemUseTransaction.mActionType = 1;
+        MovementHandler::handlePlayerAuthInput(owner, player.getNetworkIdentifier(), player, input);
+        owner.tickActors();
+        require(owner.getActors().size() == 1, "one rod input must leave one hook in flight");
+        auto *hook = dynamic_cast<FishingHookActor *>(owner.getActors().begin()->second.get());
+        require(hook != nullptr && hook->isOwnedBy(player), "the hook lost its angler");
+
+        ++input.mTick;
+        input.mPlayerActions.emplace_back().mAction = PlayerActionType::StartUsingItem;
+        MovementHandler::handlePlayerAuthInput(owner, player.getNetworkIdentifier(), player, input);
+        owner.tickActors();
+        require(owner.getActors().empty(), "one reel input must remove the hook without recasting");
     }
 
     // a drawn bow switched for a golden apple must not hand the apple its elapsed time
@@ -63,6 +87,7 @@ namespace {
         ServerTickProbe::advance(owner, 40);
         owner._tickItemUse(player);
         require(inventory.getItem(1).mCount == 1, "a full use of the apple did not eat it");
+        checkFishingInput(owner, player);
     }
 }
 
