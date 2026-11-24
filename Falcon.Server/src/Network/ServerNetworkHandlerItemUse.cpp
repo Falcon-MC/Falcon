@@ -56,8 +56,20 @@ namespace {
         return food;
     }
 
+    const CustomItemDefinition *customItemOf(const ItemStack &item) {
+        if (item.isAir() || item.mDefinition == nullptr || !item.mDefinition->isComponentBased())
+            return nullptr;
+
+        return CustomContentRegistry::getInstance().findItem(item.mDefinition->getIdentifier());
+    }
+
+    const CustomItemDefinition *customFood(const ItemStack &item) {
+        const auto *definition = customItemOf(item);
+        return definition != nullptr && definition->mIsFood ? definition : nullptr;
+    }
+
     bool isConsumable(const ItemStack &item) {
-        if (findFoodComponent(item) != nullptr)
+        if (findFoodComponent(item) != nullptr || customFood(item) != nullptr)
             return true;
 
         const Item *itemType = itemTypeOf(item);
@@ -70,6 +82,9 @@ namespace {
     }
 
     bool canAlwaysConsume(const ItemStack &item) {
+        if (const auto *food = customFood(item))
+            return food->mCanAlwaysEat;
+
         const FoodItemComponent *food = findFoodComponent(item);
         if (food == nullptr || food->canAlwaysEat())
             return true;
@@ -130,6 +145,12 @@ void ServerNetworkHandler::addEffect(Actor &actor, const MobEffectInstance &inst
 }
 
 bool ServerNetworkHandler::applyFood(ServerPlayer &player, const ItemStack &item) {
+    if (const auto *food = customFood(item)) {
+        const double saturation = (double) food->mNutrition * food->mSaturationModifier * 2.0;
+        player.consumeFood(food->mNutrition, (float) std::clamp(saturation, 0.0, (double) player.getMaxFood()));
+        return true;
+    }
+
     const FoodItemComponent *food = findFoodComponent(item);
     if (food == nullptr)
         return false;
@@ -311,9 +332,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (itemType != nullptr && _equipHeldArmor(player, *itemType))
             return;
 
-        const CustomItemDefinition *pack =
-                itemType == nullptr ? CustomContentRegistry::getInstance().findItem(heldItem.mDefinition->getIdentifier())
-                                    : nullptr;
+        const CustomItemDefinition *pack = customItemOf(heldItem);
         int32_t drawDuration = 0;
         const PackShooter::Use packUse = pack == nullptr || player.getFlags().get(ActorFlag::UsingItem)
                                                  ? PackShooter::Use::None
@@ -331,7 +350,8 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
         // a pack item is not in the item table: its wearable slot rides on the parsed item
         Item packItem;
-        if (itemType == nullptr && StringToItemParser::getInstance().parse(heldItem.mDefinition->getIdentifier(), packItem)
+        if (pack != nullptr && pack->mHasWearable
+            && StringToItemParser::getInstance().parse(heldItem.mDefinition->getIdentifier(), packItem)
             && _equipHeldArmor(player, packItem))
             return;
 
@@ -403,7 +423,6 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     const int slot = inventory.getSelectedSlot();
 
     const ItemStack &heldItem = inventory.getItemInHand();
-    const FoodItemComponent *food = findFoodComponent(heldItem);
     const Item *itemType = itemTypeOf(heldItem);
     const bool consumable = isConsumable(heldItem);
 
@@ -458,7 +477,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
         mEventBus.after().mItemCompleteUse.emit(completeEvent);
     }
 
-    applyFood(player, usedItem);
+    const bool ate = applyFood(player, usedItem);
 
     // both ride publisher_use_time_depleted: food at priority 0 eats and fires onConsume,
     // custom onCompleteUse at priority 3 runs after
@@ -468,7 +487,7 @@ void ServerNetworkHandler::_consumeHeldItem(ServerPlayer &player) {
     if (itemType != nullptr)
         itemType->onConsumed(*this, player, usedItem);
 
-    if (food != nullptr)
+    if (ate)
         playLevelSound(getLevelFor(player), LevelSoundEvent::BURP, player.getPosition());
 
     ItemStack remaining = inventory.getItemInHand();

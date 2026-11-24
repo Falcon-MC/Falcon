@@ -1287,7 +1287,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         return true;
 
     // a pack item with minecraft:entity_placer puts its entity against the clicked face, like a spawn egg
-    if (itemType == nullptr && !onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr) {
+    if (!onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr
+        && interactItem.mDefinition->isComponentBased()) {
         const CustomItemDefinition *placer =
                 CustomContentRegistry::getInstance().findItem(interactItem.mDefinition->getIdentifier());
         if (placer != nullptr && placer->mHasEntityPlacer

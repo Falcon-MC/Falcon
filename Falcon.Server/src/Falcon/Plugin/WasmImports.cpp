@@ -8,6 +8,7 @@
 #include "Falcon/Plugin/PluginServerApi.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -305,6 +306,31 @@ namespace {
         binding.mSecond = second;
         out = &binding;
         return true;
+    }
+
+    void registerCustomItem(Call &call, const std::array<uint32_t, 15> &fields, const std::string *components) {
+        std::string identifier;
+        std::string displayName;
+        std::string icon;
+        std::string category;
+        Binding *binding = nullptr;
+        if (!call.readString(fields[0], fields[1], identifier) || !call.readString(fields[2], fields[3], displayName)
+            || !call.readString(fields[4], fields[5], icon) || !call.readString(fields[6], fields[7], category)
+            || !contentCallbacks(call, fields[11], fields[12], fields[13], fields[14], binding))
+            return;
+
+        const FalconCustomItemDescriptor descriptor{
+                identifier.c_str(), displayName.c_str(), icon.c_str(), category.c_str(), fields[8], fields[9],
+                fields[10] != 0 ? 1 : 0, binding->mHasFirst ? &runItemUse : nullptr,
+                binding->mHasSecond ? &runItemUseOnBlock : nullptr, binding};
+        if (components == nullptr) {
+            call.resultS32(api().registerCustomItem(self(call), &descriptor) != 0);
+            return;
+        }
+
+        const FalconCustomItemDescriptorV2 extended{
+                descriptor, components->data(), (uint32_t) components->size()};
+        call.resultS32(api().registerCustomItemWithComponents(self(call), &extended) != 0);
     }
 
     std::vector<WasmImports::Definition> build() {
@@ -2141,24 +2167,37 @@ namespace {
                 }},
 
                 {"content", "register-custom-item", "iiiiiiiiiiiiiii:i", [](Call &call) {
-                    std::string identifier;
-                    std::string displayName;
-                    std::string icon;
-                    std::string category;
-                    Binding *binding = nullptr;
-                    const uint32_t maxStackSize = call.u32(8);
-                    const uint32_t maxDurability = call.u32(9);
-                    const int32_t handEquipped = call.flag(10) ? 1 : 0;
-                    if (!call.string(0, identifier) || !call.string(2, displayName) || !call.string(4, icon)
-                        || !call.string(6, category)
-                        || !contentCallbacks(call, call.u32(11), call.u32(12), call.u32(13), call.u32(14), binding))
+                    std::array<uint32_t, 15> fields;
+                    for (size_t index = 0; index < fields.size(); ++index)
+                        fields[index] = call.u32(index);
+                    registerCustomItem(call, fields, nullptr);
+                }},
+                {"content", "register-custom-item-with-components", "i:i", [](Call &call) {
+                    // the extra string takes the canonical ABI record past its flat argument limit
+                    uint8_t record[68];
+                    if (!call.read(call.u32(0), record, sizeof(record)))
                         return;
-
-                    const FalconCustomItemDescriptor descriptor{
-                            identifier.c_str(), displayName.c_str(), icon.c_str(), category.c_str(), maxStackSize,
-                            maxDurability, handEquipped, binding->mHasFirst ? &runItemUse : nullptr,
-                            binding->mHasSecond ? &runItemUseOnBlock : nullptr, binding};
-                    call.resultS32(api().registerCustomItem(self(call), &descriptor) != 0);
+                    const auto field = [&record](size_t offset) {
+                        uint32_t value;
+                        std::memcpy(&value, record + offset, sizeof(value));
+                        return value;
+                    };
+                    const uint32_t size = field(64);
+                    if (size > FALCON_CUSTOM_ITEM_COMPONENTS_MAX_BYTES) {
+                        call.resultS32(0);
+                        return;
+                    }
+                    if (record[40] > 1) {
+                        call.fail("invalid custom item hand-equipped flag");
+                        return;
+                    }
+                    std::string components;
+                    if (!call.readString(field(60), size, components))
+                        return;
+                    const std::array<uint32_t, 15> fields{
+                            field(0), field(4), field(8), field(12), field(16), field(20), field(24), field(28),
+                            field(32), field(36), record[40], record[44], field(48), record[52], field(56)};
+                    registerCustomItem(call, fields, &components);
                 }},
                 {"content", "register-custom-block", "i:i", [](Call &call) {
                     const uint32_t address = call.u32(0);

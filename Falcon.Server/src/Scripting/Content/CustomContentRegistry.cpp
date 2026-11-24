@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -770,349 +771,364 @@ void CustomContentRegistry::_loadPackItems(const std::string &packPath, ItemDefi
                 definition.mCreativeGroup = menuCategory->get("group")->string();
         }
 
-        const json::Value *components = item->get("components");
-        if (components != nullptr && components->isObject()) {
-            const json::Value *icon = components->get("minecraft:icon");
-            if (icon != nullptr) {
-                if (icon->isString())
-                    definition.mIcon = icon->string();
-                else if (icon->isObject() && icon->get("texture") != nullptr)
-                    definition.mIcon = icon->get("texture")->string();
-            }
-
-            const json::Value *displayName = components->get("minecraft:display_name");
-            if (displayName != nullptr && displayName->get("value") != nullptr)
-                definition.mDisplayName = displayName->get("value")->string(definition.mDisplayName);
-
-            const json::Value *maxStack = components->get("minecraft:max_stack_size");
-            if (maxStack != nullptr)
-                definition.mMaxStackSize = maxStack->isObject() ? maxStack->get("value")->integer(64)
-                                                                : maxStack->integer(64);
-
-            const json::Value *cooldown = components->get("minecraft:cooldown");
-            if (cooldown != nullptr && cooldown->isObject()) {
-                if (cooldown->get("category") != nullptr)
-                    definition.mCooldownCategory = cooldown->get("category")->string();
-                if (cooldown->get("duration") != nullptr)
-                    definition.mCooldownTicks = (int32_t) (cooldown->get("duration")->number(0.0) * 20.0);
-            }
-
-            const json::Value *food = components->get("minecraft:food");
-            if (food != nullptr && food->isObject()) {
-                definition.mIsFood = true;
-                definition.mNutrition = food->get("nutrition") != nullptr ? food->get("nutrition")->integer(0) : 0;
-                if (food->get("saturation_modifier") != nullptr)
-                    definition.mSaturationModifier = (float) food->get("saturation_modifier")->number(0.6);
-                if (food->get("can_always_eat") != nullptr)
-                    definition.mCanAlwaysEat = food->get("can_always_eat")->boolean(false);
-            }
-
-            // the game takes these as the value itself or wrapped in an object
-            const json::Value *handEquipped = components->get("minecraft:hand_equipped");
-            if (handEquipped != nullptr && handEquipped->isObject())
-                handEquipped = handEquipped->get("value");
-            if (handEquipped != nullptr)
-                definition.mHandEquipped = handEquipped->boolean(false);
-
-            const std::pair<const char *, bool *> flags[] = {
-                    {"minecraft:allow_off_hand", &definition.mAllowOffHand},
-                    {"minecraft:can_destroy_in_creative", &definition.mCanDestroyInCreative},
-                    {"minecraft:glint", &definition.mGlint},
-                    {"minecraft:liquid_clipped", &definition.mLiquidClipped},
-                    {"minecraft:should_despawn", &definition.mShouldDespawn},
-                    {"minecraft:stacked_by_data", &definition.mStackedByData},
-                    {"minecraft:fire_resistant", &definition.mFireResistant},
-            };
-            for (const auto &flag: flags) {
-                const json::Value *value = components->get(flag.first);
-                if (value != nullptr && value->isObject())
-                    value = value->get("value");
-                if (value != nullptr)
-                    *flag.second = value->boolean(*flag.second);
-            }
-
-            const json::Value *hoverTextColor = components->get("minecraft:hover_text_color");
-            if (hoverTextColor != nullptr && hoverTextColor->isObject())
-                hoverTextColor = hoverTextColor->get("value");
-            if (hoverTextColor != nullptr && hoverTextColor->isString())
-                definition.mHoverTextColor = hoverTextColor->string();
-
-            const json::Value *damage = components->get("minecraft:damage");
-            if (damage != nullptr && damage->isObject())
-                damage = damage->get("value");
-            if (damage != nullptr)
-                definition.mDamage = damage->integer(0);
-
-            const json::Value *tags = components->get("minecraft:tags");
-            if (tags != nullptr && tags->isObject())
-                tags = tags->get("tags");
-            if (tags != nullptr && tags->isArray()) {
-                for (const std::unique_ptr<json::Value> &tag: tags->mArray) {
-                    if (tag->isString()
-                        && std::find(definition.mTags.begin(), definition.mTags.end(), tag->string())
-                                   == definition.mTags.end())
-                        definition.mTags.push_back(tag->string());
-                }
-            }
-
-            const json::Value *dyeable = components->get("minecraft:dyeable");
-            if (dyeable != nullptr && dyeable->isObject()) {
-                definition.mHasDyeable = true;
-                readColor255(dyeable->get("default_color"), definition.mDyeableDefaultColor);
-            }
-
-            // a string is the button text; a bool keeps the default text
-            const json::Value *interactButton = components->get("minecraft:interact_button");
-            if (interactButton != nullptr) {
-                if (interactButton->isString()) {
-                    definition.mHasInteractButton = true;
-                    definition.mInteractButtonText = interactButton->string();
-                } else if (interactButton->mType == json::Value::Type::Boolean) {
-                    definition.mHasInteractButton = true;
-                }
-            }
-
-            // block and each use_on entry are a block name or an object holding one
-            const json::Value *blockPlacer = components->get("minecraft:block_placer");
-            if (blockPlacer != nullptr && blockPlacer->isObject() && blockPlacer->get("block") != nullptr) {
-                const auto blockName = [](const json::Value *value) {
-                    if (value != nullptr && value->isObject())
-                        value = value->get("name");
-                    return value != nullptr && value->isString() ? qualify(value->string()) : std::string();
-                };
-                definition.mPlacerBlock = blockName(blockPlacer->get("block"));
-                definition.mHasBlockPlacer = !definition.mPlacerBlock.empty();
-                const json::Value *useOn = blockPlacer->get("use_on");
-                if (useOn != nullptr && useOn->isArray()) {
-                    for (const std::unique_ptr<json::Value> &entry: useOn->mArray) {
-                        const std::string name = blockName(entry.get());
-                        if (!name.empty())
-                            definition.mPlacerUseOn.push_back(name);
-                    }
-                }
-                if (blockPlacer->get("replace_block_item") != nullptr)
-                    definition.mPlacerReplacesBlockItem = blockPlacer->get("replace_block_item")->boolean(false);
-                if (blockPlacer->get("aligned_placement") != nullptr)
-                    definition.mPlacerAligned = blockPlacer->get("aligned_placement")->boolean(false);
-            }
-
-            const json::Value *entityPlacer = components->get("minecraft:entity_placer");
-            if (entityPlacer != nullptr && entityPlacer->isObject() && entityPlacer->get("entity") != nullptr
-                && entityPlacer->get("entity")->isString()) {
-                definition.mHasEntityPlacer = true;
-                definition.mPlacerEntity = qualify(entityPlacer->get("entity")->string());
-                const auto blockNames = [entityPlacer](const char *key, std::vector<std::string> &out) {
-                    const json::Value *list = entityPlacer->get(key);
-                    if (list == nullptr || !list->isArray())
-                        return;
-                    for (const std::unique_ptr<json::Value> &entry: list->mArray) {
-                        const json::Value *name = entry->isObject() ? entry->get("name") : entry.get();
-                        if (name != nullptr && name->isString())
-                            out.push_back(qualify(name->string()));
-                    }
-                };
-                blockNames("use_on", definition.mEntityPlacerUseOn);
-                blockNames("dispense_on", definition.mEntityPlacerDispenseOn);
-            }
-
-            const json::Value *throwable = components->get("minecraft:throwable");
-            if (throwable != nullptr && throwable->isObject()) {
-                definition.mHasThrowable = true;
-                const auto number = [throwable](const char *key, float fallback) {
-                    const json::Value *value = throwable->get(key);
-                    return value == nullptr ? fallback : (float) value->number(fallback);
-                };
-                definition.mLaunchPowerScale = number("launch_power_scale", 1.0f);
-                definition.mMaxLaunchPower = number("max_launch_power", 1.0f);
-                definition.mMinDrawDuration = number("min_draw_duration", 0.0f);
-                definition.mMaxDrawDuration = number("max_draw_duration", 0.0f);
-                if (throwable->get("do_swing_animation") != nullptr)
-                    definition.mThrowSwings = throwable->get("do_swing_animation")->boolean(false);
-                if (throwable->get("scale_power_by_draw_duration") != nullptr)
-                    definition.mScalePowerByDraw = throwable->get("scale_power_by_draw_duration")->boolean(false);
-            }
-
-            const json::Value *projectile = components->get("minecraft:projectile");
-            if (projectile != nullptr && projectile->isObject() && projectile->get("projectile_entity") != nullptr
-                && projectile->get("projectile_entity")->isString()) {
-                definition.mHasProjectile = true;
-                definition.mProjectileEntity = qualify(projectile->get("projectile_entity")->string());
-                if (projectile->get("minimum_critical_power") != nullptr)
-                    definition.mMinimumCriticalPower =
-                            (float) projectile->get("minimum_critical_power")->number(0.0);
-            }
-
-            // each ammunition item is an item name or an object holding one
-            const json::Value *shooter = components->get("minecraft:shooter");
-            if (shooter != nullptr && shooter->isObject()) {
-                definition.mHasShooter = true;
-                const json::Value *ammunition = shooter->get("ammunition");
-                if (ammunition != nullptr && ammunition->isArray()) {
-                    for (const std::unique_ptr<json::Value> &entry: ammunition->mArray) {
-                        if (!entry->isObject())
-                            continue;
-                        const json::Value *item = entry->get("item");
-                        if (item != nullptr && item->isObject())
-                            item = item->get("name");
-                        if (item == nullptr || !item->isString())
-                            continue;
-
-                        CustomAmmunition ammo;
-                        ammo.mItem = qualify(item->string());
-                        const auto flag = [&entry](const char *key) {
-                            const json::Value *value = entry->get(key);
-                            return value != nullptr && value->boolean(false);
-                        };
-                        ammo.mUseOffhand = flag("use_offhand");
-                        ammo.mSearchInventory = flag("search_inventory");
-                        ammo.mUseInCreative = flag("use_in_creative");
-                        definition.mAmmunition.push_back(std::move(ammo));
-                    }
-                }
-                if (shooter->get("max_draw_duration") != nullptr)
-                    definition.mShooterMaxDrawDuration = (float) shooter->get("max_draw_duration")->number(0.0);
-                if (shooter->get("scale_power_by_draw_duration") != nullptr)
-                    definition.mShooterScalePowerByDraw = shooter->get("scale_power_by_draw_duration")->boolean(false);
-                if (shooter->get("charge_on_draw") != nullptr)
-                    definition.mChargeOnDraw = shooter->get("charge_on_draw")->boolean(false);
-            }
-
-            const json::Value *fuel = components->get("minecraft:fuel");
-            if (fuel != nullptr && fuel->isObject() && fuel->get("duration") != nullptr) {
-                definition.mHasFuel = true;
-                definition.mFuelDuration = (float) fuel->get("duration")->number(0.0);
-            }
-
-            const json::Value *compostable = components->get("minecraft:compostable");
-            if (compostable != nullptr && compostable->isObject() && compostable->get("composting_chance") != nullptr) {
-                definition.mHasCompostable = true;
-                definition.mCompostingChance = std::clamp(compostable->get("composting_chance")->integer(0), 0, 100);
-            }
-
-            const json::Value *useModifiers = components->get("minecraft:use_modifiers");
-            if (useModifiers != nullptr && useModifiers->isObject() && useModifiers->get("use_duration") != nullptr) {
-                definition.mHasUseModifiers = true;
-                definition.mUseDuration = (float) useModifiers->get("use_duration")->number(0.0);
-                if (useModifiers->get("movement_modifier") != nullptr)
-                    definition.mMovementModifier = (float) useModifiers->get("movement_modifier")->number(1.0);
-                if (useModifiers->get("emit_vibrations") != nullptr)
-                    definition.mEmitVibrations = useModifiers->get("emit_vibrations")->boolean(true);
-                if (useModifiers->get("start_sound") != nullptr && useModifiers->get("start_sound")->isString())
-                    definition.mUseStartSound = useModifiers->get("start_sound")->string();
-                if (useModifiers->get("start_using") != nullptr && useModifiers->get("start_using")->isString())
-                    definition.mStartUsing = useModifiers->get("start_using")->string();
-            }
-
-            const json::Value *useAnimation = components->get("minecraft:use_animation");
-            if (useAnimation != nullptr && useAnimation->isObject())
-                useAnimation = useAnimation->get("value");
-            if (useAnimation != nullptr && useAnimation->isString())
-                definition.mUseAnimation = useAnimation->string();
-
-            const json::Value *wearable = components->get("minecraft:wearable");
-            if (wearable != nullptr && wearable->isObject() && wearable->get("slot") != nullptr
-                && wearable->get("slot")->isString()) {
-                definition.mHasWearable = true;
-                definition.mWearableSlotName = wearable->get("slot")->string();
-                definition.mWearableSlot = armorSlotOf(definition.mWearableSlotName);
-                if (wearable->get("protection") != nullptr)
-                    definition.mProtection = wearable->get("protection")->integer(0);
-                if (wearable->get("hides_player_location") != nullptr)
-                    definition.mHidesPlayerLocation = wearable->get("hides_player_location")->boolean(false);
-
-                // older items keep their protection in minecraft:armor; the game moves it into the wearable
-                const json::Value *armor = components->get("minecraft:armor");
-                if (wearable->get("protection") == nullptr && armor != nullptr && armor->isObject()
-                    && armor->get("protection") != nullptr)
-                    definition.mProtection = armor->get("protection")->integer(0);
-            }
-
-            const json::Value *durability = components->get("minecraft:durability");
-            if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
-                definition.mMaxDurability = durability->get("max_durability")->integer(0);
-
-            const json::Value *enchantable = components->get("minecraft:enchantable");
-            if (enchantable != nullptr && enchantable->isObject()) {
-                definition.mHasEnchantable = true;
-                if (enchantable->get("value") != nullptr)
-                    definition.mEnchantableValue = enchantable->get("value")->integer(0);
-                if (enchantable->get("slot") != nullptr)
-                    definition.mEnchantableSlot = StringUtil::toLowerCase(enchantable->get("slot")->string("none"));
-            }
-
-            // minecraft:repairable: each repair_items entry lists items (names or {"name": ...})
-            // and a repair_amount: number or Molang expression
-            const json::Value *repairable = components->get("minecraft:repairable");
-            const json::Value *repairItems = repairable != nullptr && repairable->isObject()
-                                                     ? repairable->get("repair_items")
-                                                     : nullptr;
-            if (repairItems != nullptr && repairItems->isArray()) {
-                for (const std::unique_ptr<json::Value> &entry: repairItems->mArray) {
-                    if (!entry->isObject())
-                        continue;
-
-                    CustomRepairEntry repair;
-                    const json::Value *itemList = entry->get("items");
-                    if (itemList != nullptr && itemList->isArray()) {
-                        for (const std::unique_ptr<json::Value> &item: itemList->mArray) {
-                            if (item->isString())
-                                repair.mItems.push_back(qualify(item->string()));
-                            else if (item->isObject() && item->get("name") != nullptr)
-                                repair.mItems.push_back(qualify(item->get("name")->string()));
-                        }
-                    }
-
-                    const json::Value *amount = entry->get("repair_amount");
-                    if (amount != nullptr && amount->isString())
-                        repair.mAmount = amount->string();
-                    else if (amount != nullptr && amount->isNumber())
-                        repair.mAmount = std::to_string(amount->number(0.0));
-                    else if (amount != nullptr && amount->isObject() && amount->get("expression") != nullptr)
-                        repair.mAmount = amount->get("expression")->string();
-
-                    if (!repair.mItems.empty() && !repair.mAmount.empty())
-                        definition.mRepairItems.push_back(std::move(repair));
-                }
-            }
-
-            definition.mCustomComponents = readCustomComponents(*components);
-
-            const json::Value *digger = components->get("minecraft:digger");
-            if (digger != nullptr && digger->isObject()) {
-                definition.mHasDigger = true;
-                if (digger->get("use_efficiency") != nullptr)
-                    definition.mDiggerUseEfficiency = digger->get("use_efficiency")->boolean(false);
-
-                const json::Value *destroySpeeds = digger->get("destroy_speeds");
-                if (destroySpeeds != nullptr && destroySpeeds->isArray()) {
-                    for (const std::unique_ptr<json::Value> &entry: destroySpeeds->mArray) {
-                        if (!entry->isObject())
-                            continue;
-
-                        const json::Value *speedValue = entry->get("speed");
-                        const int32_t speed = speedValue != nullptr ? speedValue->integer(0) : 0;
-                        if (speed <= 0)
-                            continue;
-
-                        const json::Value *block = entry->get("block");
-                        if (block == nullptr)
-                            continue;
-
-                        if (block->isString()) {
-                            definition.mDiggerBlockSpeeds[qualify(block->string())] = speed;
-                        } else if (block->isObject()) {
-                            if (speed > definition.mDiggerToolSpeed)
-                                definition.mDiggerToolSpeed = speed;
-                        }
-                    }
-                }
-            }
-        }
+        readItemComponents(definition, item->get("components"));
 
         if (definition.mIcon.empty())
             definition.mIcon = definition.mIdentifier.substr(definition.mIdentifier.find(':') + 1);
 
         _registerItem(definition, items);
+    }
+}
+
+void CustomContentRegistry::readItemComponents(CustomItemDefinition &definition, const json::Value *components) {
+    if (components == nullptr || !components->isObject())
+        return;
+
+    const auto integer = [](const json::Value *value, int32_t fallback = 0) {
+        const double number = value == nullptr ? fallback : value->number(fallback);
+        return number >= INT32_MIN && number <= INT32_MAX ? (int32_t) number : fallback;
+    };
+    const auto real = [](const json::Value *value, float fallback = 0.0f) {
+        const double number = value == nullptr ? fallback : value->number(fallback);
+        constexpr double limit = std::numeric_limits<float>::max();
+        return number >= -limit && number <= limit ? (float) number : fallback;
+    };
+    const auto duration = [&real](const json::Value *value) {
+        const float seconds = real(value);
+        const float limit = std::nextafter((float) INT32_MAX / 20.0f, 0.0f);
+        return seconds >= 0.0f && seconds <= limit ? seconds : 0.0f;
+    };
+
+    const json::Value *icon = components->get("minecraft:icon");
+    if (icon != nullptr) {
+        if (icon->isString())
+            definition.mIcon = icon->string();
+        else if (icon->isObject() && icon->get("texture") != nullptr)
+            definition.mIcon = icon->get("texture")->string();
+    }
+
+    const json::Value *displayName = components->get("minecraft:display_name");
+    if (displayName != nullptr && displayName->get("value") != nullptr)
+        definition.mDisplayName = displayName->get("value")->string(definition.mDisplayName);
+
+    const json::Value *maxStack = components->get("minecraft:max_stack_size");
+    if (maxStack != nullptr && maxStack->isObject())
+        maxStack = maxStack->get("value");
+    if (maxStack != nullptr)
+        definition.mMaxStackSize = integer(maxStack, definition.mMaxStackSize);
+
+    const json::Value *cooldown = components->get("minecraft:cooldown");
+    if (cooldown != nullptr && cooldown->isObject()) {
+        if (cooldown->get("category") != nullptr)
+            definition.mCooldownCategory = cooldown->get("category")->string();
+        if (cooldown->get("duration") != nullptr)
+            definition.mCooldownTicks = (int32_t) (duration(cooldown->get("duration")) * 20.0f);
+    }
+
+    const json::Value *food = components->get("minecraft:food");
+    if (food != nullptr && food->isObject()) {
+        definition.mIsFood = true;
+        definition.mNutrition = std::max(0, integer(food->get("nutrition")));
+        if (food->get("saturation_modifier") != nullptr)
+            definition.mSaturationModifier = real(food->get("saturation_modifier"), 0.6f);
+        if (food->get("can_always_eat") != nullptr)
+            definition.mCanAlwaysEat = food->get("can_always_eat")->boolean(false);
+    }
+
+    // the game takes these as the value itself or wrapped in an object
+    const json::Value *handEquipped = components->get("minecraft:hand_equipped");
+    if (handEquipped != nullptr && handEquipped->isObject())
+        handEquipped = handEquipped->get("value");
+    if (handEquipped != nullptr)
+        definition.mHandEquipped = handEquipped->boolean(false);
+
+    const std::pair<const char *, bool *> flags[] = {
+            {"minecraft:allow_off_hand", &definition.mAllowOffHand},
+            {"minecraft:can_destroy_in_creative", &definition.mCanDestroyInCreative},
+            {"minecraft:glint", &definition.mGlint},
+            {"minecraft:liquid_clipped", &definition.mLiquidClipped},
+            {"minecraft:should_despawn", &definition.mShouldDespawn},
+            {"minecraft:stacked_by_data", &definition.mStackedByData},
+            {"minecraft:fire_resistant", &definition.mFireResistant},
+    };
+    for (const auto &flag: flags) {
+        const json::Value *value = components->get(flag.first);
+        if (value != nullptr && value->isObject())
+            value = value->get("value");
+        if (value != nullptr)
+            *flag.second = value->boolean(*flag.second);
+    }
+
+    const json::Value *hoverTextColor = components->get("minecraft:hover_text_color");
+    if (hoverTextColor != nullptr && hoverTextColor->isObject())
+        hoverTextColor = hoverTextColor->get("value");
+    if (hoverTextColor != nullptr && hoverTextColor->isString())
+        definition.mHoverTextColor = hoverTextColor->string();
+
+    const json::Value *damage = components->get("minecraft:damage");
+    if (damage != nullptr && damage->isObject())
+        damage = damage->get("value");
+    if (damage != nullptr)
+        definition.mDamage = integer(damage);
+
+    const json::Value *tags = components->get("minecraft:tags");
+    if (tags != nullptr && tags->isObject())
+        tags = tags->get("tags");
+    if (tags != nullptr && tags->isArray()) {
+        for (const std::unique_ptr<json::Value> &tag: tags->mArray) {
+            if (tag->isString()
+                && std::find(definition.mTags.begin(), definition.mTags.end(), tag->string())
+                           == definition.mTags.end())
+                definition.mTags.push_back(tag->string());
+        }
+    }
+
+    const json::Value *dyeable = components->get("minecraft:dyeable");
+    if (dyeable != nullptr && dyeable->isObject()) {
+        definition.mHasDyeable = true;
+        readColor255(dyeable->get("default_color"), definition.mDyeableDefaultColor);
+    }
+
+    // a string is the button text; a bool keeps the default text
+    const json::Value *interactButton = components->get("minecraft:interact_button");
+    if (interactButton != nullptr) {
+        if (interactButton->isString()) {
+            definition.mHasInteractButton = true;
+            definition.mInteractButtonText = interactButton->string();
+        } else if (interactButton->mType == json::Value::Type::Boolean) {
+            definition.mHasInteractButton = true;
+        }
+    }
+
+    // block and each use_on entry are a block name or an object holding one
+    const json::Value *blockPlacer = components->get("minecraft:block_placer");
+    if (blockPlacer != nullptr && blockPlacer->isObject() && blockPlacer->get("block") != nullptr) {
+        const auto blockName = [](const json::Value *value) {
+            if (value != nullptr && value->isObject())
+                value = value->get("name");
+            return value != nullptr && value->isString() ? qualify(value->string()) : std::string();
+        };
+        definition.mPlacerBlock = blockName(blockPlacer->get("block"));
+        definition.mHasBlockPlacer = !definition.mPlacerBlock.empty();
+        const json::Value *useOn = blockPlacer->get("use_on");
+        if (useOn != nullptr && useOn->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: useOn->mArray) {
+                const std::string name = blockName(entry.get());
+                if (!name.empty())
+                    definition.mPlacerUseOn.push_back(name);
+            }
+        }
+        if (blockPlacer->get("replace_block_item") != nullptr)
+            definition.mPlacerReplacesBlockItem = blockPlacer->get("replace_block_item")->boolean(false);
+        if (blockPlacer->get("aligned_placement") != nullptr)
+            definition.mPlacerAligned = blockPlacer->get("aligned_placement")->boolean(false);
+    }
+
+    const json::Value *entityPlacer = components->get("minecraft:entity_placer");
+    if (entityPlacer != nullptr && entityPlacer->isObject() && entityPlacer->get("entity") != nullptr
+        && entityPlacer->get("entity")->isString()) {
+        definition.mHasEntityPlacer = true;
+        definition.mPlacerEntity = qualify(entityPlacer->get("entity")->string());
+        const auto blockNames = [entityPlacer](const char *key, std::vector<std::string> &out) {
+            const json::Value *list = entityPlacer->get(key);
+            if (list == nullptr || !list->isArray())
+                return;
+            for (const std::unique_ptr<json::Value> &entry: list->mArray) {
+                const json::Value *name = entry->isObject() ? entry->get("name") : entry.get();
+                if (name != nullptr && name->isString())
+                    out.push_back(qualify(name->string()));
+            }
+        };
+        blockNames("use_on", definition.mEntityPlacerUseOn);
+        blockNames("dispense_on", definition.mEntityPlacerDispenseOn);
+    }
+
+    const json::Value *throwable = components->get("minecraft:throwable");
+    if (throwable != nullptr && throwable->isObject()) {
+        definition.mHasThrowable = true;
+        definition.mLaunchPowerScale = real(throwable->get("launch_power_scale"), 1.0f);
+        definition.mMaxLaunchPower = real(throwable->get("max_launch_power"), 1.0f);
+        definition.mMinDrawDuration = duration(throwable->get("min_draw_duration"));
+        definition.mMaxDrawDuration = duration(throwable->get("max_draw_duration"));
+        if (throwable->get("do_swing_animation") != nullptr)
+            definition.mThrowSwings = throwable->get("do_swing_animation")->boolean(false);
+        if (throwable->get("scale_power_by_draw_duration") != nullptr)
+            definition.mScalePowerByDraw = throwable->get("scale_power_by_draw_duration")->boolean(false);
+    }
+
+    const json::Value *projectile = components->get("minecraft:projectile");
+    if (projectile != nullptr && projectile->isObject() && projectile->get("projectile_entity") != nullptr
+        && projectile->get("projectile_entity")->isString()) {
+        definition.mHasProjectile = true;
+        definition.mProjectileEntity = qualify(projectile->get("projectile_entity")->string());
+        if (projectile->get("minimum_critical_power") != nullptr)
+            definition.mMinimumCriticalPower = real(projectile->get("minimum_critical_power"));
+    }
+
+    // each ammunition item is an item name or an object holding one
+    const json::Value *shooter = components->get("minecraft:shooter");
+    if (shooter != nullptr && shooter->isObject()) {
+        definition.mHasShooter = true;
+        const json::Value *ammunition = shooter->get("ammunition");
+        if (ammunition != nullptr && ammunition->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: ammunition->mArray) {
+                if (!entry->isObject())
+                    continue;
+                const json::Value *item = entry->get("item");
+                if (item != nullptr && item->isObject())
+                    item = item->get("name");
+                if (item == nullptr || !item->isString())
+                    continue;
+
+                CustomAmmunition ammo;
+                ammo.mItem = qualify(item->string());
+                const auto flag = [&entry](const char *key) {
+                    const json::Value *value = entry->get(key);
+                    return value != nullptr && value->boolean(false);
+                };
+                ammo.mUseOffhand = flag("use_offhand");
+                ammo.mSearchInventory = flag("search_inventory");
+                ammo.mUseInCreative = flag("use_in_creative");
+                definition.mAmmunition.push_back(std::move(ammo));
+            }
+        }
+        if (shooter->get("max_draw_duration") != nullptr)
+            definition.mShooterMaxDrawDuration = duration(shooter->get("max_draw_duration"));
+        if (shooter->get("scale_power_by_draw_duration") != nullptr)
+            definition.mShooterScalePowerByDraw = shooter->get("scale_power_by_draw_duration")->boolean(false);
+        if (shooter->get("charge_on_draw") != nullptr)
+            definition.mChargeOnDraw = shooter->get("charge_on_draw")->boolean(false);
+    }
+
+    const json::Value *fuel = components->get("minecraft:fuel");
+    if (fuel != nullptr && fuel->isObject() && fuel->get("duration") != nullptr) {
+        definition.mHasFuel = true;
+        definition.mFuelDuration = duration(fuel->get("duration"));
+    }
+
+    const json::Value *compostable = components->get("minecraft:compostable");
+    if (compostable != nullptr && compostable->isObject() && compostable->get("composting_chance") != nullptr) {
+        definition.mHasCompostable = true;
+        definition.mCompostingChance = std::clamp(integer(compostable->get("composting_chance")), 0, 100);
+    }
+
+    const json::Value *useModifiers = components->get("minecraft:use_modifiers");
+    if (useModifiers != nullptr && useModifiers->isObject() && useModifiers->get("use_duration") != nullptr) {
+        definition.mHasUseModifiers = true;
+        definition.mUseDuration = duration(useModifiers->get("use_duration"));
+        if (useModifiers->get("movement_modifier") != nullptr)
+            definition.mMovementModifier = real(useModifiers->get("movement_modifier"), 1.0f);
+        if (useModifiers->get("emit_vibrations") != nullptr)
+            definition.mEmitVibrations = useModifiers->get("emit_vibrations")->boolean(true);
+        if (useModifiers->get("start_sound") != nullptr && useModifiers->get("start_sound")->isString())
+            definition.mUseStartSound = useModifiers->get("start_sound")->string();
+        if (useModifiers->get("start_using") != nullptr && useModifiers->get("start_using")->isString())
+            definition.mStartUsing = useModifiers->get("start_using")->string();
+    }
+
+    const json::Value *useAnimation = components->get("minecraft:use_animation");
+    if (useAnimation != nullptr && useAnimation->isObject())
+        useAnimation = useAnimation->get("value");
+    if (useAnimation != nullptr && useAnimation->isString())
+        definition.mUseAnimation = useAnimation->string();
+
+    const json::Value *wearable = components->get("minecraft:wearable");
+    if (wearable != nullptr && wearable->isObject() && wearable->get("slot") != nullptr
+        && wearable->get("slot")->isString()) {
+        definition.mHasWearable = true;
+        definition.mWearableSlotName = wearable->get("slot")->string();
+        definition.mWearableSlot = armorSlotOf(definition.mWearableSlotName);
+        if (wearable->get("protection") != nullptr)
+            definition.mProtection = integer(wearable->get("protection"));
+        if (wearable->get("hides_player_location") != nullptr)
+            definition.mHidesPlayerLocation = wearable->get("hides_player_location")->boolean(false);
+
+        // older items keep their protection in minecraft:armor; the game moves it into the wearable
+        const json::Value *armor = components->get("minecraft:armor");
+        if (wearable->get("protection") == nullptr && armor != nullptr && armor->isObject()
+            && armor->get("protection") != nullptr)
+            definition.mProtection = integer(armor->get("protection"));
+    }
+
+    const json::Value *durability = components->get("minecraft:durability");
+    if (durability != nullptr && durability->isObject() && durability->get("max_durability") != nullptr)
+        definition.mMaxDurability = integer(durability->get("max_durability"));
+
+    const json::Value *enchantable = components->get("minecraft:enchantable");
+    if (enchantable != nullptr && enchantable->isObject()) {
+        definition.mHasEnchantable = true;
+        if (enchantable->get("value") != nullptr)
+            definition.mEnchantableValue = integer(enchantable->get("value"));
+        if (enchantable->get("slot") != nullptr)
+            definition.mEnchantableSlot = StringUtil::toLowerCase(enchantable->get("slot")->string("none"));
+    }
+
+    // minecraft:repairable: each repair_items entry lists items (names or {"name": ...})
+    // and a repair_amount: number or Molang expression
+    const json::Value *repairable = components->get("minecraft:repairable");
+    const json::Value *repairItems = repairable != nullptr && repairable->isObject()
+                                             ? repairable->get("repair_items")
+                                             : nullptr;
+    if (repairItems != nullptr && repairItems->isArray()) {
+        for (const std::unique_ptr<json::Value> &entry: repairItems->mArray) {
+            if (!entry->isObject())
+                continue;
+
+            CustomRepairEntry repair;
+            const json::Value *itemList = entry->get("items");
+            if (itemList != nullptr && itemList->isArray()) {
+                for (const std::unique_ptr<json::Value> &item: itemList->mArray) {
+                    if (item->isString())
+                        repair.mItems.push_back(qualify(item->string()));
+                    else if (item->isObject() && item->get("name") != nullptr)
+                        repair.mItems.push_back(qualify(item->get("name")->string()));
+                }
+            }
+
+            const json::Value *amount = entry->get("repair_amount");
+            if (amount != nullptr && amount->isString())
+                repair.mAmount = amount->string();
+            else if (amount != nullptr && amount->isNumber())
+                repair.mAmount = std::to_string(amount->number(0.0));
+            else if (amount != nullptr && amount->isObject() && amount->get("expression") != nullptr)
+                repair.mAmount = amount->get("expression")->string();
+
+            if (!repair.mItems.empty() && !repair.mAmount.empty())
+                definition.mRepairItems.push_back(std::move(repair));
+        }
+    }
+
+    definition.mCustomComponents = readCustomComponents(*components);
+
+    const json::Value *digger = components->get("minecraft:digger");
+    if (digger != nullptr && digger->isObject()) {
+        definition.mHasDigger = true;
+        if (digger->get("use_efficiency") != nullptr)
+            definition.mDiggerUseEfficiency = digger->get("use_efficiency")->boolean(false);
+
+        const json::Value *destroySpeeds = digger->get("destroy_speeds");
+        if (destroySpeeds != nullptr && destroySpeeds->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: destroySpeeds->mArray) {
+                if (!entry->isObject())
+                    continue;
+
+                const json::Value *speedValue = entry->get("speed");
+                const int32_t speed = integer(speedValue);
+                if (speed <= 0)
+                    continue;
+
+                const json::Value *block = entry->get("block");
+                if (block == nullptr)
+                    continue;
+
+                if (block->isString()) {
+                    definition.mDiggerBlockSpeeds[qualify(block->string())] = speed;
+                } else if (block->isObject()) {
+                    if (speed > definition.mDiggerToolSpeed)
+                        definition.mDiggerToolSpeed = speed;
+                }
+            }
+        }
     }
 }
 

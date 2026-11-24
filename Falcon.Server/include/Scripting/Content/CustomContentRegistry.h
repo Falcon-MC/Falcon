@@ -15,6 +15,9 @@
 class BehaviorPackManager;
 class ItemDefinitionRegistry;
 class BlockDefinitionRegistry;
+namespace json {
+    struct Value;
+}
 
 // one minecraft:repairable repair_items entry: repairing items and repair_amount (Molang or number)
 struct CustomRepairEntry {
@@ -302,6 +305,8 @@ public:
     }
 
     const CustomItemDefinition *registerItem(const CustomItemDefinition &item, ItemDefinitionRegistry &items);
+
+    static void readItemComponents(CustomItemDefinition &definition, const json::Value *components);
 
     const CustomBlockDefinition *registerBlock(const CustomBlockDefinition &block, ItemDefinitionRegistry &items,
                                                BlockDefinitionRegistry &blocks);

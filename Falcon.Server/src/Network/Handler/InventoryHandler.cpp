@@ -1004,7 +1004,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
             const ItemStack released = releasedItem;
             const int32_t ticksLeft = owner.getItemUseTicksLeft(player);
             const CustomItemDefinition *pack =
-                    itemType == nullptr
+                    releasedItem.mDefinition->isComponentBased()
                             ? CustomContentRegistry::getInstance().findItem(releasedItem.mDefinition->getIdentifier())
                             : nullptr;
             if ((itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks))
