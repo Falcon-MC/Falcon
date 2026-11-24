@@ -131,6 +131,22 @@ namespace {
         host._sendAbilities(value);
     }
 
+    float playerScale(FalconPlayer *target) {
+        return player(target)->getScale();
+    }
+
+    int playerSetScale(FalconPlayer *target, float scale) {
+        if (scale <= 0.0f || !std::isfinite(scale * MovementPhysics::PLAYER_HEIGHT))
+            return 0;
+        ServerPlayer &value = *player(target);
+        if (value.getScale() != scale) {
+            value.setScale(scale);
+            if (owner().isTransportReady() && value.isSpawned())
+                owner()._sendEntityData(value);
+        }
+        return 1;
+    }
+
     const char *playerXuid(FalconPlayer *target) {
         return hold(player(target)->getXuid());
     }
@@ -215,6 +231,8 @@ void PluginServerApi::fillPlayers(FalconServerApi &api) {
     api.playerSetAllowFlight = &playerSetAllowFlight;
     api.playerIsFlying = &playerIsFlying;
     api.playerSetFlying = &playerSetFlying;
+    api.playerScale = &playerScale;
+    api.playerSetScale = &playerSetScale;
     api.serverSpawnSimulatedPlayer = &serverSpawnSimulatedPlayer;
     api.playerIsSimulated = &playerIsSimulated;
     api.playerRemoveSimulated = &playerRemoveSimulated;

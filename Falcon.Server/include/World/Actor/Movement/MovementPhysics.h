@@ -27,7 +27,7 @@ namespace MovementPhysics {
 
     bool collides(Level &level, const AxisAlignedBB &box, const Actor *actor = nullptr);
 
-    AxisAlignedBB boxAt(const Vector3f &feet, float height);
+    AxisAlignedBB boxAt(const Vector3f &feet, float height, float width = PLAYER_WIDTH);
 
     const Block *blockAt(Level &level, float x, float y, float z);
 

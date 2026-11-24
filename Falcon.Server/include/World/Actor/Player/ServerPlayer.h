@@ -32,6 +32,7 @@
 #include "World/Actor/Player/PlayerRaidState.h"
 #include "World/Actor/Player/SimulatedPlayerController.h"
 #include "World/Actor/Player/WardenSpawnTracker.h"
+#include "World/Actor/Movement/MovementConstants.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
@@ -348,6 +349,34 @@ public:
 
     bool isFlying() const {
         return mFlying;
+    }
+
+    float getScale() const {
+        return mScale.value_or(1.0f);
+    }
+
+    bool hasScaleOverride() const {
+        return mScale.has_value();
+    }
+
+    void setScale(float scale) {
+        mScale = scale;
+        mHasSimulatedBox = false;
+    }
+
+    float getBodyWidth() const {
+        return MovementPhysics::PLAYER_WIDTH * getScale();
+    }
+
+    float getBodyHeight() const;
+
+    float getEyeHeight() const {
+        return MovementPhysics::PLAYER_EYE_HEIGHT * getScale();
+    }
+
+    float getBaseOffset() const {
+        return (isSleeping() ? MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET : MovementPhysics::PLAYER_BASE_OFFSET)
+               * getScale();
     }
 
     bool canToggleFlight() const {
@@ -1411,6 +1440,7 @@ private:
     bool mIsOp = false;
     bool mFlying = false;
     std::optional<bool> mAllowFlight;
+    std::optional<float> mScale;
     InputState mInputState;
     ClientDevice mClientDevice;
     CameraState mCameraState;

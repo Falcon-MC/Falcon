@@ -303,6 +303,25 @@ namespace {
 
         const PlayerInventory &inventory = player.getInventory();
         Container *openContainer = player.getInventoryManager().getContainer();
+        std::string actionsJson;
+        size_t actionCount = 0;
+        if (request.mActions.size() > 1) {
+            for (const ItemStackRequestAction &action: request.mActions) {
+                const char *name = transactionName(action.mType);
+                if (name == nullptr)
+                    continue;
+                const bool destination = hasDestination(action.mType);
+                actionsJson += actionCount++ == 0 ? "[" : ",";
+                actionsJson += "[\"" + std::string(name) + "\",\""
+                               + containerName(action.mSource.mContainerName.mContainer) + "\","
+                               + std::to_string(action.mSource.mSlot) + ",\""
+                               + (destination ? containerName(action.mDestination.mContainerName.mContainer) : "")
+                               + "\"," + std::to_string(destination ? action.mDestination.mSlot : -1)
+                               + "," + std::to_string(action.mCount) + "]";
+            }
+            if (actionCount > 1)
+                actionsJson += "]";
+        }
 
         for (const ItemStackRequestAction &action: request.mActions) {
             const char *name = transactionName(action.mType);
@@ -325,6 +344,11 @@ namespace {
                 transactionEvent.mDestinationSlot = action.mDestination.mSlot;
             }
 
+            // The first in a group carries the complete request. Individual callbacks still receive each action.
+            if (actionCount > 1) {
+                transactionEvent.mCustomData = std::move(actionsJson);
+                actionsJson = "[]";
+            }
             plugins.dispatch(transactionEvent);
             if (transactionEvent.mCancelled)
                 return false;

@@ -152,9 +152,6 @@ namespace {
     const float LINGERING_CLOUD_RADIUS_PER_TICK = -0.005f;
     const float LINGERING_CLOUD_RADIUS_ON_USE = -0.5f;
     const float LINGERING_CLOUD_MIN_RADIUS = 1.5f;
-    const float PLAYER_WIDTH = 0.6f;
-    const float PLAYER_HEIGHT = 1.8f;
-    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PROJECTILE_HIT_GROW = 0.3f;
     // blocks per axis a projectile sweep reads through the actor index; wider reads every actor once
     const float SWEEP_INDEX_SPAN = 64.0f;
@@ -499,7 +496,7 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
 
     Vector3f spawnPosition = player.getPosition();
-    spawnPosition.y += PLAYER_EYE_HEIGHT + verticalOffset;
+    spawnPosition.y += player.getEyeHeight() + verticalOffset;
 
     ServerActor *projectile = spawnActor(getLevelFor(player), identifier, spawnPosition);
     if (projectile == nullptr)
@@ -785,9 +782,10 @@ bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level 
             continue;
 
         const Vector3f &feet = player.getPosition();
-        const float halfWidth = PLAYER_WIDTH * 0.5f + ARROW_PICKUP_REACH_XZ;
+        const float halfWidth = player.getBodyWidth() * 0.5f + ARROW_PICKUP_REACH_XZ;
         if (std::fabs(position.x - feet.x) > halfWidth || std::fabs(position.z - feet.z) > halfWidth
-            || position.y < feet.y - ARROW_PICKUP_REACH_Y || position.y > feet.y + PLAYER_HEIGHT + ARROW_PICKUP_REACH_Y)
+            || position.y < feet.y - ARROW_PICKUP_REACH_Y
+            || position.y > feet.y + player.getBodyHeight() + ARROW_PICKUP_REACH_Y)
             continue;
 
         // nothing to give outside creative: the arrow stays until it expires
@@ -2272,7 +2270,7 @@ void ServerNetworkHandler::tickActors() {
                 const Vector3f shooterPosition = shooter->getPosition();
                 const Vector3f actorPosition = actor.getPosition();
                 const float toX = shooterPosition.x - actorPosition.x;
-                const float toY = shooterPosition.y + PLAYER_EYE_HEIGHT - actorPosition.y;
+                const float toY = shooterPosition.y + shooter->getEyeHeight() - actorPosition.y;
                 const float toZ = shooterPosition.z - actorPosition.z;
                 const float toLength = std::sqrt(toX * toX + toY * toY + toZ * toZ);
 
@@ -2392,7 +2390,8 @@ void ServerNetworkHandler::tickActors() {
                         continue;
                     if (candidate.getUniqueId() == actor.getOwnerUniqueId() && actor.getLifetimeTicks() < 8)
                         continue;
-                    if (meetsSweep(projectileHitBox(candidate.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT)))
+                    if (meetsSweep(projectileHitBox(candidate.getPosition(), candidate.getBodyWidth(),
+                                                    candidate.getBodyHeight())))
                         nearPlayers.push_back(&candidate);
                 }
 
@@ -2474,8 +2473,8 @@ void ServerNetworkHandler::tickActors() {
 
                 int64_t hitSample = 0;
                 for (ServerPlayer *candidate: nearPlayers) {
-                    const int64_t sample = firstSample(projectileHitBox(candidate->getPosition(), PLAYER_WIDTH,
-                                                                       PLAYER_HEIGHT));
+                    const int64_t sample = firstSample(projectileHitBox(candidate->getPosition(), candidate->getBodyWidth(),
+                                                                       candidate->getBodyHeight()));
                     if (sample != 0 && (hitSample == 0 || sample < hitSample)) {
                         hitSample = sample;
                         hitPlayer = candidate;

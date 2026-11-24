@@ -49,7 +49,7 @@ namespace {
         return LiquidBlocksFetch::at(
                 level, feet,
                 flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling),
-                sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT);
+                sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT, player.getScale());
     }
 
     void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
@@ -187,13 +187,14 @@ namespace {
         }
     }
 
-    bool findSupportBlock(Level &level, const Vector3f &feetPosition, BlockState &support) {
+    bool findSupportBlock(Level &level, const Vector3f &feetPosition, float halfWidth, BlockState &support) {
         const int32_t lowestY = (int32_t) std::floor(feetPosition.y - GROUND_PROBE_DEPTH);
         const int32_t highestY = (int32_t) std::floor(feetPosition.y);
-        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH + AABB_EPSILON);
-        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH - AABB_EPSILON);
-        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH + AABB_EPSILON);
-        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH - AABB_EPSILON);
+        const float inset = std::min(halfWidth, AABB_EPSILON);
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - halfWidth + inset);
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + halfWidth - inset);
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - halfWidth + inset);
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + halfWidth - inset);
 
         for (int32_t y = highestY; y >= lowestY; --y) {
             BlockState firstSolid;
@@ -221,11 +222,11 @@ namespace {
     }
 
     // every column the player's box touches is in memory
-    bool columnsResident(const Level &level, const Vector3f &feetPosition) {
-        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH) >> 4;
-        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH) >> 4;
-        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH) >> 4;
-        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH) >> 4;
+    bool columnsResident(const Level &level, const Vector3f &feetPosition, float halfWidth) {
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - halfWidth) >> 4;
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + halfWidth) >> 4;
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - halfWidth) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + halfWidth) >> 4;
 
         for (int32_t chunkX = minX; chunkX <= maxX; ++chunkX) {
             for (int32_t chunkZ = minZ; chunkZ <= maxZ; ++chunkZ) {
@@ -252,11 +253,13 @@ namespace {
 }
 
 bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition, const Actor *actor) {
-    const float shrink = 0.01f;
-    const float minX = feetPosition.x - PLAYER_HALF_WIDTH + shrink;
-    const float maxX = feetPosition.x + PLAYER_HALF_WIDTH - shrink;
-    const float minZ = feetPosition.z - PLAYER_HALF_WIDTH + shrink;
-    const float maxZ = feetPosition.z + PLAYER_HALF_WIDTH - shrink;
+    const auto *player = dynamic_cast<const ServerPlayer *>(actor);
+    const float halfWidth = player == nullptr ? PLAYER_HALF_WIDTH : player->getBodyWidth() * 0.5f;
+    const float shrink = std::min(0.01f, halfWidth);
+    const float minX = feetPosition.x - halfWidth + shrink;
+    const float maxX = feetPosition.x + halfWidth - shrink;
+    const float minZ = feetPosition.z - halfWidth + shrink;
+    const float maxZ = feetPosition.z + halfWidth - shrink;
 
     const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ, maxX, feetPosition.y, maxZ);
     for (const AxisAlignedBB &shape: level.getCollisionBoxes(support, actor)) {
@@ -295,7 +298,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     Level &level = owner.getLevelFor(player);
     // an unloaded column is unknown, not air: the probes below would generate it on the tick thread
-    if (!columnsResident(level, feetPosition))
+    if (!columnsResident(level, feetPosition, player.getBodyWidth() * 0.5f))
         return;
 
     const bool wasOnGround = player.isOnGround();
@@ -321,7 +324,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     if (onGround) {
         BlockState support;
-        const bool hasSupport = findSupportBlock(level, feetPosition, support);
+        const bool hasSupport = findSupportBlock(level, feetPosition, player.getBodyWidth() * 0.5f, support);
         const Block supportBlock = hasSupport ? Block(support) : Block();
 
         if (!wasOnGround) {
