@@ -1893,8 +1893,13 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const ClientToSer
     LoginHandler::handleClientToServerHandshake(*this, id, *player);
 }
 
+void ServerNetworkHandler::onEncryptionEnabled(const NetworkIdentifier &id, bool usesAccountKey) {
+    if (ServerPlayer *player = _getPlayer(id))
+        LoginHandler::encryptionEnabled(*player, usesAccountKey);
+}
+
 void ServerNetworkHandler::onConnectionFailed(const NetworkIdentifier &id) {
-    LOG_WARN(LogAreaID::Network, "%s sent a batch with an invalid encryption checksum", id.getAddress().c_str());
+    LOG_WARN(LogAreaID::Network, "Closing %s after a packet transport failure", id.getAddress().c_str());
     _disconnect(id, DisconnectReason::BadPacket, "disconnectionScreen.unexpectedPacket");
 }
 

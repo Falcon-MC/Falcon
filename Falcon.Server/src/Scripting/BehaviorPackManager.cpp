@@ -3,6 +3,7 @@
 #include "Core/Archive/ZipArchive.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Core/Json/Json.h"
+#include "Core/Text/StringUtil.h"
 #include "Resources/PackDependencies.h"
 #include "Server/ServerPaths.h"
 
@@ -10,6 +11,8 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace {
     std::string readFile(const std::filesystem::path &path) {
@@ -20,47 +23,6 @@ namespace {
         std::ostringstream buffer;
         buffer << file.rdbuf();
         return buffer.str();
-    }
-
-    std::string findString(const std::string &json, const std::string &key, size_t from = 0) {
-        const std::string pattern = "\"" + key + "\"";
-        size_t position = json.find(pattern, from);
-        if (position == std::string::npos)
-            return std::string();
-
-        position = json.find(':', position + pattern.size());
-        if (position == std::string::npos)
-            return std::string();
-
-        position = json.find('"', position);
-        if (position == std::string::npos)
-            return std::string();
-
-        const size_t end = json.find('"', position + 1);
-        if (end == std::string::npos)
-            return std::string();
-
-        return json.substr(position + 1, end - position - 1);
-    }
-
-    size_t findScriptModule(const std::string &json) {
-        size_t search = 0;
-        for (;;) {
-            const size_t typePos = json.find("\"type\"", search);
-            if (typePos == std::string::npos)
-                return std::string::npos;
-
-            const size_t valueStart = json.find('"', json.find(':', typePos) + 1);
-            const size_t valueEnd = json.find('"', valueStart + 1);
-            if (valueStart == std::string::npos || valueEnd == std::string::npos)
-                return std::string::npos;
-
-            const std::string type = json.substr(valueStart + 1, valueEnd - valueStart - 1);
-            if (type == "script")
-                return typePos;
-
-            search = valueEnd + 1;
-        }
     }
 
     // manifests may carry comments: the game reads them leniently
@@ -115,77 +77,76 @@ namespace {
         }
         return text;
     }
-
-    void readScriptModules(const std::string &manifest, BehaviorPack &out) {
-        const std::unique_ptr<json::Value> root = json::parse(stripComments(manifest));
-        if (root == nullptr || !root->isObject())
-            return;
-
-        const json::Value *modules = root->get("modules");
-        if (modules != nullptr && modules->isArray()) {
-            for (const std::unique_ptr<json::Value> &module: modules->mArray) {
-                if (module->isObject() && module->get("type") != nullptr && module->get("type")->string() == "script"
-                    && module->get("uuid") != nullptr) {
-                    out.mScriptModuleUuid = module->get("uuid")->string();
-                    out.mScriptModuleVersion = versionText(module->get("version"));
-                }
-            }
-        }
-
-        const json::Value *settings = root->get("settings");
-        if (settings != nullptr && settings->isArray()) {
-            for (const std::unique_ptr<json::Value> &entry: settings->mArray) {
-                const json::Value *name = entry->isObject() ? entry->get("name") : nullptr;
-                const json::Value *value = entry->isObject() ? entry->get("default") : nullptr;
-                // labels carry no name and no value
-                if (name == nullptr || !name->isString() || value == nullptr)
-                    continue;
-
-                PackSetting setting;
-                setting.mName = name->string();
-                if (value->mType == json::Value::Type::Boolean) {
-                    setting.mType = PackSetting::Type::Boolean;
-                    setting.mBoolean = value->mBoolean;
-                } else if (value->isNumber()) {
-                    setting.mType = PackSetting::Type::Number;
-                    setting.mNumber = value->mNumber;
-                } else if (value->isString()) {
-                    setting.mType = PackSetting::Type::String;
-                    setting.mString = value->mString;
-                } else {
-                    continue;
-                }
-                out.mSettings.push_back(setting);
-            }
-        }
-
-        const json::Value *dependencies = root->get("dependencies");
-        if (dependencies == nullptr || !dependencies->isArray())
-            return;
-
-        for (const std::unique_ptr<json::Value> &dependency: dependencies->mArray) {
-            if (!dependency->isObject() || dependency->get("module_name") == nullptr)
-                continue;
-
-            ScriptModuleDependency module;
-            module.mName = dependency->get("module_name")->string();
-            module.mVersion = versionText(dependency->get("version"));
-            out.mScriptModules.push_back(module);
-        }
-    }
 }
 
 bool BehaviorPackManager::_readManifest(const std::string &manifest, BehaviorPack &out) {
-    out.mName = findString(manifest, "name");
-    out.mUuid = findString(manifest, "uuid");
+    const std::unique_ptr<json::Value> root = json::parse(stripComments(manifest));
+    const json::Value *header = root && root->isObject() ? root->get("header") : nullptr;
+    if (!header || !header->isObject() || !header->get("uuid"))
+        return false;
+    out.mUuid = header->get("uuid")->string();
+    if (out.mUuid.empty())
+        return false;
+    if (const auto *name = header->get("name"))
+        out.mName = name->string();
 
-    const size_t scriptModule = findScriptModule(manifest);
-    if (scriptModule != std::string::npos)
-        out.mScriptEntry = findString(manifest, "entry", scriptModule);
+    const json::Value *modules = root->get("modules");
+    if (modules && modules->isArray()) {
+        for (const auto &module: modules->mArray) {
+            if (!module->isObject() || !module->get("type") || module->get("type")->string() != "script")
+                continue;
+            if (out.hasScript() || !module->get("uuid") || !module->get("entry"))
+                return false;
+            out.mScriptModuleUuid = module->get("uuid")->string();
+            out.mScriptEntry = module->get("entry")->string();
+            if (out.mScriptModuleUuid.empty() || out.mScriptEntry.empty())
+                return false;
+            out.mScriptModuleVersion = versionText(module->get("version"));
+        }
+    }
 
-    readScriptModules(manifest, out);
+    const json::Value *settings = root->get("settings");
+    if (settings != nullptr && settings->isArray()) {
+        for (const std::unique_ptr<json::Value> &entry: settings->mArray) {
+            const json::Value *name = entry->isObject() ? entry->get("name") : nullptr;
+            const json::Value *value = entry->isObject() ? entry->get("default") : nullptr;
+            // labels carry no name and no value
+            if (name == nullptr || !name->isString() || value == nullptr)
+                continue;
+
+            PackSetting setting;
+            setting.mName = name->string();
+            if (value->mType == json::Value::Type::Boolean) {
+                setting.mType = PackSetting::Type::Boolean;
+                setting.mBoolean = value->mBoolean;
+            } else if (value->isNumber()) {
+                setting.mType = PackSetting::Type::Number;
+                setting.mNumber = value->mNumber;
+            } else if (value->isString()) {
+                setting.mType = PackSetting::Type::String;
+                setting.mString = value->mString;
+            } else {
+                continue;
+            }
+            out.mSettings.push_back(setting);
+        }
+    }
+
     out.mDependencyUuids = collectPackDependencyUuids(manifest);
-    return !out.mUuid.empty();
+    const json::Value *dependencies = root->get("dependencies");
+    if (dependencies == nullptr || !dependencies->isArray())
+        return true;
+
+    for (const std::unique_ptr<json::Value> &dependency: dependencies->mArray) {
+        if (!dependency->isObject() || dependency->get("module_name") == nullptr)
+            continue;
+
+        ScriptModuleDependency module;
+        module.mName = dependency->get("module_name")->string();
+        module.mVersion = versionText(dependency->get("version"));
+        out.mScriptModules.push_back(module);
+    }
+    return true;
 }
 
 void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory) {
@@ -207,15 +168,7 @@ void BehaviorPackManager::_addPackFromManifest(const std::string &packDirectory)
     if (!pack.hasScript() && !hasContent)
         return;
 
-    for (const BehaviorPack &existing: mPacks) {
-        if (existing.mUuid == pack.mUuid) {
-            LOG_WARN(LogAreaID::Resource, "Skipping duplicate behavior pack (uuid %s already loaded)",
-                     pack.mUuid.c_str());
-            return;
-        }
-    }
-
-    mPacks.push_back(pack);
+    mPacks.push_back(std::move(pack));
 }
 
 std::vector<std::string> BehaviorPackManager::getLoadedUuids() const {
@@ -300,6 +253,11 @@ void BehaviorPackManager::_scanContainer(const std::string &directory, const std
         if (extension != ".mcpack" && extension != ".mcaddon" && extension != ".zip")
             continue;
 
+        if (entry.file_size(error) > ZipArchive::MAX_ARCHIVE_BYTES || error) {
+            LOG_WARN(LogAreaID::Resource, "Behavior pack archive %s exceeds the read budget or is unreadable",
+                     entry.path().filename().string().c_str());
+            continue;
+        }
         const std::string bytes = readFile(entry.path());
         if (!ZipArchive::isZip(bytes)) {
             LOG_WARN(LogAreaID::Resource, "Behavior pack archive %s is not a valid zip",
@@ -307,7 +265,7 @@ void BehaviorPackManager::_scanContainer(const std::string &directory, const std
             continue;
         }
 
-        const std::filesystem::path extracted = cacheRoot / entry.path().stem();
+        const std::filesystem::path extracted = cacheRoot / entry.path().filename();
         if (!ZipArchive::extractToDirectory(bytes, extracted.string())) {
             LOG_WARN(LogAreaID::Resource, "Failed to extract behavior pack archive %s",
                      entry.path().filename().string().c_str());
@@ -329,8 +287,29 @@ void BehaviorPackManager::discover(const std::string &directory) {
     const std::filesystem::path cacheRoot = root / ".cache";
     std::filesystem::remove_all(cacheRoot, error);
 
-    _scanContainer(directory, cacheRoot.string());
+    _scanContainer(directory, (cacheRoot / "behavior").string());
 
-    const std::filesystem::path bundledCache = cacheRoot / "_bundled";
+    const std::filesystem::path bundledCache = cacheRoot / "bundled";
     _scanContainer(ServerPaths::file("resource_packs"), bundledCache.string());
+
+    // a module UUID selects server-side permissions and secrets: never let directory order choose its owner
+    std::unordered_map<std::string, size_t> modules;
+    for (const BehaviorPack &pack: mPacks) {
+        if (pack.hasScript())
+            ++modules[StringUtil::toLowerCase(pack.mScriptModuleUuid)];
+    }
+    std::unordered_set<std::string> packIds;
+    std::erase_if(mPacks, [&](const BehaviorPack &pack) {
+        if (pack.hasScript() && modules.at(StringUtil::toLowerCase(pack.mScriptModuleUuid)) > 1) {
+            LOG_WARN(LogAreaID::Resource, "Skipping %s: script module UUID %s has multiple owners",
+                     pack.mPath.c_str(), pack.mScriptModuleUuid.c_str());
+            return true;
+        }
+        if (!packIds.insert(StringUtil::toLowerCase(pack.mUuid)).second) {
+            LOG_WARN(LogAreaID::Resource, "Skipping duplicate behavior pack (uuid %s already loaded)",
+                     pack.mUuid.c_str());
+            return true;
+        }
+        return false;
+    });
 }

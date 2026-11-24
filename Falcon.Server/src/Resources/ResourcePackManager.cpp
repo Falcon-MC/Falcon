@@ -12,7 +12,6 @@
 #include <filesystem>
 #include <fstream>
 
-#include <zlib.h>
 #include <openssl/sha.h>
 
 namespace {
@@ -24,26 +23,6 @@ namespace {
     uint32_t readU32(const std::string &data, size_t offset) {
         return (uint32_t) ((unsigned char) data[offset] | ((unsigned char) data[offset + 1] << 8)
                            | ((unsigned char) data[offset + 2] << 16) | ((unsigned char) data[offset + 3] << 24));
-    }
-
-    bool inflateRaw(const std::string &input, size_t uncompressedSize, std::string &out) {
-        out.resize(uncompressedSize);
-
-        z_stream stream;
-        std::memset(&stream, 0, sizeof(stream));
-
-        if (inflateInit2(&stream, -MAX_WBITS) != Z_OK)
-            return false;
-
-        stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(input.data()));
-        stream.avail_in = (uInt) input.size();
-        stream.next_out = reinterpret_cast<Bytef *>(&out[0]);
-        stream.avail_out = (uInt) uncompressedSize;
-
-        const int result = inflate(&stream, Z_FINISH);
-        inflateEnd(&stream);
-
-        return result == Z_STREAM_END;
     }
 
     std::string findJsonString(const std::string &json, const std::string &key) {
@@ -128,13 +107,13 @@ namespace {
 
 }
 
-bool ResourcePackManager::_readWholeFile(const std::string &path, std::string &out) {
+bool ResourcePackManager::_readWholeFile(const std::string &path, std::string &out, size_t maxBytes) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
         return false;
 
     const std::streamsize size = file.tellg();
-    if (size <= 0)
+    if (size <= 0 || (uint64_t) size > maxBytes)
         return false;
 
     out.resize((size_t) size);
@@ -199,17 +178,8 @@ bool ResourcePackManager::_extractZipEntry(const std::string &zip, const std::st
         if (dataStart > eocd || compressedSize > eocd - dataStart)
             return false;
 
-        const std::string raw = zip.substr(dataStart, compressedSize);
-
-        if (method == 0) {
-            out = raw;
-            return true;
-        }
-
-        if (method == 8)
-            return inflateRaw(raw, uncompressedSize, out);
-
-        return false;
+        return ZipArchive::readEntry(std::string_view(zip.data() + dataStart, compressedSize), method,
+                                     uncompressedSize, maxSize, out);
     }
 
     return false;
@@ -281,7 +251,7 @@ bool ResourcePackManager::_loadPackBytes(std::string data, const std::string &la
 
 bool ResourcePackManager::_loadPackFile(const std::string &path, const std::string &fileName) {
     std::string data;
-    if (!_readWholeFile(path, data)) {
+    if (!_readWholeFile(path, data, ZipArchive::MAX_ARCHIVE_BYTES)) {
         LOG_WARN(LogAreaID::Resource, "Could not read resource pack %s", fileName.c_str());
         return false;
     }
@@ -341,7 +311,7 @@ void ResourcePackManager::loadBundledAddonsFrom(const std::string &directory) {
             continue;
 
         std::string data;
-        if (_readWholeFile(entry.path().string(), data))
+        if (_readWholeFile(entry.path().string(), data, ZipArchive::MAX_ARCHIVE_BYTES))
             _loadAddon(data);
     }
 }
@@ -409,7 +379,7 @@ void ResourcePackManager::loadFromDirectory(const std::string &directory) {
             _loadPackFile(entry.path().string(), entry.path().filename().string());
         } else if (extension == ".mcaddon") {
             std::string data;
-            if (_readWholeFile(entry.path().string(), data))
+            if (_readWholeFile(entry.path().string(), data, ZipArchive::MAX_ARCHIVE_BYTES))
                 _loadAddon(data);
         }
     }

@@ -144,6 +144,14 @@ namespace {
         std::vector<ZipEntry> entries;
         require(ZipArchive::listEntries(zip, entries) && entries.size() == 2 && entries[1].mName == "ui/a.json",
                 "read back");
+        const std::string_view greeting("\xcb\x48\xcd\xc9\xc9\x07\x00", 7);
+        std::string decoded;
+        require(ZipArchive::readEntry(greeting, 8, 5, 5, decoded) && decoded == "hello", "deflated entry");
+        require(!ZipArchive::readEntry(greeting, 8, 6, 6, decoded), "decoded size must match the entry");
+        require(!ZipArchive::readEntry(greeting, 8, 5, 4, decoded), "entry exceeds its budget");
+        std::vector<ZipEntry> limited;
+        require(!ZipArchive::listEntries(zip, limited, 3) && limited.empty(), "archive budget is atomic");
+        require(ZipArchive::listEntries(zip, limited, 4) && limited.size() == 2, "exact archive budget");
         require(!BrPak::write({{"a", "1"}, {"a", "2"}}, 0, 0, zip), "duplicate names refused");
         require(!BrPak::isValidEntryName("../x") && !BrPak::isValidEntryName("/x") && !BrPak::isValidEntryName("a\\b"),
                 "unsafe names refused");
