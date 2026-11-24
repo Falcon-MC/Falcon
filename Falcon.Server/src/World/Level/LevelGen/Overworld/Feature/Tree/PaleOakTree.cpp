@@ -5,6 +5,7 @@
 #include "World/Level/LevelGen/Feature/Tree/TreeBlockFace.h"
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <cmath>
 
@@ -33,7 +34,7 @@ bool PaleOakTree::generate(BlockManager &manager, IRandom &random, int32_t x, in
         return false;
 
     const std::string ground = manager.getBlockAt(x, y - 1, z).mName;
-    if (ground != "minecraft:grass_block" && ground != "minecraft:dirt")
+    if (ground != BlockNames::GRASS_BLOCK && ground != BlockNames::DIRT)
         return false;
 
     if (!_placeTreeOfHeight(manager, x, y, z, i))
@@ -167,7 +168,7 @@ void PaleOakTree::_placeLogAt(BlockManager &manager, int32_t x, int32_t y, int32
 }
 
 void PaleOakTree::_placeLeafAt(BlockManager &manager, int32_t x, int32_t y, int32_t z) {
-    if (manager.getBlockAt(x, y, z).mName != "minecraft:air")
+    if (manager.getBlockAt(x, y, z).mName != BlockNames::AIR)
         return;
 
     manager.setBlockStateAt(x, y, z, VanillaBlocks::PALE_OAK_LEAVES().toBlockState());
@@ -178,7 +179,7 @@ void PaleOakTree::_placeLeafAt(BlockManager &manager, int32_t x, int32_t y, int3
 
     const int32_t depth = mossRandom.nextInt(1, 6);
     for (int32_t i = 1; i < depth; i++) {
-        if (manager.getBlockAt(x, y - i, z).mName != "minecraft:air")
+        if (manager.getBlockAt(x, y - i, z).mName != BlockNames::AIR)
             break;
 
         if (i == depth - 1)

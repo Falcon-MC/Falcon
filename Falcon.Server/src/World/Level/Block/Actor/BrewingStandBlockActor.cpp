@@ -11,7 +11,10 @@
 #include "Protocol/Packets/ContainerSetDataPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
+#include "Core/Math/VectorMath.h"
+#include "Falcon/Plugin/PluginManager.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -40,9 +43,7 @@ namespace {
                || identifier == "minecraft:lingering_potion";
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 }
 
 Tag BrewingStandBlockActor::saveNbt() const {
@@ -55,17 +56,17 @@ Tag BrewingStandBlockActor::saveNbt() const {
 
 void BrewingStandBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
     ContainerBlockActor::loadNbt(data, context);
-    const int brewTime = data.contains(TAG_COOK_TIME) ? data.getShort(TAG_COOK_TIME) : MAX_BREW_TIME;
-    mBrewTime = brewTime > MAX_BREW_TIME ? MAX_BREW_TIME : brewTime;
+    mBrewTime = std::clamp((int) data.getShort(TAG_COOK_TIME), 0, MAX_BREW_TIME);
     mFuelAmount = data.getShort(TAG_FUEL_AMOUNT);
     mFuelTotal = data.getShort(TAG_FUEL_TOTAL);
+    mBrewingIngredient = mBrewTime > 0 ? mInventory.getContainerItem(SLOT_INGREDIENT).mDefinition : nullptr;
 }
 
 Tag BrewingStandBlockActor::getSpawnCompound() const {
     Tag data = BlockActor::getSpawnCompound();
     data.putShort(TAG_FUEL_TOTAL, (int16_t) mFuelTotal);
     data.putShort(TAG_FUEL_AMOUNT, (int16_t) mFuelAmount);
-    if (mBrewTime < MAX_BREW_TIME)
+    if (mBrewTime > 0)
         data.putShort(TAG_COOK_TIME, (int16_t) mBrewTime);
     return data;
 }
@@ -85,19 +86,43 @@ bool BrewingStandBlockActor::tick(ServerNetworkHandler &owner) {
     _updateSlotStates(owner);
     _restockFuel(owner);
 
-    if (mFuelAmount <= 0 || !_hasMix()) {
-        if (mBrewTime != MAX_BREW_TIME)
-            _stopBrewing(owner);
+    const bool canBrew = mFuelAmount > 0 && _hasMix();
+    const auto &ingredientType = mInventory.getContainerItem(SLOT_INGREDIENT).mDefinition;
+    if (mBrewTime == 0) {
+        if (canBrew) {
+            mBrewTime = MAX_BREW_TIME;
+            mBrewingIngredient = ingredientType;
+            _sendProperty(owner, PROPERTY_BREW_TIME, mBrewTime);
+        }
         return true;
     }
 
-    if (mBrewTime == MAX_BREW_TIME)
-        _sendProperty(owner, PROPERTY_BREW_TIME, mBrewTime);
+    --mBrewTime;
+    // the completing tick uses the current recipe; ingredient changes cancel only while time remains
+    if (!canBrew || (mBrewTime > 0 && mBrewingIngredient != ingredientType)) {
+        _stopBrewing(owner);
+        return true;
+    }
 
-    if (--mBrewTime > 0) {
+    if (mBrewTime > 0) {
         if (mBrewTime % BREW_TIME_SYNC_INTERVAL == 0)
             _sendProperty(owner, PROPERTY_BREW_TIME, mBrewTime);
         return true;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREW)) {
+        ItemStack ingredient = mInventory.getContainerItem(SLOT_INGREDIENT);
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BREW;
+        event.mCancellable = true;
+        event.mLevel = mLevel;
+        event.mBlockPosition = mPosition;
+        event.mItem = &ingredient;
+        plugins->dispatch(event);
+        if (event.mCancelled) {
+            _stopBrewing(owner);
+            return true;
+        }
     }
 
     _brew(owner);
@@ -126,16 +151,33 @@ void BrewingStandBlockActor::_restockFuel(ServerNetworkHandler &owner) {
         return;
 
     ItemStack fuel = mInventory.getContainerItem(SLOT_FUEL);
-    if (identifierOf(fuel) != BLAZE_POWDER || fuel.mCount <= 0)
+    const bool validFuel = identifierOf(fuel) == BLAZE_POWDER && fuel.mCount > 0;
+    int fuelTime = FUEL_PER_BLAZE_POWDER;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREWING_FUEL_USE);
+        plugins != nullptr && _hasMix()) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BREWING_FUEL_USE;
+        event.mCancellable = true;
+        event.mCancelled = !validFuel;
+        event.mLevel = mLevel;
+        event.mBlockPosition = mPosition;
+        event.mAmount = fuelTime;
+        event.mItem = &fuel;
+        plugins->dispatch(event);
+        if (event.mCancelled || !(event.mAmount > 0.0))
+            return;
+        fuelTime = (int) std::min(event.mAmount, 32767.0);
+    } else if (!validFuel) {
         return;
+    }
 
     --fuel.mCount;
     if (fuel.mCount <= 0)
         fuel = ItemStack::air();
     mInventory.setContainerItem(SLOT_FUEL, std::move(fuel));
 
-    mFuelAmount = FUEL_PER_BLAZE_POWDER;
-    mFuelTotal = FUEL_PER_BLAZE_POWDER;
+    mFuelAmount = fuelTime;
+    mFuelTotal = fuelTime;
     _sendProperty(owner, PROPERTY_FUEL_AMOUNT, mFuelAmount);
     _sendProperty(owner, PROPERTY_FUEL_TOTAL, mFuelTotal);
     owner.refreshContainerViewers(mPosition, nullptr);
@@ -147,7 +189,9 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
     if (reagentId.empty())
         return;
 
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BREW_ITEM);
     bool mixed = false;
+    bool tried = false;
     for (int slot = FIRST_POTION_SLOT; slot < FIRST_POTION_SLOT + POTION_SLOTS; ++slot) {
         const ItemStack &potion = mInventory.getContainerItem(slot);
         const std::string potionId = identifierOf(potion);
@@ -167,11 +211,26 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
         result.mDefinition = std::move(output);
         if (mix->mOutputMeta >= 0)
             result.mDamage = mix->mOutputMeta;
+        tried = true;
+        if (plugins != nullptr) {
+            ItemStack input = potion;
+            PluginEvent event;
+            event.mType = FALCON_EVENT_BREW_ITEM;
+            event.mCancellable = true;
+            event.mLevel = mLevel;
+            event.mBlockPosition = mPosition;
+            event.mSourceSlot = slot;
+            event.mItem = &input;
+            event.mResult = &result;
+            plugins->dispatch(event);
+            if (event.mCancelled)
+                continue;
+        }
         mInventory.setContainerItem(slot, std::move(result));
         mixed = true;
     }
 
-    if (!mixed)
+    if (!tried)
         return;
 
     --ingredient.mCount;
@@ -183,13 +242,14 @@ void BrewingStandBlockActor::_brew(ServerNetworkHandler &owner) {
     _sendProperty(owner, PROPERTY_FUEL_AMOUNT, mFuelAmount);
     _sendProperty(owner, PROPERTY_FUEL_TOTAL, mFuelTotal);
     owner.refreshContainerViewers(mPosition, nullptr);
-    owner.playLevelSound(*mLevel, LevelSoundEvent::POTION_BREWED, centerOf(mPosition));
+    if (mixed)
+        owner.playLevelSound(*mLevel, LevelSoundEvent::POTION_BREWED, centerOf(mPosition));
 }
 
 void BrewingStandBlockActor::_stopBrewing(ServerNetworkHandler &owner) {
     mBrewTime = 0;
+    mBrewingIngredient.reset();
     _sendProperty(owner, PROPERTY_BREW_TIME, mBrewTime);
-    mBrewTime = MAX_BREW_TIME;
 }
 
 void BrewingStandBlockActor::_sendProperty(ServerNetworkHandler &owner, int property, int value) const {

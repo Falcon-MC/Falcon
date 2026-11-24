@@ -11,7 +11,7 @@ public:
 
 class DensityChunkCache {
 public:
-    template<typename T>
+    template <typename T>
     T *getOrCreate(const void *marker) {
         auto found = mStates.find(marker);
         if (found != mStates.end())

@@ -20,6 +20,16 @@ namespace {
 }
 
 namespace FeatureMath {
+    float sineAt(float scaled) {
+        static const std::vector<float> table = [] {
+            std::vector<float> values(65536);
+            for (int32_t i = 0; i < 65536; i++)
+                values[(size_t) i] = std::sin(static_cast<float>(i) / 10430.378f);
+            return values;
+        }();
+        return table[static_cast<uint16_t>(static_cast<int32_t>(scaled))];
+    }
+
     float sinLookup(float value) {
         return sineTable()[(size_t) (((int32_t) (value * 10430.378f)) & 0xFFFF)];
     }

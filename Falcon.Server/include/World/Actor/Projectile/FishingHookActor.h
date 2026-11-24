@@ -11,20 +11,26 @@ public:
 
     FishingHookActor(uint64_t runtimeId, const std::string &identifier);
 
-    ActorSize getSize() const override { return ActorSize{0.15f, 0.15f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.15f, 0.15f};
+    }
 
     void tick(ServerNetworkHandler &owner) override;
 
-    bool isExpired() const override { return mExpired; }
+    bool isExpired() const override {
+        return mExpired;
+    }
 
-    bool shouldSave() const override { return false; }
+    bool shouldSave() const override {
+        return false;
+    }
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 
-    /** Gives the motion of a freshly cast hook, aimed along the angler's view. */
+    // aimed along the angler's view
     void cast(ServerNetworkHandler &owner, ServerPlayer &angler);
 
-    /** Reels the hook in, removes it and returns the durability the rod loses. */
+    // returns the durability the rod loses
     int32_t retrieve(ServerNetworkHandler &owner, ServerPlayer &angler);
 
     bool isOwnedBy(const ServerPlayer &player) const;
@@ -45,6 +51,9 @@ private:
     int32_t _catchRate(Level &level) const;
 
     void _startLuring(ServerNetworkHandler &owner, const ServerPlayer &angler);
+
+    // FALCON_EVENT_PLAYER_FISH: false when a plugin keeps the catch in the water
+    bool _allowReel(ServerPlayer &angler, Actor *hooked);
 
     void _catch(ServerNetworkHandler &owner, ServerPlayer &angler);
 

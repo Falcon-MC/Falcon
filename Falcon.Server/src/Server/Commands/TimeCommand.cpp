@@ -1,6 +1,7 @@
 #include "Server/Commands/TimeCommand.h"
 
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Level.h"
 
 #include <cctype>
 #include <cerrno>
@@ -8,8 +9,7 @@
 #include <cstdlib>
 
 TimeCommand::TimeCommand(ServerNetworkHandler &handler)
-        : Command("time", "commands.time.description", "/time <add|set|query|start|stop> ..."),
-          mHandler(handler) {}
+        : Command("time", "commands.time.description", "/time <add|set|query|start|stop> ..."), mHandler(handler) {}
 
 bool TimeCommand::parseInteger(const std::string &value, int64_t &out) {
     if (value.empty())
@@ -78,9 +78,9 @@ std::vector<CommandOverloadData> TimeCommand::getOverloads() const {
     setAmount.mParameters = {enumParameter("mode", "TimeModeSet", {"set"}), amount};
 
     CommandOverloadData setTime;
-    setTime.mParameters = {enumParameter("mode", "TimeModeSet", {"set"}),
-                           enumParameter("time", "TimeSpec",
-                                         {"day", "night", "midnight", "noon", "sunrise", "sunset"})};
+    setTime.mParameters = {
+            enumParameter("mode", "TimeModeSet", {"set"}),
+            enumParameter("time", "TimeSpec", {"day", "night", "midnight", "noon", "sunrise", "sunset"})};
 
     CommandOverloadData query;
     query.mParameters = {enumParameter("mode", "TimeModeQuery", {"query"}),
@@ -148,7 +148,7 @@ bool TimeCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         else if (query == "gametime")
             sender.sendTranslation("commands.time.query.gametime", {std::to_string(level.getTime())});
         else if (query == "day")
-            sender.sendTranslation("commands.time.query.day", {std::to_string(level.getTime() / 24000)});
+            sender.sendTranslation("commands.time.query.day", {std::to_string(level.getTime() / Level::TICKS_PER_DAY)});
         else {
             sender.sendTranslation("commands.generic.syntax", {"/time query ", query, ""});
             return false;

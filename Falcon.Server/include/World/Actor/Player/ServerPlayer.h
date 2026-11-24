@@ -1,6 +1,11 @@
 #pragma once
 
+#include "Core/Math/AxisAlignedBB.h"
+
+#include <cmath>
+
 #include "World/Actor/Actor.h"
+#include "World/Actor/Movement/BlockCollisionEngine.h"
 #include "World/Actor/Movement/ServerPlayerMovementComponent.h"
 #include "World/Actor/Movement/PlayerMovementValidator.h"
 #include "World/Actor/Movement/Components/SwimAmountComponent.h"
@@ -9,7 +14,9 @@
 #include "Core/NBT/Tag.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Level/Dimension/Dimension.h"
+#include "World/Level/Map/MapRequestQueue.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Inventory/RecipeUnlocking.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/NetworkIdentifier.h"
 #include "Network/PacketSender.h"
@@ -20,19 +27,40 @@
 #include "Protocol/Types/SerializedSkin.h"
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/PlayerAcknowledgements.h"
+#include "Server/Debug/DebugHud.h"
+#include "World/Actor/Player/PlayerBossBars.h"
+#include "World/Actor/Player/PlayerRaidState.h"
+#include "World/Actor/Player/SimulatedPlayerController.h"
+#include "World/Actor/Player/WardenSpawnTracker.h"
+#include "World/Actor/Movement/MovementConstants.h"
+#include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 
+class CameraInstructionPacket;
+class SharedPacket;
 class ServerNetworkHandler;
+
+struct ResourcePackOffer;
+struct PendingPlayerLogin;
 
 class ServerPlayer : public Actor {
 public:
-    /** Name of the world the player was in when saved; the player data file is shared by every world. */
+    bool canFreeze() const override {
+        return true;
+    }
+
+    bool canStandOnPowderSnow() const override;
+
+    float getArmorKnockbackResistance() const override;
+
+    // world the player was saved in; one player data file is shared by every world
     static constexpr const char *TAG_LEVEL = "Level";
 
     enum class LoginState : int {
@@ -52,22 +80,80 @@ public:
     void teleport(ServerNetworkHandler &owner, const Vector3f &position,
                   MovePlayerTeleportationCause cause = MovePlayerTeleportationCause::Behavior);
 
-    const char *getIdentifier() const override { return "minecraft:player"; }
+    // a velocity the client applies itself (lunge); the packet carries the last received input tick: the client
+    // applies it on the next input tick and replays from there, the simulation takes it on that tick, queue or not
+    void applyServerMotion(ServerNetworkHandler &owner, const Vector3f &motion);
 
-    const NetworkIdentifier &getNetworkIdentifier() const { return mId; }
+    const char *getIdentifier() const override {
+        return "minecraft:player";
+    }
 
-    LoginState getLoginState() const { return mLoginState; }
+    const NetworkIdentifier &getNetworkIdentifier() const {
+        return mId;
+    }
 
-    void setLoginState(LoginState state) { mLoginState = state; }
+    // a gametest simulated player: no client behind it, the server writes its inputs
+    bool isSimulated() const {
+        return mSimulated != nullptr;
+    }
 
-    /**
-     * The protocol this connection chose from the version it announced, fixed for the rest of the session.
-     */
-    const std::shared_ptr<const ProtocolCodec> &getCodec() const { return mCodec; }
+    void makeSimulated() {
+        mSimulated = std::make_shared<SimulatedPlayerController>();
+    }
 
-    void setCodec(std::shared_ptr<const ProtocolCodec> codec) { mCodec = std::move(codec); }
+    SimulatedPlayerController *getSimulatedController() {
+        return mSimulated.get();
+    }
 
-    bool isSpawned() const { return mLoginState == LoginState::Spawned; }
+    void setResourcePackOffer(std::shared_ptr<const ResourcePackOffer> offer) {
+        mResourcePackOffer = std::move(offer);
+    }
+
+    const ResourcePackOffer *getResourcePackOffer() const {
+        return mResourcePackOffer.get();
+    }
+
+    LoginState getLoginState() const {
+        return mLoginState;
+    }
+
+    void setLoginState(LoginState state) {
+        mLoginState = state;
+    }
+
+    int64_t getLoggedInTick() const {
+        return mLoggedInTick;
+    }
+
+    void setLoggedInTick(int64_t tick) {
+        mLoggedInTick = tick;
+    }
+
+    bool isSessionInspected() const {
+        return mSessionInspected;
+    }
+
+    // false once a resource pack chunk went out as often as one login may ask for it
+    bool countPackChunkRequest(const std::string &pack, int32_t index) {
+        return ++mPackChunkRequests[pack + ':' + std::to_string(index)] <= MAX_PACK_CHUNK_REQUESTS;
+    }
+
+    void setSessionInspected() {
+        mSessionInspected = true;
+    }
+
+    // chosen from the announced version, fixed for the session
+    const std::shared_ptr<const ProtocolCodec> &getCodec() const {
+        return mCodec;
+    }
+
+    void setCodec(std::shared_ptr<const ProtocolCodec> codec) {
+        mCodec = std::move(codec);
+    }
+
+    bool isSpawned() const {
+        return mLoginState == LoginState::Spawned;
+    }
 
     std::string getName() const override {
         return mName;
@@ -77,62 +163,348 @@ public:
         return true;
     }
 
-    void setName(const std::string &name) { mName = name; }
+    void setName(const std::string &name) {
+        mName = name;
+    }
 
-    const std::string &getUuid() const { return mUuid; }
+    const std::optional<std::string> &getPluginNameTag() const {
+        return mPluginNameTag;
+    }
 
-    void setUuid(const std::string &uuid) { mUuid = uuid; }
+    void setPluginNameTag(std::string nameTag) {
+        mPluginNameTag = std::move(nameTag);
+    }
 
-    const std::string &getXuid() const { return mXuid; }
+    const std::string &getUuid() const {
+        return mUuid;
+    }
 
-    void setXuid(const std::string &xuid) { mXuid = xuid; }
+    void setUuid(const std::string &uuid) {
+        mUuid = uuid;
+    }
 
-    const std::string &getPlayFabId() const { return mPlayFabId; }
+    const std::string &getXuid() const {
+        return mXuid;
+    }
 
-    void setPlayFabId(const std::string &playFabId) { mPlayFabId = playFabId; }
+    void setXuid(const std::string &xuid) {
+        mXuid = xuid;
+    }
 
-    const SerializedSkin &getSkin() const { return mSkin; }
+    const std::string &getPlayFabId() const {
+        return mPlayFabId;
+    }
 
-    void setSkin(const SerializedSkin &skin) { mSkin = skin; }
+    void setPlayFabId(const std::string &playFabId) {
+        mPlayFabId = playFabId;
+    }
 
-    int getBuildPlatform() const { return mBuildPlatform; }
+    const SerializedSkin &getSkin() const {
+        return mSkin;
+    }
 
-    void setBuildPlatform(int platform) { mBuildPlatform = platform; }
+    void setSkin(const SerializedSkin &skin) {
+        mSkin = skin;
+        mListEntryPackets.clear();
+    }
 
-    const std::string &getLocale() const { return mLocale; }
+    // this player's list entry as a packet, one per protocol version: encoded once, sent to every joiner
+    std::shared_ptr<const SharedPacket> &getListEntryPacket(int protocolVersion) {
+        for (auto &entry: mListEntryPackets) {
+            if (entry.first == protocolVersion)
+                return entry.second;
+        }
+        mListEntryPackets.emplace_back(protocolVersion, nullptr);
+        return mListEntryPackets.back().second;
+    }
 
-    void setLocale(const std::string &locale) { mLocale = locale; }
+    void clearListEntryPackets() {
+        mListEntryPackets.clear();
+    }
+
+    int getBuildPlatform() const {
+        return mBuildPlatform;
+    }
+
+    void setBuildPlatform(int platform) {
+        mBuildPlatform = platform;
+    }
+
+    // CompatibleWithClientSideChunkGen from the login client data.
+    bool isClientSideGenerationCompatible() const {
+        return mClientSideGenerationCompatible;
+    }
+
+    void setClientSideGenerationCompatible(bool compatible) {
+        mClientSideGenerationCompatible = compatible;
+    }
+
+    // the text filtering half of SyncedClientOptionsComponent, from the login client data
+    void readSyncedClientOptions(const std::string &clientData);
+
+    // SyncedClientOptionsComponent+24: FilterProfanity at login, then UpdateClientOptionsPacket
+    bool isProfanityFilterEnabled() const {
+        return mProfanityFilterEnabled;
+    }
+
+    void setProfanityFilterEnabled(bool enabled) {
+        mProfanityFilterEnabled = enabled;
+    }
+
+    // SyncedClientOptionsComponent+16: TextFilteringDebugTimeoutMilliSeconds, 0 when the client sent none
+    int getTextFilteringDebugTimeout() const {
+        return mTextFilteringDebugTimeout;
+    }
+
+    // The share of its view the server builds for this player (ClientSideGeneration::computeServerBuildRatio).
+    float getServerBuildRatio() const {
+        return mServerBuildRatio;
+    }
+
+    void setServerBuildRatio(float ratio) {
+        mServerBuildRatio = ratio;
+    }
+
+    // the counter empty maps number their maps with
+    int32_t takeMapNameIndex() {
+        return mMapNameIndex++;
+    }
+
+    MapRequestQueue &getMapRequests() {
+        return mMapRequests;
+    }
+
+    const std::string &getLocale() const {
+        return mLocale;
+    }
+
+    void setLocale(const std::string &locale) {
+        mLocale = locale;
+    }
 
     std::string localize(const std::string &key, const std::vector<std::string> &parameters = {}) const;
 
-    int32_t getGameType() const { return mGameType; }
+    int32_t getGameType() const {
+        return mGameType;
+    }
 
-    void setGameType(int32_t gameType) { mGameType = gameType; }
+    void setGameType(int32_t gameType) {
+        mGameType = gameType;
+    }
 
-    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId);
+    bool isSurvival() const {
+        return mGameType == (int32_t) GameType::Survival;
+    }
+
+    bool isCreative() const {
+        return mGameType == (int32_t) GameType::Creative;
+    }
+
+    bool isAdventure() const {
+        return mGameType == (int32_t) GameType::Adventure;
+    }
+
+    bool isSpectator() const {
+        return mGameType == (int32_t) GameType::Spectator;
+    }
+
+    // where a wind burst that spares the fall threw the player from: a landing above it hurts nothing, one
+    // below counts the fall from there
+    const std::optional<float> &getWindImpulseHeight() const {
+        return mWindImpulseHeight;
+    }
+
+    void setWindImpulseHeight(std::optional<float> height) {
+        mWindImpulseHeight = height;
+    }
+
+    int64_t getLastActiveTick() const {
+        return mLastActiveTick;
+    }
+
+    void markActive(int64_t tick) {
+        mLastActiveTick = tick;
+    }
+
+    // true when the look direction changed since the previous input
+    bool updateInputRotation(const Vector3f &rotation) {
+        const bool changed = rotation.x != mLastInputRotation.x || rotation.y != mLastInputRotation.y;
+        mLastInputRotation = rotation;
+        return changed;
+    }
+
+    // hitPosition: where the client says it hit, in world space; null when unknown
+    // checkReach false: a gametest simulated player attacks at any distance, facing anywhere
+    bool attackActor(ServerNetworkHandler &owner, uint64_t targetRuntimeId, const Vector3f *hitPosition = nullptr,
+                     bool checkReach = true);
 
     Vector3f getLookDirection() const;
 
-    bool isOp() const { return mIsOp; }
+    bool isOp() const {
+        return mIsOp;
+    }
 
-    void setOp(bool isOp) { mIsOp = isOp; }
+    void setOp(bool isOp) {
+        mIsOp = isOp;
+    }
 
-    bool isFlying() const { return mFlying; }
+    bool isFlying() const {
+        return mFlying;
+    }
 
-    bool hasSimulatedVelocity() const { return mHasSimulatedVelocity; }
+    float getScale() const {
+        return mScale.value_or(1.0f);
+    }
 
-    const Vector3f &getSimulatedVelocity() const { return mSimulatedVelocity; }
+    bool hasScaleOverride() const {
+        return mScale.has_value();
+    }
+
+    void setScale(float scale) {
+        mScale = scale;
+        mHasSimulatedBox = false;
+    }
+
+    float getBodyWidth() const {
+        return MovementPhysics::PLAYER_WIDTH * getScale();
+    }
+
+    float getBodyHeight() const;
+
+    float getEyeHeight() const {
+        return MovementPhysics::PLAYER_EYE_HEIGHT * getScale();
+    }
+
+    float getBaseOffset() const {
+        return (isSleeping() ? MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET : MovementPhysics::PLAYER_BASE_OFFSET)
+               * getScale();
+    }
+
+    bool canToggleFlight() const {
+        return mAllowFlight.value_or(isCreative() || isSpectator());
+    }
+
+    bool hasFlightOverride() const {
+        return mAllowFlight.has_value();
+    }
+
+    void setAllowFlight(std::optional<bool> value) {
+        mAllowFlight = value;
+    }
+
+    // what the last PlayerAuthInput reported: held buttons, the movement vector and the input device
+    struct InputState {
+        int32_t mInputMode = 0;
+        bool mJumpHeld = false;
+        bool mSneakHeld = false;
+        bool mJumping = false;
+        float mMoveX = 0.0f;
+        float mMoveY = 0.0f;
+        // PlayerAuthInputData::HotbarOnlyTouch
+        bool mTouchOnlyHotbar = false;
+    };
+
+    // the device the client reported in its login client data, graphics mode updated by
+    // UpdateClientOptionsPacket: memory tier clamped to 0-4, Fancy until told otherwise
+    struct ClientDevice {
+        int32_t mMemoryTier = 0;
+        int32_t mMaxViewDistance = 0;
+        int32_t mPlatformType = 0;
+        int32_t mGraphicsMode = 1;
+    };
+
+    ClientDevice &getClientDevice() {
+        return mClientDevice;
+    }
+
+    // the server camera state: the first camera instruction creates it unnamed,
+    // a set names it after the preset, a clear puts it back on first person
+    struct CameraState {
+        bool mPresent = false;
+        std::string mPreset;
+    };
+
+    const CameraState &getCameraState() const {
+        return mCameraState;
+    }
+
+    void recordCamera(const CameraInstructionPacket &packet);
+
+    // one entry of the scripted fog stack, bottom first
+    struct FogEntry {
+        std::string mId;
+        std::string mTag;
+    };
+
+    std::vector<FogEntry> &getFogStack() {
+        return mFogStack;
+    }
+
+    // PlayerAimAssist.settings: the last settings a script activated, empty once cleared
+    struct AimAssistSettings {
+        std::string mPresetId;
+        bool mDistanceMode = false;
+        float mViewAngleX = 0.0f;
+        float mViewAngleY = 0.0f;
+        float mDistance = 0.0f;
+    };
+
+    std::optional<AimAssistSettings> &getAimAssist() {
+        return mAimAssist;
+    }
+
+    // ControlSchemeComponent, LockedPlayerRelativeStrafe until set
+    int32_t getControlScheme() const {
+        return mControlScheme;
+    }
+
+    void setControlScheme(int32_t scheme) {
+        mControlScheme = scheme;
+    }
+
+    InputState &getInputState() {
+        return mInputState;
+    }
+
+    // the script chat decorations: name prefix and suffix around the author, a prefix before the message
+    struct ChatStyle {
+        std::string mNamePrefix;
+        std::string mNameSuffix;
+        std::string mMessagePrefix;
+    };
+
+    ChatStyle &getChatStyle() {
+        return mChatStyle;
+    }
+
+    const InputState &getInputState() const {
+        return mInputState;
+    }
+
+    bool hasSimulatedVelocity() const {
+        return mHasSimulatedVelocity;
+    }
+
+    const Vector3f &getSimulatedVelocity() const {
+        return mSimulatedVelocity;
+    }
 
     void setSimulatedVelocity(const Vector3f &velocity) {
         mSimulatedVelocity = velocity;
         mHasSimulatedVelocity = true;
     }
 
-    void clearSimulatedVelocity() { mHasSimulatedVelocity = false; }
+    void clearSimulatedVelocity() {
+        mHasSimulatedVelocity = false;
+    }
 
-    bool hasSimulatedPosition() const { return mHasSimulatedPosition; }
+    bool hasSimulatedPosition() const {
+        return mHasSimulatedPosition;
+    }
 
-    const Vector3f &getSimulatedPosition() const { return mSimulatedPosition; }
+    const Vector3f &getSimulatedPosition() const {
+        return mSimulatedPosition;
+    }
 
     void setSimulatedPosition(const Vector3f &position) {
         mSimulatedPosition = position;
@@ -158,7 +530,28 @@ public:
         mHasSimulatedGround = true;
     }
 
+    // the box the replay ended on: rebuilt from the feet, a box clamped against a wall at x = 1 comes back at
+    // 0.99999995 and stands on the corner of the block beside it
+    void setSimulatedBox(const AxisAlignedBB &box, const Vector3f &feet) {
+        mSimulatedBox = box;
+        mSimulatedBoxFeet = feet;
+        mHasSimulatedBox = true;
+    }
+
+    bool findSimulatedBox(const Vector3f &feet, float height, AxisAlignedBB &box) const {
+        if (!mHasSimulatedBox || feet.x != mSimulatedBoxFeet.x || feet.y != mSimulatedBoxFeet.y
+            || feet.z != mSimulatedBoxFeet.z || std::fabs(mSimulatedBox.mMaxY - mSimulatedBox.mMinY - height) > 1.0e-4f)
+            return false;
+        box = mSimulatedBox;
+        return true;
+    }
+
+    BlockCollisionEngine::RecoveryState &getCollisionRecovery() {
+        return mCollisionRecovery;
+    }
+
     void clearMovementSimulation() {
+        mHasSimulatedBox = false;
         mMovementValidator.reset();
         mHasSimulatedVelocity = false;
         mHasSimulatedPosition = false;
@@ -179,24 +572,38 @@ public:
         return mSwimAmount;
     }
 
-    bool hasSupportingBlock() const { return mHasSupportingBlock; }
+    bool hasSupportingBlock() const {
+        return mHasSupportingBlock;
+    }
 
-    const Vector3i &getSupportingBlock() const { return mSupportingBlock; }
+    const Vector3i &getSupportingBlock() const {
+        return mSupportingBlock;
+    }
 
     void setSupportingBlock(const Vector3i &position) {
         mSupportingBlock = position;
         mHasSupportingBlock = true;
     }
 
-    void clearSupportingBlock() { mHasSupportingBlock = false; }
+    void clearSupportingBlock() {
+        mHasSupportingBlock = false;
+    }
 
-    int32_t getSlowdownTicks() const { return mSlowdownTicks; }
+    int32_t getSlowdownTicks() const {
+        return mSlowdownTicks;
+    }
 
-    void setSlowdownTicks(int32_t ticks) { mSlowdownTicks = ticks; }
+    void setSlowdownTicks(int32_t ticks) {
+        mSlowdownTicks = ticks;
+    }
 
-    bool isSimulatedSneaking() const { return mSimulatedSneaking; }
+    bool isSimulatedSneaking() const {
+        return mSimulatedSneaking;
+    }
 
-    bool isSimulatedCrawling() const { return mSimulatedCrawling; }
+    bool isSimulatedCrawling() const {
+        return mSimulatedCrawling;
+    }
 
     bool isSimulatedSwimming() const {
         return mSimulatedSwimming;
@@ -211,9 +618,13 @@ public:
         mSimulatedCrawling = crawling;
     }
 
-    int32_t getJumpDelay() const { return mJumpDelay; }
+    int32_t getJumpDelay() const {
+        return mJumpDelay;
+    }
 
-    void setJumpDelay(int32_t ticks) { mJumpDelay = ticks; }
+    void setJumpDelay(int32_t ticks) {
+        mJumpDelay = ticks;
+    }
 
     void queueKnockback(const Vector3f &motion) {
         mPendingKnockback = motion;
@@ -228,15 +639,26 @@ public:
         return true;
     }
 
-    void clearPendingKnockback() { mHasPendingKnockback = false; }
-
-    void scheduleKnockback(const Vector3f &motion) {
-        mAcknowledgements.add([this, motion]() {
-            queueKnockback(motion);
-        });
+    void clearPendingKnockback() {
+        mHasPendingKnockback = false;
     }
 
-    PlayerAcknowledgements &getAcknowledgements() { return mAcknowledgements; }
+    // motion due on this input tick or an earlier one (applyServerMotion)
+    bool takeServerMotion(int64_t inputTick, Vector3f &out) {
+        if (!mHasPendingServerMotion || inputTick < mPendingServerMotionTick)
+            return false;
+        out = mPendingServerMotion;
+        mHasPendingServerMotion = false;
+        return true;
+    }
+
+    void scheduleKnockback(const Vector3f &motion) {
+        mAcknowledgements.add([this, motion]() { queueKnockback(motion); });
+    }
+
+    PlayerAcknowledgements &getAcknowledgements() {
+        return mAcknowledgements;
+    }
 
     void awaitMovementChange() {
         mPendingMovementChanges++;
@@ -246,7 +668,19 @@ public:
         });
     }
 
-    bool hasPendingMovementChange() const { return mPendingMovementChanges > 0; }
+    bool hasPendingMovementChange() const {
+        return mPendingMovementChanges > 0;
+    }
+
+    // a client acks a movement change within a round trip; one holding the ack back would move unchecked until the
+    // timeout: the simulation resumes after a bounded number of inputs
+    bool skipsForPendingMovementChange() {
+        if (!hasPendingMovementChange()) {
+            mInputsWhilePending = 0;
+            return false;
+        }
+        return ++mInputsWhilePending <= MAX_INPUTS_WHILE_PENDING;
+    }
 
     void setFlying(bool flying) {
         if (mFlying == flying)
@@ -260,13 +694,21 @@ public:
         return mIsOp ? CommandPermission::GameDirectors : CommandPermission::Any;
     }
 
-    int64_t getFirstPlayed() const { return mFirstPlayed; }
+    int64_t getFirstPlayed() const {
+        return mFirstPlayed;
+    }
 
-    void setFirstPlayed(int64_t firstPlayed) { mFirstPlayed = firstPlayed; }
+    void setFirstPlayed(int64_t firstPlayed) {
+        mFirstPlayed = firstPlayed;
+    }
 
-    PlayerInventory &getInventory() { return mInventory; }
+    PlayerInventory &getInventory() {
+        return mInventory;
+    }
 
-    const PlayerInventory &getInventory() const { return mInventory; }
+    const PlayerInventory &getInventory() const {
+        return mInventory;
+    }
 
     void recordHurtBy(uint64_t runtimeId, int64_t tick) {
         mLastHurtByRuntimeId = runtimeId;
@@ -294,21 +736,53 @@ public:
         return mLastAttackedTick;
     }
 
-    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() { return mDynamicProperties; }
+    std::unordered_map<std::string, DynamicPropertyValue> &getDynamicProperties() {
+        return mDynamicProperties;
+    }
 
-    int64_t getLastItemUseTick() const { return mLastItemUseTick; }
+    int64_t getLastItemUseTick() const {
+        return mLastItemUseTick;
+    }
 
-    void setLastItemUseTick(int64_t tick) { mLastItemUseTick = tick; }
+    void setLastItemUseTick(int64_t tick) {
+        mLastItemUseTick = tick;
+    }
 
-    InventoryManager &getInventoryManager() { return mInventoryManager; }
+    InventoryManager &getInventoryManager() {
+        return mInventoryManager;
+    }
 
     const InventoryManager &getInventoryManager() const {
         return mInventoryManager;
     }
 
-    PacketSender *getPacketSender() const { return mSender; }
+    PacketSender *getPacketSender() const {
+        return mSender;
+    }
 
-    void setEffectsNetworkReady(bool ready) { mEffectsNetworkReady = ready; }
+    void setEffectsNetworkReady(bool ready) {
+        mEffectsNetworkReady = ready;
+    }
+
+    PlayerRecipeUnlocks &getRecipeUnlocks() {
+        return mRecipeUnlocks;
+    }
+
+    const PlayerRecipeUnlocks &getRecipeUnlocks() const {
+        return mRecipeUnlocks;
+    }
+
+    PlayerBossBars &getBossBars() {
+        return mBossBars;
+    }
+
+    DebugHud &getDebugHud() {
+        return mDebugHud;
+    }
+
+    PlayerRaidState &getRaidState() {
+        return mRaidState;
+    }
 
     void syncEffects();
 
@@ -337,13 +811,35 @@ public:
 
     void clearTitle();
 
+    static const int HUD_ELEMENT_COUNT = 13;
+
+    // no elements means all of them
+    void setHudVisibility(bool hidden, const std::vector<int32_t> *elements = nullptr);
+
+    // ClientInputLocks: one bit per InputPermissionCategory value, set when locked; true when it changed
+    bool setInputLocked(int32_t category, bool locked);
+
+    bool isInputLocked(int32_t category) const {
+        return category >= 0 && category < 32 && (mInputLocks & (1u << category)) != 0;
+    }
+
+    bool isHudElementHidden(int32_t element) const {
+        return element >= 0 && element < HUD_ELEMENT_COUNT && mHiddenHudElements[element];
+    }
+
     void resetTitle();
 
-    bool hasPendingMove() const { return mHasPendingMove; }
+    bool hasPendingMove() const {
+        return mHasPendingMove;
+    }
 
-    const Vector3f &getPendingMovePosition() const { return mPendingMovePosition; }
+    const Vector3f &getPendingMovePosition() const {
+        return mPendingMovePosition;
+    }
 
-    const Vector3f &getPendingMoveRotation() const { return mPendingMoveRotation; }
+    const Vector3f &getPendingMoveRotation() const {
+        return mPendingMoveRotation;
+    }
 
     void queueMove(const Vector3f &position, const Vector3f &rotation) {
         mPendingMovePosition = position;
@@ -351,15 +847,39 @@ public:
         mHasPendingMove = true;
     }
 
-    void clearPendingMove() { mHasPendingMove = false; }
+    void clearPendingMove() {
+        mHasPendingMove = false;
+    }
 
-    int64_t getItemUseStartTick() const { return mItemUseStartTick; }
+    int64_t getItemUseStartTick() const {
+        return mItemUseStartTick;
+    }
 
-    void setItemUseStartTick(int64_t tick) { mItemUseStartTick = tick; }
+    void setItemUseStartTick(int64_t tick) {
+        mItemUseStartTick = tick;
+    }
 
-    ChunkStreamState &getChunkStreamState() { return mChunkStreamState; }
+    // the slot and item a use started with
+    void setItemUseSource(int slot, const ItemStack &item) {
+        mItemUseSlot = slot;
+        mItemUseItem = item;
+    }
 
-    bool isAwaitingDimensionAck() const { return mAwaitingDimensionAck; }
+    int getItemUseSlot() const {
+        return mItemUseSlot;
+    }
+
+    const ItemStack &getItemUseItem() const {
+        return mItemUseItem;
+    }
+
+    ChunkStreamState &getChunkStreamState() {
+        return mChunkStreamState;
+    }
+
+    bool isAwaitingDimensionAck() const {
+        return mAwaitingDimensionAck;
+    }
 
     void setAwaitingDimensionAck(bool awaiting) {
         if (awaiting) {
@@ -369,15 +889,35 @@ public:
         mAwaitingDimensionAck = awaiting;
     }
 
-    /** A world change inside one dimension sent an intermediate dimension; the real one follows the ack. */
-    bool hasPendingDimensionHop() const { return mPendingDimensionHop; }
+    // a world change inside one dimension sent an intermediate dimension; the real one follows the ack
+    bool hasPendingDimensionHop() const {
+        return mPendingDimensionHop;
+    }
 
-    void setPendingDimensionHop(bool pending) { mPendingDimensionHop = pending; }
+    void setPendingDimensionHop(bool pending) {
+        mPendingDimensionHop = pending;
+    }
 
     void consumeOneHeldItem();
 
     bool isSleeping() const {
         return mSleeping;
+    }
+
+    // ticks since the player last slept: past three days, phantoms may spawn above it
+    int32_t getTimeSinceRest() const {
+        return mTimeSinceRest;
+    }
+
+    void setTimeSinceRest(int32_t ticks) {
+        mTimeSinceRest = ticks;
+    }
+
+    // one tick more awake; back to 1 asleep or with doinsomnia off; a spectator's stays as it is
+    void tickInsomnia(bool doInsomnia) {
+        if (isSpectator())
+            return;
+        mTimeSinceRest = doInsomnia && !mSleeping ? mTimeSinceRest + 1 : 1;
     }
 
     const Vector3i &getSleepingPosition() const {
@@ -393,6 +933,28 @@ public:
         mSleeping = false;
     }
 
+    // actor data 133, the position before lying down
+    const Vector3f &getBedEnterPosition() const {
+        return mBedEnterPosition;
+    }
+
+    void setBedEnterPosition(const Vector3f &position) {
+        mBedEnterPosition = position;
+    }
+
+    void resetSleepCounter() {
+        mSleepCounter = 0;
+    }
+
+    void tickSleepCounter() {
+        if (mSleepCounter < DEEP_SLEEP_TICKS)
+            mSleepCounter++;
+    }
+
+    bool isSleepingLongEnough() const {
+        return mSleepCounter >= DEEP_SLEEP_TICKS;
+    }
+
     bool hasSpawnPoint() const {
         return mHasSpawnPoint;
     }
@@ -401,22 +963,51 @@ public:
         return mSpawnPoint;
     }
 
-    /** The world that holds the spawn point, since a bed only counts in the world it was placed in. */
+    // a bed only counts in the world it was placed in
     const std::string &getSpawnWorld() const {
         return mSpawnWorld;
     }
 
-    void setSpawnPoint(const Vector3i &position, const std::string &world) {
+    // where the player stood when the spawn point was set (SpawnX/Y/Z): an anchor respawns around it
+    const Vector3i &getSpawnStandPosition() const {
+        return mSpawnStandPosition;
+    }
+
+    DimensionType getSpawnDimension() const {
+        return mSpawnDimension;
+    }
+
+    // false for a spawn set by command: no bed or anchor has to hold it
+    bool hasSpawnBlock() const {
+        return mHasSpawnBlock;
+    }
+
+    void setSpawnPoint(const Vector3i &position, const Vector3i &standPosition, DimensionType dimension,
+                       const std::string &world) {
         mHasSpawnPoint = true;
+        mHasSpawnBlock = true;
         mSpawnPoint = position;
+        mSpawnStandPosition = standPosition;
+        mSpawnDimension = dimension;
         mSpawnWorld = world;
     }
+
+    // /spawnpoint keeps the position and dimension, clears the block
+    void setSpawnPosition(const Vector3i &standPosition, DimensionType dimension, const std::string &world) {
+        setSpawnPoint(standPosition, standPosition, dimension, world);
+        mHasSpawnBlock = false;
+    }
+
+    // floor x and z, ceil of the feet
+    Vector3i getSpawnStandPositionHere() const;
 
     void clearSpawnPoint() {
         mHasSpawnPoint = false;
     }
 
-    int32_t getTicksSinceInAir() const { return mTicksSinceInAir; }
+    int32_t getTicksSinceInAir() const {
+        return mTicksSinceInAir;
+    }
 
     void tickGroundTracking() {
         if (isOnGround())
@@ -425,21 +1016,33 @@ public:
             mTicksSinceInAir = 0;
     }
 
-    bool isSpinAttacking() const { return mSpinAttackTicks > 0; }
+    bool isSpinAttacking() const {
+        return mSpinAttackTicks > 0;
+    }
 
     void startSpinAttack(ServerNetworkHandler &owner, int32_t ticks);
 
     void tickSpinAttack(ServerNetworkHandler &owner);
 
-    bool isAwaitingConsumableRelease() const { return mAwaitingConsumableRelease; }
+    bool isAwaitingConsumableRelease() const {
+        return mAwaitingConsumableRelease;
+    }
 
-    void setAwaitingConsumableRelease() { mAwaitingConsumableRelease = true; }
+    void setAwaitingConsumableRelease() {
+        mAwaitingConsumableRelease = true;
+    }
 
-    void clearAwaitingConsumableRelease() { mAwaitingConsumableRelease = false; }
+    void clearAwaitingConsumableRelease() {
+        mAwaitingConsumableRelease = false;
+    }
 
-    int64_t getLastEarlyConsumableReleaseTick() const { return mLastEarlyConsumableReleaseTick; }
+    int64_t getLastEarlyConsumableReleaseTick() const {
+        return mLastEarlyConsumableReleaseTick;
+    }
 
-    void setLastEarlyConsumableReleaseTick(int64_t tick) { mLastEarlyConsumableReleaseTick = tick; }
+    void setLastEarlyConsumableReleaseTick(int64_t tick) {
+        mLastEarlyConsumableReleaseTick = tick;
+    }
 
     bool hasItemCooldown(const ItemStack &item, int64_t currentTick) const;
 
@@ -449,17 +1052,43 @@ public:
 
     void tickItemCooldowns(int64_t currentTick);
 
-    bool hasLastRightClick() const { return mHasLastRightClick; }
+    // a catalyst takes what this death drops, unless the inventory is kept or nothing would drop
+    int32_t takeDeathExperience(ServerNetworkHandler &owner) override;
 
-    const Vector3i &getLastRightClickBlockPosition() const { return mLastRightClickBlockPosition; }
+    bool isDeathExperienceTaken() const {
+        return mDeathExperienceTaken;
+    }
 
-    int32_t getLastRightClickFace() const { return mLastRightClickFace; }
+    // a respawned player can feed a catalyst again
+    void clearSculkCatalystState();
 
-    const Vector3f &getLastRightClickPlayerPosition() const { return mLastRightClickPlayerPosition; }
+    WardenSpawnTracker &getWardenSpawnTracker() {
+        return mWardenSpawnTracker;
+    }
 
-    const Vector3f &getLastRightClickPosition() const { return mLastRightClickPosition; }
+    bool hasLastRightClick() const {
+        return mHasLastRightClick;
+    }
 
-    uint64_t getLastRightClickTimeMicros() const { return mLastRightClickTimeMicros; }
+    const Vector3i &getLastRightClickBlockPosition() const {
+        return mLastRightClickBlockPosition;
+    }
+
+    int32_t getLastRightClickFace() const {
+        return mLastRightClickFace;
+    }
+
+    const Vector3f &getLastRightClickPlayerPosition() const {
+        return mLastRightClickPlayerPosition;
+    }
+
+    const Vector3f &getLastRightClickPosition() const {
+        return mLastRightClickPosition;
+    }
+
+    uint64_t getLastRightClickTimeMicros() const {
+        return mLastRightClickTimeMicros;
+    }
 
     void recordRightClick(const Vector3i &blockPosition, int32_t face, const Vector3f &playerPosition,
                           const Vector3f &clickPosition, uint64_t timeMicros) {
@@ -480,9 +1109,20 @@ public:
         clearMovementSimulation();
         mLastTeleport = std::chrono::steady_clock::now();
         awaitMovementChange();
+        const uint64_t teleport = ++mTeleportCount;
+        mAwaitingTeleport = true;
+        mAcknowledgements.add([this, teleport]() {
+            if (mTeleportCount == teleport)
+                mAwaitingTeleport = false;
+        });
     }
 
-    /** Whether the player changed skin less than the given number of seconds ago. */
+    // inputs sent before the client took the teleport still carry the old position: they must not move the player
+    // back; bounded by the grace in case the ack never comes
+    bool isAwaitingTeleport() const {
+        return mAwaitingTeleport && std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
+    }
+
     bool changedSkinWithin(int seconds) const {
         return mHasChangedSkin && std::chrono::steady_clock::now() - mLastSkinChange < std::chrono::seconds(seconds);
     }
@@ -492,49 +1132,83 @@ public:
         mLastSkinChange = std::chrono::steady_clock::now();
     }
 
-    /** Whether the player was teleported less than a second ago, when their movement costs no food. */
+    // movement costs no food for a second after a teleport
     bool wasRecentlyTeleported() const {
         return std::chrono::steady_clock::now() - mLastTeleport < POST_TELEPORT_GRACE;
     }
 
-    int getAirSupply() const { return mAirSupply; }
+    int getAirSupply() const {
+        return mAirSupply;
+    }
 
-    void setAirSupply(int airSupply) { mAirSupply = airSupply; }
+    void setAirSupply(int airSupply) {
+        mAirSupply = airSupply;
+    }
 
-    void resetAirSupply() { mAirSupply = MAX_AIR_SUPPLY; }
+    void resetAirSupply() {
+        mAirSupply = MAX_AIR_SUPPLY;
+    }
 
-    int getTurtleHelmetTicks() const { return mTurtleHelmetTicks; }
+    int getTurtleHelmetTicks() const {
+        return mTurtleHelmetTicks;
+    }
 
-    void setTurtleHelmetTicks(int ticks) { mTurtleHelmetTicks = ticks; }
+    void setTurtleHelmetTicks(int ticks) {
+        mTurtleHelmetTicks = ticks;
+    }
 
-    bool isBreakingBlock() const { return mIsBreakingBlock; }
+    bool isBreakingBlock() const {
+        return mIsBreakingBlock;
+    }
 
-    const Vector3i &getBreakingBlockPosition() const { return mBreakingBlockPosition; }
+    const Vector3i &getBreakingBlockPosition() const {
+        return mBreakingBlockPosition;
+    }
 
-    int32_t getBreakingFace() const { return mBreakingFace; }
+    int32_t getBreakingFace() const {
+        return mBreakingFace;
+    }
 
-    void setBreakingFace(int32_t face) { mBreakingFace = face; }
+    void setBreakingFace(int32_t face) {
+        mBreakingFace = face;
+    }
 
-    bool hasLastBlockAttacked() const { return mHasLastBlockAttacked; }
+    bool hasLastBlockAttacked() const {
+        return mHasLastBlockAttacked;
+    }
 
-    const Vector3i &getLastBlockAttacked() const { return mLastBlockAttacked; }
+    const Vector3i &getLastBlockAttacked() const {
+        return mLastBlockAttacked;
+    }
 
     void setLastBlockAttacked(const Vector3i &position) {
         mHasLastBlockAttacked = true;
         mLastBlockAttacked = position;
     }
 
-    void clearLastBlockAttacked() { mHasLastBlockAttacked = false; }
+    void clearLastBlockAttacked() {
+        mHasLastBlockAttacked = false;
+    }
 
-    double getBreakProgress() const { return mBreakProgress; }
+    double getBreakProgress() const {
+        return mBreakProgress;
+    }
 
-    double getBreakSpeed() const { return mBreakSpeed; }
+    double getBreakSpeed() const {
+        return mBreakSpeed;
+    }
 
-    int64_t getBreakStartTick() const { return mBreakStartTick; }
+    int64_t getBreakStartTick() const {
+        return mBreakStartTick;
+    }
 
-    void addBreakProgress(double amount) { mBreakProgress += amount; }
+    void addBreakProgress(double amount) {
+        mBreakProgress += amount;
+    }
 
-    void setBreakSpeed(double speed) { mBreakSpeed = speed; }
+    void setBreakSpeed(double speed) {
+        mBreakSpeed = speed;
+    }
 
     void startBreakingBlock(const Vector3i &position, int32_t face, double speed, int64_t startTick = 0) {
         mIsBreakingBlock = true;
@@ -553,22 +1227,45 @@ public:
         mBreakStartTick = 0;
     }
 
-    int getBreakingFxTicker() { return mBreakingFxTicker++; }
+    int getBreakingFxTicker() {
+        return mBreakingFxTicker++;
+    }
 
     ServerPlayerMovementComponent &getMovementInputs() {
         return mMovementInputs;
     }
 
-    bool hasSeenNonZeroClientTick() const { return mSawNonZeroClientTick; }
+    bool hasSeenNonZeroClientTick() const {
+        return mSawNonZeroClientTick;
+    }
 
-    void markNonZeroClientTickSeen() { mSawNonZeroClientTick = true; }
+    void markNonZeroClientTickSeen() {
+        mSawNonZeroClientTick = true;
+    }
 
-    std::unordered_set<int64_t> &getSentChunks() { return mSentChunks; }
+    std::unordered_set<int64_t> &getSentChunks() {
+        return mSentChunks;
+    }
 
-    std::unordered_set<uint64_t> &getVisibleActors() { return mVisibleActors; }
+    std::unordered_set<uint64_t> &getVisibleActors() {
+        return mVisibleActors;
+    }
 
-    /** Runtime ids of the other players this player's client currently has spawned. */
-    std::unordered_set<uint64_t> &getVisiblePlayers() { return mVisiblePlayers; }
+    // the other players this client has spawned
+    bool hidesPlayer(const ServerPlayer &target) const {
+        return mHiddenPlayers.count(target.getUuid()) != 0;
+    }
+
+    void setPlayerHidden(const ServerPlayer &target, bool hidden) {
+        if (hidden)
+            mHiddenPlayers.insert(target.getUuid());
+        else
+            mHiddenPlayers.erase(target.getUuid());
+    }
+
+    std::unordered_set<uint64_t> &getVisiblePlayers() {
+        return mVisiblePlayers;
+    }
 
     bool hasMovedSinceBroadcast() const {
         return mPosition != mBroadcastPosition || mRotation != mBroadcastRotation;
@@ -579,19 +1276,33 @@ public:
         mBroadcastRotation = mRotation;
     }
 
-    size_t getSentChunkCount() const { return mSentChunkCount; }
+    size_t getSentChunkCount() const {
+        return mSentChunkCount;
+    }
 
-    void addSentChunkCount(size_t count) { mSentChunkCount += count; }
+    void addSentChunkCount(size_t count) {
+        mSentChunkCount += count;
+    }
 
-    bool hasSpawnChunksReady() const { return mSpawnChunksReady; }
+    bool hasSpawnChunksReady() const {
+        return mSpawnChunksReady;
+    }
 
-    void setSpawnChunksReady(bool ready) { mSpawnChunksReady = ready; }
+    void setSpawnChunksReady(bool ready) {
+        mSpawnChunksReady = ready;
+    }
 
-    bool hasChunkPosition() const { return mHasChunkPosition; }
+    bool hasChunkPosition() const {
+        return mHasChunkPosition;
+    }
 
-    int32_t getLastChunkX() const { return mLastChunkX; }
+    int32_t getLastChunkX() const {
+        return mLastChunkX;
+    }
 
-    int32_t getLastChunkZ() const { return mLastChunkZ; }
+    int32_t getLastChunkZ() const {
+        return mLastChunkZ;
+    }
 
     void setLastChunkPosition(int32_t chunkX, int32_t chunkZ) {
         mLastChunkX = chunkX;
@@ -616,11 +1327,18 @@ public:
                          bool disablesShield);
 
 private:
+    std::optional<float> mWindImpulseHeight;
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
     bool _isCriticalHit() const;
 
     bool _isFacing(ServerNetworkHandler &owner, const Vector3f &targetFeet, float width, float height) const;
+
+    // the playerItemAttackEntity before event; true when a script cancelled the attack
+    bool _scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition);
+
+    bool _attackProjectile(ServerNetworkHandler &owner, ServerActor &target, const Vector3f *hitPosition,
+                           bool checkReach);
 
     bool _hasShieldReady(int64_t currentTick) const;
 
@@ -630,26 +1348,49 @@ private:
 
     void _damageShield(ServerNetworkHandler &owner, float damage);
 
+    static const int MAX_PACK_CHUNK_REQUESTS = 3;
+
     NetworkIdentifier mId;
+    friend class LoginHandler;
+    std::shared_ptr<PendingPlayerLogin> mPendingLogin;
     LoginState mLoginState;
+    std::unordered_map<std::string, int> mPackChunkRequests;
+    std::shared_ptr<const ResourcePackOffer> mResourcePackOffer;
     std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
+    std::optional<std::string> mPluginNameTag;
     std::string mUuid;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
     int64_t mLastItemUseTick = -1000;
     std::string mXuid;
     std::string mPlayFabId;
     int mBuildPlatform = -1;
+    bool mClientSideGenerationCompatible = false;
+    bool mProfanityFilterEnabled = true;
+    int mTextFilteringDebugTimeout = 0;
+    float mServerBuildRatio = 1.0f;
+    int32_t mMapNameIndex = 0;
+    MapRequestQueue mMapRequests;
     std::string mLocale;
     int64_t mItemUseStartTick = 0;
+    int mItemUseSlot = -1;
+    ItemStack mItemUseItem;
     int32_t mSpinAttackTicks = 0;
     ChunkStreamState mChunkStreamState;
     bool mAwaitingDimensionAck = false;
     bool mPendingDimensionHop = false;
+    static constexpr int32_t DEEP_SLEEP_TICKS = 100;
+
     bool mSleeping = false;
+    int32_t mTimeSinceRest = 1;
+    int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
+    Vector3f mBedEnterPosition;
     bool mHasSpawnPoint = false;
+    bool mHasSpawnBlock = false;
     Vector3i mSpawnPoint;
+    Vector3i mSpawnStandPosition;
+    DimensionType mSpawnDimension = DimensionType::Overworld;
     std::string mSpawnWorld;
     int32_t mTicksSinceInAir = 0;
     bool mAwaitingConsumableRelease = false;
@@ -683,6 +1424,7 @@ private:
     std::unordered_set<int64_t> mSentChunks;
     std::unordered_set<uint64_t> mVisibleActors;
     std::unordered_set<uint64_t> mVisiblePlayers;
+    std::unordered_set<std::string> mHiddenPlayers;
     Vector3f mBroadcastPosition;
     Vector3f mBroadcastRotation;
     size_t mSentChunkCount = 0;
@@ -691,14 +1433,32 @@ private:
     int32_t mLastChunkZ = 0;
     bool mHasChunkPosition = false;
     SerializedSkin mSkin;
+    std::vector<std::pair<int, std::shared_ptr<const SharedPacket>>> mListEntryPackets;
     int32_t mGameType = 0;
+    int64_t mLastActiveTick = 0;
+    int64_t mLoggedInTick = 0;
+    bool mSessionInspected = false;
+    Vector3f mLastInputRotation;
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
+    std::optional<bool> mAllowFlight;
+    std::optional<float> mScale;
+    InputState mInputState;
+    ClientDevice mClientDevice;
+    CameraState mCameraState;
+    std::vector<FogEntry> mFogStack;
+    std::optional<AimAssistSettings> mAimAssist;
+    int32_t mControlScheme = 0;
+    ChatStyle mChatStyle;
     bool mHasSimulatedVelocity = false;
     Vector3f mSimulatedVelocity;
     bool mHasSimulatedPosition = false;
     Vector3f mSimulatedPosition;
+    AxisAlignedBB mSimulatedBox;
+    Vector3f mSimulatedBoxFeet;
+    bool mHasSimulatedBox = false;
+    BlockCollisionEngine::RecoveryState mCollisionRecovery;
     bool mHasSimulatedGround = false;
     bool mSimulatedOnGround = false;
     int32_t mJumpDelay = 0;
@@ -710,9 +1470,17 @@ private:
     bool mHasSupportingBlock = false;
     Vector3i mSupportingBlock;
     PlayerAcknowledgements mAcknowledgements;
+    std::shared_ptr<SimulatedPlayerController> mSimulated;
     int32_t mPendingMovementChanges = 0;
+    static constexpr int32_t MAX_INPUTS_WHILE_PENDING = 20;
+    bool mAwaitingTeleport = false;
+    uint64_t mTeleportCount = 0;
+    int32_t mInputsWhilePending = 0;
     bool mHasPendingKnockback = false;
     Vector3f mPendingKnockback;
+    bool mHasPendingServerMotion = false;
+    Vector3f mPendingServerMotion;
+    int64_t mPendingServerMotionTick = 0;
     PlayerInventory mInventory;
     uint64_t mLastHurtByRuntimeId = 0;
     int64_t mLastHurtByTick = 0;
@@ -721,9 +1489,17 @@ private:
     InventoryManager mInventoryManager;
     PacketSender *mSender;
     bool mEffectsNetworkReady = false;
+    PlayerRaidState mRaidState;
+    PlayerBossBars mBossBars;
+    PlayerRecipeUnlocks mRecipeUnlocks;
+    bool mHiddenHudElements[HUD_ELEMENT_COUNT] = {};
+    uint32_t mInputLocks = 0;
+    DebugHud mDebugHud;
     std::unordered_map<std::string, int64_t> mItemCooldowns;
     int32_t mShieldTransitionTicks = 0;
     int32_t mShieldInterruptTicks = 0;
     bool mShieldReblockAfterAttack = false;
     int64_t mShieldDisabledUntilTick = 0;
+    WardenSpawnTracker mWardenSpawnTracker;
+    bool mDeathExperienceTaken = false;
 };

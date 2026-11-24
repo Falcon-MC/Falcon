@@ -80,13 +80,14 @@ void ScriptScheduler::tick(int64_t currentTick) {
         if (!stillActive)
             continue;
 
-        JSValue callback = asValue(task.mCallback);
+        // the task may clear itself while it runs: keep the closure alive until it returns
+        JSValue callback = JS_DupValue(mContext, asValue(task.mCallback));
         JSValue result = JS_Call(mContext, callback, JS_UNDEFINED, 0, nullptr);
 
         if (JS_IsException(result)) {
             JSValue exception = JS_GetException(mContext);
             const char *message = JS_ToCString(mContext, exception);
-            LOG_ERROR(LogAreaID::Server, "Script scheduled task error: %s", message == nullptr ? "?" : message);
+            LOG_ERROR(LogAreaID::Script, "Script scheduled task error: %s", message == nullptr ? "?" : message);
             if (message != nullptr)
                 JS_FreeCString(mContext, message);
 
@@ -94,7 +95,7 @@ void ScriptScheduler::tick(int64_t currentTick) {
             if (!JS_IsUndefined(stack)) {
                 const char *trace = JS_ToCString(mContext, stack);
                 if (trace != nullptr) {
-                    LOG_ERROR(LogAreaID::Server, "%s", trace);
+                    LOG_ERROR(LogAreaID::Script, "%s", trace);
                     JS_FreeCString(mContext, trace);
                 }
             }
@@ -103,6 +104,7 @@ void ScriptScheduler::tick(int64_t currentTick) {
         }
 
         JS_FreeValue(mContext, result);
+        JS_FreeValue(mContext, callback);
 
         if (!task.mRepeating)
             clear(task.mId);

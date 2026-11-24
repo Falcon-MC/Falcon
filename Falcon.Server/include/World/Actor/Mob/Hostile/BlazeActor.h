@@ -8,11 +8,17 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{0.5f, 1.8f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.5f, 1.8f};
+    }
 
-    float getDefaultMaxHealth() const override { return 20.0f; }
+    float getDefaultMaxHealth() const override {
+        return 20.0f;
+    }
 
-    int getExperienceDrop() const override { return 10; }
+    int getExperienceDrop() const override {
+        return 10;
+    }
 
     bool hasGravity() const override {
         return false;

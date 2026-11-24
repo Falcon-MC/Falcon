@@ -10,8 +10,7 @@ namespace {
     const int32_t SEA_LEVEL = 63;
 
     const BlockState &reedsState() {
-        static const BlockState state = DecorationSupport::withState(
-                VanillaBlocks::REEDS().toBlockState(), "age", 15);
+        static const BlockState state = DecorationSupport::withState(VanillaBlocks::REEDS().toBlockState(), "age", 15);
         return state;
     }
 

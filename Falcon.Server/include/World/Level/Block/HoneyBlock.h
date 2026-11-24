@@ -4,8 +4,7 @@
 
 class HoneyBlock : public Block {
 public:
-    explicit HoneyBlock(const Block &block) : Block(block) {
-    }
+    explicit HoneyBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -15,6 +14,10 @@ public:
 
     float getJumpFactor() const override {
         return 0.6f;
+    }
+
+    bool hearsActorsInside() const override {
+        return true;
     }
 
     void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,

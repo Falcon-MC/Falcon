@@ -1,4 +1,8 @@
+#include "Network/ServerNetworkHandler.h"
 #include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Misc/ArmorStandActor.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "World/Item/ArmorStandItem.h"
 #include "World/Actor/VanillaActorTable.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -6,6 +10,11 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
+#include "World/Level/Block/Systems/FireSystem.h"
+#include "World/Level/Block/Systems/CommandBlockSystem.h"
+#include "World/Level/Block/OpenableBlock.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/IceCrystalBlock.h"
@@ -14,16 +23,14 @@
 #include "World/Level/Block/PlacementHelpers.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Inventory/ItemStackNbt.h"
-#include "World/Item/ItemData.h"
 #include "World/Item/CraftingRecipeTable.h"
+#include "World/Item/ItemData.h"
+#include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemNetworkIdTable.h"
+#include "World/Item/PotionEffects.h"
 #include "World/Item/ThrowableItem.h"
 #include "World/Item/VanillaItems.h"
-#include "World/Item/PotionEffects.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
-#include "World/Level/LevelGen/End/Tree/LegacyChorusTree.h"
-#include "World/Level/LevelGen/Feature/BlockManager.h"
-#include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Chunk/SubChunk.h"
@@ -44,7 +51,108 @@ namespace {
         return value->toBlockState();
     }
 
+    ItemStack armorStandTestStack(const char *identifier, int count) {
+        ItemStack item;
+        item.mDefinition = std::make_shared<ItemDefinition>(identifier, 1, false, Tag());
+        item.mCount = count;
+        return item;
+    }
+
+    void armorStandExchange() {
+        require(ArmorStandActor::slotForClick(0.05f, false) == -1, "below the stand is no slot");
+        require(ArmorStandActor::slotForClick(0.3f, false) == MobEquipment::FEET, "feet band");
+        require(ArmorStandActor::slotForClick(0.7f, false) == MobEquipment::LEGS, "legs band");
+        require(ArmorStandActor::slotForClick(1.3f, false) == MobEquipment::CHEST, "chest band");
+        require(ArmorStandActor::slotForClick(1.3f, true) == MobEquipment::MAINHAND, "held item shadows the chest");
+        require(ArmorStandActor::slotForClick(1.8f, false) == MobEquipment::HEAD, "head band");
+        require(ArmorStandActor::slotForClick(std::nanf(""), false) == -1, "NaN reaches no slot");
+
+        ItemStack slot = ItemStack::air();
+        ItemStack held = armorStandTestStack("minecraft:stick", 5);
+        require(ArmorStandActor::exchange(slot, held, false), "stack onto empty slot");
+        require(slot.mCount == 1 && held.mCount == 4, "exactly one item leaves a stack");
+        require(!ArmorStandActor::exchange(slot, held, false), "a stack never swaps with a worn item");
+        require(slot.mCount == 1 && held.mCount == 4, "a refused exchange changes nothing");
+
+        ItemStack single = armorStandTestStack("minecraft:apple", 1);
+        require(ArmorStandActor::exchange(slot, single, false), "single item swaps");
+        require(slot.mCount == 1 && single.mCount == 1 && single.mDefinition->getIdentifier() == "minecraft:stick",
+                "a swap keeps one item on each side");
+
+        ItemStack empty = ItemStack::air();
+        require(ArmorStandActor::exchange(slot, empty, false), "empty hand takes the item");
+        require(slot.isAir() && empty.mCount == 1, "taking moves the item");
+
+        ItemStack nothing = ItemStack::air();
+        require(!ArmorStandActor::exchange(slot, nothing, false), "two empty sides do nothing");
+
+        ItemStack creativeHeld = armorStandTestStack("minecraft:stick", 1);
+        ItemStack creativeSlot = ItemStack::air();
+        require(ArmorStandActor::exchange(creativeSlot, creativeHeld, true), "creative fills a slot");
+        require(creativeSlot.mCount == 1 && creativeHeld.mCount == 1, "creative keeps its stack");
+
+        require(ArmorStandItem::placedYaw(0.0f) == -180.0f, "a stand placed facing south looks north");
+        require(ArmorStandItem::placedYaw(90.0f) == -90.0f, "a stand placed facing west looks east");
+        require(ArmorStandItem::placedYaw(-90.0f) == 90.0f, "a negative yaw wraps around");
+        require(ArmorStandItem::placedYaw(22.0f) == -180.0f, "below half a step keeps the same eighth");
+        require(ArmorStandItem::placedYaw(23.0f) == -135.0f, "past half a step snaps to the next eighth");
+    }
+
+    void sleepThreshold() {
+        require(ServerNetworkHandler::getRequiredSleepers(1, 100) == 1, "lone player must be enough");
+        require(ServerNetworkHandler::getRequiredSleepers(2, 50) == 1, "half of two players is one");
+        require(ServerNetworkHandler::getRequiredSleepers(3, 50) == 2, "required sleepers must round up");
+        require(ServerNetworkHandler::getRequiredSleepers(4, 100) == 4, "everyone must sleep at 100 percent");
+        require(ServerNetworkHandler::getRequiredSleepers(4, 0) == 1, "at least one sleeper is always required");
+    }
+
+    void mendingRepairsDamagedItems() {
+        ServerNetworkHandler owner("Mending regression", "", 1);
+        ServerPlayer player(NetworkIdentifier{}, 9300);
+        const auto enchanted = [](const char *identifier, int32_t damage) {
+            ItemStack item;
+            item.mDefinition = std::make_shared<ItemDefinition>(identifier, 1, false, Tag());
+            item.mCount = 1;
+            item.mDamage = damage;
+            ItemEnchantments::write(item, {{EnchantmentIds::MENDING, 1}});
+            return item;
+        };
+
+        player.getInventory().setItemInHand(enchanted("minecraft:diamond_sword", 0));
+        player.getInventory().setOffhand(enchanted("minecraft:diamond_pickaxe", 80));
+        require(owner.repairWithMending(player, 1) == 0, "an intact item consumed Mending XP");
+        require(player.getInventory().getOffhand().mDamage == 78, "Mending ignored a damaged item in the offhand");
+    }
+
+    void blockSystemStateIsPerWorld() {
+        ServerNetworkHandler owner("Block system state", "", 1);
+        World &firstWorld = owner.getWorlds().getDefault();
+        World &secondWorld = owner.getWorlds().add("state-isolation", 4, 1);
+        Level &first = firstWorld.getOverworld();
+        Level &second = secondWorld.getOverworld();
+        require(first.getDimensionId() == second.getDimensionId(), "test worlds do not share a dimension id");
+
+        const Vector3i position(8, 64, 8);
+        first.setBlockState(position.x, position.y, position.z, block("minecraft:fire"));
+        first.getGameRules().setFromString("dofiretick", "true");
+        FireSystem::scheduleUpdate(first, position, 1);
+        FireSystem::tick(owner, second);
+        FireSystem::tick(owner, first);
+        require(first.getBlockState(position.x, position.y, position.z).mName == "minecraft:air",
+                "another world's fire tick consumed this world's scheduled update");
+
+        CommandBlockSystem::getOrCreate(first, position);
+        require(CommandBlockSystem::find(second, position) == nullptr,
+                "a command block cache entry leaked into another world");
+
+        OpenableBlock::setManualOverride(first, position, true);
+        require(!OpenableBlock::hasManualOverride(second, position),
+                "a door override leaked into another world");
+    }
+
     void freezing() {
+        const bool RISE = true;
+        const bool THAW = false;
         MobEffectId parsed;
         require(parseMobEffect("minecraft:freezing", parsed) && (int32_t) parsed == 38,
                 "freezing effect name/id is not registered");
@@ -58,15 +166,17 @@ namespace {
         const float walk = PlayerMovementSimulator::groundAcceleration(player, friction, false);
         const float sprint = PlayerMovementSimulator::groundAcceleration(player, friction, true);
         for (int tick = 1; tick <= 139; ++tick)
-            require(player.getEffects().advanceFreezing(false) == 0.0f, "freezing damaged before warmup");
-        require(player.getEffects().advanceFreezing(false) == 1.5f, "freezing did not damage at full freeze");
-        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, false) - walk * 0.5f) < 0.000001f,
+            require(player.getEffects().advanceFreezing(RISE) == 0.0f, "freezing damaged before warmup");
+        require(player.getEffects().advanceFreezing(RISE) == 1.5f, "freezing did not damage at full freeze");
+        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, false) - walk * 0.5f)
+                        < 0.000001f,
                 "server walking simulation ignored freezing");
-        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, true) - sprint * 0.5f) < 0.000001f,
+        require(std::abs(PlayerMovementSimulator::groundAcceleration(player, friction, true) - sprint * 0.5f)
+                        < 0.000001f,
                 "server sprint simulation ignored freezing");
         for (int tick = 1; tick <= 39; ++tick)
-            require(player.getEffects().advanceFreezing(false) == 0.0f, "freezing damage interval too short");
-        require(player.getEffects().advanceFreezing(false) == 1.5f, "freezing damage interval incorrect");
+            require(player.getEffects().advanceFreezing(RISE) == 0.0f, "freezing damage interval too short");
+        require(player.getEffects().advanceFreezing(RISE) == 1.5f, "freezing damage interval incorrect");
         player.setOnFire(true);
         require(!FreezingMobEffect::isProtected(player), "being on fire protected against freezing");
         ItemStack leather;
@@ -74,22 +184,23 @@ namespace {
         leather.mCount = 1;
         player.getInventory().setArmor(PlayerInventory::ARMOR_HEAD, leather);
         require(FreezingMobEffect::isProtected(player), "leather armor did not protect");
-        require(player.getEffects().advanceFreezing(true) == 0.0f && player.hasEffect(MobEffectId::Freezing),
+        require(player.getEffects().advanceFreezing(THAW) == 0.0f && player.hasEffect(MobEffectId::Freezing),
                 "protection removed the effect instead of nullifying it");
-        require(player.getMovementSpeedMultiplier() == 1.0f, "protection retained slowdown");
+        require(player.getEffects().getFreezingTicks() == 138, "freezing does not thaw twice as fast as it climbs");
+        for (int tick = 0; tick < 69; ++tick)
+            player.getEffects().advanceFreezing(THAW);
+        require(player.getEffects().getFreezingTicks() == 0 && player.getMovementSpeedMultiplier() == 1.0f,
+                "thawed freezing retained slowdown");
         player.getInventory().setArmor(PlayerInventory::ARMOR_HEAD, ItemStack::air());
         require(!FreezingMobEffect::isProtected(player), "removed armor still protects");
         for (int tick = 0; tick < 70; ++tick)
-            player.getEffects().advanceFreezing(false);
+            player.getEffects().advanceFreezing(RISE);
         require(std::abs(player.getMovementSpeedMultiplier() - 0.75f) < 0.000001f, "freezing ramp is not gradual");
         player.removeEffect(MobEffectId::Freezing);
+        require(player.getEffects().getFreezingTicks() == 70, "removing the effect dropped freezing at once");
+        for (int tick = 0; tick < 35; ++tick)
+            player.getEffects().advanceFreezing(THAW);
         require(player.getMovementSpeedMultiplier() == 1.0f, "removing freezing retained slowdown");
-        effect.mDuration = 1;
-        player.addEffect(effect);
-        player.getEffects().advanceFreezing(false);
-        player.tickEffects();
-        require(!player.hasEffect(MobEffectId::Freezing) && player.getMovementSpeedMultiplier() == 1.0f,
-                "expired freezing retained slowdown");
         effect.mDuration = 900;
         Level heat("freezing-heat-test", 2);
         heat.insertChunk(LevelChunk(0, 0));
@@ -99,11 +210,35 @@ namespace {
         require(FreezingSystem::isSuppressed(heat, player), "standing in fire did not suppress freezing");
         heat.setBlock(Vector3i(8, 20, 8), block("minecraft:lava"), false);
         require(FreezingSystem::isSuppressed(heat, player), "standing in lava did not suppress freezing");
+        heat.setBlock(Vector3i(8, 20, 8), block("minecraft:air"), false);
+        require(!FreezingSystem::isInFreezingBlock(heat, player), "air froze the player");
+        heat.setBlock(Vector3i(8, 21, 8), block("minecraft:powder_snow"), false);
+        require(FreezingSystem::isInFreezingBlock(heat, player), "powder snow at head height did not freeze");
+        heat.setBlock(Vector3i(8, 21, 8), block("minecraft:air"), false);
+        heat.setBlock(Vector3i(8, 19, 8), block("minecraft:powder_snow"), false);
+        require(!FreezingSystem::isInFreezingBlock(heat, player), "powder snow under the feet froze the player");
+        heat.setBlock(Vector3i(9, 20, 8), block("minecraft:powder_snow"), false);
+        player.setPosition(Vector3f(8.7f, 20.0f, 8.5f));
+        require(!FreezingSystem::isInFreezingBlock(heat, player), "a box ending on the block edge froze the player");
+        player.setPosition(Vector3f(8.71f, 20.0f, 8.5f));
+        require(FreezingSystem::isInFreezingBlock(heat, player), "a box reaching into powder snow did not freeze");
+        player.setPosition(Vector3f(8.5f, 20.0f, 8.5f));
+        require(player.canFreeze(), "players stopped freezing");
+        for (const char *name: {"minecraft:ender_crystal", "minecraft:item", "minecraft:tnt", "minecraft:arrow"}) {
+            auto actor = ActorClassRegistry::create(100, name);
+            require(actor != nullptr && !actor->canFreeze(), "a non-mob actor can freeze");
+        }
+        for (int tick = 0; tick < 140; ++tick)
+            player.getEffects().advanceFreezing(RISE);
+        player.kill();
+        require(player.getEffects().getFreezingTicks() == 0 && player.getMovementSpeedMultiplier() == 1.0f,
+                "a dead player kept its freeze");
         require(VanillaBlocks::fromIdentifier("minecraft:fire")->suppressesFreezing()
-                && VanillaBlocks::fromIdentifier("minecraft:lava")->suppressesFreezing()
-                && !VanillaBlocks::fromIdentifier("minecraft:stone")->suppressesFreezing(), "heat block protection incorrect");
+                        && VanillaBlocks::fromIdentifier("minecraft:lava")->suppressesFreezing()
+                        && !VanillaBlocks::fromIdentifier("minecraft:stone")->suppressesFreezing(),
+                "heat block protection incorrect");
         for (const char *name: {"minecraft:zombie", "minecraft:drowned", "minecraft:husk", "minecraft:wither",
-                               "minecraft:ender_dragon", "minecraft:frostbite"}) {
+                                "minecraft:ender_dragon", "minecraft:frostbite"}) {
             auto actor = ActorClassRegistry::create(100, name);
             require(!actor->addEffect(effect), "immune actor accepted freezing");
         }
@@ -113,10 +248,11 @@ namespace {
             require(FreezingMobEffect::isVulnerable(*actor), "missing vulnerability component");
             float damage = 0.0f;
             for (int tick = 0; tick < 140; ++tick)
-                damage = actor->getEffects().advanceFreezing(false);
+                damage = actor->getEffects().advanceFreezing(RISE);
             require(damage == 7.5f, "vulnerable freezing damage incorrect");
         }
-        for (const char *name: {"minecraft:polar_bear", "minecraft:snow_golem", "minecraft:skeleton", "minecraft:stray"}) {
+        for (const char *name:
+             {"minecraft:polar_bear", "minecraft:snow_golem", "minecraft:skeleton", "minecraft:stray"}) {
             auto actor = ActorClassRegistry::create(100, name);
             require(FreezingMobEffect::isProtected(*actor), "unfreezable mob lost immunity");
         }
@@ -132,7 +268,7 @@ namespace {
                 old.putInt("age", 7);
             if (std::string(name) == "minecraft:redstone_wire")
                 old.putInt("redstone_signal", 11);
-            // 26.50 and 26.60 have the same serialized state version.
+            // 26.50 and 26.60 share a serialized state version
             const BlockStateData upgraded = BlockStateUpgrades::upgrade(BlockStateData(name, old, 18168865));
             const Tag &states = upgraded.getStates();
             const bool wire = std::string(name) == "minecraft:redstone_wire";
@@ -163,19 +299,25 @@ namespace {
         Tag connected = block("minecraft:chorus_plant").mStates;
         connected.putByte("minecraft:connection_east", 1);
         require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:chorus_plant", connected, 18168865))
-                    .getStates().getBool("minecraft:connection_east"), "migration erased an existing connection");
-        require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:fire", Tag::ofCompound(), 0)).getStates()
-                    .contains("minecraft:connection_up"), "old-version migration missed new states");
+                        .getStates()
+                        .getBool("minecraft:connection_east"),
+                "migration erased an existing connection");
+        require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:fire", Tag::ofCompound(), 0))
+                        .getStates()
+                        .contains("minecraft:connection_up"),
+                "old-version migration missed new states");
         require(BlockStateUpgrades::upgrade(BlockStateData("minecraft:fire", Tag::ofCompound(), 18168866)).getStates()
-                    == Tag::ofCompound(), "migration rewrote a future state");
+                        == Tag::ofCompound(),
+                "migration rewrote a future state");
     }
 
     void gameplay() {
         require(findPotionId("minecraft:freezing") == 47, "missing freezing potion");
         require(findPotionId("long_freezing") == 48, "missing long freezing potion");
         require(getPotionEffects(47).front().mId == MobEffectId::Freezing
-                && getPotionEffects(47).front().mDuration == 900
-                && getPotionEffects(48).front().mDuration == 1800, "incorrect freezing potion durations");
+                        && getPotionEffects(47).front().mDuration == 900
+                        && getPotionEffects(48).front().mDuration == 1800,
+                "incorrect freezing potion durations");
         for (const char *potion: {"minecraft:potion", "minecraft:splash_potion", "minecraft:lingering_potion"}) {
             const BrewingMixData *mix = CraftingRecipeTable::findBrewingMix(potion, 4, "minecraft:ice_ball", 0);
             require(mix != nullptr && mix->mOutputMeta == 47, "missing freezing brewing recipe");
@@ -200,9 +342,11 @@ namespace {
         const Vector3i position(8, 20, 8);
         level.setBlock(Vector3i(8, 19, 8), block("minecraft:stone"), false);
         const auto *icicle = dynamic_cast<const IcicleBlock *>(VanillaBlocks::fromIdentifier("minecraft:icicle"));
-        const auto *crystal = dynamic_cast<const IceCrystalBlock *>(VanillaBlocks::fromIdentifier("minecraft:ice_crystal"));
+        const auto *crystal = dynamic_cast<const IceCrystalBlock *>(
+                VanillaBlocks::fromIdentifier("minecraft:ice_crystal"));
         require(icicle != nullptr && crystal != nullptr, "missing ice block classes");
-        require(icicle->canPlaceAt(level, position, 1) && !icicle->canPlaceAt(level, position, 2), "invalid icicle placement");
+        require(icicle->canPlaceAt(level, position, 1) && !icicle->canPlaceAt(level, position, 2),
+                "invalid icicle placement");
         require(crystal->canPlaceAt(level, position, 1), "crystal cannot attach to stone");
         for (int face = 0; face < 6; ++face) {
             const Vector3i support = PlacementOrientation::relativePosition(position, face ^ 1);
@@ -238,37 +382,219 @@ namespace {
         level.setBlock(Vector3i(9, 20, 8), powered, false);
         shape = wire->updateShape(level, position, shape);
         require(shape.mStates.getString("redstone_north") == "none"
-                && shape.mStates.getString("redstone_west") == "side", "wire straight line shape incorrect");
+                        && shape.mStates.getString("redstone_west") == "side",
+                "wire straight line shape incorrect");
         level.setBlock(Vector3i(9, 20, 8), block("minecraft:stone"), false);
         level.setBlock(Vector3i(9, 21, 8), powered, false);
-        require(wire->updateShape(level, position, shape).mStates.getString("redstone_east") == "up", "wire cannot climb");
+        require(wire->updateShape(level, position, shape).mStates.getString("redstone_east") == "up",
+                "wire cannot climb");
 
         level.setBlock(Vector3i(7, 20, 8), block("minecraft:oak_planks"), false);
         level.setBlock(position, block("minecraft:fire"), false);
-        require(level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"), "wall fire missing connection");
+        require(level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"),
+                "wall fire missing connection");
         level.setBlock(Vector3i(8, 19, 8), block("minecraft:stone"), false);
         level.setBlock(position, block("minecraft:fire"), false);
-        require(!level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"), "ground fire kept wall shape");
+        require(!level.getBlockState(8, 20, 8).mStates.getBool("minecraft:connection_west"),
+                "ground fire kept wall shape");
 
         level.setBlock(Vector3i(15, 30, 8), block("minecraft:chorus_plant"), false);
         LevelChunk neighbour(1, 0);
         neighbour.setBlock(0, 30, 8, block("minecraft:chorus_plant"));
         level.insertChunk(std::move(neighbour));
         require(level.getBlockState(15, 30, 8).mStates.getBool("minecraft:connection_east")
-                && level.getBlockState(16, 30, 8).mStates.getBool("minecraft:connection_west"), "chunk border shapes not refreshed");
+                        && level.getBlockState(16, 30, 8).mStates.getBool("minecraft:connection_west"),
+                "chunk border shapes not refreshed");
         Tag edgeStates = block("minecraft:chorus_plant").mStates;
         edgeStates.putByte("minecraft:connection_north", 1);
         level.setBlock(Vector3i(8, 30, 0), BlockState("minecraft:chorus_plant", edgeStates), false);
-        require(level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "unloaded neighbour erased saved shape");
+        require(level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"),
+                "unloaded neighbour erased saved shape");
         level.insertChunk(LevelChunk(0, -1));
-        require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"), "loaded empty neighbour kept stale connection");
+        require(!level.getBlockState(8, 30, 0).mStates.getBool("minecraft:connection_north"),
+                "loaded empty neighbour kept stale connection");
+    }
 
-        BlockManager manager(level);
-        SimpleRandom random(1234);
-        LegacyChorusTree tree;
-        manager.setBlockStateAt(8, 39, 8, block("minecraft:end_stone"));
-        tree.generate(manager, random, 8, 40, 8);
-        require(manager.getBlockAt(8, 40, 8).mStates.getBool("minecraft:connection_down"), "generated chorus missing root connection");
+    // piston at (8, 100, 8) facing up, powered by a redstone block beside it
+    struct PistonFixture {
+        ServerNetworkHandler mOwner{"Piston regression", "", 1};
+        Level &mLevel = mOwner.getLevel();
+        Vector3i mPiston{8, 100, 8};
+
+        PistonFixture() {
+            mLevel.getChunk(0, 0);
+            mLevel.getBlockActors().loadChunk(0, 0, {}, mOwner.getCodecContext());
+            for (int x = 0; x < 16; ++x)
+                for (int z = 0; z < 16; ++z)
+                    for (int y = 95; y <= 120; ++y)
+                        mLevel.setBlockState(x, y, z, BlockState("minecraft:air"));
+        }
+
+        void set(int x, int y, int z, const char *name) {
+            mLevel.setBlockState(x, y, z, block(name));
+        }
+
+        std::string at(int x, int y, int z) {
+            return mLevel.getBlockState(x, y, z).mName;
+        }
+
+        void place(bool sticky) {
+            BlockState piston = block(sticky ? "minecraft:sticky_piston" : "minecraft:piston");
+            piston.mStates.putInt("facing_direction", 1);
+            mLevel.setBlockState(mPiston.x, mPiston.y, mPiston.z, piston);
+        }
+
+        void power(bool powered) {
+            mLevel.setBlockState(mPiston.x + 1, mPiston.y, mPiston.z,
+                                 powered ? block("minecraft:redstone_block") : BlockState("minecraft:air"));
+            const BlockState piston = mLevel.getBlockState(mPiston.x, mPiston.y, mPiston.z);
+            PistonSystem::onRedstoneUpdate(mOwner, mLevel, mPiston, piston);
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(mOwner, mLevel);
+        }
+    };
+
+    void pistons() {
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            for (int y = 101; y <= 112; ++y)
+                fixture.set(8, y, 8, "minecraft:stone");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:piston_arm_collision"
+                            && fixture.at(8, 113, 8) == "minecraft:stone" && fixture.at(8, 102, 8) == "minecraft:stone",
+                    "a piston did not push a line of twelve blocks");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            for (int y = 101; y <= 113; ++y)
+                fixture.set(8, y, 8, "minecraft:stone");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:stone" && fixture.at(8, 114, 8) == "minecraft:air",
+                    "a piston pushed more than twelve blocks");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:stone");
+            fixture.set(8, 102, 8, "minecraft:obsidian");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:stone", "a piston pushed obsidian");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(true);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.set(9, 101, 8, "minecraft:stone");
+            fixture.set(7, 101, 8, "minecraft:honey_block");
+            fixture.power(true);
+            require(fixture.at(8, 102, 8) == "minecraft:slime" && fixture.at(9, 102, 8) == "minecraft:stone"
+                            && fixture.at(9, 101, 8) == "minecraft:air",
+                    "slime did not carry the block stuck to its side");
+            require(fixture.at(7, 101, 8) == "minecraft:honey_block", "slime carried a honey block along");
+            fixture.power(false);
+            require(fixture.at(8, 101, 8) == "minecraft:slime" && fixture.at(9, 101, 8) == "minecraft:stone"
+                            && fixture.at(8, 102, 8) == "minecraft:air" && fixture.at(9, 102, 8) == "minecraft:air",
+                    "a sticky piston did not pull back its slime structure");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.set(9, 101, 8, "minecraft:stone");
+            fixture.set(9, 102, 8, "minecraft:obsidian");
+            fixture.power(true);
+            require(fixture.at(8, 101, 8) == "minecraft:slime", "slime pushed a block into obsidian");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.set(8, 102, 8, "minecraft:honey_block");
+            fixture.power(true);
+            require(fixture.at(8, 102, 8) == "minecraft:slime" && fixture.at(8, 103, 8) == "minecraft:honey_block",
+                    "slime did not push the honey block ahead of it");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(true);
+            fixture.set(8, 101, 8, "minecraft:slime");
+            fixture.power(true);
+            fixture.set(9, 102, 8, "minecraft:stone");
+            fixture.set(9, 101, 8, "minecraft:obsidian");
+            fixture.power(false);
+            require(fixture.at(8, 101, 8) == "minecraft:air" && fixture.at(8, 102, 8) == "minecraft:slime"
+                            && fixture.at(9, 102, 8) == "minecraft:stone",
+                    "a sticky piston that cannot pull its structure did not retract empty-handed");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:pumpkin");
+            fixture.power(true);
+            size_t pumpkins = 0;
+            for (const std::unique_ptr<ItemActor> &dropped: fixture.mOwner.getItemEntities()) {
+                if (!dropped->isRemoved() && !dropped->getItem().isAir()
+                    && dropped->getItem().mDefinition->getIdentifier() == "minecraft:pumpkin")
+                    pumpkins++;
+            }
+            require(fixture.at(8, 101, 8) == "minecraft:piston_arm_collision" && pumpkins == 1,
+                    "a piston broke a pumpkin without dropping it");
+        }
+        {
+            PistonFixture fixture;
+            fixture.place(false);
+            fixture.set(8, 101, 8, "minecraft:stone");
+            fixture.mLevel.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
+            PistonSystem::onRedstoneUpdate(fixture.mOwner, fixture.mLevel, fixture.mPiston,
+                                           fixture.mLevel.getBlockState(8, 100, 8));
+            // the arm takes the source at once, the pushed block waits for it at its destination
+            require(fixture.at(8, 102, 8) == "minecraft:air" && PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+                    "a pushed block did not wait for the arm");
+            PistonSystem::finishMoves(fixture.mOwner, fixture.mLevel);
+            require(fixture.at(8, 102, 8) == "minecraft:stone"
+                            && !PistonSystem::isMovingInto(fixture.mLevel, {8, 102, 8}),
+                    "finishing the moves did not place the pushed block");
+        }
+        {
+            PistonFixture fixture;
+            Level other("Other", 4, 1);
+            other.getChunk(0, 0);
+            for (int y = 95; y <= 120; ++y)
+                other.setBlockState(8, y, 8, BlockState("minecraft:air"));
+            BlockState piston = block("minecraft:piston");
+            piston.mStates.putInt("facing_direction", 1);
+            other.setBlockState(8, 100, 8, piston);
+            other.setBlockState(8, 101, 8, block("minecraft:stone"));
+            other.setBlockState(9, 100, 8, block("minecraft:redstone_block"));
+            PistonSystem::onRedstoneUpdate(fixture.mOwner, other, fixture.mPiston, other.getBlockState(8, 100, 8));
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(fixture.mOwner, fixture.mLevel);
+            require(fixture.at(8, 102, 8) == "minecraft:air", "a piston move of one level ended in another");
+            for (int tick = 0; tick < 10; ++tick)
+                PistonSystem::tick(fixture.mOwner, other);
+            require(other.getBlockState(8, 102, 8).mName == "minecraft:stone", "a piston move lost its level");
+            PistonSystem::forgetLevel(other);
+        }
+    }
+
+    void fallDamageReduction() {
+        NetworkIdentifier id;
+        ServerPlayer player(id, 9100);
+        const Block *hay = VanillaBlocks::fromIdentifier("minecraft:hay_block");
+        const Block *bed = VanillaBlocks::fromIdentifier("minecraft:bed");
+        const Block *stone = VanillaBlocks::fromIdentifier("minecraft:stone");
+        // the game scales the fall distance, not the damage: 13 blocks deal ceil(13 * 0.2 - 3) = 0 on hay
+        // and ceil(13 * 0.5 - 3) = 4 on a bed
+        require(player.computeFallDamage(13.0f * hay->getFallDistanceMultiplier()) == 0.0f,
+                "hay bale did not scale the fall distance by 0.2");
+        require(player.computeFallDamage(13.0f * bed->getFallDistanceMultiplier()) == 4.0f,
+                "bed did not scale the fall distance by 0.5");
+        require(stone->getFallDistanceMultiplier() == 1.0f, "stone changed the fall distance");
+        require(*VanillaBlocks::fromIdentifier("minecraft:slime")->getFallDamage(player, 10.0f) == 0.0f,
+                "slime did not cancel the fall damage");
+        require(!stone->getFallDamage(player, 10.0f).has_value(), "stone changed the fall damage");
     }
 }
 
@@ -278,6 +604,12 @@ int main() {
         migration();
         gameplay();
         freezing();
+        armorStandExchange();
+        sleepThreshold();
+        mendingRepairsDamagedItems();
+        blockSystemStateIsPerWorld();
+        pistons();
+        fallDamageReduction();
         std::cout << "26.60 migration and gameplay regressions passed\n";
         return 0;
     } catch (const std::exception &error) {

@@ -10,16 +10,17 @@ void PlayerGravitySystem::tick(PlayerMovementContext &context) {
     auto &contact = context.contact;
     auto &travel = context.travel;
 
-    if (abilities.flying || context.waterTravel.active || context.liquidTravel.lava
-        || abilities.gliding || context.autoClimb.scaffoldDescend)
+    if (abilities.flying || context.waterTravel.active || context.liquidTravel.lava || abilities.gliding
+        || context.autoClimb.scaffoldDescend || context.autoClimb.climbing)
         return;
     const MobEffectInstance *levitation = context.player.getEffects().get(MobEffectId::Levitation);
     if (levitation != nullptr) {
-        // BDS applies LevitateSystem (0x14104F680), then ground/air vertical drag (0x141051E00).
+        // LevitateSystem, then ground/air vertical drag
         state.velocity.y = (state.velocity.y * 0.8f + 0.01f * (float) levitation->level()) * GRAVITY_MULTIPLIER;
     } else {
         const float gravity = context.player.hasEffect(MobEffectId::SlowFalling) && state.velocity.y < 0.0f
-                              ? SLOW_FALLING_GRAVITY : GRAVITY;
+                                      ? SLOW_FALLING_GRAVITY
+                                      : GRAVITY;
         state.velocity.y = (state.velocity.y - gravity) * GRAVITY_MULTIPLIER;
     }
 }

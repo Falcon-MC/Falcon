@@ -25,10 +25,15 @@ enum class BlockToolTier : uint8_t {
     Netherite = 7
 };
 
-enum class BlockDropKind : uint8_t {
-    Nothing = 0,
-    Self = 1,
-    Other = 2
+enum class BlockDropKind : uint8_t { Nothing = 0, Self = 1, Other = 2 };
+
+// set for about 190 blocks and air, every other block
+// obstructs, like the explicit obstruct_rain of ice, packed ice and grass path
+enum class BlockPrecipitationInteraction : uint8_t {
+    ObstructRain,
+    None,
+    // a snow layer may be placed in the block's position
+    Snowlogging
 };
 
 struct BlockData {
@@ -46,11 +51,11 @@ struct BlockData {
     bool mSolid;
     uint8_t mBurnChance;
     uint8_t mBurnAbility;
-    uint8_t mWaterloggingLevel;
     BlockDropKind mDropKind;
     const char *mDropIdentifier;
     uint8_t mDropMin;
     uint8_t mDropMax;
+    BlockPrecipitationInteraction mPrecipitation = BlockPrecipitationInteraction::ObstructRain;
     const char *mBehaviorIdentifier = nullptr;
     int32_t mMaxStackSize = 64;
 };

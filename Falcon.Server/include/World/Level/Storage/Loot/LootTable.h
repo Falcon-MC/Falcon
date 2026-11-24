@@ -14,15 +14,11 @@ class LootPool;
 
 class LootEntry {
 public:
-    enum class Type {
-        Item,
-        Table,
-        Empty
-    };
+    enum class Type { Item, Table, Empty };
 
     explicit LootEntry(const json::Value &definition);
 
-    /** Luck shifts the weight by quality per point, as fishing loot uses for Luck of the Sea. */
+    // luck adds quality per point to the weight: fishing loot, Luck of the Sea
     int32_t getWeight(const LootContext &context) const;
 
     bool isAvailable(const LootContext &context) const;

@@ -6,8 +6,20 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# the tests share one library of the server, and every static library it takes in must allow that
+if(FALCON_BUILD_EMBEDDED_TESTS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# the windows server is shipped as a single exe, so zlib and openssl go inside it rather than beside it as dlls.
+# set before libdatachannel looks openssl up, the first lookup decides for the whole build
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(ZLIB_USE_STATIC_LIBS ON)
+    set(OPENSSL_USE_STATIC_LIBS ON)
+endif()
 
 include(FetchContent)
 
@@ -105,14 +117,62 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(falcon_bedrock_data)
 
+# png decoding for image maps: one public domain header, built with only its png reader
+FetchContent_Declare(
+    stb_image
+    URL https://raw.githubusercontent.com/nothings/stb/4e9b368bfc071e97206ea5c6adba68dd0cbf8897/stb_image.h
+    URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+    DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(stb_image)
+
 set(FALCON_PLUGIN_API_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     falcon_plugin_api
     GIT_REPOSITORY https://github.com/Falcon-MC/PluginAPI.git
-    GIT_TAG fdf70c7e737a3b4f7daa96dbf9203362ce1ab47f
+    GIT_TAG 929f4165a593678a8ef39464acff709cf6a283dc
     GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(falcon_plugin_api)
+
+# prebuilt wasmtime c api: building it from source needs a rust toolchain
+set(FALCON_WASMTIME_VERSION 50.0.1)
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|x86_64)$")
+    set(FALCON_WASMTIME_ARCHIVE x86_64-mingw-c-api.zip)
+    set(FALCON_WASMTIME_SHA256 9001a5df99305f6bc4a22d1e38f020f953b26cc88755840743dfabd44d9eaea4)
+elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+    set(FALCON_WASMTIME_ARCHIVE aarch64-macos-c-api.tar.xz)
+    set(FALCON_WASMTIME_SHA256 a49327ca596fae51cd92e230265132112bb7896c5a24e4d58cd05b56612e26bb)
+elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    set(FALCON_WASMTIME_ARCHIVE x86_64-macos-c-api.tar.xz)
+    set(FALCON_WASMTIME_SHA256 b6d436cba5c0964785c6ff7c9b5a743131555a0227b4f742185c4fb520c502c5)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    set(FALCON_WASMTIME_ARCHIVE x86_64-linux-c-api.tar.xz)
+    set(FALCON_WASMTIME_SHA256 e2c0c26e1aef52f82f0b9918ad6f34cc30f4b557aee3e261cb127a9462be8f4d)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    set(FALCON_WASMTIME_ARCHIVE aarch64-linux-c-api.tar.xz)
+    set(FALCON_WASMTIME_SHA256 1a36140a016a9cc098f02a37bb0cc7be6451032861ba70049127928d2f31ef84)
+else()
+    message(FATAL_ERROR "Wasmtime ${FALCON_WASMTIME_VERSION} has no prebuilt C API for ${CMAKE_SYSTEM_NAME} "
+            "${CMAKE_SYSTEM_PROCESSOR} with ${CMAKE_CXX_COMPILER_ID}")
+endif()
+
+FetchContent_Declare(
+    wasmtime
+    URL https://github.com/bytecodealliance/wasmtime/releases/download/v${FALCON_WASMTIME_VERSION}/wasmtime-v${FALCON_WASMTIME_VERSION}-${FALCON_WASMTIME_ARCHIVE}
+    URL_HASH SHA256=${FALCON_WASMTIME_SHA256}
+)
+FetchContent_MakeAvailable(wasmtime)
+
+add_library(wasmtime STATIC IMPORTED GLOBAL)
+set_target_properties(wasmtime PROPERTIES
+        IMPORTED_LOCATION "${wasmtime_SOURCE_DIR}/lib/libwasmtime.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${wasmtime_SOURCE_DIR}/include")
+if(WIN32)
+    set_property(TARGET wasmtime PROPERTY INTERFACE_LINK_LIBRARIES ws2_32 advapi32 userenv ntdll shell32 ole32 bcrypt)
+elseif(NOT APPLE)
+    set_property(TARGET wasmtime PROPERTY INTERFACE_LINK_LIBRARIES pthread dl m)
+endif()
 
 add_subdirectory(Falcon.Server)
 

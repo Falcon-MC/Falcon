@@ -4,14 +4,18 @@
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/SubChunkPacket.h"
 #include "Protocol/Packets/SubChunkRequestPacket.h"
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -19,11 +23,8 @@ namespace {
     const int8_t HEIGHT_TOO_LOW = -1;
     const int8_t HEIGHT_TOO_HIGH = 16;
 
-    /**
-     * Per-column top block relative to this sub-chunk, with -1 and 16 meaning "below" and
-     * "above" it. When every column is on the same side the protocol lets us send just the
-     * type and skip the 256-byte map.
-     */
+    // per-column top block relative to this sub-chunk; -1/16 mean below/above;
+    // all columns on one side: the protocol sends just the type, no 256-byte map
     std::string buildHeightMap(const std::vector<int32_t> &tops, int32_t baseY, HeightMapDataType &type) {
         bool allTooLow = true;
         bool allTooHigh = true;
@@ -70,12 +71,19 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
                                            const SubChunkRequestPacket &packet) {
     Level &level = owner.getLevelFor(player);
     const NetworkIdentifier &id = player.getNetworkIdentifier();
+    const ChunkStreamState &state = player.getChunkStreamState();
     const bool wrongDimension = packet.mDimension != level.getDimensionId();
 
+    // the game batches every pending sub-chunk of a frame into one request, uncapped: only repeats are dropped,
+    // the view radius bounds the rest
     std::vector<SubChunkData> entries;
     entries.reserve(packet.mPositionOffsets.size());
+    std::set<std::tuple<int32_t, int32_t, int32_t>> seen;
 
     for (const Vector3i &offset: packet.mPositionOffsets) {
+        if (!seen.emplace(offset.x, offset.y, offset.z).second)
+            continue;
+
         SubChunkData entry;
         entry.mPosition = offset;
 
@@ -87,13 +95,29 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
             continue;
         }
 
-        const int32_t chunkX = packet.mSubChunkPosition.x + offset.x;
-        const int32_t subChunkY = packet.mSubChunkPosition.y + offset.y;
-        const int32_t chunkZ = packet.mSubChunkPosition.z + offset.z;
-        const int index = (int) (subChunkY - LevelChunk::LOWEST_SUB_CHUNK_Y);
+        // client-chosen centre and offsets: sum in 64 bits, range-checked before narrowing
+        const int64_t chunkX64 = (int64_t) packet.mSubChunkPosition.x + offset.x;
+        const int64_t subChunkY64 = (int64_t) packet.mSubChunkPosition.y + offset.y;
+        const int64_t chunkZ64 = (int64_t) packet.mSubChunkPosition.z + offset.z;
+        const int64_t index64 = subChunkY64 - LevelChunk::LOWEST_SUB_CHUNK_Y;
 
-        if (index < 0 || index >= LevelChunk::SUB_CHUNK_COUNT) {
+        if (chunkX64 < INT32_MIN || chunkX64 > INT32_MAX || chunkZ64 < INT32_MIN || chunkZ64 > INT32_MAX || index64 < 0
+            || index64 >= LevelChunk::SUB_CHUNK_COUNT) {
             entry.mResult = SubChunkRequestResult::IndexOutOfBounds;
+            entry.mHeightMapType = HeightMapDataType::NoData;
+            entry.mRenderHeightMapType = entry.mHeightMapType;
+            entries.push_back(entry);
+            continue;
+        }
+
+        const int32_t chunkX = (int32_t) chunkX64;
+        const int32_t subChunkY = (int32_t) subChunkY64;
+        const int32_t chunkZ = (int32_t) chunkZ64;
+        const int index = (int) index64;
+
+        // only chunks already in view: bounds the work per packet, no pulling unstreamed chunks (base finding, x-ray)
+        if (state.mInRadius.find(ChunkStreamHandler::packChunk(chunkX, chunkZ)) == state.mInRadius.end()) {
+            entry.mResult = SubChunkRequestResult::ChunkNotFound;
             entry.mHeightMapType = HeightMapDataType::NoData;
             entry.mRenderHeightMapType = entry.mHeightMapType;
             entries.push_back(entry);
@@ -132,11 +156,12 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
         entry.mHasData = true;
         const BlockNetworkIdMap *blockIds = owner.getCodecContext(id).getBlockNetworkIds();
         entry.mData = (blockIds == nullptr ? chunk->encodeSubChunkNetwork(index)
-                                           : chunk->encodeSubChunkNetwork(index, *blockIds)) + blockEntities;
+                                           : chunk->encodeSubChunkNetwork(index, *blockIds))
+                      + blockEntities;
         entries.push_back(entry);
     }
 
-    // Large requests are answered in several packets to keep each one bounded in size.
+    // large requests split over several packets to bound each one
     for (size_t sent = 0; sent < entries.size(); sent += MAX_ENTRIES_PER_RESPONSE) {
         const size_t end = std::min(entries.size(), sent + (size_t) MAX_ENTRIES_PER_RESPONSE);
 

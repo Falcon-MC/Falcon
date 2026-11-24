@@ -1,5 +1,6 @@
 #include "World/Level/TickingAreaManager.h"
 
+#include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/UUID.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -33,8 +34,8 @@ int32_t TickingArea::getRadius() const {
 
 bool TickingArea::containsChunk(int32_t chunkX, int32_t chunkZ) const {
     if (!mCircle)
-        return chunkX >= (mMinX >> CHUNK_SHIFT) && chunkX <= (mMaxX >> CHUNK_SHIFT)
-               && chunkZ >= (mMinZ >> CHUNK_SHIFT) && chunkZ <= (mMaxZ >> CHUNK_SHIFT);
+        return chunkX >= (mMinX >> CHUNK_SHIFT) && chunkX <= (mMaxX >> CHUNK_SHIFT) && chunkZ >= (mMinZ >> CHUNK_SHIFT)
+               && chunkZ <= (mMaxZ >> CHUNK_SHIFT);
 
     const int32_t dx = chunkX - getCenterChunkX();
     const int32_t dz = chunkZ - getCenterChunkZ();
@@ -55,6 +56,18 @@ std::vector<int64_t> TickingArea::getColumns() const {
         }
     }
     return columns;
+}
+
+int64_t TickingArea::getChunkCount() const {
+    if (mCircle)
+        return (int64_t) getColumns().size();
+    return ((int64_t) (mMaxX >> CHUNK_SHIFT) - (mMinX >> CHUNK_SHIFT) + 1)
+           * ((int64_t) (mMaxZ >> CHUNK_SHIFT) - (mMinZ >> CHUNK_SHIFT) + 1);
+}
+
+int64_t TickingArea::getSideChunks() const {
+    return std::max((int64_t) (mMaxX >> CHUNK_SHIFT) - (mMinX >> CHUNK_SHIFT) + 1,
+                    (int64_t) (mMaxZ >> CHUNK_SHIFT) - (mMinZ >> CHUNK_SHIFT) + 1);
 }
 
 Tag TickingArea::toNbt() const {
@@ -109,15 +122,21 @@ void TickingAreaManager::load(World &world) {
     mAreas.clear();
 
     for (const std::pair<std::string, Tag> &entry: world.getLevel(DimensionType::Overworld).loadTickingAreas()) {
-        mAreas.push_back(TickingArea::fromNbt(entry.first, entry.second));
+        TickingArea area = TickingArea::fromNbt(entry.first, entry.second);
+        // a stored area no limit admits would load its chunks at every start: left on disk, not attached
+        if (area.mMinX > area.mMaxX || area.mMinZ > area.mMaxZ || area.getSideChunks() > MAX_SIDE_CHUNKS
+            || area.getChunkCount() > MAX_SCRIPT_CHUNKS) {
+            LOG_WARN(LogAreaID::Server, "Skipped ticking area %s: %lld chunks over the limits", area.mName.c_str(),
+                     (long long) area.getChunkCount());
+            continue;
+        }
+        mAreas.push_back(std::move(area));
         _attach(world, mAreas.back());
     }
 }
 
 bool TickingAreaManager::hasName(const std::string &name) const {
-    return std::any_of(mAreas.begin(), mAreas.end(), [&name](const TickingArea &area) {
-        return area.mName == name;
-    });
+    return std::any_of(mAreas.begin(), mAreas.end(), [&name](const TickingArea &area) { return area.mName == name; });
 }
 
 std::string TickingAreaManager::nextDefaultName() const {
@@ -155,9 +174,8 @@ std::vector<TickingArea> TickingAreaManager::remove(World &world,
     return removed;
 }
 
-std::vector<TickingArea> TickingAreaManager::setPreload(World &world,
-                                                        const std::function<bool(const TickingArea &)> &match,
-                                                        bool preload) {
+std::vector<TickingArea>
+TickingAreaManager::setPreload(World &world, const std::function<bool(const TickingArea &)> &match, bool preload) {
     std::vector<TickingArea> updated;
     for (TickingArea &area: mAreas) {
         if (!match(area))
@@ -193,6 +211,18 @@ std::string TickingAreaManager::_randomId() {
     return Uuid(most, least).toString();
 }
 
+void TickingAreaManager::retryPendingLoads(World &world) {
+    for (const auto &area: mAreas) {
+        Level &level = world.getLevel(area.mDimension);
+        for (const int64_t column: area.getColumns()) {
+            const int32_t x = (int32_t) (column >> 32);
+            const int32_t z = (int32_t) (column & 0xffffffff);
+            if (!level.isChunkPopulated(x, z))
+                level.requestChunkAsync(x, z);
+        }
+    }
+}
+
 void TickingAreaManager::_attach(World &world, const TickingArea &area) {
     Level &level = world.getLevel(area.mDimension);
     const uint64_t loader = _loaderId(area);
@@ -208,6 +238,7 @@ void TickingAreaManager::_attach(World &world, const TickingArea &area) {
     }
 
     world.mActorPersistencePending = true;
+    world.mActiveColumnsStale = true;
 }
 
 void TickingAreaManager::_detach(World &world, const TickingArea &area) {
@@ -218,4 +249,5 @@ void TickingAreaManager::_detach(World &world, const TickingArea &area) {
         level.unregisterChunkLoader(loader, (int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
 
     world.mActorPersistencePending = true;
+    world.mActiveColumnsStale = true;
 }

@@ -16,6 +16,8 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <array>
@@ -39,36 +41,34 @@ namespace {
         std::map<int64_t, std::vector<ScheduledPosition>> mBuckets;
     };
 
-    std::array<FireSchedule, Dimension::DIMENSION_COUNT> gSchedules;
+    std::unordered_map<const Level *, FireSchedule> gSchedules;
 
     FireSchedule &scheduleOf(Level &level) {
-        return gSchedules[level.getDimensionId()];
+        return gSchedules[&level];
     }
 
-    const char *UNBURNABLE_BLOCKS[] = {
-            "minecraft:crimson_button",
-            "minecraft:crimson_door",
-            "minecraft:crimson_double_slab",
-            "minecraft:crimson_fence",
-            "minecraft:crimson_fence_gate",
-            "minecraft:crimson_planks",
-            "minecraft:crimson_pressure_plate",
-            "minecraft:crimson_slab",
-            "minecraft:crimson_stairs",
-            "minecraft:crimson_trapdoor",
-            "minecraft:crimson_wall_sign",
-            "minecraft:warped_button",
-            "minecraft:warped_door",
-            "minecraft:warped_double_slab",
-            "minecraft:warped_fence",
-            "minecraft:warped_fence_gate",
-            "minecraft:warped_planks",
-            "minecraft:warped_pressure_plate",
-            "minecraft:warped_slab",
-            "minecraft:warped_stairs",
-            "minecraft:warped_trapdoor",
-            "minecraft:ice"
-    };
+    const char *UNBURNABLE_BLOCKS[] = {"minecraft:crimson_button",
+                                       "minecraft:crimson_door",
+                                       "minecraft:crimson_double_slab",
+                                       "minecraft:crimson_fence",
+                                       "minecraft:crimson_fence_gate",
+                                       "minecraft:crimson_planks",
+                                       "minecraft:crimson_pressure_plate",
+                                       "minecraft:crimson_slab",
+                                       "minecraft:crimson_stairs",
+                                       "minecraft:crimson_trapdoor",
+                                       "minecraft:crimson_wall_sign",
+                                       "minecraft:warped_button",
+                                       "minecraft:warped_door",
+                                       "minecraft:warped_double_slab",
+                                       "minecraft:warped_fence",
+                                       "minecraft:warped_fence_gate",
+                                       "minecraft:warped_planks",
+                                       "minecraft:warped_pressure_plate",
+                                       "minecraft:warped_slab",
+                                       "minecraft:warped_stairs",
+                                       "minecraft:warped_trapdoor",
+                                       "minecraft:ice"};
 
     const int NEIGHBOUR_BOUND_HORIZONTAL = 300;
     const int NEIGHBOUR_BOUND_VERTICAL = 250;
@@ -93,12 +93,7 @@ namespace {
         return distribution(fireRandom());
     }
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        if (value.size() < suffix.size())
-            return false;
-
-        return value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool isChunkReady(Level &level, const Vector3i &position) {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
@@ -109,7 +104,7 @@ namespace {
 
     BlockState stateAt(Level &level, const Vector3i &position) {
         if (!isChunkReady(level, position))
-            return BlockState("minecraft:air");
+            return BlockState(BlockNames::AIR);
 
         return level.getBlockState(position.x, position.y, position.z);
     }
@@ -156,9 +151,7 @@ namespace {
     }
 
     bool canNeighbourBurn(Level &level, const Vector3i &position) {
-        static const int OFFSETS[6][3] = {
-                {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-        };
+        static const int OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
         for (const auto &offset: OFFSETS) {
             const Vector3i side = relative(position, offset[0], offset[1], offset[2]);
@@ -175,7 +168,7 @@ namespace {
 
     void extinguish(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
         const BlockState previous = stateAt(level, position);
-        level.setBlock(position, BlockState("minecraft:air"), false);
+        level.setBlock(position, BlockState(BlockNames::AIR), false);
         level.onBlockBroken(position, previous);
     }
 
@@ -189,10 +182,7 @@ namespace {
         level.onBlockPlaced(position, placed);
     }
 
-    /**
-     * Rain puts fire out if the fire or any horizontal neighbour is open to the sky, except
-     * on blocks that burn forever.
-     */
+    // fire or a horizontal neighbour open to the sky, unless on a block burning forever
     bool checkRain(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
         if (!level.hasSkyLight() || !level.isRaining())
             return false;
@@ -210,7 +200,7 @@ namespace {
     }
 
     int chanceOfNeighboursEncouragingFire(Level &level, const Vector3i &position) {
-        if (stateAt(level, position).mName != "minecraft:air")
+        if (stateAt(level, position).mName != BlockNames::AIR)
             return 0;
 
         int chance = 0;
@@ -240,8 +230,8 @@ namespace {
         return !fireEvent.mCancelled;
     }
 
-    void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound,
-                               int age, const Vector3i &source) {
+    void tryToCatchBlockOnFire(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int bound, int age,
+                               const Vector3i &source) {
         const BlockState state = stateAt(level, position);
         const int burnAbility = FireSystem::getBurnAbility(state.mName);
 
@@ -251,8 +241,7 @@ namespace {
         if (!allowFire(owner, level, FALCON_EVENT_BLOCK_BURN, position, source))
             return;
 
-        // The burning block is either replaced by fire, more likely while the source fire is
-        // young, or simply destroyed.
+        // replaced by fire (likelier while the source is young) or destroyed
         if (nextInt(age + 10) < 5) {
             setFire(owner, level, position, "minecraft:fire", std::min(age + nextInt(5) / 4, FireSystem::MAX_AGE));
             FireSystem::scheduleUpdate(level, position, FireSystem::TICK_RATE);
@@ -262,26 +251,36 @@ namespace {
         extinguish(owner, level, position);
     }
 
-    void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
-        if (actor.isDead() || actor.isProjectile() || !actor.isIn(level))
-            return;
+    // every player and actor each tick: peek, no state copy
+    bool isFireAt(Level &level, const Vector3i &position) {
+        const BlockState *state = level.peekBlockPtr(position.x, position.y, position.z);
+        // nearly every actor stands in air: no name to look up
+        return state != nullptr && state->mName != BlockNames::AIR && FireSystem::matches(state->mName);
+    }
 
-        if (actor.hasEffect(MobEffectId::FireResistance))
+    void touchActor(ServerNetworkHandler &owner, Level &level, ServerActor &actor) {
+        // the block first: it rules out nearly every actor before anything is asked of the actor
+        if (!actor.isIn(level))
             return;
 
         const Vector3f position = actor.getPosition();
         const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                              (int32_t) std::floor(position.z));
 
-        if (!FireSystem::matches(stateAt(level, block).mName))
+        if (!isFireAt(level, block))
             return;
 
-        actor.hurt(owner, FireSystem::CONTACT_DAMAGE,
-                   ActorDamageSource::environment("death.attack.inFire", actor.getName()));
+        if (actor.isDead() || actor.isProjectile() || actor.hasEffect(MobEffectId::FireResistance))
+            return;
+
+        owner.hurtActor(actor, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", block);
 
         if (actor.getFireTicks() < FireSystem::COMBUST_TICKS) {
-            actor.setFireTicks(FireSystem::COMBUST_TICKS);
-            owner.syncActorFlags(actor);
+            const int32_t duration = owner.allowCombustion(actor, FireSystem::COMBUST_TICKS, nullptr, block);
+            if (duration > actor.getFireTicks()) {
+                actor.setFireTicks(duration);
+                owner.syncActorFlags(actor);
+            }
         }
     }
 
@@ -300,14 +299,16 @@ namespace {
         const Vector3i block((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                              (int32_t) std::floor(position.z));
 
-        if (!FireSystem::matches(stateAt(level, block).mName))
+        if (!isFireAt(level, block))
             return;
 
-        owner.hurt(player, FireSystem::CONTACT_DAMAGE,
-                   ActorDamageSource::environment("death.attack.inFire", player.getName()));
+        owner.hurtActor(player, FireSystem::CONTACT_DAMAGE, "death.attack.inFire", block);
 
-        if (player.getFireTicks() < FireSystem::COMBUST_TICKS)
-            player.setFireTicks(FireSystem::COMBUST_TICKS);
+        if (player.getFireTicks() < FireSystem::COMBUST_TICKS) {
+            const int32_t duration = owner.allowCombustion(player, FireSystem::COMBUST_TICKS, nullptr, block);
+            if (duration > player.getFireTicks())
+                player.setFireTicks(duration);
+        }
     }
 }
 
@@ -338,15 +339,14 @@ bool FireSystem::canBeIgnitedAgainst(const std::string &identifier) {
 }
 
 bool FireSystem::canSurviveAt(Level &level, const Vector3i &position) {
-    return isTopFacingSurfaceSolid(stateAt(level, relative(position, 0, -1, 0)))
-           || canNeighbourBurn(level, position);
+    return isTopFacingSurfaceSolid(stateAt(level, relative(position, 0, -1, 0))) || canNeighbourBurn(level, position);
 }
 
 bool FireSystem::ignite(ServerNetworkHandler &owner, Level &level, const Vector3i &position, bool canLightPortal) {
     if (!isChunkReady(level, position))
         return false;
 
-    if (stateAt(level, position).mName != "minecraft:air")
+    if (stateAt(level, position).mName != BlockNames::AIR)
         return false;
 
     if (canLightPortal && ObsidianBlock::tryLightPortal(level, position, &owner))
@@ -380,8 +380,8 @@ void FireSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const
         return;
     }
 
-    if (isFireTickEnabled(owner, level) &&
-        scheduleOf(level).mScheduled.count(RedstoneSystem::packPosition(position)) == 0)
+    if (isFireTickEnabled(owner, level)
+        && scheduleOf(level).mScheduled.count(RedstoneSystem::packPosition(position)) == 0)
         scheduleUpdate(level, position, TICK_RATE);
 
     checkRain(owner, level, position);
@@ -410,8 +410,7 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
 
     scheduleUpdate(level, position, TICK_RATE + nextInt(MAX_EXTRA_DELAY));
 
-    // With nothing flammable around, fire on solid ground lingers for a few ages before
-    // going out; fire with no solid floor goes out at once.
+    // nothing flammable around: lingers a few ages on solid ground, out at once without a floor
     if (!forever && !canNeighbourBurn(level, position)) {
         if (!isTopFacingSurfaceSolid(belowState) || age > SUPPORTED_FADE_AGE)
             extinguish(owner, level, position);
@@ -430,9 +429,8 @@ void FireSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, co
     tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, 1), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
     tryToCatchBlockOnFire(owner, level, relative(position, 0, 0, -1), NEIGHBOUR_BOUND_HORIZONTAL, age, position);
 
-    // Fire also jumps into air blocks next to something flammable, in a 3x3 area from one
-    // block below to four above. Each level above the first makes it less likely, older fire
-    // spreads less, and higher difficulty spreads more.
+    // jumps into air next to flammables, 3x3 from one below to four above; less likely per level above
+    // the first and with age, more with difficulty
     const int difficulty = (int) owner.getProperties().getDifficulty();
 
     for (int32_t x = position.x - 1; x <= position.x + 1; ++x) {
@@ -490,9 +488,8 @@ void FireSystem::tick(ServerNetworkHandler &owner, Level &level) {
     FireSchedule &schedule = scheduleOf(level);
     ++schedule.mTick;
 
-    // Due entries are copied out before running them because updates reschedule fire and
-    // would otherwise insert into the buckets being walked. Stale bucket entries are
-    // skipped by checking mScheduled, the single source of truth per position.
+    // copied out first: updates reschedule into the buckets being walked; stale entries skipped against
+    // mScheduled
     std::vector<ScheduledPosition> due;
 
     while (!schedule.mBuckets.empty()) {
@@ -526,4 +523,8 @@ void FireSystem::tick(ServerNetworkHandler &owner, Level &level) {
         if (actor != nullptr)
             touchActor(owner, level, *actor);
     }
+}
+
+void FireSystem::forgetLevel(const Level &level) {
+    gSchedules.erase(&level);
 }

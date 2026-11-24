@@ -2,8 +2,7 @@
 
 #include "World/Containers/Managers/Models/ContainerManagerModel.h"
 
-class ChestContainerScreenValidator : public ContainerScreenValidatorBase {
-};
+class ChestContainerScreenValidator : public ContainerScreenValidatorBase {};
 
 class ChestContainerManagerModel : public ContainerManagerModel {
 public:

@@ -13,10 +13,7 @@ PacketRateLimiter::PacketRateLimiter(const Rates &perSecond) {
     }
 }
 
-/**
- * Token bucket per packet category: refills continuously at the configured rate and holds at
- * most one second of burst. A rate of zero or less disables the limit for that category.
- */
+// token bucket per category: continuous refill, at most one second of burst; rate <= 0 disables it
 bool PacketRateLimiter::tryAcquire(RateLimitedPacket category) {
     Bucket &bucket = mBuckets[(size_t) category];
     if (bucket.mRate <= 0.0)

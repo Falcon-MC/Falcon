@@ -1,11 +1,11 @@
 #include "Server/Commands/TellCommand.h"
 
+#include "Core/Event/EventBus.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 
 TellCommand::TellCommand(ServerNetworkHandler &handler)
-        : Command("tell", "commands.tell.description", "/tell <target> <message>", {"msg", "w"}),
-          mHandler(handler) {}
+        : Command("tell", "commands.tell.description", "/tell <target> <message>", {"msg", "w"}), mHandler(handler) {}
 
 CommandPermission TellCommand::getRequiredPermission() const {
     return CommandPermission::Any;
@@ -45,6 +45,17 @@ bool TellCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
     ServerPlayer *self = sender.asPlayer();
     const std::string senderName = sender.getSenderName();
 
+    // a player's message goes through the chat event with its targets, and stops if cancelled
+    if (self != nullptr) {
+        PlayerChatBeforeEvent before(*self, message);
+        before.mTargets = &targets;
+        mHandler.getEventBus().before().mChatSend.emit(before);
+        if (before.isCancelled()) {
+            sender.sendTranslation("commands.generic.canceled", {});
+            return false;
+        }
+    }
+
     bool delivered = false;
     for (ServerPlayer *target: targets) {
         if (self != nullptr && target == self) {
@@ -57,5 +68,10 @@ bool TellCommand::execute(CommandOrigin &sender, const std::vector<std::string> 
         delivered = true;
     }
 
+    if (self != nullptr) {
+        PlayerChatAfterEvent after(*self, message);
+        after.mTargets = &targets;
+        mHandler.getEventBus().after().mChatSend.emit(after);
+    }
     return delivered;
 }

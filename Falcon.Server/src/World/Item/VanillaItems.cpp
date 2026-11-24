@@ -1621,7 +1621,7 @@ Item VanillaItems::OXIDIZED_COPPER_DOOR() {
 }
 
 Item VanillaItems::PAINTING() {
-    return Item(ItemDataTable::at(402));
+    return Item(*ItemDataTable::find("minecraft:painting"));
 }
 
 Item VanillaItems::PALE_OAK_BOAT() {

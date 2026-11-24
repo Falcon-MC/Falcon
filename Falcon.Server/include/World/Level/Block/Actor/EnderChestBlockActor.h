@@ -6,13 +6,29 @@ class EnderChestBlockActor final : public BlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "EnderChest";
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    Container *getContainer() override { return nullptr; }
+    Container *getContainer() override {
+        return nullptr;
+    }
 
     Container *getContainerFor(int64_t ownerId);
+
+    // every player looking in counts, whoever's items they see: the lid shuts behind the last one
+    void addViewer();
+
+    void removeViewer();
+
+    int getViewerCount() const {
+        return mViewers;
+    }
+
+private:
+    int mViewers = 0;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
 
 #include <optional>
 #include <string>
@@ -8,11 +9,7 @@
 
 class Actor;
 
-enum class DamageResult {
-    Ignored,
-    Blocked,
-    Dealt
-};
+enum class DamageResult { Ignored, Blocked, Dealt };
 
 class ActorDamageSource {
 public:
@@ -23,8 +20,8 @@ public:
         return source;
     }
 
-    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName,
-                               Actor &attacker, const std::string &attackerName, const Vector3f &origin) {
+    static ActorDamageSource attack(const std::string &deathMessageKey, const std::string &victimName, Actor &attacker,
+                                    const std::string &attackerName, const Vector3f &origin) {
         ActorDamageSource source;
         source.mDeathMessageKey = deathMessageKey;
         source.mDeathMessageParameters = {victimName, attackerName};
@@ -40,6 +37,11 @@ public:
 
     ActorDamageSource &withoutCooldown() {
         mRespectCooldown = false;
+        return *this;
+    }
+
+    ActorDamageSource &fromBlock(std::optional<Vector3i> block) {
+        mBlock = block;
         return *this;
     }
 
@@ -63,16 +65,24 @@ public:
         return *this;
     }
 
+    // a cause the death message does not tell: minecraft:area_attack overrides the message of its cause
+    ActorDamageSource &withCause(const std::string &cause) {
+        mCause = cause;
+        return *this;
+    }
+
     ActorDamageSource &withDamager(Actor *damager) {
         mDamager = damager;
         return *this;
     }
 
     std::string mDeathMessageKey;
+    std::string mCause;
     std::vector<std::string> mDeathMessageParameters;
     Actor *mAttacker = nullptr;
     Actor *mDamager = nullptr;
     std::optional<Vector3f> mOrigin;
+    std::optional<Vector3i> mBlock;
     bool mProjectile = false;
     bool mApplyArmor = true;
     bool mRespectCooldown = true;

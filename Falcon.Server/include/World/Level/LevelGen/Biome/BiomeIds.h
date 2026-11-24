@@ -16,8 +16,12 @@ namespace BiomeIds {
     static constexpr int32_t FROZEN_RIVER = 11;
     static constexpr int32_t ICE_PLAINS = 12;
     static constexpr int32_t MUSHROOM_ISLAND = 14;
+    static constexpr int32_t MUSHROOM_ISLAND_SHORE = 15;
     static constexpr int32_t BEACH = 16;
+    static constexpr int32_t DESERT_HILLS = 17;
+    static constexpr int32_t TAIGA_HILLS = 19;
     static constexpr int32_t JUNGLE = 21;
+    static constexpr int32_t JUNGLE_HILLS = 22;
     static constexpr int32_t JUNGLE_EDGE = 23;
     static constexpr int32_t DEEP_OCEAN = 24;
     static constexpr int32_t STONE_BEACH = 25;
@@ -25,6 +29,7 @@ namespace BiomeIds {
     static constexpr int32_t BIRCH_FOREST = 27;
     static constexpr int32_t ROOFED_FOREST = 29;
     static constexpr int32_t COLD_TAIGA = 30;
+    static constexpr int32_t COLD_TAIGA_HILLS = 31;
     static constexpr int32_t MEGA_TAIGA = 32;
     static constexpr int32_t EXTREME_HILLS_PLUS_TREES = 34;
     static constexpr int32_t SAVANNA = 35;
@@ -32,6 +37,7 @@ namespace BiomeIds {
     static constexpr int32_t MESA = 37;
     static constexpr int32_t MESA_PLATEAU_STONE = 38;
     static constexpr int32_t WARM_OCEAN = 40;
+    static constexpr int32_t DEEP_WARM_OCEAN = 41;
     static constexpr int32_t LUKEWARM_OCEAN = 42;
     static constexpr int32_t DEEP_LUKEWARM_OCEAN = 43;
     static constexpr int32_t COLD_OCEAN = 44;
@@ -42,6 +48,7 @@ namespace BiomeIds {
     static constexpr int32_t SUNFLOWER_PLAINS = 129;
     static constexpr int32_t EXTREME_HILLS_MUTATED = 131;
     static constexpr int32_t FLOWER_FOREST = 132;
+    static constexpr int32_t SWAMPLAND_MUTATED = 134;
     static constexpr int32_t ICE_PLAINS_SPIKES = 140;
     static constexpr int32_t BIRCH_FOREST_MUTATED = 155;
     static constexpr int32_t REDWOOD_TAIGA_MUTATED = 160;
@@ -60,5 +67,7 @@ namespace BiomeIds {
     static constexpr int32_t CHERRY_GROVE = 192;
     static constexpr int32_t PALE_GARDEN = 193;
     static constexpr int32_t SULFUR_CAVES = 194;
+    static constexpr int32_t DAPPLED_FOREST = 195;
+    static constexpr int32_t ICE_CAVES = 196;
 
 }

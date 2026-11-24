@@ -1,11 +1,17 @@
 #include "World/Level/Block/Actor/HopperBlockActor.h"
 
+#include "World/Level/Block/ComposterBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Actor/Misc/ItemActor.h"
+#include "Core/Math/AxisAlignedBB.h"
+#include "World/Actor/ServerActor.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <utility>
@@ -18,14 +24,7 @@ namespace {
 
     const int FACE_DOWN = 0;
 
-    const int32_t FACE_OFFSETS[6][3] = {
-            {0,  -1, 0},
-            {0,  1,  0},
-            {0,  0,  -1},
-            {0,  0,  1},
-            {-1, 0,  0},
-            {1,  0,  0}
-    };
+    const int32_t FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     struct SlotRange {
         int mFirst = 0;
@@ -105,7 +104,10 @@ namespace {
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
             const ItemStack &existing = container.getContainerItem(slot);
-            if (existing.isAir() || existing.mCount <= 0)
+            if (existing.isAir() || existing.mCount <= 0 || container.isSlotDisabled(slot))
+                continue;
+
+            if (!container.canHoldInSlot(slot, item))
                 continue;
 
             if (!PlayerInventory::canStack(existing, item) || existing.mCount >= maxStackSize)
@@ -119,7 +121,10 @@ namespace {
 
         for (int slot = range.mFirst; slot < range.mLast; ++slot) {
             const ItemStack &existing = container.getContainerItem(slot);
-            if (!existing.isAir() && existing.mCount > 0)
+            if ((!existing.isAir() && existing.mCount > 0) || container.isSlotDisabled(slot))
+                continue;
+
+            if (!container.canHoldInSlot(slot, item))
                 continue;
 
             ItemStack single = item;
@@ -168,11 +173,62 @@ namespace {
         return item.mCount - remaining;
     }
 
-    bool moveOne(Container &from, const SlotRange &fromRange, Container &to, const SlotRange &toRange) {
+    // FALCON_EVENT_HOPPER_TRANSFER for the one item about to move; false when a plugin keeps it
+    bool allowedByPlugins(Level *level, const Vector3i &hopper, const ItemStack &source, bool pushing) {
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_HOPPER_TRANSFER);
+        if (plugins == nullptr)
+            return true;
+
+        ItemStack one = source;
+        one.mCount = 1;
+        PluginEvent event;
+        event.mType = FALCON_EVENT_HOPPER_TRANSFER;
+        event.mCancellable = true;
+        event.mLevel = level;
+        event.mBlockPosition = hopper;
+        event.mItem = &one;
+        event.mState = pushing;
+        plugins->dispatch(event);
+        return !event.mCancelled;
+    }
+
+    // a container actor (a chest or hopper minecart, a chest boat) whose box reaches into the block
+    Container *actorContainerAt(Level &level, const Vector3i &block) {
+        ServerNetworkHandler *owner = level.getOwner();
+        if (owner == nullptr)
+            return nullptr;
+        const AxisAlignedBB cell((float) block.x, (float) block.y, (float) block.z, (float) block.x + 1.0f,
+                                 (float) block.y + 1.0f, (float) block.z + 1.0f);
+        Container *found = nullptr;
+        owner->forEachActorNear(Vector3f((float) block.x + 0.5f, (float) block.y, (float) block.z + 0.5f), 1.0f,
+                                [&](ServerActor &actor) {
+            if (found != nullptr || !actor.isAlive() || actor.isExpired() || !actor.isIn(level))
+                return;
+            Container *container = actor.getEntityContainer();
+            if (container != nullptr && actor.isMinecart()
+                && ActorPushSystem::boundingBoxOf(actor).intersectsWith(cell))
+                found = container;
+        });
+        return found;
+    }
+
+    bool isFull(const Container &container) {
+        for (int slot = 0; slot < container.getContainerSize(); ++slot) {
+            const ItemStack &item = container.getContainerItem(slot);
+            if (item.isAir() || item.mCount <= 0 || item.mCount < PlayerInventory::getMaxStackSize(item))
+                return false;
+        }
+        return true;
+    }
+
+    bool moveOne(Container &from, const SlotRange &fromRange, Container &to, const SlotRange &toRange, Level *level,
+                 const Vector3i &hopper, bool pushing) {
         for (int slot = fromRange.mFirst; slot < fromRange.mLast; ++slot) {
             const ItemStack &source = from.getContainerItem(slot);
-            if (source.isAir() || source.mCount <= 0)
+            if (source.isAir() || source.mCount <= 0 || !from.canTakeFromSlot(slot))
                 continue;
+            if (!allowedByPlugins(level, hopper, source, pushing))
+                return false;
 
             ItemStack moved = source;
             if (!addOneWithin(to, toRange, moved))
@@ -256,67 +312,109 @@ bool HopperBlockActor::_pushItems(Level &level, const BlockState &state) {
                           mPosition.z + FACE_OFFSETS[facing][2]);
 
     BlockActor *targetActor = level.getBlockActors().find(target);
-    if (targetActor == nullptr)
-        return false;
+    Container *targetContainer = targetActor == nullptr ? nullptr : targetActor->getContainer();
+    if (targetContainer != nullptr)
+        return moveOne(mInventory, fullRange(mInventory), *targetContainer,
+                       pushRange(*targetActor, *targetContainer, facing == FACE_DOWN), &level, mPosition, true);
 
-    HopperBlockActor *targetHopper = dynamic_cast<HopperBlockActor *>(targetActor);
-    if (targetHopper != nullptr && facing != FACE_DOWN)
+    // a composter below takes the first slot it composts, one item at a time
+    const BlockState *below = facing == FACE_DOWN ? level.peekBlockPtr(target.x, target.y, target.z) : nullptr;
+    if (below != nullptr && ComposterBlock::matches(below->mName) && level.getOwner() != nullptr) {
+        for (int slot = 0; slot < mInventory.getContainerSize(); ++slot) {
+            ItemStack item = mInventory.getContainerItem(slot);
+            if (item.isAir() || ComposterBlock::compostChance(item) <= 0)
+                continue;
+            if (!allowedByPlugins(&level, mPosition, item, true))
+                return false;
+            if (!ComposterBlock::addItem(*level.getOwner(), level, target, item))
+                continue;
+            --item.mCount;
+            mInventory.setContainerItem(slot, item.mCount <= 0 ? ItemStack::air() : std::move(item));
+            return true;
+        }
         return false;
+    }
 
-    Container *targetContainer = targetActor->getContainer();
-    if (targetContainer == nullptr)
-        return false;
-
-    return moveOne(mInventory, fullRange(mInventory), *targetContainer,
-                   pushRange(*targetActor, *targetContainer, facing == FACE_DOWN));
+    // a minecart with a container in front takes the items when no block container is there
+    Container *minecart = actorContainerAt(level, target);
+    return minecart != nullptr
+           && moveOne(mInventory, fullRange(mInventory), *minecart, fullRange(*minecart), &level, mPosition, true);
 }
 
 bool HopperBlockActor::_pullItems(ServerNetworkHandler &owner) {
-    if (mInventory.isFull())
+    if (mInventory.isFull() || mLevel == nullptr)
         return false;
 
+    // a container above is pulled from; anything else lets the hopper pick up dropped items
     const Vector3i above(mPosition.x, mPosition.y + 1, mPosition.z);
-
-    BlockActor *sourceActor = mLevel->getBlockActors().find(above);
-    if (sourceActor == nullptr)
-        return _pickupItemActors(owner);
-
-    Container *sourceContainer = sourceActor->getContainer();
-    if (sourceContainer == nullptr)
-        return _pickupItemActors(owner);
-
-    return moveOne(*sourceContainer, pullRange(*sourceActor, *sourceContainer), mInventory,
-                   fullRange(mInventory));
+    // a block with no container may still give an item, as a ready composter its bone meal
+    const BlockState *aboveState = mLevel->peekBlockPtr(above.x, above.y, above.z);
+    const Block *aboveBlock = aboveState == nullptr ? nullptr : VanillaBlocks::fromState(*aboveState);
+    const std::string output = aboveBlock == nullptr ? std::string() : aboveBlock->getHopperOutput(*aboveState);
+    if (!output.empty()) {
+        const ItemStack item = owner.createItemStack(output, 1);
+        if (item.isAir() || !allowedByPlugins(mLevel, mPosition, item, false) || !addOne(mInventory, item))
+            return false;
+        aboveBlock->onHopperOutputTaken(owner, *mLevel, above);
+        return true;
+    }
+    BlockActor *source = mLevel->getBlockActors().find(above);
+    if (source != nullptr && source->getContainer() != nullptr)
+        return pullFrom(owner, *mLevel, above, mInventory, mPosition);
+    if (Container *minecart = actorContainerAt(*mLevel, above))
+        return moveOne(*minecart, fullRange(*minecart), mInventory, fullRange(mInventory), mLevel, mPosition, false);
+    return _pickupItemActors(owner);
 }
 
 bool HopperBlockActor::_pickupItemActors(ServerNetworkHandler &owner) {
+    if (mLevel == nullptr)
+        return false;
     const float minX = (float) mPosition.x;
     const float minY = (float) mPosition.y;
     const float minZ = (float) mPosition.z;
-    const float maxX = minX + 1.0f;
-    const float maxY = minY + 2.0f;
-    const float maxZ = minZ + 1.0f;
+    return pickUpItems(owner, *mLevel, minX, minY, minZ, minX + 1.0f, minY + 2.0f, minZ + 1.0f, mInventory);
+}
 
+bool HopperBlockActor::pullFrom(ServerNetworkHandler &owner, Level &level, const Vector3i &source, Container &target,
+                                const Vector3i &puller) {
+    if (isFull(target))
+        return false;
+
+    BlockActor *sourceActor = level.getBlockActors().find(source);
+    if (sourceActor == nullptr)
+        return false;
+
+    sourceActor->unpackLoot(owner);
+    Container *sourceContainer = sourceActor->getContainer();
+    if (sourceContainer == nullptr)
+        return false;
+
+    return moveOne(*sourceContainer, pullRange(*sourceActor, *sourceContainer), target, fullRange(target), &level,
+                   puller, false);
+}
+
+bool HopperBlockActor::pickUpItems(ServerNetworkHandler &owner, Level &level, float minX, float minY, float minZ,
+                                   float maxX, float maxY, float maxZ, Container &target) {
     bool pickedUp = false;
 
     for (const std::unique_ptr<ItemActor> &entry: owner.getItemEntities()) {
-        if (mInventory.isFull())
+        if (isFull(target))
             break;
 
         ItemActor &actor = *entry;
-        if (actor.isRemoved() || mLevel == nullptr || !actor.isIn(*mLevel))
+        if (actor.isRemoved() || !actor.isIn(level))
             continue;
 
         const Vector3f &position = actor.getPosition();
-        if (position.x < minX || position.x >= maxX || position.y < minY || position.y >= maxY
-            || position.z < minZ || position.z >= maxZ)
+        if (position.x < minX || position.x >= maxX || position.y < minY || position.y >= maxY || position.z < minZ
+            || position.z >= maxZ)
             continue;
 
         ItemStack remaining = actor.getItem();
         if (remaining.isAir() || remaining.mCount <= 0)
             continue;
 
-        const int moved = addItemsWithin(mInventory, fullRange(mInventory), remaining);
+        const int moved = addItemsWithin(target, fullRange(target), remaining);
         if (moved <= 0)
             continue;
 

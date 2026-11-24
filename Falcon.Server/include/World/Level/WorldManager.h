@@ -8,10 +8,8 @@
 #include <string>
 #include <vector>
 
-/**
- * Owns every loaded World. Ids are never reused, so an actor that still carries the id of an unloaded world
- * resolves to the default world instead of to an unrelated one. Main thread only.
- */
+// main thread only; ids never reused: an actor carrying an unloaded world's id resolves to the default
+// world, not an unrelated one
 class WorldManager {
 public:
     static std::string getWorldsDirectory();
@@ -34,12 +32,11 @@ public:
 
     std::vector<World *> getWorlds();
 
-    /** Folders under `worlds/` that hold a world database, loaded or not. */
+    // loaded or not
     static std::vector<std::string> listOnDisk();
 
     static bool exists(const std::string &name);
 
-    /** Rejects names that would escape the worlds folder or that the file system cannot hold. */
     static bool isValidName(const std::string &name);
 
 private:

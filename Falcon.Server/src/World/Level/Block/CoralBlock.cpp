@@ -1,4 +1,8 @@
 #include "World/Level/Block/CoralBlock.h"
+#include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginManager.h"
+#include "Falcon/Plugin/PluginWorldEventData.h"
+
 
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockData.h"
@@ -8,6 +12,7 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Block/BlockIdentifier.h"
 
 FALCON_REGISTER_BLOCK(CoralBlock, 185);
 
@@ -17,15 +22,10 @@ namespace {
     const int32_t MIN_DEATH_DELAY = 60;
     const int32_t DEATH_DELAY_SPREAD = 40;
 
-    const Vector3i NEIGHBOUR_OFFSETS[] = {
-            Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1),
-            Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)
-    };
+    const Vector3i NEIGHBOUR_OFFSETS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                          Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
 
-    bool endsWith(const std::string &value, const std::string &suffix) {
-        return value.size() >= suffix.size()
-               && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-    }
+    using BlockIdentifier::endsWith;
 
     bool isCoralBlock(const std::string &identifier) {
         return endsWith(identifier, "_coral_block");
@@ -37,8 +37,8 @@ bool CoralBlock::isLiveCoral(const std::string &identifier) {
         || identifier.compare(0, DEAD_PREFIX.size(), DEAD_PREFIX) == 0)
         return false;
 
-    return endsWith(identifier, "_coral") || endsWith(identifier, "_coral_block")
-           || endsWith(identifier, "_coral_fan") || endsWith(identifier, "_coral_wall_fan");
+    return endsWith(identifier, "_coral") || endsWith(identifier, "_coral_block") || endsWith(identifier, "_coral_fan")
+           || endsWith(identifier, "_coral_wall_fan");
 }
 
 bool CoralBlock::matches(const std::string &identifier) {
@@ -76,7 +76,28 @@ void CoralBlock::dieWithoutWater(Level &level, const Vector3i &position, const B
     if (BlockDataTable::find(dead.c_str()) == nullptr)
         return;
 
-    BlockChangeSystem::change(level, position, CopperSystem::transform(current, dead), BlockChangeCause::Fade, true);
+    BlockState next = CopperSystem::transform(current, dead);
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_DEATH)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BLOCK_DEATH;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mBlockPosition = position;
+        event.mBlockName = next.mName;
+        event.mPreviousBlockName = current.mName;
+        const std::string original = PluginWorldEventData::encodeBlock(next);
+        event.mCustomData = original;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return;
+        if (event.mCustomData != original) {
+            BlockState altered;
+            if (!PluginWorldEventData::decodeBlock(event.mCustomData, altered))
+                return;
+            next = std::move(altered);
+        }
+    }
+    BlockChangeSystem::change(level, position, next, BlockChangeCause::Fade, true);
 }
 
 void CoralBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,

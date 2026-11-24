@@ -8,11 +8,17 @@ public:
 
     using MobActor::MobActor;
 
-    ActorCategory getCategory() const override { return ActorCategory::Hostile; }
+    ActorCategory getCategory() const override {
+        return ActorCategory::Hostile;
+    }
 
-    bool shouldRemoveInPeaceful() const override { return true; }
+    bool shouldRemoveInPeaceful() const override {
+        return true;
+    }
 
-    int getExperienceDrop() const override { return DEFAULT_EXPERIENCE; }
+    int getExperienceDrop() const override {
+        return DEFAULT_EXPERIENCE;
+    }
 
     bool preventsSleep() const override {
         return true;

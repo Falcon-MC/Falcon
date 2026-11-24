@@ -20,8 +20,8 @@ namespace {
 }
 
 BlockActorClassRegistry::Registration::Registration(const char *blockActorId, Factory factory) {
-    entries()[blockActorId].push_back(Entry{factory, PluginRegistrationScope::getOwner(),
-                                            PluginRegistrationScope::isActive()});
+    entries()[blockActorId].push_back(
+            Entry{factory, PluginRegistrationScope::getOwner(), PluginRegistrationScope::isActive()});
 }
 
 std::unique_ptr<BlockActor> BlockActorClassRegistry::create(const std::string &blockActorId) {
@@ -52,8 +52,8 @@ void BlockActorClassRegistry::remove(const void *owner) {
 
     for (auto &blockActorId: entries()) {
         std::vector<Entry> &registered = blockActorId.second;
-        registered.erase(std::remove_if(registered.begin(), registered.end(), [owner](const Entry &entry) {
-            return entry.mOwner == owner;
-        }), registered.end());
+        registered.erase(std::remove_if(registered.begin(), registered.end(),
+                                        [owner](const Entry &entry) { return entry.mOwner == owner; }),
+                         registered.end());
     }
 }

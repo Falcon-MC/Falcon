@@ -8,6 +8,10 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    bool isLeaves() const override {
+        return true;
+    }
+
     PistonMoveReaction getPistonMoveReaction() const override;
 
     bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,

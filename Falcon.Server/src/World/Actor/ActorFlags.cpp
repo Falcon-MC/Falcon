@@ -2,7 +2,7 @@
 
 void ActorFlags::set(ActorFlag flag, bool value) {
     const int bit = (int) flag;
-    int64_t &target = bit < 64 ? mLow : mHigh;
+    int64_t &target = mBits[bit / 64];
     const int64_t mask = (int64_t) 1 << (bit % 64);
 
     if (value)
@@ -13,7 +13,7 @@ void ActorFlags::set(ActorFlag flag, bool value) {
 
 bool ActorFlags::get(ActorFlag flag) const {
     const int bit = (int) flag;
-    const int64_t source = bit < 64 ? mLow : mHigh;
+    const int64_t source = mBits[bit / 64];
     return (source & ((int64_t) 1 << (bit % 64))) != 0;
 }
 
@@ -23,4 +23,5 @@ void ActorFlags::applyPlayerDefaults() {
     set(ActorFlag::Breathing, true);
     set(ActorFlag::HasCollision, true);
     set(ActorFlag::HasGravity, true);
+    set(ActorFlag::PushTowardsClosestSpace, true);
 }

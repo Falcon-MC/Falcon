@@ -9,7 +9,9 @@ public:
         setProjectile(projectile);
     }
 
-    ActorSize getSize() const override { return mSize; }
+    ActorSize getSize() const override {
+        return mSize;
+    }
 
 private:
     ActorSize mSize;

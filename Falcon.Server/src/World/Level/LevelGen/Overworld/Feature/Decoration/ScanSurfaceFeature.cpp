@@ -5,7 +5,8 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 
-bool ScanSurfaceFeature::isSupportValid(const BlockState &support, Level &level, int32_t x, int32_t y, int32_t z) const {
+bool ScanSurfaceFeature::isSupportValid(const BlockState &support, Level &level, int32_t x, int32_t y,
+                                        int32_t z) const {
     (void) level;
     (void) x;
     (void) y;

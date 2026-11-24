@@ -23,7 +23,7 @@ bool ChargeHeldItemGoal::holdsCrossbow(const MobActor &mob) {
     const ItemStack &held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
     return !held.isAir()
            && dynamic_cast<const CrossbowItem *>(VanillaItems::fromIdentifier(held.mDefinition->getIdentifier()))
-              != nullptr;
+                      != nullptr;
 }
 
 bool ChargeHeldItemGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
@@ -52,5 +52,6 @@ void ChargeHeldItemGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
 
     setFlag(owner, mob, ActorFlag::Charging, false);
+    CrossbowItem::loadHeld(owner, mob);
     setFlag(owner, mob, ActorFlag::Charged, true);
 }

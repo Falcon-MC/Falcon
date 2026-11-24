@@ -8,12 +8,10 @@ namespace {
     const char *REDSTONE_BLOCK = "minecraft:redstone_block";
 }
 
-bool RedstoneBlock::matches(const std::string &identifier)
-{
+bool RedstoneBlock::matches(const std::string &identifier) {
     return identifier == REDSTONE_BLOCK;
 }
 
-bool RedstoneBlock::isSignalSource() const
-{
+bool RedstoneBlock::isSignalSource() const {
     return true;
 }

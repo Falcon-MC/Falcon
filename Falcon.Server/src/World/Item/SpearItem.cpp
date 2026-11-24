@@ -15,6 +15,7 @@ FALCON_REGISTER_ITEM(SpearItem, 80);
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -24,14 +25,13 @@ namespace {
     const float MINIMUM_SPEED = 0.13f;
     const float MINIMUM_LUNGE_FOOD = 6.0f;
     const float BASE_LUNGE_EXHAUST = 4.0f;
-    const int32_t STAB_COOLDOWN_TICKS = 20;
     const int32_t SWEEP_INTERVAL_TICKS = 5;
     const float MAX_STAB_DISTANCE = 5.0f;
     const float MINIMUM_AIM_DOT = 0.866f;
     const float SWEEP_REACH = 1.5f;
     const float SWEEP_EXPAND_HORIZONTAL = 1.5f;
     const float SWEEP_EXPAND_VERTICAL = 1.0f;
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
     const float PLAYER_WIDTH = 0.6f;
     const float PLAYER_HEIGHT = 1.8f;
 
@@ -59,8 +59,8 @@ SpearItem::SpearItem(const Item &base) : Item(base), mTierName(tierNameOf(base.g
 
 bool SpearItem::matches(const std::string &identifier) {
     static const std::string suffix = "_spear";
-    return identifier.size() > suffix.size() &&
-           identifier.compare(identifier.size() - suffix.size(), suffix.size(), suffix) == 0;
+    return identifier.size() > suffix.size()
+           && identifier.compare(identifier.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 float SpearItem::getKineticDamage(float speed) const {
@@ -121,8 +121,8 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
         ServerPlayer &candidate = entry.second;
         if (&candidate == &player || !candidate.isSpawned() || candidate.isDead())
             continue;
-        if (candidate.getGameType() == (int32_t) GameType::Creative
-            || candidate.getGameType() == (int32_t) GameType::Spectator)
+        if (candidate.isCreative()
+            || candidate.isSpectator())
             continue;
 
         consider(candidate, PLAYER_WIDTH, PLAYER_HEIGHT);
@@ -182,8 +182,8 @@ Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &pla
         ServerPlayer &candidate = entry.second;
         if (&candidate == &player || !candidate.isSpawned() || candidate.isDead())
             continue;
-        if (candidate.getGameType() == (int32_t) GameType::Creative
-            || candidate.getGameType() == (int32_t) GameType::Spectator)
+        if (candidate.isCreative()
+            || candidate.isSpectator())
             continue;
 
         consider(candidate, PLAYER_WIDTH, PLAYER_HEIGHT);
@@ -198,7 +198,7 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
     if (victim != nullptr) {
         owner.hurt(*victim, damage,
                    ActorDamageSource::attack("death.attack.player", victim->getName(), attacker, attacker.getName(),
-                                        attacker.getPosition())
+                                             attacker.getPosition())
                            .withoutArmor()
                            .withoutCooldown());
         return;
@@ -207,40 +207,49 @@ void SpearItem::applySpearDamage(ServerNetworkHandler &owner, ServerPlayer &atta
     ServerActor *actor = dynamic_cast<ServerActor *>(&target);
     if (actor != nullptr)
         owner.damageActor(*actor, damage,
-                          ActorDamageSource::attack("death.attack.player", actor->getName(), attacker, attacker.getName(),
-                                               attacker.getPosition())
+                          ActorDamageSource::attack("death.attack.player", actor->getName(), attacker,
+                                                    attacker.getName(), attacker.getPosition())
                                   .withoutArmor());
 }
 
-void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+bool SpearItem::getLungeImpulse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                                Vector3f &impulse) const {
     const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
     if (lungeLevel <= 0)
-        return;
+        return false;
 
     if (player.getFlags().get(ActorFlag::Swimming) || player.getFlags().get(ActorFlag::Gliding))
-        return;
+        return false;
 
     if (LiquidBlocksFetch::at(owner.getLevelFor(player), player.getPosition()).water)
-        return;
+        return false;
 
     const int32_t gameType = player.getGameType();
-    const bool finiteResources = gameType == (int32_t) GameType::Survival
-                                 || gameType == (int32_t) GameType::Adventure;
+    const bool finiteResources = gameType == (int32_t) GameType::Survival || gameType == (int32_t) GameType::Adventure;
     if (finiteResources && player.getFood() < MINIMUM_LUNGE_FOOD)
-        return;
+        return false;
 
     const Vector3f direction = player.getLookDirection();
     const float length = std::sqrt(direction.x * direction.x + direction.z * direction.z);
     if (length <= 0.0f)
-        return;
+        return false;
 
     const float push = 0.5f + (float) lungeLevel * 0.4f;
+    impulse = Vector3f((direction.x / length) * push, 0.0f, (direction.z / length) * push);
+    return true;
+}
 
-    Vector3f motion = player.getMotion();
-    motion.x += (direction.x / length) * push;
-    motion.z += (direction.z / length) * push;
-    player.setMotion(motion);
-    owner.sendActorMotion(player);
+void SpearItem::applyLunge(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
+    Vector3f impulse;
+    if (!getLungeImpulse(owner, player, item, impulse))
+        return;
+
+    Vector3f motion = player.hasSimulatedVelocity() ? player.getSimulatedVelocity() : player.getMotion();
+    motion.x += impulse.x;
+    motion.z += impulse.z;
+    player.applyServerMotion(owner, motion);
+
+    const int32_t lungeLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LUNGE);
 
     const char *sound = lungeLevel >= 3 ? LevelSoundEvent::LUNGE_3
                                         : (lungeLevel == 2 ? LevelSoundEvent::LUNGE_2 : LevelSoundEvent::LUNGE_1);
@@ -254,7 +263,7 @@ bool SpearItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, 
                          "minecraft:player");
     stab(owner, player, item);
 
-    // Staying in the using state is what drives the sweep in onUsingTick.
+    // staying in the using state drives the sweep in onUsingTick
     return true;
 }
 
@@ -262,7 +271,7 @@ void SpearItem::stab(ServerNetworkHandler &owner, ServerPlayer &player, const It
     if (player.hasItemCooldown(item, owner.getCurrentTick()))
         return;
 
-    player.startItemCooldown(item, owner.getCurrentTick(), STAB_COOLDOWN_TICKS);
+    player.startItemCooldown(item, owner.getCurrentTick());
     applyLunge(owner, player, item);
 
     Level &level = owner.getLevelFor(player);
@@ -307,6 +316,6 @@ bool SpearItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, c
     (void) item;
     (void) elapsedTicks;
 
-    // The jab already ran when the spear was raised, releasing it only ends the sweep.
+    // the jab ran when the spear was raised; releasing only ends the sweep
     return true;
 }

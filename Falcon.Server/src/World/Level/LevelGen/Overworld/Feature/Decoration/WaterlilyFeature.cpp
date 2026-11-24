@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
 
@@ -36,7 +37,7 @@ void WaterlilyFeature::populate(ChunkGenerateContext &context, IRandom &random) 
     if (y != SEA_LEVEL)
         return;
 
-    if (chunk.getBlock(x, y, z).mName != "minecraft:water")
+    if (chunk.getBlock(x, y, z).mName != BlockNames::WATER)
         return;
 
     chunk.setBlock(x, y + 1, z, waterlilyState());

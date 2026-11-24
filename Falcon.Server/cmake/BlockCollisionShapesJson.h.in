@@ -1,0 +1,7 @@
+#pragma once
+
+namespace FalconBlockCollisionData {
+    inline constexpr const char kBlockCollisionShapesJson[] = R"FBC(
+@FALCON_BLOCK_COLLISION_SHAPES_JSON_CONTENT@
+)FBC";
+}

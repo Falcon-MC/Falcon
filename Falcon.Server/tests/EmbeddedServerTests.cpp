@@ -2,6 +2,7 @@
 #include "Server/ServerHost.h"
 #include "Server/ServerPaths.h"
 #include "Core/NBT/NbtIo.h"
+#include "Core/Debug/BedrockLog.h"
 #include "Core/Utility/BinaryStream.h"
 #include "Network/Client/ClientNetworkSystem.h"
 
@@ -13,11 +14,12 @@
 
 namespace {
     void require(bool condition, const char *message) {
-        if (!condition) throw std::runtime_error(message);
+        if (!condition)
+            throw std::runtime_error(message);
     }
-    template<class T> T await(std::future<T> future) {
-        require(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready,
-                "Request did not complete");
+    template <class T>
+    T await(std::future<T> future) {
+        require(future.wait_for(std::chrono::seconds(30)) == std::future_status::ready, "Request did not complete");
         return future.get();
     }
     int64_t savedTime(const std::filesystem::path &directory) {
@@ -31,7 +33,8 @@ namespace {
 
 int main() {
     const auto directory = std::filesystem::temp_directory_path()
-            / ("falcon-embedded-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                           / ("falcon-embedded-"
+                              + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto originalRoot = ServerPaths::getRoot();
     try {
         std::atomic<unsigned int> logCalls{0};
@@ -54,8 +57,12 @@ int main() {
         require(ServerPaths::getRoot() == originalRoot, "Failed start changed root");
 
         config.dataDirectory = directory / "new-directory";
-        config.properties = {{"view-distance", "4"}, {"tick-distance", "4"},
-                             {"level-seed", "1"}, {"auto-compaction-interval", "0"}};
+        // the client dialled below is the server's own, not the game
+        config.properties = {{"view-distance", "5"},
+                             {"tick-distance", "4"},
+                             {"level-seed", "1"},
+                             {"auto-compaction-interval", "0"},
+                             {"allow-unofficial-clients", "true"}};
         config.log = [&logCalls](LogLevel, const std::string &) {
             logCalls.fetch_add(1);
             throw std::runtime_error("Host logger failure");
@@ -82,6 +89,19 @@ int main() {
         await(server.save());
         require(await(server.getPlayerNames()).empty(), "Unexpected players");
         require(savedTime(config.dataDirectory) == 1000, "Command did not execute during pause");
+        const auto metadata = config.dataDirectory / "worlds" / "World" / "level.dat";
+        std::filesystem::remove(metadata);
+        std::filesystem::create_directory(metadata);
+        bool saveRejected = false;
+        try {
+            await(server.save());
+        } catch (const std::exception &) {
+            saveRejected = true;
+        }
+        std::filesystem::remove(metadata);
+        require(saveRejected, "Save future ignored a disk error");
+        require(server.isRunning(), "Save failure stopped the server");
+        await(server.save());
         ClientConnectionSettings client;
         client.mHost = "127.0.0.1";
         client.mPort = server.getPort();
@@ -90,10 +110,16 @@ int main() {
         client.mTransportLayer = TransportLayer::NetherNet;
         client.mNetherNet.mSignalingType = NetherNetSignalingType::Http;
         client.mIdentity.mDisplayName = "EmbeddedPlayer";
-        client.mChunkRadius = 4;
-        client.mDeferSpawn = true;
-        client.mTimeoutMs = 10000;
+        client.mChunkRadius = 5;
+        client.mDeferSpawn = false;
+        client.mTimeoutMs = 30000;
+        // the test client can lose a race between its own ICE transport and the server's answer on a busy runner
+        // ("Got a remote candidate without ICE transport"); this test is about the embedded server, so it dials again
         auto connection = ClientNetworkSystem::dial(client);
+        for (int attempt = 1; attempt < 5 && connection.mConnection == nullptr; ++attempt) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250 * attempt));
+            connection = ClientNetworkSystem::dial(client);
+        }
         require(connection.mConnection != nullptr, connection.mError.c_str());
         const auto players = await(server.getPlayerNames());
         require(players.size() == 1 && players.front() == "EmbeddedPlayer", "Player snapshot missing");
@@ -104,8 +130,7 @@ int main() {
         server.setPaused(false);
         server.requestStop();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
-        while (server.getState() == EmbeddedServer::State::Stopping
-               && std::chrono::steady_clock::now() < deadline)
+        while (server.getState() == EmbeddedServer::State::Stopping && std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         require(server.getState() == EmbeddedServer::State::Stopped, "Asynchronous stop did not finish");
         require(!server.isRunning() && server.getPort() == 0, "Stop did not clear state");
@@ -113,7 +138,11 @@ int main() {
         require(std::filesystem::exists(config.dataDirectory / "worlds" / "World" / "level.dat"),
                 "World was not saved");
         bool rejected = false;
-        try { await(server.save()); } catch (...) { rejected = true; }
+        try {
+            await(server.save());
+        } catch (...) {
+            rejected = true;
+        }
         require(rejected, "Stopped server accepted request");
         const unsigned int callsAfterStop = logCalls.load();
         require(callsAfterStop != 0, "Log callback was not called");
@@ -128,11 +157,37 @@ int main() {
                 "Invalid property error missing");
         require(await(server.startAsync(config)), "Same instance could not restart");
         server.stop();
+        // a directory in place of level.dat: the shutdown save cannot write it
+        require(await(server.startAsync(config)), "Could not restart for shutdown failure check");
+        std::filesystem::remove(metadata);
+        std::filesystem::create_directory(metadata);
+        server.stop();
+        require(server.getState() == EmbeddedServer::State::Failed, "World save failure reported a clean shutdown");
+        require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
+                "World save failure did not report Shutdown");
+        std::filesystem::remove(metadata);
+        require(await(server.startAsync(config)), "Could not restart after failed shutdown");
+        server.setPaused(true);
+        client.mPort = server.getPort();
+        auto shutdownConnection = ClientNetworkSystem::dial(client);
+        require(shutdownConnection.mConnection != nullptr, shutdownConnection.mError.c_str());
+        const auto playerData = config.dataDirectory / "players" / "embeddedplayer.dat";
+        std::filesystem::remove(playerData);
+        std::filesystem::create_directory(playerData);
+        server.stop();
+        require(server.getState() == EmbeddedServer::State::Failed, "Player save failure reported a clean shutdown");
+        require(server.getError().code == EmbeddedServer::ErrorCode::Shutdown,
+                "Player save failure did not report Shutdown");
+        shutdownConnection.mConnection->disconnect("Done");
+        std::filesystem::remove(playerData);
         std::filesystem::remove_all(directory);
         std::cout << "Embedded lifecycle checks passed\n";
         return 0;
     } catch (const std::exception &error) {
+        // the host logger above throws: the reason would never reach the ctest output
         std::cerr << error.what() << '\n';
+        LOG_ERROR(LogAreaID::Server, "%s", error.what());
+        BedrockLog::flush();
         return 1;
     }
 }

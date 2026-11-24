@@ -2,15 +2,12 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(TridentItem, 62,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:trident";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<TridentItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        TridentItem, 62, [](const std::string &identifier) { return identifier == "minecraft:trident"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<TridentItem>(item); });
 
 #include "World/Actor/ServerActor.h"
+#include "World/Actor/Movement/MovementPhysics.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "Core/Math/MathConstants.h"
 #include "World/Level/Level.h"
@@ -35,8 +32,7 @@ namespace {
     const int32_t SPIN_ATTACK_TICKS = 20;
 }
 
-TridentItem::TridentItem(const Item &base) : Item(base) {
-}
+TridentItem::TridentItem(const Item &base) : Item(base) {}
 
 bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player, int32_t level) const {
     Level &world = owner.getLevelFor(player);
@@ -48,9 +44,9 @@ bool TridentItem::applyRiptide(ServerNetworkHandler &owner, ServerPlayer &player
     const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
     const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
 
-    float x = -std::sin(yaw) * std::cos(pitch);
-    float y = -std::sin(pitch);
-    float z = std::cos(yaw) * std::cos(pitch);
+    float x = -MovementPhysics::mojangSin(yaw) * MovementPhysics::mojangCos(pitch);
+    float y = -MovementPhysics::mojangSin(pitch);
+    float z = MovementPhysics::mojangCos(yaw) * MovementPhysics::mojangCos(pitch);
     const float length = std::sqrt(x * x + y * y + z * z);
     if (length <= 0.0f)
         return false;
@@ -112,7 +108,9 @@ bool TridentItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player,
     data.mBaseDamage = TRIDENT_BASE_DAMAGE;
     data.mLoyaltyLevel = ItemEnchantments::getLevel(item, EnchantmentIds::LOYALTY);
     data.mImpalingLevel = ItemEnchantments::getLevel(item, EnchantmentIds::IMPALING);
-    data.mChanneling = ItemEnchantments::getLevel(item, EnchantmentIds::CHANNELING) > 0;
+    // channeling turns on the trident's lightning, as the script component shows it
+    if (ItemEnchantments::getLevel(item, EnchantmentIds::CHANNELING) > 0)
+        trident->getProjectileComponent().mLightning = true;
     data.mPickupItem = item;
     data.mPickupItem.mCount = 1;
     data.mFavoredSlot = player.getInventory().getSelectedSlot();
@@ -129,8 +127,7 @@ bool TridentItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player,
         else
             inventory.setItemInHand(std::move(held));
 
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
     return true;

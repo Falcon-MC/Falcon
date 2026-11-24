@@ -20,8 +20,8 @@ bool BedOrientationBlock::matches(const std::string &identifier) {
 }
 
 std::vector<BlockPlacementEntry> BedOrientationBlock::getPlacementBlocks(Level &level, const Vector3i &position,
-                                                                        const BlockState &state,
-                                                                        int playerFacing) const {
+                                                                         const BlockState &state,
+                                                                         int playerFacing) const {
     (void) level;
 
     if (!state.mStates.contains("head_piece_bit") || playerFacing < PlacementOrientation::FACE_NORTH)
@@ -74,4 +74,8 @@ void BedOrientationBlock::onBroken(ServerNetworkHandler &owner, Level &level, co
 std::vector<Vector3i> BedOrientationBlock::getAffectedBlocks(Level &level, const Vector3i &position,
                                                              const BlockState &state) const {
     return BedBlock::otherPiece(level, position, state);
+}
+
+const char *BedOrientationBlock::getBlockActorId() const {
+    return BedBlockActor::BLOCK_ACTOR_ID;
 }

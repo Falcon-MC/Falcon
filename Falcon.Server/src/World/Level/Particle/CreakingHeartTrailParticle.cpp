@@ -7,10 +7,8 @@ namespace {
     const int32_t TRAIL_AMOUNT = 1;
 }
 
-CreakingHeartTrailParticle::CreakingHeartTrailParticle(const Vector3f &creakingPosition,
-                                                       const Vector3i &heartPosition)
-        : Particle(creakingPosition), mHeartPosition(heartPosition) {
-}
+CreakingHeartTrailParticle::CreakingHeartTrailParticle(const Vector3f &creakingPosition, const Vector3i &heartPosition)
+        : Particle(creakingPosition), mHeartPosition(heartPosition) {}
 
 std::unique_ptr<Packet> CreakingHeartTrailParticle::encode() const {
     std::unique_ptr<LevelEventGenericPacket> packet(new LevelEventGenericPacket());

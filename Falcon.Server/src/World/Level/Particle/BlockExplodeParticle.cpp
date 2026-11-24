@@ -4,10 +4,8 @@
 
 #include <string>
 
-BlockExplodeParticle::BlockExplodeParticle(const Vector3f &position, double radius,
-                                           const std::vector<Vector3i> &blocks)
-        : Particle(position), mRadius(radius), mBlocks(blocks) {
-}
+BlockExplodeParticle::BlockExplodeParticle(const Vector3f &position, double radius, const std::vector<Vector3i> &blocks)
+        : Particle(position), mRadius(radius), mBlocks(blocks) {}
 
 std::unique_ptr<Packet> BlockExplodeParticle::encode() const {
     std::unique_ptr<LevelEventGenericPacket> packet(new LevelEventGenericPacket());

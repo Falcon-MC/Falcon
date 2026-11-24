@@ -7,9 +7,7 @@
 
 class LadderBlock final : public WallAttachedBlock {
 public:
-    explicit LadderBlock(const Block &block) : WallAttachedBlock(block)
-    {
-    }
+    explicit LadderBlock(const Block &block) : WallAttachedBlock(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -20,4 +18,6 @@ public:
     bool canPlaceAt(Level &level, const Vector3i &position, int blockFace) const override;
 
     bool canSurvive(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const override;
 };

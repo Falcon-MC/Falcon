@@ -18,6 +18,10 @@ public:
     bool canUse(ServerNetworkHandler &owner, MobActor &mob) override;
 
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
+
+    bool keepsAfloat() const override {
+        return true;
+    }
 };
 
 class SlimeKeepOnJumpingGoal : public SlimeGoal {

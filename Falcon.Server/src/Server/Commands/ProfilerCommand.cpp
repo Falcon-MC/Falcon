@@ -9,8 +9,7 @@ namespace {
 }
 
 ProfilerCommand::ProfilerCommand(ServerNetworkHandler &handler)
-        : Command("profiler", "Records a server performance report", "/profiler <on|off|status>"),
-          mHandler(handler) {}
+        : Command("profiler", "Records a server performance report", "/profiler <on|off|status>"), mHandler(handler) {}
 
 CommandPermission ProfilerCommand::getRequiredPermission() const {
     return CommandPermission::GameDirectors;

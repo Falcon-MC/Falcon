@@ -5,8 +5,8 @@
 
 class LegacyTreeObject : public VanillaTreeObject {
 public:
-    static void growTree(BlockManager &manager, int32_t x, int32_t y, int32_t z, IRandom &random,
-                         TreeWoodType type, bool tall);
+    static void growTree(BlockManager &manager, int32_t x, int32_t y, int32_t z, IRandom &random, TreeWoodType type,
+                         bool tall);
 
     virtual TreeWoodType getType() const;
 

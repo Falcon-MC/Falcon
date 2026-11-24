@@ -1,11 +1,18 @@
 #include "World/Level/Block/BedBlock.h"
 
 #include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/BlockQuery.h"
+#include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/LavaBlock.h"
+#include "World/Level/Block/MagmaBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/LiquidView.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
@@ -14,6 +21,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const char *HEAD_PIECE_BIT = "head_piece_bit";
@@ -21,6 +29,44 @@ namespace {
     const char *DIRECTION = "direction";
     const char *CARDINAL_DIRECTION = "cardinal_direction";
     const double BED_EXPLOSION_SIZE = 5.0;
+    const int32_t MIN_SLEEP_SKY_DARKEN = 4;
+
+    struct StandUpOffset {
+        int32_t mX;
+        int32_t mY;
+        int32_t mZ;
+    };
+
+    const StandUpOffset STAND_UP_OFFSETS[12] = {{1, 0, 0},  {1, 0, 1},   {1, 0, 2},  {0, 0, 2},  {-1, 0, 2}, {-1, 0, 1},
+                                                {-1, 0, 0}, {-1, 0, -1}, {0, 0, -1}, {1, 0, -1}, {0, 1, 0},  {0, 1, 1}};
+
+    // taken when the sleeper lay down from the other side
+    const StandUpOffset MIRRORED_STAND_UP_OFFSETS[12] = {{-1, 0, 0}, {-1, 0, 1},  {-1, 0, 2}, {0, 0, 2},
+                                                         {1, 0, 2},  {1, 0, 1},   {1, 0, 0},  {1, 0, -1},
+                                                         {0, 0, -1}, {-1, 0, -1}, {0, 1, 0},  {0, 1, 1}};
+
+    // indexed by the direction state
+    const int STAND_UP_ROTATIONS[4] = {2, 3, 0, 1};
+
+    // the direction state the face was read from
+    int directionIndex(int face) {
+        switch (face) {
+            case RedstoneFace::WEST:
+                return 1;
+            case RedstoneFace::NORTH:
+                return 2;
+            case RedstoneFace::EAST:
+                return 3;
+            default:
+                return 0;
+        }
+    }
+
+    // the magma flag, the lava material (type 6) and the wither rose
+    bool isUnsafeToStandOn(const BlockState &state) {
+        return VanillaBlocks::getAs<MagmaBlock>(state.mName) != nullptr || LavaBlock::matches(state.mName)
+               || state.mName == BlockNames::WITHER_ROSE;
+    }
 
     bool isHeadPiece(const BlockState &state) {
         return state.mStates.getByte(HEAD_PIECE_BIT, 0) != 0;
@@ -42,28 +88,25 @@ namespace {
         else
             maxZ += (float) footOffset.z;
 
-        return position.x > minX && position.x < maxX
-               && position.y > (float) head.y - 5.5f && position.y < (float) head.y + 2.5f
-               && position.z > minZ && position.z < maxZ;
+        return position.x > minX && position.x < maxX && position.y > (float) head.y - 5.5f
+               && position.y < (float) head.y + 2.5f && position.z > minZ && position.z < maxZ;
     }
 
-    bool isMonsterNearby(ServerNetworkHandler &owner, Level &level, const Vector3i &head,
-                         const Vector3i &footOffset) {
+    bool isMonsterNearby(ServerNetworkHandler &owner, Level &level, const Vector3i &head, const Vector3i &footOffset) {
         const AxisAlignedBB area = AxisAlignedBB((float) head.x - 8.0f, (float) head.y - 6.5f, (float) head.z - 8.0f,
                                                  (float) head.x + 9.0f, (float) head.y + 5.5f, (float) head.z + 9.0f)
-                .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
+                                           .addCoord((float) footOffset.x, 0.0f, (float) footOffset.z);
 
         for (const auto &entry: owner.getActors()) {
             const MobActor *actor = dynamic_cast<const MobActor *>(entry.second.get());
-            if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() ||
-                !actor->isIn(level))
+            if (actor == nullptr || !actor->isAlive() || !actor->preventsSleep() || !actor->isIn(level))
                 continue;
 
             const Vector3f position = actor->getPosition();
             const ActorSize size = actor->getSize();
             const float halfWidth = size.mWidth * 0.5f;
-            const AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth,
-                                    position.x + halfWidth, position.y + size.mHeight, position.z + halfWidth);
+            const AxisAlignedBB box(position.x - halfWidth, position.y, position.z - halfWidth, position.x + halfWidth,
+                                    position.y + size.mHeight, position.z + halfWidth);
             if (box.intersectsWith(area))
                 return true;
         }
@@ -100,8 +143,7 @@ bool BedBlock::findHead(Level &level, const Vector3i &position, const BlockState
 
     head = RedstoneFace::relative(position, headFace(state));
     const BlockState headState = level.getBlockState(head.x, head.y, head.z);
-    return headState.mName == state.mName && isHeadPiece(headState)
-           && headFace(headState) == headFace(state);
+    return headState.mName == state.mName && isHeadPiece(headState) && headFace(headState) == headFace(state);
 }
 
 bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
@@ -111,8 +153,7 @@ bool BedBlock::isValidAt(Level &level, const Vector3i &head) {
 
     const Vector3i foot = RedstoneFace::relative(head, RedstoneFace::opposite(headFace(headState)));
     const BlockState footState = level.getBlockState(foot.x, foot.y, foot.z);
-    return footState.mName == headState.mName && !isHeadPiece(footState)
-           && headFace(footState) == headFace(headState);
+    return footState.mName == headState.mName && !isHeadPiece(footState) && headFace(footState) == headFace(headState);
 }
 
 void BedBlock::setOccupied(ServerNetworkHandler &owner, Level &level, const Vector3i &head, bool occupied) {
@@ -156,7 +197,7 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         if (!willExplode)
             return true;
 
-        level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
+        level.setBlockState(position.x, position.y, position.z, BlockState(BlockNames::AIR));
         BlockActionHandler::broadcastBlockUpdate(owner, level, position,
                                                  level.getBlockState(position.x, position.y, position.z));
         breakOtherHalf(owner, level, position, state);
@@ -178,15 +219,16 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
-    player.setSpawnPoint(head, level.getName());
+    player.setSpawnPoint(head, player.getSpawnStandPositionHere(), player.getDimension(), level.getName());
     player.sendTranslation("§7%tile.bed.respawnSet", {});
 
-    if (!level.isNight() && !level.isThundering()) {
+    // refused while the dimension has a day (vfunc 8) and its sky darkening stays under 4
+    if (level.getSkyLightSubtracted() < MIN_SLEEP_SKY_DARKEN) {
         player.sendTranslation("§7%tile.bed.noSleep", {});
         return true;
     }
 
-    if (player.getGameType() != (int32_t) GameType::Creative && isMonsterNearby(owner, level, head, footOffset)) {
+    if (!player.isCreative() && isMonsterNearby(owner, level, head, footOffset)) {
         player.sendTranslation("§7%tile.bed.notSafe", {});
         return true;
     }
@@ -202,10 +244,105 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
             return true;
     }
 
-    if (!owner.sleepOn(player, head))
+    // kept as the actor's position, at the eyes, only once the player lies down
+    const Vector3f previousEnterPosition = player.getBedEnterPosition();
+    const Vector3f feet = player.getPosition();
+    player.setBedEnterPosition(Vector3f(feet.x, feet.y + MovementPhysics::PLAYER_EYE_HEIGHT, feet.z));
+    if (!owner.sleepOn(player, head)) {
+        player.setBedEnterPosition(previousEnterPosition);
         player.sendTranslation("§7%tile.bed.occupied", {});
+    }
 
     return true;
+}
+
+bool BedBlock::findStandUpPosition(Level &level, const Vector3i &bed, const Vector3f &previous, Vector3i &standUp) {
+    const BlockState bedState = level.getBlockState(bed.x, bed.y, bed.z);
+    if (!matches(bedState.mName))
+        return false;
+
+    Vector3i head = bed;
+    if (!findHead(level, bed, bedState, head))
+        head = bed;
+
+    const int direction = directionIndex(headFace(level.getBlockState(head.x, head.y, head.z)));
+    const int rotation = STAND_UP_ROTATIONS[direction];
+    const float centerX = (float) head.x + 0.5f;
+    const float centerZ = (float) head.z + 0.5f;
+    bool mirrored = false;
+    switch (direction) {
+        case 0:
+            mirrored = previous.x > centerX;
+            break;
+        case 1:
+            mirrored = previous.z > centerZ;
+            break;
+        case 2:
+            mirrored = previous.x < centerX;
+            break;
+        default:
+            mirrored = previous.z < centerZ;
+            break;
+    }
+    const StandUpOffset *offsets = mirrored ? MIRRORED_STAND_UP_OFFSETS : STAND_UP_OFFSETS;
+
+    bool hasFallback = false;
+    Vector3i fallback;
+    for (int i = 0; i < 12; ++i) {
+        const int32_t a = offsets[i].mX;
+        const int32_t b = offsets[i].mZ;
+        int32_t dx = a;
+        int32_t dz = b;
+        switch (rotation) {
+            case 1:
+                dx = -b;
+                dz = a;
+                break;
+            case 2:
+                dx = -a;
+                dz = -b;
+                break;
+            case 3:
+                dx = b;
+                dz = -a;
+                break;
+            default:
+                break;
+        }
+        const Vector3i candidate(head.x + dx, head.y + offsets[i].mY, head.z + dz);
+        const Vector3i below(candidate.x, candidate.y - 1, candidate.z);
+
+        const BlockState belowState = level.getBlockState(below.x, below.y, below.z);
+        const AxisAlignedBB floor = BlockShape::getRelativeShape(belowState);
+        if (!(floor.mMinX < floor.mMaxX && floor.mMinY < floor.mMaxY && floor.mMinZ < floor.mMaxZ))
+            continue;
+
+        const BlockState candidateState = level.getBlockState(candidate.x, candidate.y, candidate.z);
+        const bool candidateIsBed = matches(candidateState.mName);
+        // BlockSource vfunc 432
+        if (!candidateIsBed
+            && (BlockSupport::isSolid(candidateState) || candidateState.mName == BlockNames::END_PORTAL
+                || candidateState.mName == BlockNames::END_PORTAL_FRAME))
+            continue;
+
+        if (!BlockQuery::isAirAt(level, Vector3i(candidate.x, candidate.y + 1, candidate.z)))
+            continue;
+        if (candidateIsBed && !BlockQuery::isAirAt(level, Vector3i(candidate.x, candidate.y + 2, candidate.z)))
+            continue;
+
+        if (!isUnsafeToStandOn(candidateState) && !isUnsafeToStandOn(belowState)) {
+            standUp = candidate;
+            return true;
+        }
+        if (!hasFallback) {
+            hasFallback = true;
+            fallback = candidate;
+        }
+    }
+
+    if (hasFallback)
+        standUp = fallback;
+    return hasFallback;
 }
 
 std::vector<Vector3i> BedBlock::otherPiece(Level &level, const Vector3i &position, const BlockState &state) {

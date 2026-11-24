@@ -1,23 +1,31 @@
 #pragma once
 
+#include <functional>
+
 #include "Core/NBT/Tag.h"
 #include "Core/Math/AxisAlignedBB.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/NoteBlockInstrument.h"
 
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <typeinfo>
 #include <vector>
 
 struct BlockData;
+struct DispenseSource;
 class Actor;
 class BlockBehavior;
+class Container;
 class ItemStack;
 class Level;
+class LiquidPhysicsSystem;
 class MobActor;
 class ServerActor;
+class ItemActor;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -45,29 +53,13 @@ struct BlockDrop {
     int32_t mCount;
 };
 
-enum class PlacementMergeResult {
-    None,
-    Merged,
-    Rejected
-};
+enum class PlacementMergeResult { None, Merged, Rejected };
 
-enum class BlockTraversal {
-    None,
-    Scaffolding,
-    PowderSnow
-};
+enum class BlockTraversal { None, Scaffolding, PowderSnow };
 
-enum class PathHazard {
-    None,
-    Damaging,
-    Portal
-};
+enum class PathHazard { None, Damaging, Portal };
 
-enum class PistonMoveReaction {
-    Normal,
-    Break,
-    PushOnly
-};
+enum class PistonMoveReaction { Normal, Break, PushOnly };
 
 class Block {
 public:
@@ -80,6 +72,14 @@ public:
         (void) position;
         (void) state;
         return false;
+    }
+
+    // with the face clicked and the spot on it, from 0 to 1 on each axis, for a block that reads where it was hit
+    virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const BlockState &state, int face, const Vector3f &clickPosition) const {
+        (void) face;
+        (void) clickPosition;
+        return onInteract(owner, player, position, state);
     }
 
     virtual void onTouch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
@@ -98,8 +98,8 @@ public:
         (void) state;
     }
 
-    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
-                          const BlockState &state, float fallDistance) const {
+    virtual void onFallOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position, const BlockState &state,
+                          float fallDistance) const {
         (void) owner;
         (void) actor;
         (void) position;
@@ -116,8 +116,56 @@ public:
         return false;
     }
 
+    // faces liquid cannot cross, a bit per LiquidFace (stops_liquid_flowing_from_direction)
+    virtual uint8_t getLiquidBlockedFaces(const BlockState &state) const {
+        (void) state;
+        return 0;
+    }
+
+    // Material type 18: liquid falling onto it turns it to stone
+    virtual bool isIceMaterial() const {
+        return false;
+    }
+
+    // true for blocks reacting to the hooks below: other blocks never reach them
+    virtual bool usesBlockTicks() const {
+        return false;
+    }
+
+    // BlockPlaceEvent, neighborChanged (slot 75) and BlockQueuedTickEvent as the tick queues run them;
+    // `ticks` reads and writes the world and queues ticks
+    virtual void onTickPlace(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+    }
+
+    virtual void onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
+                                        const Vector3i &changed) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+        (void) changed;
+    }
+
+    virtual void onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const {
+        (void) ticks;
+        (void) position;
+        (void) state;
+    }
+
     virtual bool canBeReplaced(const BlockState &state) const {
         (void) state;
+        return false;
+    }
+
+    // replaceable, yet stays when an actor item (armor stand) is placed into it
+    virtual bool staysUnderPlacedActor() const {
+        return false;
+    }
+
+    // head slot when given to an armor stand
+    virtual bool isWornOnHead() const {
         return false;
     }
 
@@ -125,7 +173,21 @@ public:
         return false;
     }
 
+    virtual bool isLeaves() const {
+        return false;
+    }
+
+    // left standing when the wither breaks the blocks around it, hurt or charging
+    virtual bool resistsWither(bool charging) const {
+        (void) charging;
+        return false;
+    }
+
     virtual bool suppressesFreezing() const {
+        return false;
+    }
+
+    virtual bool freezesActorsInside() const {
         return false;
     }
 
@@ -145,7 +207,7 @@ public:
         return BlockTraversal::None;
     }
 
-    /** How mob pathfinding treats this block: navigation options decide whether a hazard is avoided. */
+    // navigation options decide whether the hazard is avoided
     virtual PathHazard getPathHazard() const {
         return PathHazard::None;
     }
@@ -199,12 +261,45 @@ public:
         (void) blockFace;
     }
 
+    // set by anything reporting through Level::onBlockPlaced: a player, /setblock, fire
+    virtual void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
+    // a player is about to break the block, before its drops and its removal
+    virtual void onPlayerWillDestroy(ServerNetworkHandler &owner, ServerPlayer &player, Level &level,
+                                     const Vector3i &position, const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           const BlockState &state) const {
         (void) owner;
         (void) level;
         (void) position;
         (void) state;
+    }
+
+    // of this very class, none derived from it: nothing overrides what a block does. Asked for every
+    // neighbour of every block an explosion breaks, so the answer is kept
+    bool isPlainClass() const {
+        if (mPlainClass == 0)
+            mPlainClass = typeid(*this) == typeid(Block) ? 1 : 2;
+        return mPlainClass == 1;
+    }
+
+    // true for a block that does something in onActorInside: the others are not even told, and a crowd
+    // standing in water or grass costs nothing. A block overriding one overrides the other
+    virtual bool hearsActorsInside() const {
+        return false;
     }
 
     virtual void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
@@ -230,6 +325,11 @@ public:
         return false;
     }
 
+    // true in every class overriding onRandomTick: random ticks skip inert blocks
+    virtual bool hasRandomTick() const {
+        return false;
+    }
+
     virtual void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) const {
         (void) owner;
@@ -244,6 +344,22 @@ public:
         (void) level;
         (void) position;
         (void) state;
+    }
+
+    // bone meal on this block; false: it takes none and the bone meal is kept
+    virtual bool onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
+    // the block's own dispense for its item; false drops it as a dropper does
+    virtual bool dispense(const DispenseSource &source) const {
+        (void) source;
+        return false;
     }
 
     virtual std::vector<BlockPlacementEntry> getPlacementBlocks(Level &level, const Vector3i &position,
@@ -267,6 +383,35 @@ public:
     virtual void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state) const;
 
+    // whether a normal update from `changed` reaches onNeighbourChanged; null `changed` is the block itself
+    virtual bool watchesNeighbour(const Vector3i &position, const BlockState &state, const Vector3i *changed) const {
+        (void) position;
+        (void) state;
+        (void) changed;
+        return true;
+    }
+
+    // a wind burst reached the block; true when it reacted
+    virtual bool onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                             const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
+    // a dropped item ran into the block; true when the block took over its motion
+    virtual bool onItemHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           ItemActor &item) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) item;
+        return false;
+    }
+
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {
         (void) owner;
@@ -283,8 +428,59 @@ public:
         (void) drop;
     }
 
-    virtual bool getCollisionShape(const BlockState &state, AxisAlignedBB &shape) const {
+    // the item a hopper below pulls out of a block with no container; empty: none
+    virtual std::string getHopperOutput(const BlockState &state) const {
         (void) state;
+        return std::string();
+    }
+
+    // the hopper below took the item getHopperOutput named
+    virtual void onHopperOutputTaken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+    }
+
+    // item and projectile physics read the shape only of these; other blocks stop them at the cell
+    virtual bool shapesCollisionPerActor() const {
+        return false;
+    }
+
+    // several boxes resolved with the neighbours; false leaves the single shape and the vanilla table
+    virtual bool getCollisionShapesAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                      const std::function<const BlockState *(int32_t, int32_t, int32_t)> &neighbours,
+                                      std::vector<AxisAlignedBB> &shapes) const {
+        (void) state;
+        (void) position;
+        (void) actor;
+        (void) neighbours;
+        (void) shapes;
+        return false;
+    }
+
+    // boxes, in world coordinates, for a mover whose box is known before it moves: a block that only carries what
+    // already stands above it. false leaves the usual shapes
+    virtual bool getMoverCollisionShapes(const BlockState &state, const Vector3i &position, const AxisAlignedBB &mover,
+                                         bool descending, std::vector<AxisAlignedBB> &shapes) const {
+        (void) state;
+        (void) position;
+        (void) mover;
+        (void) descending;
+        (void) shapes;
+        return false;
+    }
+
+    // actor null outside a move: placement, explosions, block rays
+    // shapes that depend on where the actor stands against the block
+    virtual bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                                     AxisAlignedBB &shape) const {
+        (void) position;
+        return getCollisionShape(state, actor, shape);
+    }
+
+    virtual bool getCollisionShape(const BlockState &state, const Actor *actor, AxisAlignedBB &shape) const {
+        (void) state;
+        (void) actor;
         (void) shape;
         return false;
     }
@@ -316,16 +512,81 @@ public:
     static std::vector<BlockDrop> grassDrops(const std::string &shearedItem, int32_t shearedCount,
                                              const ItemStack &tool);
 
+    // what a comparator reads from this block, -1 when it gives none and the comparator reads redstone
+    virtual int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        return -1;
+    }
+
+    // what a comparator reads from the container of the block actor here, 0 without one
+    static int containerSignal(Level &level, const Vector3i &position);
+
+    static int containerSignal(const Container &container);
+
     virtual bool isSignalSource() const {
         return false;
+    }
+
+    // power this source gives the neighbour on `face` (RedstoneSystem convention), strong through solid blocks;
+    // -1 leaves it to RedstoneSystem
+    virtual int getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
+                                 bool strong) const {
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) face;
+        (void) strong;
+        return -1;
+    }
+
+    // a normal or redstone update reached this block; the power around it may have changed
+    virtual void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
+    // block light of a state; `dataEmission` is the value the block data gives every state
+    virtual int getLightEmission(const BlockState &state, int dataEmission) const {
+        (void) state;
+        return dataEmission;
     }
 
     virtual PistonMoveReaction getPistonMoveReaction() const {
         return PistonMoveReaction::Normal;
     }
 
-    virtual BlockState applyPlacementOrientation(const BlockState &state,
-                                                 const BlockPlacementContext &context) const;
+    // VibrationProperties flags: the BlockVibrationPropertiesComponent the game gives wool and carpets
+    virtual uint8_t getVibrationProperties() const {
+        return 0;
+    }
+
+    // minecraft:instrument_sound: what a note block plays with this block on top of it (above) or under it;
+    // false when that face has none and the note block stays silent
+    virtual bool getInstrumentSound(bool above, NoteBlockInstrument &instrument) const {
+        const uint8_t face = above ? mInstrumentAbove : mInstrumentBelow;
+        if (face == NO_INSTRUMENT)
+            return false;
+        instrument = (NoteBlockInstrument) face;
+        return true;
+    }
+
+    // `above` null: a note block under this block stays silent
+    void setInstrumentSounds(NoteBlockInstrument below, const NoteBlockInstrument *above) {
+        mInstrumentBelow = (uint8_t) below;
+        mInstrumentAbove = above == nullptr ? NO_INSTRUMENT : (uint8_t) *above;
+    }
+
+    // the block actor type this block carries, null for none: an actor of another type goes when the block is set
+    virtual const char *getBlockActorId() const {
+        return nullptr;
+    }
+
+    virtual BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const;
 
     Block() : mTypeId(0), mIdentifier("minecraft:air"), mName("Air"), mStates(Tag::ofCompound()) {}
 
@@ -338,13 +599,21 @@ public:
     explicit Block(const BlockState &state)
             : mTypeId(0), mIdentifier(state.mName), mName(state.mName), mStates(state.mStates) {}
 
-    int32_t getTypeId() const { return mTypeId; }
+    int32_t getTypeId() const {
+        return mTypeId;
+    }
 
-    const std::string &getIdentifier() const { return mIdentifier; }
+    const std::string &getIdentifier() const {
+        return mIdentifier;
+    }
 
-    const std::string &getName() const { return mName; }
+    const std::string &getName() const {
+        return mName;
+    }
 
-    const Tag &getStates() const { return mStates; }
+    const Tag &getStates() const {
+        return mStates;
+    }
 
     const BlockData *getData() const;
 
@@ -356,13 +625,24 @@ public:
 
     std::optional<float> getFallDamage(const Actor &actor, float vanillaFallDamage) const;
 
-    BlockState toBlockState() const { return BlockState(mIdentifier, mStates); }
+    float getFallDistanceMultiplier() const;
 
-    int32_t getNetworkHash() const { return BlockStateHasher::hash(mIdentifier, mStates); }
+    BlockState toBlockState() const {
+        return BlockState(mIdentifier, mStates);
+    }
+
+    int32_t getNetworkHash() const {
+        return BlockStateHasher::hash(mIdentifier, mStates);
+    }
 
 private:
     int32_t mTypeId;
     std::string mIdentifier;
     std::string mName;
     Tag mStates;
+    mutable uint8_t mPlainClass = 0;
+    static constexpr uint8_t NO_INSTRUMENT = 0xFF;
+    // a block without the component: the harp below, silence above
+    uint8_t mInstrumentBelow = (uint8_t) NoteBlockInstrument::Harp;
+    uint8_t mInstrumentAbove = NO_INSTRUMENT;
 };

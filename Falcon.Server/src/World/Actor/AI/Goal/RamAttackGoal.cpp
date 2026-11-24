@@ -92,8 +92,9 @@ void RamAttackGoal::_tickApproach(ServerNetworkHandler &owner, MobActor &mob, co
     const float wanted = std::min(std::max(distance, mSettings.mMinRamDistance), mSettings.mRamDistance);
     const float directionX = distance > MIN_DIRECTION_LENGTH ? dx / distance : 1.0f;
     const float directionZ = distance > MIN_DIRECTION_LENGTH ? dz / distance : 0.0f;
-    mob.getNavigation().moveTo(Vector3f(targetPosition.x + directionX * wanted, targetPosition.y,
-                                        targetPosition.z + directionZ * wanted), mSettings.mRunSpeed);
+    mob.getNavigation().moveTo(
+            Vector3f(targetPosition.x + directionX * wanted, targetPosition.y, targetPosition.z + directionZ * wanted),
+            mSettings.mRunSpeed);
 }
 
 void RamAttackGoal::_tickPrepare(MobActor &mob, const Actor &target) {

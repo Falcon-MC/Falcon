@@ -5,12 +5,7 @@
 class MobActor;
 class ServerNetworkHandler;
 
-enum class GoalControlFlag : uint8_t {
-    Move = 1 << 0,
-    Look = 1 << 1,
-    Jump = 1 << 2,
-    Target = 1 << 3
-};
+enum class GoalControlFlag : uint8_t { Move = 1 << 0, Look = 1 << 1, Jump = 1 << 2, Target = 1 << 3 };
 
 class Goal {
 public:
@@ -35,6 +30,12 @@ public:
     virtual void tick(ServerNetworkHandler &owner, MobActor &mob) {
         (void) owner;
         (void) mob;
+    }
+
+    // mobs have no buoyancy: the game's float goal keeps them at the surface;
+    // without one (zombie, drowned) a mob sinks and walks on the bottom
+    virtual bool keepsAfloat() const {
+        return false;
     }
 
     uint8_t getRequiredControlFlags() const {

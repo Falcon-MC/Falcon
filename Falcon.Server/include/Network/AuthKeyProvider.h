@@ -20,6 +20,9 @@ public:
 
     EVP_PKEY *acquireKey(const std::string &keyId, std::string &issuer);
 
+    // true until the first fetch ends, failed or not: a login checked before then misses its key
+    bool isFetchingFirstKeys();
+
 private:
     AuthKeyProvider() = default;
 

@@ -2,9 +2,11 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/LevelGen/Biome/BiomeChunkGenDataRegistry.h"
+#include "World/Level/LevelGen/Biome/BiomeSearch.h"
+#include "World/Level/LevelGen/Structure/StructureFeature.h"
 #include "World/Level/Level.h"
-#include "World/Level/Chunk/LevelChunk.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/PlayerCommandOrigin.h"
 
 #include <atomic>
 #include <cmath>
@@ -12,9 +14,8 @@
 #include <thread>
 
 namespace {
-    const int32_t SEA_LEVEL = 63;
-    const int32_t HEIGHT_STEP = 8;
-    const int32_t TELEPORT_HEIGHT_OFFSET = 16;
+    // an empty search runs once more from here
+    const int32_t RETRY_OFFSET = 32;
 
     std::atomic<bool> gSearchRunning{false};
 
@@ -35,7 +36,7 @@ namespace {
 
 LocateCommand::LocateCommand(ServerNetworkHandler &handler)
         : Command("locate", "commands.locate.description",
-                  "/locate biome <biomeName> [teleport] [radius] [spiral|xaxis]"),
+                  "/locate biome <biomeName> [teleport] | /locate structure <structure>"),
           mHandler(handler) {}
 
 CommandPermission LocateCommand::getRequiredPermission() const {
@@ -65,28 +66,31 @@ std::vector<CommandOverloadData> LocateCommand::getOverloads() const {
     teleportParameter.mEnumData.mIsSoft = false;
     teleportParameter.mEnumData.mValues = {"true", "false"};
 
-    CommandParamData radiusParameter;
-    radiusParameter.mName = "radius";
-    radiusParameter.mOptional = true;
-    radiusParameter.mHasType = true;
-    radiusParameter.mType = CommandParamType::Int;
-
-    CommandParamData searchParameter;
-    searchParameter.mName = "search";
-    searchParameter.mOptional = true;
-    searchParameter.mHasEnumData = true;
-    searchParameter.mEnumData.mName = "LocateSearchType";
-    searchParameter.mEnumData.mIsSoft = false;
-    searchParameter.mEnumData.mValues = {"spiral", "xaxis"};
-
     CommandOverloadData overload;
     overload.mParameters.push_back(modeParameter);
     overload.mParameters.push_back(biomeParameter);
     overload.mParameters.push_back(teleportParameter);
-    overload.mParameters.push_back(radiusParameter);
-    overload.mParameters.push_back(searchParameter);
 
-    return {overload};
+    CommandParamData structureModeParameter;
+    structureModeParameter.mName = "mode";
+    structureModeParameter.mHasEnumData = true;
+    structureModeParameter.mEnumData.mName = "LocateModeStructure";
+    structureModeParameter.mEnumData.mIsSoft = false;
+    structureModeParameter.mEnumData.mValues = {"structure"};
+
+    CommandParamData structureParameter;
+    structureParameter.mName = "structure";
+    structureParameter.mHasEnumData = true;
+    structureParameter.mEnumData.mName = "Structure";
+    structureParameter.mEnumData.mIsSoft = false;
+    for (const StructureFeature *feature: StructureFeature::getAll())
+        structureParameter.mEnumData.mValues.push_back(feature->getName());
+
+    CommandOverloadData structureOverload;
+    structureOverload.mParameters.push_back(structureModeParameter);
+    structureOverload.mParameters.push_back(structureParameter);
+
+    return {overload, structureOverload};
 }
 
 bool LocateCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
@@ -95,12 +99,87 @@ bool LocateCommand::execute(CommandOrigin &sender, const std::vector<std::string
         return false;
     }
 
+    if (arguments[0] == "structure")
+        return _locateStructure(sender, arguments);
+
     if (arguments[0] != "biome") {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }
 
     return _locateBiome(sender, arguments);
+}
+
+bool LocateCommand::_locateStructure(CommandOrigin &sender, const std::vector<std::string> &arguments) {
+    if (arguments.size() < 2) {
+        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        return false;
+    }
+
+    if (!sender.isPlayer()) {
+        sender.sendTranslation("commands.locate.structure.fail.noplayer", {});
+        return false;
+    }
+
+    const StructureFeature *feature = StructureFeature::get(arguments[1]);
+    if (feature == nullptr) {
+        sender.sendTranslation("commands.generic.parameter.invalid", {arguments[1]});
+        return false;
+    }
+
+    bool expected = false;
+    if (!gSearchRunning.compare_exchange_strong(expected, true)) {
+        sender.sendMessage("A search is already running");
+        return false;
+    }
+
+    ServerPlayer *player = sender.asPlayer();
+    const Vector3f &origin = player->getPosition();
+    const int32_t originX = (int32_t) std::floor(origin.x);
+    const int32_t originZ = (int32_t) std::floor(origin.z);
+
+    const NetworkIdentifier requesterId = player->getNetworkIdentifier();
+    CommandOriginData requestOrigin;
+    if (const PlayerCommandOrigin *playerOrigin = dynamic_cast<const PlayerCommandOrigin *>(&sender))
+        requestOrigin = playerOrigin->getOriginData();
+    ServerNetworkHandler &handler = mHandler;
+    Level &level = handler.getLevelFor(*player);
+    const std::shared_ptr<const ChunkGenerator> generator = level.shareGenerator();
+
+    std::thread search([&handler, generator, feature, requesterId, requestOrigin, originX, originZ]() {
+        StructureChunkPos start;
+        const bool found = generator->getDimensionType() == feature->getDimension()
+                           && feature->findNearest(*generator, originX, originZ, start);
+        gSearchRunning = false;
+
+        handler.postToMainThread([&handler, feature, requesterId, requestOrigin, found, start, originX, originZ]() {
+            auto entry = handler.getPlayers().find(requesterId);
+            if (entry == handler.getPlayers().end())
+                return;
+
+            ServerPlayer *target = &entry->second;
+            if (!target->isSpawned())
+                return;
+
+            if (!found) {
+                target->sendTranslation("commands.locate.structure.fail.nostructurefound", {});
+                return;
+            }
+
+            const int32_t foundX = start.x * 16 + feature->getBlockOffset();
+            const int32_t foundZ = start.z * 16 + feature->getBlockOffset();
+            const int64_t deltaX = foundX - originX;
+            const int64_t deltaZ = foundZ - originZ;
+            const int64_t distance = (int64_t) std::sqrt((double) (deltaX * deltaX + deltaZ * deltaZ));
+
+            handler.sendCommandOutput(*target, requestOrigin, "commands.locate.structure.success",
+                                      {"minecraft:" + feature->getName(), std::to_string(foundX),
+                                       std::to_string(foundZ), std::to_string(distance)});
+        });
+    });
+
+    search.detach();
+    return true;
 }
 
 bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::string> &arguments) {
@@ -127,35 +206,10 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
         return false;
     }
 
-    int32_t maxRadius = DEFAULT_BIOME_RADIUS;
-    if (arguments.size() > 3) {
-        try {
-            maxRadius = (int32_t) std::stol(arguments[3]);
-        } catch (const std::exception &) {
-            sender.sendTranslation("commands.generic.num.invalid", {arguments[3]});
-            return false;
-        }
-
-        if (maxRadius <= 0 || maxRadius > DEFAULT_BIOME_RADIUS) {
-            sender.sendTranslation("commands.generic.num.invalid", {arguments[3]});
-            return false;
-        }
-    }
-
     bool expected = false;
     if (!gSearchRunning.compare_exchange_strong(expected, true)) {
         sender.sendMessage("A biome search is already running");
         return false;
-    }
-
-    int32_t searchType = SEARCH_SPIRAL;
-    if (arguments.size() > 4) {
-        if (arguments[4] == "xaxis")
-            searchType = SEARCH_X_AXIS;
-        else if (arguments[4] != "spiral") {
-            sender.sendTranslation("commands.generic.parameter.invalid", {arguments[4]});
-            return false;
-        }
     }
 
     ServerPlayer *player = sender.asPlayer();
@@ -165,108 +219,74 @@ bool LocateCommand::_locateBiome(CommandOrigin &sender, const std::vector<std::s
     const int32_t originZ = (int32_t) std::floor(origin.z);
 
     const NetworkIdentifier requesterId = player->getNetworkIdentifier();
+    CommandOriginData requestOrigin;
+    if (const PlayerCommandOrigin *playerOrigin = dynamic_cast<const PlayerCommandOrigin *>(&sender))
+        requestOrigin = playerOrigin->getOriginData();
     ServerNetworkHandler &handler = mHandler;
     Level &level = handler.getLevelFor(*player);
 
-    std::thread search([&handler, &level, requesterId, biomeName, biomeId, maxRadius, searchType, teleport,
-                        originX, originY, originZ]() {
-        Vector3i found;
-        const bool located = searchType == SEARCH_X_AXIS
-                             ? _findBiomeXAxis(level, originX, originZ, biomeId, maxRadius, found)
-                             : _findBiomeSpiral(level, originX, originZ, biomeId, maxRadius, found);
+    // shared: a world unloaded mid-search doesn't take the generator with it
+    const std::shared_ptr<const ChunkGenerator> generator = level.shareGenerator();
+
+    std::thread search([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport, originX, originY,
+                        originZ]() {
+        BiomeSearch::Result result = BiomeSearch::findNearest(*generator, Vector3i(originX, originY, originZ), biomeId);
+        if (!result.mFound) {
+            result = BiomeSearch::findNearest(
+                    *generator, Vector3i(originX + RETRY_OFFSET, originY + RETRY_OFFSET, originZ + RETRY_OFFSET),
+                    biomeId);
+        }
         gSearchRunning = false;
 
-        handler.postToMainThread([&handler, &level, requesterId, biomeName, teleport, located, found,
-                                  originX, originY, originZ]() {
+        handler.postToMainThread([&handler, generator, requesterId, requestOrigin, biomeName, biomeId, teleport, result,
+                                  originX, originZ]() {
             auto entry = handler.getPlayers().find(requesterId);
             if (entry == handler.getPlayers().end())
                 return;
 
             ServerPlayer *target = &entry->second;
-            if (!target->isSpawned() || !target->isIn(level))
+            if (!target->isSpawned())
                 return;
 
-            if (!located) {
+            // the searched world may have been unloaded meanwhile: resolve the level again here, and the held
+            // generator tells whether it is still the one searched
+            Level &level = handler.getLevelFor(*target);
+            if (!target->isIn(level) || level.shareGenerator() != generator)
+                return;
+
+            if (!result.mFound) {
                 target->sendTranslation("commands.locate.biome.fail", {biomeName});
                 return;
             }
 
-            Vector3i result = found;
-            if (level.hasSkyLight())
-                result.y = level.getHeightAt(originX, originZ) + TELEPORT_HEIGHT_OFFSET;
+            const Vector3i found = result.mNeedsOpening ? BiomeSearch::findOpening(level, result.mPosition, biomeId)
+                                                        : result.mPosition;
 
-            const double deltaX = (double) result.x - (double) originX;
-            const double deltaY = (double) result.y - (double) originY;
-            const double deltaZ = (double) result.z - (double) originZ;
-            const int32_t distance = (int32_t) std::sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ);
+            const int32_t deltaX = found.x - originX;
+            const int32_t deltaZ = found.z - originZ;
+            const int32_t distance = (int32_t) std::sqrt((double) (deltaX * deltaX + deltaZ * deltaZ));
 
-            target->sendTranslation("commands.locate.biome.success",
-                                    {biomeName, std::to_string(result.x), std::to_string(result.y),
-                                     std::to_string(result.z), std::to_string(distance)});
+            // the client disconnects on a TextPacket with more than four parameters: the five-parameter result
+            // goes out as command output, as the game sends it
+            handler.sendCommandOutput(*target, requestOrigin, "commands.locate.biome.success",
+                                      {biomeName, std::to_string(found.x), std::to_string(found.y),
+                                       std::to_string(found.z), std::to_string(distance)});
 
-            if (teleport)
-                target->teleport(handler, Vector3f((float) result.x, (float) result.y, (float) result.z));
+            if (!teleport)
+                return;
+
+            // the report only reads loaded chunks, but landing in unloaded rock suffocates:
+            // load the area, find the opening again, land on a standable block
+            Vector3i destination = found;
+            if (result.mNeedsOpening) {
+                BiomeSearch::loadOpeningArea(level, result.mPosition);
+                destination = BiomeSearch::findOpening(level, result.mPosition, biomeId);
+            }
+            destination = level.findSafeSpawn(destination);
+            target->teleport(handler, Vector3f((float) destination.x, (float) destination.y, (float) destination.z));
         });
     });
 
     search.detach();
     return true;
-}
-
-bool LocateCommand::_findBiomeSpiral(Level &level, int32_t centerX, int32_t centerZ, int32_t biomeId,
-                                     int32_t maxRadius, Vector3i &found) {
-    int32_t x = 0;
-    int32_t z = 0;
-    int32_t dx = 0;
-    int32_t dz = -1;
-
-    const int64_t diameter = (int64_t) maxRadius * 2 + 1;
-    const int64_t maxSteps = diameter * diameter;
-
-    for (int64_t step = 0; step < maxSteps; step++) {
-        const int32_t checkX = centerX + (x << 4);
-        const int32_t checkZ = centerZ + (z << 4);
-
-        OverworldBiomeResult result = level.pickBiomeResult(checkX, SEA_LEVEL, checkZ);
-
-        int32_t height = SEA_LEVEL;
-        while (height > level.getMinY()) {
-            if (result.correct(height - SEA_LEVEL).getBiomeId() == biomeId) {
-                found = Vector3i(checkX, height, checkZ);
-                return true;
-            }
-
-            height -= HEIGHT_STEP;
-        }
-
-        if (x == z || (x < 0 && x == -z) || (x > 0 && x == 1 - z)) {
-            const int32_t temp = dx;
-            dx = -dz;
-            dz = temp;
-        }
-
-        x += dx;
-        z += dz;
-    }
-
-    return false;
-}
-
-bool LocateCommand::_findBiomeXAxis(Level &level, int32_t centerX, int32_t centerZ, int32_t biomeId,
-                                    int32_t maxRadius, Vector3i &found) {
-    for (int32_t x = 0; x <= maxRadius; x++) {
-        const int32_t offset = x << 4;
-
-        for (int32_t i = 0; i < 2; i++) {
-            const int32_t deltaX = i == 0 ? offset : -offset;
-            const int32_t checkX = centerX + deltaX;
-
-            if (level.pickBiome(checkX, SEA_LEVEL, centerZ) == biomeId) {
-                found = Vector3i(checkX, SEA_LEVEL, centerZ);
-                return true;
-            }
-        }
-    }
-
-    return false;
 }

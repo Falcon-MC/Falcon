@@ -10,7 +10,9 @@ public:
 
     explicit LegacyTreeObjectWrapper(const std::shared_ptr<LegacyTreeObject> &legacyTreeGenerator);
 
-    const std::shared_ptr<LegacyTreeObject> &getLegacyTreeGenerator() const { return mLegacyTreeGenerator; }
+    const std::shared_ptr<LegacyTreeObject> &getLegacyTreeGenerator() const {
+        return mLegacyTreeGenerator;
+    }
 
     void setLegacyTreeGenerator(const std::shared_ptr<LegacyTreeObject> &generator) {
         mLegacyTreeGenerator = generator;

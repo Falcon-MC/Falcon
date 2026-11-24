@@ -1,0 +1,229 @@
+#include "World/Level/Block/RespawnAnchorBlock.h"
+#include "Falcon/Plugin/PluginEvent.h"
+#include "Falcon/Plugin/PluginManager.h"
+#include "Core/Json/Json.h"
+
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/BlockTypeIds.h"
+#include "World/Level/Block/BlockSupport.h"
+#include "World/Level/Block/LiquidView.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Explosion.h"
+#include "World/Level/Level.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Protocol/Types/BlockDefinition.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
+
+#include <algorithm>
+#include <cmath>
+
+FALCON_REGISTER_BLOCK(RespawnAnchorBlock, 405);
+
+namespace {
+    const char *CHARGE = "respawn_anchor_charge";
+    // level sound events 308, 309, 310
+    const char *SOUND_CHARGE = "respawn_anchor.charge";
+    const char *SOUND_DEPLETE = "respawn_anchor.deplete";
+    const char *SOUND_SET_SPAWN = "respawn_anchor.set_spawn";
+    const double EXPLOSION_RADIUS = 5.0;
+    const int WATER_SIDES_TO_SHIELD = 2;
+
+    const int NEIGHBOURS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+
+    using VectorMath::centerOf;
+
+    bool isSolidAt(Level &level, int32_t x, int32_t y, int32_t z) {
+        if (y < level.getMinY() || y > level.getMaxY())
+            return false;
+
+        return BlockSupport::isSolid(level.getBlockState(x, y, z));
+    }
+
+    // solid floor, room for the feet and the head
+    bool canStandAt(Level &level, int32_t x, int32_t y, int32_t z) {
+        return isSolidAt(level, x, y - 1, z) && !isSolidAt(level, x, y, z) && !isSolidAt(level, x, y + 1, z);
+    }
+
+    bool isWaterAt(Level &level, int32_t x, int32_t y, int32_t z) {
+        if (y < level.getMinY() || y > level.getMaxY())
+            return false;
+
+        return LiquidView(level.getBlockState(x, y, z)).isWater()
+               || LiquidView(level.getBlockStateAtLayer(x, y, z, 1)).isWater();
+    }
+
+    // the game compares the item's block with glowstone's
+    bool isGlowstone(const ItemStack &item) {
+        if (item.isAir() || item.mBlockDefinition == nullptr)
+            return false;
+
+        const Block *block = VanillaBlocks::fromIdentifier(item.mBlockDefinition->getIdentifier());
+        return block != nullptr && block->getTypeId() == BlockTypeIds::GLOWSTONE;
+    }
+
+    bool holdsSpawnPoint(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
+        return player.hasSpawnPoint() && player.getSpawnDimension() == player.getDimension()
+               && player.getSpawnPoint() == position && player.getSpawnWorld() == owner.getWorldFor(player).getName();
+    }
+}
+
+bool RespawnAnchorBlock::matches(const std::string &identifier) {
+    return identifier == "minecraft:respawn_anchor";
+}
+
+int RespawnAnchorBlock::getCharge(const BlockState &state) {
+    return state.mStates.getInt(CHARGE, 0);
+}
+
+// no neighbour update, sound at the center
+void RespawnAnchorBlock::addCharge(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int delta) {
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    Tag states = state.mStates;
+    states.putInt(CHARGE, std::clamp(getCharge(state) + delta, 0, MAX_CHARGE));
+    level.setBlock(position, BlockState(state.mName, states), false);
+    owner.playLevelSound(level, delta > 0 ? SOUND_CHARGE : SOUND_DEPLETE, centerOf(position));
+}
+
+bool RespawnAnchorBlock::isChargedAnchor(Level &level, const Vector3i &position) {
+    const BlockState state = level.getBlockState(position.x, position.y, position.z);
+    return VanillaBlocks::getAs<RespawnAnchorBlock>(state.mName) != nullptr && getCharge(state) > 0;
+}
+
+// two of the six neighbours in water keep the blast from breaking blocks
+bool RespawnAnchorBlock::isSurroundedByWater(Level &level, const Vector3i &position) {
+    int sides = 0;
+    for (const int *offset: NEIGHBOURS) {
+        if (isWaterAt(level, position.x + offset[0], position.y + offset[1], position.z + offset[2]))
+            sides++;
+    }
+
+    return sides >= WATER_SIDES_TO_SHIELD;
+}
+
+// the position itself, else x-1..x+2 then z-1..z+2 on its layer, z fastest
+std::optional<Vector3i> RespawnAnchorBlock::findStandUpPosition(Level &level, const Vector3i &position) {
+    if (canStandAt(level, position.x, position.y, position.z))
+        return position;
+
+    for (int32_t x = position.x - 1; x <= position.x + 2; x++) {
+        for (int32_t z = position.z - 1; z <= position.z + 2; z++) {
+            if (canStandAt(level, x, position.y, z))
+                return Vector3i(x, position.y, z);
+        }
+    }
+
+    return std::nullopt;
+}
+
+// the anchor must still be charged and the spot standable
+std::optional<Vector3f> RespawnAnchorBlock::findRespawnPosition(Level &level, const Vector3i &anchor,
+                                                                const Vector3i &standPosition) {
+    if (!isChargedAnchor(level, anchor))
+        return std::nullopt;
+
+    const std::optional<Vector3i> standUp = findStandUpPosition(level, standPosition);
+    if (!standUp.has_value())
+        return std::nullopt;
+
+    return Vector3f((float) standUp->x + 0.5f, (float) standUp->y, (float) standUp->z + 0.5f);
+}
+
+void RespawnAnchorBlock::explode(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                 ServerPlayer *player) {
+    double radius = EXPLOSION_RADIUS;
+    bool breaksBlocks = true;
+    double fireChance = 1.0 / 3.0;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_PRE_EXPLODE)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_BLOCK_PRE_EXPLODE;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mPlayer = player;
+        event.mBlockPosition = position;
+        event.mAmount = radius;
+        plugins->dispatch(event);
+        if (event.mCancelled || !std::isfinite(event.mAmount) || event.mAmount < 0.0)
+            return;
+        radius = event.mAmount;
+        if (const auto data = json::parse(event.mCustomData); data != nullptr && data->isObject()) {
+            if (const auto *blocks = data->get("breaks"); blocks != nullptr && blocks->mType == json::Value::Type::Boolean)
+                breaksBlocks = blocks->mBoolean;
+            if (const auto *fire = data->get("fire"); fire != nullptr && fire->isNumber())
+                fireChance = std::clamp(fire->number(), 0.0, 1.0);
+        }
+    }
+    level.setBlock(position, BlockState(BlockNames::AIR), true);
+
+    Explosion explosion(owner, level, centerOf(position), radius, nullptr, false);
+    explosion.setFireChance(fireChance);
+    explosion.setInWater(isSurroundedByWater(level, position));
+    if (breaksBlocks)
+        explosion.explode();
+    else
+        explosion.explodeWithoutBlocks();
+}
+
+bool RespawnAnchorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                    const BlockState &state) const {
+    Level &level = owner.getLevelFor(player);
+    const bool glowstone = isGlowstone(player.getInventory().getItemInHand());
+    const int charge = getCharge(state);
+
+    if (glowstone && charge < MAX_CHARGE) {
+        player.consumeOneHeldItem();
+        addCharge(owner, level, position, 1);
+        return true;
+    }
+
+    // glowstone still counts as handled: it is not placed against the anchor
+    if (charge <= 0)
+        return glowstone;
+
+    enum class Action { Explode, SetSpawn };
+    Action action = player.getDimension() == DimensionType::Nether ? Action::SetSpawn : Action::Explode;
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_RESPAWN_ANCHOR_USE)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_PLAYER_RESPAWN_ANCHOR_USE;
+        event.mCancellable = true;
+        event.mLevel = &level;
+        event.mPlayer = &player;
+        event.mBlockPosition = position;
+        event.mAmount = (double) action;
+        plugins->dispatch(event);
+        if (event.mCancelled)
+            return true;
+        if (event.mAmount == (double) Action::SetSpawn)
+            action = Action::SetSpawn;
+        else if (event.mAmount == (double) Action::Explode)
+            action = Action::Explode;
+    }
+    if (action == Action::Explode) {
+        if (level.getGameRules().getBool("respawnblocksexplode"))
+            explode(owner, level, position, &player);
+        return true;
+    }
+
+    if (holdsSpawnPoint(owner, player, position))
+        return glowstone;
+
+    player.setSpawnPoint(position, player.getSpawnStandPositionHere(), player.getDimension(),
+                         owner.getWorldFor(player).getName());
+    owner.playLevelSound(level, SOUND_SET_SPAWN, centerOf(position));
+    player.sendTranslation("§7%tile.respawn_anchor.respawnSet", {});
+    return true;
+}
+
+// charge / 4 * 15, truncated
+int RespawnAnchorBlock::getLightEmission(const BlockState &state, int dataEmission) const {
+    (void) dataEmission;
+    return (int) ((float) getCharge(state) / (float) MAX_CHARGE * 15.0f);
+}
+
+// RespawnAnchorBlock::getComparatorSignal: the charge scaled to 15, rounded down
+int RespawnAnchorBlock::getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return (int) std::floor((float) getCharge(state) / (float) MAX_CHARGE * 15.0f);
+}

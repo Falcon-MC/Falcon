@@ -8,9 +8,13 @@ public:
 
     using HostileActor::HostileActor;
 
-    ActorSize getSize() const override { return ActorSize{4.0f, 4.0f}; }
+    ActorSize getSize() const override {
+        return ActorSize{4.0f, 4.0f};
+    }
 
-    float getDefaultMaxHealth() const override { return 10.0f; }
+    float getDefaultMaxHealth() const override {
+        return 10.0f;
+    }
 
     bool preventsSleep() const override {
         return false;

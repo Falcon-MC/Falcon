@@ -24,14 +24,25 @@ public:
     static void handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                               ServerPlayer &player);
 
+    static void encryptionEnabled(ServerPlayer &player, bool usesAccountKey);
+
+    // a signed login proves its account only through the handshake: without it, whoever once received the
+    // same login could present it again
+    static bool requiresEncryption(bool configured, bool signedLogin) {
+        return configured || signedLogin;
+    }
+
     static void startEncryption(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                 const std::string &clientPublicKey);
 
+    // scripts may hold it first: asyncPlayerJoin
     static void completeLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player);
 
+    // login success and the resource packs
+    static void _finishLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player);
+
     static void handleResourcePackClientResponse(ServerNetworkHandler &owner, const NetworkIdentifier &id,
-                                                 ServerPlayer &player,
-                                                 const ResourcePackClientResponsePacket &packet);
+                                                 ServerPlayer &player, const ResourcePackClientResponsePacket &packet);
 
     static void handleResourcePackChunkRequest(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                                const ResourcePackChunkRequestPacket &packet);
@@ -42,10 +53,9 @@ public:
 
     static void sendAbilities(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    /** The abilities a player has, as sent to themselves and to the players who see them. */
     static PlayerAbilityData buildAbilities(ServerNetworkHandler &owner, const ServerPlayer &player);
 
-    /** The UUID that identifies the player in the player list, which AddPlayer must reuse. */
+    // player-list UUID; AddPlayer must reuse it
     static Uuid playerListUuid(const ServerPlayer &player);
 
     static void sendBiomeDefinitions(ServerNetworkHandler &owner, ServerPlayer &player);
@@ -75,4 +85,8 @@ public:
     static void checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void registerVanillaDefinitions(ServerNetworkHandler &owner);
+
+private:
+    static void admitLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                           bool accountKeyProven);
 };

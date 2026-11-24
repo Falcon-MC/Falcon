@@ -87,11 +87,23 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"chat-restriction", "None", PropertyKind::Enum, 0, 0, "None,Dropped,Disabled"},
             {"disable-player-interaction", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"client-side-chunk-generation-enabled", "false", PropertyKind::Bool, 0, 0, nullptr},
+            // Falcon only: structures whose chunks stay on the server under client side generation, because
+            // Falcon does not generate them exactly yet and the client's copy would differ from the server's.
+            {"client-side-chunk-generation-server-structures",
+             "village,temple,shipwreck,monument,ancient_city,trial_chambers", PropertyKind::String, 0, 0, nullptr},
             {"block-network-ids-are-hashes", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-custom-skins", "false", PropertyKind::Bool, 0, 0, nullptr},
+            {"allow-unofficial-clients", "false", PropertyKind::Bool, 0, 0, nullptr},
+            // the game's client sends no identity when it joins from the LAN worlds list, and the game takes it
+            {"allow-lan-without-identity", "true", PropertyKind::Bool, 0, 0, nullptr},
+            {"emit-server-telemetry", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"disable-client-vibrant-visuals", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"skin-change-cooldown", "30", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"spawn-protection", "16", PropertyKind::Int, 0, UNBOUNDED, nullptr},
+            // Replays player movement server-side and corrects clients that diverge. Packet validity checks do not
+            // depend on it. server-authoritative-movement-strict only tightens this simulation.
+            {"movement-simulation", "false", PropertyKind::Bool, 0, 0, nullptr},
+            // former name of movement-simulation: still read, no longer generated
             {"simulation", "true", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-movement-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
             {"server-authoritative-dismount-strict", "false", PropertyKind::Bool, 0, 0, nullptr},
@@ -101,7 +113,7 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"server-authoritative-block-breaking-pick-range-scalar", "1.5", PropertyKind::Float, 0, 0, nullptr},
             {"server-build-radius-ratio", "Disabled", PropertyKind::String, 0, 0, nullptr},
             {"player-position-acceptance-threshold", "0.5", PropertyKind::Float, 0, 0, nullptr},
-            // BDS 1.26.10 movement settings (0x1437F5420) use -1 for both policy limits.
+            // 1.26.10 movement settings: -1 for both policy limits
             {"player-tick-throttled-input-batch-size", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-tick-throttled-max-tick-credits", "-1", PropertyKind::Int, -1, UNBOUNDED, nullptr},
             {"player-movement-action-direction-threshold", "0.85", PropertyKind::Float, 0, 0, nullptr},
@@ -117,8 +129,22 @@ const std::vector<PropertyDefinition> &PropertiesSettings::getDefinitions() {
             {"max-form-responses-per-second", "20", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-movement-packets-per-second", "40", PropertyKind::Int, 0, UNBOUNDED, nullptr},
             {"max-chat-message-length", "512", PropertyKind::Int, 0, UNBOUNDED, nullptr},
-            {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"}
-    };
+            {"wasm-plugin-memory-mb", "64", PropertyKind::Int, 1, 4096, nullptr},
+            {"wasm-plugin-fuel", "10000000", PropertyKind::Int, 1, UNBOUNDED, nullptr},
+            {"wasm-plugin-disk-mb", "64", PropertyKind::Int, 1, 65536, nullptr},
+            {"transport", "nethernet", PropertyKind::Enum, 0, 0, "nethernet"},
+            // Falcon only: PEM chain and key for https on the signaling port; the game tries https before http
+            {"signaling-certificate", "", PropertyKind::String, 0, 0, nullptr},
+            {"signaling-private-key", "", PropertyKind::String, 0, 0, nullptr},
+            // Falcon only: second signaling listener, 0 for none; the game probes 443 and 80 beside port 19132 only
+            {"signaling-extra-port", "0", PropertyKind::Int, 0, 65535, nullptr},
+            // Falcon only: domain the players type, empty for no ACME; the certificate lands in certificates/
+            {"signaling-acme-domain", "", PropertyKind::String, 0, 0, nullptr},
+            {"signaling-acme-email", "", PropertyKind::String, 0, 0, nullptr},
+            {"signaling-acme-directory", "https://acme-v02.api.letsencrypt.org/directory", PropertyKind::String, 0, 0,
+             nullptr},
+            // tls-alpn-01 answers on TCP 443, http-01 on TCP 80
+            {"signaling-acme-challenge", "tls-alpn-01", PropertyKind::Enum, 0, 0, "tls-alpn-01,http-01"}};
 
     return definitions;
 }
@@ -136,8 +162,9 @@ std::string PropertiesSettings::getDefaultContents() {
     std::string contents;
 
     for (const PropertyDefinition &definition: getDefinitions()) {
-        // Accept the BDS spelling on input without generating two competing settings.
-        if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar")
+        // BDS spelling and former names accepted on input, never generated alongside
+        if (std::string(definition.mKey) == "server-authoritative-block-breaking-pick-range-scalar"
+            || std::string(definition.mKey) == "simulation")
             continue;
         contents += definition.mKey;
         contents += "=";
@@ -180,7 +207,7 @@ bool PropertiesSettings::_isValidValue(const PropertyDefinition &definition, con
         case PropertyKind::String:
             return true;
         case PropertyKind::Bool:
-            if (std::string(definition.mKey) == "simulation"
+            if (std::string(definition.mKey) == "movement-simulation" || std::string(definition.mKey) == "simulation"
                 || std::string(definition.mKey) == "server-authoritative-block-breaking"
                 || std::string(definition.mKey) == "disable-client-vibrant-visuals")
                 return value == "true" || value == "false";
@@ -227,6 +254,18 @@ void PropertiesSettings::_validate() {
         mInvalid.push_back(std::string(definition.mKey) + "=" + it->second);
         it->second = definition.mDefault;
     }
+}
+
+void PropertiesSettings::_resolveMovementSettings() {
+    mServerAuthoritativeMovementStrict = getBool("server-authoritative-movement-strict");
+    // a file predating movement-simulation keeps its behaviour: the former name if set, else strict mode:
+    // it asks for the simulation, and used to get it by default
+    if (hasProperty("movement-simulation"))
+        mMovementSimulation = getBool("movement-simulation");
+    else if (hasProperty("simulation"))
+        mMovementSimulation = getBool("simulation");
+    else
+        mMovementSimulation = mServerAuthoritativeMovementStrict;
 }
 
 std::vector<std::string> PropertiesSettings::getAutoloadWorlds() const {
@@ -283,6 +322,7 @@ bool PropertiesSettings::load(const std::string &path) {
     }
 
     _validate();
+    _resolveMovementSettings();
 
     mLoaded = true;
     return true;
@@ -290,6 +330,7 @@ bool PropertiesSettings::load(const std::string &path) {
 
 bool PropertiesSettings::setProperty(const std::string &key, const std::string &value) {
     mProperties[key] = value;
+    _resolveMovementSettings();
 
     std::vector<std::string> lines;
     bool replaced = false;
@@ -366,6 +407,19 @@ int PropertiesSettings::getInt(const std::string &key, int defaultValue) const {
     return atoi(it->second.c_str());
 }
 
+float PropertiesSettings::getServerBuildRadiusRatio() const {
+    const std::string value = getString("server-build-radius-ratio");
+    if (value.empty() || value == "Disabled")
+        return -1.0f;
+
+    char *end = nullptr;
+    const float ratio = std::strtof(value.c_str(), &end);
+    if (end == value.c_str() || *end != '\0' || !(ratio >= 0.0f && ratio <= 1.0f))
+        return -1.0f;
+
+    return ratio;
+}
+
 float PropertiesSettings::getFloat(const std::string &key, float defaultValue) const {
     auto it = mProperties.find(key);
     if (it == mProperties.end() || it->second.empty())
@@ -407,10 +461,10 @@ bool PropertiesSettings::getBool(const char *key) const {
 }
 
 float PropertiesSettings::getServerAuthoritativeBlockBreakingRangeScalar() const {
-    // Prefer Falcon's public spelling; retain the BDS pick-range spelling for existing files.
+    // Falcon's spelling first; the BDS pick-range spelling stays for existing files
     const char *key = hasProperty("server-authoritative-block-breaking-range-scalar")
-                          ? "server-authoritative-block-breaking-range-scalar"
-                          : "server-authoritative-block-breaking-pick-range-scalar";
+                              ? "server-authoritative-block-breaking-range-scalar"
+                              : "server-authoritative-block-breaking-pick-range-scalar";
     const float scalar = getFloat(key);
     return std::isfinite(scalar) && scalar > 1.0f ? scalar : 1.5f;
 }

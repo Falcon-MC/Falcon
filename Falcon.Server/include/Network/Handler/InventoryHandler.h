@@ -1,5 +1,9 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
+
+#include <cstdint>
+
 class ServerNetworkHandler;
 class ServerPlayer;
 class NetworkIdentifier;
@@ -20,11 +24,9 @@ public:
 
     static void sendHeldItem(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    static void handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player,
-                                   const MobEquipmentPacket &packet);
+    static void handleMobEquipment(ServerNetworkHandler &owner, ServerPlayer &player, const MobEquipmentPacket &packet);
 
-    static void handlePlayerHotbar(ServerNetworkHandler &owner, ServerPlayer &player,
-                                   const PlayerHotbarPacket &packet);
+    static void handlePlayerHotbar(ServerNetworkHandler &owner, ServerPlayer &player, const PlayerHotbarPacket &packet);
 
     static void handleOpenInventory(ServerNetworkHandler &owner, ServerPlayer &player);
 
@@ -34,12 +36,16 @@ public:
     static void handleTransaction(ServerNetworkHandler &owner, ServerPlayer &player,
                                   const InventoryTransactionPacket &packet);
 
+    // a click on an entity: false when it is gone, cancelled or ignores the click
+    static bool interactWithEntity(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId,
+                                   const Vector3f &clickPosition);
+
     static void handleContainerClose(ServerPlayer &player, const ContainerClosePacket &packet);
 
     static void resetInventory(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void handleCraftingEvent(ServerNetworkHandler &owner, ServerPlayer &player,
-                                     const CraftingEventPacket &packet);
+                                    const CraftingEventPacket &packet);
 
     static void _updateEnchantOptions(ServerNetworkHandler &owner, ServerPlayer &player);
 };

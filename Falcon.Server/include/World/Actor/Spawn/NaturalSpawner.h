@@ -7,34 +7,40 @@
 #include <cstdint>
 #include <random>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class Level;
 class ServerNetworkHandler;
 
+// every ticking chunk rolls a spawn column; each floor of it spawns one herd against per-pool caps,
+// counted separately for surface and underground mobs in the surrounding chunks
 class NaturalSpawner {
 public:
-    struct Category {
-        const char *mName;
-        int32_t mCap;
-        int32_t mInterval;
-        bool mHostile;
-    };
+    static const int32_t POOL_COUNT = 7;
 
     void tick(ServerNetworkHandler &owner, Level &level);
 
+    static int32_t countPopulationActors(ServerNetworkHandler &owner, Level &level);
+
+    // the mobs a herd could be drawn from at the spot, in roll order; empty when no mob fits there
+    std::vector<std::string> candidatesAt(Level &level, const Vector3i &position, bool surface, int32_t difficulty,
+                                          const std::vector<Vector3f> &players);
+
 private:
-    struct NearbyActor {
-        Vector3f mPosition;
-        const std::string *mPopulation;
-        std::string mIdentifier;
+    struct Counts {
+        int32_t mPools[2][POOL_COUNT] = {};
+        std::unordered_map<std::string, int32_t> mTypes[2];
     };
 
     struct SpawnSite {
         Vector3i mPosition;
         bool mSurface = false;
         bool mWater = false;
+        bool mInWater = false;
         bool mLava = false;
+        bool mInLava = false;
         bool mBubble = false;
         bool mSnow = false;
         std::string mBelow;
@@ -44,19 +50,52 @@ private:
         float mPlayerDistance = 0.0f;
     };
 
+    struct Candidate {
+        const SpawnRule *mRule;
+        const SpawnCondition *mCondition;
+    };
+
+    void _collectCandidates(Level &level, const SpawnSite &site, int32_t difficulty,
+                            std::vector<Candidate> &candidates, int32_t &totalWeight);
+
     void _despawn(ServerNetworkHandler &owner, Level &level, const std::vector<Vector3f> &players);
 
-    int32_t _attempt(ServerNetworkHandler &owner, Level &level, const Vector3f &player, int32_t chunkX, int32_t chunkZ,
-                  const Category &category, int32_t difficulty, const std::vector<Vector3f> &players,
-                  const std::vector<NearbyActor> &nearby);
+    void _tickChunk(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, int32_t difficulty,
+                    int32_t &mobCount, const std::vector<Vector3f> &players);
 
-    bool _makeSite(Level &level, const Vector3i &position, const std::vector<Vector3f> &players, bool water,
+    void _count(ServerNetworkHandler &owner, Level &level, int32_t chunkX, int32_t chunkZ, Counts &counts);
+
+    void _spawnCluster(ServerNetworkHandler &owner, Level &level, const SpawnSite &site, int32_t difficulty,
+                       int32_t &mobCount, Counts &counts);
+
+    bool _makeSite(Level &level, const Vector3i &position, const std::vector<Vector3f> &players, bool surface,
                    SpawnSite &site);
 
-    bool _matches(Level &level, const SpawnSite &site, const SpawnCondition &condition, int32_t difficulty,
-                  const std::string &identifier, const Vector3f &player, const std::vector<NearbyActor> &nearby) const;
+    bool _matches(Level &level, const SpawnSite &site, const SpawnCondition &condition, int32_t difficulty) const;
+
+    bool _canSpawnAt(Level &level, const SpawnSite &site, const SpawnCondition &condition) const;
 
     int32_t _nextInt(int32_t bound);
 
+    float _nextFloat();
+
+    // the living actors of the level being ticked, listed once and again only when an actor joins or leaves
+    struct Counted {
+        int64_t mId;
+        int32_t mChunkX;
+        int32_t mChunkZ;
+        int32_t mPool;
+        const char *mIdentifier;
+    };
+
+    void _census(ServerNetworkHandler &owner, Level &level);
+
+    std::vector<Counted> mCensus;
+    const Level *mCensusLevel = nullptr;
+    uint64_t mCensusSerial = 0;
+    int64_t mCensusTick = -1;
+    std::unordered_set<int64_t> mSurfaceMobs;
     std::mt19937 mRandom{std::random_device{}()};
+
+    friend struct NaturalSpawnerTestAccess;
 };

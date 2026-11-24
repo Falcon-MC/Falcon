@@ -14,8 +14,7 @@ public:
     static void setGeneratorFactory(ObjectGeneratorPtr (*factory)());
 
 private:
-    bool _placeDirtAndTree(BlockManager &manager, int32_t originX, int32_t originY, int32_t originZ,
-                           int32_t surfaceY);
+    bool _placeDirtAndTree(BlockManager &manager, int32_t originX, int32_t originY, int32_t originZ, int32_t surfaceY);
 
     void _placeRootedDirtColumnDownward(BlockManager &manager, int32_t originX, int32_t originZ, int32_t startY,
                                         int32_t endY);

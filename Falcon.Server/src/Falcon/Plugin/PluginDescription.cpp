@@ -44,9 +44,11 @@ namespace {
         const size_t firstDot = value.find('.');
         const size_t secondDot = firstDot == std::string::npos ? std::string::npos : value.find('.', firstDot + 1);
         const std::string majorText = firstDot == std::string::npos ? value : value.substr(0, firstDot);
-        const std::string minorText = firstDot == std::string::npos ? "0"
-                                      : value.substr(firstDot + 1, secondDot == std::string::npos
-                                                                   ? std::string::npos : secondDot - firstDot - 1);
+        const std::string minorText = firstDot == std::string::npos
+                                              ? "0"
+                                              : value.substr(firstDot + 1, secondDot == std::string::npos
+                                                                                   ? std::string::npos
+                                                                                   : secondDot - firstDot - 1);
         const std::string patchText = secondDot == std::string::npos ? "0" : value.substr(secondDot + 1);
         if (majorText.empty() || minorText.empty() || patchText.empty())
             return false;

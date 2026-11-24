@@ -26,7 +26,8 @@ std::vector<CommandOverloadData> PlaySoundCommand::getOverloads() const {
     player.mOptional = true;
 
     CommandOverloadData overload;
-    overload.mParameters = {makeTypedParameter("sound", CommandParamType::String), player,
+    overload.mParameters = {makeTypedParameter("sound", CommandParamType::String),
+                            player,
                             makeTypedParameter("position", CommandParamType::Position, true),
                             makeTypedParameter("volume", CommandParamType::Float, true),
                             makeTypedParameter("pitch", CommandParamType::Float, true),

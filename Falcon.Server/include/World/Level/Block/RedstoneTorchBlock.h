@@ -6,9 +6,7 @@
 
 class RedstoneTorchBlock final : public TorchBlock {
 public:
-    explicit RedstoneTorchBlock(const Block &block) : TorchBlock(block)
-    {
-    }
+    explicit RedstoneTorchBlock(const Block &block) : TorchBlock(block) {}
 
     static bool matches(const std::string &identifier);
 

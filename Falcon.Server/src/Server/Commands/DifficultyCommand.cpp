@@ -1,9 +1,7 @@
 #include "Server/Commands/DifficultyCommand.h"
 
 #include "World/Actor/Player/ServerPlayer.h"
-#include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Protocol/Packets/SetDifficultyPacket.h"
 
 #include <algorithm>
 #include <string>
@@ -62,16 +60,7 @@ bool DifficultyCommand::execute(CommandOrigin &sender, const std::vector<std::st
         return false;
     }
 
-    mHandler.setDifficulty(DIFFICULTY_NAMES[(size_t) difficulty]);
-
-    SetDifficultyPacket packet;
-    packet.mDifficulty = (uint32_t) difficulty;
-
-    for (auto &entry: mHandler.getPlayers()) {
-        if (entry.second.isSpawned())
-            mHandler.getNetworkHandler().send(entry.first, packet, mHandler.getCodecContext());
-    }
-
+    mHandler.changeDifficulty(difficulty);
     sender.sendTranslation("commands.difficulty.success", {DIFFICULTY_NAMES[(size_t) difficulty]});
     return true;
 }

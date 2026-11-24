@@ -14,9 +14,15 @@ public:
         return RIDE_SPRINT_MULTIPLIER;
     }
 
-    ActorSize getSize() const override { return ActorSize{1.7f, 2.375f}; }
+    ActorSize getSize() const override {
+        return ActorSize{1.7f, 2.375f};
+    }
 
-    float getDefaultMaxHealth() const override { return 32.0f; }
+    float getDefaultMaxHealth() const override {
+        return 32.0f;
+    }
 
-    int getExperienceDrop() const override { return 0; }
+    int getExperienceDrop() const override {
+        return 0;
+    }
 };

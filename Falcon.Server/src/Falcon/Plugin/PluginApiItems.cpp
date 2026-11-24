@@ -19,24 +19,6 @@ namespace {
     const char *const NAME_TAG = "Name";
     const char *const LORE_TAG = "Lore";
 
-    FalconItem *copyOf(const ItemStack &stack) {
-        ItemStack *copy = new ItemStack(stack);
-        copy->mUsingNetId = false;
-        copy->mNetId = 0;
-        return toHandle(copy);
-    }
-
-    ItemStack valueOf(FalconItem *handle) {
-        if (handle == nullptr)
-            return ItemStack::air();
-        ItemStack copy = *item(handle);
-        copy.mUsingNetId = false;
-        copy.mNetId = 0;
-        if (copy.isAir() || copy.mCount <= 0)
-            return ItemStack::air();
-        return copy;
-    }
-
     const Tag *displayOf(const ItemStack &stack) {
         if (!stack.mTag.isCompound())
             return nullptr;
@@ -77,6 +59,19 @@ namespace {
         if (lore == nullptr || !lore->isList() || lore->getListType() != Tag::Type::String)
             return nullptr;
         return lore;
+    }
+
+    int32_t itemNetworkId(FalconItem *handle, int32_t *blockNetworkId) {
+        if (blockNetworkId != nullptr)
+            *blockNetworkId = 0;
+        if (handle == nullptr)
+            return 0;
+        const ItemStack &stack = *item(handle);
+        if (stack.isAir() || stack.mDefinition == nullptr)
+            return 0;
+        if (blockNetworkId != nullptr && stack.mBlockDefinition != nullptr)
+            *blockNetworkId = stack.mBlockDefinition->getRuntimeId();
+        return stack.mDefinition->getRuntimeId();
     }
 
     FalconItem *itemCreate(const char *identifier, uint32_t count) {
@@ -313,6 +308,7 @@ namespace {
 
 void PluginServerApi::fillItems(FalconServerApi &api) {
     api.itemCreate = &itemCreate;
+    api.itemNetworkId = &itemNetworkId;
     api.itemCopy = &itemCopy;
     api.itemDestroy = &itemDestroy;
     api.itemIsEmpty = &itemIsEmpty;

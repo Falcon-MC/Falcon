@@ -25,15 +25,12 @@ namespace {
 
 }
 
-FallenTree::FallenTree() : mWoodType(TreeWoodType::OAK), mMinLogLength(3), mMaxLogLength(7) {
-}
+FallenTree::FallenTree() : mWoodType(TreeWoodType::OAK), mMinLogLength(3), mMaxLogLength(7) {}
 
-FallenTree::FallenTree(TreeWoodType woodType) : mWoodType(woodType), mMinLogLength(3), mMaxLogLength(7) {
-}
+FallenTree::FallenTree(TreeWoodType woodType) : mWoodType(woodType), mMinLogLength(3), mMaxLogLength(7) {}
 
 FallenTree::FallenTree(TreeWoodType woodType, int32_t minLogLength, int32_t maxLogLength)
-        : mWoodType(woodType), mMinLogLength(minLogLength), mMaxLogLength(maxLogLength) {
-}
+        : mWoodType(woodType), mMinLogLength(minLogLength), mMaxLogLength(maxLogLength) {}
 
 bool FallenTree::generate(BlockManager &manager, IRandom &random, int32_t x, int32_t y, int32_t z) {
     const Coordinate origin{x, y, z};
@@ -46,11 +43,9 @@ bool FallenTree::generate(BlockManager &manager, IRandom &random, int32_t x, int
     const TreeBlockFace direction = TreeBlockFaces::HORIZONTAL_PLANE[random.nextInt(4)];
     const int32_t logLength = _sampleLogLength(random);
     const int32_t distance = 2 + random.nextInt(2);
-    Coordinate logStartPos{
-            origin.mX + TreeBlockFaces::getXOffset(direction) * distance,
-            origin.mY + TreeBlockFaces::getYOffset(direction) * distance,
-            origin.mZ + TreeBlockFaces::getZOffset(direction) * distance
-    };
+    Coordinate logStartPos{origin.mX + TreeBlockFaces::getXOffset(direction) * distance,
+                           origin.mY + TreeBlockFaces::getYOffset(direction) * distance,
+                           origin.mZ + TreeBlockFaces::getZOffset(direction) * distance};
     _setGroundHeightForFallenLogStartPos(manager, logStartPos);
 
     if (_canPlaceEntireFallenLog(manager, logLength, logStartPos, direction)) {
@@ -137,8 +132,7 @@ void FallenTree::_placeStumpVine(BlockManager &manager, IRandom &random, const C
     manager.setBlockStateAt(pos.mX, pos.mY, pos.mZ, getVineState(meta));
 }
 
-void FallenTree::_decorateFallenLog(BlockManager &manager, IRandom &random,
-                                    const std::vector<Coordinate> &fallenLog) {
+void FallenTree::_decorateFallenLog(BlockManager &manager, IRandom &random, const std::vector<Coordinate> &fallenLog) {
     if (fallenLog.empty() || random.nextInt(4) != 0)
         return;
 

@@ -9,14 +9,14 @@
 namespace {
 
     const BlockState &sunflowerLowerState() {
-        static const BlockState state = DecorationSupport::withByteState(
-                VanillaBlocks::SUNFLOWER().toBlockState(), "upper_block_bit", false);
+        static const BlockState state = DecorationSupport::withByteState(VanillaBlocks::SUNFLOWER().toBlockState(),
+                                                                         "upper_block_bit", false);
         return state;
     }
 
     const BlockState &sunflowerUpperState() {
-        static const BlockState state = DecorationSupport::withByteState(
-                VanillaBlocks::SUNFLOWER().toBlockState(), "upper_block_bit", true);
+        static const BlockState state = DecorationSupport::withByteState(VanillaBlocks::SUNFLOWER().toBlockState(),
+                                                                         "upper_block_bit", true);
         return state;
     }
 

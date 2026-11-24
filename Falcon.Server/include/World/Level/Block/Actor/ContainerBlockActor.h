@@ -3,6 +3,8 @@
 #include "World/Level/Block/Actor/BlockActor.h"
 #include "World/Level/Block/Inventory/SimpleContainerInventory.h"
 
+#include <memory>
+
 class ContainerBlockActor : public BlockActor {
 public:
     explicit ContainerBlockActor(int size) : mInventory(size) {}
@@ -11,20 +13,30 @@ public:
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    Container *getContainer() override { return &mInventory; }
+    Container *getContainer() override {
+        return &mInventory;
+    }
 
-    SimpleContainerInventory &getInventory() { return mInventory; }
+    SimpleContainerInventory &getInventory() {
+        return mInventory;
+    }
 
-    const SimpleContainerInventory &getInventory() const { return mInventory; }
+    const SimpleContainerInventory &getInventory() const {
+        return mInventory;
+    }
 
-    void addViewer() { ++mViewers; }
+    void addViewer() {
+        ++mViewers;
+    }
 
     void removeViewer() {
         if (mViewers > 0)
             --mViewers;
     }
 
-    int getViewerCount() const { return mViewers; }
+    int getViewerCount() const {
+        return mViewers;
+    }
 
 protected:
     SimpleContainerInventory mInventory;
@@ -41,7 +53,9 @@ public:
 
     BarrelBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class ShulkerBoxBlockActor final : public ContainerBlockActor {
@@ -54,7 +68,9 @@ public:
         mInventory.setRejectsShulkerBoxes(true);
     }
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -62,9 +78,13 @@ public:
 
     Tag getSpawnCompound() const override;
 
-    void setFacing(int8_t facing) { mFacing = facing; }
+    void setFacing(int8_t facing) {
+        mFacing = facing;
+    }
 
-    int8_t getFacing() const { return mFacing; }
+    int8_t getFacing() const {
+        return mFacing;
+    }
 
 private:
     int8_t mFacing = 1;
@@ -78,7 +98,9 @@ public:
 
     DispenserBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class DropperBlockActor final : public ContainerBlockActor {
@@ -89,7 +111,9 @@ public:
 
     DropperBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class BrewingStandBlockActor final : public ContainerBlockActor {
@@ -102,12 +126,14 @@ public:
     static const int SLOT_FUEL = 4;
     static const int FIRST_POTION_SLOT = 1;
     static const int POTION_SLOTS = 3;
-    static const int MAX_BREW_TIME = 400;
+    static constexpr int MAX_BREW_TIME = 400;
     static const int FUEL_PER_BLAZE_POWDER = 20;
 
     BrewingStandBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -130,27 +156,10 @@ private:
 
     void _updateSlotStates(ServerNetworkHandler &owner);
 
-    int mBrewTime = MAX_BREW_TIME;
+    int mBrewTime = 0;
     int mFuelAmount = 0;
     int mFuelTotal = 0;
-};
-
-class BeaconBlockActor final : public ContainerBlockActor {
-public:
-    static constexpr const char *BLOCK_ACTOR_ID = "Beacon";
-
-    static const int SIZE = 1;
-
-    BeaconBlockActor() : ContainerBlockActor(SIZE) {}
-
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
-
-    Tag saveNbt() const override;
-
-    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
-
-    int mPrimaryEffect = 0;
-    int mSecondaryEffect = 0;
+    std::shared_ptr<ItemDefinition> mBrewingIngredient;
 };
 
 class CrafterBlockActor final : public ContainerBlockActor {
@@ -159,9 +168,32 @@ public:
 
     static const int SIZE = 9;
 
+    // how long the crafting state stays on after a craft
+    static const int CRAFTING_TICKS = 6;
+
     CrafterBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
+
+    // the items and the disabled slots; the crafting ticks only travel to clients
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    // the crafting state goes off when the ticks run out
+    bool tick(ServerNetworkHandler &owner) override;
+
+    // only an empty slot can be disabled; false when nothing changed
+    bool setSlotDisabled(int slot, bool disabled);
+
+    // disabled slots plus filled slots
+    int getComparatorSignal() const;
+
+    int mCraftingTicks = 0;
 };
 
 class CampfireBlockActor final : public ContainerBlockActor {
@@ -169,11 +201,13 @@ public:
     static constexpr const char *BLOCK_ACTOR_ID = "Campfire";
 
     static const int SIZE = 4;
-    static const int COOK_TIME = 600;
+    static constexpr int COOK_TIME = 600;
 
     CampfireBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
@@ -199,7 +233,12 @@ public:
 
     ShelfBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
+
+    // the client draws the items: they travel with the block actor
+    Tag getSpawnCompound() const override;
 };
 
 class ChiseledBookshelfBlockActor final : public ContainerBlockActor {
@@ -210,7 +249,9 @@ public:
 
     ChiseledBookshelfBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };
 
 class DecoratedPotBlockActor final : public ContainerBlockActor {
@@ -221,18 +262,27 @@ public:
 
     DecoratedPotBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
-};
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
-class JukeboxBlockActor final : public ContainerBlockActor {
-public:
-    static constexpr const char *BLOCK_ACTOR_ID = "Jukebox";
+    Tag saveNbt() const override;
 
-    static const int SIZE = 1;
+    Tag getSpawnCompound() const override;
 
-    JukeboxBlockActor() : ContainerBlockActor(SIZE) {}
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    // the four sherd or brick item names, kept as the game saves them
+    const Tag *getSherds() const {
+        return mSherds.isList() ? &mSherds : nullptr;
+    }
+
+    void setSherds(const Tag &sherds) {
+        mSherds = sherds;
+    }
+
+private:
+    Tag mSherds;
 };
 
 class LecternBlockActor final : public ContainerBlockActor {
@@ -243,11 +293,27 @@ public:
 
     LecternBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 
     void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    bool hasBook() const {
+        return !mInventory.getContainerItem(0).isAir();
+    }
+
+    const ItemStack &getBook() const {
+        return mInventory.getContainerItem(0);
+    }
+
+    // one book in slot 0, back to its first page
+    void setBook(ItemStack book);
+
+    // the book, now out of the lectern; air when there was none
+    ItemStack takeBook();
 
     int mPage = 0;
     int mTotalPages = 0;
@@ -261,5 +327,7 @@ public:
 
     EnchantTableBlockActor() : ContainerBlockActor(SIZE) {}
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 };

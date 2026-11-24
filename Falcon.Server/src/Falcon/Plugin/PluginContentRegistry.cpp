@@ -2,6 +2,7 @@
 
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Item/ItemClassRegistry.h"
 #include "Falcon/Plugin/PluginActor.h"
 
@@ -20,13 +21,14 @@ void PluginContentRegistry::addBlock(const Block &base, const BlockEntry &entry)
     const std::string &identifier = base.getIdentifier();
     mBlocks[identifier] = entry;
     mBlockTypes[identifier] = BlockClassRegistry::create(base);
+    VanillaBlocks::invalidateResolvedBlocks();
 }
 
 void PluginContentRegistry::addEntity(const std::string &identifier, const EntityEntry &entry) {
     mEntities[identifier] = entry;
     const ActorClassRegistry::Registration registration(
-            identifier.c_str(), [](uint64_t runtimeId, const std::string &actorIdentifier)
-                    -> std::unique_ptr<ServerActor> {
+            identifier.c_str(),
+            [](uint64_t runtimeId, const std::string &actorIdentifier) -> std::unique_ptr<ServerActor> {
                 return std::make_unique<PluginActor>(runtimeId, actorIdentifier);
             });
     (void) registration;

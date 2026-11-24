@@ -11,12 +11,24 @@ public:
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    bool hasRandomTick() const override {
+        return true;
+    }
+
 protected:
-    virtual const char *getGrowthState() const { return "growth"; }
+    virtual const char *getGrowthState() const {
+        return "growth";
+    }
 
-    virtual int getMaxGrowth() const { return 7; }
+    virtual int getMaxGrowth() const {
+        return 7;
+    }
 
-    virtual int getGrowthChance() const { return 2; }
+    virtual int getGrowthChance() const {
+        return 2;
+    }
 
-    virtual bool needsLight() const { return true; }
+    virtual bool needsLight() const {
+        return true;
+    }
 };

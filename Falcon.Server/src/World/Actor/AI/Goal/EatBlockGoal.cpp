@@ -34,8 +34,8 @@ namespace {
     }
 }
 
-EatBlockGoal::EatBlockGoal(std::vector<std::pair<std::string, std::string>> pairs, std::string chance,
-                           int32_t eatTicks, std::string event)
+EatBlockGoal::EatBlockGoal(std::vector<std::pair<std::string, std::string>> pairs, std::string chance, int32_t eatTicks,
+                           std::string event)
         : mPairs(std::move(pairs)), mChance(std::move(chance)), mEatTicks(eatTicks), mEvent(std::move(event)) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look
                             | (uint8_t) GoalControlFlag::Jump);
@@ -57,13 +57,12 @@ float EatBlockGoal::_chance(const MobActor &mob) const {
             truth = mob.getFlags().get(ActorFlag::Baby);
     }
 
-    const std::string chosen = truth ? mChance.substr(question + 1, colon - question - 1)
-                                     : mChance.substr(colon + 1);
+    const std::string chosen = truth ? mChance.substr(question + 1, colon - question - 1) : mChance.substr(colon + 1);
     return std::strtof(trim(chosen).c_str(), nullptr);
 }
 
 const std::pair<std::string, std::string> *EatBlockGoal::_findPair(Level &level, const MobActor &mob,
-                                                                     Vector3i &position) const {
+                                                                   Vector3i &position) const {
     const Vector3f feet = mob.getPosition();
     const int32_t x = (int32_t) std::floor(feet.x);
     const int32_t y = (int32_t) std::floor(feet.y);

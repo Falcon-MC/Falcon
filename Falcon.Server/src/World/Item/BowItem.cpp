@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(BowItem, 60,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:bow";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<BowItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        BowItem, 60, [](const std::string &identifier) { return identifier == "minecraft:bow"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<BowItem>(item); });
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -21,9 +17,9 @@ FALCON_REGISTER_ITEM_CUSTOM(BowItem, 60,
 using namespace RangedWeaponHelpers;
 
 namespace {
-    const float BOW_MAX_FORCE = 3.5f;
+    const float BOW_MAX_FORCE = 3.0f;
     const int32_t BOW_MINIMUM_TICKS = 3;
-    const int32_t FLAME_ARROW_FIRE_TICKS = 45 * 60;
+    const int32_t FLAME_ARROW_FIRE_TICKS = 5 * 20;
 
     void applyBowEnchantments(const ItemStack &bow, ProjectileData &data) {
         const int32_t power = ItemEnchantments::getLevel(bow, EnchantmentIds::POWER);
@@ -40,7 +36,10 @@ namespace {
     }
 }
 
-BowItem::BowItem(const Item &base) : Item(base) {
+BowItem::BowItem(const Item &base) : Item(base) {}
+
+int32_t BowItem::getUseDuration() const {
+    return 72000;
 }
 
 bool BowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
@@ -64,7 +63,7 @@ bool BowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, con
     if (force < 0.1f || elapsedTicks < BOW_MINIMUM_TICKS)
         return false;
 
-    ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, force);
+    ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, force, 0.0f, &item);
     if (arrow == nullptr)
         return false;
 

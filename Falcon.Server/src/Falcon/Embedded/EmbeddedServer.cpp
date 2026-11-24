@@ -17,18 +17,26 @@ namespace {
         explicit CallbackLogEndPoint(std::function<void(LogLevel, const std::string &)> callback)
                 : mCallback(std::move(callback)) {}
         void log(const LogDetails &details) override {
-            // Host callbacks must not unwind through the logger's worker.
-            try { mCallback(details.mLevel, details.mMessage); } catch (...) {}
+            // host callback exceptions swallowed: no unwinding through the logger's worker
+            try {
+                mCallback(details.mLevel, details.mMessage);
+            } catch (...) {
+            }
         }
+
     private:
         std::function<void(LogLevel, const std::string &)> mCallback;
     };
 }
 
 EmbeddedServer::EmbeddedServer() = default;
-EmbeddedServer::~EmbeddedServer() { stop(); }
+EmbeddedServer::~EmbeddedServer() {
+    stop();
+}
 
-bool EmbeddedServer::start(const EmbeddedServerConfig &config) { return startAsync(config).get(); }
+bool EmbeddedServer::start(const EmbeddedServerConfig &config) {
+    return startAsync(config).get();
+}
 
 std::future<bool> EmbeddedServer::startAsync(const EmbeddedServerConfig &config) {
     auto started = std::make_shared<std::promise<bool>>();
@@ -38,7 +46,8 @@ std::future<bool> EmbeddedServer::startAsync(const EmbeddedServerConfig &config)
         started->set_value(false);
         return result;
     }
-    if (mThread.joinable()) mThread.join();
+    if (mThread.joinable())
+        mThread.join();
     if (mLogEndPoint) {
         BedrockLog::removeEndPoint(mLogEndPoint);
         mLogEndPoint.reset();
@@ -79,7 +88,8 @@ void EmbeddedServer::requestStop() {
 
 void EmbeddedServer::stop() {
     requestStop();
-    if (mThread.joinable()) mThread.join();
+    if (mThread.joinable())
+        mThread.join();
     if (mLogEndPoint) {
         BedrockLog::flush();
         BedrockLog::removeEndPoint(mLogEndPoint);
@@ -87,10 +97,18 @@ void EmbeddedServer::stop() {
     }
 }
 
-void EmbeddedServer::setPaused(bool paused) { mPaused.store(paused); }
-bool EmbeddedServer::isPaused() const { return mPaused.load(); }
-bool EmbeddedServer::isRunning() const { return getState() == State::Running; }
-unsigned short EmbeddedServer::getPort() const { return mPort.load(); }
+void EmbeddedServer::setPaused(bool paused) {
+    mPaused.store(paused);
+}
+bool EmbeddedServer::isPaused() const {
+    return mPaused.load();
+}
+bool EmbeddedServer::isRunning() const {
+    return getState() == State::Running;
+}
+unsigned short EmbeddedServer::getPort() const {
+    return mPort.load();
+}
 EmbeddedServer::State EmbeddedServer::getState() const {
     std::lock_guard<std::mutex> lock(mMutex);
     return mState;
@@ -117,10 +135,16 @@ std::future<void> EmbeddedServer::executeCommand(std::string command) {
     auto result = promise->get_future();
     try {
         _enqueue([promise, command = std::move(command)](ServerNetworkHandler &handler) {
-            try { handler.executeConsoleCommand(command); promise->set_value(); }
-            catch (...) { promise->set_exception(std::current_exception()); }
+            try {
+                handler.executeConsoleCommand(command);
+                promise->set_value();
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
         });
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
     return result;
 }
 
@@ -129,10 +153,16 @@ std::future<void> EmbeddedServer::save() {
     auto result = promise->get_future();
     try {
         _enqueue([promise](ServerNetworkHandler &handler) {
-            try { handler.autoSave(); promise->set_value(); }
-            catch (...) { promise->set_exception(std::current_exception()); }
+            try {
+                handler.autoSave(true);
+                promise->set_value();
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
         });
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
     return result;
 }
 
@@ -144,11 +174,16 @@ std::future<std::vector<std::string>> EmbeddedServer::getPlayerNames() {
             try {
                 std::vector<std::string> names;
                 for (const auto &entry: handler.getPlayers())
-                    if (!entry.second.getName().empty()) names.push_back(entry.second.getName());
+                    if (!entry.second.getName().empty())
+                        names.push_back(entry.second.getName());
                 promise->set_value(std::move(names));
-            } catch (...) { promise->set_exception(std::current_exception()); }
+            } catch (...) {
+                promise->set_exception(std::current_exception());
+            }
         });
-    } catch (...) { promise->set_exception(std::current_exception()); }
+    } catch (...) {
+        promise->set_exception(std::current_exception());
+    }
     return result;
 }
 
@@ -211,17 +246,22 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, std::shared_ptr<std::prom
                 std::lock_guard<std::mutex> lock(mMutex);
                 tasks.swap(mTasks);
             }
-            for (auto &task: tasks) task(host.getHandler());
+            for (auto &task: tasks)
+                task(host.getHandler());
             host.tick(mPaused.load());
             nextTick += TICK_INTERVAL;
             const auto now = std::chrono::steady_clock::now();
-            if (now - nextTick > CATCHUP_RESET_INTERVAL) nextTick = now;
-            else std::this_thread::sleep_until(nextTick);
+            if (now - nextTick > CATCHUP_RESET_INTERVAL)
+                nextTick = now;
+            else
+                host.waitForNextTick(nextTick);
         }
     } catch (const std::exception &error) {
         std::lock_guard<std::mutex> lock(mMutex);
         mError = {phase == ErrorCode::Startup && dynamic_cast<const std::invalid_argument *>(&error)
-                  ? ErrorCode::InvalidConfiguration : phase, error.what()};
+                          ? ErrorCode::InvalidConfiguration
+                          : phase,
+                  error.what()};
     } catch (...) {
         std::lock_guard<std::mutex> lock(mMutex);
         mError = {phase, "Unknown embedded server exception"};
@@ -230,17 +270,21 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, std::shared_ptr<std::prom
         std::lock_guard<std::mutex> lock(mMutex);
         mState = State::Stopping;
         mProgress = Progress::Stopping;
-        mTasks.clear(); // Abandoned futures receive broken_promise.
+        mTasks.clear(); // abandoned futures get broken_promise
     }
-    try { host.stop(); }
-    catch (const std::exception &error) {
+    try {
+        host.stop();
+    } catch (const std::exception &error) {
         std::lock_guard<std::mutex> lock(mMutex);
-        if (mError.code == ErrorCode::None) mError = {ErrorCode::Shutdown, error.what()};
+        if (mError.code == ErrorCode::None)
+            mError = {ErrorCode::Shutdown, error.what()};
     } catch (...) {
         std::lock_guard<std::mutex> lock(mMutex);
-        if (mError.code == ErrorCode::None) mError = {ErrorCode::Shutdown, "Unknown shutdown exception"};
+        if (mError.code == ErrorCode::None)
+            mError = {ErrorCode::Shutdown, "Unknown shutdown exception"};
     }
-    if (rootChanged) ServerPaths::setRoot(previousRoot);
+    if (rootChanged)
+        ServerPaths::setRoot(previousRoot);
     host.release();
     if (mLogEndPoint) {
         BedrockLog::flush();
@@ -253,5 +297,6 @@ void EmbeddedServer::_run(EmbeddedServerConfig config, std::shared_ptr<std::prom
         mState = mError.code == ErrorCode::None ? State::Stopped : State::Failed;
         mProgress = Progress::None;
     }
-    if (!reported) started->set_value(false);
+    if (!reported)
+        started->set_value(false);
 }

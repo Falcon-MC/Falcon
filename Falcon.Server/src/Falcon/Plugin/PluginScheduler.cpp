@@ -7,10 +7,7 @@
 #include <utility>
 
 namespace {
-    /**
-     * Plugin code is foreign: an exception escaping a task must not unwind through the tick
-     * loop, so it is caught and logged here.
-     */
+    // plugin code is foreign: a task exception is caught here, never unwinds through the tick loop
     void runGuarded(const LoadedPlugin &plugin, FalconTask task, void *userData) {
         if (task == nullptr)
             return;
@@ -24,9 +21,7 @@ namespace {
 }
 
 PluginScheduler::PluginScheduler() {
-    mWorker = std::thread([this] {
-        _workerLoop();
-    });
+    mWorker = std::thread([this] { _workerLoop(); });
 }
 
 PluginScheduler::~PluginScheduler() {
@@ -36,8 +31,8 @@ PluginScheduler::~PluginScheduler() {
 uint64_t PluginScheduler::schedule(LoadedPlugin &plugin, FalconTask task, void *userData, uint64_t delayTicks,
                                    uint64_t periodTicks) {
     const uint64_t id = mNextId++;
-    mTasks.push_back(Task{id, &plugin, task, userData, mCurrentTick + std::max<uint64_t>(delayTicks, 1),
-                          periodTicks, false});
+    mTasks.push_back(
+            Task{id, &plugin, task, userData, mCurrentTick + std::max<uint64_t>(delayTicks, 1), periodTicks, false});
     return id;
 }
 
@@ -71,8 +66,7 @@ void PluginScheduler::cancelAll(const LoadedPlugin &plugin) {
             continue;
         }
 
-        // Jobs that never ran still get their completion callback: every async job's done
-        // callback runs exactly once, here or in shutdown().
+        // unrun jobs still get their completion callback: exactly once, here or in shutdown()
         mCompleted.push_back(*it);
         it = mPending.erase(it);
     }
@@ -81,8 +75,8 @@ void PluginScheduler::cancelAll(const LoadedPlugin &plugin) {
 void PluginScheduler::tick() {
     mCurrentTick++;
 
-    // A task may schedule new tasks, which can reallocate mTasks: the count is fixed up front
-    // so new tasks wait for the next tick, and each task is copied before it runs.
+    // a task may schedule more and reallocate mTasks: count fixed up front (new ones wait a tick),
+    // each task copied before it runs
     const size_t count = mTasks.size();
     for (size_t index = 0; index < count; index++) {
         Task task = mTasks[index];
@@ -97,12 +91,10 @@ void PluginScheduler::tick() {
             mTasks[index].mNextTick = mCurrentTick + task.mPeriod;
     }
 
-    mTasks.erase(std::remove_if(mTasks.begin(), mTasks.end(), [](const Task &task) {
-        return task.mCancelled;
-    }), mTasks.end());
+    mTasks.erase(std::remove_if(mTasks.begin(), mTasks.end(), [](const Task &task) { return task.mCancelled; }),
+                 mTasks.end());
 
-    // Async work runs on the worker thread, but its completion callback always runs here on
-    // the main thread, where touching game state is safe.
+    // completion callbacks always run here on the main thread, where game state is safe to touch
     std::deque<AsyncJob> completed;
     {
         std::lock_guard<std::mutex> lock(mMutex);
@@ -144,9 +136,7 @@ void PluginScheduler::_workerLoop() {
         AsyncJob job;
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            mCondition.wait(lock, [this] {
-                return mStopping || !mPending.empty();
-            });
+            mCondition.wait(lock, [this] { return mStopping || !mPending.empty(); });
 
             if (mStopping)
                 return;

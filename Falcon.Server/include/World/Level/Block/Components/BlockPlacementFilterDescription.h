@@ -8,7 +8,7 @@ public:
     bool allows(const std::string &identifier) const {
         if (mAllowedIdentifiers.empty())
             return true;
-        for (const std::string &allowed : mAllowedIdentifiers) {
+        for (const std::string &allowed: mAllowedIdentifiers) {
             if (allowed == identifier)
                 return true;
         }

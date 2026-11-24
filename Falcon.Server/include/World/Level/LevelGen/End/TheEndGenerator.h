@@ -21,17 +21,25 @@ public:
 
     TheEndGenerator &operator=(const TheEndGenerator &) = delete;
 
-    DimensionType getDimensionType() const override { return DimensionType::TheEnd; }
+    DimensionType getDimensionType() const override {
+        return DimensionType::TheEnd;
+    }
 
     void generate(LevelChunk &chunk) const override;
 
     void decorate(Level &level, LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) const override;
 
-    int64_t getSeed() const override { return mSeed; }
+    int64_t getSeed() const override {
+        return mSeed;
+    }
 
-    int getSpawnY() const override { return TheEndGeneratorConstants::SPAWN_Y; }
+    int getSpawnY() const override {
+        return TheEndGeneratorConstants::SPAWN_Y;
+    }
 
-    int32_t getAirHash() const override { return mAirHash; }
+    int32_t getAirHash() const override {
+        return mAirHash;
+    }
 
     int32_t pickBiome(int32_t x, int32_t y, int32_t z) const override;
 
@@ -40,7 +48,16 @@ public:
 
     static int64_t chunkHash(int32_t chunkX, int32_t chunkZ);
 
+    /**
+     * The highest y of the chunk's terrain alone, 0 when it has none. The game reads the heightmap of terrain it
+     * generates into a scratch buffer, without touching the level, to aim an end gateway.
+     */
+    int32_t getTerrainTop(int32_t chunkX, int32_t chunkZ) const;
+
 private:
+    template <typename Visitor>
+    void _forEachTerrainBlock(int32_t chunkX, int32_t chunkZ, Visitor &&visit) const;
+
     void _generateTerrain(LevelChunk &chunk, int32_t *heightMap) const;
 
     int64_t mSeed;

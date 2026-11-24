@@ -6,43 +6,99 @@
 #include "World/Level/LevelGen/Overworld/Biome/ClimateAttributes.h"
 #include "World/Level/Particle/Particle.h"
 #include "World/Level/LightSystem.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 
+#include "World/Level/Block/Actor/DataDrivenBlockActor.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/BlockLightProperties.h"
 #include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
+#include "Scripting/Content/CustomContentRegistry.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
+#include "World/Actor/ServerActor.h"
+#include "World/Level/Block/BlockNames.h"
+#include "World/Level/Chunk/SubChunk.h"
+#include "World/Level/Block/LiquidView.h"
 
+#include <atomic>
 #include <algorithm>
+#include <bitset>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iterator>
 #include <random>
+#include <stdexcept>
 #include <utility>
+
+#if defined(__linux__) && defined(__GLIBC__)
+#include <malloc.h>
+#elif defined(__APPLE__)
+#include <malloc/malloc.h>
+#endif
+
+namespace {
+    // rises whenever a chunk leaves a level: a remembered chunk is good only for the epoch it was found in
+    std::atomic<uint64_t> gChunkEpoch{1};
+
+    // the last chunk a thread looked up: an actor asks about the same one many times in a row
+    struct ChunkMemo {
+        const Level *mLevel = nullptr;
+        int64_t mKey = 0;
+        LevelChunk *mChunk = nullptr;
+        uint64_t mEpoch = 0;
+    };
+    thread_local ChunkMemo tChunkMemo;
+}
+
+namespace {
+    // level.dat "experiments": a byte per toggle name beside two bookkeeping flags
+    std::vector<std::string> readExperiments(const Tag &levelDat) {
+        std::vector<std::string> names;
+        const Tag *experiments = levelDat.get("experiments");
+        if (experiments == nullptr || !experiments->isCompound())
+            return names;
+        const std::vector<std::string> &keys = experiments->getKeys();
+        const std::vector<Tag> &values = experiments->getValues();
+        for (size_t index = 0; index < keys.size() && index < values.size(); ++index) {
+            if (keys[index] == "experiments_ever_used" || keys[index] == "saved_with_toggled_experiments")
+                continue;
+            if (values[index].getType() == Tag::Type::Byte && values[index].asByte() != 0)
+                names.push_back(keys[index]);
+        }
+        return names;
+    }
+}
+
+bool Level::hasExperiment(const std::string &name) const {
+    return std::find(mExperiments.begin(), mExperiments.end(), name) != mExperiments.end();
+}
 
 Level::Level(const std::string &name, int viewDistance, int64_t seed, DimensionType dimension)
         : mName(name), mViewDistance(viewDistance), mSeed(seed), mDimension(dimension),
           mGenerator(DimensionFactory::createGenerator(dimension, seed)), mLiquidPhysics(*this) {}
 
-void Level::decorate(LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) {
-    mGenerator->decorate(*this, chunk, overflow);
+Level::~Level() {
+    RedstoneSystem::forgetLevel(*this);
 }
 
-OverworldBiomeResult Level::pickBiomeResult(int32_t x, int32_t y, int32_t z) const {
-    const OverworldGenerator *overworld = dynamic_cast<const OverworldGenerator *>(mGenerator.get());
-
-    if (overworld == nullptr) {
-        return OverworldBiomeResult(mGenerator->pickBiome(x, y, z), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-    }
-
-    return overworld->pickBiomeResult(x, y, z);
+void Level::decorate(LevelChunk &chunk, std::vector<GeneratedBlockChange> *overflow) {
+    mGenerator->decorate(*this, chunk, overflow);
 }
 
 Level &Level::operator=(Level &&other) noexcept {
     if (this == &other)
         return *this;
 
+    RedstoneSystem::moveLevelState(other, *this);
+
+    _finishPendingChangeWrite(true);
+    other._finishPendingChangeWrite(true);
     if (mChunkWorker != nullptr)
         mChunkWorker->stop();
     mChunkWorker.reset();
@@ -54,25 +110,43 @@ Level &Level::operator=(Level &&other) noexcept {
     mName = std::move(other.mName);
     mViewDistance = other.mViewDistance;
     mTime = other.mTime;
+    mWorldTick = other.mWorldTick;
     mSeed = other.mSeed;
     mDimension = other.mDimension;
     mWorldId = other.mWorldId;
     mSpawnPosition = other.mSpawnPosition;
     mHasSpawnPosition = other.mHasSpawnPosition;
     mGenerator = std::move(other.mGenerator);
+    mTerrainCache = other.mTerrainCache;
     mStorage = std::move(other.mStorage);
     mChunks = std::move(other.mChunks);
-    mChunkNetworkCache = std::move(other.mChunkNetworkCache);
-    mTranslatedChunkNetworkCache = std::move(other.mTranslatedChunkNetworkCache);
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
     mPendingChunks = std::move(other.mPendingChunks);
     mActiveColumns = std::move(other.mActiveColumns);
+    mActiveColumnOrder = std::move(other.mActiveColumnOrder);
     mCompletedChunks = std::move(other.mCompletedChunks);
+    mDeferredSaves = std::move(other.mDeferredSaves);
+    mIdleSaves = std::move(other.mIdleSaves);
+    mQueuedEntityErasures = std::move(other.mQueuedEntityErasures);
+    mErasingEntityBatch = std::move(other.mErasingEntityBatch);
+    mErasingEntities = std::move(other.mErasingEntities);
+    mEntityEraseWrite = std::move(other.mEntityEraseWrite);
     mRepopulatedChunks = std::move(other.mRepopulatedChunks);
+    mSavedChunkCache = std::move(other.mSavedChunkCache);
+    mMaps = std::move(other.mMaps);
+    mStructureGuard = std::move(other.mStructureGuard);
     mIncomingChanges = std::move(other.mIncomingChanges);
     mPendingBlockChanges = std::move(other.mPendingBlockChanges);
-    mBlockUpdateScheduler.moveStateFrom(std::move(other.mBlockUpdateScheduler));
+    mPendingBlockChangeCount = other.mPendingBlockChangeCount;
+    other.mPendingBlockChangeCount = 0;
+    mLiquidTick = other.mLiquidTick;
     mBlockUpdates.moveStateFrom(std::move(other.mBlockUpdates));
     mLiquidPhysics.moveStateFrom(std::move(other.mLiquidPhysics));
+    mNamedTicks = std::move(other.mNamedTicks);
+    mNeighborChanges = std::move(other.mNeighborChanges);
+    mExperiments = std::move(other.mExperiments);
+    mVillageManager = std::move(other.mVillageManager);
+    mPoiManager = std::move(other.mPoiManager);
     mGameRules = std::move(other.mGameRules);
     mRulesOwner = other.mRulesOwner;
     mPacketBroadcaster = std::move(other.mPacketBroadcaster);
@@ -94,24 +168,34 @@ bool Level::openStorage(const std::string &worldsDirectory) {
     if (!mStorage.open(worldsDirectory, mName, getDimensionId()))
         return false;
 
+    mSavedChunkCache.clear();
+    mStructureGuard.clear();
+
     if (mDimension == DimensionType::Overworld) {
         Tag levelDat;
         if (mStorage.readLevelDat(levelDat)) {
+            mWorldTick = std::max<int64_t>(0, levelDat.getLong("currentTick"));
             if (levelDat.contains("Time"))
                 setTime(levelDat.getLong("Time"));
 
-            if (levelDat.contains("RandomSeed") && levelDat.getLong("RandomSeed") != mSeed) {
+            const bool reseeded = levelDat.contains("RandomSeed") && levelDat.getLong("RandomSeed") != mSeed;
+            if (reseeded)
                 mSeed = levelDat.getLong("RandomSeed");
-                mGenerator = DimensionFactory::createGenerator(mDimension, mSeed);
-            }
+
+            const auto generator = (DimensionFactory::GeneratorType) levelDat.getInt(
+                    "Generator", (int32_t) DimensionFactory::GeneratorType::Overworld);
+            if (reseeded || generator == DimensionFactory::GeneratorType::Flat)
+                mGenerator = DimensionFactory::createGenerator(mDimension, mSeed, generator,
+                                                               levelDat.getString("FlatWorldLayers"));
 
             mWorldStartCount = (uint32_t) levelDat.getLong("worldStartCount", DEFAULT_WORLD_START_COUNT);
+            mExperiments = readExperiments(levelDat);
             mBonusChestEnabled = levelDat.getByte("bonusChestEnabled", 0) != 0;
             mBonusChestSpawned = levelDat.getByte("bonusChestSpawned", 0) != 0;
 
             if (levelDat.contains("SpawnY") && levelDat.getInt("SpawnY") != UNSET_SPAWN_Y)
-                setSpawnPosition(Vector3i(levelDat.getInt("SpawnX"), levelDat.getInt("SpawnY"),
-                                          levelDat.getInt("SpawnZ")));
+                setSpawnPosition(
+                        Vector3i(levelDat.getInt("SpawnX"), levelDat.getInt("SpawnY"), levelDat.getInt("SpawnZ")));
         }
 
         if (!mHasSpawnPosition) {
@@ -122,58 +206,110 @@ bool Level::openStorage(const std::string &worldsDirectory) {
         saveLevelDat();
     }
 
+    mVillageManager.load(*this, mOwner != nullptr ? mOwner->getCurrentTick() : 0);
     return true;
 }
 
 void Level::saveLevelDat() {
-    const Vector3i spawn = mHasSpawnPosition ? mSpawnPosition
-                           : mHasDefaultSpawnPosition ? mDefaultSpawnPosition : Vector3i(0, UNSET_SPAWN_Y, 0);
-    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mBonusChestEnabled,
-                           mBonusChestSpawned, (int64_t) (uint32_t) (mWorldStartCount - 1));
+    const Vector3i spawn = mHasSpawnPosition          ? mSpawnPosition
+                           : mHasDefaultSpawnPosition ? mDefaultSpawnPosition
+                                                      : Vector3i(0, UNSET_SPAWN_Y, 0);
+    mStorage.writeLevelDat(mName, spawn.x, spawn.y, spawn.z, 0, 1, mSeed, mTime, mWorldTick, mBonusChestEnabled,
+                           mBonusChestSpawned,
+                           (int64_t) (uint32_t) (mWorldStartCount - 1));
 }
 
 bool Level::attachStorage(Level &overworld) {
-    return mStorage.attach(overworld.mStorage, getDimensionId());
+    mSavedChunkCache.clear();
+    if (!mStorage.attach(overworld.mStorage, getDimensionId()))
+        return false;
+
+    mVillageManager.load(*this, mOwner != nullptr ? mOwner->getCurrentTick() : 0);
+    return true;
 }
 
-void Level::saveAll() {
+void Level::saveAll(bool wait) {
     if (!mStorage.isOpen())
         return;
 
+    const uint64_t failures = mStorage.getWriteFailures();
+    const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();
+    if (wait && async) {
+        mChunkWorker->waitForSaves();
+        while (drainCompletedChunks() != 0) {
+        }
+    }
+
+    mVillageManager.save(*this);
     if (mDimension == DimensionType::Overworld) {
         saveWeather();
         saveGameRules();
         saveLevelDat();
+        _saveLoadedMaps();
     }
 
-    const bool async = mChunkWorker != nullptr && mChunkWorker->isRunning();
+    if (wait || !async) {
+        while (!mIncomingChanges.empty())
+            processGeneratedChanges();
+    }
 
-    _flushPendingBlockChanges(!async);
+    if (wait || !async) {
+        _finishPendingChangeWrite(true);
+        _flushPendingBlockChanges(true);
+        mParkedChangesToFlush = 0;
+    } else {
+        // parked changes written over the next ticks, a batch at a time: the save covers what its chunks
+        // spilled into neighbours
+        mParkedChangesToFlush = mPendingBlockChangeCount;
+        _flushParkedChanges();
+    }
 
     size_t saved = 0;
+    // a full save covers what a background save still has queued
+    if (wait || !async) {
+        mDeferredSaves.clear();
+        mIdleSaves.clear();
+        _flushEntityErasures(true);
+    }
+
     for (auto &entry: mChunks) {
-        if (!entry.second.isDirty())
+        _syncPendingTicks(entry.second);
+        if (!entry.second.isDirty()
+            && (mChunkWorker == nullptr || !mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ())))
             continue;
 
+        // copying every dirty chunk at once stalls the tick for seconds after a generation burst:
+        // processDeferredSaves() copies a few per tick
+        if (async && !wait) {
+            mDeferredSaves.push_back(entry.first);
+            continue;
+        }
+
         if (async) {
-            // The worker gets its own copy: resident chunks belong to the main thread and
-            // keep changing while the save runs.
+            // copy: resident chunks belong to the main thread and keep changing during the save
             std::unique_ptr<LevelChunk> copy(new LevelChunk(entry.second));
             copy->invalidateNetworkCaches();
             mChunkWorker->requestSave(std::move(copy));
             entry.second.clearDirty();
+            _markChunkSaved(entry.first);
             saved++;
             continue;
         }
 
         if (mStorage.saveChunk(entry.second)) {
             entry.second.clearDirty();
+            _markChunkSaved(entry.first);
             saved++;
         }
     }
 
     if (saved != 0)
         LOG_INFO(LogAreaID::Server, "Saved %zu chunk(s) for level %s", saved, mName.c_str());
+    if (wait) {
+        const bool workerSuccess = !async || mChunkWorker->waitForSaves();
+        if (!workerSuccess || mStorage.getWriteFailures() != failures)
+            throw std::runtime_error("Could not save level: " + mName);
+    }
 }
 
 void Level::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
@@ -183,18 +319,81 @@ void Level::saveEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> 
     mStorage.saveEntities(chunkX, chunkZ, entities);
 }
 
+void Level::beginStorageBatch() {
+    mStorage.beginBatch();
+}
+
+bool Level::commitStorageBatch() {
+    return mStorage.commitBatch();
+}
+
+void Level::appendEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &entities) {
+    if (!mStorage.isOpen())
+        return;
+
+    mStorage.appendEntities(chunkX, chunkZ, entities);
+}
+
 std::vector<Tag> Level::loadEntities(int32_t chunkX, int32_t chunkZ) {
     if (!mStorage.isOpen())
         return std::vector<Tag>();
 
-    return mStorage.loadEntities(chunkX, chunkZ);
+    std::vector<Tag> entities = mStorage.loadEntities(chunkX, chunkZ);
+    if (mErasingEntities.empty())
+        return entities;
+
+    entities.erase(std::remove_if(entities.begin(), entities.end(),
+                                  [this](const Tag &entity) {
+                                      return mErasingEntities.count(entity.getLong("UniqueID", 0)) != 0;
+                                  }),
+                   entities.end());
+    return entities;
+}
+
+bool Level::hasStoredEntity(int64_t uniqueId) const {
+    return mStorage.isOpen() && mErasingEntities.count(uniqueId) == 0 && mStorage.hasEntity(uniqueId);
 }
 
 void Level::eraseEntity(int64_t uniqueId) {
     if (!mStorage.isOpen())
         return;
 
-    mStorage.eraseEntity(uniqueId);
+    if (mChunkWorker == nullptr || !mChunkWorker->isRunning()) {
+        mStorage.eraseEntity(uniqueId);
+        return;
+    }
+
+    mQueuedEntityErasures.push_back(uniqueId);
+    mErasingEntities.insert(uniqueId);
+}
+
+void Level::_flushEntityErasures(bool wait) {
+    if (mEntityEraseWrite.valid()) {
+        if (!wait && mEntityEraseWrite.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+            return;
+
+        mEntityEraseWrite.get();
+        for (const int64_t uniqueId: mErasingEntityBatch)
+            mErasingEntities.erase(uniqueId);
+        mErasingEntityBatch.clear();
+    }
+
+    if (mQueuedEntityErasures.empty())
+        return;
+
+    if (mChunkWorker == nullptr || !mChunkWorker->isRunning()) {
+        for (const int64_t uniqueId: mQueuedEntityErasures) {
+            mStorage.eraseEntity(uniqueId);
+            mErasingEntities.erase(uniqueId);
+        }
+        mQueuedEntityErasures.clear();
+        return;
+    }
+
+    mErasingEntityBatch.swap(mQueuedEntityErasures);
+    mEntityEraseWrite = mChunkWorker->requestEraseEntities(mErasingEntityBatch);
+    if (wait)
+        _flushEntityErasures(true);
 }
 
 void Level::saveTickingArea(const std::string &id, const Tag &area) {
@@ -218,6 +417,14 @@ std::vector<std::pair<std::string, Tag>> Level::loadTickingAreas() {
     return mStorage.loadTickingAreas();
 }
 
+bool Level::saveSavedData(const std::string &key, const Tag &data, bool wrapped) {
+    return mStorage.saveSavedData(key, data, wrapped);
+}
+
+bool Level::loadSavedData(const std::string &key, Tag &data, bool wrapped) {
+    return mStorage.loadSavedData(key, data, wrapped);
+}
+
 void Level::saveBlockEntities(int32_t chunkX, int32_t chunkZ, const std::vector<Tag> &blockEntities) {
     if (!mStorage.isOpen())
         return;
@@ -233,15 +440,28 @@ std::vector<Tag> Level::loadBlockEntities(int32_t chunkX, int32_t chunkZ) {
 }
 
 void Level::closeStorage() {
-    if (mChunkWorker != nullptr)
+    if (mChunkWorker != nullptr) {
         mChunkWorker->discardPendingGeneration();
-
-    saveAll();
-
-    if (mChunkWorker != nullptr)
         mChunkWorker->stop();
+        _finishPendingChangeWrite(true);
+        while (drainCompletedChunks() != 0) {
+        }
+        for (auto &entry: mChunks) {
+            if (mChunkWorker->hasFailedSave(entry.second.getX(), entry.second.getZ()))
+                entry.second.markDirty();
+        }
+        mChunkWorker.reset();
+    }
+    mPendingChunks.clear();
+    try {
+        saveAll(true);
+    } catch (...) {
+        mStorage.close();
+        throw;
+    }
 
     mStorage.close();
+    mSavedChunkCache.clear();
 }
 
 Vector3i Level::getSpawnPosition() const {
@@ -265,7 +485,7 @@ Vector3f Level::getSpawnPositionForPlayer() {
 }
 
 int32_t Level::getMoonPhase() const {
-    return (int32_t) (((mTime / 24000) % 8 + 8) % 8);
+    return (int32_t) (((mTime / TICKS_PER_DAY) % 8 + 8) % 8);
 }
 
 float Level::getMoonBrightness() const {
@@ -293,15 +513,15 @@ float Level::getRegionalDifficulty(int32_t difficulty) const {
 
 bool Level::isStandable(int32_t x, int32_t y, int32_t z) {
     const auto isLiquid = [](const std::string &name) {
-        return name == "minecraft:water" || name == "minecraft:flowing_water" || name == "minecraft:lava"
+        return name == BlockNames::WATER || name == "minecraft:flowing_water" || name == BlockNames::LAVA
                || name == "minecraft:flowing_lava";
     };
 
     const std::string below = getBlockState(x, y - 1, z).mName;
-    const bool supported = isSolidAt(x, y - 1, z) || below == "minecraft:water" || below == "minecraft:flowing_water";
+    const bool supported = isSolidAt(x, y - 1, z) || below == BlockNames::WATER || below == "minecraft:flowing_water";
 
-    return supported && !isSolidAt(x, y, z) && !isLiquid(getBlockState(x, y, z).mName)
-           && !isSolidAt(x, y + 1, z) && !isLiquid(getBlockState(x, y + 1, z).mName);
+    return supported && !isSolidAt(x, y, z) && !isLiquid(getBlockState(x, y, z).mName) && !isSolidAt(x, y + 1, z)
+           && !isLiquid(getBlockState(x, y + 1, z).mName);
 }
 
 Vector3i Level::findSafeSpawn(const Vector3i &around) {
@@ -319,7 +539,7 @@ Vector3i Level::findSafeSpawn(const Vector3i &around) {
 
 int32_t Level::_topSolidOrLiquidY(int32_t x, int32_t z) {
     for (int32_t y = LevelChunk::MAX_Y; y > LevelChunk::MIN_Y; --y) {
-        if (getBlockState(x, y, z).mName != "minecraft:air")
+        if (getBlockState(x, y, z).mName != BlockNames::AIR)
             return y;
     }
 
@@ -327,11 +547,18 @@ int32_t Level::_topSolidOrLiquidY(int32_t x, int32_t z) {
 }
 
 Vector3i Level::_findLandSpawn() {
-    static const int32_t WATER_BIOMES[] = {
-            BiomeIds::OCEAN, BiomeIds::DEEP_OCEAN, BiomeIds::WARM_OCEAN, BiomeIds::LUKEWARM_OCEAN,
-            BiomeIds::DEEP_LUKEWARM_OCEAN, BiomeIds::COLD_OCEAN, BiomeIds::DEEP_COLD_OCEAN, BiomeIds::FROZEN_OCEAN,
-            BiomeIds::DEEP_FROZEN_OCEAN, BiomeIds::LEGACY_FROZEN_OCEAN, BiomeIds::RIVER, BiomeIds::FROZEN_RIVER
-    };
+    static const int32_t WATER_BIOMES[] = {BiomeIds::OCEAN,
+                                           BiomeIds::DEEP_OCEAN,
+                                           BiomeIds::WARM_OCEAN,
+                                           BiomeIds::LUKEWARM_OCEAN,
+                                           BiomeIds::DEEP_LUKEWARM_OCEAN,
+                                           BiomeIds::COLD_OCEAN,
+                                           BiomeIds::DEEP_COLD_OCEAN,
+                                           BiomeIds::FROZEN_OCEAN,
+                                           BiomeIds::DEEP_FROZEN_OCEAN,
+                                           BiomeIds::LEGACY_FROZEN_OCEAN,
+                                           BiomeIds::RIVER,
+                                           BiomeIds::FROZEN_RIVER};
     const int32_t SEARCH_STEP = 16;
     const int32_t SEARCH_RADIUS = 1024;
     const int32_t SAMPLE_Y = 64;
@@ -371,18 +598,42 @@ LevelChunk &Level::getChunk(int32_t chunkX, int32_t chunkZ) {
     if (it != mChunks.end())
         return it->second;
 
+    // a synchronous read never overtakes an older pending-change write; streaming retries instead of
+    // waiting on the tick thread
+    if (mPendingChangeWrite.valid() && mPersistingChangeKeys.count(key) != 0)
+        _finishPendingChangeWrite(true);
+
     LevelChunk chunk(chunkX, chunkZ);
     chunk.setDimension(mDimension);
 
-    if (!mStorage.isOpen() || !mStorage.loadChunk(chunk))
+    const bool generated = !mStorage.isOpen() || !mStorage.loadChunk(chunk);
+    if (generated)
         _generate(chunk);
+
+    if (mStorage.isOpen() && mPendingChunks.find(key) == mPendingChunks.end()) {
+        const auto stored = mStorage.loadPendingBlockChanges(chunkX, chunkZ);
+        for (const auto &change: stored) {
+            if (change.mY >= LevelChunk::MIN_Y && change.mY <= LevelChunk::MAX_Y)
+                chunk.setBlock(change.mX & 15, change.mY, change.mZ & 15, *change.mState);
+        }
+        if (!stored.empty()) {
+            LightSystem::computeSkyLight(chunk);
+            LightSystem::computeBlockLight(chunk);
+            mStorage.erasePendingBlockChanges(chunkX, chunkZ);
+        }
+    }
 
     mPendingChunks.erase(key);
 
-    auto result = mChunks.emplace(key, std::move(chunk));
+    LevelChunk &inserted = mChunks.emplace(key, std::move(chunk)).first->second;
+    _loadPendingTicks(inserted);
     _replayPendingChanges(key);
     _refreshChunkShapes(chunkX, chunkZ);
-    return result.first->second;
+    if (mOwner != nullptr)
+        RedstoneSystem::onChunkLoaded(*mOwner, *this, inserted);
+    if (generated && inserted.isPopulated())
+        _dispatchChunkEvent(FALCON_EVENT_CHUNK_POPULATE, chunkX, chunkZ, true);
+    return inserted;
 }
 
 LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
@@ -396,21 +647,28 @@ LevelChunk &Level::generateTerrainChunk(int32_t chunkX, int32_t chunkZ) {
     chunk.setDimension(mDimension);
     _generate(chunk);
 
-    return mChunks.emplace(key, std::move(chunk)).first->second;
+    LevelChunk &inserted = mChunks.emplace(key, std::move(chunk)).first->second;
+    if (inserted.isPopulated())
+        _dispatchChunkEvent(FALCON_EVENT_CHUNK_POPULATE, chunkX, chunkZ, true);
+    return inserted;
 }
 
 LevelChunk &Level::insertChunk(LevelChunk chunk) {
     const int64_t key = _packChunk(chunk.getX(), chunk.getZ());
     chunk.setDimension(mDimension);
     auto result = mChunks.emplace(key, std::move(chunk));
-    if (result.second)
-        _refreshChunkShapes(result.first->second.getX(), result.first->second.getZ());
+    if (result.second) {
+        LevelChunk &inserted = result.first->second;
+        _loadPendingTicks(inserted);
+        _refreshChunkShapes(inserted.getX(), inserted.getZ());
+        if (mOwner != nullptr)
+            RedstoneSystem::onChunkLoaded(*mOwner, *this, inserted);
+    }
     return result.first->second;
 }
 
 void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
-    // Only inspect sections whose palette contains a derived shape. Revisit neighbours so a
-    // connection held at an unloaded chunk border is resolved when that chunk arrives.
+    // neighbours too: a connection held at an unloaded chunk border resolves on its arrival
     for (int32_t dx = -1; dx <= 1; ++dx) {
         for (int32_t dz = -1; dz <= 1; ++dz) {
             LevelChunk *chunk = peekChunkPtr(chunkX + dx, chunkZ + dz);
@@ -439,6 +697,29 @@ void Level::_refreshChunkShapes(int32_t chunkX, int32_t chunkZ) {
     }
 }
 
+// ticks change without dirtying the blocks: a chunk is saved again when its record differs
+void Level::_syncPendingTicks(LevelChunk &chunk) {
+    bool changed = mLiquidPhysics.savePendingTicks(chunk);
+    std::string named = mNamedTicks.save(chunk.getX(), chunk.getZ(), getMinY());
+    if (named != chunk.getNamedTicks()) {
+        chunk.setNamedTicks(std::move(named));
+        changed = true;
+    }
+    if (changed)
+        chunk.markDirty();
+}
+
+void Level::_loadPendingTicks(LevelChunk &chunk) {
+    mLiquidPhysics.loadPendingTicks(chunk);
+    mNamedTicks.load(chunk.getX(), chunk.getZ(), getMinY(), chunk.getNamedTicks(),
+                     mOwner != nullptr ? mOwner->getCurrentTick() : 0);
+}
+
+void Level::_dropPendingTicks(int32_t chunkX, int32_t chunkZ) {
+    mLiquidPhysics.dropPendingTicks(chunkX, chunkZ);
+    mNamedTicks.drop(chunkX, chunkZ);
+}
+
 LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
     const int64_t key = _packChunk(chunkX, chunkZ);
 
@@ -451,21 +732,22 @@ LevelChunk Level::extractChunk(int32_t chunkX, int32_t chunkZ) {
 
     LevelChunk chunk = std::move(it->second);
     mChunks.erase(it);
+    RedstoneSystem::onChunkUnloaded(*this, chunkX, chunkZ);
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
+    _dropPendingTicks(chunkX, chunkZ);
     return chunk;
 }
 
 void Level::dropChunk(int32_t chunkX, int32_t chunkZ) {
     mChunks.erase(_packChunk(chunkX, chunkZ));
+    RedstoneSystem::onChunkUnloaded(*this, chunkX, chunkZ);
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
+    _dropPendingTicks(chunkX, chunkZ);
 }
 
 void Level::_queueGeneratedChanges(std::vector<GeneratedBlockChange> changes) {
     if (changes.empty())
         return;
-
-    if (mIncomingChanges.empty()) {
-        mIncomingChanges = std::move(changes);
-        return;
-    }
 
     mIncomingChanges.insert(mIncomingChanges.end(), std::make_move_iterator(changes.begin()),
                             std::make_move_iterator(changes.end()));
@@ -477,11 +759,36 @@ void Level::_replayPendingChanges(int64_t key) {
         return;
 
     std::vector<GeneratedBlockChange> changes = std::move(pending->second);
+    mPendingBlockChangeCount -= changes.size();
     mPendingBlockChanges.erase(pending);
     _queueGeneratedChanges(std::move(changes));
 }
 
+// older than anything parked or applied since the task left: a resident chunk gets them at once, else
+// they go before the blocks parked meanwhile
+void Level::_restoreSpilledChanges(int64_t key, std::vector<GeneratedBlockChange> changes) {
+    if (changes.empty())
+        return;
+
+    if (mChunks.find(key) != mChunks.end() && mPendingChunks.find(key) == mPendingChunks.end()) {
+        _applyGeneratedChanges(changes);
+        return;
+    }
+
+    std::vector<GeneratedBlockChange> &parked = mPendingBlockChanges[key];
+    mPendingBlockChangeCount += changes.size();
+    changes.insert(changes.end(), std::make_move_iterator(parked.begin()), std::make_move_iterator(parked.end()));
+    parked = std::move(changes);
+}
+
 void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &changes) {
+    // features spill into the same few columns: relit once per column after the batch, same light
+    std::unordered_map<int64_t, std::pair<LevelChunk *, std::bitset<256>>> touchedColumns;
+    int64_t lastKey = 0;
+    LevelChunk *lastChunk = nullptr;
+    bool lastParked = false;
+    bool haveLast = false;
+
     for (const GeneratedBlockChange &change: changes) {
         if (change.mY < LevelChunk::MIN_Y || change.mY > LevelChunk::MAX_Y)
             continue;
@@ -490,39 +797,178 @@ void Level::_applyGeneratedChanges(const std::vector<GeneratedBlockChange> &chan
         const int32_t chunkZ = change.mZ >> 4;
         const int64_t key = _packChunk(chunkX, chunkZ);
 
-        LevelChunk *chunk = peekChunkPtr(chunkX, chunkZ);
-        // Feature blocks that spill into a chunk which is absent or still being loaded are
-        // kept aside, replayed once it arrives, or merged into storage on save.
-        if (chunk == nullptr || mPendingChunks.find(key) != mPendingChunks.end()) {
+        if (!haveLast || key != lastKey) {
+            lastKey = key;
+            lastChunk = peekChunkPtr(chunkX, chunkZ);
+            lastParked = lastChunk == nullptr || mPendingChunks.find(key) != mPendingChunks.end();
+            haveLast = true;
+        }
+
+        LevelChunk *chunk = lastChunk;
+        // absent or loading chunk: kept aside, replayed on arrival or merged into storage on save
+        if (lastParked) {
             mPendingBlockChanges[key].push_back(change);
+            ++mPendingBlockChangeCount;
             continue;
         }
+        // decorated later, from a copy already holding it: its own blocks won there
+        if (decorationHolds(chunk->getBaseSequence(), chunk->getDecorationSequence(), change.mSequence))
+            continue;
 
         const int32_t localX = change.mX & 15;
         const int32_t localZ = change.mZ & 15;
 
-        if (chunk->getBlock(localX, change.mY, localZ) == change.mState)
+        // both interned: equal exactly when the same object
+        const BlockState &previous = chunk->getBlock(localX, change.mY, localZ, change.mLayer);
+        if (&previous == change.mState)
             continue;
 
-        chunk->setBlock(localX, change.mY, localZ, change.mState);
-        LightSystem::onBlockChanged(*this, change.mX, change.mY, change.mZ);
-        _invalidateChunkNetwork(key);
-        mRepopulatedChunks.insert(key);
+        const int32_t previousLight = BlockLightProperties::packed(previous);
+        const int32_t nextLight = BlockLightProperties::packed(*change.mState);
+        chunk->setBlock(localX, change.mY, localZ, change.mLayer, *change.mState);
+        std::pair<LevelChunk *, std::bitset<256>> &touched = touchedColumns[key];
+        touched.first = chunk;
+
+        // mostly stone variants swapped: same light properties keep height and sky light, and an opaque
+        // non-emitter holds no block light either way
+        if (previousLight == nextLight) {
+            if (!BlockLightProperties::isTransparent(nextLight) && BlockLightProperties::lightLevel(nextLight) == 0)
+                continue;
+        } else {
+            touched.second.set((size_t) (localX * 16 + localZ));
+        }
+        addBlockLightUpdate(change.mX, change.mY, change.mZ);
+    }
+
+    for (const auto &entry: touchedColumns) {
+        mRepopulatedChunks.insert(entry.first);
+        if (entry.second.second.none())
+            continue;
+
+        for (size_t column = 0; column < 256; ++column) {
+            if (entry.second.second.test(column))
+                LightSystem::relightColumn(*entry.second.first, (int) (column / 16), (int) (column % 16));
+        }
     }
 }
 
 size_t Level::processGeneratedChanges() {
+    _flushParkedChanges();
     if (mIncomingChanges.empty())
         return 0;
 
+    // until the budget is spent, at least one batch: a backlog uses spare time, a busy tick grows by one
+    // batch at most
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + GENERATED_CHANGES_BUDGET;
     std::vector<GeneratedBlockChange> batch;
-    batch.swap(mIncomingChanges);
-    _applyGeneratedChanges(batch);
-    return batch.size();
+    size_t applied = 0;
+    do {
+        const size_t count = std::min(mIncomingChanges.size(), GENERATED_CHANGES_BATCH);
+        batch.clear();
+        batch.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            batch.push_back(std::move(mIncomingChanges.front()));
+            mIncomingChanges.pop_front();
+        }
+
+        _applyGeneratedChanges(batch);
+        applied += count;
+    } while (!mIncomingChanges.empty() && std::chrono::steady_clock::now() < deadline);
+
+    return applied;
+}
+
+void Level::_finishPendingChangeWrite(bool wait) {
+    if (!mPendingChangeWrite.valid())
+        return;
+    if (!wait && mPendingChangeWrite.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+
+    auto failed = mPendingChangeWrite.get();
+    mPersistingChangeCount = 0;
+    mPersistingChangeKeys.clear();
+    if (failed.empty())
+        return;
+
+    // failed writes keep their payload, ahead of changes received meanwhile: a retry keeps the newest
+    // state per position
+    mPendingBlockChangeCount += failed.size();
+    std::unordered_map<int64_t, std::vector<GeneratedBlockChange>> older;
+    for (GeneratedBlockChange &change: failed)
+        older[_packChunk(change.mX >> 4, change.mZ >> 4)].push_back(std::move(change));
+
+    for (auto &entry: older) {
+        auto &newer = mPendingBlockChanges[entry.first];
+        entry.second.insert(entry.second.end(), std::make_move_iterator(newer.begin()),
+                            std::make_move_iterator(newer.end()));
+        newer = std::move(entry.second);
+    }
+}
+
+void Level::_flushParkedChanges() {
+    if (mParkedChangesToFlush == 0 && mPendingBlockChangeCount <= PARKED_CHANGES_IN_MEMORY) {
+        _finishPendingChangeWrite(false);
+        return;
+    }
+
+    const size_t before = mPendingBlockChangeCount;
+    _flushPendingBlockChanges(false);
+    const size_t handed = before > mPendingBlockChangeCount ? before - mPendingBlockChangeCount : 0;
+    mParkedChangesToFlush = handed >= mParkedChangesToFlush || mPendingBlockChangeCount == 0
+                                    ? 0
+                                    : mParkedChangesToFlush - handed;
+}
+
+// true: nothing parked or in flight for the eight neighbours; else starts writing theirs if no write runs;
+// only for early saves: storage never merges every parked change as it arrives
+bool Level::_persistSpillAround(int32_t chunkX, int32_t chunkZ) {
+    _finishPendingChangeWrite(false);
+
+    bool settled = true;
+    std::vector<int64_t> keys;
+    std::vector<GeneratedBlockChange> batch;
+    for (int32_t dx = -1; dx <= 1; ++dx) {
+        for (int32_t dz = -1; dz <= 1; ++dz) {
+            if (dx == 0 && dz == 0)
+                continue;
+
+            const int64_t key = _packChunk(chunkX + dx, chunkZ + dz);
+            if (mPersistingChangeKeys.count(key) != 0) {
+                settled = false;
+                continue;
+            }
+
+            const auto parked = mPendingBlockChanges.find(key);
+            if (parked == mPendingBlockChanges.end())
+                continue;
+
+            settled = false;
+            if (mPendingChangeWrite.valid() || mPendingChunks.find(key) != mPendingChunks.end())
+                continue;
+
+            keys.push_back(key);
+            mPendingBlockChangeCount -= parked->second.size();
+            batch.insert(batch.end(), std::make_move_iterator(parked->second.begin()),
+                         std::make_move_iterator(parked->second.end()));
+            mPendingBlockChanges.erase(parked);
+        }
+    }
+
+    if (keys.empty())
+        return settled;
+
+    mPersistingChangeKeys.insert(keys.begin(), keys.end());
+    mPersistingChangeCount = batch.size();
+    mPendingChangeWrite = mChunkWorker->requestPersistChanges((int32_t) (keys.front() >> 32),
+                                                              (int32_t) (keys.front() & 0xffffffff), std::move(batch));
+    return false;
 }
 
 void Level::_flushPendingBlockChanges(bool includeInFlight) {
+    _finishPendingChangeWrite(includeInFlight);
     if (!mStorage.isOpen())
+        return;
+    if (mPendingChangeWrite.valid())
         return;
 
     for (auto it = mPendingBlockChanges.begin(); it != mPendingBlockChanges.end();) {
@@ -531,9 +977,36 @@ void Level::_flushPendingBlockChanges(bool includeInFlight) {
             continue;
         }
 
-        mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
-                                          it->second);
-        it = mPendingBlockChanges.erase(it);
+        if (!includeInFlight && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
+            const int64_t first = it->first;
+            std::vector<GeneratedBlockChange> batch;
+            while (it != mPendingBlockChanges.end() && mPersistingChangeKeys.size() < MAX_PERSIST_BATCH_CHUNKS) {
+                if (mPendingChunks.find(it->first) != mPendingChunks.end()) {
+                    ++it;
+                    continue;
+                }
+
+                mPersistingChangeKeys.insert(it->first);
+                batch.insert(batch.end(), std::make_move_iterator(it->second.begin()),
+                             std::make_move_iterator(it->second.end()));
+                it = mPendingBlockChanges.erase(it);
+            }
+
+            mPersistingChangeCount = batch.size();
+            mPendingBlockChangeCount -= mPersistingChangeCount;
+            mPendingChangeWrite = mChunkWorker->requestPersistChanges((int32_t) (first >> 32),
+                                                                      (int32_t) (first & 0xffffffff), std::move(batch));
+            return;
+        }
+
+        const size_t count = it->second.size();
+        if (mStorage.mergePendingBlockChanges((int32_t) (it->first >> 32), (int32_t) (it->first & 0xffffffff),
+                                              it->second)) {
+            mPendingBlockChangeCount -= count;
+            it = mPendingBlockChanges.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
@@ -544,7 +1017,12 @@ std::vector<int64_t> Level::consumeRepopulatedChunks() {
 }
 
 bool Level::isChunkResident(int32_t chunkX, int32_t chunkZ) const {
-    return mChunks.find(_packChunk(chunkX, chunkZ)) != mChunks.end();
+    // the chunk asked about is most often the one just looked up
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    const ChunkMemo &memo = tChunkMemo;
+    if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == gChunkEpoch.load(std::memory_order_relaxed))
+        return true;
+    return mChunks.find(key) != mChunks.end();
 }
 
 void Level::registerChunkLoader(uint64_t loaderId, int32_t chunkX, int32_t chunkZ) {
@@ -589,17 +1067,139 @@ void Level::releaseChunkIfUnused(int32_t chunkX, int32_t chunkZ) {
         mUnloadQueue.insert(key);
 }
 
+// resident without a loader (synchronous getChunk(), async load finished after the player moved on):
+// nothing queues them for unload; collected after two sweeps loaderless and outside ticking columns
+void Level::_sweepOrphanChunks() {
+    std::unordered_set<int64_t> orphans;
+
+    for (const auto &entry: mChunks) {
+        const int64_t key = entry.first;
+        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mPendingChunks.find(key) != mPendingChunks.end()
+            || mActiveColumns.find(key) != mActiveColumns.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end())
+            continue;
+
+        if (mOrphanCandidates.find(key) != mOrphanCandidates.end())
+            mUnloadQueue.insert(key);
+        else
+            orphans.insert(key);
+    }
+
+    mOrphanCandidates.swap(orphans);
+}
+
+void Level::setOccupiedColumns(std::unordered_set<int64_t> columns) {
+    mOccupiedColumns = std::move(columns);
+}
+
+// eight populated neighbours: no more spilled blocks, content final; saved once generation goes quiet,
+// fresh terrain hits disk before the auto-save without competing with players waiting for terrain
+void Level::_queueCompletedSaves(int32_t chunkX, int32_t chunkZ) {
+    if (!mStorage.isOpen() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
+        return;
+
+    for (int32_t dx = -1; dx <= 1; ++dx) {
+        for (int32_t dz = -1; dz <= 1; ++dz) {
+            const int32_t x = chunkX + dx;
+            const int32_t z = chunkZ + dz;
+            bool complete = isChunkPopulated(x, z);
+            for (int32_t nx = -1; nx <= 1 && complete; ++nx) {
+                for (int32_t nz = -1; nz <= 1 && complete; ++nz)
+                    complete = isChunkPopulated(x + nx, z + nz);
+            }
+
+            if (complete)
+                mIdleSaves.push_back(_packChunk(x, z));
+        }
+    }
+}
+
+void Level::processDeferredSaves() {
+    _flushEntityErasures(false);
+
+    // unapplied spilled blocks could still be parked next to a chunk saved now
+    const bool generationIdle = mChunkWorker != nullptr && mChunkWorker->getOutstandingGenerationCount() == 0
+                                && mPendingChunks.empty() && mCompletedChunks.empty() && mIncomingChanges.empty();
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + DEFERRED_SAVE_BUDGET;
+    while ((!mDeferredSaves.empty() || (generationIdle && !mIdleSaves.empty()))
+           && std::chrono::steady_clock::now() < deadline && mChunkWorker != nullptr
+           && mChunkWorker->getPendingSaveCount() < MAX_QUEUED_BACKGROUND_SAVES) {
+        std::deque<int64_t> &queue = mDeferredSaves.empty() ? mIdleSaves : mDeferredSaves;
+        const int64_t key = queue.front();
+        queue.pop_front();
+
+        auto chunk = mChunks.find(key);
+        if (chunk == mChunks.end() || mChunkWorker == nullptr || !mChunkWorker->isRunning())
+            continue;
+        _syncPendingTicks(chunk->second);
+        if (!chunk->second.isDirty() && !mChunkWorker->hasFailedSave(chunk->second.getX(), chunk->second.getZ()))
+            continue;
+        // idle save waits for its spill into absent neighbours to reach storage: no crash with half its trees;
+        // spill into a resident neighbour is written with it, else the generation frontier is written twice
+        if (&queue == &mIdleSaves && !_persistSpillAround(chunk->second.getX(), chunk->second.getZ())) {
+            mIdleSaves.push_front(key);
+            break;
+        }
+
+        std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
+        copy->invalidateNetworkCaches();
+        mChunkWorker->requestSave(std::move(copy));
+        chunk->second.clearDirty();
+        _markChunkSaved(key);
+    }
+}
+
+void Level::packIdleChunks() {
+    if (mPackCursor >= mPackKeys.size()) {
+        mPackKeys.clear();
+        mPackKeys.reserve(mChunks.size());
+        for (const auto &entry: mChunks)
+            mPackKeys.push_back(entry.first);
+        mPackCursor = 0;
+    }
+
+    const std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::now() + PACK_BUDGET;
+    for (size_t visited = 0; visited < MAX_PACK_VISITS_PER_TICK && mPackCursor < mPackKeys.size(); ++visited) {
+        const int64_t key = mPackKeys[mPackCursor++];
+        auto it = mChunks.find(key);
+        if (it == mChunks.end() || it->second.isPacked())
+            continue;
+
+        // read since the last pass: another pass before packing
+        LevelChunk &chunk = it->second;
+        if (chunk.consumeAccessed() || !chunk.isPopulated() || mActiveColumns.count(key) != 0
+            || mOccupiedColumns.count(key) != 0 || mPendingChunks.count(key) != 0)
+            continue;
+
+        chunk.pack();
+        if (std::chrono::steady_clock::now() >= deadline)
+            break;
+    }
+}
+
 size_t Level::processChunkUnloads() {
+    if (++mUnloadSweepTicks >= UNLOAD_SWEEP_INTERVAL_TICKS) {
+        mUnloadSweepTicks = 0;
+        _sweepOrphanChunks();
+    }
+
     if (mUnloadQueue.empty())
         return 0;
 
     size_t unloaded = 0;
+    size_t queuedSaves = 0;
 
-    for (auto it = mUnloadQueue.begin(); it != mUnloadQueue.end() && unloaded < MAX_CHUNK_UNLOADS_PER_TICK;) {
+    for (auto it = mUnloadQueue.begin();
+         it != mUnloadQueue.end() && unloaded + queuedSaves < MAX_CHUNK_UNLOADS_PER_TICK;) {
         const int64_t key = *it;
 
-        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mPendingChunks.find(key) != mPendingChunks.end()) {
+        if (mChunkLoaders.find(key) != mChunkLoaders.end() || mOccupiedColumns.find(key) != mOccupiedColumns.end()) {
             it = mUnloadQueue.erase(it);
+            continue;
+        }
+
+        // a load or populate in flight would insert it again after the free: wait for the drain
+        if (mPendingChunks.find(key) != mPendingChunks.end()) {
+            ++it;
             continue;
         }
 
@@ -609,26 +1209,62 @@ size_t Level::processChunkUnloads() {
             continue;
         }
 
-        if (chunk->second.isDirty() && mStorage.isOpen()) {
-            if (mChunkWorker != nullptr && mChunkWorker->isRunning()) {
-                std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
-                copy->invalidateNetworkCaches();
-                mChunkWorker->requestSave(std::move(copy));
-            } else
-                mStorage.saveChunk(chunk->second);
+        // no free while a save is queued: a synchronous getChunk() would read the old version back; a failed
+        // save keeps it resident
+        if (mChunkWorker != nullptr && mChunkWorker->hasPendingSave(chunk->second.getX(), chunk->second.getZ())) {
+            ++it;
+            continue;
         }
+
+        _syncPendingTicks(chunk->second);
+        // saved by a worker from a copy, the tick never waits on storage; resident until it lands
+        if (chunk->second.isDirty() && mStorage.isOpen() && mChunkWorker != nullptr && mChunkWorker->isRunning()) {
+            std::unique_ptr<LevelChunk> copy(new LevelChunk(chunk->second));
+            copy->invalidateNetworkCaches();
+            mChunkWorker->requestSave(std::move(copy));
+            chunk->second.clearDirty();
+            _markChunkSaved(key);
+            ++it;
+            queuedSaves++;
+            continue;
+        }
+
+        if (chunk->second.isDirty() && (!mStorage.isOpen() || !mStorage.saveChunk(chunk->second))) {
+            it = mUnloadQueue.erase(it);
+            continue;
+        }
+        if (chunk->second.isDirty())
+            _markChunkSaved(key);
 
         const int32_t chunkX = chunk->second.getX();
         const int32_t chunkZ = chunk->second.getZ();
         mChunks.erase(chunk);
-        _invalidateChunkNetwork(key);
+        gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
+        _dropPendingTicks(chunkX, chunkZ);
         mRepopulatedChunks.erase(key);
+        mOrphanCandidates.erase(key);
         it = mUnloadQueue.erase(it);
         unloaded++;
         _dispatchChunkEvent(FALCON_EVENT_CHUNK_UNLOAD, chunkX, chunkZ, false);
     }
 
+    mUnloadedSinceTrim += unloaded;
+    if (mUnloadQueue.empty() && mUnloadedSinceTrim >= HEAP_TRIM_UNLOAD_THRESHOLD) {
+        mUnloadedSinceTrim = 0;
+        releaseFreedHeap();
+    }
+
     return unloaded;
+}
+
+void Level::releaseFreedHeap() {
+    // the allocator keeps freed memory: RSS would stay at its peak after players leave or generation
+    // stops copying chunks
+#if defined(__linux__) && defined(__GLIBC__)
+    malloc_trim(0);
+#elif defined(__APPLE__)
+    malloc_zone_pressure_relief(nullptr, 0);
+#endif
 }
 
 bool Level::isChunkPopulated(int32_t chunkX, int32_t chunkZ) const {
@@ -636,9 +1272,68 @@ bool Level::isChunkPopulated(int32_t chunkX, int32_t chunkZ) const {
     return it != mChunks.end() && it->second.isPopulated();
 }
 
+bool Level::isChunkSaved(int32_t chunkX, int32_t chunkZ) {
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    const auto cached = mSavedChunkCache.find(key);
+    if (cached != mSavedChunkCache.end())
+        return cached->second;
+
+    // the game empties the whole cache rather than evicting single entries
+    if (mSavedChunkCache.size() >= ClientSideGeneration::SAVED_CHUNK_CACHE_LIMIT)
+        mSavedChunkCache.clear();
+
+    const bool saved = mStorage.hasChunk(chunkX, chunkZ);
+    mSavedChunkCache.emplace(key, saved);
+    return saved;
+}
+
+bool Level::applyMapPixels(int64_t mapId, const std::vector<MapPixel> &pixels) {
+    MapItemSavedData *map = getMapData(mapId);
+    if (map == nullptr)
+        return false;
+
+    map->applyClientPixels(pixels);
+    return true;
+}
+
+void Level::_saveLoadedMaps() {
+    mMaps.saveDirty(mStorage);
+    mMaps.unloadUnused();
+}
+
+void Level::_markChunkSaved(int64_t key) {
+    // the game flags a chunk queued for saving so storage is read again
+    mSavedChunkCache[key] = true;
+}
+
+bool Level::isNearStructure(const std::vector<const StructureFeature *> &features, int32_t chunkX, int32_t chunkZ) {
+    if (features.empty() || mGenerator == nullptr)
+        return false;
+
+    return mStructureGuard.isNearStart(*mGenerator, features, chunkX, chunkZ);
+}
+
+Level::ChunkMemoGuard::~ChunkMemoGuard() {
+    gChunkEpoch.fetch_add(1, std::memory_order_relaxed);
+}
+
 LevelChunk *Level::peekChunkPtr(int32_t chunkX, int32_t chunkZ) {
-    auto it = mChunks.find(_packChunk(chunkX, chunkZ));
-    return it == mChunks.end() ? nullptr : &it->second;
+    const int64_t key = _packChunk(chunkX, chunkZ);
+    ChunkMemo &memo = tChunkMemo;
+    const uint64_t epoch = gChunkEpoch.load(std::memory_order_relaxed);
+    if (memo.mLevel == this && memo.mKey == key && memo.mEpoch == epoch)
+        return memo.mChunk;
+
+    auto it = mChunks.find(key);
+    if (it == mChunks.end())
+        return nullptr;
+
+    // only a chunk found is remembered: one that is missing may load at any time
+    memo.mLevel = this;
+    memo.mKey = key;
+    memo.mChunk = &it->second;
+    memo.mEpoch = epoch;
+    return memo.mChunk;
 }
 
 int Level::getSkyLightAt(int32_t x, int32_t y, int32_t z) {
@@ -682,6 +1377,39 @@ int32_t Level::getHeightAt(int32_t x, int32_t z) {
     return chunk->getHeight(localX, localZ);
 }
 
+int32_t Level::getAboveTopSolidBlock(int32_t x, int32_t y, int32_t z) {
+    LevelChunk *chunk = peekChunkPtr(x >> 4, z >> 4);
+    // the block source answers its height limit for a column it has no chunk for
+    if (chunk == nullptr)
+        return getMaxY() + 1;
+
+    const int localX = x & 15;
+    const int localZ = z & 15;
+    const auto isLeaves = [](const BlockState &state) {
+        const Block *block = VanillaBlocks::fromState(state);
+        return block != nullptr && block->isLeaves();
+    };
+
+    int32_t current = std::min(y, getMaxY());
+    if (getDimensionType() == DimensionType::Nether) {
+        while (current > getMinY()) {
+            const BlockState &state = chunk->getBlock(localX, current, localZ);
+            if (isLeaves(state) || !BlockSupport::isSolid(state))
+                break;
+            --current;
+        }
+    }
+
+    for (; current >= getMinY(); --current) {
+        const BlockState &state = chunk->getBlock(localX, current, localZ);
+        if (isLeaves(state))
+            continue;
+        if (BlockSupport::isSolid(state))
+            return current + 1;
+    }
+    return getMinY();
+}
+
 void Level::updateSkyLightSubtracted() {
     mSkyLightSubtracted = LightSystem::calculateSkyLightSubtracted(*this);
 }
@@ -691,16 +1419,25 @@ bool Level::isColumnActive(int32_t chunkX, int32_t chunkZ) const {
 }
 
 void Level::setActiveColumns(std::vector<int64_t> columns) {
-    std::unordered_set<int64_t> next(columns.begin(), columns.end());
-
-    // Block updates that came due in a column while it was inactive were parked; they
-    // resume as soon as the column becomes active again.
+    std::unordered_set<int64_t> previous;
+    previous.swap(mActiveColumns);
+    mActiveColumnOrder.clear();
     for (int64_t column: columns) {
-        if (mActiveColumns.find(column) == mActiveColumns.end())
-            mBlockUpdateScheduler.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
+        if (!mActiveColumns.insert(column).second)
+            continue;
+        mActiveColumnOrder.push_back(column);
+        // updates due while inactive were parked: resume them
+        if (previous.find(column) == previous.end())
+            mBlockUpdates.activateColumn((int32_t) (column >> 32), (int32_t) (column & 0xffffffff));
     }
-
-    mActiveColumns.swap(next);
+    // a view source walks its bounds in rows of x when it does not shuffle
+    std::sort(mActiveColumnOrder.begin(), mActiveColumnOrder.end(), [](int64_t left, int64_t right) {
+        const int32_t leftZ = (int32_t) (left & 0xffffffff);
+        const int32_t rightZ = (int32_t) (right & 0xffffffff);
+        if (leftZ != rightZ)
+            return leftZ < rightZ;
+        return (int32_t) (left >> 32) < (int32_t) (right >> 32);
+    });
 }
 
 void Level::startWorkers(size_t threadCount) {
@@ -708,6 +1445,16 @@ void Level::startWorkers(size_t threadCount) {
         mChunkWorker.reset(new ChunkWorker(*mGenerator, mStorage));
 
     mChunkWorker->start(threadCount);
+}
+
+bool Level::isChunkRequested(int32_t chunkX, int32_t chunkZ) const {
+    return mPendingChunks.count(_packChunk(chunkX, chunkZ)) != 0;
+}
+
+bool Level::canRequestChunk() const {
+    return mChunkWorker != nullptr && mChunkWorker->isRunning() && _generationBacklog() < MAX_GENERATION_BACKLOG
+           && mCompletedChunks.size() < MAX_COMPLETED_BACKLOG
+           && mChunkWorker->getOutstandingGenerationCount() < ChunkWorker::MAX_OUTSTANDING_GENERATION;
 }
 
 bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
@@ -721,16 +1468,59 @@ bool Level::requestChunkAsync(int32_t chunkX, int32_t chunkZ) {
     if (mChunkWorker == nullptr || !mChunkWorker->isRunning())
         return false;
 
+    _finishPendingChangeWrite(false);
+    if (_generationBacklog() >= MAX_GENERATION_BACKLOG || mCompletedChunks.size() >= MAX_COMPLETED_BACKLOG
+        || mChunkWorker->getOutstandingGenerationCount() >= ChunkWorker::MAX_OUTSTANDING_GENERATION
+        || (mPendingChangeWrite.valid() && mPersistingChangeKeys.count(key) != 0))
+        return false;
+
     if (!mPendingChunks.insert(key).second)
         return false;
 
     if (resident != mChunks.end()) {
-        mChunkWorker->requestPopulate(std::unique_ptr<LevelChunk>(new LevelChunk(resident->second)));
+        if (!mChunkWorker->requestPopulate(std::unique_ptr<LevelChunk>(new LevelChunk(resident->second))))
+            mPendingChunks.erase(key);
         return false;
     }
 
-    mChunkWorker->requestLoad(chunkX, chunkZ);
+    // spilled blocks travel with the load, applied on the worker: no replay on the main thread
+    std::vector<GeneratedBlockChange> parked;
+    const auto pending = mPendingBlockChanges.find(key);
+    if (pending != mPendingBlockChanges.end())
+        parked.swap(pending->second);
+    const size_t parkedCount = parked.size();
+
+    if (!mChunkWorker->requestLoad(chunkX, chunkZ, parked)) {
+        mPendingChunks.erase(key);
+        if (parkedCount != 0)
+            pending->second.swap(parked);
+        return false;
+    }
+
+    if (parkedCount != 0) {
+        mPendingBlockChangeCount -= parkedCount;
+        mPendingBlockChanges.erase(pending);
+    }
     return false;
+}
+
+void Level::_storeGeneratedContent(ChunkLoadResult &result) {
+    if (mOwner == nullptr)
+        return;
+
+    if (!result.mBlockActors.empty() && mBlockActors.isChunkLoaded(result.mX, result.mZ))
+        mBlockActors.addLoaded(result.mBlockActors, mOwner->getCodecContext());
+
+    if (result.mEntities.empty() || !mStorage.isOpen())
+        return;
+
+    for (Tag &entity: result.mEntities)
+        entity.putLong("UniqueID", mOwner->allocateActorUniqueId());
+    mStorage.appendEntities(result.mX, result.mZ, result.mEntities);
+
+    const int64_t column = ((int64_t) result.mX << 32) | (uint32_t) result.mZ;
+    if (mOwner->getWorldOf(*this).getActorLoadedChunks(getDimensionType()).count(column) != 0)
+        mOwner->spawnStoredActors(*this, result.mEntities);
 }
 
 void Level::_dispatchChunkEvent(uint32_t type, int32_t chunkX, int32_t chunkZ, bool generated) {
@@ -751,17 +1541,15 @@ size_t Level::drainCompletedChunks() {
     if (mChunkWorker == nullptr)
         return 0;
 
-    if (mCompletedChunks.empty()) {
-        std::vector<ChunkLoadResult> results = mChunkWorker->drainCompleted();
-        for (ChunkLoadResult &result: results)
-            mCompletedChunks.push_back(std::move(result));
-    }
+    // drain every tick: credits return at once, generation runs while results wait for an insert slot
+    std::vector<ChunkLoadResult> results = mChunkWorker->drainCompleted();
+    for (ChunkLoadResult &result: results)
+        mCompletedChunks.push_back(std::move(result));
 
     size_t added = 0;
 
-    // Inserts are capped per tick to bound main-thread work; leftovers stay queued for the
-    // next tick. A populated result only replaces a resident chunk that is still
-    // unpopulated, so it never overwrites edits made since the copy was taken.
+    // capped per tick; a populated result only replaces a still-unpopulated resident chunk: never
+    // overwrites edits made since the copy
     while (!mCompletedChunks.empty() && added < MAX_CHUNK_INSERTS_PER_TICK) {
         ChunkLoadResult &result = mCompletedChunks.front();
         const int64_t key = _packChunk(result.mX, result.mZ);
@@ -772,21 +1560,28 @@ size_t Level::drainCompletedChunks() {
         const bool canReplace = !canInsert && result.mReplacesResident && !resident->second.isPopulated();
 
         if (result.mChunk != nullptr && (canInsert || canReplace)) {
+            const bool populated = result.mChunk->isPopulated() && (canReplace || result.mGenerated);
             if (canInsert) {
-                mChunks.emplace(key, std::move(*result.mChunk));
+                LevelChunk &inserted = mChunks.emplace(key, std::move(*result.mChunk)).first->second;
+                _loadPendingTicks(inserted);
                 _dispatchChunkEvent(FALCON_EVENT_CHUNK_LOAD, result.mX, result.mZ, result.mGenerated);
             } else {
                 resident->second = std::move(*result.mChunk);
+                _loadPendingTicks(resident->second);
                 mRepopulatedChunks.insert(key);
             }
-
-            _invalidateChunkNetwork(key);
-            mChunkNetworkCache[key] = std::move(result.mNetworkData);
 
             added++;
 
             _queueGeneratedChanges(std::move(result.mOverflowChanges));
             _refreshChunkShapes(result.mX, result.mZ);
+            _queueCompletedSaves(result.mX, result.mZ);
+            _storeGeneratedContent(result);
+            if (populated)
+                _dispatchChunkEvent(FALCON_EVENT_CHUNK_POPULATE, result.mX, result.mZ, true);
+        } else {
+            // overtaken by a synchronous getChunk(), or discarded at shutdown: keep the spilled blocks it carried
+            _restoreSpilledChanges(key, std::move(result.mSpilledChanges));
         }
 
         _replayPendingChanges(key);
@@ -796,33 +1591,12 @@ size_t Level::drainCompletedChunks() {
     return added;
 }
 
-void Level::_invalidateChunkNetwork(int64_t key) {
-    mChunkNetworkCache.erase(key);
-    for (auto &translated: mTranslatedChunkNetworkCache)
-        translated.second.erase(key);
-}
-
 std::string Level::getChunkData(int32_t chunkX, int32_t chunkZ, const BlockNetworkIdMap *blockIds) {
-    const int64_t key = _packChunk(chunkX, chunkZ);
-
-    if (blockIds != nullptr) {
-        std::unordered_map<int64_t, std::string> &translated = mTranslatedChunkNetworkCache[blockIds];
-        auto found = translated.find(key);
-        if (found != translated.end())
-            return found->second;
-
-        std::string data = getChunk(chunkX, chunkZ).encodeNetwork(blockIds);
-        translated[key] = data;
-        return data;
-    }
-
-
-    auto cached = mChunkNetworkCache.find(key);
-    if (cached != mChunkNetworkCache.end())
-        return cached->second;
-
-    std::string data = getChunk(chunkX, chunkZ).encodeNetwork();
-    mChunkNetworkCache[key] = data;
+    // encoding is cheap next to caching sections for every loaded chunk; most have a single viewer: nothing
+    // kept once sent
+    LevelChunk &chunk = getChunk(chunkX, chunkZ);
+    std::string data = chunk.encodeNetwork(blockIds);
+    chunk.invalidateNetworkCaches();
     return data;
 }
 
@@ -851,11 +1625,11 @@ const BlockState *Level::peekBlockPtr(int32_t x, int32_t y, int32_t z, int layer
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
         return nullptr;
 
-    auto it = mChunks.find(_packChunk(x >> 4, z >> 4));
-    if (it == mChunks.end())
+    const LevelChunk *chunk = peekChunkPtr(x >> 4, z >> 4);
+    if (chunk == nullptr)
         return nullptr;
 
-    return &it->second.getBlock(x & 15, y, z & 15, layer);
+    return &chunk->getBlock(x & 15, y, z & 15, layer);
 }
 
 bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
@@ -863,7 +1637,7 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
         return false;
 
     const BlockState &state = getChunk(x >> 4, z >> 4).getBlock(x & 15, y, z & 15);
-    if (state.mName == "minecraft:air")
+    if (state.mName == BlockNames::AIR)
         return false;
 
     const BlockData *data = BlockDataTable::find(state.mName.c_str());
@@ -873,8 +1647,83 @@ bool Level::isSolidAt(int32_t x, int32_t y, int32_t z) {
     return data->mSolid;
 }
 
-std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
+namespace {
+    // a liquid has no block class shaping it per actor or place: what the table says of the state holds everywhere
+    bool isShapelessLiquid(const BlockState *state) {
+        static std::unordered_map<const BlockState *, bool> known;
+        auto found = known.find(state);
+        if (found == known.end())
+            found = known.emplace(state, !BlockShape::hasCollision(*state)
+                                                 && BlockShape::getRelativeShape(*state).isEmpty())
+                            .first;
+        return found->second;
+    }
+}
+
+namespace {
+    const int32_t FREE_CHECK_CHUNKS = 12;
+
+    bool mayHaveShape(const BlockState &state) {
+        if (state.mName == BlockNames::AIR)
+            return false;
+        return !(LiquidView(state).isLiquid() && !BlockShape::hasCollision(state)
+                 && BlockShape::getRelativeShape(state).isEmpty());
+    }
+}
+
+void Level::beginSkyLightBatch() {
+    if (mSkyLightBatches++ == 0)
+        mBatchLight = true;
+}
+
+void Level::endSkyLightBatch() {
+    if (mSkyLightBatches == 0 || --mSkyLightBatches != 0)
+        return;
+
+    mBatchLight = false;
+    _flushLightBatch();
+}
+
+bool Level::isFreeOfColliders(const AxisAlignedBB &area, const Actor *actor) {
+    const int32_t minChunkX = (int32_t) std::floor(area.mMinX) >> 4;
+    const int32_t maxChunkX = (int32_t) std::floor(area.mMaxX) >> 4;
+    const int32_t minChunkZ = (int32_t) std::floor(area.mMinZ) >> 4;
+    const int32_t maxChunkZ = (int32_t) std::floor(area.mMaxZ) >> 4;
+    // a move across many chunks is cheaper to walk than to ask about section by section
+    if ((maxChunkX - minChunkX + 1) * (maxChunkZ - minChunkZ + 1) > FREE_CHECK_CHUNKS)
+        return false;
+
+    const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
+    const int32_t maxY = std::min((int32_t) std::floor(area.mMaxY), LevelChunk::MAX_Y);
+    if (minY <= maxY) {
+        for (int32_t chunkX = minChunkX; chunkX <= maxChunkX; ++chunkX) {
+            for (int32_t chunkZ = minChunkZ; chunkZ <= maxChunkZ; ++chunkZ) {
+                const LevelChunk *chunk = peekChunkPtr(chunkX, chunkZ);
+                if (chunk == nullptr)
+                    continue;
+                for (int section = LevelChunk::subChunkIndexFor(minY); section <= LevelChunk::subChunkIndexFor(maxY);
+                     ++section) {
+                    if (chunk->getSubChunk(section).paletteMatches(SubChunk::PaletteQuery::Shaped, mayHaveShape))
+                        return false;
+                }
+            }
+        }
+    }
+
+    bool free = true;
+    if (mOwner != nullptr) {
+        mOwner->forEachCollidableActor([&](ServerActor &other) {
+            if (&other != actor && other.isIn(*this))
+                free = false;
+        });
+    }
+    return free;
+}
+
+std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area, const Actor *actor) {
     std::vector<AxisAlignedBB> boxes;
+    const BlockState *passable = nullptr;
+    const BlockShape::Neighbours neighbours = [this](int32_t x, int32_t y, int32_t z) { return peekBlockPtr(x, y, z); };
     const int32_t minX = (int32_t) std::floor(area.mMinX);
     const int32_t minY = std::max((int32_t) std::floor(area.mMinY) - 1, LevelChunk::MIN_Y);
     const int32_t minZ = (int32_t) std::floor(area.mMinZ);
@@ -882,21 +1731,72 @@ std::vector<AxisAlignedBB> Level::getCollisionBoxes(const AxisAlignedBB &area) {
     const int32_t maxY = std::min((int32_t) std::floor(area.mMaxY), LevelChunk::MAX_Y);
     const int32_t maxZ = (int32_t) std::floor(area.mMaxZ);
 
+    static const BlockState *const air = SubChunk::intern(BlockState());
+    // a long move crosses few chunks: each is looked up once, not once a block
+    const LevelChunk *chunk = nullptr;
+    int32_t chunkX = 0;
+    int32_t chunkZ = 0;
+    bool haveChunk = false;
     for (int32_t x = minX; x <= maxX; ++x) {
         for (int32_t z = minZ; z <= maxZ; ++z) {
+            if (!haveChunk || chunkX != (x >> 4) || chunkZ != (z >> 4)) {
+                chunkX = x >> 4;
+                chunkZ = z >> 4;
+                chunk = peekChunkPtr(chunkX, chunkZ);
+                haveChunk = true;
+            }
+            if (chunk == nullptr)
+                continue;
+
             for (int32_t y = minY; y <= maxY; ++y) {
-                const BlockState *state = peekBlockPtr(x, y, z);
-                if (state == nullptr || !BlockShape::hasCollision(*state))
+                // a long move through the sky or the sea: sections holding nothing with a shape are stepped over
+                if (((y - LevelChunk::MIN_Y) & 15) == 0 || y == minY) {
+                    while (y <= maxY
+                           && !chunk->getSubChunk(LevelChunk::subChunkIndexFor(y))
+                                       .paletteMatches(SubChunk::PaletteQuery::Shaped, mayHaveShape))
+                        y = (y | 15) + 1;
+                    if (y > maxY)
+                        break;
+                }
+
+                const BlockState *state = &chunk->getBlock(x & 15, y, z & 15);
+                if (state == air || state == passable || state->mName == BlockNames::AIR)
                     continue;
 
-                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
-                if (shape.intersectsWith(area))
-                    boxes.push_back(shape);
+                // a move through water crosses the same shapeless state block after block: asked once
+                if (LiquidView(*state).isLiquid() && isShapelessLiquid(state)) {
+                    passable = state;
+                    continue;
+                }
+
+                const size_t first = boxes.size();
+                BlockShape::appendShapesAt(*state, x, y, z, actor, neighbours, boxes);
+                // only the boxes the area touches
+                boxes.erase(std::remove_if(boxes.begin() + (std::ptrdiff_t) first, boxes.end(),
+                                           [&area](const AxisAlignedBB &box) { return !box.intersectsWith(area); }),
+                            boxes.end());
             }
         }
     }
 
+    appendCollidableActorBoxes(area, actor, boxes);
     return boxes;
+}
+
+void Level::appendCollidableActorBoxes(const AxisAlignedBB &area, const Actor *actor,
+                                       std::vector<AxisAlignedBB> &out) {
+    // a mob with minecraft:is_collidable carries actor flag 121: others stand on it like a block
+    if (mOwner != nullptr) {
+        mOwner->forEachCollidableActor([&](ServerActor &other) {
+            if (&other == actor || !other.isIn(*this) || !other.getFlags().get(ActorFlag::Collidable))
+                return;
+            if (actor != nullptr && actor->getVehicleId() == other.getUniqueId())
+                return;
+            const AxisAlignedBB shape = ActorPushSystem::boundingBoxOf(other);
+            if (shape.intersectsWith(area))
+                out.push_back(shape);
+        });
+    }
 }
 
 void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &state) {
@@ -907,14 +1807,42 @@ void Level::setBlockState(int32_t x, int32_t y, int32_t z, const BlockState &sta
     if (chunk.getBlock(x & 15, y, z & 15) == state)
         return;
 
+    // interned: still the old block once the chunk holds the new one
+    const BlockState &previous = chunk.getBlock(x & 15, y, z & 15);
     chunk.setBlock(x & 15, y, z & 15, state);
-    LightSystem::onBlockChanged(*this, x, y, z);
-    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
+    if (previous.mName != state.mName) {
+        mBlockActors.onBlockReplaced(Vector3i(x, y, z));
+        removeForeignBlockActor(Vector3i(x, y, z), state);
+    }
+    if (mOwner != nullptr && CustomContentRegistry::getInstance().hasNeighborListeners())
+        _recordNeighborChange(x, y, z, previous, state);
+    if (mBatchLight) {
+        mBatchedLightColumns.insert(((int64_t) x << 32) | (uint32_t) z);
+        addBlockLightUpdate(x, y, z);
+    } else {
+        LightSystem::onBlockChanged(*this, x, y, z);
+    }
+    if (mBlockWatcher)
+        mBlockWatcher(x, y, z);
 
-    if (chunk.getBlock(x & 15, y, z & 15, 1).mName != "minecraft:air")
-        mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
+    mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), 0, previous);
+    if (mOwner != nullptr)
+        RedstoneSystem::onBlockChanged(*this, Vector3i(x, y, z));
+}
 
-    mLiquidPhysics.onBlockChanged(x, y, z);
+void Level::removeForeignBlockActor(const Vector3i &position, const BlockState &state) {
+    BlockActor *actor = mBlockActors.find(position);
+    if (actor == nullptr)
+        return;
+    const Block *block = VanillaBlocks::fromState(state);
+    const char *carried = block == nullptr ? nullptr : block->getBlockActorId();
+    if (carried != nullptr && std::strcmp(carried, actor->getBlockActorId()) == 0)
+        return;
+    // pack blocks share the data-driven actor
+    if (dynamic_cast<DataDrivenBlockActor *>(actor) != nullptr
+        && CustomContentRegistry::getInstance().isCustomBlock(state.mName))
+        return;
+    mBlockActors.remove(position);
 }
 
 BlockState Level::getBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer) {
@@ -937,10 +1865,11 @@ void Level::setBlockStateAtLayer(int32_t x, int32_t y, int32_t z, int layer, con
     if (chunk.getBlock(x & 15, y, z & 15, layer) == state)
         return;
 
+    const BlockState &previous = chunk.getBlock(x & 15, y, z & 15, layer);
     chunk.setBlock(x & 15, y, z & 15, layer, state);
-    _invalidateChunkNetwork(_packChunk(x >> 4, z >> 4));
-    mLiquidPhysics.normalizeWaterlogged(Vector3i(x, y, z));
-    mLiquidPhysics.onBlockChanged(x, y, z);
+    mLiquidPhysics.onBlockChanged(Vector3i(x, y, z), layer, previous);
+    if (mBlockWatcher)
+        mBlockWatcher(x, y, z);
 }
 
 void Level::setBlock(int32_t x, int32_t y, int32_t z, int32_t blockHash) {
@@ -967,17 +1896,24 @@ void Level::scheduleFluidTick(const Vector3i &position, int64_t delay) {
 void Level::tick() {
     updateBlockLight();
 
-    mBlockUpdateScheduler.tick(
-            [this](const Vector3i &position) {
-                mLiquidPhysics.onScheduledUpdate(position);
-            },
-            [this](int32_t chunkX, int32_t chunkZ) {
-                return isColumnActive(chunkX, chunkZ);
-            });
+    mBatchLight = true;
+    mLiquidPhysics.tick(++mLiquidTick, mActiveColumnOrder);
+    mBatchLight = false;
+    _flushLightBatch();
+}
+
+void Level::_flushLightBatch() {
+    for (const int64_t column: mBatchedLightColumns) {
+        const int32_t x = (int32_t) (column >> 32);
+        const int32_t z = (int32_t) (column & 0xffffffff);
+        if (LevelChunk *chunk = peekChunkPtr(x >> 4, z >> 4))
+            LightSystem::relightColumn(*chunk, x & 15, z & 15);
+    }
+    mBatchedLightColumns.clear();
 }
 
 void Level::scheduleBlockUpdate(const Vector3i &position, int64_t delay) {
-    mBlockUpdateScheduler.schedule(position, delay);
+    scheduleUpdate(position, delay);
 }
 
 bool Level::canRainAt(int32_t x, int32_t z) {
@@ -999,6 +1935,17 @@ void Level::initializeWeather() {
         mRainTime = clearDuration(generator) + 12000;
     if (mThunderTime <= 0)
         mThunderTime = clearDuration(generator) + 12000;
+    mRainLevel = mRaining ? 1.0f : 0.0f;
+    mLightningLevel = mThundering ? 1.0f : 0.0f;
+}
+
+void Level::tickWeatherLevels() {
+    const auto approach = [](float level, float target) {
+        const float next = target >= level ? std::min(level + 0.01f, target) : std::max(level - 0.01f, target);
+        return std::clamp(next, 0.0f, 1.0f);
+    };
+    mLightningLevel = approach(mLightningLevel, mThundering ? 1.0f : 0.0f);
+    mRainLevel = approach(mRainLevel, mRaining ? 1.0f : 0.0f);
 }
 
 void Level::saveWeather() {
@@ -1033,15 +1980,15 @@ std::vector<Level::ChunkPosition> Level::getChunksAround(int32_t centerChunkX, i
         }
     }
 
-    std::sort(chunks.begin(), chunks.end(), [centerChunkX, centerChunkZ](const ChunkPosition &left,
-                                                                        const ChunkPosition &right) {
-        const int64_t leftX = left.mX - centerChunkX;
-        const int64_t leftZ = left.mZ - centerChunkZ;
-        const int64_t rightX = right.mX - centerChunkX;
-        const int64_t rightZ = right.mZ - centerChunkZ;
+    std::sort(chunks.begin(), chunks.end(),
+              [centerChunkX, centerChunkZ](const ChunkPosition &left, const ChunkPosition &right) {
+                  const int64_t leftX = left.mX - centerChunkX;
+                  const int64_t leftZ = left.mZ - centerChunkZ;
+                  const int64_t rightX = right.mX - centerChunkX;
+                  const int64_t rightZ = right.mZ - centerChunkZ;
 
-        return leftX * leftX + leftZ * leftZ < rightX * rightX + rightZ * rightZ;
-    });
+                  return leftX * leftX + leftZ * leftZ < rightX * rightX + rightZ * rightZ;
+              });
 
     return chunks;
 }

@@ -33,12 +33,7 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    enum class Phase {
-        Approach,
-        Charge,
-        Reposition,
-        Cooldown
-    };
+    enum class Phase { Approach, Charge, Reposition, Cooldown };
 
     static const SpearItem *_heldSpear(const MobActor &mob);
 

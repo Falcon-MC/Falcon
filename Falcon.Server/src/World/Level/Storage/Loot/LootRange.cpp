@@ -1,4 +1,5 @@
 #include "World/Level/Storage/Loot/LootRange.h"
+#include "World/Level/LevelGen/Random/GameRandom.h"
 
 #include <cmath>
 
@@ -35,7 +36,7 @@ int32_t LootRange::rollInt(std::mt19937 &random) const {
     if (maximum <= minimum)
         return minimum;
 
-    return std::uniform_int_distribution<int32_t>(minimum, maximum)(random);
+    return minimum + GameRandom::nextInt(random, maximum - minimum + 1);
 }
 
 float LootRange::rollFloat(std::mt19937 &random) const {

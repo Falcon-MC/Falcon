@@ -10,7 +10,9 @@
 #include <string>
 #include <unordered_set>
 
+class Actor;
 class Level;
+class LevelChunk;
 class ServerNetworkHandler;
 
 namespace RedstoneFace {
@@ -40,15 +42,14 @@ namespace RedstoneFace {
     int fromName(const std::string &name);
 }
 
-/**
- * Redstone power queries (weak and strong power per face) and the reactions of redstone
- * components to block updates. Unloaded chunks are treated as unpowered air.
- */
+// unloaded chunks read as unpowered air
 class RedstoneSystem {
 public:
     static constexpr int MAX_SIGNAL = 15;
 
     static int64_t packPosition(const Vector3i &position);
+
+    static Vector3i unpackPosition(int64_t packed);
 
     static bool isNormalBlock(const BlockState &state);
 
@@ -78,8 +79,14 @@ public:
     static void updateAllAroundRedstone(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                         int ignoredFace = RedstoneFace::NONE);
 
-    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                            bool observer);
+    static void updateComparatorOutputLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+
+    // the game's observer: a change in the cell an observer watches schedules its pulse, unless it is already
+    // lit or waiting to be
+    static void onBlockChanged(Level &level, const Vector3i &position);
+
+    // an observer a piston has just set down lights at once
+    static void onObserverMoved(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
 
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, BlockUpdateType type);
@@ -89,6 +96,14 @@ public:
 
     static void onRedstoneBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &previous);
+
+    static void onChunkLoaded(ServerNetworkHandler &owner, Level &level, const LevelChunk &chunk);
+
+    static void onChunkUnloaded(Level &level, int32_t chunkX, int32_t chunkZ);
+
+    static void forgetLevel(Level &level);
+
+    static void moveLevelState(Level &from, Level &to);
 
     static void onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
@@ -111,6 +126,7 @@ public:
     static void tick(ServerNetworkHandler &owner, Level &level);
 
 private:
-    static void _touchPressurePlate(ServerNetworkHandler &owner, Level &level, const Vector3f &feet,
+    // the actor standing on it is the push event's source
+    static void _touchPressurePlate(ServerNetworkHandler &owner, Level &level, Actor &actor,
                                     std::unordered_set<int64_t> &visited);
 };

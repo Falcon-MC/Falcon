@@ -6,8 +6,7 @@
 
 StompAttackGoal::StompAttackGoal(float speed, float maxRange, int32_t coolDown, float stompRangeSquared,
                                  float noDamageRangeSquared)
-        : MeleeAttackGoal(speed, maxRange, coolDown, stompRangeSquared), mNoDamageRangeSquared(noDamageRangeSquared) {
-}
+        : MeleeAttackGoal(speed, maxRange, coolDown, stompRangeSquared), mNoDamageRangeSquared(noDamageRangeSquared) {}
 
 void StompAttackGoal::_tryAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
     if (mTicksSinceAttack <= mCoolDown)

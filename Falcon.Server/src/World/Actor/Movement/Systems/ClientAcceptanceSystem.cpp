@@ -19,11 +19,11 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     if (context.abilities.spectator || travel.isStuck)
         return;
 
-    // BDS ClientAcceptanceSystem (0x141038FF0) selects the solid-shape thresholds
-    // when the move's collision list contains block shapes. Defaults: 0x1402C1190.
-    const AxisAlignedBB sweep = boxAt(state.start, context.pose.mHeight).addCoord(
-            travel.moved.mRequested.x, travel.moved.mRequested.y, travel.moved.mRequested.z);
-    const bool solid = !context.level.getCollisionBoxes(sweep).empty();
+    // ClientAcceptanceSystem picks the solid-shape thresholds when the collision list holds block
+    // shapes; the floor is in every grounded sweep: counting it would refill 0.1 per tick and
+    // accept 0.1 extra blocks per tick of speed; only a wall or ceiling hit selects them
+    const bool solid = travel.moved.mCollidedX || travel.moved.mCollidedZ
+                       || (travel.moved.mCollidedY && travel.moved.mRequested.y > 0.0f);
     const float refill = solid ? 0.1f : 0.035f;
     const float maximum = solid ? 1.0f : 0.5f;
     const float verticalLimit = solid ? 1.0f : 0.43f;
@@ -34,7 +34,7 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     const Vector3f error(context.prediction.feetPosition->x - state.simulated.x,
                          context.prediction.feetPosition->y - state.simulated.y,
                          context.prediction.feetPosition->z - state.simulated.z);
-    // BDS spends the shared Manhattan-distance budget in Y, X, Z order, accepting only upward Y.
+    // shared Manhattan budget spent in Y, X, Z order; only upward Y accepted
     if (error.y > minimum && error.y < std::min(verticalLimit, remaining)) {
         accepted.y = error.y;
         remaining -= error.y;
@@ -49,14 +49,15 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
     }
     const float spent = std::fabs(accepted.x) + std::fabs(accepted.y) + std::fabs(accepted.z);
     if (spent > minimum) {
-        // 0x141038C40 collision-tests acceptance separately; it does not replace physical velocity.
-        const auto moved = ActorCollisionSystem::move(context.level, travel.box, accepted, 0.0f, state.onGround);
+        // the game collision-tests acceptance separately; physical velocity untouched
+        const auto moved = ActorCollisionSystem::move(context.level, travel.box, accepted, 0.0f, state.onGround,
+                                                      &context.player);
         travel.accepted = moved.mMoved;
         travel.moved.mMoved.x += moved.mMoved.x;
         travel.moved.mMoved.y += moved.mMoved.y;
         travel.moved.mMoved.z += moved.mMoved.z;
-        state.simulated = Vector3f(travel.box.mMinX + PLAYER_WIDTH * 0.5f, travel.box.mMinY,
-                                   travel.box.mMinZ + PLAYER_WIDTH * 0.5f);
+        state.simulated = Vector3f(travel.box.mMinX + context.pose.mWidth * 0.5f, travel.box.mMinY,
+                                   travel.box.mMinZ + context.pose.mWidth * 0.5f);
         const bool horizontalCollision = input(context.input.getPacket(), PlayerAuthInputData::HorizontalCollision);
         const bool verticalCollision = input(context.input.getPacket(), PlayerAuthInputData::VerticalCollision);
         if (!horizontalCollision) {
@@ -65,7 +66,7 @@ void ClientAcceptanceSystem::tick(PlayerMovementContext &context) {
         }
         if (!verticalCollision)
             travel.moved.mRequested.y += accepted.y;
-        // BDS 0x141038C40 snaps sub-0.0001 collision residuals before finalizing the move.
+        // the game snaps sub-0.0001 collision residuals before finalizing
         const auto snap = [](float requested, float &actual) {
             if (std::fabs(requested - actual) <= 0.0001f)
                 actual = requested;

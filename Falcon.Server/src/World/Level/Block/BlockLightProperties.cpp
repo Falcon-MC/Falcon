@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockIdentifier.h"
+#include "World/Level/Block/VanillaBlocks.h"
 
 namespace {
     const int32_t FILTER_SHIFT = 8;
@@ -14,21 +15,25 @@ namespace {
                || identifier == "minecraft:azalea_leaves_flowered";
     }
 
-    int lightFilterOverride(const std::string &identifier) {
-        if (BlockIdentifier::equalsAny(identifier, {"minecraft:water", "minecraft:flowing_water", "minecraft:lava",
-                                                    "minecraft:flowing_lava", "minecraft:ice",
-                                                    "minecraft:frosted_ice"}))
+    int lightFilterOverride(const BlockState &state) {
+        const std::string &identifier = state.mName;
+        if (BlockIdentifier::equalsAny(identifier,
+                                       {"minecraft:water", "minecraft:flowing_water", "minecraft:lava",
+                                        "minecraft:flowing_lava", "minecraft:ice", "minecraft:frosted_ice"}))
             return 2;
 
         if (identifier == "minecraft:packed_ice")
             return FULL_FILTER;
 
-        if (BlockIdentifier::equalsAny(identifier, {"minecraft:slime", "minecraft:honey_block",
-                                                    "minecraft:barrier"}))
+        if (BlockIdentifier::equalsAny(identifier, {"minecraft:slime", "minecraft:honey_block", "minecraft:barrier"}))
             return 1;
 
+        // lava stops more light than the other contents
         if (identifier == "minecraft:cauldron")
-            return 3;
+            return state.mStates.getString("cauldron_liquid", "water") == "lava"
+                                   && state.mStates.getInt("fill_level", 0) > 0
+                           ? 14
+                           : 3;
 
         if (identifier == "minecraft:daylight_detector" || identifier == "minecraft:daylight_detector_inverted")
             return 0;
@@ -41,11 +46,15 @@ namespace {
         if (data == nullptr)
             return TRANSPARENT_BIT;
 
-        int filter = lightFilterOverride(state.mName);
+        int filter = lightFilterOverride(state);
         if (filter < 0)
             filter = data->mSolid && !data->mTransparent ? FULL_FILTER : 1;
 
-        int32_t packed = (int32_t) (data->mLightEmission & 0xFF) | ((filter & 0xFF) << FILTER_SHIFT);
+        int emission = data->mLightEmission;
+        if (const Block *block = VanillaBlocks::fromIdentifier(state.mName))
+            emission = block->getLightEmission(state, emission);
+
+        int32_t packed = (int32_t) (emission & 0xFF) | ((filter & 0xFF) << FILTER_SHIFT);
         if (diffusesSkyLight(state.mName))
             packed |= DIFFUSES_BIT;
 

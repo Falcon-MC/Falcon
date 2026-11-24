@@ -15,6 +15,5 @@ public:
     void populate(ChunkGenerateContext &context, IRandom &random) override;
 
 private:
-    static void _populateFlower(int32_t flower, BlockManager &object, int32_t x, int32_t y, int32_t z,
-                                IRandom &random);
+    static void _populateFlower(int32_t flower, BlockManager &object, int32_t x, int32_t y, int32_t z, IRandom &random);
 };

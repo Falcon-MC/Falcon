@@ -26,7 +26,6 @@ enum class ContainerBlockKind {
     Lectern,
     ChiseledBookshelf,
     DecoratedPot,
-    Jukebox,
     Shelf
 };
 
@@ -44,22 +43,42 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    const char *getBlockActorId() const override;
+
     static const ContainerBlockDefinition *findDefinition(const std::string &identifier);
 
     static bool isShulkerBoxItem(const ItemStack &item);
 
     static std::unique_ptr<BlockActor> createBlockActor(ContainerBlockKind kind);
 
+    bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                      const BlockState &state, int face, const Vector3f &clickPosition) const override;
+
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    bool hearsActorsInside() const override;
+
+    void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                       const BlockState &state) const override;
+
     BlockState applyPlacementOrientation(const BlockState &state, const BlockPlacementContext &context) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
+
+    void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
 
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;
 
     void writeDropContents(Level &level, const Vector3i &position, ItemStack &item) const override;
+
+    uint8_t getLiquidBlockedFaces(const BlockState &state) const override;
+
+    int getComparatorSignal(Level &level, const Vector3i &position, const BlockState &state) const override;
+
+    void onRedstonePower(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
 };

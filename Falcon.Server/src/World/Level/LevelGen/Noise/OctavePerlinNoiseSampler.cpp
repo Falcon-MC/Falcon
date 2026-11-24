@@ -102,16 +102,11 @@ double OctavePerlinNoiseSampler::sample(double x, double y, double z, double yAm
         const PerlinNoiseSampler *sampler = mOctaveSamplers[(size_t) index].get();
 
         if (sampler != nullptr) {
-            const double sampleY = useDefaultY
-                                   ? -sampler->getOriginY()
-                                   : maintainPrecision(y * persistence);
-            const double sampled = sampler->sample(
-                    maintainPrecision(x * persistence),
-                    sampleY,
-                    maintainPrecision(z * persistence),
-                    yAmplification * persistence,
-                    minY * persistence
-            ) * lacunarity;
+            const double sampleY = useDefaultY ? -sampler->getOriginY() : maintainPrecision(y * persistence);
+            const double sampled = sampler->sample(maintainPrecision(x * persistence), sampleY,
+                                                   maintainPrecision(z * persistence), yAmplification * persistence,
+                                                   minY * persistence)
+                                   * lacunarity;
             noise += 1.0 * sampled;
         }
 

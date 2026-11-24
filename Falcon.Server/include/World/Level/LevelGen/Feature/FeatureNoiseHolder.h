@@ -12,28 +12,27 @@ public:
 
     static const FeatureNoiseHolder *get();
 
-    const SimplexF &getRandomClayWithDripleavesSnapToFloor() const { return *mRandomClayWithDripleavesSnapToFloor; }
+    const SimplexF &getMossSnapToCeiling() const {
+        return *mMossSnapToCeiling;
+    }
 
-    const SimplexF &getDripstoneCluster() const { return *mDripstoneCluster; }
+    const SimplexF &getSculkPatch() const {
+        return *mSculkPatch;
+    }
 
-    const SimplexF &getMossPatchSnapToFloor() const { return *mMossPatchSnapToFloor; }
+    const SimplexNoise &getKelp() const {
+        return *mKelp;
+    }
 
-    const SimplexF &getMossSnapToCeiling() const { return *mMossSnapToCeiling; }
-
-    const SimplexF &getSculkPatch() const { return *mSculkPatch; }
-
-    const SimplexNoise &getKelp() const { return *mKelp; }
-
-    const SimplexNoise &getSulfurCaveGradient() const { return *mSulfurCaveGradient; }
+    const SimplexNoise &getIceCaveGradient() const {
+        return *mIceCaveGradient;
+    }
 
 private:
     explicit FeatureNoiseHolder(IRandom &random);
 
-    std::shared_ptr<SimplexF> mRandomClayWithDripleavesSnapToFloor;
-    std::shared_ptr<SimplexF> mDripstoneCluster;
-    std::shared_ptr<SimplexF> mMossPatchSnapToFloor;
     std::shared_ptr<SimplexF> mMossSnapToCeiling;
     std::shared_ptr<SimplexF> mSculkPatch;
     std::shared_ptr<SimplexNoise> mKelp;
-    std::shared_ptr<SimplexNoise> mSulfurCaveGradient;
+    std::shared_ptr<SimplexNoise> mIceCaveGradient;
 };

@@ -23,11 +23,8 @@ bool EndPortalBlock::canSurvive(Level &level, const Vector3i &position, const Bl
     (void) state;
 
     const Vector3i sides[4] = {
-            Vector3i(position.x - 1, position.y, position.z),
-            Vector3i(position.x + 1, position.y, position.z),
-            Vector3i(position.x, position.y, position.z - 1),
-            Vector3i(position.x, position.y, position.z + 1)
-    };
+            Vector3i(position.x - 1, position.y, position.z), Vector3i(position.x + 1, position.y, position.z),
+            Vector3i(position.x, position.y, position.z - 1), Vector3i(position.x, position.y, position.z + 1)};
 
     for (const Vector3i &side: sides) {
         const std::string identifier = identifierAt(level, side.x, side.y, side.z);
@@ -66,10 +63,9 @@ void EndPortalBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, co
         spawnObsidianPlatform(end, Vector3i(END_PLATFORM_X, END_PLATFORM_Y, END_PLATFORM_Z), &owner);
 
         actor.setPortalCooldown(PortalBlock::PORTAL_COOLDOWN_TICKS);
-        owner.changeActorLevel(actor, end,
-                               Vector3f((float) END_PLATFORM_X + 0.5f,
-                                        (float) END_PLATFORM_Y + 1.0f,
-                                        (float) END_PLATFORM_Z + 0.5f));
+        owner.changeActorLevel(
+                actor, end,
+                Vector3f((float) END_PLATFORM_X + 0.5f, (float) END_PLATFORM_Y + 1.0f, (float) END_PLATFORM_Z + 0.5f));
         return;
     }
 

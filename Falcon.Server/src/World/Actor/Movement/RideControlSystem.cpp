@@ -106,7 +106,7 @@ namespace {
     }
 
     float ridingCharge(int32_t ticks) {
-        // BDS VehicleJumpInput (0x140EF0920): holding past the peak decays toward 0.8.
+        // VehicleJumpInput: held past the peak, decays toward 0.8
         return ticks < 10 ? (float) ticks * 0.1f : 0.8f + 0.2f / (float) (ticks - 9);
     }
 
@@ -297,9 +297,7 @@ void RideControlSystem::receiveInput(ServerNetworkHandler &owner, ServerPlayer &
     if (mob == nullptr || !isControlledBy(*mob, player))
         return;
 
-    const auto has = [&packet](PlayerAuthInputData flag) {
-        return packet.hasInputFlag((int32_t) flag);
-    };
+    const auto has = [&packet](PlayerAuthInputData flag) { return packet.hasInputFlag((int32_t) flag); };
 
     RiderInput &input = mob->getRideControl().mInput;
     input.mStrafe = packet.mMotionX;
@@ -309,7 +307,8 @@ void RideControlSystem::receiveInput(ServerNetworkHandler &owner, ServerPlayer &
     boundMovement(input.mStrafe, input.mForward);
     boundMovement(input.mRawStrafe, input.mRawForward);
     input.mPitch = std::isfinite(packet.mInteractRotationX)
-                       ? std::max(-90.0f, std::min(90.0f, packet.mInteractRotationX)) : 0.0f;
+                           ? std::max(-90.0f, std::min(90.0f, packet.mInteractRotationX))
+                           : 0.0f;
     input.mYaw = std::isfinite(packet.mInteractRotationY) ? wrapDegrees(packet.mInteractRotationY) : 0.0f;
     input.mJumpHeld = has(PlayerAuthInputData::WantUp) || has(PlayerAuthInputData::JumpDown)
                       || has(PlayerAuthInputData::Jumping) || has(PlayerAuthInputData::StartJumping);
@@ -333,7 +332,7 @@ bool RideControlSystem::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (type == RideControlType::Item && !_holdsControlItem(mob, *rider))
         return false;
 
-    // Control requests are consumed once; missing requests must not charge or release a jump.
+    // control requests consumed once; a missing one neither charges nor releases a jump
     RiderInput &input = mob.getRideControl().mInput;
     if (!input.mReceived)
         return true;
@@ -465,8 +464,7 @@ bool RideControlSystem::_handleJumpOrDash(ServerNetworkHandler &owner, MobActor 
 bool RideControlSystem::_tryDash(ServerNetworkHandler &owner, MobActor &mob, RideControlType type, float charge) {
     const json::Value *dash = mob.getComponent(DASH_ACTION);
     RideControlState &state = mob.getRideControl();
-    if (dash == nullptr || state.mDashCooldownEndTick != -1
-        || (type == RideControlType::Ground && !mob.isOnGround()))
+    if (dash == nullptr || state.mDashCooldownEndTick != -1 || (type == RideControlType::Ground && !mob.isOnGround()))
         return false;
 
     Level &level = owner.getLevelFor(mob);
@@ -484,15 +482,14 @@ bool RideControlSystem::_tryDash(ServerNetworkHandler &owner, MobActor &mob, Rid
     const float yaw = (entityDirection ? mob.getRotation().y : state.mInput.mYaw) * DEGREES_TO_RADIANS;
     const float pitch = (direction == DASH_DIRECTION_PASSENGER ? state.mInput.mPitch : 0.0f) * DEGREES_TO_RADIANS;
 
-    // BDS 1.26.10 DashActionSystem (0x140B50800) scales the impulse linearly.
+    // DashActionSystem scales the impulse linearly
     const float horizontalMomentum = numberIn(dash, "horizontal_momentum", DASH_DEFAULT_HORIZONTAL);
     const float verticalMomentum = numberIn(dash, "vertical_momentum", DASH_DEFAULT_VERTICAL);
-    const float horizontal = charge * horizontalMomentum * mob.getMovementSpeed()
-                             * mob.getMovementSpeedMultiplier();
+    const float horizontal = charge * horizontalMomentum * mob.getMovementSpeed() * mob.getMovementSpeedMultiplier();
     const MobEffectInstance *jumpBoost = mob.getEffect(MobEffectId::JumpBoost);
     const float boost = jumpBoost == nullptr ? 0.0f : (float) jumpBoost->level() * 0.1f;
     const float verticalImpulse = charge * verticalMomentum * (1.0f + boost) * jumpFactor(level, mob);
-    // Passenger direction rotates both the forward and upward parts of the impulse.
+    // passenger direction rotates both the forward and upward parts
     const float vertical = -std::sin(pitch) * horizontal + std::cos(pitch) * verticalImpulse;
     const float x = -std::sin(yaw) * (std::cos(pitch) * horizontal + std::sin(pitch) * verticalImpulse);
     const float z = std::cos(yaw) * (std::cos(pitch) * horizontal + std::sin(pitch) * verticalImpulse);
@@ -539,7 +536,8 @@ void RideControlSystem::_tickGround(ServerNetworkHandler &owner, MobActor &mob) 
     rotation.z = input.mYaw;
     mob.setRotation(rotation);
 
-    const bool jumpGrace = state.mJumpTick != -1 && owner.getCurrentTick() - state.mJumpTick <= JUMP_CONTROL_GRACE_TICKS;
+    const bool jumpGrace = state.mJumpTick != -1
+                           && owner.getCurrentTick() - state.mJumpTick <= JUMP_CONTROL_GRACE_TICKS;
     if (!mob.isOnGround() && !jumpGrace)
         return;
 
@@ -665,7 +663,7 @@ void RideControlSystem::_applySlipperyImpulse(MobActor &mob, float wishX, float 
 
 void RideControlSystem::_applyAirRotation(MobActor &mob, float targetYaw) {
     Vector3f rotation = mob.getRotation();
-    // BDS VehicleAirControlledMoveSystem (0x140B71470) follows the latest target.
+    // VehicleAirControlledMoveSystem follows the latest target
     const float delta = wrapDegrees(targetYaw - rotation.y);
     const float factor = std::max((45.0f - std::min(std::fabs(delta), 45.0f)) / 90.0f, 0.18f);
     rotation.x = mob.getRideControl().mInput.mPitch * 0.5f;
@@ -695,10 +693,11 @@ void RideControlSystem::_tickAir(MobActor &mob) {
 
     const float yaw = mob.getRotation().y * DEGREES_TO_RADIANS;
     const float pitch = std::max(-MAX_PITCH, std::min(MAX_PITCH, input.mPitch)) * DEGREES_TO_RADIANS;
-    const float dx = (-std::sin(yaw) * std::cos(pitch) * forward + std::cos(yaw) * strafe) * speed * AIR_HORIZONTAL_TUNE;
+    const float dx = (-std::sin(yaw) * std::cos(pitch) * forward + std::cos(yaw) * strafe) * speed
+                     * AIR_HORIZONTAL_TUNE;
     const float dz = (std::cos(yaw) * std::cos(pitch) * forward + std::sin(yaw) * strafe) * speed * AIR_HORIZONTAL_TUNE;
     const float dy = input.mJumpHeld ? speed * AIR_VERTICAL_TUNE
-                                      : -std::sin(pitch) * forward * speed * AIR_VERTICAL_TUNE;
+                                     : -std::sin(pitch) * forward * speed * AIR_VERTICAL_TUNE;
     mob.setMotion(Vector3f(dx, dy, dz));
 }
 
@@ -718,7 +717,8 @@ void RideControlSystem::_tickWater(ServerNetworkHandler &owner, MobActor &mob) {
     int32_t topY = 0;
     const bool hasSurface = topWaterY(level, mob, topY);
     const float surfaceY = (float) topY + 1.0f;
-    const bool inWaterColumn = touchesWater(level, mob) || (hasSurface && position.y <= surfaceY + WATER_BREACH_EPSILON);
+    const bool inWaterColumn = touchesWater(level, mob)
+                               || (hasSurface && position.y <= surfaceY + WATER_BREACH_EPSILON);
 
     const json::Value *camera = mob.getComponent(FREE_CAMERA_CONTROLLED);
     float forward = input.mRawForward;
@@ -754,7 +754,8 @@ void RideControlSystem::_tickWater(ServerNetworkHandler &owner, MobActor &mob) {
 
     const float yaw = input.mYaw * DEGREES_TO_RADIANS;
     const float pitch = std::max(-MAX_PITCH, std::min(MAX_PITCH, input.mPitch)) * DEGREES_TO_RADIANS;
-    float desiredX = (-std::sin(yaw) * std::cos(pitch) * forward + std::cos(yaw) * strafe) * speed * AIR_HORIZONTAL_TUNE;
+    float desiredX = (-std::sin(yaw) * std::cos(pitch) * forward + std::cos(yaw) * strafe) * speed
+                     * AIR_HORIZONTAL_TUNE;
     float desiredZ = (std::cos(yaw) * std::cos(pitch) * forward + std::sin(yaw) * strafe) * speed * AIR_HORIZONTAL_TUNE;
     float desiredY = -std::sin(pitch) * forward * speed * AIR_VERTICAL_TUNE;
 
@@ -840,7 +841,7 @@ bool RideControlSystem::tryBoost(ServerNetworkHandler &owner, ServerPlayer &play
         state.mBoostTicks = (int32_t) std::lround(numberIn(boostable, "duration", DEFAULT_BOOST_SECONDS)
                                                   * (float) TICKS_PER_SECOND);
 
-        if (player.getGameType() == (int32_t) GameType::Creative)
+        if (player.isCreative())
             return true;
 
         ItemDurability::apply(&player, held, (int32_t) numberIn(entry.get(), "damage", 1.0f));

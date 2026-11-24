@@ -20,6 +20,17 @@ namespace {
     }
 }
 
+const char *FurnaceBlockActor::getBlockActorId() const {
+    switch (mKind) {
+        case FurnaceKind::BlastFurnace:
+            return BLAST_FURNACE_ID;
+        case FurnaceKind::Smoker:
+            return SMOKER_ID;
+        default:
+            return BLOCK_ACTOR_ID;
+    }
+}
+
 Tag FurnaceBlockActor::saveNbt() const {
     Tag data = mInventory.saveNbt();
     data.putInt(TAG_KIND, (int32_t) mKind);
@@ -31,7 +42,9 @@ Tag FurnaceBlockActor::saveNbt() const {
 }
 
 void FurnaceBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    mKind = (FurnaceKind) data.getInt(TAG_KIND);
+    // a save without the kind keeps the one its id gave
+    if (data.contains(TAG_KIND))
+        mKind = (FurnaceKind) data.getInt(TAG_KIND);
     mBurnTime = data.getShort(TAG_BURN_TIME);
     mMaxBurnTime = data.getShort(TAG_BURN_DURATION);
     mCookTime = data.getShort(TAG_COOK_TIME);

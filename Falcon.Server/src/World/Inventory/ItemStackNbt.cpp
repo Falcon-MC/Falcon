@@ -6,6 +6,7 @@
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Storage/Loot/LegacyItemMapper.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const char *TAG_SLOT = "Slot";
@@ -19,7 +20,7 @@ namespace {
     const char *TAG_CAN_PLACE = "CanPlaceOn";
     const char *TAG_CAN_BREAK = "CanDestroy";
 
-    const char *AIR_IDENTIFIER = "minecraft:air";
+    const char *AIR_IDENTIFIER = BlockNames::AIR;
 
     Tag stringList(const std::vector<std::string> &values) {
         Tag list = Tag::ofList(Tag::Type::String);
@@ -29,10 +30,8 @@ namespace {
         return list;
     }
 
-    /**
-     * Saved data can name an item the game has since renamed or split by meta. The current item is
-     * looked up first, and the saved one is kept when the upgrade leads nowhere the registry knows.
-     */
+    // saved data may name an item the game since renamed or split by meta: current item first, the saved one kept
+    // when the upgrade leads nowhere the registry knows
     std::shared_ptr<ItemDefinition> upgradeItem(const std::string &name, int32_t &damage,
                                                 const PacketCodecContext &context) {
         std::string upgraded = name;
@@ -94,8 +93,8 @@ Tag ItemStackNbt::write(const ItemStack &item) {
     }
 
     if (item.mBlockDefinition != nullptr) {
-        data.put(TAG_BLOCK, BlockState(item.mBlockDefinition->getIdentifier(),
-                                       item.mBlockDefinition->getState()).toNbt());
+        data.put(TAG_BLOCK,
+                 BlockState(item.mBlockDefinition->getIdentifier(), item.mBlockDefinition->getState()).toNbt());
     }
 
     if (!item.mCanPlace.empty()) {

@@ -5,6 +5,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
+class Actor;
 class Block;
 class Level;
 
@@ -19,14 +20,14 @@ namespace MovementPhysics {
 
     bool input(const PlayerAuthInputPacket &packet, PlayerAuthInputData flag);
 
-    bool activeState(bool previous, const PlayerAuthInputPacket &packet,
-                     PlayerAuthInputData start, PlayerAuthInputData stop);
+    bool activeState(bool previous, const PlayerAuthInputPacket &packet, PlayerAuthInputData start,
+                     PlayerAuthInputData stop);
 
     bool chunkLoaded(Level &level, const Vector3f &position);
 
-    bool collides(Level &level, const AxisAlignedBB &box);
+    bool collides(Level &level, const AxisAlignedBB &box, const Actor *actor = nullptr);
 
-    AxisAlignedBB boxAt(const Vector3f &feet, float height);
+    AxisAlignedBB boxAt(const Vector3f &feet, float height, float width = PLAYER_WIDTH);
 
     const Block *blockAt(Level &level, float x, float y, float z);
 

@@ -11,7 +11,7 @@
 #include <cstdlib>
 
 namespace {
-    const int32_t DIRECT_MOVE_COST = 10;
+    const int32_t DIRECT_MOVE_COST = NodeEvaluator::BLOCK_COST;
     const int32_t OBLIQUE_MOVE_COST = 14;
     const int32_t MAX_SMOOTH_LOOKAHEAD = 8;
     const float BLOCK_CENTER = 0.5f;
@@ -52,6 +52,11 @@ bool PathFinder::tryReserveSearch(int64_t tick) {
 
 bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
                           Path &path) {
+    return findPath(level, mob, mob.getSize(), target, options, path);
+}
+
+bool PathFinder::findPath(Level &level, const Actor &actor, const ActorSize &size, const Vector3f &target,
+                          const PathOptions &options, Path &path) {
     path.clear();
     mNodes.clear();
     mHeap.clear();
@@ -66,17 +71,15 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
         mStamp = 1;
     }
 
-    const Vector3f position = mob.getPosition();
-    const ActorSize size = mob.getSize();
+    const Vector3f position = actor.getPosition();
     const bool inWater = LiquidBlocksFetch::at(level, position).water;
-    mEvaluator.prepare(level, size.mWidth, size.mHeight, position, inWater, options);
+    mEvaluator.prepare(level, actor, size.mWidth, size.mHeight, position, inWater, options);
 
     mTargetX = (int32_t) std::floor(target.x);
     mTargetY = (int32_t) std::floor(target.y);
     mTargetZ = (int32_t) std::floor(target.z);
 
-    _offer((int32_t) std::floor(position.x), (int32_t) std::floor(position.y), (int32_t) std::floor(position.z), 0,
-           -1);
+    _offer((int32_t) std::floor(position.x), (int32_t) std::floor(position.y), (int32_t) std::floor(position.z), 0, -1);
     int32_t current = _heapPop();
     mNodes[current].mClosed = true;
 
@@ -120,14 +123,14 @@ bool PathFinder::findPath(Level &level, const MobActor &mob, const Vector3f &tar
     return !path.isEmpty();
 }
 
-bool PathFinder::findDirectPath(Level &level, const MobActor &mob, const Vector3f &target,
-                                const PathOptions &options, Path &path) {
+bool PathFinder::findDirectPath(Level &level, const MobActor &mob, const Vector3f &target, const PathOptions &options,
+                                Path &path) {
     if (!options.isVolumetric())
         return false;
 
     const Vector3f position = mob.getPosition();
     const ActorSize size = mob.getSize();
-    mEvaluator.prepare(level, size.mWidth, size.mHeight, position, LiquidBlocksFetch::at(level, position).water,
+    mEvaluator.prepare(level, mob, size.mWidth, size.mHeight, position, LiquidBlocksFetch::at(level, position).water,
                        options);
     if (mEvaluator.hasBarrier(position, target))
         return false;
@@ -221,7 +224,8 @@ void PathFinder::_expandGround(int32_t nodeIndex) {
             continue;
 
         const int32_t y = node.mY + offset;
-        _offer(x, y, z, node.mG + DIRECT_MOVE_COST + mEvaluator.extraCost(x, y, z), nodeIndex);
+        const int32_t jump = offset > 0 ? mEvaluator.jumpCost() : 0;
+        _offer(x, y, z, node.mG + DIRECT_MOVE_COST + mEvaluator.extraCost(x, y, z) + jump, nodeIndex);
     }
 
     for (int32_t direction = 0; direction < 4; ++direction) {
@@ -240,10 +244,7 @@ void PathFinder::_expandGround(int32_t nodeIndex) {
     }
 }
 
-/**
- * Expands to the 18 neighbours that share a face or an edge with the node. Corner moves are left out, and an
- * edge move is only allowed when both face moves it cuts across are open, so the mob never clips a corner.
- */
+// 18 face and edge neighbours, no corners; an edge move needs both face moves it cuts across open: no corner clipping
 void PathFinder::_expandVolume(int32_t nodeIndex, bool swimming) {
     const Node node = mNodes[nodeIndex];
 
@@ -260,9 +261,10 @@ void PathFinder::_expandVolume(int32_t nodeIndex, bool swimming) {
                 if (!mEvaluator.isOpen(x, y, z, swimming))
                     continue;
 
-                if (axes == 2 && ((dx != 0 && !mEvaluator.isOpen(node.mX + dx, node.mY, node.mZ, swimming))
-                                  || (dy != 0 && !mEvaluator.isOpen(node.mX, node.mY + dy, node.mZ, swimming))
-                                  || (dz != 0 && !mEvaluator.isOpen(node.mX, node.mY, node.mZ + dz, swimming))))
+                if (axes == 2
+                    && ((dx != 0 && !mEvaluator.isOpen(node.mX + dx, node.mY, node.mZ, swimming))
+                        || (dy != 0 && !mEvaluator.isOpen(node.mX, node.mY + dy, node.mZ, swimming))
+                        || (dz != 0 && !mEvaluator.isOpen(node.mX, node.mY, node.mZ + dz, swimming))))
                     continue;
 
                 const int32_t cost = axes == 1 ? DIRECT_MOVE_COST : OBLIQUE_MOVE_COST;
@@ -351,9 +353,15 @@ void PathFinder::_buildPath(int32_t endIndex, bool reachesTarget, const Vector3f
     }
     std::reverse(mChain.begin(), mChain.end());
 
+    // a walking path ends on the middle of its last block, as the game's does: the target itself can sit on a block
+    // edge, where the mob stops and slides off
     const Vector3f &last = mChain.empty() ? start : mChain.back();
-    if (reachesTarget && !mEvaluator.hasBarrier(last, target))
+    if (reachesTarget && mEvaluator.getOptions().isVolumetric() && !mEvaluator.hasBarrier(last, target))
         mChain.push_back(target);
+    // already on the target's block: the path is that block alone
+    if (mChain.empty() && reachesTarget && !mNodes.empty())
+        mChain.emplace_back((float) mNodes[0].mX + BLOCK_CENTER, (float) mNodes[0].mY,
+                            (float) mNodes[0].mZ + BLOCK_CENTER);
 
     Vector3f anchor = start;
     const int32_t count = (int32_t) mChain.size();

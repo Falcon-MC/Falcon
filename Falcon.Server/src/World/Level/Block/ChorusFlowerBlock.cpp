@@ -1,5 +1,7 @@
 #include "World/Level/Block/ChorusFlowerBlock.h"
 
+#include <algorithm>
+
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/PlantGrowthHelpers.h"
 #include "World/Level/Block/VanillaBlocks.h"
@@ -59,11 +61,18 @@ void ChorusFlowerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, 
         growUp = true;
     }
 
+    const auto flowerOfAge = [](int32_t age) {
+        return DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(), AGE, age);
+    };
+    const BlockState stem = VanillaBlocks::CHORUS_PLANT().toBlockState();
     const Vector3i twoAbove = above(top);
     if (growUp && isInRange(level, twoAbove) && isAirAt(level, twoAbove) && allNeighboursEmpty(level, top, NO_FACE)) {
-        if (!placeFlower(level, top, age))
+        const BlockState flower = flowerOfAge(age);
+        if (!BlockChangeSystem::allows(level, top, flower, BlockChangeCause::Grow))
             return;
-        level.setBlock(position, VanillaBlocks::CHORUS_PLANT().toBlockState(), true);
+        BlockChangeSystem::StructureBlocks blocks{{top, flower}, {position, stem}};
+        if (BlockChangeSystem::prepareStructure(level, position, blocks))
+            BlockChangeSystem::applyStructure(level, blocks, true);
         return;
     }
 
@@ -72,18 +81,23 @@ void ChorusFlowerBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, 
         if (grounded)
             ++attempts;
 
-        bool branched = false;
+        const BlockState flower = flowerOfAge(age + 1);
+        BlockChangeSystem::StructureBlocks blocks;
         for (int32_t attempt = 0; attempt < attempts; ++attempt) {
             const int32_t face = HORIZONTAL_FACES[RandomTickSystem::nextInt(4)];
             const Vector3i branch = side(position, face);
             if (isAirAt(level, branch) && isAirAt(level, below(branch))
-                && allNeighboursEmpty(level, branch, opposite(face)) && placeFlower(level, branch, age + 1)) {
-                branched = true;
+                && allNeighboursEmpty(level, branch, opposite(face))
+                && std::none_of(blocks.begin(), blocks.end(), [&branch](const auto &entry) { return entry.first == branch; })
+                && BlockChangeSystem::allows(level, branch, flower, BlockChangeCause::Grow)) {
+                blocks.emplace_back(branch, flower);
             }
         }
 
-        if (branched) {
-            level.setBlock(position, VanillaBlocks::CHORUS_PLANT().toBlockState(), true);
+        if (!blocks.empty()) {
+            blocks.emplace_back(position, stem);
+            if (BlockChangeSystem::prepareStructure(level, position, blocks))
+                BlockChangeSystem::applyStructure(level, blocks, true);
             return;
         }
     }
@@ -97,11 +111,4 @@ bool ChorusFlowerBlock::allNeighboursEmpty(Level &level, const Vector3i &positio
             return false;
     }
     return true;
-}
-
-bool ChorusFlowerBlock::placeFlower(Level &level, const Vector3i &position, int32_t age) {
-    return BlockChangeSystem::change(level, position,
-                                     DecorationSupport::withState(VanillaBlocks::CHORUS_FLOWER().toBlockState(),
-                                                                  AGE, age),
-                                     BlockChangeCause::Grow, true);
 }

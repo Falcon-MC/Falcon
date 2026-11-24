@@ -142,8 +142,8 @@ namespace {
         readGroups(result, *root);
         readItems(result, *root);
 
-        LOG_TRACE(LogAreaID::Server, "Loaded %zu creative group(s) and %zu creative item(s)",
-                  result.mGroups.size(), result.mEntries.size());
+        LOG_TRACE(LogAreaID::Server, "Loaded %zu creative group(s) and %zu creative item(s)", result.mGroups.size(),
+                  result.mEntries.size());
         return result;
     }
 

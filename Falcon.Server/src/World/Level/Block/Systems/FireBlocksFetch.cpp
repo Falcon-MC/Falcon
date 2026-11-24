@@ -25,11 +25,12 @@ FireContact FireBlocksFetch::at(Level &level, const Vector3f &feet) {
     for (int32_t x = minX; x <= maxX; ++x) {
         for (int32_t y = minY; y <= maxY; ++y) {
             for (int32_t z = minZ; z <= maxZ; ++z) {
-                const BlockState state = level.getBlockState(x, y, z);
-                if (VanillaBlocks::getAs<FireBlock>(state.mName) == nullptr)
+                // unloaded chunk: no fire; a lookup would generate it on the main thread for an actor outrunning terrain
+                const BlockState *state = level.peekBlockPtr(x, y, z);
+                if (state == nullptr || VanillaBlocks::getAs<FireBlock>(state->mName) == nullptr)
                     continue;
 
-                return FireContact{true, state.mName == "minecraft:soul_fire" ? 2.0f : 1.0f};
+                return FireContact{true, state->mName == "minecraft:soul_fire" ? 2.0f : 1.0f, Vector3i(x, y, z)};
             }
         }
     }

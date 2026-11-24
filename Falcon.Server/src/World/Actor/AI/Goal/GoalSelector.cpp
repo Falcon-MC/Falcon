@@ -3,6 +3,7 @@
 #include <algorithm>
 
 void GoalSelector::addGoal(int32_t priority, std::unique_ptr<Goal> goal) {
+    mKeepsAfloat = mKeepsAfloat || goal->keepsAfloat();
     mGoals.push_back({priority, std::move(goal)});
     std::stable_sort(mGoals.begin(), mGoals.end(), [](const PrioritizedGoal &left, const PrioritizedGoal &right) {
         return left.mPriority < right.mPriority;
@@ -48,6 +49,7 @@ void GoalSelector::stopAll(ServerNetworkHandler &owner, MobActor &mob) {
 void GoalSelector::clear(ServerNetworkHandler &owner, MobActor &mob) {
     stopAll(owner, mob);
     mGoals.clear();
+    mKeepsAfloat = false;
 }
 
 bool GoalSelector::_canReplaceConflicts(const PrioritizedGoal &candidate) const {

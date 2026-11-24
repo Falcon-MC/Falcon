@@ -3,7 +3,9 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Chunk/GeneratedBlockChange.h"
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 class Level;
@@ -26,4 +28,28 @@ public:
     virtual int32_t getAirHash() const = 0;
 
     virtual int32_t pickBiome(int32_t x, int32_t y, int32_t z) const = 0;
+
+    // y above the top solid or liquid block from terrain generation alone: what the game reads for an unloaded
+    // column; generates a throwaway chunk: any thread, but not cheap
+    virtual int32_t getPreliminaryHeight(int32_t x, int32_t z) const;
+
+    // y above the top solid block of the generated column, carvers included and liquids skipped: where the game
+    // lays a structure on the ground; generates a throwaway chunk
+    int32_t getGeneratedSolidHeight(int32_t x, int32_t z) const;
+
+    // a throwaway chunk of terrain, for reading many columns of the same chunk
+    std::unique_ptr<LevelChunk> generateTerrain(int32_t chunkX, int32_t chunkZ) const;
+
+    // getGeneratedSolidHeight for a chunk the caller already holds
+    static int32_t solidHeight(const LevelChunk &chunk, int32_t localX, int32_t localZ);
+
+    // the coarse height structures read their biomes at: the terrain density alone, with no water and cut to the
+    // eight block noise cells, so a sea column reports its floor
+    virtual int32_t getPreliminarySurfaceLevel(int32_t quartX, int32_t quartZ) const;
+
+    // getPreliminaryHeight of every column of a chunk, z major, from a single throwaway chunk
+    virtual std::array<int32_t, 256> getPreliminaryHeights(int32_t chunkX, int32_t chunkZ) const;
+
+    // the lowest getPreliminaryHeight of the chunk's columns, from a single throwaway chunk
+    virtual int32_t getPreliminaryLowestHeight(int32_t chunkX, int32_t chunkZ) const;
 };

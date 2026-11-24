@@ -8,11 +8,17 @@ public:
 
     using PassiveActor::PassiveActor;
 
-    ActorSize getSize() const override { return ActorSize{0.6f, 0.6f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.6f, 0.6f};
+    }
 
-    float getDefaultMaxHealth() const override { return 20.0f; }
+    float getDefaultMaxHealth() const override {
+        return 20.0f;
+    }
 
-    int getExperienceDrop() const override { return 0; }
+    int getExperienceDrop() const override {
+        return 0;
+    }
 
     bool hasGravity() const override {
         return false;

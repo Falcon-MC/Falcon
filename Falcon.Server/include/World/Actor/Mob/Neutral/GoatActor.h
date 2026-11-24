@@ -8,7 +8,11 @@ public:
 
     using NeutralActor::NeutralActor;
 
-    ActorSize getSize() const override { return ActorSize{0.9f, 1.3f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.9f, 1.3f};
+    }
 
-    float getDefaultMaxHealth() const override { return 10.0f; }
+    float getDefaultMaxHealth() const override {
+        return 10.0f;
+    }
 };

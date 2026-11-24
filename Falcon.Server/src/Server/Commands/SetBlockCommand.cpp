@@ -1,5 +1,6 @@
 #include "Server/Commands/SetBlockCommand.h"
 
+#include "Server/Commands/CommandEnums.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -7,6 +8,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -26,10 +28,7 @@ std::vector<CommandOverloadData> SetBlockCommand::getOverloads() const {
     position.mHasType = true;
     position.mType = CommandParamType::BlockPosition;
 
-    CommandParamData block;
-    block.mName = "block";
-    block.mHasType = true;
-    block.mType = CommandParamType::String;
+    const CommandParamData block = makeEnumParameter("block", "Block", CommandEnums::blockValues());
 
     CommandParamData mode;
     mode.mName = "mode";
@@ -63,7 +62,7 @@ bool SetBlockCommand::resolveBlock(const std::string &name, BlockState &out) {
 }
 
 bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, const Vector3i &position,
-                                 const BlockState &state, const std::string &mode) {
+                                 const BlockState &state, const std::string &mode, bool updateNeighbours) {
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return false;
 
@@ -75,7 +74,7 @@ bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, co
     if (mode == "keep" && !BlockSupport::isReplaceable(existing))
         return false;
 
-    if (mode == "destroy" && existing.mName != "minecraft:air") {
+    if (mode == "destroy" && existing.mName != BlockNames::AIR) {
         BlockActionHandler::destroyBlock(handler, level, position, existing, true, ItemStack::air());
     } else {
         level.onBlockBroken(position, existing);
@@ -83,7 +82,8 @@ bool SetBlockCommand::placeBlock(ServerNetworkHandler &handler, Level &level, co
 
     level.setBlock(position, state, false);
     level.onBlockPlaced(position, state);
-    level.updateAround(position);
+    if (updateNeighbours)
+        level.updateAround(position);
     return true;
 }
 
@@ -110,7 +110,7 @@ bool SetBlockCommand::execute(CommandOrigin &sender, const std::vector<std::stri
     }
 
     BlockState state;
-    if (!resolveBlock(arguments[3], state)) {
+    if (!CommandEnums::parseBlock(arguments[3], state)) {
         sender.sendTranslation("commands.setblock.notFound", {arguments[3]});
         return false;
     }

@@ -4,6 +4,8 @@ falcon.commands.about.version=Αυτός ο διακομιστής εκτελε�
 falcon.commands.about.game=Minecraft: Bedrock Edition %1$s (πρωτόκολλο %2$s)
 falcon.commands.about.build=Έκδοση κατασκευής %1$s, διαμόρφωση %2$s
 
+falcon.commands.plugins.list=Πρόσθετα (%1$s): %2$s
+
 falcon.commands.world.list=Φορτωμένοι κόσμοι (%1$s): %2$s
 falcon.commands.world.available=Κόσμοι στον δίσκο: %1$s
 falcon.commands.world.created=Ο κόσμος %1$s δημιουργήθηκε

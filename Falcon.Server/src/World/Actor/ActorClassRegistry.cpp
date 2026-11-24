@@ -45,8 +45,8 @@ namespace {
 }
 
 ActorClassRegistry::Registration::Registration(const char *identifier, Factory factory) {
-    entries()[identifier].push_back(Entry{factory, PluginRegistrationScope::getOwner(),
-                                          PluginRegistrationScope::isActive()});
+    entries()[identifier].push_back(
+            Entry{factory, PluginRegistrationScope::getOwner(), PluginRegistrationScope::isActive()});
 }
 
 const ServerActor *ActorClassRegistry::getPrototype(const std::string &identifier) {
@@ -102,9 +102,9 @@ void ActorClassRegistry::remove(const void *owner) {
 
     for (auto &identifier: entries()) {
         std::vector<Entry> &registered = identifier.second;
-        registered.erase(std::remove_if(registered.begin(), registered.end(), [owner](const Entry &entry) {
-            return entry.mOwner == owner;
-        }), registered.end());
+        registered.erase(std::remove_if(registered.begin(), registered.end(),
+                                        [owner](const Entry &entry) { return entry.mOwner == owner; }),
+                         registered.end());
     }
 }
 

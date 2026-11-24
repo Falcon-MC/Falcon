@@ -2,19 +2,21 @@
 
 #include "Server/Commands/CommandOrigin.h"
 
+class Actor;
 class Level;
 class ServerPlayer;
 
 class ExecuteCommandOrigin : public CommandOrigin {
 public:
-    ExecuteCommandOrigin(CommandOrigin &base, ServerPlayer *executor, const Vector3f &position,
-                         const Vector3f &rotation, Level *level);
+    // the executor is a player or any other entity (execute as @e)
+    ExecuteCommandOrigin(CommandOrigin &base, Actor *executor, const Vector3f &position, const Vector3f &rotation,
+                         Level *level);
 
     std::string getSenderName() const override;
 
-    bool isPlayer() const override { return mExecutor != nullptr; }
+    bool isPlayer() const override;
 
-    ServerPlayer *asPlayer() override { return mExecutor; }
+    ServerPlayer *asPlayer() override;
 
     void sendMessage(const std::string &message) override;
 
@@ -24,23 +26,68 @@ public:
 
     CommandPermission getCommandPermission() const override;
 
-    Vector3f getPosition() override { return mPosition; }
+    ServerPlayer *permissionPlayer() override {
+        return mBase.permissionPlayer();
+    }
 
-    Vector3f getRotation() override { return mRotation; }
+    bool canExecuteCommand(const Command &command) const override {
+        return mBase.canExecuteCommand(command);
+    }
 
-    Level *getLevel() override { return mLevel; }
+    bool canManageServer() const override {
+        return mBase.canManageServer();
+    }
 
-    void setPosition(const Vector3f &position) { mPosition = position; }
+    ServerPlayer *permissionGroupPlayer() override {
+        return mBase.permissionGroupPlayer();
+    }
 
-    void setRotation(const Vector3f &rotation) { mRotation = rotation; }
+    Vector3f getPosition() override {
+        return mPosition;
+    }
 
-    void setExecutor(ServerPlayer *executor) { mExecutor = executor; }
+    Vector3f getRotation() override {
+        return mRotation;
+    }
 
-    void setLevel(Level *level) { mLevel = level; }
+    Level *getLevel() override {
+        return mLevel;
+    }
+
+    // without an executor, the base origin's entity keeps running it
+    Actor *getEntity() override;
+
+    bool getSourceBlock(Level *&level, Vector3i &position) override {
+        return mBase.getSourceBlock(level, position);
+    }
+
+    bool canUseCommandsWithoutCheats() const override {
+        return mBase.canUseCommandsWithoutCheats();
+    }
+
+    void sendError(const std::string &message) override {
+        mBase.sendError(message);
+    }
+
+    void setPosition(const Vector3f &position) {
+        mPosition = position;
+    }
+
+    void setRotation(const Vector3f &rotation) {
+        mRotation = rotation;
+    }
+
+    void setExecutor(Actor *executor) {
+        mExecutor = executor;
+    }
+
+    void setLevel(Level *level) {
+        mLevel = level;
+    }
 
 private:
     CommandOrigin &mBase;
-    ServerPlayer *mExecutor;
+    Actor *mExecutor;
     Vector3f mPosition;
     Vector3f mRotation;
     Level *mLevel;

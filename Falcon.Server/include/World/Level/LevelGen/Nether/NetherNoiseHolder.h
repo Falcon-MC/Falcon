@@ -1,47 +1,57 @@
 #pragma once
 
-#include "World/Level/LevelGen/Density/DensityFunction.h"
+#include "World/Level/LevelGen/End/Noise/TheEndOctaveNoise.h"
+#include "World/Level/LevelGen/Overworld/Surface/SurfaceSimplexNoise.h"
 #include "World/Level/LevelGen/Noise/NormalNoise.h"
 #include "World/Level/LevelGen/Random/IRandom.h"
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 class NetherTerrainNoises {
 public:
-    explicit NetherTerrainNoises(IRandom &random);
+    explicit NetherTerrainNoises(uint32_t seed);
 
-    const NormalNoisePtr &getSurfaceNoise() const { return mSurfaceNoise; }
+    const TheEndOctaveNoise &getMinLimitNoise() const {
+        return *mMinLimitNoise;
+    }
 
-    const NormalNoisePtr &getPatchNoise() const { return mPatchNoise; }
+    const TheEndOctaveNoise &getMaxLimitNoise() const {
+        return *mMaxLimitNoise;
+    }
 
-    const NormalNoisePtr &getSoulsandNoise() const { return mSoulsandNoise; }
+    const TheEndOctaveNoise &getMainNoise() const {
+        return *mMainNoise;
+    }
 
-    const NormalNoisePtr &getNetherStateNoise() const { return mNetherStateNoise; }
+    const std::vector<SurfaceSimplexNoise> &getDepthNoise() const {
+        return mDepthNoise;
+    }
 
-    const NormalNoisePtr &getNetherwartNoise() const { return mNetherwartNoise; }
-
-    const DensityFunctionPtr &getBase3dNoise() const { return mBase3dNoise; }
-
-    const DensityFunctionPtr &getDensityFunction() const { return mDensityFunction; }
+    const std::vector<SurfaceSimplexNoise> &getAdjustmentNoise() const {
+        return mAdjustmentNoise;
+    }
 
 private:
-    NormalNoisePtr mSurfaceNoise;
-    NormalNoisePtr mPatchNoise;
-    NormalNoisePtr mSoulsandNoise;
-    NormalNoisePtr mNetherStateNoise;
-    NormalNoisePtr mNetherwartNoise;
-    DensityFunctionPtr mBase3dNoise;
-    DensityFunctionPtr mDensityFunction;
+    std::unique_ptr<TheEndOctaveNoise> mMinLimitNoise;
+    std::unique_ptr<TheEndOctaveNoise> mMaxLimitNoise;
+    std::unique_ptr<TheEndOctaveNoise> mMainNoise;
+    std::vector<SurfaceSimplexNoise> mDepthNoise;
+    std::vector<SurfaceSimplexNoise> mAdjustmentNoise;
 };
 
 class NetherDeltaNoises {
 public:
     explicit NetherDeltaNoises(IRandom &random);
 
-    const NormalNoisePtr &getSurfaceNoise() const { return mSurfaceNoise; }
+    const NormalNoisePtr &getSurfaceNoise() const {
+        return mSurfaceNoise;
+    }
 
-    const NormalNoisePtr &getSurfaceSecondaryNoise() const { return mSurfaceSecondaryNoise; }
+    const NormalNoisePtr &getSurfaceSecondaryNoise() const {
+        return mSurfaceSecondaryNoise;
+    }
 
 private:
     NormalNoisePtr mSurfaceNoise;
@@ -52,15 +62,17 @@ class NetherNoiseHolder {
 public:
     explicit NetherNoiseHolder(int64_t seed);
 
-    const NetherTerrainNoises &getTerrainNoises() const { return *mTerrainNoises; }
+    const NetherTerrainNoises &getTerrainNoises() const {
+        return *mTerrainNoises;
+    }
 
-    const NetherDeltaNoises &getDeltaNoises() const { return *mDeltaNoises; }
+    const NetherDeltaNoises &getDeltaNoises() const {
+        return *mDeltaNoises;
+    }
 
-    IRandom &getRandomSource() const { return *mRandomSource; }
-
-    static void setInstance(const NetherNoiseHolder *instance);
-
-    static const NetherNoiseHolder *get();
+    IRandom &getRandomSource() const {
+        return *mRandomSource;
+    }
 
 private:
     IRandomPtr mRandomSource;

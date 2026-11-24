@@ -2,6 +2,7 @@
 
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 #include <string>
@@ -14,7 +15,7 @@ namespace PlacementOrientation {
     constexpr int FACE_WEST = 4;
     constexpr int FACE_EAST = 5;
 
-    constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 
     inline int horizontalFacing(float yaw) {
         float angle = std::fmod(yaw, 360.0f);
@@ -132,6 +133,12 @@ namespace PlacementOrientation {
         return Vector3i(position.x + offset.x, position.y + offset.y, position.z + offset.z);
     }
 
+    // multi_face_direction_bits: one bit per side the block clings to, in down, up, south, west, north, east order
+    inline int multiFaceBit(int direction) {
+        static const int BITS[6] = {1, 2, 16, 4, 8, 32};
+        return direction >= FACE_DOWN && direction <= FACE_EAST ? BITS[direction] : 0;
+    }
+
     inline int signRotation(float yaw) {
         const float value = ((yaw + 180.0f) * 16.0f / 360.0f) + 0.5f;
         int rotation = (int) std::floor(value) % 16;
@@ -142,11 +149,9 @@ namespace PlacementOrientation {
 
     inline const char *leverDirection(int face, int playerFacing) {
         if (face == FACE_DOWN)
-            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "down_east_west"
-                                                                          : "down_north_south";
+            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "down_east_west" : "down_north_south";
         if (face == FACE_UP)
-            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "up_east_west"
-                                                                          : "up_north_south";
+            return playerFacing == FACE_WEST || playerFacing == FACE_EAST ? "up_east_west" : "up_north_south";
         return faceName(face);
     }
 

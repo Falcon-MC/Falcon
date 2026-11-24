@@ -1,11 +1,11 @@
 #pragma once
 
-#include "World/Level/Block/Block.h"
+#include "World/Level/Block/CauldronBlock.h"
+#include "World/Level/Block/SpeleothemBlock.h"
 
-class PointedDripstoneBlock : public Block {
+class PointedDripstoneBlock : public SpeleothemBlock {
 public:
-    explicit PointedDripstoneBlock(const Block &block) : Block(block) {
-    }
+    explicit PointedDripstoneBlock(const Block &block) : SpeleothemBlock(block) {}
 
     static constexpr const char *IDENTIFIER = "minecraft:pointed_dripstone";
 
@@ -14,18 +14,25 @@ public:
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
 
+    bool hasRandomTick() const override {
+        return true;
+    }
+
+    bool getCollisionShapeAt(const BlockState &state, const Vector3i &position, const Actor *actor,
+                             AxisAlignedBB &shape) const override;
+
+    // the tip of a stalactite a drop can fall from: not under water
+    static bool isStalactiteTip(Level &level, const Vector3i &position);
+
+    // the source on top of the block the stalactite hangs from, water or lava
+    static bool getDripFluid(Level &level, const Vector3i &stalactite, CauldronBlock::Liquid &fluid);
+
 private:
-    static bool isHanging(const BlockState &state);
+    void growFromRoot(Level &level, const Vector3i &root) const;
 
-    static bool pointsTowards(const BlockState &state, bool hanging);
+    void growStalagmiteBelow(Level &level, const Vector3i &tip) const;
 
-    static bool findTip(Level &level, const Vector3i &root, bool hanging, Vector3i &tip);
-
-    static bool canTipGrow(Level &level, const Vector3i &tip, bool hanging);
-
-    static void grow(Level &level, const Vector3i &tip, bool hanging);
-
-    static void growStalagmiteBelow(Level &level, const Vector3i &tip);
-
-    static void refreshThickness(Level &level, const Vector3i &position, bool hanging);
+    // the drop's particle, and the cauldron below it fills once the drop lands
+    void dripIntoCauldron(ServerNetworkHandler &owner, Level &level, const Vector3i &root,
+                          CauldronBlock::Liquid fluid) const;
 };

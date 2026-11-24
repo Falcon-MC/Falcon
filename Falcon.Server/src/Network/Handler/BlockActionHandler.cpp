@@ -1,10 +1,15 @@
+#include "Falcon/Plugin/PluginPackets.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Protocol/Packets/PlayerAuthInputPacket.h"
 
+#include "World/Item/ItemProperties.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockSupport.h"
 #include "World/Level/Block/Components/BlockPlacementComponent.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
+#include "World/Level/Block/BlockPrecipitation.h"
 #include "World/Level/Block/LiquidView.h"
+#include "World/Level/Block/SnowLayerBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/BlockIdentifier.h"
@@ -16,6 +21,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Player/ExperienceValues.h"
 #include "World/Level/Block/BlockShape.h"
+#include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/VanillaItems.h"
 #include "Scripting/Content/CustomContentRegistry.h"
@@ -39,8 +45,13 @@
 #include "Protocol/Types/ItemUseTransaction.h"
 #include "Protocol/Types/PlacedBlockAliases.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "World/Actor/Movement/MovementConstants.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
+#include <typeinfo>
+#include <unordered_map>
 #include <vector>
 #include <chrono>
 #include <cmath>
@@ -60,9 +71,11 @@ namespace {
         return dx * dx + dy * dy + dz * dz <= MOVEMENT_BLOCK_RANGE * MOVEMENT_BLOCK_RANGE;
     }
 
-    const float PLAYER_BASE_OFFSET = 1.62f;
     const double BREAK_SPEED_CHANGE_EPSILON = 0.0001;
     const double BREAK_PROGRESS_EPSILON = 0.000001;
+    // progress counts server ticks from the tick after the start, not input ticks:
+    // a client-predicted destroy can arrive up to this many ticks early
+    const int64_t BREAK_TICK_TOLERANCE = 2;
     const float REACH_MAX_DIFF = 6.0f;
     const uint64_t RIGHT_CLICK_DEDUP_MICROSECONDS = 100000;
 
@@ -74,8 +87,8 @@ namespace {
 
     AxisAlignedBB actorBox(const Vector3f &position, const ActorSize &size) {
         const float half = size.mWidth * 0.5f;
-        return AxisAlignedBB(position.x - half, position.y, position.z - half,
-                             position.x + half, position.y + size.mHeight, position.z + half);
+        return AxisAlignedBB(position.x - half, position.y, position.z - half, position.x + half,
+                             position.y + size.mHeight, position.z + half);
     }
 
 
@@ -103,7 +116,7 @@ namespace {
             return 0.05;
         }
 
-        if (player.getGameType() == (int32_t) GameType::Creative)
+        if (player.isCreative())
             return 0.0;
 
         if (blockData->mHardness < 0.0f)
@@ -112,35 +125,35 @@ namespace {
         const double blockHardness = (double) blockData->mHardness;
         const ItemStack &heldItem = player.getInventory().getItemInHand();
         const ItemData *itemData = heldItem.isAir() || heldItem.mDefinition == nullptr
-                                  ? nullptr
-                                  : ItemDataTable::find(heldItem.mDefinition->getIdentifier());
+                                           ? nullptr
+                                           : ItemDataTable::find(heldItem.mDefinition->getIdentifier());
 
         bool customTool = false;
         int32_t customSpeed = 0;
         bool customUseEfficiency = false;
         if (itemData == nullptr && !heldItem.isAir() && heldItem.mDefinition != nullptr) {
-            const bool standardTool = blockData->mToolType == BlockToolType::Pickaxe ||
-                                      blockData->mToolType == BlockToolType::Shovel ||
-                                      blockData->mToolType == BlockToolType::Axe ||
-                                      blockData->mToolType == BlockToolType::Hoe;
+            const bool standardTool = blockData->mToolType == BlockToolType::Pickaxe
+                                      || blockData->mToolType == BlockToolType::Shovel
+                                      || blockData->mToolType == BlockToolType::Axe
+                                      || blockData->mToolType == BlockToolType::Hoe;
             customSpeed = CustomContentRegistry::getInstance().getDiggerSpeed(
                     heldItem.mDefinition->getIdentifier(), blockData->mName, standardTool, customUseEfficiency);
             customTool = customSpeed > 0;
         }
 
-        const Item *heldType = itemData == nullptr ? nullptr
-                                                   : VanillaItems::fromIdentifier(heldItem.mDefinition->getIdentifier());
+        const Item *heldType = itemData == nullptr
+                                       ? nullptr
+                                       : VanillaItems::fromIdentifier(heldItem.mDefinition->getIdentifier());
         float itemSpeed = 1.0f;
         const bool itemDefinesSpeed = heldType != nullptr
                                       && heldType->getDestroySpeed(blockData->mIdentifier, itemSpeed);
 
-        const bool matchesTool = customTool || (itemData != nullptr && blockData->mToolType != BlockToolType::None &&
-                                (int32_t) itemData->mToolType == (int32_t) blockData->mToolType &&
-                                itemData->mToolTier >= (int32_t) blockData->mToolTier);
+        const bool matchesTool = customTool
+                                 || (itemData != nullptr && blockData->mToolType != BlockToolType::None
+                                     && (int32_t) itemData->mToolType == (int32_t) blockData->mToolType
+                                     && itemData->mToolTier >= (int32_t) blockData->mToolTier);
 
-        const bool canHarvest = blockData->mToolType == BlockToolType::None || blockData->mHandHarvest ||
-                                matchesTool
-                                || (heldType != nullptr && heldType->canDestroySpecial(blockData->mIdentifier));
+        const bool canHarvest = BlockActionHandler::canHarvest(*blockData, heldItem);
 
         double seconds = canHarvest ? blockHardness * 1.5 : blockHardness * 5.0;
 
@@ -151,8 +164,8 @@ namespace {
             speedMultiplier = itemSpeed;
         else if (correctTool)
             speedMultiplier = customTool ? (float) customSpeed
-                                         : toolSpeedMultiplier((BlockToolTier) (itemData == nullptr ? 0
-                                                                                                    : itemData->mToolTier));
+                                         : toolSpeedMultiplier(
+                                                   (BlockToolTier) (itemData == nullptr ? 0 : itemData->mToolTier));
 
         const int32_t efficiencyLevel = ItemEnchantments::getLevel(heldItem, EnchantmentIds::EFFICIENCY);
         if (correctTool && canHarvest && efficiencyLevel > 0 && (!customTool || customUseEfficiency))
@@ -173,13 +186,15 @@ namespace {
 
         seconds /= (double) speedMultiplier;
 
-        if (player.getTicksSinceInAir() < 5 && !player.isFlying())
+        // the client's rate this tick: no grace after landing
+        if (player.isRiding() || (!player.isOnGround() && !player.isFlying()))
             seconds *= 5.0;
 
         const bool inWater = player.getFlags().get(ActorFlag::Swimming);
-        const bool hasAquaAffinity =
-                ItemEnchantments::getLevel(player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD),
-                                           EnchantmentIds::AQUA_AFFINITY) > 0;
+        const bool hasAquaAffinity = ItemEnchantments::getLevel(
+                                             player.getInventory().getArmor(PlayerInventory::ARMOR_HEAD),
+                                             EnchantmentIds::AQUA_AFFINITY)
+                                     > 0;
         if (inWater && !hasAquaAffinity)
             seconds *= hasConduitPower && blockHardness >= 0.5 ? 2.5 : 5.0;
 
@@ -205,18 +220,16 @@ namespace {
         return std::max<int64_t>(0, (int64_t) ticks);
     }
 
-    bool hasReachedBreakTime(ServerNetworkHandler &owner, ServerPlayer &player,
-                             const BlockData *blockData) {
+    bool hasReachedBreakTime(ServerNetworkHandler &owner, ServerPlayer &player, const BlockData *blockData) {
         if (!player.isBreakingBlock())
             return false;
 
         const int64_t elapsedTicks = owner.getCurrentTick() - player.getBreakStartTick();
-        return elapsedTicks >= expectedBreakTicks(player, blockData);
+        return elapsedTicks + BREAK_TICK_TOLERANCE >= expectedBreakTicks(player, blockData);
     }
 
     bool finiteClickPosition(const Vector3f &clickPosition) {
-        return std::isfinite(clickPosition.x) && std::isfinite(clickPosition.y)
-               && std::isfinite(clickPosition.z);
+        return std::isfinite(clickPosition.x) && std::isfinite(clickPosition.y) && std::isfinite(clickPosition.z);
     }
 
     uint64_t steadyTimeMicros() {
@@ -224,12 +237,7 @@ namespace {
         return (uint64_t) duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count();
     }
 
-    float distanceSquared(const Vector3f &left, const Vector3f &right) {
-        const float x = left.x - right.x;
-        const float y = left.y - right.y;
-        const float z = left.z - right.z;
-        return x * x + y * y + z * z;
-    }
+    using VectorMath::distanceSquared;
 
     bool isDuplicateRightClick(ServerPlayer &player, const ItemUseTransaction &transaction) {
         const uint64_t now = steadyTimeMicros();
@@ -237,13 +245,13 @@ namespace {
                                && now - player.getLastRightClickTimeMicros() < RIGHT_CLICK_DEDUP_MICROSECONDS
                                && player.getLastRightClickFace() == transaction.mBlockFace
                                && player.getLastRightClickBlockPosition() == transaction.mBlockPosition
-                               && distanceSquared(player.getLastRightClickPlayerPosition(),
-                                                  transaction.mPlayerPosition) < 0.00001f
+                               && distanceSquared(player.getLastRightClickPlayerPosition(), transaction.mPlayerPosition)
+                                          < 0.00001f
                                && distanceSquared(player.getLastRightClickPosition(), transaction.mClickPosition)
-                                  < 0.00001f;
+                                          < 0.00001f;
 
-        player.recordRightClick(transaction.mBlockPosition, transaction.mBlockFace,
-                                transaction.mPlayerPosition, transaction.mClickPosition, now);
+        player.recordRightClick(transaction.mBlockPosition, transaction.mBlockFace, transaction.mPlayerPosition,
+                                transaction.mClickPosition, now);
         return duplicate;
     }
 
@@ -262,11 +270,33 @@ namespace {
         return identifier;
     }
 
+    // the undyed shulker box is its own item: the placement alias read backwards gives "minecraft:shulker_box",
+    // the white one; wall signs and wall banners drop the item their standing form places
+    std::string selfDropIdentifier(const std::string &identifier) {
+        if (identifier == BlockNames::UNDYED_SHULKER_BOX)
+            return identifier;
+        if (identifier == BlockNames::WALL_BANNER || identifier == "minecraft:wall_sign"
+            || BlockIdentifier::endsWith(identifier, "_wall_sign"))
+            return BlockPickItem::identifierFor(identifier);
+
+        return furnaceDropIdentifier(identifier);
+    }
+
     bool isBreakableInCreative(const ServerPlayer &player, const std::string &identifier) {
-        if (BlockIdentifier::equalsAny(identifier, {
-                "minecraft:end_gateway", "minecraft:fire", "minecraft:soul_fire", "minecraft:invisible_bedrock",
-                "minecraft:jigsaw", "minecraft:moving_block", "minecraft:bubble_column", "minecraft:water",
-                "minecraft:flowing_water", "minecraft:lava", "minecraft:flowing_lava"}))
+        // a pack item can refuse to break blocks in creative, like a sword
+        const ItemStack &held = player.getInventory().getItemInHand();
+        if (!held.isAir() && held.mDefinition != nullptr) {
+            const CustomItemDefinition *custom =
+                    CustomContentRegistry::getInstance().findItem(held.mDefinition->getIdentifier());
+            if (custom != nullptr && !custom->mCanDestroyInCreative)
+                return false;
+        }
+
+        if (BlockIdentifier::equalsAny(identifier,
+                                       {"minecraft:end_gateway", "minecraft:fire", "minecraft:soul_fire",
+                                        "minecraft:invisible_bedrock", "minecraft:jigsaw", "minecraft:moving_block",
+                                        "minecraft:bubble_column", "minecraft:water", "minecraft:flowing_water",
+                                        "minecraft:lava", "minecraft:flowing_lava"}))
             return false;
 
         if (BlockIdentifier::equalsAny(identifier, {"minecraft:allow", "minecraft:deny", "minecraft:border_block"}))
@@ -280,24 +310,26 @@ namespace {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
             return;
 
-        const BlockState state = level.getBlockState(position.x, position.y, position.z);
+        // peek only: no synchronous chunk load or generation on the tick thread; unloaded: nothing to correct
+        const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z);
+        if (statePtr == nullptr)
+            return;
+        const BlockState state = *statePtr;
 
         UpdateBlockPacket update;
         update.mBlockPosition = position;
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = 0;
-        BlockActionHandler::broadcastToViewers(owner, level,
-                                               Vector3f((float) position.x + 0.5f,
-                                                        (float) position.y + 0.5f,
-                                                        (float) position.z + 0.5f),
-                                               update);
+        // a correction for the requester only: a broadcast would let one client flood every viewer
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), update, owner.getCodecContext());
+        if (isNearPlayer(player,
+                         Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f)))
+            player.awaitMovementChange();
     }
 
     void syncBlocksNearby(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &clicked, int face) {
-        static const int sides[6][3] = {
-                {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-        };
+        static const int sides[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
         constexpr float maxDistanceSquared = 10000.0f;
 
         const Vector3f &feet = player.getPosition();
@@ -331,7 +363,11 @@ namespace {
                 continue;
 
             for (int32_t layer = 0; layer < 2; ++layer) {
-                const BlockState state = level.getBlockStateAtLayer(position.x, position.y, position.z, layer);
+                // peek only: no chunk generation from client coordinates when syncing around a click
+                const BlockState *statePtr = level.peekBlockPtr(position.x, position.y, position.z, layer);
+                if (statePtr == nullptr)
+                    continue;
+                const BlockState &state = *statePtr;
 
                 UpdateBlockPacket update;
                 update.mBlockPosition = position;
@@ -378,6 +414,18 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 
+    const auto type = PluginPackets::worldEffectType(packet);
+    if (type != 0 && PluginManager::findWithSubscribers(type) != nullptr) {
+        std::vector<NetworkIdentifier> viewers;
+        for (auto &entry: owner.getPlayers()) {
+            if (&entry.second != except && &owner.getLevelFor(entry.second) == &level
+                && entry.second.getSentChunks().count(key) != 0)
+                viewers.push_back(entry.first);
+        }
+        PluginPackets::broadcastWorldEffect(owner, level, position, packet, type, std::move(viewers));
+        return;
+    }
+
     for (auto &entry: owner.getPlayers()) {
         if (&entry.second == except)
             continue;
@@ -399,9 +447,7 @@ void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, Level
     update.mFlags = UpdateBlockPacket::Flag::All;
     update.mDataLayer = layer;
     broadcastToViewers(owner, level,
-                       Vector3f((float) position.x + 0.5f,
-                                (float) position.y + 0.5f,
-                                (float) position.z + 0.5f),
+                       Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
                        update);
 }
 
@@ -412,16 +458,10 @@ void BlockActionHandler::broadcastBlockActorData(ServerNetworkHandler &owner, Le
     data.mBlockPosition = position;
     data.mData = blockActor.getSpawnCompound();
     broadcastToViewers(owner, level,
-                       Vector3f((float) position.x + 0.5f,
-                                (float) position.y + 0.5f,
-                                (float) position.z + 0.5f),
-                       data);
+                       Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f), data);
 }
 
-/**
- * The block-cracking level events carry the per-tick break progress as a fraction of
- * 65535; the client uses it to animate the crack at the same pace as the server.
- */
+// per-tick progress as a fraction of 65535: the client animates the crack at the server's pace
 int32_t BlockActionHandler::breakSpeedEventData(double speed) {
     return (int32_t) std::clamp(65535.0 * speed, 0.0, 65535.0);
 }
@@ -431,10 +471,10 @@ bool BlockActionHandler::canInteractWithBlock(ServerPlayer &player, const Vector
 }
 
 bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vector3i &position, float rangeScalar) {
-    const float maxDistance = player.getGameType() == (int32_t) GameType::Creative ? 13.0f : 7.0f;
+    const float maxDistance = player.isCreative() ? 13.0f : 7.0f;
 
     const Vector3f feet = player.getPosition();
-    const Vector3f eyePosition(feet.x, feet.y + PLAYER_BASE_OFFSET, feet.z);
+    const Vector3f eyePosition(feet.x, feet.y + player.getBaseOffset(), feet.z);
     const Vector3f target((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
     const float dx = target.x - eyePosition.x;
@@ -458,28 +498,43 @@ bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vecto
         directionZ /= length;
     }
 
-    // Besides the reach distance, reject blocks clearly behind the player: the target must
-    // not lie more than REACH_MAX_DIFF behind the plane through the eyes facing the yaw.
+    // beyond reach, also reject blocks more than REACH_MAX_DIFF behind the eye plane facing the yaw
     const float dot = directionX * eyePosition.x + directionZ * eyePosition.z;
     const float dot1 = directionX * target.x + directionZ * target.z;
     return (dot1 - dot) >= -REACH_MAX_DIFF;
 }
 
-bool BlockActionHandler::canBreakBlock(const ServerNetworkHandler &owner, ServerPlayer &player,
-                                       const Vector3i &position) {
+bool BlockActionHandler::canBreakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
+    // reach first: nothing is read at a position the client only named
     const PropertiesSettings &properties = owner.getProperties();
     const float scalar = properties.getServerAuthoritativeBlockBreaking()
-                             ? properties.getServerAuthoritativeBlockBreakingRangeScalar() : 1.0f;
-    return _canInteractWithBlock(player, position, scalar);
+                                 ? properties.getServerAuthoritativeBlockBreakingRangeScalar()
+                                 : 1.0f;
+    if (!_canInteractWithBlock(player, position, scalar))
+        return false;
+
+    Level &level = owner.getLevelFor(player);
+    // a column not in memory is unknown: the callers read it next, and a read would generate it
+    if (!level.isChunkResident(position.x >> 4, position.z >> 4))
+        return false;
+
+    if (player.isAdventure()) {
+        const BlockState *block = level.peekBlockPtr(position.x, position.y, position.z);
+        if (block == nullptr || !ItemProperties::canDestroy(player.getInventory().getItemInHand(), block->mName))
+            return false;
+    }
+
+    // a deny block forbids breaking as much as placing: else breaking bypasses it
+    return isBlockChangeAllowed(level, position, player);
 }
 
 void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position) {
     Level &level = owner.getLevelFor(player);
 
-    const BlockState brokenState = level.getChunk(position.x >> 4, position.z >> 4)
-                                         .getBlock(position.x & 15, position.y, position.z & 15);
+    const BlockState brokenState =
+            level.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
 
-    if (brokenState.mName == "minecraft:air") {
+    if (brokenState.mName == BlockNames::AIR) {
         return;
     }
 
@@ -490,41 +545,65 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
         return;
     }
 
-    PluginEvent pluginEvent;
-    pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
-    pluginEvent.mCancellable = true;
-    pluginEvent.mPlayer = &player;
-    pluginEvent.mBlockPosition = position;
-    pluginEvent.mBlockName = brokenState.mName;
-    PluginManager::getInstance().dispatch(pluginEvent);
-    if (pluginEvent.mCancelled) {
-        sendCurrentBlockState(owner, player, position);
-        return;
-    }
-
     const std::string brokenIdentifier = brokenState.mName;
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     const ItemStack heldItem = player.getInventory().getItemInHand();
+    // a block the held item cannot harvest drops nothing for a player; explosions and pistons still drop it
+    const bool harvested = brokenData == nullptr || canHarvest(*brokenData, heldItem);
+    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
 
-    destroyBlock(owner, level, position, brokenState, !creative, heldItem);
+    // plugins listening see the drops and the experience, worked out once, and may change them
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_BREAK);
+    std::vector<ItemStack> drops;
+    int32_t experience = 0;
+    if (plugins != nullptr) {
+        if (!creative && harvested && level.getGameRules().getBool("dotiledrops"))
+            drops = blockDrops(owner, &level, position, brokenState, heldItem);
+        if (!creative && !silkTouch && harvested)
+            experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+
+        PluginEvent pluginEvent;
+        pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
+        pluginEvent.mCancellable = true;
+        pluginEvent.mPlayer = &player;
+        pluginEvent.mBlockPosition = position;
+        pluginEvent.mBlockName = brokenState.mName;
+        pluginEvent.mDrops = &drops;
+        pluginEvent.mExperience = &experience;
+        plugins->dispatch(pluginEvent);
+        if (pluginEvent.mCancelled) {
+            sendCurrentBlockState(owner, player, position);
+            return;
+        }
+    }
+
+    if (const Block *broken = VanillaBlocks::fromState(brokenState))
+        broken->onPlayerWillDestroy(owner, player, level, position, brokenState);
+    destroyBlock(owner, level, position, brokenState, plugins == nullptr && !creative && harvested, heldItem, &player);
+    if (plugins != nullptr) {
+        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        for (const ItemStack &drop: drops)
+            owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
-
-    PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenIdentifier);
-    owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
 
     if (brokenData != nullptr && brokenData->mHardness > 0.0f)
         owner.damagePlayerHeldItem(player, 1);
 
-    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
-    if (!creative && !silkTouch) {
-        const int experience = ExperienceValues::getOreDropExperience(brokenState.mName);
-        if (experience > 0) {
-            const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                       (float) position.z + 0.5f);
-            owner.spawnExperienceOrbs(level, orbPosition, experience);
-        }
+    // the destroyed-by-player event goes out once the tool took its wear
+    PlayerBreakBlockAfterEvent brokenEvent(player, position, brokenState);
+    brokenEvent.mItemBeforeBreak = heldItem;
+    brokenEvent.mItemAfterBreak = player.getInventory().getItemInHand();
+    owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
+
+    if (plugins == nullptr && !creative && !silkTouch && harvested)
+        experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+    if (experience > 0) {
+        const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        owner.spawnExperienceOrbs(level, orbPosition, experience);
     }
 
     player.exhaust(0.005f);
@@ -532,48 +611,110 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
 void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                          const BlockState &brokenState, const ItemStack &tool) {
+    const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+    for (const ItemStack &drop: blockDrops(owner, &level, position, brokenState, tool))
+        owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
+                       ItemActorHandler::DROP_PICKUP_DELAY);
+}
+
+std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owner, Level *level,
+                                                      const Vector3i &position, const BlockState &brokenState,
+                                                      const ItemStack &tool) {
+    std::vector<ItemStack> drops;
+
+    // a block of the plain class broken with no tool drops itself, the same each time: an explosion asks
+    // for thousands a tick
+    if (level != nullptr && tool.isAir()) {
+        struct PlainDrop {
+            bool mPlain = false;
+            std::string mName;
+            int32_t mCount = 0;
+        };
+        thread_local std::unordered_map<int32_t, PlainDrop> plainDrops;
+        const int32_t hash = brokenState.getHash();
+        auto known = plainDrops.find(hash);
+        if (known == plainDrops.end()) {
+            PlainDrop plain;
+            const BlockData *data = BlockDataTable::find(brokenState.mName.c_str());
+            const Block *block = VanillaBlocks::fromIdentifier(brokenState.mName);
+            if (block != nullptr && block->isPlainClass() && data != nullptr
+                && data->mDropKind == BlockDropKind::Self) {
+                plain.mPlain = true;
+                Item parsedItem;
+                const int32_t count = block->getResourceCount(brokenState);
+                if (count > 0
+                    && StringToItemParser::getInstance().parse(selfDropIdentifier(block->getResourceItem(brokenState)),
+                                                               parsedItem)) {
+                    plain.mName = parsedItem.getIdentifier();
+                    plain.mCount = count;
+                }
+            }
+            known = plainDrops.emplace(hash, std::move(plain)).first;
+        }
+        // what a block actor holds goes with the item: the long way
+        if (known->second.mPlain && level->getBlockActors().find(position) == nullptr) {
+            if (known->second.mName.empty())
+                return drops;
+            ItemStack drop;
+            drop.mDefinition = owner.getItemDefinitions().getDefinition(known->second.mName);
+            drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(known->second.mName);
+            drop.mCount = known->second.mCount;
+            drops.push_back(std::move(drop));
+            return drops;
+        }
+    }
+
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
     const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
     if (brokenData == nullptr && brokenBlock == nullptr)
-        return;
+        return drops;
     const bool silkTouch = ItemEnchantments::getLevel(tool, EnchantmentIds::SILK_TOUCH) > 0;
     const int32_t fortuneLevel = ItemEnchantments::getLevel(tool, EnchantmentIds::FORTUNE);
 
-    auto spawnDrop = [&](const std::string &identifier, int32_t count) {
+    bool ownItem = false;
+    auto addDrop = [&](const std::string &identifier, int32_t count) {
         if (identifier.empty() || count <= 0)
             return;
 
-        Item parsedItem;
-        if (!StringToItemParser::getInstance().parse(identifier, parsedItem))
-            return;
+        // the name an identifier parses to never changes once it parsed: an explosion asks the same few
+        // thousands of times a tick
+        thread_local std::unordered_map<std::string, std::string> parsedNames;
+        auto parsed = parsedNames.find(identifier);
+        if (parsed == parsedNames.end()) {
+            Item parsedItem;
+            if (!StringToItemParser::getInstance().parse(identifier, parsedItem))
+                return;
+            parsed = parsedNames.emplace(identifier, parsedItem.getIdentifier()).first;
+        }
 
         ItemStack drop;
-        drop.mDefinition = owner.getItemDefinitions().getDefinition(parsedItem.getIdentifier());
-        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsedItem.getIdentifier());
+        drop.mDefinition = owner.getItemDefinitions().getDefinition(parsed->second);
+        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsed->second);
         drop.mCount = count;
 
-        if (brokenBlock != nullptr)
-            brokenBlock->writeDropContents(level, position, drop);
-
-        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                    (float) position.z + 0.5f);
-        owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
-                       ItemActorHandler::DROP_PICKUP_DELAY);
+        if (brokenBlock != nullptr && level != nullptr)
+            brokenBlock->writeDropContents(*level, position, drop);
+        // the block's own item carries what its block actor holds (bed color, banner patterns)
+        if (level != nullptr && ownItem) {
+            if (const BlockActor *actor = level->getBlockActors().find(position))
+                BlockPickItem::applyActorItemData(drop, *actor);
+        }
+        drops.push_back(std::move(drop));
     };
 
     std::vector<BlockDrop> classDrops;
     if (brokenBlock != nullptr && brokenBlock->getDrops(brokenState, tool, fortuneLevel, classDrops)) {
         for (const BlockDrop &drop: classDrops)
-            spawnDrop(furnaceDropIdentifier(drop.mIdentifier), drop.mCount);
-        return;
+            addDrop(furnaceDropIdentifier(drop.mIdentifier), drop.mCount);
+        return drops;
     }
 
     if (brokenData == nullptr)
-        return;
+        return drops;
 
     std::string dropIdentifier;
     int32_t dropCount = 0;
-    const std::string normalizedDropIdentifier = furnaceDropIdentifier(
+    const std::string normalizedDropIdentifier = selfDropIdentifier(
             brokenBlock != nullptr ? brokenBlock->getResourceItem(brokenState) : brokenState.mName);
     const int32_t resourceCount = brokenBlock != nullptr ? brokenBlock->getResourceCount(brokenState) : 1;
 
@@ -592,28 +733,59 @@ void BlockActionHandler::spawnBlockDrops(ServerNetworkHandler &owner, Level &lev
             dropCount += rand() % (fortuneLevel + 1);
     }
 
-    spawnDrop(dropIdentifier, dropCount);
+    ownItem = dropIdentifier == normalizedDropIdentifier;
+    addDrop(dropIdentifier, dropCount);
+    return drops;
+}
+
+bool BlockActionHandler::canHarvest(const BlockData &block, const ItemStack &tool) {
+    if (block.mToolType == BlockToolType::None || block.mHandHarvest)
+        return true;
+    if (tool.isAir() || tool.mDefinition == nullptr)
+        return false;
+
+    const std::string &identifier = tool.mDefinition->getIdentifier();
+    const ItemData *itemData = ItemDataTable::find(identifier);
+    if (itemData == nullptr) {
+        const bool standardTool = block.mToolType == BlockToolType::Pickaxe || block.mToolType == BlockToolType::Shovel
+                                  || block.mToolType == BlockToolType::Axe || block.mToolType == BlockToolType::Hoe;
+        bool useEfficiency = false;
+        return CustomContentRegistry::getInstance().getDiggerSpeed(identifier, block.mName, standardTool, useEfficiency)
+               > 0;
+    }
+    if ((int32_t) itemData->mToolType == (int32_t) block.mToolType && itemData->mToolTier >= (int32_t) block.mToolTier)
+        return true;
+    const Item *type = VanillaItems::fromIdentifier(identifier);
+    return type != nullptr && type->canDestroySpecial(block.mIdentifier);
 }
 
 void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                      const BlockState &brokenState, bool dropItems, const ItemStack &tool) {
-    const int32_t brokenHash = BlockStateHasher::hash(brokenState.mName, brokenState.mStates);
-    const Block *brokenBlock = VanillaBlocks::fromIdentifier(brokenState.mName);
+                                      const BlockState &brokenState, bool dropItems, const ItemStack &tool,
+                                      const Actor *entitySource, const Vector3i *blockSource) {
+    // the hash a state keeps once asked, its class the one kept on the state: an explosion breaks
+    // thousands of blocks a tick
+    const int32_t brokenHash = brokenState.getHash();
+    const Block *brokenBlock = VanillaBlocks::fromState(brokenState);
+    static const BlockState air(BlockNames::AIR);
 
-    level.setBlockState(position.x, position.y, position.z, BlockState("minecraft:air"));
+    // the drops and onBroken still read the actor: it leaves with the block once they ran
+    std::unique_ptr<BlockActor> heldActor = level.getBlockActors().take(position);
+    level.setBlockState(position.x, position.y, position.z, air);
+    if (heldActor != nullptr)
+        level.getBlockActors().insert(std::move(heldActor));
 
     if (brokenBlock != nullptr) {
         for (const Vector3i &affected: brokenBlock->getAffectedBlocks(level, position, brokenState)) {
             const BlockState affectedState = level.getBlockState(affected.x, affected.y, affected.z);
-            if (affectedState.mName == "minecraft:air")
+            if (affectedState.mName == BlockNames::AIR)
                 continue;
 
             destroyBlock(owner, level, affected, affectedState, false, ItemStack::air());
         }
     }
 
-    const BlockState replacement = level.getBlockState(position.x, position.y, position.z);
-    const int32_t replacementHash = BlockStateHasher::hash(replacement.mName, replacement.mStates);
+    const BlockState *replacement = level.peekBlockPtr(position.x, position.y, position.z);
+    const int32_t replacementHash = replacement == nullptr ? air.getHash() : replacement->getHash();
 
     if (dropItems && level.getGameRules().getBool("dotiledrops"))
         spawnBlockDrops(owner, level, position, brokenState, tool);
@@ -632,10 +804,14 @@ void BlockActionHandler::destroyBlock(ServerNetworkHandler &owner, Level &level,
         brokenBlock->onBroken(owner, level, position, brokenState);
 
     level.onBlockBroken(position, brokenState);
+    if (brokenBlock == nullptr)
+        owner.getScriptEngine().onCustomBlockBreak(level, position, brokenState, entitySource, blockSource);
+    const BlockState *left = level.peekBlockPtr(position.x, position.y, position.z);
+    level.removeForeignBlockActor(position, left == nullptr ? air : *left);
 }
 
-void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
-                                            const Vector3i &position, int32_t face) {
+void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                            int32_t face) {
     Level &level = owner.getLevelFor(player);
     if (position.y < level.getMinY() || position.y > level.getMaxY())
         return;
@@ -658,10 +834,10 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
         return;
     }
 
-    const BlockState state = level.getChunk(position.x >> 4, position.z >> 4)
-                                   .getBlock(position.x & 15, position.y, position.z & 15);
+    const BlockState state =
+            level.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
 
-    if (state.mName == "minecraft:air") {
+    if (state.mName == BlockNames::AIR) {
         return;
     }
 
@@ -672,7 +848,7 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
         return;
 
     const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     if (creative && !isBreakableInCreative(player, state.mName))
         return;
 
@@ -683,10 +859,10 @@ void BlockActionHandler::startBreakingBlock(ServerNetworkHandler &owner, ServerP
     }
 
     player.startBreakingBlock(position, face, breakSpeed, owner.getCurrentTick());
+    owner.getScriptEngine().onPlayerStartBreakingBlock(player, position, face);
 
     owner.broadcastLevelEvent(level, LevelEventPacket::Event::BlockStartBreak,
-                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                       (float) position.z + 0.5f),
+                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
                               breakSpeedEventData(breakSpeed));
 
     if (creative)
@@ -711,10 +887,10 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
         return;
     }
 
-    const BlockState &state = level.getChunk(position.x >> 4, position.z >> 4)
-                                    .getBlock(position.x & 15, position.y, position.z & 15);
+    const BlockState &state =
+            level.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
 
-    if (state.mName == "minecraft:air") {
+    if (state.mName == BlockNames::AIR) {
         stopBreakingBlock(owner, player);
         return;
     }
@@ -730,10 +906,10 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
     if (std::fabs(newBreakSpeed - player.getBreakSpeed()) > BREAK_SPEED_CHANGE_EPSILON) {
         player.setBreakSpeed(newBreakSpeed);
 
-        owner.broadcastLevelEvent(level, LevelEventPacket::Event::BlockUpdateBreak,
-                                  Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                           (float) position.z + 0.5f),
-                                  breakSpeedEventData(newBreakSpeed));
+        owner.broadcastLevelEvent(
+                level, LevelEventPacket::Event::BlockUpdateBreak,
+                Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
+                breakSpeedEventData(newBreakSpeed));
     }
 
     player.addBreakProgress(player.getBreakSpeed());
@@ -743,6 +919,43 @@ void BlockActionHandler::continueBreakingBlock(ServerNetworkHandler &owner, Serv
     }
 }
 
+void BlockActionHandler::resyncDroppedInput(ServerNetworkHandler &owner, ServerPlayer &player,
+                                            const PlayerAuthInputPacket &packet) {
+    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+        if (action.mAction == PlayerActionType::BlockPredictDestroy
+            || action.mAction == PlayerActionType::DimensionChangeRequestOrCreativeDestroyBlock)
+            syncBlocksNearby(owner, player, action.mBlockPosition, action.mFace);
+    }
+    if (packet.mHasItemUseTransaction
+        && (packet.mItemUseTransaction.mActionType == 0 || packet.mItemUseTransaction.mActionType == 2))
+        syncBlocksNearby(owner, player, packet.mItemUseTransaction.mBlockPosition,
+                         packet.mItemUseTransaction.mBlockFace);
+}
+
+namespace {
+    BlockActionHandler::BreakRejectionHook breakRejectionHook = nullptr;
+
+    void reportBreakRejection(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const char *reason, const BlockState *state, const BlockData *blockData) {
+        if (breakRejectionHook == nullptr)
+            return;
+        BlockActionHandler::BreakRejection rejection;
+        rejection.mReason = reason;
+        rejection.mBlock = state != nullptr ? state->mName : std::string();
+        rejection.mBreaking = player.isBreakingBlock();
+        rejection.mBreakingPosition = player.getBreakingBlockPosition();
+        rejection.mElapsedTicks = player.isBreakingBlock() ? owner.getCurrentTick() - player.getBreakStartTick() : 0;
+        rejection.mExpectedTicks = blockData != nullptr ? expectedBreakTicks(player, blockData) : 0;
+        rejection.mProgress = player.getBreakProgress();
+        rejection.mSpeed = player.getBreakSpeed();
+        breakRejectionHook(player, position, rejection);
+    }
+}
+
+void BlockActionHandler::setBreakRejectionHook(BreakRejectionHook hook) {
+    breakRejectionHook = hook;
+}
+
 void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                                                const Vector3i &position) {
     Level &playerLevel = owner.getLevelFor(player);
@@ -750,11 +963,12 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
         return;
 
     if (!canBreakBlock(owner, player, position) || isInSpawnProtection(owner, player, playerLevel, position)) {
+        reportBreakRejection(owner, player, position, "not allowed", nullptr, nullptr);
         sendCurrentBlockState(owner, player, position);
         return;
     }
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     if (creative && !player.isBreakingBlock()) {
         startBreakingBlock(owner, player, position, 0);
         return;
@@ -762,28 +976,36 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
 
     if (!creative) {
         Level &level = owner.getLevelFor(player);
-        const BlockState &state = level.getChunk(position.x >> 4, position.z >> 4)
-                                        .getBlock(position.x & 15, position.y, position.z & 15);
-        if (state.mName == "minecraft:air") {
+        const BlockState &state =
+                level.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
+        if (state.mName == BlockNames::AIR) {
             stopBreakingBlock(owner, player);
             return;
         }
 
         if (!player.isBreakingBlock() || player.getBreakingBlockPosition() != position) {
+            reportBreakRejection(owner, player, position,
+                                 player.isBreakingBlock() ? "breaking another block" : "no break started", &state,
+                                 BlockDataTable::find(state.mName.c_str()));
             sendCurrentBlockState(owner, player, position);
             return;
         }
 
         const BlockData *blockData = BlockDataTable::find(state.mName.c_str());
-        if (!hasReachedBreakTime(owner, player, blockData) ||
-            player.getBreakProgress() + BREAK_PROGRESS_EPSILON < 1.0) {
+        if (!hasReachedBreakTime(owner, player, blockData)
+            || player.getBreakProgress() + player.getBreakSpeed() * (double) BREAK_TICK_TOLERANCE
+                               + BREAK_PROGRESS_EPSILON
+                       < 1.0) {
+            reportBreakRejection(owner, player, position,
+                                 !hasReachedBreakTime(owner, player, blockData) ? "too early" : "progress short",
+                                 &state, blockData);
             sendCurrentBlockState(owner, player, position);
             return;
         }
     }
 
     if (player.isBreakingBlock())
-        stopBreakingBlock(owner, player);
+        stopBreakingBlock(owner, player, false);
 
     breakBlock(owner, player, position);
 }
@@ -791,10 +1013,10 @@ void BlockActionHandler::completeBreakingBlock(ServerNetworkHandler &owner, Serv
 void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlayer &player) {
     const Vector3i position = player.getBreakingBlockPosition();
     Level &level = owner.getLevelFor(player);
-    const BlockState &state = level.getChunk(position.x >> 4, position.z >> 4)
-                                    .getBlock(position.x & 15, position.y, position.z & 15);
+    const BlockState &state =
+            level.getChunk(position.x >> 4, position.z >> 4).getBlock(position.x & 15, position.y, position.z & 15);
 
-    if (state.mName == "minecraft:air")
+    if (state.mName == BlockNames::AIR)
         return;
 
     const int32_t blockHash = BlockStateHasher::hash(state.mName, state.mStates);
@@ -815,21 +1037,21 @@ void BlockActionHandler::sendBreakingFx(ServerNetworkHandler &owner, ServerPlaye
     swing.mEventData = 0;
     swing.mHasFirePosition = false;
     broadcastToViewers(owner, level, center, swing, &player);
-
 }
 
-void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player) {
+void BlockActionHandler::stopBreakingBlock(ServerNetworkHandler &owner, ServerPlayer &player, bool cancelled) {
     if (!player.isBreakingBlock())
         return;
 
     const Vector3i position = player.getBreakingBlockPosition();
+    if (cancelled)
+        owner.getScriptEngine().onPlayerCancelBreakingBlock(player, position, player.getBreakingFace(),
+                                                            player.getBreakProgress());
     player.stopBreakingBlock();
 
     owner.broadcastLevelEvent(owner.getLevelFor(player), LevelEventPacket::Event::BlockStopBreak,
-                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f,
-                                       (float) position.z + 0.5f),
+                              Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
                               0);
-
 }
 
 bool BlockActionHandler::matchesTransactionItem(const PacketCodecContext &context, const ItemStack &held,
@@ -838,23 +1060,25 @@ bool BlockActionHandler::matchesTransactionItem(const PacketCodecContext &contex
         return held.isAir() && sent.isAir();
 
     return context.toNetworkItemId(held.mDefinition->getRuntimeId())
-               == context.toNetworkItemId(sent.mDefinition->getRuntimeId())
+                   == context.toNetworkItemId(sent.mDefinition->getRuntimeId())
            && held.mDamage == sent.mDamage;
 }
 
-/**
- * Allow and deny blocks: the nearest one below the position in the same column decides,
- * and deny still lets creative players build.
- */
+// the nearest allow/deny below in the same column decides; deny still lets creative build
 bool BlockActionHandler::isBlockChangeAllowed(Level &level, const Vector3i &position, const ServerPlayer &player) {
-    for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
-        const std::string &identifier = level.getBlockState(position.x, y, position.z).mName;
+    if (!level.isChunkResident(position.x >> 4, position.z >> 4))
+        return false;
 
-        if (identifier == "minecraft:allow")
+    for (int32_t y = position.y - 1; y >= level.getMinY(); --y) {
+        const BlockState *state = level.peekBlockPtr(position.x, y, position.z);
+        if (state == nullptr)
+            continue;
+
+        if (state->mName == "minecraft:allow")
             return true;
 
-        if (identifier == "minecraft:deny")
-            return player.getGameType() == (int32_t) GameType::Creative;
+        if (state->mName == "minecraft:deny")
+            return player.isCreative();
     }
 
     return true;
@@ -874,7 +1098,7 @@ bool BlockActionHandler::isBlockedByActor(ServerNetworkHandler &owner, Level &le
         if (&other == &placer || !other.isSpawned() || other.isDead())
             continue;
 
-        if (other.getGameType() == (int32_t) GameType::Spectator)
+        if (other.isSpectator())
             continue;
 
         if (&owner.getLevelFor(other) != &level)
@@ -902,19 +1126,20 @@ bool BlockActionHandler::isBlockedByActor(ServerNetworkHandler &owner, Level &le
     return false;
 }
 
-void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &player,
+bool BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &player,
                                     const ItemUseTransaction &transaction) {
     if (transaction.mBlockFace < 0 || transaction.mBlockFace >= 6)
-        return;
+        return false;
 
-    if (isDuplicateRightClick(player, transaction))
-        return;
+    // a simulated player's clicks come from the server: no resent packet to drop
+    if (!player.isSimulated() && isDuplicateRightClick(player, transaction))
+        return false;
 
-    if (!player.isSpawned() || player.isDead() || player.getGameType() == (int32_t) GameType::Spectator)
-        return;
+    if (!player.isSpawned() || player.isDead() || player.isSpectator())
+        return false;
 
     if (transaction.mHotbarSlot < 0 || transaction.mHotbarSlot >= PlayerInventory::HOTBAR_SIZE)
-        return;
+        return false;
 
     PlayerInventory &inventory = player.getInventory();
     bool selectedSlotChanged = false;
@@ -926,16 +1151,17 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     bool handled = false;
 
-    if (canInteractWithBlock(player, transaction.mBlockPosition)) {
-        if (player.getGameType() == (int32_t) GameType::Creative)
+    // the game checks no reach for a simulated player
+    if (player.isSimulated() || canInteractWithBlock(player, transaction.mBlockPosition)) {
+        if (player.isCreative())
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
-        else if (matchesTransactionItem(owner.getCodecContext(player.getNetworkIdentifier()),
-                                        inventory.getItemInHand(), transaction.mItemInHand))
+        else if (matchesTransactionItem(owner.getCodecContext(player.getNetworkIdentifier()), inventory.getItemInHand(),
+                                        transaction.mItemInHand))
             handled = interactBlock(owner, player, transaction, selectedSlotChanged);
     }
 
     if (handled)
-        return;
+        return true;
 
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
 
@@ -948,9 +1174,10 @@ void BlockActionHandler::placeBlock(ServerNetworkHandler &owner, ServerPlayer &p
     const float deltaZ = (float) transaction.mBlockPosition.z - playerPosition.z;
 
     if (deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ > MAX_SYNC_DISTANCE_SQUARED)
-        return;
+        return false;
 
     syncBlocksNearby(owner, player, transaction.mBlockPosition, transaction.mBlockFace);
+    return false;
 }
 
 bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer &player,
@@ -961,32 +1188,38 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     PlayerInventory &inventory = player.getInventory();
     Level &level = owner.getLevelFor(player);
 
-    const BlockState clickedState = level.getBlockState(transaction.mBlockPosition.x,
-                                                        transaction.mBlockPosition.y,
+    // the clicked column is read below: one not in memory would be generated on the tick thread
+    if (!player.isSimulated()
+        && !level.isChunkResident(transaction.mBlockPosition.x >> 4, transaction.mBlockPosition.z >> 4))
+        return false;
+
+    const BlockState clickedState = level.getBlockState(transaction.mBlockPosition.x, transaction.mBlockPosition.y,
                                                         transaction.mBlockPosition.z);
 
-    static const int offsets[6][3] = {
-            {0,  -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-    };
+    const ItemStack &handItem = inventory.getItemInHand();
+    const Block *heldBlock = handItem.mBlockDefinition != nullptr
+                                     ? VanillaBlocks::fromIdentifier(handItem.mBlockDefinition->getIdentifier())
+                                     : nullptr;
+    const bool snowLayerPlacement = heldBlock != nullptr && SnowLayerBlock::matches(heldBlock->getIdentifier());
+    const bool snowloggingClicked = snowLayerPlacement && BlockPrecipitation::isSnowloggable(clickedState);
+
+    static const int offsets[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
     const int face = transaction.mBlockFace;
     const bool replacesClicked = BlockSupport::isReplaceable(clickedState);
     const int placementFace = replacesClicked ? PlacementOrientation::FACE_UP : face;
 
     Vector3i target = transaction.mBlockPosition;
-    if (!replacesClicked) {
+    if (!replacesClicked && !snowloggingClicked) {
         target = Vector3i(transaction.mBlockPosition.x + offsets[face][0],
                           transaction.mBlockPosition.y + offsets[face][1],
                           transaction.mBlockPosition.z + offsets[face][2]);
     }
 
-    const ItemStack &handItem = inventory.getItemInHand();
-    const Block *heldBlock = handItem.mBlockDefinition != nullptr
-                             ? VanillaBlocks::fromIdentifier(handItem.mBlockDefinition->getIdentifier())
-                             : nullptr;
-
     if (heldBlock != nullptr)
         target = heldBlock->resolvePlacementPosition(level, target, face);
+    if (snowloggingClicked)
+        target = transaction.mBlockPosition;
 
     if (target.y < level.getMinY() || target.y > level.getMaxY())
         return false;
@@ -994,7 +1227,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (level.getDimensionType() == DimensionType::Nether && target.y > NETHER_PLACEMENT_LIMIT)
         return false;
 
-    if (clickedState.mName == "minecraft:air")
+    if (clickedState.mName == BlockNames::AIR)
         return false;
 
     if (isInSpawnProtection(owner, player, level, transaction.mBlockPosition))
@@ -1014,10 +1247,9 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (interactPluginEvent.mCancelled)
         return false;
 
-    scripts.onPlayerInteractWithBlock(player, transaction.mBlockPosition, face);
-
-    owner.getScriptEngine().onItemUseOnBlock(player, transaction.mBlockPosition.x,
-                                             transaction.mBlockPosition.y, transaction.mBlockPosition.z);
+    scripts.onPlayerInteractWithBlock(player, clickedState.mName, transaction.mBlockPosition, face,
+                                      transaction.mClickPosition);
+    scripts.onItemUseOnBlock(player, transaction.mBlockPosition, face, transaction.mClickPosition);
 
     const Block *clickedBlock = VanillaBlocks::fromIdentifier(clickedState.mName);
     if (clickedBlock != nullptr)
@@ -1029,27 +1261,50 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     const bool useBlock = !player.getFlags().get(ActorFlag::Sneaking) || inventory.getItemInHand().isAir();
 
     const Item *itemType = !onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr
-                           ? VanillaItems::fromIdentifier(interactItem.mDefinition->getIdentifier())
-                           : nullptr;
+                                   ? VanillaItems::fromIdentifier(interactItem.mDefinition->getIdentifier())
+                                   : nullptr;
     const bool itemFirst = itemType != nullptr && itemType->takesPriorityOverBlockInteraction();
 
-    if (itemFirst && itemType->onUseOnBlock(owner, player, interactItem, transaction.mBlockPosition,
-                                            transaction.mBlockFace, transaction.mClickPosition))
+    if (itemFirst
+        && itemType->onUseOnBlock(owner, player, interactItem, transaction.mBlockPosition, transaction.mBlockFace,
+                                  transaction.mClickPosition))
         return true;
 
-    if (!onCooldown && useBlock && PluginBlock::interactAt(player, transaction.mBlockPosition,
-                                                           (uint32_t) transaction.mBlockFace, clickedState.mName))
+    if (!onCooldown && useBlock
+        && PluginBlock::interactAt(player, transaction.mBlockPosition, (uint32_t) transaction.mBlockFace,
+                                   clickedState.mName))
         return true;
 
-    if (!onCooldown && useBlock && clickedBlock != nullptr &&
-        clickedBlock->onInteract(owner, player, transaction.mBlockPosition, clickedState))
+    if (!onCooldown && useBlock && clickedBlock != nullptr
+        && clickedBlock->onInteractAt(owner, player, transaction.mBlockPosition, clickedState, transaction.mBlockFace,
+                                      transaction.mClickPosition))
         return true;
 
-    if (!itemFirst && itemType != nullptr && itemType->onUseOnBlock(owner, player, interactItem,
-                                                                    transaction.mBlockPosition,
-                                                                    transaction.mBlockFace,
-                                                                    transaction.mClickPosition))
+    if (!itemFirst && itemType != nullptr
+        && itemType->onUseOnBlock(owner, player, interactItem, transaction.mBlockPosition, transaction.mBlockFace,
+                                  transaction.mClickPosition))
         return true;
+
+    // a pack item with minecraft:entity_placer puts its entity against the clicked face, like a spawn egg
+    if (!onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr
+        && interactItem.mDefinition->isComponentBased()) {
+        const CustomItemDefinition *placer =
+                CustomContentRegistry::getInstance().findItem(interactItem.mDefinition->getIdentifier());
+        if (placer != nullptr && placer->mHasEntityPlacer
+            && (placer->mEntityPlacerUseOn.empty()
+                || std::find(placer->mEntityPlacerUseOn.begin(), placer->mEntityPlacerUseOn.end(), clickedState.mName)
+                           != placer->mEntityPlacerUseOn.end())) {
+            static const int OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+            const int side = transaction.mBlockFace >= 0 && transaction.mBlockFace < 6 ? transaction.mBlockFace : 1;
+            const Vector3f spawnPosition((float) (transaction.mBlockPosition.x + OFFSETS[side][0]) + 0.5f,
+                                         (float) (transaction.mBlockPosition.y + OFFSETS[side][1]),
+                                         (float) (transaction.mBlockPosition.z + OFFSETS[side][2]) + 0.5f);
+            if (owner.spawnActor(owner.getLevelFor(player), placer->mPlacerEntity, spawnPosition) != nullptr) {
+                player.consumeOneHeldItem();
+                return true;
+            }
+        }
+    }
 
     if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success) {
         return true;
@@ -1057,9 +1312,21 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const ItemStack &heldItem = inventory.getItemInHand();
 
+    // a pack item with minecraft:block_placer places that block, on the blocks it lists when it lists any
+    std::shared_ptr<BlockDefinition> placerDefinition;
+    if (!heldItem.isAir() && heldItem.mDefinition != nullptr && heldItem.mBlockDefinition == nullptr) {
+        const CustomItemDefinition *placer =
+                CustomContentRegistry::getInstance().findItem(heldItem.mDefinition->getIdentifier());
+        if (placer != nullptr && placer->mHasBlockPlacer
+            && (placer->mPlacerUseOn.empty()
+                || std::find(placer->mPlacerUseOn.begin(), placer->mPlacerUseOn.end(), clickedState.mName)
+                           != placer->mPlacerUseOn.end()))
+            placerDefinition = owner.getBlockDefinitions().getDefinition(placer->mPlacerBlock);
+    }
+
     const bool bucket = BucketItem::isBucket(heldItem);
     if (heldItem.isAir() || heldItem.mCount <= 0 || heldItem.mDefinition == nullptr
-        || (!bucket && heldItem.mBlockDefinition == nullptr)) {
+        || (!bucket && heldItem.mBlockDefinition == nullptr && placerDefinition == nullptr)) {
         if (!bucket && !heldItem.isAir() && heldItem.mDefinition != nullptr)
             owner.emitItemUse(player);
         return false;
@@ -1070,15 +1337,14 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         return true;
     }
 
-    if (player.getGameType() == (int32_t) GameType::Adventure
+    if (player.isAdventure()
         && std::find(heldItem.mCanPlace.begin(), heldItem.mCanPlace.end(), clickedState.mName)
-           == heldItem.mCanPlace.end()) {
+                   == heldItem.mCanPlace.end()) {
         return false;
     }
 
     broadcastArmSwing(owner, player,
-                      Vector3f((float) transaction.mBlockPosition.x + 0.5f,
-                               (float) transaction.mBlockPosition.y + 0.5f,
+                      Vector3f((float) transaction.mBlockPosition.x + 0.5f, (float) transaction.mBlockPosition.y + 0.5f,
                                (float) transaction.mBlockPosition.z + 0.5f));
 
     if (!isChunkReady(level, target))
@@ -1087,10 +1353,11 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (isInSpawnProtection(owner, player, level, target))
         return false;
 
-    if (!isBlockChangeAllowed(level, target, player))
+    if (!isBlockChangeAllowed(level, target, player) || PistonSystem::isMovingInto(level, target))
         return false;
 
-    const BlockDefinition &definition = *heldItem.mBlockDefinition;
+    const BlockDefinition &definition = heldItem.mBlockDefinition != nullptr ? *heldItem.mBlockDefinition
+                                                                             : *placerDefinition;
 
     BlockState mergedState(definition.getIdentifier(), definition.getState());
     PlacementMergeResult mergeResult = PlacementMergeResult::None;
@@ -1104,29 +1371,44 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const bool merged = mergeResult == PlacementMergeResult::Merged;
 
-    //TODO: snowlogging is not implemented
     const BlockState targetState = level.getBlockState(target.x, target.y, target.z);
-    if (!merged && !BlockSupport::isReplaceable(targetState))
+    const bool snowloggingTarget = snowLayerPlacement && BlockPrecipitation::isSnowloggable(targetState);
+    if (!merged && !snowloggingTarget && !BlockSupport::isReplaceable(targetState))
         return false;
 
     const BlockData *placedData = BlockDataTable::find(definition.getIdentifier().c_str());
 
     const BlockState targetOverlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
     const bool targetHasLiquid = LiquidView(targetState).isLiquid() || LiquidView(targetOverlay).isLiquid();
-    if (!merged && targetHasLiquid && placedData != nullptr && placedData->mWaterloggingLevel == 0
-        && !placedData->mSolid)
+    if (snowloggingTarget && targetOverlay.mName != BlockNames::AIR)
+        return false;
+    if (!merged && targetHasLiquid && placedData != nullptr && !placedData->mSolid
+        && LiquidPhysicsSystem::getWaterloggingLevel(BlockState(definition.getIdentifier(), definition.getState()))
+                   == 0)
         return false;
 
-    BlockState placedState = merged ? mergedState : BlockPlacementComponent::apply(
-            BlockState(definition.getIdentifier(), definition.getState()), &level,
-            player.getRotation().y, player.getRotation().x, placementFace,
-            transaction.mClickPosition, player.getPosition(), target);
+    BlockState placedState = merged ? mergedState
+                                    : BlockPlacementComponent::apply(
+                                              BlockState(definition.getIdentifier(), definition.getState()), &level,
+                                              player.getRotation().y, player.getRotation().x, placementFace,
+                                              transaction.mClickPosition, player.getPosition(), target);
+
+    if (!merged && scripts.beforeCustomBlockPlace(player, level, target, face, placedState))
+        return false;
 
     const Block *placedBlock = VanillaBlocks::fromIdentifier(placedState.mName);
     if (!merged && placedBlock != nullptr && !placedBlock->canPlaceAt(level, target, placementFace))
         return false;
 
+    const CustomBlockDefinition *custom = merged ? nullptr
+                                                 : CustomContentRegistry::getInstance().findBlock(placedState.mName);
+    if (custom != nullptr && !custom->mPlacementFilter.allowsPlacement(level, target, placementFace))
+        return false;
+
     if (isBlockedByActor(owner, level, target, placedState, player))
+        return false;
+
+    if (scripts.beforePlayerPlaceBlock(player, level, target, face, transaction.mClickPosition, placedState))
         return false;
 
     PluginEvent placePluginEvent;
@@ -1160,8 +1442,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         }
     }
 
-    const bool waterlogsTarget = LiquidView(targetState).isWater() && placedData != nullptr
-                                 && placedData->mWaterloggingLevel > 0;
+    const bool waterlogsTarget = LiquidView(targetState).isWater()
+                                 && LiquidPhysicsSystem::getWaterloggingLevel(placedState) > 0;
 
     const int32_t blockHash = BlockStateHasher::hash(placedState.mName, placedState.mStates);
     level.setBlockState(target.x, target.y, target.z, placedState);
@@ -1171,7 +1453,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         broadcastBlockUpdate(owner, level, entry.mPosition, entry.mState);
     }
 
-    if (waterlogsTarget)
+    if (waterlogsTarget || snowloggingTarget)
         level.setBlockStateAtLayer(target.x, target.y, target.z, 1, targetState);
 
     PlayerPlaceBlockAfterEvent placeEvent(player, target, placedState.mName);
@@ -1179,17 +1461,16 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     const ItemStack placedWithItem = heldItem;
 
-    if (player.getGameType() != (int32_t) GameType::Creative) {
+    if (!player.isCreative()) {
         ItemStack remaining = heldItem;
         remaining.mCount--;
         if (remaining.mCount <= 0)
             remaining = ItemStack::air();
         inventory.setItemInHand(std::move(remaining));
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
-                                              inventory.getSelectedSlot());
+        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, inventory.getSelectedSlot());
     }
 
-    if (selectedSlotChanged || player.getGameType() != (int32_t) GameType::Creative)
+    if (selectedSlotChanged || !player.isCreative())
         InventoryHandler::sendHeldItem(owner, player);
 
     UpdateBlockPacket update;
@@ -1201,15 +1482,15 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     const Vector3f targetCenter((float) target.x + 0.5f, (float) target.y + 0.5f, (float) target.z + 0.5f);
     broadcastToViewers(owner, level, targetCenter, update);
 
-    if (waterlogsTarget) {
+    if (waterlogsTarget || snowloggingTarget) {
         const BlockState overlay = level.getBlockStateAtLayer(target.x, target.y, target.z, 1);
 
-        UpdateBlockPacket waterUpdate;
-        waterUpdate.mBlockPosition = target;
-        waterUpdate.mRuntimeId = (uint32_t) BlockStateHasher::hash(overlay.mName, overlay.mStates);
-        waterUpdate.mFlags = UpdateBlockPacket::Flag::All;
-        waterUpdate.mDataLayer = 1;
-        broadcastToViewers(owner, level, targetCenter, waterUpdate);
+        UpdateBlockPacket overlayUpdate;
+        overlayUpdate.mBlockPosition = target;
+        overlayUpdate.mRuntimeId = (uint32_t) BlockStateHasher::hash(overlay.mName, overlay.mStates);
+        overlayUpdate.mFlags = UpdateBlockPacket::Flag::All;
+        overlayUpdate.mDataLayer = 1;
+        broadcastToViewers(owner, level, targetCenter, overlayUpdate);
     }
 
     owner.playBlockSound(level, LevelSoundEvent::PLACE, targetCenter, (int32_t) blockHash);
@@ -1219,7 +1500,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
 
     BlockActor *blockActor = level.getBlockActors().find(target);
     if (blockActor != nullptr) {
-        BlockPickItem::restoreBlockData(*blockActor, placedWithItem, owner.getCodecContext());
+        if (!snowloggingTarget)
+            BlockPickItem::restoreBlockData(*blockActor, placedWithItem, owner.getCodecContext());
 
         BlockActorDataPacket data;
         data.mBlockPosition = target;
@@ -1228,5 +1510,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     }
 
     level.onBlockPlaced(target, placedState);
+    if (!merged)
+        scripts.onCustomBlockPlaced(level, target, placedState, targetState);
     return true;
 }

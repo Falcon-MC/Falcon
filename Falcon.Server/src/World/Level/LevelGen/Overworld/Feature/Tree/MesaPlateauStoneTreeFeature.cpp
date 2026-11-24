@@ -9,9 +9,6 @@ const char *MesaPlateauStoneTreeFeature::name() const {
 }
 
 std::vector<const char *> MesaPlateauStoneTreeFeature::getFeatures() const {
-    return std::vector<const char *>{
-            "minecraft:dead_bush_feature",
-            "minecraft:mesa_foliage_feature",
-            MesaTreeFeature::NAME
-    };
+    return std::vector<const char *>{"minecraft:dead_bush_feature", "minecraft:mesa_foliage_feature",
+                                     MesaTreeFeature::NAME};
 }

@@ -1,9 +1,13 @@
 #pragma once
 
 #include "Core/Utility/UUID.h"
+#include <falcon/falcon_api.h>
 
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 class ResourcePack {
@@ -20,6 +24,13 @@ public:
     std::vector<std::string> mDependencyUuids;
 };
 
+struct ResourcePackOffer {
+    std::vector<ResourcePack> mPacks;
+    bool mRequired = false;
+
+    const ResourcePack *findById(const std::string &uuid) const;
+};
+
 class ResourcePackManager {
 public:
     void loadFromDirectory(const std::string &directory);
@@ -30,11 +41,22 @@ public:
 
     void loadFolder(const std::string &path, const std::string &label);
 
-    const std::vector<ResourcePack> &getPacks() const { return mPacks; }
+    const std::vector<ResourcePack> &getPacks() const {
+        return mPacks;
+    }
 
-    const ResourcePack *findById(const std::string &uuid) const;
+    bool replacePluginPacks(const std::string &owner, std::vector<std::pair<std::string, std::string>> archives,
+                            bool required);
 
-    size_t count() const { return mPacks.size(); }
+    std::shared_ptr<const ResourcePackOffer> getOffer(bool serverRequired);
+
+    static std::shared_ptr<const ResourcePackOffer> replaceOffer(
+            const ResourcePackOffer &current, const FalconResourcePackOfferEntry *entries, uint32_t count,
+            bool required);
+
+    size_t count() const {
+        return mPacks.size();
+    }
 
     std::vector<std::string> getLoadedUuids() const;
 
@@ -43,20 +65,22 @@ public:
 private:
     bool _loadPackFile(const std::string &path, const std::string &fileName);
 
-    bool _loadPackBytes(std::string data, const std::string &label, const std::string &contentKey);
+    bool _loadPackBytes(std::string data, const std::string &label, const std::string &contentKey,
+                        size_t maxManifestSize = 1024 * 1024);
 
     void _loadFolder(const std::string &path, const std::string &label);
 
     void _loadAddon(const std::string &data);
 
-    static bool _readWholeFile(const std::string &path, std::string &out);
+    static bool _readWholeFile(const std::string &path, std::string &out, size_t maxBytes = SIZE_MAX);
 
-    static bool _extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out);
+    static bool _extractZipEntry(const std::string &zip, const std::string &suffix, std::string &out, size_t maxSize);
 
-    static bool _readManifest(const std::string &manifest, std::string &uuid, std::string &version,
-                              std::string &name);
+    static bool _readManifest(const std::string &manifest, std::string &uuid, std::string &version, std::string &name);
 
     static std::string _sha256(const std::string &data);
 
     std::vector<ResourcePack> mPacks;
+    std::map<std::string, ResourcePackOffer> mPluginStacks;
+    std::shared_ptr<const ResourcePackOffer> mCachedOffer;
 };

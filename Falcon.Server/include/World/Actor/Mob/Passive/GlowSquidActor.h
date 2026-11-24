@@ -8,9 +8,13 @@ public:
 
     using PassiveActor::PassiveActor;
 
-    ActorSize getSize() const override { return ActorSize{0.475f, 0.95f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.475f, 0.95f};
+    }
 
-    float getDefaultMaxHealth() const override { return 10.0f; }
+    float getDefaultMaxHealth() const override {
+        return 10.0f;
+    }
 
     PhysicsComponent getPhysics() const override {
         PhysicsComponent physics = PassiveActor::getPhysics();

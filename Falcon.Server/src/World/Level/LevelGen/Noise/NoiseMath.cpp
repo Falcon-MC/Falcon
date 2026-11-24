@@ -1,5 +1,7 @@
 #include "World/Level/LevelGen/Noise/NoiseMath.h"
 
+#include <limits>
+
 double NoiseMath::grad(int32_t hash, double x, double y, double z) {
     switch (hash & 0xF) {
         case 0x0:
@@ -47,6 +49,22 @@ int32_t NoiseMath::floor(double d) {
     return d < static_cast<double>(i) ? i - 1 : i;
 }
 
+int32_t NoiseMath::floorDiv(int32_t value, int32_t divisor) {
+    int32_t quotient = value / divisor;
+    if ((value % divisor != 0) && ((value < 0) != (divisor < 0)))
+        quotient--;
+
+    return quotient;
+}
+
+// cvttss2si gives INT32_MIN for nan and out-of-range values; a plain cast is undefined there
+int32_t NoiseMath::truncateToInt(float value) {
+    if (!(value >= -2147483648.0f && value < 2147483648.0f))
+        return std::numeric_limits<int32_t>::min();
+
+    return static_cast<int32_t>(value);
+}
+
 double NoiseMath::lerp(double delta, double start, double end) {
     return start + delta * (end - start);
 }
@@ -55,8 +73,10 @@ double NoiseMath::lerp2(double deltaX, double deltaY, double val00, double val10
     return lerp(deltaY, lerp(deltaX, val00, val10), lerp(deltaX, val01, val11));
 }
 
-double NoiseMath::lerp3(double deltaX, double deltaY, double deltaZ, double val000, double val100, double val010, double val110, double val001, double val101, double val011, double val111) {
-    return lerp(deltaZ, lerp2(deltaX, deltaY, val000, val100, val010, val110), lerp2(deltaX, deltaY, val001, val101, val011, val111));
+double NoiseMath::lerp3(double deltaX, double deltaY, double deltaZ, double val000, double val100, double val010,
+                        double val110, double val001, double val101, double val011, double val111) {
+    return lerp(deltaZ, lerp2(deltaX, deltaY, val000, val100, val010, val110),
+                lerp2(deltaX, deltaY, val001, val101, val011, val111));
 }
 
 double NoiseMath::smoothStep(double d) {

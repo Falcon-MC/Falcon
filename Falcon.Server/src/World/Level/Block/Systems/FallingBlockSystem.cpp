@@ -10,52 +10,50 @@
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/UpdateBlockPacket.h"
+#include "Core/Math/VectorMath.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <unordered_set>
 
 namespace {
-    const char *FALLABLE_BLOCKS[] = {
-            "minecraft:sand",
-            "minecraft:red_sand",
-            "minecraft:gravel",
-            "minecraft:suspicious_sand",
-            "minecraft:suspicious_gravel",
-            "minecraft:anvil",
-            "minecraft:chipped_anvil",
-            "minecraft:damaged_anvil",
-            "minecraft:deprecated_anvil",
-            "minecraft:dragon_egg",
-            "minecraft:scaffolding",
-            "minecraft:pointed_dripstone",
-            "minecraft:white_concrete_powder",
-            "minecraft:orange_concrete_powder",
-            "minecraft:magenta_concrete_powder",
-            "minecraft:light_blue_concrete_powder",
-            "minecraft:yellow_concrete_powder",
-            "minecraft:lime_concrete_powder",
-            "minecraft:pink_concrete_powder",
-            "minecraft:gray_concrete_powder",
-            "minecraft:light_gray_concrete_powder",
-            "minecraft:cyan_concrete_powder",
-            "minecraft:purple_concrete_powder",
-            "minecraft:blue_concrete_powder",
-            "minecraft:brown_concrete_powder",
-            "minecraft:green_concrete_powder",
-            "minecraft:red_concrete_powder",
-            "minecraft:black_concrete_powder"
-    };
+    const char *FALLABLE_BLOCKS[] = {"minecraft:sand",
+                                     "minecraft:red_sand",
+                                     "minecraft:gravel",
+                                     "minecraft:suspicious_sand",
+                                     "minecraft:suspicious_gravel",
+                                     "minecraft:anvil",
+                                     "minecraft:chipped_anvil",
+                                     "minecraft:damaged_anvil",
+                                     "minecraft:deprecated_anvil",
+                                     "minecraft:dragon_egg",
+                                     "minecraft:scaffolding",
+                                     "minecraft:pointed_dripstone",
+                                     "minecraft:icicle",
+                                     "minecraft:white_concrete_powder",
+                                     "minecraft:orange_concrete_powder",
+                                     "minecraft:magenta_concrete_powder",
+                                     "minecraft:light_blue_concrete_powder",
+                                     "minecraft:yellow_concrete_powder",
+                                     "minecraft:lime_concrete_powder",
+                                     "minecraft:pink_concrete_powder",
+                                     "minecraft:gray_concrete_powder",
+                                     "minecraft:light_gray_concrete_powder",
+                                     "minecraft:cyan_concrete_powder",
+                                     "minecraft:purple_concrete_powder",
+                                     "minecraft:blue_concrete_powder",
+                                     "minecraft:brown_concrete_powder",
+                                     "minecraft:green_concrete_powder",
+                                     "minecraft:red_concrete_powder",
+                                     "minecraft:black_concrete_powder"};
 
     const std::string CONCRETE_POWDER_SUFFIX = "_concrete_powder";
 
     const std::unordered_set<std::string> &fallableSet() {
-        static const std::unordered_set<std::string> blocks(std::begin(FALLABLE_BLOCKS),
-                                                            std::end(FALLABLE_BLOCKS));
+        static const std::unordered_set<std::string> blocks(std::begin(FALLABLE_BLOCKS), std::end(FALLABLE_BLOCKS));
         return blocks;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool isChunkReady(Level &level, const Vector3i &position) {
         if (position.y < level.getMinY() || position.y > level.getMaxY())
@@ -74,14 +72,15 @@ bool FallingBlockSystem::breaksOnLava(const std::string &identifier) {
 }
 
 bool FallingBlockSystem::breaksOnGround(const std::string &identifier) {
-    return identifier == "minecraft:suspicious_sand" || identifier == "minecraft:suspicious_gravel" ||
-           identifier == "minecraft:pointed_dripstone";
+    return identifier == "minecraft:suspicious_sand" || identifier == "minecraft:suspicious_gravel"
+           || identifier == "minecraft:pointed_dripstone";
 }
 
 bool FallingBlockSystem::isConcretePowder(const std::string &identifier) {
-    return identifier.size() > CONCRETE_POWDER_SUFFIX.size() &&
-           identifier.compare(identifier.size() - CONCRETE_POWDER_SUFFIX.size(),
-                              CONCRETE_POWDER_SUFFIX.size(), CONCRETE_POWDER_SUFFIX) == 0;
+    return identifier.size() > CONCRETE_POWDER_SUFFIX.size()
+           && identifier.compare(identifier.size() - CONCRETE_POWDER_SUFFIX.size(), CONCRETE_POWDER_SUFFIX.size(),
+                                 CONCRETE_POWDER_SUFFIX)
+                      == 0;
 }
 
 std::string FallingBlockSystem::getConcreteFor(const std::string &identifier) {
@@ -102,11 +101,11 @@ std::string FallingBlockSystem::getNextAnvilDamage(const std::string &identifier
 }
 
 bool FallingBlockSystem::isWater(const std::string &identifier) {
-    return identifier == "minecraft:water" || identifier == "minecraft:flowing_water";
+    return identifier == BlockNames::WATER || identifier == "minecraft:flowing_water";
 }
 
 bool FallingBlockSystem::isLava(const std::string &identifier) {
-    return identifier == "minecraft:lava" || identifier == "minecraft:flowing_lava";
+    return identifier == BlockNames::LAVA || identifier == "minecraft:flowing_lava";
 }
 
 bool FallingBlockSystem::isTransparent(const BlockState &state) {
@@ -121,7 +120,7 @@ bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
     const BlockState state = level.getBlockState(position.x, position.y, position.z);
     const std::string &identifier = state.mName;
 
-    if (identifier == "minecraft:air" || identifier == "minecraft:fire" || identifier == "minecraft:soul_fire")
+    if (identifier == BlockNames::AIR || identifier == "minecraft:fire" || identifier == "minecraft:soul_fire")
         return true;
 
     if (isWater(identifier) || isLava(identifier))
@@ -135,17 +134,10 @@ bool FallingBlockSystem::canFallInto(Level &level, const Vector3i &position) {
     return false;
 }
 
-/**
- * Every face except the bottom: powder resting on top of water stays powder.
- */
+// every face but the bottom: powder resting on water stays powder
 bool FallingBlockSystem::isTouchingWater(Level &level, const Vector3i &position) {
-    static const Vector3i OFFSETS[] = {
-            Vector3i(0, 1, 0),
-            Vector3i(0, 0, -1),
-            Vector3i(0, 0, 1),
-            Vector3i(-1, 0, 0),
-            Vector3i(1, 0, 0)
-    };
+    static const Vector3i OFFSETS[] = {Vector3i(0, 1, 0), Vector3i(0, 0, -1), Vector3i(0, 0, 1), Vector3i(-1, 0, 0),
+                                       Vector3i(1, 0, 0)};
 
     for (const Vector3i &offset: OFFSETS) {
         const BlockState side = level.getBlockState(position.x + offset.x, position.y + offset.y,
@@ -184,7 +176,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
     if (!isChunkReady(level, position))
         return;
 
-    setBlockState(owner, level, position, BlockState("minecraft:air"));
+    setBlockState(owner, level, position, BlockState(BlockNames::AIR));
 
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
 
@@ -199,7 +191,7 @@ void FallingBlockSystem::spawnFallingBlock(ServerNetworkHandler &owner, Level &l
 }
 
 void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                        const BlockState &state) {
+                                        const BlockState &state, const Vector3i *changed) {
     if (!isChunkReady(level, position))
         return;
 
@@ -210,11 +202,25 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
         return;
     }
 
-    // Hanging dripstone is held up from above, by a solid block or the rest of the
-    // stalactite; it only falls once that support is gone.
-    if (state.mName == "minecraft:pointed_dripstone" && state.mStates.getBool("hanging", false)) {
+    // the fall waits for a queued tick: 1 when the block below changed, else 2
+    const bool below = changed != nullptr && changed->x == position.x && changed->z == position.z
+                       && changed->y < position.y;
+    level.scheduleUpdate(position, below ? 1 : 2);
+}
+
+void FallingBlockSystem::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                           const BlockState &state) {
+    if (!isChunkReady(level, position))
+        return;
+
+    if (state.mName == "minecraft:icicle" && !state.mStates.getBool("hanging", false))
+        return;
+
+    // hanging dripstone and icicles hang from a solid block or the rest of the stalactite
+    if ((state.mName == "minecraft:pointed_dripstone" || state.mName == "minecraft:icicle")
+        && state.mStates.getBool("hanging", false)) {
         const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
-        if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == "minecraft:pointed_dripstone")
+        if (level.isSolidAt(position.x, position.y + 1, position.z) || above.mName == state.mName)
             return;
     }
 
@@ -225,7 +231,11 @@ void FallingBlockSystem::onNormalUpdate(ServerNetworkHandler &owner, Level &leve
     spawnFallingBlock(owner, level, position, state);
 }
 
+// BlockPlaceEvent queues the fall check 2 ticks later
 void FallingBlockSystem::onBlockPlaced(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) {
-    onNormalUpdate(owner, level, position, state);
+    (void) owner;
+    (void) state;
+    if (isChunkReady(level, position))
+        level.scheduleUpdate(position, 2);
 }

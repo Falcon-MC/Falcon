@@ -6,9 +6,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <system_error>
 #include <sys/stat.h>
 #include <zlib.h>
 
@@ -29,6 +32,40 @@ PlayerDataProvider::PlayerDataProvider(const std::string &directory) : mDirector
     MAKE_DIRECTORY(mDirectory.c_str());
 }
 
+bool PlayerDataProvider::isSafeName(const std::string &name) {
+    // client-supplied name: no escaping the directory, no path injection; control bytes rejected (a NUL
+    // truncates the path)
+    if (name.empty() || name.size() > 64 || name == "." || name == "..")
+        return false;
+
+    for (const unsigned char character: name) {
+        // ':' opens an alternate stream on windows
+        if (character == '/' || character == '\\' || character == ':' || character < 0x20)
+            return false;
+    }
+
+    if (name.find("..") != std::string::npos)
+        return false;
+
+#ifdef _WIN32
+    // windows only: characters a file name cannot hold, a trailing dot or space it drops, and device
+    // names, which open the device whatever the extension
+    if (name.find_first_of("<>\"|?*") != std::string::npos || name.back() == '.' || name.back() == ' ')
+        return false;
+
+    const std::string stem = StringUtil::toLowerCase(name.substr(0, name.find('.')));
+    static const char *const devices[] = {"con",  "prn",  "aux",  "nul",  "com1", "com2", "com3", "com4",
+                                          "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3",
+                                          "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9"};
+    for (const char *device: devices) {
+        if (stem == device)
+            return false;
+    }
+#endif
+
+    return true;
+}
+
 std::string PlayerDataProvider::_getPlayerDataPath(const std::string &name) const {
     return mDirectory + "/" + StringUtil::toLowerCase(name) + ".dat";
 }
@@ -38,7 +75,8 @@ bool PlayerDataProvider::_gzipCompress(const std::string &input, std::string &ou
     std::memset(&stream, 0, sizeof(stream));
 
     if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, GZIP_WINDOW_BITS, GZIP_MEMORY_LEVEL,
-                     Z_DEFAULT_STRATEGY) != Z_OK)
+                     Z_DEFAULT_STRATEGY)
+        != Z_OK)
         return false;
 
     output.resize(deflateBound(&stream, (uLong) input.size()) + 32);
@@ -91,11 +129,25 @@ bool PlayerDataProvider::_gzipDecompress(const std::string &input, std::string &
 }
 
 bool PlayerDataProvider::hasData(const std::string &name) const {
+    if (!isSafeName(name))
+        return false;
+
     struct stat info;
     return stat(_getPlayerDataPath(name).c_str(), &info) == 0;
 }
 
+bool PlayerDataProvider::removeData(const std::string &name) const {
+    if (!isSafeName(name))
+        return false;
+
+    std::error_code error;
+    return std::filesystem::remove(_getPlayerDataPath(name), error) && !error;
+}
+
 bool PlayerDataProvider::loadData(const std::string &name, Tag &outData) const {
+    if (!isSafeName(name))
+        return false;
+
     std::ifstream file(_getPlayerDataPath(name), std::ios::binary);
     if (!file.is_open())
         return false;
@@ -118,7 +170,48 @@ bool PlayerDataProvider::loadData(const std::string &name, Tag &outData) const {
     return true;
 }
 
+std::string PlayerDataProvider::_getArchivePath(const std::string &name, const std::string &xuid) const {
+    return mDirectory + "/" + StringUtil::toLowerCase(name) + "." + xuid + ".dat";
+}
+
+bool PlayerDataProvider::claimData(const std::string &name, const std::string &xuid) const {
+    // an unsigned login names itself: it must not take over a save an account owns
+    if (xuid.empty()) {
+        Tag data;
+        return !loadData(name, data) || data.getString(TAG_OWNER_XUID, std::string()).empty();
+    }
+    if (!isSafeName(name) || !isSafeName(xuid))
+        return true;
+
+    const std::string live = _getPlayerDataPath(name);
+    const std::string mine = _getArchivePath(name, xuid);
+
+    Tag data;
+    if (loadData(name, data)) {
+        const std::string owner = data.getString(TAG_OWNER_XUID, std::string());
+        if (owner.empty() || owner == xuid)
+            return true;
+        if (!isSafeName(owner))
+            return false;
+
+        // rename does not replace on windows: an older archive of that account goes first, the live
+        // save being the newer of the two
+        const std::string theirs = _getArchivePath(name, owner);
+        std::remove(theirs.c_str());
+        if (std::rename(live.c_str(), theirs.c_str()) != 0)
+            return false;
+    }
+
+    struct stat info;
+    if (stat(mine.c_str(), &info) != 0)
+        return true;
+    return std::rename(mine.c_str(), live.c_str()) == 0;
+}
+
 bool PlayerDataProvider::saveData(const std::string &name, const Tag &data) const {
+    if (!isSafeName(name))
+        return false;
+
     BinaryStream stream;
 
     try {
@@ -131,10 +224,21 @@ bool PlayerDataProvider::saveData(const std::string &name, const Tag &data) cons
     if (!_gzipCompress(stream.getBuffer(), compressed))
         return false;
 
-    std::ofstream file(_getPlayerDataPath(name), std::ios::binary | std::ios::trunc);
-    if (!file.is_open())
-        return false;
+    // written beside the save, then renamed over it: a crash mid-write leaves the previous save whole
+    const std::string path = _getPlayerDataPath(name);
+    const std::string pending = path + ".tmp";
+    {
+        std::ofstream file(pending, std::ios::binary | std::ios::trunc);
+        if (!file.is_open())
+            return false;
 
-    file.write(compressed.data(), (std::streamsize) compressed.size());
-    return file.good();
+        file.write(compressed.data(), (std::streamsize) compressed.size());
+        file.flush();
+        if (!file.good())
+            return false;
+    }
+
+    std::error_code error;
+    std::filesystem::rename(pending, path, error);
+    return !error;
 }

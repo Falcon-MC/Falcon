@@ -1,5 +1,8 @@
 #include "World/Level/Block/Systems/PistonSystem.h"
 
+#include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Movement/ActorCollisionSystem.h"
+#include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Level/Block/Actor/PistonArmBlockActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -13,52 +16,88 @@
 #include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
+#include "World/Level/Block/BlockNames.h"
 
+#include <unordered_map>
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <optional>
 #include <unordered_set>
+#include <vector>
 
 namespace {
     const char *PISTON = "minecraft:piston";
     const char *STICKY_PISTON = "minecraft:sticky_piston";
     const char *PISTON_ARM_COLLISION = "minecraft:piston_arm_collision";
     const char *STICKY_PISTON_ARM_COLLISION = "minecraft:sticky_piston_arm_collision";
-    const char *AIR = "minecraft:air";
+    using BlockNames::AIR;
 
-    const std::unordered_set<std::string> UNPUSHABLE = {
-            "minecraft:bedrock", "minecraft:obsidian", "minecraft:crying_obsidian",
-            "minecraft:glowingobsidian", "minecraft:beacon", "minecraft:barrier",
-            "minecraft:allow", "minecraft:deny", "minecraft:border_block",
-            "minecraft:command_block", "minecraft:chain_command_block", "minecraft:repeating_command_block",
-            "minecraft:ender_chest", "minecraft:end_gateway", "minecraft:end_portal",
-            "minecraft:end_portal_frame", "minecraft:frog_spawn", "minecraft:invisible_bedrock",
-            "minecraft:jigsaw", "minecraft:lodestone", "minecraft:mob_spawner", "minecraft:moving_block",
-            "minecraft:pointed_dripstone", "minecraft:portal", "minecraft:respawn_anchor",
-            "minecraft:sculk_catalyst", "minecraft:sculk_shrieker", "minecraft:structure_block",
-            "minecraft:structure_void", "minecraft:trial_spawner", "minecraft:vault",
-            "minecraft:creaking_heart"
-    };
+    const std::unordered_set<std::string> UNPUSHABLE = {"minecraft:bedrock",
+                                                        "minecraft:obsidian",
+                                                        "minecraft:crying_obsidian",
+                                                        "minecraft:glowingobsidian",
+                                                        "minecraft:beacon",
+                                                        "minecraft:barrier",
+                                                        "minecraft:allow",
+                                                        "minecraft:deny",
+                                                        "minecraft:border_block",
+                                                        "minecraft:command_block",
+                                                        "minecraft:chain_command_block",
+                                                        "minecraft:repeating_command_block",
+                                                        "minecraft:ender_chest",
+                                                        "minecraft:end_gateway",
+                                                        "minecraft:end_portal",
+                                                        "minecraft:end_portal_frame",
+                                                        "minecraft:frog_spawn",
+                                                        "minecraft:invisible_bedrock",
+                                                        "minecraft:jigsaw",
+                                                        "minecraft:lodestone",
+                                                        "minecraft:mob_spawner",
+                                                        "minecraft:moving_block",
+                                                        "minecraft:pointed_dripstone",
+                                                        "minecraft:portal",
+                                                        "minecraft:respawn_anchor",
+                                                        "minecraft:sculk_catalyst",
+                                                        "minecraft:sculk_shrieker",
+                                                        "minecraft:structure_block",
+                                                        "minecraft:structure_void",
+                                                        "minecraft:trial_spawner",
+                                                        "minecraft:vault",
+                                                        "minecraft:creaking_heart"};
 
-    const std::unordered_set<std::string> UNPULLABLE_EXTRA = {
-            "minecraft:campfire", "minecraft:soul_campfire", "minecraft:heavy_core"
-    };
+    const std::unordered_set<std::string> UNPULLABLE_EXTRA = {"minecraft:campfire", "minecraft:soul_campfire",
+                                                              "minecraft:heavy_core"};
 
-    const std::unordered_set<std::string> BREAKS_WHEN_MOVED = {
-            "minecraft:bamboo", "minecraft:bed", "minecraft:budding_amethyst", "minecraft:cactus",
-            "minecraft:cake", "minecraft:campfire", "minecraft:soul_campfire", "minecraft:candle_cake",
-            "minecraft:chorus_flower", "minecraft:chorus_plant", "minecraft:cocoa", "minecraft:dragon_egg",
-            "minecraft:ladder", "minecraft:lever", "minecraft:glow_lichen", "minecraft:melon_block",
-            "minecraft:pumpkin", "minecraft:snow_layer", "minecraft:standing_banner",
-            "minecraft:wall_banner", "minecraft:undyed_shulker_box", "minecraft:vine",
-            "minecraft:frame", "minecraft:glow_frame"
-    };
+    const std::unordered_set<std::string> BREAKS_WHEN_MOVED = {"minecraft:bamboo",
+                                                               "minecraft:bed",
+                                                               "minecraft:budding_amethyst",
+                                                               "minecraft:cactus",
+                                                               "minecraft:cake",
+                                                               "minecraft:campfire",
+                                                               "minecraft:soul_campfire",
+                                                               "minecraft:candle_cake",
+                                                               "minecraft:chorus_flower",
+                                                               "minecraft:chorus_plant",
+                                                               "minecraft:cocoa",
+                                                               "minecraft:dragon_egg",
+                                                               "minecraft:ladder",
+                                                               "minecraft:lever",
+                                                               "minecraft:glow_lichen",
+                                                               "minecraft:melon_block",
+                                                               "minecraft:pumpkin",
+                                                               "minecraft:snow_layer",
+                                                               "minecraft:standing_banner",
+                                                               "minecraft:wall_banner",
+                                                               "minecraft:undyed_shulker_box",
+                                                               "minecraft:vine",
+                                                               "minecraft:frame",
+                                                               "minecraft:glow_frame"};
 
     const std::unordered_set<std::string> NEVER_BREAKS = {
-            "minecraft:rail", "minecraft:golden_rail", "minecraft:detector_rail", "minecraft:activator_rail",
-            "minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor", "minecraft:sculk_shrieker",
-            "minecraft:heavy_core"
-    };
+            "minecraft:rail",           "minecraft:golden_rail",  "minecraft:detector_rail",
+            "minecraft:activator_rail", "minecraft:sculk_sensor", "minecraft:calibrated_sculk_sensor",
+            "minecraft:sculk_shrieker", "minecraft:heavy_core"};
 
     struct PendingMove {
         Vector3i mPiston;
@@ -81,7 +120,8 @@ namespace {
         }
     }
 
-    std::array<std::vector<PendingMove>, Dimension::DIMENSION_COUNT> gPendingMoves;
+    // per level: worlds share dimension ids
+    std::unordered_map<const Level *, std::vector<PendingMove>> gPendingMoves;
 
     bool contains(const std::unordered_set<std::string> &set, const std::string &value) {
         return set.find(value) != set.end();
@@ -118,6 +158,52 @@ namespace {
                         position.z + offset.z * distance);
     }
 
+    const char *const PUSHABLE_BY_BLOCK = "minecraft:pushable_by_block";
+
+    // mobs with minecraft:pushable_by_block in the cells the moving blocks and the arm head enter go one block
+    // along; the game slides them over the two ticks of the move
+    void pushMobs(ServerNetworkHandler &owner, Level &level, const Vector3i &piston, const std::vector<Vector3i> &moved,
+                  const std::optional<Vector3i> &armHead, int direction) {
+        std::vector<AxisAlignedBB> cells;
+        cells.reserve(moved.size() + 1);
+        for (const Vector3i &source: moved) {
+            const Vector3i target = relative(source, direction);
+            cells.emplace_back((float) target.x, (float) target.y, (float) target.z, (float) target.x + 1.0f,
+                               (float) target.y + 1.0f, (float) target.z + 1.0f);
+        }
+        if (armHead.has_value())
+            cells.emplace_back((float) armHead->x, (float) armHead->y, (float) armHead->z, (float) armHead->x + 1.0f,
+                               (float) armHead->y + 1.0f, (float) armHead->z + 1.0f);
+        if (cells.empty())
+            return;
+
+        const Vector3i offset = RedstoneFace::offset(direction);
+        const Vector3f center((float) piston.x + 0.5f, (float) piston.y + 0.5f, (float) piston.z + 0.5f);
+        std::vector<MobActor *> pushed;
+        owner.forEachActorNear(center, (float) PistonSystem::MOVE_BLOCK_LIMIT + 3.0f, [&](ServerActor &actor) {
+            MobActor *mob = dynamic_cast<MobActor *>(&actor);
+            if (mob == nullptr || !mob->isAlive() || &owner.getLevelFor(*mob) != &level
+                || mob->getComponent(PUSHABLE_BY_BLOCK) == nullptr)
+                return;
+            const AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*mob);
+            for (const AxisAlignedBB &cell: cells) {
+                if (box.intersectsWith(cell)) {
+                    pushed.push_back(mob);
+                    return;
+                }
+            }
+        });
+        const Vector3f delta((float) offset.x, (float) offset.y, (float) offset.z);
+        for (MobActor *mob: pushed) {
+            // moved blocks are air until the move lands: only the blocks past them stop the mob
+            AxisAlignedBB box = ActorPushSystem::boundingBoxOf(*mob);
+            const ActorMoveResult result = ActorCollisionSystem::move(level, box, delta, 0.0f, mob->isOnGround(), mob);
+            const Vector3f &position = mob->getPosition();
+            mob->teleport(Vector3f(position.x + result.mMoved.x, position.y + result.mMoved.y,
+                                   position.z + result.mMoved.z));
+        }
+    }
+
     int faceAxis(int face) {
         if (face == RedstoneFace::DOWN || face == RedstoneFace::UP)
             return 1;
@@ -125,6 +211,87 @@ namespace {
             return 2;
         return 0;
     }
+
+    // slime and honey reach every neighbour
+    // but the one walked from; along the move direction pushed, from a sticky side only dragged if pullable
+    struct MoveResolver {
+        Level &mLevel;
+        Vector3i mPiston;
+        // the retracting arm: removed by the game before walking the pulled blocks, counts as air
+        Vector3i mFreed;
+        bool mHasFreed;
+        int mDirection;
+        std::vector<Vector3i> &mToMove;
+        std::vector<Vector3i> &mToDestroy;
+
+        bool contains(const std::vector<Vector3i> &list, const Vector3i &position) const {
+            return std::find(list.begin(), list.end(), position) != list.end();
+        }
+
+        bool isInWorld(const Vector3i &position) const {
+            return position.y >= mLevel.getMinY() && position.y <= mLevel.getMaxY();
+        }
+
+        // _checkAttachedBlocks starts the walk with the piston's facing as the branch
+        bool resolve(const Vector3i &origin, int facing) {
+            return walk(origin, facing) && mToMove.size() <= (size_t) PistonSystem::MOVE_BLOCK_LIMIT;
+        }
+
+        bool walk(const Vector3i &position, int branch) {
+            if (contains(mToMove, position))
+                return true;
+
+            const BlockState state = stateAt(mLevel, position);
+            if (isAir(state) || (mHasFreed && position == mFreed))
+                return true;
+
+            const bool ahead = branch == mDirection;
+            // the game keeps a block with a piston block actor (type 18) in place unless its actor allows the move,
+            // the moving piston included
+            if (position == mPiston || !PistonSystem::canBePushed(state))
+                return !ahead;
+
+            if (PistonSystem::canSticksBlock(state)) {
+                if (!isInWorld(relative(position, mDirection)))
+                    return false;
+                mToMove.push_back(position);
+                // past the limit the structure fails anyway
+                if (mToMove.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
+                    return false;
+
+                const int from = RedstoneFace::opposite(branch);
+                for (int side = 0; side < RedstoneFace::COUNT; ++side) {
+                    if (side == from)
+                        continue;
+
+                    const Vector3i neighbour = relative(position, side);
+                    const BlockState neighbourState = stateAt(mLevel, neighbour);
+                    // slime and honey do not hold onto each other, but one still pushes the other ahead of it
+                    if (side != mDirection && PistonSystem::canSticksBlock(neighbourState)
+                        && neighbourState.mName != state.mName)
+                        continue;
+                    if (!walk(neighbour, side))
+                        return false;
+                }
+                return true;
+            }
+
+            if (PistonSystem::breaksWhenMoved(state)) {
+                if (ahead && !contains(mToDestroy, position))
+                    mToDestroy.push_back(position);
+                return true;
+            }
+            if (!ahead && !PistonSystem::canBePulled(state))
+                return true;
+
+            mToMove.push_back(position);
+            if (mToMove.size() > (size_t) PistonSystem::MOVE_BLOCK_LIMIT)
+                return false;
+
+            const Vector3i next = relative(position, mDirection);
+            return isInWorld(next) && walk(next, mDirection);
+        }
+    };
 }
 
 bool PistonSystem::isPiston(const std::string &identifier) {
@@ -139,10 +306,7 @@ bool PistonSystem::isArmCollision(const std::string &identifier) {
     return identifier == PISTON_ARM_COLLISION || identifier == STICKY_PISTON_ARM_COLLISION;
 }
 
-/**
- * The stored facing_direction of a piston points the opposite way on the horizontal axes,
- * so it is flipped here to get the face the arm actually extends towards.
- */
+// stored facing_direction is reversed on the horizontal axes
 int PistonSystem::getPistonFace(const BlockState &state) {
     const int index = getStoredFacing(state);
     if (index == RedstoneFace::DOWN || index == RedstoneFace::UP)
@@ -259,8 +423,8 @@ bool PistonSystem::_checkState(ServerNetworkHandler &owner, Level &level, const 
     return false;
 }
 
-bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                           const BlockState &state, bool extending) {
+bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           bool extending) {
     const int face = getPistonFace(state);
     const bool sticky = isSticky(state.mName);
     const int moveDirection = extending ? face : RedstoneFace::opposite(face);
@@ -282,34 +446,14 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
                 if (extending || sticksToPiston(originState))
                     toDestroy.push_back(origin);
             } else {
-                Vector3i current = origin;
-                while (true) {
-                    if ((int) toMove.size() >= MOVE_BLOCK_LIMIT) {
-                        if (extending)
-                            return false;
-                        break;
-                    }
-
-                    toMove.push_back(current);
-
-                    const Vector3i next = relative(current, moveDirection);
-                    const BlockState nextState = stateAt(level, next);
-
-                    if (isAir(nextState) || (!extending && next == armPosition))
-                        break;
-
-                    if (!canBePushed(nextState) || next == position) {
-                        if (extending)
-                            return false;
-                        break;
-                    }
-
-                    if (breaksWhenMoved(nextState)) {
-                        toDestroy.push_back(next);
-                        break;
-                    }
-
-                    current = next;
+                MoveResolver resolver{level, position, armPosition, !extending, moveDirection, toMove, toDestroy};
+                if (!resolver.resolve(origin, face)) {
+                    if (extending)
+                        return false;
+                    // the game still retracts a sticky piston whose blocks cannot be
+                    // pulled: it drops the collected blocks and pulls nothing
+                    toMove.clear();
+                    toDestroy.clear();
                 }
             }
         }
@@ -332,12 +476,12 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
 
     for (size_t index = toDestroy.size(); index > 0; --index) {
         const Vector3i &destroyed = toDestroy[index - 1];
-        level.setBlock(destroyed, BlockState(AIR), false);
+        const BlockState broken = level.getBlockState(destroyed.x, destroyed.y, destroyed.z);
+        BlockActionHandler::destroyBlock(owner, level, destroyed, broken, true, ItemStack::air(), nullptr, &position);
     }
 
-    // Moved blocks are lifted out of the world now, with their block actors detached and any
-    // open container screens closed, and only placed at their destination once the arm
-    // animation completes in tick(). The client draws them in between from the arm's data.
+    // lifted out now (actors detached, container screens closed), placed when the arm animation ends in
+    // tick(); the client draws them meanwhile from the arm's data
     std::vector<BlockState> moved;
     std::vector<std::unique_ptr<BlockActor>> movedActors;
     moved.reserve(toMove.size());
@@ -352,11 +496,14 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     arm.setSticky(sticky);
     arm.setFacing(face);
     arm.beginMove(extending, toMove);
+    owner.getScriptEngine().onPistonActivate(level, position, extending);
 
     for (size_t index = toMove.size(); index > 0; --index)
         level.setBlock(toMove[index - 1], BlockState(AIR), false);
 
-    gPendingMoves[level.getDimensionId()].push_back(
+    pushMobs(owner, level, position, toMove, extending ? std::optional<Vector3i>(armPosition) : std::nullopt,
+             moveDirection);
+    gPendingMoves[&level].push_back(
             PendingMove{position, toMove, std::move(moved), std::move(movedActors), moveDirection});
     BlockActionHandler::broadcastBlockActorData(owner, level, arm);
 
@@ -376,30 +523,12 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
     return true;
 }
 
-void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
-    std::vector<PendingMove> &pendingMoves = gPendingMoves[level.getDimensionId()];
-    if (pendingMoves.empty())
-        return;
-
-    std::vector<PendingMove> pending;
-    pending.swap(pendingMoves);
-
-    for (PendingMove &move: pending) {
-        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
-        if (arm != nullptr) {
-            arm->advance();
-
-            const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
-            if (!done) {
-                BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
-                pendingMoves.push_back(std::move(move));
-                continue;
-            }
-        }
-
+namespace {
+    void completeMove(ServerNetworkHandler &owner, Level &level, PendingMove &move) {
         for (size_t index = 0; index < move.mSources.size() && index < move.mMoved.size(); ++index) {
             const Vector3i destination = relative(move.mSources[index], move.mDirection);
             level.setBlock(destination, move.mMoved[index], false);
+            RedstoneSystem::onObserverMoved(owner, level, destination);
 
             std::unique_ptr<BlockActor> &blockActor = move.mActors[index];
             if (blockActor == nullptr)
@@ -416,8 +545,9 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
             RedstoneSystem::updateAroundRedstone(owner, level, relative(source, move.mDirection));
         }
 
+        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
         if (arm == nullptr)
-            continue;
+            return;
 
         arm->finish();
         BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
@@ -425,17 +555,89 @@ void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
     }
 }
 
-/**
- * True while a piston move touching the area is still animating. Movement checks use it to
- * avoid judging a player against blocks that are mid-move.
- */
+void PistonSystem::tick(ServerNetworkHandler &owner, Level &level) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end() || found->second.empty())
+        return;
+
+    std::vector<PendingMove> pending;
+    pending.swap(found->second);
+
+    for (PendingMove &move: pending) {
+        PistonArmBlockActor *arm = level.getBlockActors().find<PistonArmBlockActor>(move.mPiston);
+        if (arm != nullptr) {
+            arm->advance();
+
+            const bool done = arm->isExtending() ? arm->getProgress() >= 1.0f : arm->getProgress() <= 0.0f;
+            if (!done) {
+                BlockActionHandler::broadcastBlockActorData(owner, level, *arm);
+                gPendingMoves[&level].push_back(std::move(move));
+                continue;
+            }
+        }
+
+        completeMove(owner, level, move);
+    }
+}
+
+// the moved blocks live only in memory until the arm stops: placed now, before anything is saved or unloaded
+void PistonSystem::finishMoves(ServerNetworkHandler &owner, Level &level, const std::unordered_set<int64_t> *columns) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end())
+        return;
+
+    const auto inColumns = [columns](const Vector3i &position) {
+        return columns->count(((int64_t) (position.x >> 4) << 32) | (uint32_t) (position.z >> 4)) != 0;
+    };
+
+    std::vector<PendingMove> pending;
+    pending.swap(found->second);
+    gPendingMoves.erase(found);
+
+    for (PendingMove &move: pending) {
+        bool touched = columns == nullptr || inColumns(move.mPiston);
+        for (size_t index = 0; index < move.mSources.size() && !touched; ++index)
+            touched = inColumns(move.mSources[index]) || inColumns(relative(move.mSources[index], move.mDirection));
+        if (!touched) {
+            gPendingMoves[&level].push_back(std::move(move));
+            continue;
+        }
+
+        completeMove(owner, level, move);
+    }
+}
+
+void PistonSystem::forgetLevel(const Level &level) {
+    gPendingMoves.erase(&level);
+}
+
+// the game fills each destination with a moving_block, which nothing can be placed into
+bool PistonSystem::isMovingInto(const Level &level, const Vector3i &position) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end())
+        return false;
+
+    for (const PendingMove &move: found->second) {
+        for (const Vector3i &source: move.mSources) {
+            if (relative(source, move.mDirection) == position)
+                return true;
+        }
+    }
+    return false;
+}
+
+// movement checks: never judge a player against blocks mid-move
 bool PistonSystem::isMovingNear(const Level &level, const AxisAlignedBB &area) {
     const auto touches = [&area](const Vector3i &position) {
         return position.x + 1.0f > area.mMinX && position.x < area.mMaxX && position.y + 1.0f > area.mMinY
                && position.y < area.mMaxY && position.z + 1.0f > area.mMinZ && position.z < area.mMaxZ;
     };
 
-    for (const PendingMove &move: gPendingMoves[level.getDimensionId()]) {
+    const auto found = gPendingMoves.find(&level);
+    if (found == gPendingMoves.end())
+        return false;
+
+    for (const PendingMove &move: found->second) {
         if (touches(move.mPiston) || touches(relative(move.mPiston, move.mDirection)))
             return true;
         for (const Vector3i &source: move.mSources) {

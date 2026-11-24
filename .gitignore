@@ -1,5 +1,7 @@
 *
 !/.gitignore
+!/.clang-format
+!/.clang-format-ignore
 !/.github
 !/.github/**
 !/CMakeLists.txt
@@ -17,5 +19,10 @@
 !/Falcon.Protocol/**
 !/Falcon.Server
 !/Falcon.Server/**
+/Falcon.Server/allowlist.json
+/Falcon.Server/banned-ips.json
+/Falcon.Server/banned-players.json
 /Falcon.Server/benchmarks/
 /Falcon.Server/docs/
+__pycache__/
+.DS_Store

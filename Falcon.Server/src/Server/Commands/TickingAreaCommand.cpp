@@ -220,11 +220,9 @@ bool TickingAreaCommand::_remove(CommandOrigin &sender, const std::vector<std::s
     const std::string name = arguments[1];
 
     World &world = mHandler.getWorldOf(*sender.getLevel());
-    const std::vector<TickingArea> removed = world.getTickingAreas().remove(
-            world, [&](const TickingArea &area) {
-                return area.mDimension == dimension
-                       && (byPosition ? area.containsBlock(position) : area.mName == name);
-            });
+    const std::vector<TickingArea> removed = world.getTickingAreas().remove(world, [&](const TickingArea &area) {
+        return area.mDimension == dimension && (byPosition ? area.containsBlock(position) : area.mName == name);
+    });
 
     if (removed.empty()) {
         if (byPosition)
@@ -247,9 +245,7 @@ bool TickingAreaCommand::_removeAll(CommandOrigin &sender) {
     const DimensionType dimension = sender.getLevel()->getDimensionType();
     World &world = mHandler.getWorldOf(*sender.getLevel());
     const std::vector<TickingArea> removed = world.getTickingAreas().remove(
-            world, [dimension](const TickingArea &area) {
-                return area.mDimension == dimension;
-            });
+            world, [dimension](const TickingArea &area) { return area.mDimension == dimension; });
 
     if (removed.empty()) {
         sender.sendTranslation("commands.tickingarea-remove_all.failure", {});
@@ -285,9 +281,8 @@ bool TickingAreaCommand::_list(CommandOrigin &sender, const std::vector<std::str
 
     sender.sendTranslation("§a%commands.tickingarea-list.success.allDimensions", {});
     for (const DimensionType dimension: {DimensionType::Overworld, DimensionType::Nether, DimensionType::TheEnd}) {
-        const bool any = std::any_of(areas.begin(), areas.end(), [dimension](const TickingArea &area) {
-            return area.mDimension == dimension;
-        });
+        const bool any = std::any_of(areas.begin(), areas.end(),
+                                     [dimension](const TickingArea &area) { return area.mDimension == dimension; });
         if (!any)
             continue;
 

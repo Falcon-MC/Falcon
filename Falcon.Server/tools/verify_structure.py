@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the BDS layout inventory; optionally audit the original include-only relocation."""
+"""Check the source layout inventory; optionally audit the original include-only relocation."""
 
 import argparse
 import hashlib
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def verify(root, verify_content):
-    manifest_path = root / 'Falcon.Server/structure/bds-1.26.10.json'
+    manifest_path = root / 'Falcon.Server/tools/Structure/inventory.json'
     manifest = json.loads(manifest_path.read_text())
     records = manifest['files']
     headers = {
@@ -54,7 +54,7 @@ def verify(root, verify_content):
                 relative = path.relative_to(root).as_posix()
                 if relative not in inventoried:
                     errors.append('File missing from inventory: ' + relative)
-    # A legacy owned include must not silently resolve to a different dependency header.
+    # a legacy owned include must not silently resolve to another dependency header
     legacy = {row['old'].removeprefix('Falcon.Server/include/')
               for row in records if row['old'].startswith('Falcon.Server/include/')
               and row['old'] != row['path']}

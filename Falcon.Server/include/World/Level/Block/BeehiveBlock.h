@@ -9,10 +9,11 @@ class BeehiveBlock final : public Block {
 public:
     static constexpr int32_t MAX_HONEY_LEVEL = 5;
 
-    explicit BeehiveBlock(const Block &block) : Block(block) {
-    }
+    explicit BeehiveBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
+
+    const char *getBlockActorId() const override;
 
     static int32_t getHoneyLevel(const BlockState &state);
 
@@ -23,8 +24,8 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
-    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
-                  const BlockState &state, const ItemStack &usedItem, int blockFace) const override;
+    void onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position, const BlockState &state,
+                  const ItemStack &usedItem, int blockFace) const override;
 
     void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                   const BlockState &state) const override;

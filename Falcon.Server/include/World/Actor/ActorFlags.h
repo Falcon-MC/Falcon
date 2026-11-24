@@ -15,6 +15,7 @@ enum class ActorFlag : int {
     Ignited = 10,
     Baby = 11,
     CanShowName = 14,
+    Silent = 17,
     CanClimb = 19,
     CanWalk = 22,
     Sitting = 24,
@@ -28,8 +29,10 @@ enum class ActorFlag : int {
     Moving = 34,
     Breathing = 35,
     Chested = 36,
+    ShowBottom = 38,
     Rearing = 39,
     Shaking = 40,
+    Casting = 42,
     Charging = 43,
     WasdControlled = 44,
     CanPowerJump = 45,
@@ -38,16 +41,36 @@ enum class ActorFlag : int {
     HasGravity = 49,
     SpinAttack = 56,
     Swimming = 57,
+    // set for minecraft:block_climber: scaffolding at the feet layer, then the layer below
+    InScaffolding = 69,
+    OverScaffolding = 70,
     Blocking = 72,
     TransitionBlocking = 73,
     BlockedUsingShield = 74,
     BlockedUsingDamagedShield = 75,
     Sleeping = 76,
+    // a player asked a sleeping villager to get up
+    WantsToWake = 77,
+    // a trader holds up what it would give for the item a player holds
+    TradeInterest = 78,
+    Roaring = 84,
+    DelayedAttacking = 85,
     FacingTargetToRangeAttack = 88,
+    // read by Player.isEmoting
+    Emoting = 92,
     Celebrating = 93,
     Admiring = 94,
     CelebratingSpecial = 95,
+    // the same layers: scaffolding resting on something, or powder snow the actor stands on
+    InAscendingBlock = 99,
+    OverDescendingBlock = 100,
+    JumpGoalJump = 103,
+    Emerging = 104,
+    Sniffing = 105,
+    Digging = 106,
+    SonicBoom = 107,
     HasDashCooldown = 108,
+    PushTowardsClosestSpace = 109,
     Crawling = 114,
     TimerFlag1 = 115,
     TimerFlag2 = 116,
@@ -60,12 +83,16 @@ enum class ActorFlag : int {
     BodyRotationAlwaysFollowsHead = 124,
     CanUseVerticalMovementAction = 125,
     UsesLegacyFriction = 127,
+    NameplateDepthTested = 129,
 };
 
 class ActorFlags {
 public:
+    // the three flag words: data ids 0, 92 and 139
     static const int32_t FLAGS_DATA_ID = 0;
-    static const int32_t FLAGS_2_DATA_ID = 91;
+    // the flag words go out as data 0, 92 and 139
+    static const int32_t FLAGS_2_DATA_ID = 92;
+    static const int32_t FLAGS_3_DATA_ID = 139;
     static const int32_t VARIANT_DATA_ID = 2;
     static const int32_t COLOR_DATA_ID = 3;
     static const int32_t OWNER_DATA_ID = 5;
@@ -75,23 +102,32 @@ public:
     static const int32_t MARK_VARIANT_DATA_ID = 43;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
     static const int32_t BED_POSITION_DATA_ID = 28;
+    static const int32_t BED_ENTER_POSITION_DATA_ID = 133;
     static const int32_t FUSE_LENGTH_DATA_ID = 55;
     static const int32_t AIR_SUPPLY_DATA_ID = 7;
     static const int32_t AIR_SUPPLY_MAX_DATA_ID = 42;
     static const int32_t VISIBLE_MOB_EFFECTS_DATA_ID = 131;
+    static const int32_t NAMEPLATE_RENDER_DISTANCE_DATA_ID = 140;
     static const int8_t PLAYER_FLAG_SLEEP = 0x2;
 
     void set(ActorFlag flag, bool value);
 
     bool get(ActorFlag flag) const;
 
-    int64_t getLowBits() const { return mLow; }
+    int64_t getLowBits() const {
+        return mBits[0];
+    }
 
-    int64_t getHighBits() const { return mHigh; }
+    int64_t getHighBits() const {
+        return mBits[1];
+    }
+
+    int64_t getExtendedBits() const {
+        return mBits[2];
+    }
 
     void applyPlayerDefaults();
 
 private:
-    int64_t mLow = 0;
-    int64_t mHigh = 0;
+    int64_t mBits[3] = {0, 0, 0};
 };

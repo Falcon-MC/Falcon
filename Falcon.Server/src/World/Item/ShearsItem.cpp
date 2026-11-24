@@ -6,10 +6,11 @@ FALCON_REGISTER_ITEM(ShearsItem, 130);
 
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/CobwebBlock.h"
-#include "World/Level/Block/FloweredAzaleaLeavesBlock.h"
-#include "World/Level/Block/LeavesBlock.h"
+#include "World/Level/Block/PumpkinBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/VineBlock.h"
+#include "World/Level/Level.h"
+#include "Network/ServerNetworkHandler.h"
 
 namespace {
     const float WEB_AND_LEAVES_SPEED = 15.0f;
@@ -25,20 +26,19 @@ bool ShearsItem::matches(const std::string &identifier) {
 
 bool ShearsItem::getDestroySpeed(const std::string &blockIdentifier, float &speed) const {
     const Block *block = VanillaBlocks::fromIdentifier(blockIdentifier);
-    if (dynamic_cast<const CobwebBlock *>(block) != nullptr || dynamic_cast<const LeavesBlock *>(block) != nullptr
-        || dynamic_cast<const FloweredAzaleaLeavesBlock *>(block) != nullptr) {
+    if (dynamic_cast<const CobwebBlock *>(block) != nullptr || (block != nullptr && block->isLeaves())) {
         speed = WEB_AND_LEAVES_SPEED;
         return true;
     }
 
-    // Besides wool, the data table only assigns shears to plants that break instantly.
+    // besides wool, the data table only gives shears to instantly broken plants
     const BlockData *data = BlockDataTable::find(blockIdentifier.c_str());
     if (data != nullptr && data->mToolType == BlockToolType::Shears) {
         speed = WOOL_SPEED;
         return true;
     }
 
-    // Glow lichen has no block class of its own; the client lists it next to vines.
+    // glow lichen has no block class; the client lists it next to vines
     if (dynamic_cast<const VineBlock *>(block) != nullptr || blockIdentifier == "minecraft:glow_lichen") {
         speed = VINE_SPEED;
         return true;
@@ -50,4 +50,17 @@ bool ShearsItem::getDestroySpeed(const std::string &blockIdentifier, float &spee
 
 bool ShearsItem::canDestroySpecial(const std::string &blockIdentifier) const {
     return dynamic_cast<const CobwebBlock *>(VanillaBlocks::fromIdentifier(blockIdentifier)) != nullptr;
+}
+
+bool ShearsItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
+                              const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
+    (void) item;
+    (void) clickPosition;
+    const BlockState &state =
+            owner.getLevelFor(player).getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    const PumpkinBlock *pumpkin = dynamic_cast<const PumpkinBlock *>(VanillaBlocks::fromState(state));
+    if (pumpkin == nullptr)
+        return false;
+    pumpkin->carve(owner, player, blockPosition, face);
+    return true;
 }

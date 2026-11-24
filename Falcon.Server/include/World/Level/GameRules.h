@@ -26,7 +26,9 @@ public:
 
     const Rule *find(const std::string &name) const;
 
-    const std::vector<Rule> &getRules() const { return mRules; }
+    const std::vector<Rule> &getRules() const {
+        return mRules;
+    }
 
     std::vector<std::string> getNames() const;
 

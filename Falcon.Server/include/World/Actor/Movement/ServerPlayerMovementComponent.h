@@ -4,13 +4,14 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <vector>
 
 class PlayerAuthInputPacket;
 
-/** Main-thread input timeline. Network arrival never advances movement simulation itself. */
+// main-thread input timeline; network arrival never advances the simulation
 class ServerPlayerMovementComponent {
 public:
-    // BDS 1.26.10 ServerPlayerMovementComponent input admission (0x14127B1A0).
+    // ServerPlayerMovementComponent input admission
     static constexpr size_t MAX_PENDING_INPUTS = 1000;
 
     bool enqueue(const PlayerAuthInputPacket &packet);
@@ -20,6 +21,12 @@ public:
     std::shared_ptr<const PlayerAuthInputPacket> takeNext();
 
     void clearPending();
+    // inputs dropped unprocessed since the last call: resend their predicted block changes
+    std::vector<std::shared_ptr<const PlayerAuthInputPacket>> takeDropped() {
+        std::vector<std::shared_ptr<const PlayerAuthInputPacket>> dropped;
+        dropped.swap(mDropped);
+        return dropped;
+    }
 
     bool hasPendingFlightRequest() const {
         return !mFlightRequests.empty();
@@ -41,6 +48,16 @@ public:
         return mLastProcessedTick;
     }
 
+    int64_t lastReceivedTick() const {
+        return mLastReceivedTick;
+    }
+
+    // streak of inputs whose tick doesn't advance past the last received one
+    uint32_t noteInputTick(int64_t tick) {
+        mStaleTicks = mLastReceivedTick >= 0 && tick <= mLastReceivedTick ? mStaleTicks + 1 : 0;
+        return mStaleTicks;
+    }
+
     static size_t catchupSteps(double previousTickMilliseconds);
 
 private:
@@ -51,7 +68,9 @@ private:
 
     std::deque<std::shared_ptr<const PlayerAuthInputPacket>> mInputs;
     std::deque<FlightRequest> mFlightRequests;
+    std::vector<std::shared_ptr<const PlayerAuthInputPacket>> mDropped;
     int64_t mLastReceivedTick = -1;
+    uint32_t mStaleTicks = 0;
     int64_t mLastProcessedTick = -1;
     int64_t mLastServerTick = -1;
     uint64_t mCredits = 0;

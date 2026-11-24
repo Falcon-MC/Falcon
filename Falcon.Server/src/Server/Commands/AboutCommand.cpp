@@ -23,8 +23,7 @@ namespace {
 }
 
 AboutCommand::AboutCommand(ServerNetworkHandler &handler)
-        : Command("about", "Shows the server version", "/about", {"version", "ver"}),
-          mHandler(handler) {}
+        : Command("about", "Shows the server version", "/about", {"version", "ver"}), mHandler(handler) {}
 
 CommandPermission AboutCommand::getRequiredPermission() const {
     return CommandPermission::Any;
@@ -43,8 +42,7 @@ bool AboutCommand::execute(CommandOrigin &sender, const std::vector<std::string>
                          {FalconBuildInfo::kVersion, shortCommit(), FalconBuildInfo::kBranch});
     sender.sendLocalized("falcon.commands.about.game",
                          {announcement.mGameVersion, std::to_string(announcement.mProtocolVersion)});
-    sender.sendLocalized("falcon.commands.about.build",
-                         {FalconBuildInfo::kBuildId, FalconBuildInfo::kConfiguration});
+    sender.sendLocalized("falcon.commands.about.build", {FalconBuildInfo::kBuildId, FalconBuildInfo::kConfiguration});
 
     return true;
 }

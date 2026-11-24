@@ -6,63 +6,63 @@
 
 namespace {
 
-constexpr int32_t UPPER_MASK = static_cast<int32_t>(0x80000000);
-constexpr int32_t LOWER_MASK = 0x7FFFFFFF;
-constexpr int32_t MAG01[2] = {0x0, static_cast<int32_t>(0x9908B0DF)};
-constexpr int32_t INIT_STATE_SEED = 19650218;
-constexpr int32_t INIT_MULTIPLIER = 1812433253;
-constexpr int64_t MIX_MULTIPLIER_1 = 1664525LL;
-constexpr int64_t MIX_MULTIPLIER_2 = 1566083941LL;
-constexpr uint64_t GOLDEN_RATIO_64 = 0x9E3779B97F4A7C15ULL;
-constexpr uint64_t NEGATED_GOLDEN_RATIO_64 = 0x61C8864680B583EBULL;
-constexpr uint64_t STAFFORD_MULTIPLIER_1 = 0xBF58476D1CE4E5B9ULL;
-constexpr uint64_t STAFFORD_MULTIPLIER_2 = 0x94D049BB133111EBULL;
-constexpr int32_t EMPTY_BOOLEAN_SOURCE = 1;
+    constexpr int32_t UPPER_MASK = static_cast<int32_t>(0x80000000);
+    constexpr int32_t LOWER_MASK = 0x7FFFFFFF;
+    constexpr int32_t MAG01[2] = {0x0, static_cast<int32_t>(0x9908B0DF)};
+    constexpr int32_t INIT_STATE_SEED = 19650218;
+    constexpr int32_t INIT_MULTIPLIER = 1812433253;
+    constexpr int64_t MIX_MULTIPLIER_1 = 1664525LL;
+    constexpr int64_t MIX_MULTIPLIER_2 = 1566083941LL;
+    constexpr uint64_t GOLDEN_RATIO_64 = 0x9E3779B97F4A7C15ULL;
+    constexpr uint64_t NEGATED_GOLDEN_RATIO_64 = 0x61C8864680B583EBULL;
+    constexpr uint64_t STAFFORD_MULTIPLIER_1 = 0xBF58476D1CE4E5B9ULL;
+    constexpr uint64_t STAFFORD_MULTIPLIER_2 = 0x94D049BB133111EBULL;
+    constexpr int32_t EMPTY_BOOLEAN_SOURCE = 1;
 
-int32_t unsignedShiftRight(int32_t value, int32_t bits) {
-    return static_cast<int32_t>(static_cast<uint32_t>(value) >> bits);
+    int32_t unsignedShiftRight(int32_t value, int32_t bits) {
+        return static_cast<int32_t>(static_cast<uint32_t>(value) >> bits);
+    }
+
+    int32_t wrapAdd(int32_t a, int32_t b) {
+        return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
+    }
+
+    int32_t wrapSubtract(int32_t a, int32_t b) {
+        return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b));
+    }
+
+    int64_t wrapAddLong(int64_t a, int64_t b) {
+        return static_cast<int64_t>(static_cast<uint64_t>(a) + static_cast<uint64_t>(b));
+    }
+
+    int64_t wrapSubtractLong(int64_t a, int64_t b) {
+        return static_cast<int64_t>(static_cast<uint64_t>(a) - static_cast<uint64_t>(b));
+    }
+
+    int64_t wrapMultiplyLong(int64_t a, int64_t b) {
+        return static_cast<int64_t>(static_cast<uint64_t>(a) * static_cast<uint64_t>(b));
+    }
+
+    int64_t toUnsignedLong(int32_t value) {
+        return static_cast<int64_t>(static_cast<uint32_t>(value));
+    }
+
+    double makeDouble(int32_t v, int32_t w) {
+        const int64_t high = static_cast<int64_t>(static_cast<uint64_t>(static_cast<uint32_t>(unsignedShiftRight(v, 6)))
+                                                  << 27);
+        const int32_t low = unsignedShiftRight(w, 5);
+        return static_cast<double>(high | static_cast<int64_t>(low)) * 0x1.0p-53;
+    }
+
+    uint64_t stafford13(uint64_t z) {
+        z = (z ^ (z >> 30)) * STAFFORD_MULTIPLIER_1;
+        z = (z ^ (z >> 27)) * STAFFORD_MULTIPLIER_2;
+        return z ^ (z >> 31);
+    }
+
 }
 
-int32_t wrapAdd(int32_t a, int32_t b) {
-    return static_cast<int32_t>(static_cast<uint32_t>(a) + static_cast<uint32_t>(b));
-}
-
-int32_t wrapSubtract(int32_t a, int32_t b) {
-    return static_cast<int32_t>(static_cast<uint32_t>(a) - static_cast<uint32_t>(b));
-}
-
-int64_t wrapAddLong(int64_t a, int64_t b) {
-    return static_cast<int64_t>(static_cast<uint64_t>(a) + static_cast<uint64_t>(b));
-}
-
-int64_t wrapSubtractLong(int64_t a, int64_t b) {
-    return static_cast<int64_t>(static_cast<uint64_t>(a) - static_cast<uint64_t>(b));
-}
-
-int64_t wrapMultiplyLong(int64_t a, int64_t b) {
-    return static_cast<int64_t>(static_cast<uint64_t>(a) * static_cast<uint64_t>(b));
-}
-
-int64_t toUnsignedLong(int32_t value) {
-    return static_cast<int64_t>(static_cast<uint32_t>(value));
-}
-
-double makeDouble(int32_t v, int32_t w) {
-    const int64_t high = static_cast<int64_t>(static_cast<uint64_t>(static_cast<uint32_t>(unsignedShiftRight(v, 6))) << 27);
-    const int32_t low = unsignedShiftRight(w, 5);
-    return static_cast<double>(high | static_cast<int64_t>(low)) * 0x1.0p-53;
-}
-
-uint64_t stafford13(uint64_t z) {
-    z = (z ^ (z >> 30)) * STAFFORD_MULTIPLIER_1;
-    z = (z ^ (z >> 27)) * STAFFORD_MULTIPLIER_2;
-    return z ^ (z >> 31);
-}
-
-}
-
-MersenneTwister::MersenneTwister()
-    : mMt(), mMti(N), mMixIndex(1), mBooleanSource(EMPTY_BOOLEAN_SOURCE) {
+MersenneTwister::MersenneTwister() : mMt(), mMti(N), mMixIndex(1), mBooleanSource(EMPTY_BOOLEAN_SOURCE) {
     setSeed(static_cast<int64_t>(0));
 }
 
@@ -117,7 +117,8 @@ void MersenneTwister::_initState() {
     mMt[0] = static_cast<int32_t>(static_cast<uint32_t>(static_cast<uint64_t>(v) & 0xFFFFFFFFULL));
 
     for (int32_t k = 1; k < N; ++k) {
-        v = wrapAddLong(wrapMultiplyLong(static_cast<int64_t>(INIT_MULTIPLIER), v ^ (v >> 30)), static_cast<int64_t>(k)) & 0xFFFFFFFFLL;
+        v = wrapAddLong(wrapMultiplyLong(static_cast<int64_t>(INIT_MULTIPLIER), v ^ (v >> 30)), static_cast<int64_t>(k))
+            & 0xFFFFFFFFLL;
         mMt[k] = static_cast<int32_t>(static_cast<uint32_t>(static_cast<uint64_t>(v) & 0xFFFFFFFFULL));
     }
 }
@@ -209,14 +210,16 @@ int32_t MersenneTwister::nextInt() {
 }
 
 int32_t MersenneTwister::nextInt(int32_t n) {
-    uint64_t m = static_cast<uint64_t>(static_cast<uint32_t>(nextInt())) * static_cast<uint64_t>(static_cast<uint32_t>(n));
+    uint64_t m = static_cast<uint64_t>(static_cast<uint32_t>(nextInt()))
+                 * static_cast<uint64_t>(static_cast<uint32_t>(n));
     uint64_t l = m & 0xFFFFFFFFULL;
 
     if (l < static_cast<uint64_t>(n)) {
         const uint64_t t = 0x100000000ULL % static_cast<uint64_t>(n);
 
         while (l < t) {
-            m = static_cast<uint64_t>(static_cast<uint32_t>(nextInt())) * static_cast<uint64_t>(static_cast<uint32_t>(n));
+            m = static_cast<uint64_t>(static_cast<uint32_t>(nextInt()))
+                * static_cast<uint64_t>(static_cast<uint32_t>(n));
             l = m & 0xFFFFFFFFULL;
         }
     }
@@ -269,8 +272,7 @@ bool MersenneTwister::nextBoolean() {
     return (bits & 1) == 1;
 }
 
-SimpleRandom::SimpleRandom(int64_t seed)
-    : mSeeds(0), mProvider(), mGaussianState(0) {
+SimpleRandom::SimpleRandom(int64_t seed) : mSeeds(0), mProvider(), mGaussianState(0) {
     setSeed(seed);
 }
 
@@ -343,7 +345,8 @@ double SimpleRandom::nextGaussian() {
         values[0] = 0x1.0p-53;
     }
 
-    const double sample = std::sqrt(-2.0 * std::log(values[0])) * std::cos(2.0 * MathConstants::PI * values[1]) * 0.33333;
+    const double sample = std::sqrt(-2.0 * std::log(values[0])) * std::cos(2.0 * MathConstants::PI * values[1])
+                          * 0.33333;
 
     if (sample > 1.0) {
         return 1.0;

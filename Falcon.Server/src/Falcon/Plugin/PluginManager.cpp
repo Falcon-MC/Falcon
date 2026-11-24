@@ -1,5 +1,6 @@
 #include "Falcon/Plugin/PluginManager.h"
 
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Core/Debug/BedrockLog.h"
 #include "Network/ServerNetworkHandler.h"
@@ -9,6 +10,7 @@
 #include "Falcon/Plugin/PluginCommand.h"
 #include "Falcon/Plugin/PluginPackets.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/WasmHost.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -39,8 +41,8 @@ PluginManager::~PluginManager() {
         mOwner.getNetworkHandler().setOutboundFilter(nullptr);
 
     EventBus &bus = mOwner.getEventBus();
-    bus.after().mPlayerJoin.unsubscribe(mJoinHook);
-    bus.after().mPlayerLeave.unsubscribe(mQuitHook);
+    bus.before().mPlayerJoinMessage.unsubscribe(mJoinHook);
+    bus.before().mPlayerLeaveMessage.unsubscribe(mQuitHook);
     bus.before().mChatSend.unsubscribe(mChatHook);
 
     disableAll();
@@ -106,7 +108,7 @@ void PluginManager::loadAll(const std::string &directory) {
         }
 
         if (!native && description.mRuntime != "internal" && description.mRuntime != "java"
-            && description.mRuntime != "dotnet") {
+            && description.mRuntime != "dotnet" && description.mRuntime != "wasm") {
             LOG_ERROR(LogAreaID::Server, "Could not load plugin %s: the %s runtime is not supported yet",
                       description.mName.c_str(), description.mRuntime.c_str());
             continue;
@@ -141,6 +143,9 @@ void PluginManager::loadAll(const std::string &directory) {
         } else if (plugin->mDescription.mRuntime == "dotnet") {
             if (!DotnetHost::load(*plugin))
                 continue;
+        } else if (plugin->mDescription.mRuntime == "wasm") {
+            if (!WasmHost::load(*plugin))
+                continue;
         } else if (!(internal ? InternalPluginLoader::load(*plugin, mOwner) : _loadNative(*plugin))) {
             continue;
         }
@@ -172,14 +177,13 @@ void PluginManager::loadAll(const std::string &directory) {
 
 bool PluginManager::_loadNative(LoadedPlugin &plugin) {
     const std::string &name = plugin.mDescription.mName;
-    const std::string path = (std::filesystem::path(plugin.mDirectory)
-                              / NativeLibrary::fileName(plugin.mDescription.mMain)).string();
+    const std::string path =
+            (std::filesystem::path(plugin.mDirectory) / NativeLibrary::fileName(plugin.mDescription.mMain)).string();
 
     plugin.mLibrary = std::make_unique<NativeLibrary>();
     std::string error;
     if (!plugin.mLibrary->open(path, error)) {
-        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s from %s: %s", name.c_str(), path.c_str(),
-                  error.c_str());
+        LOG_ERROR(LogAreaID::Server, "Could not load plugin %s from %s: %s", name.c_str(), path.c_str(), error.c_str());
         return false;
     }
 
@@ -343,26 +347,41 @@ void PluginManager::disableAll() {
 }
 
 void PluginManager::_disable(LoadedPlugin &plugin) {
-    if (plugin.mEnabled && plugin.mCallbacks.onDisable != nullptr) {
+    const bool wasEnabled = plugin.mEnabled;
+    plugin.mEnabled = false;
+
+    // Close windows before onDisable can release the callback's state.
+    const std::vector<uint64_t> windows(plugin.mWindowPlayers.begin(), plugin.mWindowPlayers.end());
+    for (uint64_t id: windows) {
+        if (!plugin.mWindowPlayers.contains(id))
+            continue;
+        if (ServerPlayer *player = MobActor::findPlayer(mOwner, id)) {
+            auto &inventories = player->getInventoryManager();
+            if (inventories.getPluginWindow(inventories.getContainerWindowId()) != nullptr)
+                inventories.onCurrentWindowRemove();
+        }
+    }
+    plugin.mWindowPlayers.clear();
+
+    if (wasEnabled && plugin.mCallbacks.onDisable != nullptr) {
         try {
             plugin.mCallbacks.onDisable(plugin.mCallbacks.userData);
         } catch (...) {
             LOG_ERROR(LogAreaID::Server, "[%s] onDisable threw an exception", plugin.mDescription.mName.c_str());
         }
     }
-
-    plugin.mEnabled = false;
     mScheduler.cancelAll(plugin);
 
     for (const std::string &command: plugin.mCommands)
         mOwner.getCommands().unregisterCommand(command);
     plugin.mCommands.clear();
-    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [&](const Subscription &entry) {
-        return entry.mPlugin == &plugin;
-    }), mSubscriptions.end());
+    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(),
+                                        [&](const Subscription &entry) { return entry.mPlugin == &plugin; }),
+                         mSubscriptions.end());
     _updateSubscribedTypes();
     mPermissions->clearPlugin(plugin);
     mServices.removePlugin(plugin);
+    mOwner.getResourcePacks().replacePluginPacks(plugin.mDescription.mName, {}, false);
 
     if (plugin.mDescription.mRuntime == "internal")
         InternalPluginLoader::unload(plugin);
@@ -384,9 +403,8 @@ void PluginManager::_updateSubscribedTypes() {
         return;
     }
 
-    mOwner.getNetworkHandler().setOutboundFilter([this](const NetworkIdentifier &id, std::string &data) {
-        return PluginPackets::onSend(*this, id, data);
-    });
+    mOwner.getNetworkHandler().setOutboundFilter(
+            [this](const NetworkIdentifier &id, std::string &data) { return PluginPackets::onSend(*this, id, data); });
 }
 
 void PluginManager::tick() {
@@ -406,25 +424,24 @@ uint64_t PluginManager::subscribeCustom(LoadedPlugin &plugin, const std::string 
     if (handler == nullptr || priority > FALCON_PRIORITY_MONITOR || name.empty())
         return 0;
 
-    return _insertSubscription(Subscription{0, &plugin, FALCON_EVENT_CUSTOM, priority, ignoreCancelled, handler,
-                                            userData, name});
+    return _insertSubscription(
+            Subscription{0, &plugin, FALCON_EVENT_CUSTOM, priority, ignoreCancelled, handler, userData, name});
 }
 
 uint64_t PluginManager::_insertSubscription(Subscription subscription) {
     subscription.mId = mNextSubscriptionId++;
-    const auto position = std::upper_bound(mSubscriptions.begin(), mSubscriptions.end(), subscription,
-                                           [](const Subscription &left, const Subscription &right) {
-                                               return left.mPriority < right.mPriority;
-                                           });
+    const auto position = std::upper_bound(
+            mSubscriptions.begin(), mSubscriptions.end(), subscription,
+            [](const Subscription &left, const Subscription &right) { return left.mPriority < right.mPriority; });
     mSubscriptions.insert(position, subscription);
     _updateSubscribedTypes();
     return subscription.mId;
 }
 
 void PluginManager::unsubscribe(uint64_t id) {
-    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(), [id](const Subscription &entry) {
-        return entry.mId == id;
-    }), mSubscriptions.end());
+    mSubscriptions.erase(std::remove_if(mSubscriptions.begin(), mSubscriptions.end(),
+                                        [id](const Subscription &entry) { return entry.mId == id; }),
+                         mSubscriptions.end());
     _updateSubscribedTypes();
 }
 
@@ -484,24 +501,33 @@ void PluginManager::dispatch(PluginEvent &event) {
 void PluginManager::_hookEventBus() {
     EventBus &bus = mOwner.getEventBus();
 
-    mJoinHook = bus.after().mPlayerJoin.subscribe([this](PlayerJoinAfterEvent &source) {
+    // before the join and leave messages go out, so a plugin can replace them
+    mJoinHook = bus.before().mPlayerJoinMessage.subscribe([this](PlayerJoinMessageBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_JOIN;
         event.mPlayer = &source.mPlayer;
+        event.mMessage = &source.mMessage;
+        event.mMessageDefault = source.mDefault;
         dispatch(event);
+        source.mDefault = event.mMessageDefault;
     });
 
-    mQuitHook = bus.after().mPlayerLeave.subscribe([this](PlayerLeaveAfterEvent &source) {
-        if (source.mPlayer == nullptr)
-            return;
-
+    mQuitHook = bus.before().mPlayerLeaveMessage.subscribe([this](PlayerLeaveMessageBeforeEvent &source) {
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_QUIT;
-        event.mPlayer = source.mPlayer;
+        event.mPlayer = &source.mPlayer;
+        event.mMessage = &source.mMessage;
+        event.mMessageDefault = source.mDefault;
+        event.mCause = source.mReason;
         dispatch(event);
+        source.mDefault = event.mMessageDefault;
     });
 
     mChatHook = bus.before().mChatSend.subscribe([this](PlayerChatBeforeEvent &source) {
+        // the plugin chat event is the public chat only
+        if (source.mTargets != nullptr)
+            return;
+
         PluginEvent event;
         event.mType = FALCON_EVENT_PLAYER_CHAT;
         event.mCancellable = true;

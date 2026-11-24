@@ -1,5 +1,9 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "Falcon/Plugin/PluginManager.h"
+#include "Server/Commands/ServerCommandOrigin.h"
+
+#include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/AboutCommand.h"
 #include "Server/Commands/AllowListCommand.h"
@@ -21,28 +25,45 @@
 #include "Server/Commands/GameModeCommand.h"
 #include "Server/Commands/GameRuleCommand.h"
 #include "Server/Commands/GiveCommand.h"
+#include "Server/Commands/HudCommand.h"
+#include "Server/Commands/InputPermissionCommand.h"
 #include "Server/Commands/KickCommand.h"
 #include "Server/Commands/KillCommand.h"
 #include "Server/Commands/ListCommand.h"
 #include "Server/Commands/LocateCommand.h"
 #include "Server/Commands/MeCommand.h"
+#include "Server/Commands/MusicCommand.h"
 #include "Server/Commands/OpCommand.h"
 #include "Server/Commands/PardonCommand.h"
 #include "Server/Commands/PardonIpCommand.h"
 #include "Server/Commands/ParticleCommand.h"
 #include "Server/Commands/PlaySoundCommand.h"
+#include "Server/Commands/PluginsCommand.h"
 #include "Server/Commands/ProfilerCommand.h"
+#include "Server/Commands/ReplaceItemCommand.h"
 #include "Server/Commands/SaveCommand.h"
+#include "Server/Commands/ScoreboardCommand.h"
 #include "Server/Commands/SayCommand.h"
+#include "Server/Commands/GameTestCommand.h"
+#include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
+#include "Server/Commands/CloneCommand.h"
+#include "Server/Commands/FunctionCommand.h"
+#include "Server/Commands/PlayAnimationCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
 #include "Server/Commands/SetWorldSpawnCommand.h"
 #include "Server/Commands/SpawnPointCommand.h"
+#include "Server/Commands/SpreadPlayersCommand.h"
+#include "Server/Commands/AimAssistCommand.h"
+#include "Server/Commands/CameraShakeCommand.h"
+#include "Server/Commands/FogCommand.h"
+#include "Server/Commands/DebugHudCommand.h"
 #include "Server/Commands/StatusCommand.h"
 #include "Server/Commands/StopCommand.h"
 #include "Server/Commands/StopSoundCommand.h"
 #include "Server/Commands/SummonCommand.h"
+#include "Server/Commands/RecipeCommand.h"
 #include "Server/Commands/TagCommand.h"
 #include "Server/Commands/TickingAreaCommand.h"
 #include "Server/Commands/TeleportCommand.h"
@@ -64,12 +85,62 @@
 #include "Protocol/Packets/SetPlayerGameTypePacket.h"
 #include "Protocol/Types/StartGameTypes.h"
 
+#include <algorithm>
+#include <climits>
+#include <cstdlib>
 #include <memory>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace {
+    class PermissionGroupsCommand final : public Command {
+    public:
+        explicit PermissionGroupsCommand(ServerNetworkHandler &owner)
+                : Command("permissiongroup", "Manages permission groups",
+                          "permissiongroup <list|create|delete|default|assign|unassign|inherit|uninherit|set|unset|reload>"),
+                  mOwner(owner) {}
+
+        CommandPermission getRequiredPermission() const override {
+            return CommandPermission::Internal;
+        }
+
+        std::vector<CommandOverloadData> getOverloads() const override {
+            CommandOverloadData overload;
+            overload.mParameters = {
+                    makeEnumParameter("action", "PermissionGroupAction", {"list", "create", "delete", "default",
+                                                                           "assign", "unassign", "inherit", "uninherit",
+                                                                           "set", "unset", "reload"}),
+                    makeTypedParameter("arguments", CommandParamType::RawText, true)};
+            return {std::move(overload)};
+        }
+
+        bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) override {
+            if (dynamic_cast<ServerCommandOrigin *>(&sender) == nullptr)
+                return false;
+            auto &permissions = mOwner.getPluginManager().getPermissions();
+            if (arguments.size() == 1 && arguments[0] == "list") {
+                const auto names = permissions.groupNames();
+                sender.sendMessage(names.empty() ? "No permission groups." : Command::joinArguments(names, 0));
+                return true;
+            }
+            if (!permissions.updateGroups(arguments)) {
+                sender.sendMessage("Could not update permission groups. Check the arguments and configuration.");
+                return false;
+            }
+            for (auto &[id, player]: mOwner.getPlayers()) {
+                if (player.isSpawned())
+                    mOwner._sendAvailableCommands(player);
+            }
+            sender.sendMessage("Permission groups updated.");
+            return true;
+        }
+
+    private:
+        ServerNetworkHandler &mOwner;
+    };
+
     std::string toLowerCopy(const std::string &value) {
         std::string lowered = value;
         for (char &character: lowered) {
@@ -78,13 +149,238 @@ namespace {
         }
         return lowered;
     }
+
+    struct ScoreFilter {
+        std::string mObjective;
+        int32_t mMin = INT32_MIN;
+        int32_t mMax = INT32_MAX;
+        bool mNegated = false;
+    };
+
+    struct SelectorFilter {
+        bool mValid = false;
+        char mKind = 0;
+        std::vector<std::pair<std::string, bool>> mTypes;
+        std::string mName;
+        bool mHasName = false;
+        bool mNameNegated = false;
+        size_t mLimit = 0;
+        std::vector<ScoreFilter> mScores;
+    };
+
+    std::string normalizeTypeId(const std::string &type) {
+        const std::string lowered = toLowerCopy(type);
+        return lowered.find(':') == std::string::npos ? "minecraft:" + lowered : lowered;
+    }
+
+    std::string trimCopy(const std::string &value) {
+        size_t begin = 0;
+        size_t end = value.size();
+        while (begin < end && (value[begin] == ' ' || value[begin] == '\t'))
+            ++begin;
+        while (end > begin && (value[end - 1] == ' ' || value[end - 1] == '\t'))
+            --end;
+        return value.substr(begin, end - begin);
+    }
+
+    bool parseScoreBound(const std::string &value, int32_t &out) {
+        if (value.empty() || value.size() > 11)
+            return false;
+        char *end = nullptr;
+        const long long parsed = std::strtoll(value.c_str(), &end, 10);
+        if (*end != '\0' || parsed < INT32_MIN || parsed > INT32_MAX)
+            return false;
+        out = (int32_t) parsed;
+        return true;
+    }
+
+    // {objective=5,other=1..3,last=!..0}: a range is n, n.., ..n or n..m, both ends included
+    bool parseScores(const std::string &value, std::vector<ScoreFilter> &out) {
+        if (value.size() < 2 || value.front() != '{' || value.back() != '}')
+            return false;
+        const std::string body = value.substr(1, value.size() - 2);
+        size_t start = 0;
+        while (start < body.size()) {
+            size_t comma = body.find(',', start);
+            if (comma == std::string::npos)
+                comma = body.size();
+            const std::string entry = trimCopy(body.substr(start, comma - start));
+            start = comma + 1;
+            const size_t equals = entry.find('=');
+            if (equals == std::string::npos)
+                return false;
+            ScoreFilter filter;
+            filter.mObjective = trimCopy(entry.substr(0, equals));
+            std::string range = trimCopy(entry.substr(equals + 1));
+            if (!range.empty() && range[0] == '!') {
+                filter.mNegated = true;
+                range = trimCopy(range.substr(1));
+            }
+            const size_t dots = range.find("..");
+            if (filter.mObjective.empty() || range.empty())
+                return false;
+            if (dots == std::string::npos) {
+                if (!parseScoreBound(range, filter.mMin))
+                    return false;
+                filter.mMax = filter.mMin;
+            } else {
+                const std::string low = range.substr(0, dots);
+                const std::string high = range.substr(dots + 2);
+                if ((low.empty() && high.empty()) || (!low.empty() && !parseScoreBound(low, filter.mMin))
+                    || (!high.empty() && !parseScoreBound(high, filter.mMax)))
+                    return false;
+            }
+            out.push_back(filter);
+        }
+        return !out.empty();
+    }
+
+    // a target without a score fails, negated or not
+    bool matchesScores(const SelectorFilter &filter, Scoreboard &scoreboard, const Actor &actor) {
+        if (filter.mScores.empty())
+            return true;
+        const ScoreboardIdentity *identity = scoreboard.findActor(actor.getUniqueId());
+        for (const ScoreFilter &score: filter.mScores) {
+            const ScoreboardObjective *objective = scoreboard.getObjective(score.mObjective);
+            const int32_t *value = identity == nullptr || objective == nullptr ? nullptr
+                                                                               : objective->find(identity->mId);
+            if (value == nullptr)
+                return false;
+            if ((*value >= score.mMin && *value <= score.mMax) == score.mNegated)
+                return false;
+        }
+        return true;
+    }
+
+    // "@k" and "@k[key=value,...]"; only type, name, c and scores: an unknown argument invalidates the selector
+    // instead of widening it to every target; scores off: they read objectives a low sender can't see
+    SelectorFilter parseSelector(const std::string &selector, bool scores) {
+        SelectorFilter filter;
+        if (selector.size() < 2 || selector[0] != '@')
+            return filter;
+
+        filter.mKind = selector[1];
+        if (selector.size() == 2) {
+            filter.mValid = true;
+            return filter;
+        }
+
+        if (selector[2] != '[' || selector.back() != ']')
+            return filter;
+
+        const std::string body = selector.substr(3, selector.size() - 4);
+        size_t start = 0;
+        while (start <= body.size()) {
+            size_t comma = start;
+            bool quoted = false;
+            bool escaped = false;
+            int braces = 0;
+            for (; comma < body.size(); ++comma) {
+                const char character = body[comma];
+                if (escaped)
+                    escaped = false;
+                else if (quoted && character == '\\')
+                    escaped = true;
+                else if (character == '"')
+                    quoted = !quoted;
+                else if (!quoted && character == '{')
+                    ++braces;
+                else if (!quoted && character == '}' && braces > 0)
+                    --braces;
+                else if (!quoted && braces == 0 && character == ',')
+                    break;
+            }
+            if (quoted || escaped || braces != 0)
+                return filter;
+
+            const std::string entry = trimCopy(body.substr(start, comma - start));
+            start = comma + 1;
+            if (entry.empty()) {
+                if (comma == body.size())
+                    break;
+                continue;
+            }
+
+            const size_t equals = entry.find('=');
+            if (equals == std::string::npos)
+                return filter;
+
+            const std::string key = toLowerCopy(trimCopy(entry.substr(0, equals)));
+            std::string value = trimCopy(entry.substr(equals + 1));
+            bool negated = false;
+            if (!value.empty() && value[0] == '!') {
+                negated = true;
+                value = trimCopy(value.substr(1));
+            }
+            if (!value.empty() && value[0] == '"') {
+                if (value.size() < 2 || value.back() != '"')
+                    return filter;
+                std::string decoded;
+                for (size_t i = 1; i + 1 < value.size(); ++i) {
+                    if (value[i] == '\\') {
+                        if (++i + 1 >= value.size())
+                            return filter;
+                    } else if (value[i] == '"') {
+                        return filter;
+                    }
+                    decoded.push_back(value[i]);
+                }
+                value = std::move(decoded);
+            }
+
+            if (key == "type") {
+                filter.mTypes.emplace_back(normalizeTypeId(value), negated);
+            } else if (key == "name") {
+                filter.mHasName = true;
+                filter.mNameNegated = negated;
+                filter.mName = value;
+            } else if (key == "c") {
+                if (negated || value.empty() || value.size() > 9
+                    || value.find_first_not_of("0123456789") != std::string::npos)
+                    return filter;
+                filter.mLimit = (size_t) std::stoul(value);
+                if (filter.mLimit == 0)
+                    return filter;
+            } else if (key == "scores") {
+                if (negated || !scores || !parseScores(value, filter.mScores))
+                    return filter;
+            } else {
+                return filter;
+            }
+
+            if (comma == body.size())
+                break;
+        }
+
+        filter.mValid = true;
+        return filter;
+    }
+
+    bool matchesType(const SelectorFilter &filter, const std::string &typeId) {
+        const std::string normalized = normalizeTypeId(typeId);
+        for (const auto &type: filter.mTypes) {
+            if ((normalized == type.first) == type.second)
+                return false;
+        }
+        return true;
+    }
+
+    bool matchesName(const SelectorFilter &filter, const std::string &name) {
+        if (!filter.mHasName)
+            return true;
+        return (name == filter.mName) != filter.mNameNegated;
+    }
 }
 
 void ServerNetworkHandler::_registerCommands() {
+    mCommands.registerCommand(std::make_shared<PermissionGroupsCommand>(*this));
     mCommands.registerCommand(std::make_shared<GameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<OpCommand>(*this));
     mCommands.registerCommand(std::make_shared<DeopCommand>(*this));
     mCommands.registerCommand(std::make_shared<GiveCommand>(*this));
+    mCommands.registerCommand(std::make_shared<HudCommand>(*this));
+    mCommands.registerCommand(std::make_shared<InputPermissionCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ReplaceItemCommand>(*this));
     mCommands.registerCommand(std::make_shared<EnchantCommand>(*this));
     mCommands.registerCommand(std::make_shared<EffectCommand>(*this));
     mCommands.registerCommand(std::make_shared<KillCommand>(*this));
@@ -99,10 +395,14 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TitleCommand>(*this, true));
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, false));
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, true));
+    mCommands.registerCommand(std::make_shared<SpreadPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetWorldSpawnCommand>(*this));
     mCommands.registerCommand(std::make_shared<SayCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ScriptEventCommand>(*this));
+    mCommands.registerCommand(std::make_shared<GameTestCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellCommand>(*this));
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<MusicCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
     mCommands.registerCommand(std::make_shared<TimeCommand>(*this));
     mCommands.registerCommand(std::make_shared<WorldCommand>(*this));
@@ -113,6 +413,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<ClearCommand>(*this));
     mCommands.registerCommand(std::make_shared<LocateCommand>(*this));
     mCommands.registerCommand(std::make_shared<AboutCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PluginsCommand>(*this));
     mCommands.registerCommand(std::make_shared<AllowListCommand>(*this));
     mCommands.registerCommand(std::make_shared<TeleportCommand>(*this));
     mCommands.registerCommand(std::make_shared<KickCommand>(*this));
@@ -122,6 +423,11 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<PardonIpCommand>(*this));
     mCommands.registerCommand(std::make_shared<BanListCommand>(*this));
     mCommands.registerCommand(std::make_shared<SeedCommand>(*this));
+    mCommands.registerCommand(std::make_shared<CloneCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FunctionCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PlayAnimationCommand>(*this));
+    // no help: the client keeps its own and runs it; a server one clashes with it and the client then drops
+    // the arguments of the other commands
     mCommands.registerCommand(std::make_shared<DefaultGameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetMaxPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<StopCommand>(*this));
@@ -129,6 +435,10 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::On));
     mCommands.registerCommand(std::make_shared<SaveCommand>(*this, SaveCommand::Mode::Off));
     mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
+    mCommands.registerCommand(std::make_shared<DebugHudCommand>(*this));
+    mCommands.registerCommand(std::make_shared<CameraShakeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FogCommand>(*this));
+    mCommands.registerCommand(std::make_shared<AimAssistCommand>(*this));
     mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
     mCommands.registerCommand(std::make_shared<StopSoundCommand>(*this));
@@ -139,10 +449,15 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
     mCommands.registerCommand(std::make_shared<TestForBlocksCommand>());
     mCommands.registerCommand(std::make_shared<TagCommand>(*this));
+    mCommands.registerCommand(std::make_shared<RecipeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<ScoreboardCommand>(*this));
     mCommands.registerCommand(std::make_shared<TickingAreaCommand>(*this));
 }
 
-ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {
+ServerPlayer *ServerNetworkHandler::getPlayerByExactName(const std::string &name) {
+    if (name.empty())
+        return nullptr;
+
     for (auto &entry: mPlayers) {
         if (entry.second.getName() == name)
             return &entry.second;
@@ -155,6 +470,14 @@ ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {
             return &entry.second;
     }
 
+    return nullptr;
+}
+
+ServerPlayer *ServerNetworkHandler::getPlayerByName(const std::string &name) {
+    if (ServerPlayer *exact = getPlayerByExactName(name))
+        return exact;
+
+    const std::string lowered = toLowerCopy(name);
     ServerPlayer *partial = nullptr;
     for (auto &entry: mPlayers) {
         const std::string candidate = toLowerCopy(entry.second.getName());
@@ -182,38 +505,129 @@ std::vector<std::string> ServerNetworkHandler::getPlayerNames() const {
     return names;
 }
 
-std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &sender,
-                                                                 const std::string &selector) {
+std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &sender, const std::string &selector) {
     std::vector<ServerPlayer *> targets;
 
-    if (selector == "@a" || selector == "@e") {
-        for (auto &entry: mPlayers) {
-            if (entry.second.isSpawned())
-                targets.push_back(&entry.second);
-        }
+    if (selector.empty() || selector[0] != '@') {
+        ServerPlayer *named = getPlayerByName(selector);
+        if (named != nullptr)
+            targets.push_back(named);
         return targets;
     }
 
-    if (selector == "@s" || selector == "@p") {
+    const SelectorFilter filter =
+            parseSelector(selector, sender.getCommandPermission() >= CommandPermission::GameDirectors);
+    if (!filter.mValid || !matchesType(filter, "minecraft:player"))
+        return targets;
+
+    if (filter.mKind == 's') {
         ServerPlayer *self = sender.asPlayer();
-        if (self != nullptr)
+        if (self != nullptr && matchesName(filter, self->getName()) && matchesScores(filter, mScoreboard, *self))
             targets.push_back(self);
         return targets;
     }
 
-    if (selector == "@r") {
+    if (filter.mKind != 'a' && filter.mKind != 'e' && filter.mKind != 'r' && filter.mKind != 'p')
+        return targets;
+
+    const Level *senderLevel = sender.getLevel();
+    const Level *contextLevel = senderLevel != nullptr ? senderLevel : &getLevel();
+    // every dimension of the command's world, as the game; another world is another server's players
+    const World *contextWorld = senderLevel != nullptr ? &getWorldOf(*senderLevel) : nullptr;
+
+    if (filter.mKind == 'p') {
+        // nearest to where the command runs: a command block or the console is no player itself
+        const Vector3f origin = sender.getPosition();
+        ServerPlayer *nearest = nullptr;
+        float nearestDistance = 0.0f;
         for (auto &entry: mPlayers) {
-            if (entry.second.isSpawned()) {
-                targets.push_back(&entry.second);
-                break;
+            ServerPlayer &player = entry.second;
+            if (!player.isSpawned() || !player.isIn(*contextLevel) || !matchesName(filter, player.getName())
+                || !matchesScores(filter, mScoreboard, player))
+                continue;
+
+            const Vector3f &position = player.getPosition();
+            const float dx = position.x - origin.x, dy = position.y - origin.y, dz = position.z - origin.z;
+            const float distance = dx * dx + dy * dy + dz * dz;
+            if (nearest == nullptr || distance < nearestDistance) {
+                nearest = &player;
+                nearestDistance = distance;
             }
         }
+        if (nearest != nullptr)
+            targets.push_back(nearest);
         return targets;
     }
 
-    ServerPlayer *named = getPlayerByName(selector);
-    if (named != nullptr)
-        targets.push_back(named);
+    const bool random = filter.mKind == 'r';
+    const size_t limit = random && filter.mLimit == 0 ? 1 : filter.mLimit;
+
+    for (auto &entry: mPlayers) {
+        ServerPlayer &player = entry.second;
+        if (!player.isSpawned() || !matchesName(filter, player.getName())
+            || !matchesScores(filter, mScoreboard, player))
+            continue;
+        if (filter.mKind == 'e' && !player.isIn(*contextLevel))
+            continue;
+        if (contextWorld != nullptr && &getWorldFor(player) != contextWorld)
+            continue;
+
+        targets.push_back(&player);
+        if (!random && limit != 0 && targets.size() >= limit)
+            break;
+    }
+
+    // drawn, not the first ones of the map's order
+    if (random) {
+        static std::mt19937 generator{std::random_device{}()};
+        std::shuffle(targets.begin(), targets.end(), generator);
+        if (targets.size() > limit)
+            targets.resize(limit);
+    }
+
+    return targets;
+}
+
+std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrigin &sender,
+                                                                     const std::string &selector) {
+    std::vector<ServerActor *> targets;
+
+    const SelectorFilter filter =
+            parseSelector(selector, sender.getCommandPermission() >= CommandPermission::GameDirectors);
+    // @s of an entity that is not a player: the executing actor itself
+    if (filter.mValid && filter.mKind == 's') {
+        ServerActor *self = dynamic_cast<ServerActor *>(sender.getEntity());
+        if (self != nullptr && !self->isDead() && matchesType(filter, self->getTypeId())
+            && matchesName(filter, self->getName()))
+            targets.push_back(self);
+        return targets;
+    }
+    if (!filter.mValid || filter.mKind != 'e')
+        return targets;
+
+    const Level *contextLevel = sender.getLevel();
+    if (contextLevel == nullptr)
+        contextLevel = &getLevel();
+    size_t limit = filter.mLimit;
+    if (limit != 0) {
+        const size_t players = resolveTargets(sender, selector).size();
+        if (players >= limit)
+            return targets;
+        limit -= players;
+    }
+
+    for (auto &entry: mActors) {
+        ServerActor *actor = entry.second.get();
+        if (actor == nullptr || actor->isDead() || !actor->isIn(*contextLevel))
+            continue;
+        if (!matchesType(filter, actor->getTypeId()) || !matchesName(filter, actor->getName())
+            || !matchesScores(filter, mScoreboard, *actor))
+            continue;
+
+        targets.push_back(actor);
+        if (limit != 0 && targets.size() >= limit)
+            break;
+    }
 
     return targets;
 }
@@ -231,15 +645,17 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
         mPluginManager->dispatch(gameModeEvent);
         if (gameModeEvent.mCancelled)
             return;
+        if (mScriptEngine.beforePlayerGameModeChange(player, previousGameMode, gameMode))
+            return;
+        player.setAllowFlight(std::nullopt);
     }
 
     player.setGameType(gameMode);
     player.setHungerEnabled(gameMode == (int32_t) GameType::Survival || gameMode == (int32_t) GameType::Adventure);
 
-    const bool mayFly = gameMode == (int32_t) GameType::Creative || gameMode == (int32_t) GameType::Spectator;
-    if (!mayFly && player.isFlying()) {
+    if (previousGameMode != gameMode && !player.canToggleFlight() && player.isFlying()) {
         player.setFlying(false);
-        player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition()));
+        player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition(), &player));
     }
 
     if (gameMode == (int32_t) GameType::Spectator) {
@@ -258,18 +674,20 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     if (previousGameMode != gameMode) {
         PlayerGameModeChangeAfterEvent event(player, previousGameMode, gameMode);
         mEventBus.after().mPlayerGameModeChange.emit(event);
+        mScriptEngine.onPlayerGameModeChange(player, previousGameMode, gameMode);
     }
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
-                                             const std::string &message) {
+                                             const std::string &message, bool success) {
     CommandOutputPacket output;
     output.mOrigin = origin;
     output.mType = CommandOutputType::AllOutput;
-    output.mSuccessCount = 1;
+    output.mSuccessCount = success ? 1 : 0;
 
+    // the per-message bool is "Successful?", the client shows a failed one as an error
     CommandOutputMessage line;
-    line.mInternal = false;
+    line.mInternal = success;
     line.mMessageId = message;
     output.mMessages.push_back(line);
 
@@ -277,15 +695,14 @@ void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const Command
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
-                                             const std::string &key,
-                                             const std::vector<std::string> &parameters) {
+                                             const std::string &key, const std::vector<std::string> &parameters) {
     CommandOutputPacket output;
     output.mOrigin = origin;
     output.mType = CommandOutputType::AllOutput;
     output.mSuccessCount = 1;
 
     CommandOutputMessage line;
-    line.mInternal = false;
+    line.mInternal = true;
     line.mMessageId = key;
     line.mParameters = parameters;
     output.mMessages.push_back(std::move(line));

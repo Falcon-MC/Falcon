@@ -18,8 +18,7 @@ namespace {
     const int SEARCH_RADIUS = 11;
 }
 
-DaylightDetectorBlock::DaylightDetectorBlock(const Block &base) : Block(base) {
-}
+DaylightDetectorBlock::DaylightDetectorBlock(const Block &base) : Block(base) {}
 
 bool DaylightDetectorBlock::matches(const std::string &identifier) {
     return identifier == DAYLIGHT_DETECTOR || identifier == DAYLIGHT_DETECTOR_INVERTED;
@@ -75,8 +74,8 @@ int DaylightDetectorBlock::computeSignal(Level &level, const Vector3i &position,
     return signal;
 }
 
-bool DaylightDetectorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
-                                       const Vector3i &position, const BlockState &state) const {
+bool DaylightDetectorBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                                       const BlockState &state) const {
     BlockState toggled = state;
     toggled.mName = state.mName == DAYLIGHT_DETECTOR ? DAYLIGHT_DETECTOR_INVERTED : DAYLIGHT_DETECTOR;
 

@@ -13,6 +13,7 @@ FALCON_REGISTER_BLOCK(SaplingBlock, 280);
 #include "World/Level/LevelGen/Random/SimpleRandom.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 
 #include <chrono>
 #include <string>
@@ -34,7 +35,9 @@ namespace {
             mChanged.push_back(Vector3i(x, y, z));
         }
 
-        const std::vector<Vector3i> &getChanged() const { return mChanged; }
+        const std::vector<Vector3i> &getChanged() const {
+            return mChanged;
+        }
 
     private:
         std::vector<Vector3i> mChanged;
@@ -66,7 +69,8 @@ TreeWoodType SaplingBlock::getWoodType() const {
     return TreeWoodType::OAK;
 }
 
-bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            ServerPlayer *player) const {
     TrackingBlockManager manager(level);
     SimpleRandom random(randomSeed());
 
@@ -77,10 +81,20 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
         return false;
 
     const BlockState grown = manager.getBlockAt(position.x, position.y, position.z);
-    if (!BlockChangeSystem::allows(level, position, grown, BlockChangeCause::Grow))
+    if (!BlockChangeSystem::allows(level, position, grown, BlockChangeCause::Grow, nullptr, player))
         return false;
 
     const std::vector<Vector3i> changed = manager.getChanged();
+    if (PluginManager::findWithSubscribers(FALCON_EVENT_STRUCTURE_GROW) != nullptr) {
+        BlockChangeSystem::StructureBlocks blocks;
+        blocks.reserve(changed.size());
+        for (const Vector3i &at: changed)
+            blocks.emplace_back(at, manager.getBlockAt(at.x, at.y, at.z));
+        if (!BlockChangeSystem::prepareStructure(level, position, blocks, player))
+            return false;
+        BlockChangeSystem::applyStructure(level, blocks, false);
+        return true;
+    }
     manager.applySubChunkUpdate();
 
     for (const Vector3i &changedPosition: changed) {
@@ -93,19 +107,23 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
 
 void SaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 const BlockState &state) const {
-    if (RandomTickSystem::nextInt(7) != 0)
-        return;
+    tryGrow(owner, level, position, state, nullptr);
+}
 
-    if (RandomTickSystem::getFullLight(level, Vector3i(position.x, position.y + 1, position.z))
-        < MINIMUM_LIGHT_LEVEL)
-        return;
+bool SaplingBlock::tryGrow(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           ServerPlayer *player) const {
+    if (RandomTickSystem::nextInt(7) != 0)
+        return false;
+
+    if (RandomTickSystem::getFullLight(level, Vector3i(position.x, position.y + 1, position.z)) < MINIMUM_LIGHT_LEVEL)
+        return false;
 
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
-        BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false);
-        return;
+        return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
+                                         false, player);
     }
 
-    growTree(owner, level, position);
+    return growTree(owner, level, position, player);
 }

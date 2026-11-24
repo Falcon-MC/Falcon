@@ -16,6 +16,9 @@ public:
 
     bool acknowledge(uint64_t timestamp);
 
+    // a simulated player answers everything at once: it has no client to wait for
+    void acknowledgeAll();
+
     bool hasTimedOut(int64_t currentTick) const;
 
     void clear();

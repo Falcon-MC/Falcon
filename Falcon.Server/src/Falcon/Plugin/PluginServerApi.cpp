@@ -11,14 +11,18 @@
 #include "Protocol/Packets/TransferPacket.h"
 
 #include <atomic>
-
+#include <mutex>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace PluginApiHelpers;
 
 namespace {
-    // Script forms count up from 1; plugin forms start far above so both share a player's callbacks safely.
+    // script forms count up from 1; plugin forms start far above: both share a player's callbacks
     constexpr uint32_t PLUGIN_FORM_ID_BASE = 0x40000000u;
+    std::mutex pendingFormsMutex;
+    std::unordered_map<NetworkIdentifier, std::unordered_set<uint32_t>, NetworkIdentifier::Hasher> pendingForms;
 
     ServerPlayer *spawnedPlayerAt(uint32_t index) {
         uint32_t current = 0;
@@ -87,36 +91,87 @@ namespace {
             player(target)->sendMessage(message);
     }
 
+    void dispatchFormResponse(ServerPlayer &responder, uint32_t formId, const std::string &response,
+                              ServerNetworkHandler::ModalFormOutcome outcome) {
+        if (outcome == ServerNetworkHandler::ModalFormOutcome::PlayerQuit)
+            return;
+        PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FORM_RESPONSE);
+        if (plugins == nullptr)
+            return;
+
+        PluginEvent answer;
+        answer.mType = FALCON_EVENT_PLAYER_FORM_RESPONSE;
+        answer.mPlayer = &responder;
+        answer.mFormId = formId;
+        answer.mFormResponse = response;
+        answer.mState = outcome != ServerNetworkHandler::ModalFormOutcome::Answered;
+        plugins->dispatch(answer);
+    }
+
     uint32_t playerSendForm(FalconPlayer *target, const char *formJson) {
         static std::atomic<uint32_t> nextFormId{PLUGIN_FORM_ID_BASE};
-        if (formJson == nullptr || *formJson == '\0')
+        if (target == nullptr || formJson == nullptr || *formJson == '\0')
             return 0;
 
         const uint32_t formId = nextFormId.fetch_add(1);
         const NetworkIdentifier id = player(target)->getNetworkIdentifier();
         const std::string form(formJson);
+        std::lock_guard lock(pendingFormsMutex);
+        pendingForms[id].insert(formId);
         owner().postToMainThread([id, formId, form] {
+            bool pending = false;
+            {
+                std::lock_guard lock(pendingFormsMutex);
+                const auto queued = pendingForms.find(id);
+                if (queued != pendingForms.end()) {
+                    pending = queued->second.erase(formId) != 0;
+                    if (queued->second.empty())
+                        pendingForms.erase(queued);
+                }
+            }
+
             auto found = owner().getPlayers().find(id);
             if (found == owner().getPlayers().end())
                 return;
+            if (!pending) {
+                dispatchFormResponse(found->second, formId, {}, ServerNetworkHandler::ModalFormOutcome::UserClosed);
+                return;
+            }
 
             owner().sendModalForm(found->second, formId, form,
-                                  [formId](ServerPlayer &responder, const std::string &response, bool closed) {
-                                      PluginManager *plugins =
-                                          PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_FORM_RESPONSE);
-                                      if (plugins == nullptr)
-                                          return;
-
-                                      PluginEvent answer;
-                                      answer.mType = FALCON_EVENT_PLAYER_FORM_RESPONSE;
-                                      answer.mPlayer = &responder;
-                                      answer.mFormId = formId;
-                                      answer.mFormResponse = response;
-                                      answer.mState = closed;
-                                      plugins->dispatch(answer);
+                                  [formId](ServerPlayer &responder, const std::string &response,
+                                           ServerNetworkHandler::ModalFormOutcome outcome) {
+                                      dispatchFormResponse(responder, formId, response, outcome);
                                   });
         });
         return formId;
+    }
+
+    int playerCloseForms(FalconPlayer *target) {
+        if (target == nullptr)
+            return 0;
+        const NetworkIdentifier id = player(target)->getNetworkIdentifier();
+        std::lock_guard lock(pendingFormsMutex);
+        // Bedrock can queue an unopened request even if a close follows in the same batch.
+        pendingForms.erase(id);
+        owner().postToMainThread([id] {
+            auto &players = owner().getPlayers();
+            const auto found = players.find(id);
+            if (found != players.end())
+                owner().closeAllForms(found->second);
+        });
+        return 1;
+    }
+
+    int playerSetNameTag(FalconPlayer *target, const char *nameTag) {
+        if (target == nullptr || nameTag == nullptr)
+            return 0;
+        owner().updatePlayerNameTag(*player(target), nameTag);
+        return 1;
+    }
+
+    int playerPing(FalconPlayer *target) {
+        return target == nullptr ? -1 : owner().getNetworkHandler().getAveragePing(player(target)->getNetworkIdentifier());
     }
 
     int playerTransfer(FalconPlayer *target, const char *address, uint32_t port) {
@@ -127,18 +182,33 @@ namespace {
         TransferPacket packet;
         packet.mAddress = address;
         packet.mPort = (uint16_t) port;
-        owner().postToMainThread([id, packet] {
-            owner().sendPacketTo(id, packet);
-        });
+        owner().postToMainThread([id, packet] { owner().sendPacketTo(id, packet); });
         return 1;
+    }
+
+    PlayerBossBars::Color bossBarColor(uint32_t color) {
+        return color > (uint32_t) PlayerBossBars::Color::White ? PlayerBossBars::Color::Purple
+                                                               : (PlayerBossBars::Color) color;
+    }
+
+    uint32_t playerAddBossBar(FalconPlayer *target, const char *title, float percent, uint32_t color) {
+        return player(target)->getBossBars().add(title == nullptr ? "" : title, percent, bossBarColor(color));
+    }
+
+    int playerUpdateBossBar(FalconPlayer *target, uint32_t bar, const char *title, float percent, uint32_t color) {
+        return player(target)->getBossBars().update(bar, title == nullptr ? "" : title, percent, bossBarColor(color))
+                       ? 1
+                       : 0;
+    }
+
+    int playerRemoveBossBar(FalconPlayer *target, uint32_t bar) {
+        return player(target)->getBossBars().remove(bar) ? 1 : 0;
     }
 
     void playerKick(FalconPlayer *target, const char *reason) {
         const NetworkIdentifier id = player(target)->getNetworkIdentifier();
         const std::string text = reason == nullptr ? std::string() : std::string(reason);
-        owner().postToMainThread([id, text] {
-            owner()._disconnect(id, text);
-        });
+        owner().postToMainThread([id, text] { owner()._disconnect(id, DisconnectReason::Kicked, text); });
     }
 
     void broadcastMessage(const char *message) {
@@ -208,6 +278,15 @@ namespace {
         PluginServerApi::fillPackets(api);
         PluginServerApi::fillContent(api);
         PluginServerApi::fillServices(api);
+        PluginServerApi::fillMaps(api);
+        PluginServerApi::fillEffects(api);
+        PluginServerApi::fillScoreboard(api);
+        PluginServerApi::fillContainers(api);
+        PluginServerApi::fillData(api);
+        PluginServerApi::fillCommands(api);
+        PluginServerApi::fillWorldQueries(api);
+        PluginServerApi::fillActors(api);
+        PluginServerApi::fillAdmin(api);
         return api;
     }
 }
@@ -225,7 +304,13 @@ void PluginServerApi::fillCore(FalconServerApi &api) {
     api.playerSendMessage = &playerSendMessage;
     api.playerKick = &playerKick;
     api.playerSendForm = &playerSendForm;
+    api.playerCloseForms = &playerCloseForms;
+    api.playerSetNameTag = &playerSetNameTag;
+    api.playerPing = &playerPing;
     api.playerTransfer = &playerTransfer;
+    api.playerAddBossBar = &playerAddBossBar;
+    api.playerUpdateBossBar = &playerUpdateBossBar;
+    api.playerRemoveBossBar = &playerRemoveBossBar;
     api.broadcastMessage = &broadcastMessage;
     api.subscribe = &subscribe;
     api.unsubscribe = &unsubscribe;

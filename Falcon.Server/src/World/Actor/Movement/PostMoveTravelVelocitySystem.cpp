@@ -3,11 +3,13 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 
-float PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsComponent &physics,
-                                          const AxisAlignedBB &box, Vector3f motion, const ActorMoveResult &result,
-                                          const LiquidContact &feet, float &landingFallDistance) {
+void PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsComponent &physics, const AxisAlignedBB &box,
+                                         Vector3f motion, const ActorMoveResult &result, const LiquidContact &feet,
+                                         float &landingFallDistance) {
     landingFallDistance = 0.0f;
-    actor.setPosition(Vector3f((box.mMinX + box.mMaxX) * 0.5f, box.mMinY, (box.mMinZ + box.mMaxZ) * 0.5f));
+    // a box scaled around its middle starts above the feet: the feet stay where the full box would put them
+    const float raised = actor.getSize().mHeight * (1.0f - actor.getCollisionScale()) * 0.5f;
+    actor.setPosition(Vector3f((box.mMinX + box.mMaxX) * 0.5f, box.mMinY - raised, (box.mMinZ + box.mMaxZ) * 0.5f));
 
     if (result.mCollidedX)
         motion.x = 0.0f;
@@ -20,7 +22,7 @@ float PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsCompo
 
     if (!physics.mHasGravity || feet.water || feet.bubble) {
         actor.resetFallDistance();
-        return 0.0f;
+        return;
     }
 
     const float y = actor.getPosition().y;
@@ -28,12 +30,10 @@ float PostMoveTravelVelocitySystem::apply(ServerActor &actor, const PhysicsCompo
         if (y > actor.getHighestPosition())
             actor.setHighestPosition(y);
         actor.updateFallDistance();
-        return 0.0f;
+        return;
     }
 
     actor.updateFallDistance();
     landingFallDistance = actor.getFallDistance();
-    const float damage = actor.computeFallDamage();
     actor.resetFallDistance();
-    return damage;
 }

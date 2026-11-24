@@ -8,12 +8,10 @@ namespace {
     const char *OBSERVER = "minecraft:observer";
 }
 
-bool ObserverBlock::matches(const std::string &identifier)
-{
+bool ObserverBlock::matches(const std::string &identifier) {
     return identifier == OBSERVER;
 }
 
-bool ObserverBlock::isSignalSource() const
-{
+bool ObserverBlock::isSignalSource() const {
     return true;
 }

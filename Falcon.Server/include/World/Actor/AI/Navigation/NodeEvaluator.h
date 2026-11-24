@@ -7,13 +7,11 @@
 #include <array>
 #include <cstdint>
 
+class Actor;
 class Level;
 
-/**
- * Classifies block positions for the pathfinder. Ground modes (walk, climb) look for a block to stand on,
- * volumetric modes (swim, fly) accept any open position in their medium. Every lookup is cached for the
- * duration of one search because A* asks about the same blocks many times.
- */
+// ground modes (walk, climb) need a block to stand on; swim and fly accept any open position in their medium;
+// lookups cached per search: A* revisits the same blocks
 class NodeEvaluator {
 public:
     static constexpr int32_t NO_OFFSET = INT32_MIN;
@@ -21,7 +19,7 @@ public:
     static constexpr int32_t LIQUID_EXTRA_COST = 20;
     static constexpr int32_t HAZARD_EXTRA_COST = 80;
 
-    void prepare(Level &level, float width, float height, const Vector3f &start, bool inWater,
+    void prepare(Level &level, const Actor &actor, float width, float height, const Vector3f &start, bool inWater,
                  const PathOptions &options);
 
     const PathOptions &getOptions() const {
@@ -32,20 +30,26 @@ public:
         return mInWater;
     }
 
-    /** Vertical offset from `feetY` to the nearest standable position in this column, or NO_OFFSET. */
+    // offset from feetY to the nearest standable y in this column, or NO_OFFSET
     int32_t availableOffset(int32_t x, int32_t feetY, int32_t z);
 
     bool isStandable(int32_t x, int32_t y, int32_t z);
 
-    /** A climber can hang at this position: the body fits and a solid block is beside it. */
+    // body fits and a solid block is beside it
     bool canClimb(int32_t x, int32_t feetY, int32_t z);
 
-    /** A swimmer or flier can occupy this position. `swimming` selects water as the medium. */
+    // medium: water when swimming, air otherwise
     bool isOpen(int32_t x, int32_t feetY, int32_t z, bool swimming);
 
     bool isPassable(float centerX, float feetY, float centerZ);
 
     int32_t extraCost(int32_t x, int32_t feetY, int32_t z);
+
+    // minecraft:preferred_path's jump cost; 0 without it
+    int32_t jumpCost() const;
+
+    // one block of walk in the search's cost units
+    static constexpr int32_t BLOCK_COST = 10;
 
     bool hasBarrier(const Vector3f &from, const Vector3f &to);
 
@@ -80,7 +84,11 @@ private:
 
     bool _isSampleOpen(const Vector3f &position);
 
+    // minecraft:preferred_path's cost of the block under the feet
+    int32_t _groundCost(int32_t x, int32_t feetY, int32_t z) const;
+
     Level *mLevel = nullptr;
+    const Actor *mActor = nullptr;
     const PathOptions *mOptions = nullptr;
     float mRadius = 0.3f;
     float mHeight = 1.8f;

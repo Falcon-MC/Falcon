@@ -40,33 +40,25 @@ namespace {
     const char *YELLOW = "\033[33m";
     const char *CYAN = "\033[36m";
 
-    const char *LOGO[] = {
-            R"( _____     _                 )",
-            R"(|  ___|_ _| | ___ ___  _ __  )",
-            R"(| |_ / _` | |/ __/ _ \| '_ \ )",
-            R"(|  _| (_| | | (_| (_) | | | |)",
-            R"(|_|  \__,_|_|\___\___/|_| |_|)"
-    };
+    const char *LOGO[] = {R"( _____     _                 )", R"(|  ___|_ _| | ___ ___  _ __  )",
+                          R"(| |_ / _` | |/ __/ _ \| '_ \ )", R"(|  _| (_| | | (_| (_) | | | |)",
+                          R"(|_|  \__,_|_|\___\___/|_| |_|)"};
 
-    const char *LICENSE_TEXT[] = {
-            "Falcon is free software: you can redistribute it and/or modify",
-            "it under the terms of the GNU Lesser General Public License as published",
-            "by the Free Software Foundation, either version 3 of the License, or",
-            "(at your option) any later version.",
-            "",
-            "Falcon is distributed in the hope that it will be useful,",
-            "but WITHOUT ANY WARRANTY; without even the implied warranty of",
-            "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
-            "",
-            "See the full license at https://www.gnu.org/licenses/lgpl-3.0.html"
-    };
+    const char *LICENSE_TEXT[] = {"Falcon is free software: you can redistribute it and/or modify",
+                                  "it under the terms of the GNU Lesser General Public License as published",
+                                  "by the Free Software Foundation, either version 3 of the License, or",
+                                  "(at your option) any later version.",
+                                  "",
+                                  "Falcon is distributed in the hope that it will be useful,",
+                                  "but WITHOUT ANY WARRANTY; without even the implied warranty of",
+                                  "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+                                  "",
+                                  "See the full license at https://www.gnu.org/licenses/lgpl-3.0.html"};
 
     std::string toLower(const std::string &value) {
         std::string lowered = value;
         std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                       [](unsigned char character) {
-                           return (char) std::tolower(character);
-                       });
+                       [](unsigned char character) { return (char) std::tolower(character); });
         return lowered;
     }
 
@@ -179,8 +171,8 @@ namespace {
         const std::string address = trim(body);
         const bool valid = !address.empty() && address.size() <= 45
                            && std::all_of(address.begin(), address.end(), [](unsigned char character) {
-                               return std::isxdigit(character) != 0 || character == '.' || character == ':';
-                           });
+                                  return std::isxdigit(character) != 0 || character == '.' || character == ':';
+                              });
         return valid ? address : std::string();
     }
 }
@@ -272,8 +264,9 @@ void SetupWizard::banner() const {
         writeLine(paint(center(line, FRAME_WIDTH), ACCENT));
 
     writeLine();
-    writeLine(paint(center("Setup wizard  " + std::string(mUseUnicode ? "·" : "-") + "  v"
-                           + FalconBuildInfo::kVersion, FRAME_WIDTH), BOLD));
+    writeLine(paint(center("Setup wizard  " + std::string(mUseUnicode ? "·" : "-") + "  v" + FalconBuildInfo::kVersion,
+                           FRAME_WIDTH),
+                    BOLD));
     writeLine(paint(border(), ACCENT));
     writeLine();
 }
@@ -469,36 +462,36 @@ void SetupWizard::configureServer() {
     accept(tr("server.name.set", {paint(mValues["server-name"], BOLD)}));
     writeLine();
 
-    mValues["gamemode"] = askChoice(tr("server.gamemode"), {
-            {"survival", tr("gamemode.survival")},
-            {"creative", tr("gamemode.creative")},
-            {"adventure", tr("gamemode.adventure")},
-            {"spectator", tr("gamemode.spectator")}
-    }, mValues["gamemode"]);
+    mValues["gamemode"] = askChoice(tr("server.gamemode"),
+                                    {{"survival", tr("gamemode.survival")},
+                                     {"creative", tr("gamemode.creative")},
+                                     {"adventure", tr("gamemode.adventure")},
+                                     {"spectator", tr("gamemode.spectator")}},
+                                    mValues["gamemode"]);
     accept(tr("server.gamemode.set", {paint(tr("gamemode." + mValues["gamemode"]), BOLD)}));
     writeLine();
 
-    mValues["difficulty"] = askChoice(tr("server.difficulty"), {
-            {"peaceful", tr("difficulty.peaceful")},
-            {"easy", tr("difficulty.easy")},
-            {"normal", tr("difficulty.normal")},
-            {"hard", tr("difficulty.hard")}
-    }, mValues["difficulty"]);
+    mValues["difficulty"] = askChoice(tr("server.difficulty"),
+                                      {{"peaceful", tr("difficulty.peaceful")},
+                                       {"easy", tr("difficulty.easy")},
+                                       {"normal", tr("difficulty.normal")},
+                                       {"hard", tr("difficulty.hard")}},
+                                      mValues["difficulty"]);
     accept(tr("server.difficulty.set", {paint(tr("difficulty." + mValues["difficulty"]), BOLD)}));
     writeLine();
 
-    mValues["max-players"] = std::to_string(askInteger(tr("server.maxPlayers"),
-                                                       std::atoi(mValues["max-players"].c_str()), 1, 1000));
+    mValues["max-players"] = std::to_string(
+            askInteger(tr("server.maxPlayers"), std::atoi(mValues["max-players"].c_str()), 1, 1000));
     accept(tr("server.maxPlayers.set", {paint(mValues["max-players"], BOLD)}));
 }
 
 void SetupWizard::configureNetwork() {
     step(tr("network.title"), tr("network.description"));
 
-    mValues["server-port"] = std::to_string(askInteger(tr("network.portV4"),
-                                                       std::atoi(mValues["server-port"].c_str()), 1, 65535));
-    mValues["server-portv6"] = std::to_string(askInteger(tr("network.portV6"),
-                                                         std::atoi(mValues["server-portv6"].c_str()), 1, 65535));
+    mValues["server-port"] = std::to_string(
+            askInteger(tr("network.portV4"), std::atoi(mValues["server-port"].c_str()), 1, 65535));
+    mValues["server-portv6"] = std::to_string(
+            askInteger(tr("network.portV6"), std::atoi(mValues["server-portv6"].c_str()), 1, 65535));
     accept(tr("network.ports.set", {paint(mValues["server-port"], BOLD), paint(mValues["server-portv6"], BOLD)}));
     writeLine();
 
@@ -529,8 +522,8 @@ void SetupWizard::configureWorld() {
                                          : tr("world.seed.set", {paint(mValues["level-seed"], BOLD)}));
     writeLine();
 
-    mValues["view-distance"] = std::to_string(askInteger(tr("world.viewDistance"),
-                                                         std::atoi(mValues["view-distance"].c_str()), 4, 96));
+    mValues["view-distance"] = std::to_string(
+            askInteger(tr("world.viewDistance"), std::atoi(mValues["view-distance"].c_str()), 4, 96));
     accept(tr("world.viewDistance.set", {paint(mValues["view-distance"], BOLD)}));
 }
 
@@ -609,7 +602,7 @@ void SetupWizard::printAddresses() const {
     const std::string external = findExternalAddress();
     const std::string localLabel = tr("addresses.local");
     const std::string externalLabel = tr("addresses.external");
-    const size_t width = (std::max)(displayWidth(localLabel), displayWidth(externalLabel)) + 2;
+    const size_t width = (std::max) (displayWidth(localLabel), displayWidth(externalLabel)) + 2;
 
     writeLine();
     writeLine("    " + paint(padRight(localLabel, width), DIM)
@@ -628,22 +621,21 @@ void SetupWizard::printSummary() const {
     writeLine();
 
     const std::vector<std::pair<std::string, std::string>> rows = {
-            {tr("summary.language"),   Localization::getInstance().getLanguageName(mLocale)},
+            {tr("summary.language"), Localization::getInstance().getLanguageName(mLocale)},
             {tr("summary.serverName"), mValues.at("server-name")},
-            {tr("summary.gamemode"),   tr("gamemode." + mValues.at("gamemode")) + ", "
-                                       + tr("difficulty." + mValues.at("difficulty"))},
-            {tr("summary.players"),    tr("summary.players.value", {mValues.at("max-players")})},
-            {tr("summary.ports"),      mValues.at("server-port") + " / " + mValues.at("server-portv6")},
-            {tr("summary.onlineMode"), tr(mValues.at("online-mode") == "true" ? "summary.required"
-                                                                              : "summary.notRequired")},
-            {tr("summary.world"),      mValues.at("level-name")},
-            {tr("summary.operators"),  mOperators.empty() ? tr("summary.none") : join(mOperators, ", ")},
-            {tr("summary.allowList"),  tr(mValues.at("allow-list") == "true" ? "summary.on" : "summary.off")}
-    };
+            {tr("summary.gamemode"),
+             tr("gamemode." + mValues.at("gamemode")) + ", " + tr("difficulty." + mValues.at("difficulty"))},
+            {tr("summary.players"), tr("summary.players.value", {mValues.at("max-players")})},
+            {tr("summary.ports"), mValues.at("server-port") + " / " + mValues.at("server-portv6")},
+            {tr("summary.onlineMode"),
+             tr(mValues.at("online-mode") == "true" ? "summary.required" : "summary.notRequired")},
+            {tr("summary.world"), mValues.at("level-name")},
+            {tr("summary.operators"), mOperators.empty() ? tr("summary.none") : join(mOperators, ", ")},
+            {tr("summary.allowList"), tr(mValues.at("allow-list") == "true" ? "summary.on" : "summary.off")}};
 
     size_t width = 0;
     for (const auto &row: rows)
-        width = (std::max)(width, displayWidth(row.first));
+        width = (std::max) (width, displayWidth(row.first));
 
     for (const auto &row: rows)
         writeLine("    " + paint(padRight(row.first, width + 2), DIM) + row.second);

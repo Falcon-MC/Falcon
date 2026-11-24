@@ -41,9 +41,10 @@ void PlayerTraversalSystem::tick(PlayerMovementContext &context) {
             state.velocity.y = POWDER_SNOW_ASCEND_SPEED;
     }
 
-    if (!abilities.flying && !abilities.gliding && inside != nullptr && inside->isClimbable() && traversal == BlockTraversal::None) {
+    if (!abilities.flying && !abilities.gliding && inside != nullptr && inside->isClimbable()
+        && traversal == BlockTraversal::None) {
         state.velocity.y = std::max(state.velocity.y, -CLIMB_SPEED);
-        if (input.jumpHeld || context.player.hasHorizontalCollision())
+        if (input.jumpHeld)
             state.velocity.y = CLIMB_SPEED;
         if (context.pose.mSneaking && state.velocity.y < 0.0f)
             state.velocity.y = 0.0f;

@@ -38,3 +38,20 @@ bool Gzip::decompress(const std::string &input, std::string &output) {
     inflateEnd(&stream);
     return true;
 }
+
+bool Gzip::compress(const std::string &input, std::string &output) {
+    z_stream stream;
+    std::memset(&stream, 0, sizeof(stream));
+    if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, GZIP_WINDOW_BITS, 8, Z_DEFAULT_STRATEGY) != Z_OK)
+        return false;
+
+    output.assign(deflateBound(&stream, (uLong) input.size()), '\0');
+    stream.next_in = (Bytef *) input.data();
+    stream.avail_in = (uInt) input.size();
+    stream.next_out = (Bytef *) &output[0];
+    stream.avail_out = (uInt) output.size();
+    const int result = deflate(&stream, Z_FINISH);
+    output.resize(output.size() - stream.avail_out);
+    deflateEnd(&stream);
+    return result == Z_STREAM_END;
+}

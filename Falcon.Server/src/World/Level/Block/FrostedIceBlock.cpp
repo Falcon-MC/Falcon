@@ -15,10 +15,8 @@ namespace {
     const int MIN_MELT_DELAY = 20;
     const int MAX_MELT_DELAY = 40;
 
-    const Vector3i NEIGHBOUR_OFFSETS[] = {
-            Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1),
-            Vector3i(0, 0, 1), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)
-    };
+    const Vector3i NEIGHBOUR_OFFSETS[] = {Vector3i(0, -1, 0), Vector3i(0, 1, 0),  Vector3i(0, 0, -1),
+                                          Vector3i(0, 0, 1),  Vector3i(-1, 0, 0), Vector3i(1, 0, 0)};
 
     Vector3i offset(const Vector3i &position, const Vector3i &delta) {
         return Vector3i(position.x + delta.x, position.y + delta.y, position.z + delta.z);

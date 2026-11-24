@@ -1,9 +1,16 @@
 #pragma once
 
+#include "Core/Math/Vector3f.h"
+#include "Core/Math/Vector3i.h"
+#include "World/Level/ClientSideGeneration.h"
+
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <unordered_set>
 #include <vector>
 
+class Level;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -13,10 +20,31 @@ struct ChunkStreamState {
     std::unordered_set<int64_t> mLoading;
     std::vector<int64_t> mReadyToSend;
     int64_t mLastLoaderChunk = INT64_MAX;
+    uint64_t mSendTick = UINT64_MAX;
+    // tick the send queue is looked at again: a pass that found every chunk still generating waits a few
+    uint64_t mLoadRetryTick = 0;
+    unsigned mSendsThisTick = 0;
     int32_t mComparatorChunkX = 0;
     int32_t mComparatorChunkZ = 0;
     double mComparatorDirX = 0.0;
     double mComparatorDirZ = 0.0;
+    // Radius granted to the client in ChunkRadiusUpdated, 0 until it asks. The client drops chunks beyond it,
+    // so streaming further marks chunks as sent that the client never keeps.
+    int32_t mRadius = 0;
+
+    // Client side generation only.
+    ClientSideGeneration::SavedChunkList mSavedChunks;
+    // Chunks in the radius the server leaves to the client. They are sent anyway once something else on the
+    // server builds them, and decided again whenever the view moves.
+    std::vector<int64_t> mClientBuilt;
+    size_t mClientBuiltCursor = 0;
+    bool mPublished = false;
+    // A teleport moves the view without waiting for the player to travel PUBLISHER_MOVE_THRESHOLD blocks.
+    bool mForcePublisherMove = false;
+    bool mChunkSentSinceUpdate = false;
+    std::chrono::steady_clock::time_point mLastChunkSent;
+    Vector3i mPublisherPosition;
+    uint32_t mPublisherRadius = 0;
 };
 
 /**
@@ -27,14 +55,49 @@ class ChunkStreamHandler {
 public:
     static constexpr int32_t FIELD_OF_VIEW_DEGREES = 70;
     static constexpr int32_t TELEPORT_LOAD_COUNT = 8;
+    // with many players online; fewer players are each sent more
+    static constexpr unsigned MAX_SENDS_PER_TICK = 16;
+    // pending outbound bytes before more chunks are encoded for this player, with many players online
+    static constexpr size_t MAX_QUEUED_CHUNK_BYTES = 256 * 1024;
+    // sent chunks the PlayStatus PlayerSpawn waits for
+    static constexpr size_t SPAWN_CHUNK_COUNT = 56;
+    static constexpr unsigned JOIN_BURST_SENDS_PER_TICK = 2;
 
     static void tick(ServerNetworkHandler &owner, ServerPlayer &player);
 
+    // chunks one player is sent per tick, between MAX_SENDS_PER_TICK and more when few players are online
+    static unsigned getSendsPerTick(ServerNetworkHandler &owner);
+
     static void handleTeleport(ServerNetworkHandler &owner, ServerPlayer &player);
+
+    // after every player's tick: what the players waiting for their spawn chunks left of the generation slots
+    static void loadDeferred(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void handleViewDistanceChange(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void invalidateChunk(ServerPlayer &player, int64_t hash);
+
+    /**
+     * Whether a NetworkChunkPublisherUpdatePacket is due under client side generation: never within
+     * PUBLISHER_DELAY_NANOSECONDS of the last chunk sent since the previous update, and then when the player moved
+     * far enough, the radius changed or chunks wait to be listed.
+     */
+    static bool isPublisherUpdateDue(const ChunkStreamState &state, const Vector3i &position, uint32_t radius,
+                                     std::chrono::steady_clock::time_point now);
+
+    /**
+     * Forgets the chunks still waiting to be sent for the current view. Under client side generation a teleport
+     * drops them, since each one sent would push the publisher update and the view move back.
+     */
+    static void dropPendingChunks(ChunkStreamState &state);
+
+    // actors and players a client hears about: 57 chunks around its own, not the streamed view
+    // the offsets around the viewer chunk
+    static bool isInActorRange(const Vector3f &viewer, const Vector3f &position);
+
+    // the streamed view covers the block, 46 blocks of margin
+    //  against the publisher view of
+    static bool isPositionRelevant(ServerPlayer &player, const Level &level, const Vector3i &position);
 
     static int64_t packChunk(int32_t chunkX, int32_t chunkZ);
 

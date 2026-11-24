@@ -12,15 +12,16 @@
 
 bool CommandBlockContainerScreenValidator::isValid(ServerNetworkHandler &owner, ServerPlayer &player,
                                                    const Vector3i &position) const {
-    if (!player.isOp() && player.getGameType() != (int32_t) GameType::Creative)
+    // command blocks are operator-only, and the screen only opens in creative: both are required
+    if (!player.isOp() || !player.isCreative())
         return false;
 
     return ContainerScreenValidatorBase::isValid(owner, player, position);
 }
 
 CommandBlockContainerManagerModel::CommandBlockContainerManagerModel()
-        : ContainerManagerModel(ContainerType::CommandBlock,
-                                std::make_unique<CommandBlockContainerScreenValidator>()) {}
+        : ContainerManagerModel(ContainerType::CommandBlock, std::make_unique<CommandBlockContainerScreenValidator>()) {
+}
 
 bool CommandBlockContainerManagerModel::openWindow(ServerNetworkHandler &owner, ServerPlayer &player,
                                                    const Vector3i &position) {

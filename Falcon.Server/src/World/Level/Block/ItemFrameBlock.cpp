@@ -12,10 +12,12 @@ FALCON_REGISTER_BLOCK(ItemFrameBlock, 60);
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
+#include "Network/Handler/MapHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Types/ItemDefinition.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Core/Math/VectorMath.h"
 
 #include <cstdlib>
 #include <utility>
@@ -26,13 +28,9 @@ namespace {
     const char *FILLED_MAP = "minecraft:filled_map";
     const char *STATE_MAP_BIT = "item_frame_map_bit";
 
-    const int FACE_OFFSETS[6][3] = {
-            {0,  -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}
-    };
+    const int FACE_OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
-    Vector3f centreOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-    }
+    using VectorMath::centerOf;
 
     bool rollsDrop(float chance) {
         if (chance >= 1.0f)
@@ -69,15 +67,13 @@ namespace {
         if (frame.isEmpty() || !rollsDrop(frame.getDropChance()))
             return;
 
-        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.25f,
-                                    (float) position.z + 0.5f);
+        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.25f, (float) position.z + 0.5f);
         owner.dropItem(level, dropPosition, frame.getItem(), ItemActorHandler::randomDropMotion(),
                        ItemActorHandler::DROP_PICKUP_DELAY);
     }
 }
 
-ItemFrameBlock::ItemFrameBlock(const Block &base) : Block(base) {
-}
+ItemFrameBlock::ItemFrameBlock(const Block &base) : Block(base) {}
 
 BlockState ItemFrameBlock::applyPlacementOrientation(const BlockState &state,
                                                      const BlockPlacementContext &context) const {
@@ -112,8 +108,7 @@ bool ItemFrameBlock::canPlaceAt(Level &level, const Vector3i &position, int bloc
     if (blockFace < 0 || blockFace >= 6)
         return false;
 
-    const Vector3i support(position.x - FACE_OFFSETS[blockFace][0],
-                           position.y - FACE_OFFSETS[blockFace][1],
+    const Vector3i support(position.x - FACE_OFFSETS[blockFace][0], position.y - FACE_OFFSETS[blockFace][1],
                            position.z - FACE_OFFSETS[blockFace][2]);
 
     const BlockState state = level.getBlockState(support.x, support.y, support.z);
@@ -158,10 +153,11 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
 
         ItemStack framed = held;
         framed.mCount = 1;
+        MapHandler::onFrameItemChanged(owner, level, position, ItemStack::air(), framed);
         frame->setItem(std::move(framed));
         frame->setRotation(0);
 
-        if (player.getGameType() != (int32_t) GameType::Creative) {
+        if (!player.isCreative()) {
             ItemStack remaining = held;
             remaining.mCount -= 1;
             inventory.setItemInHand(remaining.mCount <= 0 ? ItemStack::air() : std::move(remaining));
@@ -170,11 +166,11 @@ bool ItemFrameBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
         }
 
         setStoringMap(owner, level, position, state, isFilledMap(held));
-        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameAddItem, centreOf(position), 0);
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameAddItem, centerOf(position), 0);
     } else {
         frame->setRotation(frame->getRotation() + 1);
         setStoringMap(owner, level, position, state, false);
-        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameRotateItem, centreOf(position), 0);
+        owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameRotateItem, centerOf(position), 0);
     }
 
     BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
@@ -188,18 +184,18 @@ bool ItemFrameBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
     if (frame == nullptr || frame->isEmpty())
         return false;
 
-    const bool creative = player.getGameType() == (int32_t) GameType::Creative;
+    const bool creative = player.isCreative();
     if (!creative)
         dropFramedItem(owner, level, position, *frame);
 
+    MapHandler::onFrameItemChanged(owner, level, position, frame->getItem(), ItemStack::air());
     frame->setItem(ItemStack::air());
     frame->setRotation(0);
     setStoringMap(owner, level, position, state, false);
 
-    owner.broadcastLevelEvent(level,
-                              creative ? LevelEventPacket::SoundItemFrameRemoveItem
-                                       : LevelEventPacket::SoundItemFrameBreak,
-                              centreOf(position), 0);
+    owner.broadcastLevelEvent(
+            level, creative ? LevelEventPacket::SoundItemFrameRemoveItem : LevelEventPacket::SoundItemFrameBreak,
+            centerOf(position), 0);
 
     BlockActionHandler::broadcastBlockActorData(owner, level, *frame);
     return true;
@@ -219,7 +215,7 @@ void ItemFrameBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     created->setState(state);
     blockActors.insert(std::move(created));
 
-    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFramePlace, centreOf(position), 0);
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFramePlace, centerOf(position), 0);
 }
 
 void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -231,7 +227,12 @@ void ItemFrameBlock::onBroken(ServerNetworkHandler &owner, Level &level, const V
         return;
 
     dropFramedItem(owner, level, position, *frame);
+    MapHandler::onFrameItemChanged(owner, level, position, frame->getItem(), ItemStack::air());
     level.getBlockActors().remove(position);
 
-    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centreOf(position), 0);
+    owner.broadcastLevelEvent(level, LevelEventPacket::SoundItemFrameBreak, centerOf(position), 0);
+}
+
+const char *ItemFrameBlock::getBlockActorId() const {
+    return isGlow(getIdentifier()) ? GlowItemFrameBlockActor::BLOCK_ACTOR_ID : ItemFrameBlockActor::BLOCK_ACTOR_ID;
 }

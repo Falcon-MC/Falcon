@@ -2,6 +2,7 @@
 
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Block/BlockNames.h"
 
 namespace {
     const BlockState &emeraldOreState() {
@@ -26,7 +27,7 @@ void LegacyEmeraldOreFeature::populate(ChunkGenerateContext &context, IRandom &r
     if (y < LevelChunk::MIN_Y || y > LevelChunk::MAX_Y)
         return;
 
-    if (chunk.getBlock(x, y, z).mName == "minecraft:stone")
+    if (chunk.getBlock(x, y, z).mName == BlockNames::STONE)
         chunk.setBlock(x, y, z, emeraldOreState());
 }
 

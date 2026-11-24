@@ -2,14 +2,11 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(CrossbowItem, 61,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:crossbow";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<CrossbowItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        CrossbowItem, 61, [](const std::string &identifier) { return identifier == "minecraft:crossbow"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<CrossbowItem>(item); });
 
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/EnchantmentData.h"
@@ -28,7 +25,7 @@ namespace {
     const char *CHARGED_LOAD_TICK_TAG = "LoadTick";
     const int64_t CROSSBOW_FIRE_DELAY_TICKS = 5;
 
-    const float CROSSBOW_FORCE = 3.5f;
+    const float CROSSBOW_FORCE = 3.15f;
     const int32_t CROSSBOW_LOAD_TICKS = 25;
     const int32_t CROSSBOW_QUICK_CHARGE_TICKS = 5;
 
@@ -48,7 +45,11 @@ namespace {
     }
 }
 
-CrossbowItem::CrossbowItem(const Item &base) : Item(base) {
+CrossbowItem::CrossbowItem(const Item &base) : Item(base) {}
+
+// the shooter base sets 72000, the crossbow then 25
+int32_t CrossbowItem::getUseDuration() const {
+    return 25;
 }
 
 bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
@@ -107,6 +108,32 @@ int32_t CrossbowItem::getChargeTicks(const ItemStack &item) {
     return CROSSBOW_LOAD_TICKS - quickCharge * CROSSBOW_QUICK_CHARGE_TICKS;
 }
 
+void CrossbowItem::loadHeld(ServerNetworkHandler &owner, MobActor &mob) {
+    ItemStack held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
+    if (held.isAir() || isCrossbowLoaded(held))
+        return;
+
+    if (held.mTag.getType() != Tag::Type::Compound)
+        held.mTag = Tag::ofCompound();
+
+    Tag chargedItem = Tag::ofCompound();
+    chargedItem.put(CHARGED_NAME_TAG, Tag::ofString(ARROW_IDENTIFIER));
+    chargedItem.putInt(CHARGED_LOAD_TICK_TAG, (int32_t) owner.getCurrentTick());
+    held.mTag.put(CHARGED_ITEM_TAG, std::move(chargedItem));
+    mob.getEquipment().setSlot(MobEquipment::MAINHAND, std::move(held));
+    mob.getEquipment().broadcast(owner, mob);
+}
+
+void CrossbowItem::unloadHeld(ServerNetworkHandler &owner, MobActor &mob) {
+    ItemStack held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
+    if (held.isAir() || !isCrossbowLoaded(held))
+        return;
+
+    held.mTag.remove(CHARGED_ITEM_TAG);
+    mob.getEquipment().setSlot(MobEquipment::MAINHAND, std::move(held));
+    mob.getEquipment().broadcast(owner, mob);
+}
+
 bool CrossbowItem::onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     if (isCrossbowLoaded(item))
         return false;
@@ -156,8 +183,8 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
 
     owner.playLevelSound(owner.getLevelFor(player),
                          ItemEnchantments::getLevel(item, EnchantmentIds::QUICK_CHARGE) > 0
-                         ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
-                                         : LevelSoundEvent::CROSSBOW_LOADING_END,
+                                 ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
+                                 : LevelSoundEvent::CROSSBOW_LOADING_END,
                          player.getPosition(), "minecraft:player");
 }
 

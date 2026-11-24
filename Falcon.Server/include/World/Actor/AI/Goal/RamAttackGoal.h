@@ -39,11 +39,7 @@ public:
     void tick(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    enum class Phase {
-        Approach,
-        Prepare,
-        Charge
-    };
+    enum class Phase { Approach, Prepare, Charge };
 
     void _tickApproach(ServerNetworkHandler &owner, MobActor &mob, const Actor &target);
 

@@ -2,8 +2,14 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemDefinition.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
+#include "World/Level/Block/Actor/TrialSpawnerBlockActor.h"
+#include "World/Level/Block/TrialSpawnerBlock.h"
+#include "World/Level/Level.h"
 
 #include "World/Item/ItemClassRegistry.h"
 
@@ -12,6 +18,7 @@
 
 namespace {
     const std::string SPAWN_EGG_SUFFIX = "_spawn_egg";
+    const char *const MOB_SPAWNER = "minecraft:mob_spawner";
     const char *const DISPLAY_TAG = "display";
     const char *const NAME_TAG = "Name";
     const float PLAYER_HALF_WIDTH = 0.3f;
@@ -31,7 +38,7 @@ namespace {
         return identifier;
     }
 
-    // The client turns the spawned mob towards the player, measured from the player's box corner.
+    // the client turns the mob toward the player, measured from the player's box corner
     float yawTowards(const ServerPlayer &player, const Vector3f &spawnPosition) {
         const Vector3f &position = player.getPosition();
         const float dx = position.x - PLAYER_HALF_WIDTH - spawnPosition.x;
@@ -42,6 +49,9 @@ namespace {
     }
 
     std::string customNameOf(const ItemStack &item) {
+        // an item without user data carries an end tag
+        if (!item.mTag.isCompound())
+            return std::string();
         const Tag *display = item.mTag.get(DISPLAY_TAG);
         if (display == nullptr || !display->isCompound())
             return std::string();
@@ -49,37 +59,58 @@ namespace {
     }
 }
 
-FALCON_REGISTER_ITEM_CUSTOM(SpawnEggItem, 90,
-                            [](const std::string &identifier) {
-                                return identifier.size() > SPAWN_EGG_SUFFIX.size()
-                                       && identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(),
-                                                             SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX) == 0;
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<SpawnEggItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        SpawnEggItem, 90,
+        [](const std::string &identifier) {
+            return identifier.size() > SPAWN_EGG_SUFFIX.size()
+                   && identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(),
+                                         SPAWN_EGG_SUFFIX)
+                              == 0;
+        },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<SpawnEggItem>(item); });
 
 SpawnEggItem::SpawnEggItem(const Item &base) : Item(base) {}
 
+std::string SpawnEggItem::spawnedActorOf(const std::string &itemIdentifier) {
+    if (itemIdentifier.size() <= SPAWN_EGG_SUFFIX.size()
+        || itemIdentifier.compare(itemIdentifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(),
+                                  SPAWN_EGG_SUFFIX)
+                   != 0)
+        return std::string();
+    return resolveSpawnedActor(itemIdentifier.substr(0, itemIdentifier.size() - SPAWN_EGG_SUFFIX.size()));
+}
+
 bool SpawnEggItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
-                                const Vector3i &blockPosition, int32_t face,
-                                const Vector3f &clickPosition) const {
+                                const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const {
     (void) clickPosition;
 
     if (item.mDefinition == nullptr)
         return false;
 
-    const std::string &identifier = item.mDefinition->getIdentifier();
-    if (identifier.size() <= SPAWN_EGG_SUFFIX.size() ||
-        identifier.compare(identifier.size() - SPAWN_EGG_SUFFIX.size(), SPAWN_EGG_SUFFIX.size(),
-                           SPAWN_EGG_SUFFIX) != 0)
+    const std::string entityIdentifier = spawnedActorOf(item.mDefinition->getIdentifier());
+    if (entityIdentifier.empty())
         return false;
 
-    const std::string entityIdentifier =
-            resolveSpawnedActor(identifier.substr(0, identifier.size() - SPAWN_EGG_SUFFIX.size()));
+    // an egg used on a spawner sets its mob instead of spawning one
+    Level &level = owner.getLevelFor(player);
+    const BlockState *clicked = level.peekBlockPtr(blockPosition.x, blockPosition.y, blockPosition.z);
+    if (clicked != nullptr && clicked->mName == MOB_SPAWNER) {
+        MobSpawnerBlockActor &spawner = level.getBlockActors().getOrCreate<MobSpawnerBlockActor>(blockPosition);
+        spawner.setEntityIdentifier(entityIdentifier);
+        BlockActionHandler::broadcastBlockActorData(owner, level, spawner);
+        player.consumeOneHeldItem();
+        return true;
+    }
 
-    Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y,
-                           (float) blockPosition.z + 0.5f);
+    if (clicked != nullptr && TrialSpawnerBlock::matches(clicked->mName)) {
+        auto &spawner = level.getBlockActors().getOrCreate<TrialSpawnerBlockActor>(blockPosition);
+        if (spawner.configureFromSpawnEgg(owner, entityIdentifier)) {
+            player.consumeOneHeldItem();
+            return true;
+        }
+    }
+
+    Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y, (float) blockPosition.z + 0.5f);
     switch (face) {
         case 0:
             spawnPosition.y -= 1.0f;

@@ -80,9 +80,8 @@ namespace EnchantmentTargets {
     const uint32_t BLOCK_TOOLS = AXE | PICKAXE | SHOVEL | HOE;
     const uint32_t WEAPONS = SWORD | TRIDENT | SPEAR | MACE | BOW | CROSSBOW | BLOCK_TOOLS;
     const uint32_t DURABLE_MISC = SHEARS | FLINT_AND_STEEL | SHIELD | CARROT_ON_STICK | ELYTRA | BRUSH;
-    const uint32_t ALL = ARMOR | SHIELD | SWORD | TRIDENT | SPEAR | MACE | BOW | CROSSBOW | SHEARS |
-                         FLINT_AND_STEEL | BLOCK_TOOLS | FISHING_ROD | CARROT_ON_STICK | COMPASS | MASK |
-                         ELYTRA | BRUSH | BOOK;
+    const uint32_t ALL = ARMOR | SHIELD | SWORD | TRIDENT | SPEAR | MACE | BOW | CROSSBOW | SHEARS | FLINT_AND_STEEL
+                         | BLOCK_TOOLS | FISHING_ROD | CARROT_ON_STICK | COMPASS | MASK | ELYTRA | BRUSH | BOOK;
 }
 
 namespace EnchantmentGroups {
@@ -94,15 +93,10 @@ namespace EnchantmentGroups {
     const uint32_t TRIDENT_PROPULSION = 1u << 4;
     const uint32_t CROSSBOW_SHOT = 1u << 5;
     const uint32_t BOOTS_MOVEMENT = 1u << 6;
-    const uint32_t HEAVY_WEAPON_DAMAGE = 1u << 7;
+    const uint32_t TRIDENT_CHANNELING = 1u << 7;
 }
 
-enum class EnchantmentRarity : int32_t {
-    Common = 10,
-    Uncommon = 5,
-    Rare = 2,
-    Mythic = 1
-};
+enum class EnchantmentRarity : int32_t { Common = 10, Uncommon = 5, Rare = 2, Mythic = 1 };
 
 struct EnchantmentData {
     int32_t mId;

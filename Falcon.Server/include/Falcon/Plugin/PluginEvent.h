@@ -6,6 +6,7 @@
 #include <falcon/falcon_api.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,7 @@ class Actor;
 class ItemStack;
 class Level;
 class ServerPlayer;
+struct ResourcePackOffer;
 
 struct PluginEvent {
     FalconEventType mType = 0;
@@ -21,6 +23,8 @@ struct PluginEvent {
     bool mMonitor = false;
     ServerPlayer *mPlayer = nullptr;
     std::string *mMessage = nullptr;
+    // the join or leave message is still the game's own translation
+    bool mMessageDefault = false;
     Actor *mEntity = nullptr;
     Actor *mAttacker = nullptr;
     Vector3i mBlockPosition;
@@ -64,4 +68,16 @@ struct PluginEvent {
     const std::string *mClientData = nullptr;
     uint32_t mFormId = 0;
     std::string mFormResponse;
+    bool mHasEffect = false;
+    FalconEffect mEffect{};
+    // what a break or a death drops, and the experience; null for the events that drop nothing
+    std::vector<ItemStack> *mDrops = nullptr;
+    int32_t *mExperience = nullptr;
+    // a death: whether the player keeps their items and experience
+    bool *mKeepInventory = nullptr;
+    bool *mKeepExperience = nullptr;
+    // a hit: the push it gives
+    float *mKnockbackHorizontal = nullptr;
+    float *mKnockbackVertical = nullptr;
+    std::shared_ptr<const ResourcePackOffer> *mResourcePackOffer = nullptr;
 };

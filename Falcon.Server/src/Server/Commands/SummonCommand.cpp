@@ -78,8 +78,7 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
     } else if (arguments.size() >= 4) {
         const Vector3f origin = position;
 
-        if (!parseCoordinate(arguments[1], origin.x, position.x)
-            || !parseCoordinate(arguments[2], origin.y, position.y)
+        if (!parseCoordinate(arguments[1], origin.x, position.x) || !parseCoordinate(arguments[2], origin.y, position.y)
             || !parseCoordinate(arguments[3], origin.z, position.z)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;

@@ -2,25 +2,31 @@
 
 #include "Core/Event/Event.h"
 #include "Core/Math/Vector3i.h"
+#include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockState.h"
+
+#include <optional>
 
 #include <string>
+#include <vector>
 
 class ServerPlayer;
 
 struct PlayerChatBeforeEvent : public CancellableEvent {
     ServerPlayer &mSender;
     std::string mMessage;
+    // a message sent to these players only (/tell); broadcast chat leaves it null
+    const std::vector<ServerPlayer *> *mTargets = nullptr;
 
-    PlayerChatBeforeEvent(ServerPlayer &sender, std::string message)
-            : mSender(sender), mMessage(std::move(message)) {}
+    PlayerChatBeforeEvent(ServerPlayer &sender, std::string message) : mSender(sender), mMessage(std::move(message)) {}
 };
 
 struct PlayerChatAfterEvent : public Event {
     ServerPlayer &mSender;
     std::string mMessage;
+    const std::vector<ServerPlayer *> *mTargets = nullptr;
 
-    PlayerChatAfterEvent(ServerPlayer &sender, std::string message)
-            : mSender(sender), mMessage(std::move(message)) {}
+    PlayerChatAfterEvent(ServerPlayer &sender, std::string message) : mSender(sender), mMessage(std::move(message)) {}
 };
 
 struct PlayerBreakBlockBeforeEvent : public CancellableEvent {
@@ -36,22 +42,52 @@ struct PlayerBreakBlockAfterEvent : public Event {
     Vector3i mBlockPosition;
     std::string mBrokenBlockIdentifier;
 
+    // the block as it stood, states included; unset when only the identifier is known
+    std::optional<BlockState> mBrokenState;
+    // the held item before the break and after the tool took its wear
+    ItemStack mItemBeforeBreak;
+    ItemStack mItemAfterBreak;
+
     PlayerBreakBlockAfterEvent(ServerPlayer &player, const Vector3i &position, std::string identifier)
             : mPlayer(player), mBlockPosition(position), mBrokenBlockIdentifier(std::move(identifier)) {}
+
+    PlayerBreakBlockAfterEvent(ServerPlayer &player, const Vector3i &position, const BlockState &state)
+            : mPlayer(player), mBlockPosition(position), mBrokenBlockIdentifier(state.mName), mBrokenState(state) {}
 };
 
 struct PlayerSpawnAfterEvent : public Event {
     ServerPlayer &mPlayer;
     bool mInitialSpawn;
 
-    PlayerSpawnAfterEvent(ServerPlayer &player, bool initialSpawn)
-            : mPlayer(player), mInitialSpawn(initialSpawn) {}
+    PlayerSpawnAfterEvent(ServerPlayer &player, bool initialSpawn) : mPlayer(player), mInitialSpawn(initialSpawn) {}
 };
 
 struct PlayerJoinAfterEvent : public Event {
     ServerPlayer &mPlayer;
 
     explicit PlayerJoinAfterEvent(ServerPlayer &player) : mPlayer(player) {}
+};
+
+// the join or leave message about to go out: mDefault while it is the game's own translation, which mMessage gives
+// in English; an empty replacement sends nothing
+struct PlayerJoinMessageBeforeEvent : public Event {
+    ServerPlayer &mPlayer;
+    std::string mMessage;
+    bool mDefault = true;
+
+    PlayerJoinMessageBeforeEvent(ServerPlayer &player, std::string message)
+            : mPlayer(player), mMessage(std::move(message)) {}
+};
+
+struct PlayerLeaveMessageBeforeEvent : public Event {
+    ServerPlayer &mPlayer;
+    std::string mMessage;
+    bool mDefault = true;
+    // the kick reason, or what the connection gave
+    std::string mReason;
+
+    PlayerLeaveMessageBeforeEvent(ServerPlayer &player, std::string message, std::string reason)
+            : mPlayer(player), mMessage(std::move(message)), mReason(std::move(reason)) {}
 };
 
 struct PlayerLeaveAfterEvent : public Event {

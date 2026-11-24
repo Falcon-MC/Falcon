@@ -1,6 +1,7 @@
 #include "World/Level/Block/Inventory/FurnaceInventory.h"
 
 #include "World/Inventory/ItemStackNbt.h"
+#include "World/Inventory/InventoryManager.h"
 
 #include <utility>
 #include <vector>
@@ -30,6 +31,12 @@ void FurnaceInventory::setContainerItem(int slot, ItemStack item) {
         return;
 
     mItems[(size_t) slot] = std::move(item);
+}
+
+bool FurnaceInventory::canHoldInSlot(int slot, const ItemStack &item) const {
+    if (slot == SLOT_INPUT)
+        return true;
+    return slot == SLOT_FUEL && InventoryManager::getFuelTime(item) > 0;
 }
 
 void FurnaceInventory::clear() {

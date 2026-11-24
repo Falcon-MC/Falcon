@@ -2,13 +2,9 @@
 
 #include "World/Item/ItemClassRegistry.h"
 
-FALCON_REGISTER_ITEM_CUSTOM(FireworkRocketItem, 50,
-                            [](const std::string &identifier) {
-                                return identifier == "minecraft:firework_rocket";
-                            },
-                            [](const Item &item) -> std::unique_ptr<Item> {
-                                return std::make_unique<FireworkRocketItem>(item);
-                            });
+FALCON_REGISTER_ITEM_CUSTOM(
+        FireworkRocketItem, 50, [](const std::string &identifier) { return identifier == "minecraft:firework_rocket"; },
+        [](const Item &item) -> std::unique_ptr<Item> { return std::make_unique<FireworkRocketItem>(item); });
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -79,8 +75,7 @@ namespace {
     }
 }
 
-FireworkRocketItem::FireworkRocketItem(const Item &base) : Item(base) {
-}
+FireworkRocketItem::FireworkRocketItem(const Item &base) : Item(base) {}
 
 bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     (void) item;
@@ -104,15 +99,14 @@ bool FireworkRocketItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player
     ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, player.getPosition());
     if (rocket != nullptr) {
         rocket->setProjectile(true);
-        rocket->setOwnerUniqueId((int64_t) player.getRuntimeId());
+        rocket->setOwnerUniqueId(player.getUniqueId());
         rocket->getProjectileData().mFireworkLifetime = rollLifetime();
         rocket->getProjectileData().mFireworkData = buildFireworkData(item);
         owner.syncActorFirework(*rocket);
         rocket->getProjectileData().mFireworkAttached = true;
     }
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, player.getPosition(),
-                         "minecraft:player");
+    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, player.getPosition(), "minecraft:player");
     player.consumeOneHeldItem();
     return true;
 }
@@ -123,7 +117,7 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
     (void) item;
     (void) clickPosition;
 
-    if (player.getGameType() == (int32_t) GameType::Adventure)
+    if (player.isAdventure())
         return false;
 
     Vector3f spawnPosition((float) blockPosition.x + 0.5f, (float) blockPosition.y + 0.5f,
@@ -152,9 +146,18 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
             break;
     }
 
-    ServerActor *rocket = owner.spawnActor(owner.getLevelFor(player), FIREWORK_ACTOR, spawnPosition);
-    if (rocket == nullptr)
+    if (launch(owner, owner.getLevelFor(player), spawnPosition, item) == nullptr)
         return false;
+
+    player.consumeOneHeldItem();
+    return true;
+}
+
+ServerActor *FireworkRocketItem::launch(ServerNetworkHandler &owner, Level &level, const Vector3f &position,
+                                        const ItemStack &item) {
+    ServerActor *rocket = owner.spawnActor(level, FIREWORK_ACTOR, position);
+    if (rocket == nullptr)
+        return nullptr;
 
     rocket->setProjectile(true);
     rocket->setMotion(Vector3f(gaussianDrift(), 0.05f, gaussianDrift()));
@@ -162,7 +165,6 @@ bool FireworkRocketItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer 
     rocket->getProjectileData().mFireworkData = buildFireworkData(item);
     owner.syncActorFirework(*rocket);
 
-    owner.playLevelSound(owner.getLevelFor(player), LevelSoundEvent::LAUNCH, spawnPosition);
-    player.consumeOneHeldItem();
-    return true;
+    owner.playLevelSound(level, LevelSoundEvent::LAUNCH, position);
+    return rocket;
 }

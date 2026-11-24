@@ -12,6 +12,9 @@ public:
 
     static ActorAttributes createActorDefaults();
 
+    // adds the attribute when missing; false when it was already there
+    bool ensure(const std::string &name, float minimum, float maximum, float value);
+
     void set(const std::string &name, float value);
 
     void addMaximum(const std::string &name, float amount);
@@ -26,7 +29,9 @@ public:
 
     void setClamped(const std::string &name, float value);
 
-    const std::vector<AttributeData> &getAll() const { return mAttributes; }
+    const std::vector<AttributeData> &getAll() const {
+        return mAttributes;
+    }
 
     std::vector<AttributeData> getPlayerUpdate(bool sprinting) const;
 

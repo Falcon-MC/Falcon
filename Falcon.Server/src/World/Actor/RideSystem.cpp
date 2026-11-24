@@ -2,7 +2,9 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
 
@@ -48,8 +50,7 @@ namespace {
         }
     }
 
-    void sendSeatPosition(ServerNetworkHandler &owner, Actor &vehicle, Actor &passenger,
-                          const Vector3f &seat) {
+    void sendSeatPosition(ServerNetworkHandler &owner, Actor &vehicle, Actor &passenger, const Vector3f &seat) {
         SetActorDataPacket packet;
         packet.mRuntimeActorId = (int64_t) passenger.getRuntimeId();
 
@@ -79,6 +80,16 @@ namespace {
         return actor->getSeatOffset(index, passengerCount);
     }
 
+    // vanilla writes the passenger's height offset into the synced seat: the client puts the passenger's network
+    // position (eyes for a player) there; our positions are feet based: the server side keeps the bare seat
+    float heightOffsetOf(const Actor &passenger) {
+        if (dynamic_cast<const ServerPlayer *>(&passenger) != nullptr)
+            return PlayerMovementSimulator::PLAYER_BASE_OFFSET;
+
+        const ServerActor *actor = dynamic_cast<const ServerActor *>(&passenger);
+        return actor == nullptr ? 0.0f : actor->getBaseOffset();
+    }
+
     Vector3f seatPositionOf(const Actor &vehicle, const Vector3f &seat) {
         const float yaw = vehicle.getRotation().y * DEGREES_TO_RADIANS;
         const float cosine = std::cos(yaw);
@@ -92,10 +103,19 @@ namespace {
         const std::vector<int64_t> passengers = vehicle.getPassengers();
         for (size_t index = 0; index < passengers.size(); ++index) {
             Actor *passenger = RideSystem::resolve(owner, passengers[index]);
-            if (passenger != nullptr)
-                sendSeatPosition(owner, vehicle, *passenger, seatOffsetOf(vehicle, index, passengers.size()));
+            if (passenger == nullptr)
+                continue;
+
+            sendSeatPosition(owner, vehicle, *passenger,
+                             RideSystem::syncedSeatOf(vehicle, *passenger, index, passengers.size()));
         }
     }
+}
+
+Vector3f RideSystem::syncedSeatOf(const Actor &vehicle, const Actor &passenger, size_t index, size_t passengerCount) {
+    Vector3f seat = seatOffsetOf(vehicle, index, passengerCount);
+    seat.y += heightOffsetOf(passenger);
+    return seat;
 }
 
 bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &vehicle, bool riderInitiated) {
@@ -105,6 +125,18 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
     for (Actor *above = resolve(owner, vehicle.getVehicleId()); above != nullptr;
          above = resolve(owner, above->getVehicleId())) {
         if (above->getUniqueId() == rider.getUniqueId())
+            return false;
+    }
+
+    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_MOUNT)) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_MOUNT;
+        event.mCancellable = true;
+        event.mEntity = &rider;
+        event.mTarget = &vehicle;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&rider);
+        plugins->dispatch(event);
+        if (event.mCancelled)
             return false;
     }
 
@@ -119,8 +151,8 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
     rider.setPosition(seatPositionOf(vehicle, seatOffsetOf(vehicle, count - 1, count)));
 
     SetActorLinkPacket packet;
-    packet.mActorLink = makeLink(vehicle.getUniqueId(), rider.getUniqueId(),
-                                 linkTypeFor(vehicle, rider.getUniqueId()), riderInitiated);
+    packet.mActorLink = makeLink(vehicle.getUniqueId(), rider.getUniqueId(), linkTypeFor(vehicle, rider.getUniqueId()),
+                                 riderInitiated);
     sendToWatchers(owner, vehicle, rider, packet);
     refreshSeats(owner, vehicle);
 
@@ -130,6 +162,17 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
 
 void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderInitiated) {
     Actor *vehicle = resolve(owner, rider.getVehicleId());
+    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_DISMOUNT);
+    if (plugins != nullptr && vehicle != nullptr) {
+        PluginEvent event;
+        event.mType = FALCON_EVENT_ENTITY_DISMOUNT;
+        event.mEntity = &rider;
+        event.mTarget = vehicle;
+        event.mPlayer = dynamic_cast<ServerPlayer *>(&rider);
+        plugins->dispatch(event);
+        // a handler may have mounted the rider elsewhere or removed the vehicle
+        vehicle = resolve(owner, rider.getVehicleId());
+    }
 
     rider._setVehicleId(0);
     rider.getFlags().set(ActorFlag::Riding, false);
@@ -140,23 +183,25 @@ void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderI
     const size_t index = passengerIndexOf(*vehicle, rider.getUniqueId());
     const size_t count = vehicle->getPassengers().size();
     ServerActor *serverVehicle = dynamic_cast<ServerActor *>(vehicle);
-    const Vector3f standing = serverVehicle != nullptr
-                              ? serverVehicle->getDismountPosition(index, count)
-                              : seatPositionOf(*vehicle, seatOffsetOf(*vehicle, index, count));
+    const Vector3f standing = serverVehicle != nullptr ? serverVehicle->getDismountPosition(index, count)
+                                                       : seatPositionOf(*vehicle, seatOffsetOf(*vehicle, index, count));
 
     vehicle->_removePassenger(rider.getUniqueId());
 
     SetActorLinkPacket packet;
-    packet.mActorLink = makeLink(vehicle->getUniqueId(), rider.getUniqueId(), EntityLinkType::Remove,
-                                 riderInitiated);
+    packet.mActorLink = makeLink(vehicle->getUniqueId(), rider.getUniqueId(), EntityLinkType::Remove, riderInitiated);
     sendToWatchers(owner, *vehicle, rider, packet);
     refreshSeats(owner, *vehicle);
 
     ServerPlayer *playerRider = dynamic_cast<ServerPlayer *>(&rider);
-    if (playerRider != nullptr)
-        playerRider->teleport(owner, standing);
-    else
+    if (playerRider == nullptr) {
         rider.teleport(standing);
+    } else if (riderInitiated && !owner.getProperties().getServerAuthoritativeDismountStrict()
+               && !vehicle->getFlags().get(ActorFlag::DoesServerAuthOnlyDismount)) {
+        playerRider->getMovementValidator().allowDismountPosition();
+    } else {
+        playerRider->teleport(owner, standing);
+    }
 
     if (serverVehicle != nullptr)
         serverVehicle->onPassengerRemoved(owner, rider);

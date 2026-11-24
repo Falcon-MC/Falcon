@@ -1,0 +1,168 @@
+#include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/SetBlockCommand.h"
+#include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/ContainerBlockActor.h"
+#include "World/Level/Block/ContainerBlock.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Chunk/LevelChunk.h"
+#include "World/Level/Level.h"
+#include "World/Level/WorldManager.h"
+
+#include <iostream>
+#include <stdexcept>
+#include <string>
+
+namespace {
+    const Vector3i SHELF(4, 100, 4);
+    // the south face: the slots run along x, the readable band is y 0.25 to 0.6875
+    const int FRONT = 3;
+
+    void require(bool condition, const std::string &message) {
+        if (!condition)
+            throw std::runtime_error(message);
+    }
+
+    ItemStack item(ServerNetworkHandler &server, const char *name, int count = 1) {
+        ItemStack result = server.createItemStack(name, count);
+        require(!result.isAir(), "missing item definition");
+        return result;
+    }
+
+    std::string slotName(Level &level, int slot) {
+        ShelfBlockActor *shelf = level.getBlockActors().find<ShelfBlockActor>(SHELF);
+        if (shelf == nullptr)
+            return "";
+        const ItemStack &stored = shelf->getInventory().getContainerItem(slot);
+        return stored.isAir() ? "air" : stored.mDefinition->getIdentifier();
+    }
+}
+
+int main() {
+    try {
+        ServerNetworkHandler server("Shelf", "", 1);
+        Level &level = server.getWorlds().getDefault().getOverworld();
+        level.insertChunk(LevelChunk(0, 0));
+        BlockState state;
+        require(SetBlockCommand::resolveBlock("minecraft:oak_shelf", state), "no oak shelf");
+        state.mStates.putString("minecraft:cardinal_direction", "south");
+        level.setBlock(SHELF, state, false);
+        const Block *block = VanillaBlocks::fromIdentifier("minecraft:oak_shelf");
+        require(block != nullptr, "the shelf block was not registered");
+
+        const NetworkIdentifier id;
+        ServerPlayer &player = server.getPlayers().try_emplace(id, id, 4007).first->second;
+        player.setLoginState(ServerPlayer::LoginState::Spawned);
+        player.moveToLevel(level);
+        player.setPosition(Vector3f(4.5f, 101.0f, 6.5f));
+        PlayerInventory &inventory = player.getInventory();
+
+        inventory.setItemInHand(item(server, "minecraft:diamond", 3));
+        require(block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.1f, 0.5f, 1.0f)),
+                "a diamond was not put on the shelf");
+        require(slotName(level, 0) == "minecraft:diamond" && inventory.getItemInHand().isAir(),
+                "the whole stack did not go to the left slot");
+        const Tag spawn = level.getBlockActors().find<ShelfBlockActor>(SHELF)->getSpawnCompound();
+        const Tag *sent = spawn.get("Items");
+        require(sent != nullptr && sent->isList() && sent->size() == 1, "the shelf items did not reach the client");
+
+        require(!block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.5f, 0.5f, 1.0f)),
+                "an empty hand on an empty slot did something");
+        require(!block->onInteractAt(server, player, SHELF, state, 2, Vector3f(0.1f, 0.5f, 0.0f)),
+                "the back of the shelf took an interaction");
+        require(!block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.1f, 0.8f, 1.0f)),
+                "a click above the items was read");
+
+        inventory.setItemInHand(item(server, "minecraft:stick"));
+        require(block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.2f, 0.3f, 1.0f))
+                        && slotName(level, 0) == "minecraft:stick"
+                        && inventory.getItemInHand().mDefinition->getIdentifier() == "minecraft:diamond",
+                "the stick and the diamonds did not change places");
+
+        // the right third
+        inventory.setItemInHand(ItemStack::air());
+        require(!block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.9f, 0.5f, 1.0f)),
+                "an empty right slot was taken from");
+        ItemStack locked = item(server, "minecraft:apple");
+        locked.mTag = Tag::ofCompound();
+        locked.mTag.putByte("minecraft:item_lock", 1);
+        inventory.setItemInHand(locked);
+        require(!block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.9f, 0.5f, 1.0f)),
+                "a locked item went on the shelf");
+
+        // instant building: the shelf takes a copy, the hand keeps its own
+        player.setGameType(1);
+        inventory.setItemInHand(item(server, "minecraft:apple", 5));
+        require(block->onInteractAt(server, player, SHELF, state, FRONT, Vector3f(0.9f, 0.5f, 1.0f))
+                        && slotName(level, 2) == "minecraft:apple" && inventory.getItemInHand().mCount == 5,
+                "in creative the hand lost its item");
+
+        // facing south the row runs from the east end (type 1) to the west end (type 3), powered one by one
+        player.setGameType(0);
+        const Vector3i east(SHELF.x + 1, SHELF.y, SHELF.z);
+        const Vector3i west(SHELF.x - 1, SHELF.y, SHELF.z);
+        level.setBlock(east, state, false);
+        level.setBlock(west, state, false);
+        const auto power = [&](const Vector3i &at, bool on) {
+            const char *below = on ? "minecraft:redstone_block" : "minecraft:stone";
+            level.setBlock(Vector3i(at.x, at.y - 1, at.z), BlockState(below), false);
+            block->onRedstonePower(server, level, at, level.getBlockState(at.x, at.y, at.z));
+        };
+        const auto rowType = [&](const Vector3i &at) {
+            const BlockState now = level.getBlockState(at.x, at.y, at.z);
+            return now.mStates.getByte("powered_bit") == 0 ? -1 : now.mStates.getInt("powered_shelf_type");
+        };
+        power(east, true);
+        require(rowType(east) == 0, "a lone powered shelf was joined to something");
+        power(SHELF, true);
+        require(rowType(east) == 1 && rowType(SHELF) == 3, "two powered shelves did not join");
+        power(west, true);
+        require(rowType(east) == 1 && rowType(SHELF) == 2 && rowType(west) == 3,
+                "the third shelf did not join the row");
+
+        level.getBlockActors().getOrCreate<ShelfBlockActor>(east);
+        level.getBlockActors().getOrCreate<ShelfBlockActor>(west);
+        for (int slot = 0; slot < 9; ++slot)
+            inventory.setItem(slot, item(server, "minecraft:stick", slot + 1));
+        const BlockState middle = level.getBlockState(SHELF.x, SHELF.y, SHELF.z);
+        require(block->onInteractAt(server, player, SHELF, middle, FRONT, Vector3f(0.5f, 0.1f, 1.0f)),
+                "a powered row did not swap");
+        // the west end takes hotbar 0-2, the middle 3-5, the east end 6-8
+        ShelfBlockActor *westShelf = level.getBlockActors().find<ShelfBlockActor>(west);
+        ShelfBlockActor *eastShelf = level.getBlockActors().find<ShelfBlockActor>(east);
+        require(westShelf->getInventory().getContainerItem(0).mCount == 1
+                        && eastShelf->getInventory().getContainerItem(2).mCount == 9,
+                "the hotbar thirds went to the wrong shelves");
+        // the middle shelf held a stick and five apples from the checks above
+        require(inventory.getItem(3).mCount == 1
+                        && inventory.getItem(5).mDefinition->getIdentifier() == "minecraft:apple",
+                "the middle shelf's items did not come to the hotbar");
+
+        power(SHELF, false);
+        require(rowType(SHELF) == -1 && rowType(east) == 0 && rowType(west) == 0,
+                "the row did not come apart when its middle lost power");
+
+        // placed straight onto a powered block: powered at once. Placement hooks run for a level the server owns
+        level.setOwner(&server);
+        const Vector3i placed(SHELF.x, SHELF.y, SHELF.z + 3);
+        level.setBlock(Vector3i(placed.x, placed.y - 1, placed.z), BlockState("minecraft:redstone_block"), false);
+        level.setBlock(placed, state, false);
+        level.onBlockPlaced(placed, state);
+        require(rowType(placed) == 0, "a shelf placed on a redstone block was not powered");
+
+        // an end whose partner sits in a chunk not loaded keeps its place in the row
+        const Vector3i edge(15, SHELF.y, SHELF.z);
+        BlockState end = state;
+        end.mStates.putByte("powered_bit", 1);
+        end.mStates.putInt("powered_shelf_type", 1);
+        level.setBlock(Vector3i(edge.x, edge.y - 1, edge.z), BlockState("minecraft:redstone_block"), false);
+        level.setBlock(edge, end, false);
+        block->onRedstonePower(server, level, edge, end);
+        require(rowType(edge) == 1, "a row end left its row because the next chunk was not loaded");
+        std::cout << "shelf checks passed\n";
+    } catch (const std::exception &error) {
+        std::clog << "Shelf regression failed: " << error.what() << '\n';
+        return 1;
+    }
+    return 0;
+}

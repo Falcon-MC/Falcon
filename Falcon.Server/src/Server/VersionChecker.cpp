@@ -5,15 +5,29 @@
 #include "Core/Net/HttpsClient.h"
 #include "Network/ConnectionRequest.h"
 
+#include <atomic>
 #include <cstdlib>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
 
-    const char *LATEST_RELEASE_URL =
-            "https://api.github.com/repos/Falcon-MC/Falcon/releases/latest";
+    struct AvailableUpdate {
+        std::mutex mMutex;
+        std::atomic<bool> mReady{false};
+        std::string mData;
+    };
+
+    const auto &availableUpdate() {
+        static const auto update = std::make_shared<AvailableUpdate>();
+        return update;
+    }
+
+    const char *LATEST_RELEASE_URL = "https://api.github.com/repos/Falcon-MC/Falcon/releases/latest";
 
     std::vector<long long> parseVersion(const std::string &version) {
         std::vector<long long> parts;
@@ -51,7 +65,7 @@ namespace {
         return 0;
     }
 
-    void runCheck() {
+    void runCheck(AvailableUpdate &update) {
         std::string body;
         if (!HttpsClient::get(LATEST_RELEASE_URL, body))
             return;
@@ -71,18 +85,28 @@ namespace {
             return;
 
         if (compareVersions(latestParts, currentParts) > 0) {
-            LOG_INFO(LogAreaID::Server,
-                     "A newer version of Falcon is available: %s (current version is %s)",
+            LOG_INFO(LogAreaID::Server, "A newer version of Falcon is available: %s (current version is %s)",
                      latest.c_str(), FalconBuildInfo::kVersion);
+            std::lock_guard lock(update.mMutex);
+            update.mData = std::move(body);
+            update.mReady.store(true, std::memory_order_release);
         }
     }
 
 }
 
 void VersionChecker::checkForUpdatesAsync() {
-    std::thread worker([]() {
-        runCheck();
-    });
+    std::thread worker([update = availableUpdate()]() { runCheck(*update); });
 
     worker.detach();
+}
+
+std::string VersionChecker::takeAvailableUpdate() {
+    AvailableUpdate &update = *availableUpdate();
+    if (!update.mReady.load(std::memory_order_acquire))
+        return {};
+
+    std::lock_guard lock(update.mMutex);
+    update.mReady.store(false, std::memory_order_relaxed);
+    return std::exchange(update.mData, {});
 }

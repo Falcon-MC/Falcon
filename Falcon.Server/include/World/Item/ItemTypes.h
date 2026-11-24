@@ -2,15 +2,7 @@
 
 #include <cstdint>
 
-enum class ToolType : uint8_t {
-    None = 0,
-    Sword = 1,
-    Shovel = 2,
-    Pickaxe = 3,
-    Axe = 4,
-    Shears = 5,
-    Hoe = 6
-};
+enum class ToolType : uint8_t { None = 0, Sword = 1, Shovel = 2, Pickaxe = 3, Axe = 4, Shears = 5, Hoe = 6 };
 
 enum class ToolTier : int32_t {
     None = 0,
@@ -34,10 +26,4 @@ enum class ArmorTier : int32_t {
     Netherite = 7
 };
 
-enum class ArmorSlot : uint8_t {
-    None = 0,
-    Head = 1,
-    Chest = 2,
-    Legs = 3,
-    Feet = 4
-};
+enum class ArmorSlot : uint8_t { None = 0, Head = 1, Chest = 2, Legs = 3, Feet = 4 };

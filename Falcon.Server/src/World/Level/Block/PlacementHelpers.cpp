@@ -12,13 +12,20 @@ namespace PlacementHelpers {
         const bool fullY = shape.mMinY <= 0.0f && shape.mMaxY >= 1.0f;
         const bool fullZ = shape.mMinZ <= 0.0f && shape.mMaxZ >= 1.0f;
         switch (face) {
-            case 0: return fullX && fullZ && shape.mMinY <= 0.0f;
-            case 1: return fullX && fullZ && shape.mMaxY >= 1.0f;
-            case 2: return fullX && fullY && shape.mMinZ <= 0.0f;
-            case 3: return fullX && fullY && shape.mMaxZ >= 1.0f;
-            case 4: return fullY && fullZ && shape.mMinX <= 0.0f;
-            case 5: return fullY && fullZ && shape.mMaxX >= 1.0f;
-            default: return false;
+            case 0:
+                return fullX && fullZ && shape.mMinY <= 0.0f;
+            case 1:
+                return fullX && fullZ && shape.mMaxY >= 1.0f;
+            case 2:
+                return fullX && fullY && shape.mMinZ <= 0.0f;
+            case 3:
+                return fullX && fullY && shape.mMaxZ >= 1.0f;
+            case 4:
+                return fullY && fullZ && shape.mMinX <= 0.0f;
+            case 5:
+                return fullY && fullZ && shape.mMaxX >= 1.0f;
+            default:
+                return false;
         }
     }
 

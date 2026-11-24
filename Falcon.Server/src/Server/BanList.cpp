@@ -63,6 +63,10 @@ void BanList::reload() {
         BanEntry entry;
         entry.mName = StringUtil::toLowerCase(name->string());
 
+        const json::Value *xuid = value->get("xuid");
+        if (xuid != nullptr)
+            entry.mXuid = xuid->string();
+
         const json::Value *creationDate = value->get("creationDate");
         const json::Value *banSource = value->get("source");
         const json::Value *expireDate = value->get("expireDate");
@@ -76,19 +80,36 @@ void BanList::reload() {
     }
 }
 
-const BanEntry *BanList::find(const std::string &name) const {
+const BanEntry *BanList::find(const std::string &name, const std::string &xuid) const {
     const std::string lowered = StringUtil::toLowerCase(name);
-    const auto found = std::find_if(mEntries.begin(), mEntries.end(), [&lowered](const BanEntry &entry) {
-        return entry.mName == lowered;
+    const auto found = std::find_if(mEntries.begin(), mEntries.end(), [&lowered, &xuid](const BanEntry &entry) {
+        return entry.mName == lowered || (!xuid.empty() && entry.mXuid == xuid);
     });
     return found == mEntries.end() ? nullptr : &*found;
 }
 
-void BanList::add(const std::string &name, const std::string &reason, const std::string &source) {
+void BanList::bindXuid(const std::string &name, const std::string &xuid) {
+    if (xuid.empty())
+        return;
+
+    const std::string lowered = StringUtil::toLowerCase(name);
+    for (BanEntry &entry: mEntries) {
+        if (entry.mName != lowered || !entry.mXuid.empty())
+            continue;
+
+        entry.mXuid = xuid;
+        _save();
+        return;
+    }
+}
+
+void BanList::add(const std::string &name, const std::string &reason, const std::string &source,
+                  const std::string &xuid) {
     remove(name);
 
     BanEntry entry;
     entry.mName = StringUtil::toLowerCase(name);
+    entry.mXuid = xuid;
     entry.mCreationDate = _currentDate();
     entry.mSource = source;
     entry.mExpireDate = FOREVER;
@@ -99,9 +120,8 @@ void BanList::add(const std::string &name, const std::string &reason, const std:
 
 bool BanList::remove(const std::string &name) {
     const std::string lowered = StringUtil::toLowerCase(name);
-    const auto found = std::find_if(mEntries.begin(), mEntries.end(), [&lowered](const BanEntry &entry) {
-        return entry.mName == lowered;
-    });
+    const auto found = std::find_if(mEntries.begin(), mEntries.end(),
+                                    [&lowered](const BanEntry &entry) { return entry.mName == lowered; });
     if (found == mEntries.end())
         return false;
 
@@ -135,6 +155,8 @@ void BanList::_save() const {
         const BanEntry &entry = mEntries[index];
         file << "    {\n";
         file << "        \"name\": \"" << json::escape(entry.mName) << "\",\n";
+        if (!entry.mXuid.empty())
+            file << "        \"xuid\": \"" << json::escape(entry.mXuid) << "\",\n";
         file << "        \"creationDate\": \"" << json::escape(entry.mCreationDate) << "\",\n";
         file << "        \"source\": \"" << json::escape(entry.mSource) << "\",\n";
         file << "        \"expireDate\": \"" << json::escape(entry.mExpireDate) << "\",\n";

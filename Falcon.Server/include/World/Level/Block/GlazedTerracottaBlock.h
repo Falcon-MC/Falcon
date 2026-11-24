@@ -6,9 +6,7 @@
 
 class GlazedTerracottaBlock final : public Block {
 public:
-    explicit GlazedTerracottaBlock(const Block &block) : Block(block)
-    {
-    }
+    explicit GlazedTerracottaBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 

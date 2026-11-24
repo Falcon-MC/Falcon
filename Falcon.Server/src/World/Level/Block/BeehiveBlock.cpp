@@ -93,7 +93,7 @@ bool BeehiveBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
     setHoneyLevel(level, position, 0);
 
     if (owner.getProperties().getDifficulty() == Difficulty::Peaceful
-        || player.getGameType() == (int32_t) GameType::Creative || isCalmedBySmoke(level, position))
+        || player.isCreative() || isCalmedBySmoke(level, position))
         return true;
 
     BeehiveBlockActor *hive = level.getBlockActors().find<BeehiveBlockActor>(position);
@@ -151,4 +151,8 @@ void BeehiveBlock::writeDropContents(Level &level, const Vector3i &position, Ite
 
     drop.mTag.put(BLOCK_ENTITY_TAG, hive->saveNbt());
     hive->clearOccupants();
+}
+
+const char *BeehiveBlock::getBlockActorId() const {
+    return BeehiveBlockActor::BLOCK_ACTOR_ID;
 }

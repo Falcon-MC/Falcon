@@ -8,7 +8,8 @@ TagCommand::TagCommand(ServerNetworkHandler &handler)
 
 std::vector<CommandOverloadData> TagCommand::getOverloads() const {
     CommandOverloadData change;
-    change.mParameters = {makePlayerParameter("targets"), makeEnumParameter("action", "TagChangeAction", {"add", "remove"}),
+    change.mParameters = {makePlayerParameter("targets"),
+                          makeEnumParameter("action", "TagChangeAction", {"add", "remove"}),
                           makeTypedParameter("name", CommandParamType::String)};
 
     CommandOverloadData list;

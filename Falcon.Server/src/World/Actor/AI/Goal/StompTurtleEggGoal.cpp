@@ -4,6 +4,7 @@
 #include "World/Level/Block/TurtleEggBlock.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Core/Math/VectorMath.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,9 +19,7 @@ namespace {
         return generator;
     }
 
-    Vector3f centerOf(const Vector3i &position) {
-        return Vector3f((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
-    }
+    using VectorMath::bottomCenterOf;
 }
 
 StompTurtleEggGoal::StompTurtleEggGoal(float speed, int32_t searchRange, int32_t searchHeight, float goalRadius,
@@ -49,7 +48,7 @@ bool StompTurtleEggGoal::_findEgg(ServerNetworkHandler &owner, const MobActor &m
                 if (!_isEgg(owner, mob, candidate))
                     continue;
 
-                const Vector3f center = centerOf(candidate);
+                const Vector3f center = bottomCenterOf(candidate);
                 const float dx = center.x - position.x;
                 const float dy = center.y - position.y;
                 const float dz = center.z - position.z;
@@ -78,7 +77,7 @@ void StompTurtleEggGoal::start(ServerNetworkHandler &owner, MobActor &mob) {
     (void) owner;
     mStompTicks = 0;
     mRepathTicks = 0;
-    mob.getNavigation().moveTo(centerOf(mEgg), mSpeed);
+    mob.getNavigation().moveTo(bottomCenterOf(mEgg), mSpeed);
 }
 
 void StompTurtleEggGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
@@ -87,7 +86,7 @@ void StompTurtleEggGoal::stop(ServerNetworkHandler &owner, MobActor &mob) {
 }
 
 void StompTurtleEggGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
-    const Vector3f target = centerOf(mEgg);
+    const Vector3f target = bottomCenterOf(mEgg);
     const Vector3f position = mob.getPosition();
     const float dx = target.x - position.x;
     const float dy = target.y - position.y;

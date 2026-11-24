@@ -8,6 +8,7 @@
 #include "World/Level/Level.h"
 #include "World/Actor/FreezingSystem.h"
 #include "Network/Handler/BlockActionHandler.h"
+#include "Network/Handler/MapHandler.h"
 #include "Network/Handler/MovementHandler.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Types/StartGameTypes.h"
@@ -22,15 +23,14 @@ namespace {
     public:
         ProfiledPlayerScope(Profiler &profiler, const ServerPlayer &player)
                 : mProfiler(profiler), mPlayer(player), mChunksBefore(player.getSentChunkCount()),
-                  mStart(std::chrono::steady_clock::now()) {
-        }
+                  mStart(std::chrono::steady_clock::now()) {}
 
         ~ProfiledPlayerScope() {
             if (!mProfiler.isActive())
                 return;
 
-            const double elapsed = std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - mStart).count();
+            const double elapsed =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mStart).count();
 
             mProfiler.recordPlayer(mPlayer.getName(), elapsed,
                                    (uint32_t) (mPlayer.getSentChunkCount() - mChunksBefore));
@@ -67,10 +67,13 @@ void ServerNetworkHandler::_applyPendingPlayerMove(ServerPlayer &player) {
             MovementHandler::handleMovement(*this, player, player.getPendingMovePosition(),
                                             player.getPendingMoveRotation());
         } else {
+            const Vector3f previous = player.getPosition();
             player.setPosition(player.getPendingMovePosition());
             player.setRotation(player.getPendingMoveRotation());
-            if (player.hasSimulatedGround())
-                player.setOnGround(player.isSimulatedOnGround());
+            player.setOnGround(player.hasSimulatedGround()
+                                       ? player.isSimulatedOnGround()
+                                       : MovementHandler::checkGroundState(getLevelFor(player), previous,
+                                                                           player.getPosition(), &player));
         }
         player.clearPendingMove();
     }
@@ -89,12 +92,11 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     inputs.beginTick(mCurrentTick, mProperties.getPlayerTickThrottledMaxTickCredits(),
                      mProperties.getPlayerTickThrottledInputBatchSize());
     const double previousTickMs = mTickDurationSamples.empty() ? 0.0 : mTickDurationSamples.back();
-    // Vehicles still travel in tickActors; consuming several rider inputs here would overwrite their controls.
+    // vehicles still travel in tickActors; several rider inputs here would overwrite their controls
     const size_t steps = player.isRiding() ? 1 : 1 + ServerPlayerMovementComponent::catchupSteps(previousTickMs);
     const auto applyFlightRequest = [&](bool flying) {
-        // A server-side game mode change can revoke an already validated, queued request.
-        if (flying && player.getGameType() != (int32_t) GameType::Creative
-            && player.getGameType() != (int32_t) GameType::Spectator)
+        // flight permission can change while a validated request waits for its movement input
+        if (!player.canToggleFlight())
             return;
         MovementHandler::requestFlight(*this, player.getNetworkIdentifier(), player, flying);
     };
@@ -110,14 +112,18 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
         while (inputs.takeFlightRequest(packet->mTick, false, flying))
             applyFlightRequest(flying);
         MovementHandler::handlePlayerAuthInput(*this, player.getNetworkIdentifier(), player, *packet);
-        // Collision state, position and plugin cancellation must settle before the next replay step.
+        // collision state, position and plugin cancellation settle before the next replay step
         _applyPendingPlayerMove(player);
         while (inputs.takeFlightRequest(packet->mTick, true, flying))
             applyFlightRequest(flying);
     }
 
+    for (const auto &dropped: inputs.takeDropped())
+        BlockActionHandler::resyncDroppedInput(*this, player, *dropped);
+
     player.tickCombat(1);
     player.tickItemCooldowns(mCurrentTick);
+    player.getWardenSpawnTracker().tick();
     player.tickShield(*this);
     player.tickSpinAttack(*this);
     ElytraItem::tickGliding(*this, player);
@@ -132,18 +138,22 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
 
     const bool fireTickDamage = !player.isDead() && player.tickFire();
 
-    if (player.getGameType() == (int32_t) GameType::Creative && player.getFireTicks() > 1)
+    if (player.isCreative() && player.getFireTicks() > 1)
         player.setFireTicks(1);
 
-    if (fireTickDamage && player.getGameType() != (int32_t) GameType::Creative &&
-        player.getGameType() != (int32_t) GameType::Spectator &&
-        !player.hasEffect(MobEffectId::FireResistance))
+    if (fireTickDamage && !player.isCreative()
+        && !player.isSpectator() && !player.hasEffect(MobEffectId::FireResistance))
         hurt(player, 1.0f, ActorDamageSource::environment("death.attack.inFire", player.getName()));
 
     if (wasOnFire != player.isOnFire())
         _sendEntityData(player);
 
     _tickItemUse(player);
+
+    if (player.isSpawned())
+        MapHandler::tickPlayer(*this, player);
+
+    RecipeUnlockSystem::tick(*this, player);
 
     if (player.isSpawned())
         FreezingSystem::tick(*this, player);
@@ -153,6 +163,10 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
         _sendAttributes(player);
         _sendEntityData(player);
     }
+
+    player.getRaidState().tick(*this, player);
+    player.getDebugHud().tick(*this, player);
+    player.getBossBars().tick(*this, player);
 
     if (player.isBreakingBlock()) {
         const Vector3i breakingPosition = player.getBreakingBlockPosition();
@@ -169,8 +183,7 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     player.tickSpawnInvulnerability();
 
     const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
-    const bool naturalRegeneration = getWorldFor(player).getOverworld().getGameRules()
-            .getBool("naturalregeneration");
+    const bool naturalRegeneration = getWorldFor(player).getOverworld().getGameRules().getBool("naturalregeneration");
     const bool hungerChanged = player.isSpawned()
                                && player.tickHunger(1, (int) mProperties.getDifficulty(), naturalRegeneration);
     if (hungerChanged)

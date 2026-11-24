@@ -11,6 +11,12 @@ public:
 
     static bool isCold(Level &level, const Vector3i &position);
 
+    // rain, not snow, falls on this block of a rain biome while the level rains
+    static bool isRainingOn(Level &level, const Vector3i &position);
+
+    // falling snow settles on top of this block
+    static bool canHoldSnow(Level &level, const Vector3i &below);
+
 private:
     static void tickColumn(Level &level, int32_t x, int32_t z);
 

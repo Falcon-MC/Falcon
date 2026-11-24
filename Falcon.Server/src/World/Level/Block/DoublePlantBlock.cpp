@@ -8,6 +8,7 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Types/ItemStack.h"
+#include "World/Level/Block/BlockNames.h"
 
 FALCON_REGISTER_BLOCK(DoublePlantBlock, 240);
 
@@ -29,10 +30,9 @@ bool DoublePlantBlock::getDrops(const BlockState &state, const ItemStack &tool, 
 }
 
 bool DoublePlantBlock::matches(const std::string &identifier) {
-    return BlockIdentifier::equalsAny(identifier, {
-            "minecraft:tall_grass", "minecraft:large_fern", "minecraft:sunflower", "minecraft:lilac",
-            "minecraft:rose_bush", "minecraft:peony", "minecraft:pitcher_plant"
-    });
+    return BlockIdentifier::equalsAny(identifier, {"minecraft:tall_grass", "minecraft:large_fern",
+                                                   "minecraft:sunflower", "minecraft:lilac", "minecraft:rose_bush",
+                                                   "minecraft:peony", "minecraft:pitcher_plant"});
 }
 
 bool DoublePlantBlock::canPlaceAt(Level &level, const Vector3i &position, int blockFace) const {
@@ -40,7 +40,7 @@ bool DoublePlantBlock::canPlaceAt(Level &level, const Vector3i &position, int bl
         return false;
 
     const BlockState above = level.getBlockState(position.x, position.y + 1, position.z);
-    if (above.mName != "minecraft:air")
+    if (above.mName != BlockNames::AIR)
         return false;
 
     const BlockState below = level.getBlockState(position.x, position.y - 1, position.z);
@@ -60,8 +60,7 @@ bool DoublePlantBlock::canSurvive(Level &level, const Vector3i &position, const 
 }
 
 std::vector<BlockPlacementEntry> DoublePlantBlock::getPlacementBlocks(Level &level, const Vector3i &position,
-                                                                     const BlockState &state,
-                                                                     int playerFacing) const {
+                                                                      const BlockState &state, int playerFacing) const {
     (void) level;
     (void) playerFacing;
 
@@ -71,8 +70,7 @@ std::vector<BlockPlacementEntry> DoublePlantBlock::getPlacementBlocks(Level &lev
     Tag states = state.mStates;
     states.putByte("upper_block_bit", 1);
 
-    return {BlockPlacementEntry{Vector3i(position.x, position.y + 1, position.z),
-                                BlockState(state.mName, states)}};
+    return {BlockPlacementEntry{Vector3i(position.x, position.y + 1, position.z), BlockState(state.mName, states)}};
 }
 
 std::vector<Vector3i> DoublePlantBlock::getAffectedBlocks(Level &level, const Vector3i &position,

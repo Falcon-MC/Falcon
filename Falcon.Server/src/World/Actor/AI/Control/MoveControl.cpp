@@ -50,7 +50,8 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
         _tickSwimming(mob);
         return;
     }
-    if (!jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
+    // a mob without gravity has no jump arc to wait out
+    if (mob.hasGravity() && !jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
         return;
 
     const float speed = mSpeed * mob.getMovementSpeedMultiplier();
@@ -133,11 +134,11 @@ void MoveControl::_tryJump(ServerNetworkHandler &owner, MobActor &mob, JumpContr
         for (int32_t z = minZ; z <= maxZ; ++z) {
             for (int32_t y = minY; y <= maxY; ++y) {
                 const BlockState *state = level.peekBlockPtr(x, y, z);
-                if (state == nullptr || !BlockShape::hasCollision(*state))
+                if (state == nullptr)
                     continue;
 
-                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z);
-                if (!shape.intersectsWith(box))
+                const AxisAlignedBB shape = BlockShape::getShapeAt(*state, x, y, z, &mob);
+                if (shape.mMaxY <= shape.mMinY || !shape.intersectsWith(box))
                     continue;
 
                 blocked = true;

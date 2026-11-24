@@ -6,8 +6,7 @@
 
 class MagmaBlock final : public Block {
 public:
-    explicit MagmaBlock(const Block &block) : Block(block) {
-    }
+    explicit MagmaBlock(const Block &block) : Block(block) {}
 
     static bool matches(const std::string &identifier);
 
@@ -17,4 +16,13 @@ public:
 
     void onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                   const BlockState &state) const override;
+
+    bool usesBlockTicks() const override {
+        return true;
+    }
+
+    void onTickNeighbourChanged(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state,
+                                const Vector3i &changed) const override;
+
+    void onQueuedTick(LiquidPhysicsSystem &ticks, const Vector3i &position, const BlockState &state) const override;
 };

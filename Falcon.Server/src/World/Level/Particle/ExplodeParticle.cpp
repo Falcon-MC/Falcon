@@ -4,9 +4,7 @@
 
 #include <cmath>
 
-ExplodeParticle::ExplodeParticle(const Vector3f &position, double size)
-        : Particle(position), mSize(size) {
-}
+ExplodeParticle::ExplodeParticle(const Vector3f &position, double size) : Particle(position), mSize(size) {}
 
 std::unique_ptr<Packet> ExplodeParticle::encode() const {
     std::unique_ptr<LevelEventPacket> packet(new LevelEventPacket());

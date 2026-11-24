@@ -11,12 +11,12 @@ namespace MovementPhysics {
     inline constexpr float GRAVITY_MULTIPLIER = 0.98f;
     inline constexpr float STEP_HEIGHT = 0.5625f;
     inline constexpr float SNEAK_INPUT = 0.3f;
+    inline constexpr float SPRINT_INPUT_AXIS = 0.70710677f;
     inline constexpr float SWIFT_SNEAK_PER_LEVEL = 0.15f;
     inline constexpr int32_t SWIFT_SNEAK_DELAY_TICKS = 2;
     inline constexpr float JUMP_BOOST_PER_LEVEL = 0.1f;
-    inline constexpr float CONSUMING_INPUT = 0.1225f;
     inline constexpr float WALK_AIR_SPEED = 0.02f;
-    inline constexpr float SPRINT_AIR_SPEED = 0.026f;
+    inline constexpr float SPRINT_AIR_SPEED = 0.025999999f;
     inline constexpr float SPRINT_SPEED_MULTIPLIER = 1.3f;
     inline constexpr float DEFAULT_BLOCK_FRICTION = 0.6f;
     inline constexpr float IMPULSE_SCALE = 0.98f;
@@ -24,6 +24,11 @@ namespace MovementPhysics {
     inline constexpr float PLAYER_HEIGHT = 1.8f;
     inline constexpr float PLAYER_SNEAKING_HEIGHT = 1.49f;
     inline constexpr float PLAYER_CRAWLING_HEIGHT = 0.6f;
+    // eyes above the feet; also how far above the feet a player's network position is
+    inline constexpr float PLAYER_EYE_HEIGHT = 1.62f;
+    inline constexpr float PLAYER_BASE_OFFSET = PLAYER_EYE_HEIGHT;
+    // a sleeper's network position sits 0.2 above the feet
+    inline constexpr float PLAYER_SLEEPING_BASE_OFFSET = 0.2f;
     inline constexpr int32_t JUMP_DELAY_TICKS = 10;
     inline constexpr float EDGE_INSET = 0.025f;
     inline constexpr float EDGE_STEP = 0.05f;
@@ -45,11 +50,9 @@ namespace MovementPhysics {
     inline constexpr float HONEY_MAX_FALL = -0.12f;
     inline constexpr const char *const LEATHER_BOOTS = "minecraft:leather_boots";
     inline constexpr float MOJANG_PI = 3.1415927f;
-    inline constexpr float SIN_COEFFICIENTS[] = {
-            1.5896230e-10f, -2.5050748e-8f, 2.7557314e-6f, -1.9841270e-4f, 8.333334e-3f, -1.6666667e-1f
-    };
-    inline constexpr float COS_COEFFICIENTS[] = {
-            -1.1358537e-11f, 2.0875701e-9f, -2.7557314e-7f, 2.4801588e-5f, -1.3888889e-3f, 4.1666668e-2f
-    };
+    inline constexpr float SIN_COEFFICIENTS[] = {1.5896230e-10f, -2.5050748e-8f, 2.7557314e-6f,
+                                                 -1.9841270e-4f, 8.333334e-3f,   -1.6666667e-1f};
+    inline constexpr float COS_COEFFICIENTS[] = {-1.1358537e-11f, 2.0875701e-9f,  -2.7557314e-7f,
+                                                 2.4801588e-5f,   -1.3888889e-3f, 4.1666668e-2f};
 
 }

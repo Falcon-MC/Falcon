@@ -17,8 +17,8 @@ public:
                               const BlockState &state, Actor &source);
 
 private:
-    static void _sense(ServerNetworkHandler &owner, MobActor &mob, const json::Value &sensor,
-                       const Vector3i &position, const std::string &block, Actor &source);
+    static void _sense(ServerNetworkHandler &owner, MobActor &mob, const json::Value &sensor, const Vector3i &position,
+                       const std::string &block, Actor &source);
 
     static bool _matchesSource(ServerNetworkHandler &owner, MobActor &mob, const json::Value &sensor, Actor &source);
 };

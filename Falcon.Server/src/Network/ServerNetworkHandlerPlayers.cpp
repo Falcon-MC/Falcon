@@ -9,25 +9,27 @@
 #include "Protocol/Packets/MobEquipmentPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
+#include "World/Actor/Movement/MovementConstants.h"
 
 #include <cmath>
 
 namespace {
-    const float PLAYER_EYE_HEIGHT = 1.62f;
+    using MovementPhysics::PLAYER_EYE_HEIGHT;
 }
 
-bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) const {
+bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const ServerPlayer &target) {
     if (&viewer == &target || !viewer.isSpawned() || !target.isSpawned())
         return false;
 
-    if (!viewer.sharesLevelWith(target))
+    if (viewer.hidesPlayer(target) || !viewer.sharesLevelWith(target))
         return false;
 
     const Vector3f position = target.getPosition();
-    const int64_t hash = ChunkStreamHandler::packChunk((int32_t) std::floor(position.x) >> 4,
-                                                       (int32_t) std::floor(position.z) >> 4);
+    if (!ChunkStreamHandler::isInActorRange(viewer.getPosition(), position))
+        return false;
 
-    return viewer.getSentChunks().find(hash) != viewer.getSentChunks().end();
+    return getLevelFor(target).isChunkPopulated((int32_t) std::floor(position.x) >> 4,
+                                                (int32_t) std::floor(position.z) >> 4);
 }
 
 void ServerNetworkHandler::_sendPlayerSpawn(ServerPlayer &viewer, ServerPlayer &target) {
@@ -53,7 +55,7 @@ void ServerNetworkHandler::_sendPlayerSpawn(ServerPlayer &viewer, ServerPlayer &
     armor.mChestplate = inventory.getArmor(PlayerInventory::ARMOR_TORSO);
     armor.mLeggings = inventory.getArmor(PlayerInventory::ARMOR_LEGS);
     armor.mBoots = inventory.getArmor(PlayerInventory::ARMOR_FEET);
-    armor.mBody = ItemStack::air();
+    armor.mBody = inventory.getBodyArmor();
     mNetworkHandler->send(viewer.getNetworkIdentifier(), armor, mCodecContext);
 
     MobEquipmentPacket offhand;
@@ -72,30 +74,63 @@ void ServerNetworkHandler::_sendPlayerRemove(ServerPlayer &viewer, const ServerP
     mNetworkHandler->send(viewer.getNetworkIdentifier(), remove, mCodecContext);
 }
 
+void ServerNetworkHandler::setPlayerVisibleTo(ServerPlayer &viewer, ServerPlayer &target, bool visible) {
+    if (&viewer == &target)
+        return;
+    viewer.setPlayerHidden(target, !visible);
+    if (visible)
+        spawnPlayerTo(viewer, target);
+    else
+        despawnPlayerFrom(viewer, target, true);
+}
+
+void ServerNetworkHandler::spawnPlayerTo(ServerPlayer &viewer, ServerPlayer &target) {
+    if (canPlayerSeePlayer(viewer, target) && viewer.getVisiblePlayers().insert(target.getRuntimeId()).second)
+        _sendPlayerSpawn(viewer, target);
+}
+
+void ServerNetworkHandler::despawnPlayerFrom(ServerPlayer &viewer, const ServerPlayer &target, bool sendPacket) {
+    if (viewer.getVisiblePlayers().erase(target.getRuntimeId()) != 0 && viewer.isSpawned() && sendPacket)
+        _sendPlayerRemove(viewer, target);
+}
+
 void ServerNetworkHandler::updatePlayerVisibility() {
+    // every offset the range table holds fits in this many chunks
+    static const int32_t RANGE_CHUNKS = 4;
+    static std::vector<uint64_t> gone;
+
+    mPlayerIndexDirty = true;
     for (auto &viewerEntry: mPlayers) {
         ServerPlayer &viewer = viewerEntry.second;
         std::unordered_set<uint64_t> &visible = viewer.getVisiblePlayers();
 
-        for (auto &targetEntry: mPlayers) {
-            ServerPlayer &target = targetEntry.second;
-            if (&target == &viewer)
-                continue;
-
-            const bool shouldSee = canPlayerSeePlayer(viewer, target);
-            const bool seen = visible.find(target.getRuntimeId()) != visible.end();
-            if (shouldSee == seen)
-                continue;
-
-            if (shouldSee) {
-                visible.insert(target.getRuntimeId());
-                _sendPlayerSpawn(viewer, target);
-            } else {
-                visible.erase(target.getRuntimeId());
-                if (viewer.isSpawned())
-                    _sendPlayerRemove(viewer, target);
-            }
+        // the ones seen, then the ones near: never every player against every other
+        gone.clear();
+        for (const uint64_t runtimeId: visible) {
+            ServerPlayer *target = getPlayerByRuntimeId(runtimeId);
+            if (target == nullptr || !canPlayerSeePlayer(viewer, *target))
+                gone.push_back(runtimeId);
         }
+        for (const uint64_t runtimeId: gone) {
+            visible.erase(runtimeId);
+            ServerPlayer *target = getPlayerByRuntimeId(runtimeId);
+            if (target != nullptr && viewer.isSpawned())
+                _sendPlayerRemove(viewer, *target);
+        }
+
+        if (!viewer.isSpawned())
+            continue;
+
+        const Vector3f position = viewer.getPosition();
+        forEachPlayerAroundChunk((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4,
+                                 RANGE_CHUNKS, [&](ServerPlayer &target) {
+            if (&target == &viewer || visible.find(target.getRuntimeId()) != visible.end()
+                || !canPlayerSeePlayer(viewer, target))
+                return;
+
+            visible.insert(target.getRuntimeId());
+            _sendPlayerSpawn(viewer, target);
+        });
     }
 }
 
@@ -114,11 +149,31 @@ void ServerNetworkHandler::broadcastPlayerMove(ServerPlayer &player) {
     move.mOnGround = player.isOnGround();
     move.mTick = (int64_t) mCurrentTick;
 
-    for (auto &entry: mPlayers) {
-        ServerPlayer &viewer = entry.second;
+    // a viewer was in range at the last visibility pass: one chunk more covers the move since
+    static const int32_t VIEWER_CHUNKS = 6;
+    const Vector3f position = player.getPosition();
+    forEachPlayerAroundChunk((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4,
+                             VIEWER_CHUNKS, [&](ServerPlayer &viewer) {
         if (viewer.getVisiblePlayers().count(player.getRuntimeId()) != 0)
             mNetworkHandler->send(viewer.getNetworkIdentifier(), move, mCodecContext);
-    }
+    });
+}
+
+void ServerNetworkHandler::sendToPlayerViewers(const ServerPlayer &player, const Packet &packet, bool includeSelf) {
+    // a viewer was in range at the last visibility pass: one chunk more covers the move since
+    static const int32_t VIEWER_CHUNKS = 6;
+    static std::vector<NetworkIdentifier> viewers;
+    viewers.clear();
+    if (includeSelf && player.isSpawned())
+        viewers.push_back(player.getNetworkIdentifier());
+
+    const Vector3f position = player.getPosition();
+    forEachPlayerAroundChunk((int32_t) std::floor(position.x) >> 4, (int32_t) std::floor(position.z) >> 4,
+                             VIEWER_CHUNKS, [&](ServerPlayer &viewer) {
+        if (&viewer != &player && viewer.isSpawned() && viewer.getVisiblePlayers().count(player.getRuntimeId()) != 0)
+            viewers.push_back(viewer.getNetworkIdentifier());
+    });
+    mNetworkHandler->sendToMany(viewers, packet, mCodecContext);
 }
 
 void ServerNetworkHandler::despawnPlayerForViewers(ServerPlayer &player) {

@@ -8,8 +8,16 @@ public:
 
     static bool matches(const std::string &identifier);
 
+    bool isLeaves() const override {
+        return true;
+    }
+
     void onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
+
+    bool hasRandomTick() const override {
+        return true;
+    }
 
     void onNeighbourChanged(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state) const override;
@@ -19,7 +27,7 @@ public:
     bool getDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                   std::vector<BlockDrop> &drops) const override;
 
-    // Shared with flowered azalea leaves, which have their own block class.
+    // shared with flowered azalea leaves, a block class of their own
     static void leafDrops(const BlockState &state, const ItemStack &tool, int32_t fortuneLevel,
                           std::vector<BlockDrop> &drops);
 };

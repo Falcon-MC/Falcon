@@ -13,8 +13,7 @@ namespace {
     const int32_t REPATH_INTERVAL = 10;
 }
 
-FollowMobGoal::FollowMobGoal(float speed, float searchRange, float stopDistance,
-                             std::shared_ptr<json::Value> filters)
+FollowMobGoal::FollowMobGoal(float speed, float searchRange, float stopDistance, std::shared_ptr<json::Value> filters)
         : mSpeed(speed), mSearchRange(searchRange), mStopDistance(stopDistance), mFilters(std::move(filters)) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Move | (uint8_t) GoalControlFlag::Look);
 }
@@ -85,29 +84,27 @@ Actor *FollowMobGoal::_findLeader(ServerNetworkHandler &owner, const MobActor &m
     Actor *nearest = nullptr;
     float nearestDistance = mSearchRange * mSearchRange;
 
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &player = entry.second;
-        if (!player.isSpawned() || player.getGameType() == (int32_t) GameType::Spectator
+    owner.forEachPlayerNear(mob.getPosition(), mSearchRange, [&](ServerPlayer &player) {
+        if (!player.isSpawned() || player.isSpectator()
             || !_accepts(owner, mob, player))
-            continue;
+            return;
 
         const float distance = mob.distanceSquaredTo(player);
         if (distance <= nearestDistance) {
             nearest = &player;
             nearestDistance = distance;
         }
-    }
+    });
 
-    for (auto &entry: owner.getActors()) {
-        ServerActor *candidate = entry.second.get();
-        if (dynamic_cast<MobActor *>(candidate) == nullptr || !_accepts(owner, mob, *candidate))
-            continue;
+    owner.forEachActorNear(mob.getPosition(), mSearchRange, [&](ServerActor &candidate) {
+        if (dynamic_cast<MobActor *>(&candidate) == nullptr || !_accepts(owner, mob, candidate))
+            return;
 
-        const float distance = mob.distanceSquaredTo(*candidate);
+        const float distance = mob.distanceSquaredTo(candidate);
         if (distance <= nearestDistance) {
-            nearest = candidate;
+            nearest = &candidate;
             nearestDistance = distance;
         }
-    }
+    });
     return nearest;
 }

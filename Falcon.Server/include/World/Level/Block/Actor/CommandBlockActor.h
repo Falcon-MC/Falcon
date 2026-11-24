@@ -7,11 +7,7 @@
 #include <cstdint>
 #include <string>
 
-enum class CommandBlockActorMode : int32_t {
-    Normal = 0,
-    Repeating = 1,
-    Chain = 2
-};
+enum class CommandBlockActorMode : int32_t { Normal = 0, Repeating = 1, Chain = 2 };
 
 class CommandBlockActor final : public BlockActor {
 public:
@@ -43,63 +39,54 @@ public:
 
     static CommandBlockActorMode modeFromBlockName(const std::string &name);
 
-    CommandBlockActorMode getMode() const noexcept
-    {
+    CommandBlockActorMode getMode() const noexcept {
         return mMode;
     }
 
-    void setMode(CommandBlockActorMode mode) noexcept
-    {
+    void setMode(CommandBlockActorMode mode) noexcept {
         mMode = mode;
     }
 
-    const std::string &getCommand() const noexcept
-    {
+    const std::string &getCommand() const noexcept {
         return mCommand;
     }
 
-    void setCommand(const std::string &command)
-    {
+    void setCommand(const std::string &command) {
         mCommand = command;
         mSuccessCount = 0;
     }
 
-    bool isAuto() const noexcept
-    {
+    bool isAuto() const noexcept {
         return mAuto;
     }
 
-    void setAuto(bool value) noexcept
-    {
+    void setAuto(bool value) noexcept {
         mAuto = value;
     }
 
-    bool needsRedstone() const noexcept
-    {
+    bool needsRedstone() const noexcept {
         return !mAuto;
     }
 
-    bool isConditional() const noexcept
-    {
+    bool isConditional() const noexcept {
         return mConditionalMode;
     }
 
-    void setConditional(bool value) noexcept
-    {
+    void setConditional(bool value) noexcept {
         mConditionalMode = value;
     }
 
-    bool isPowered() const noexcept
-    {
+    bool isPowered() const noexcept {
         return mPowered;
     }
 
-    void setPowered(bool value) noexcept
-    {
+    void setPowered(bool value) noexcept {
         mPowered = value;
     }
 
-    const char *getBlockActorId() const override { return BLOCK_ACTOR_ID; }
+    const char *getBlockActorId() const override {
+        return BLOCK_ACTOR_ID;
+    }
 
     Tag saveNbt() const override;
 

@@ -10,6 +10,11 @@ class FallingBlock : public ServerActor {
 public:
     static const char *IDENTIFIER;
 
+    // a falling block rests on powder snow
+    bool canStandOnPowderSnow() const override {
+        return true;
+    }
+
     static const float GRAVITY;
     static const float DRAG;
     static const float BASE_OFFSET;
@@ -22,21 +27,35 @@ public:
 
     FallingBlock(uint64_t runtimeId, const BlockState &blockState);
 
-    const BlockState &getBlockState() const { return mBlockState; }
+    const BlockState &getBlockState() const {
+        return mBlockState;
+    }
 
-    void setBlockState(const BlockState &state) { mBlockState = state; }
+    void setBlockState(const BlockState &state) {
+        mBlockState = state;
+    }
 
-    bool getBreakOnLava() const { return mBreakOnLava; }
+    bool getBreakOnLava() const {
+        return mBreakOnLava;
+    }
 
-    void setBreakOnLava(bool value) { mBreakOnLava = value; }
+    void setBreakOnLava(bool value) {
+        mBreakOnLava = value;
+    }
 
-    bool getBreakOnGround() const { return mBreakOnGround; }
+    bool getBreakOnGround() const {
+        return mBreakOnGround;
+    }
 
-    void setBreakOnGround(bool value) { mBreakOnGround = value; }
+    void setBreakOnGround(bool value) {
+        mBreakOnGround = value;
+    }
 
     void tick(ServerNetworkHandler &owner) override;
 
-    bool isExpired() const override { return mExpired; }
+    bool isExpired() const override {
+        return mExpired;
+    }
 
     float getBaseOffset() const override {
         return BASE_OFFSET;
@@ -46,7 +65,9 @@ public:
         return true;
     }
 
-    bool shouldSave() const override { return !mExpired; }
+    bool shouldSave() const override {
+        return !mExpired;
+    }
 
     void fillSpawnMetadata(EntityDataMap &metadata) const override;
 
@@ -71,7 +92,12 @@ private:
 
     void _onDripstoneLanded(ServerNetworkHandler &owner, const Vector3i &position, const BlockState &state);
 
-    void _damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position, const std::string &deathKey);
+    void _onIcicleLanded(ServerNetworkHandler &owner, const Vector3i &position);
+
+    float _anvilDamage() const;
+
+    void _damageEntitiesAt(ServerNetworkHandler &owner, const Vector3i &position, const std::string &deathKey,
+                           float damage);
 
     BlockState mBlockState;
     bool mBreakOnLava = false;

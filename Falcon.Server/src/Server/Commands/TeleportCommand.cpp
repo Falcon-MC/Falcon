@@ -2,6 +2,7 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cerrno>
 #include <cmath>
@@ -46,14 +47,23 @@ std::vector<CommandOverloadData> TeleportCommand::getOverloads() const {
     return {toPlayer, toPosition, victimToPlayer, victimToPosition};
 }
 
-bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first,
-                                    const Vector3f &origin, Vector3f &out) {
+bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                                    Vector3f &out) {
     if (arguments.size() != first + 3)
         return false;
 
-    return parseCoordinate(arguments[first], origin.x, out.x)
-           && parseCoordinate(arguments[first + 1], origin.y, out.y)
-           && parseCoordinate(arguments[first + 2], origin.z, out.z);
+    if (!parseCoordinate(arguments[first], origin.x, out.x) || !parseCoordinate(arguments[first + 1], origin.y, out.y)
+        || !parseCoordinate(arguments[first + 2], origin.z, out.z))
+        return false;
+    // the game centers an absolute whole x or z on its block, as CommandPosition does; y stays
+    const auto whole = [](const std::string &value) {
+        return !value.empty() && value[0] != '~' && value[0] != '^' && value.find('.') == std::string::npos;
+    };
+    if (whole(arguments[first]))
+        out.x += 0.5f;
+    if (whole(arguments[first + 2]))
+        out.z += 0.5f;
+    return true;
 }
 
 bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<ServerPlayer *> &victims,
@@ -70,10 +80,14 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
 
     ServerPlayer &target = *targets.front();
     for (ServerPlayer *victim: victims) {
-        if (!victim->sharesLevelWith(target))
-            mHandler.changePlayerLevel(*victim, mHandler.getLevelFor(target), target.getPosition());
+        Vector3f destination = target.getPosition();
+        Level *level = &mHandler.getLevelFor(target);
+        if (!PluginEvents::teleport(*victim, destination, "command", &level))
+            continue;
+        if (!victim->isIn(*level))
+            mHandler.changePlayerLevel(*victim, *level, destination);
         else
-            victim->teleport(mHandler, target.getPosition());
+            victim->teleport(mHandler, destination);
 
         sender.sendTranslation("commands.tp.success", {victim->getName(), target.getName()});
     }
@@ -90,7 +104,13 @@ bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vecto
             return false;
         }
 
-        victim->teleport(mHandler, destination);
+        Level *level = &mHandler.getLevelFor(*victim);
+        if (!PluginEvents::teleport(*victim, destination, "command", &level))
+            continue;
+        if (!victim->isIn(*level))
+            mHandler.changePlayerLevel(*victim, *level, destination);
+        else
+            victim->teleport(mHandler, destination);
         sender.sendTranslation("commands.tp.success.coordinates",
                                {victim->getName(), formatCoordinate(destination.x), formatCoordinate(destination.y),
                                 formatCoordinate(destination.z)});

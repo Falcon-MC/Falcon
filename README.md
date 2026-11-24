@@ -10,69 +10,96 @@
 </p>
 
 <p align="center">
-	<a href="https://falcon-mc.github.io"><img src="https://img.shields.io/badge/website-falcon--mc.github.io-2ea44f" alt="Website"></a>
+	<a href="https://falcon-mc.com"><img src="https://img.shields.io/badge/website-falcon--mc.com-2ea44f" alt="Website"></a>
 	<a href="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml"><img src="https://github.com/Falcon-MC/Falcon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 	<img src="https://img.shields.io/badge/minecraft-v1.26.60%20(Bedrock)-56383E" alt="Minecraft">
 	<img src="https://img.shields.io/badge/protocol-2225-blue" alt="Protocol">
-	<img src="https://img.shields.io/badge/language-C%2B%2B17-00599C" alt="C++17">
+	<img src="https://img.shields.io/badge/language-C%2B%2B20-00599C" alt="C++20">
 	<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
 </p>
 
 ## What is this?
 
-Falcon is a Minecraft: Bedrock Edition server built from the ground up in C++17. It does not derive
-from any existing server: the protocol, world storage, inventory, movement and gameplay systems are
-all reimplemented by hand, with vanilla behavior as the reference.
+Falcon is a Minecraft: Bedrock Edition server written from scratch in C++20. Protocol, world storage,
+inventories, movement and gameplay are reimplemented by hand, with vanilla behavior as the reference.
 
-- **Native** - no runtime to install, the server ships as a single self-contained executable
-- **Vanilla worlds** - Bedrock world format, so worlds move between Falcon and the game unchanged
-- **Behavior packs** - custom content and a JavaScript scripting API loaded from packs
+- **Native** - one self-contained executable, no runtime to install
+- **Vanilla worlds** - the game's world format, including worlds from before 0.9
+- **Behavior packs** - custom content and the official JavaScript scripting API
+- **Plugins** - WebAssembly, native C and Java
 
 ## Getting started
 
-Download the latest Windows, Linux or macOS build from the [releases](https://github.com/Falcon-MC/Falcon/releases),
-check it against its `.sha256` file and run it. On the first start, a setup wizard in the console writes
-`server.properties`.
+Download the build for your system from the [releases](https://github.com/Falcon-MC/Falcon/releases) and run it.
+On the first start, a setup wizard writes `server.properties`.
+
+Every setting is described on the [website](https://falcon-mc.com).
 
 ## Supported versions
 
-| Minecraft | Protocol |
-|-----------|----------|
-| 1.26.60   | 2225     |
-| 1.26.52   | 2193     |
-| 1.26.45   | 2169     |
-| 1.26.40   | 2168     |
+Falcon speaks Minecraft **1.26.60** (protocol 2225). 1.26.52, 1.26.45 and 1.26.40 can join with
+`any-version=true`.
 
-Only the newest version can join by default. Set `any-version=true` in `server.properties` to let every
-supported version join.
+## Plugins
 
-## Related repositories
+| Runtime  | Use it for                                                    |
+|----------|---------------------------------------------------------------|
+| `wasm`   | New plugins, sandboxed, in any language with WIT bindings     |
+| `native` | Raw performance through the C API                             |
+| `java`   | Java plugins                                                  |
 
-- [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types
-- [Network](https://github.com/Falcon-MC/Network) - RakNet and NetherNet transport
-- [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
-- [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
-- [BlockStateUpdater](https://github.com/Falcon-MC/BlockStateUpdater) - block state upgrade schemas
-- [leveldb](https://github.com/Falcon-MC/leveldb) - LevelDB with the zlib compression used by Bedrock worlds
+The API lives in [PluginAPI](https://github.com/Falcon-MC/PluginAPI), with a complete
+[example](https://github.com/Falcon-MC/PluginAPI/tree/main/examples/wasm/HelloWasm).
+
+## Permission groups
+
+Use the server console to manage permission groups. For example, these commands let a moderator
+use `kick` and give them the permissions of the default group:
+
+```text
+permissiongroup create player
+permissiongroup default player
+permissiongroup create moderator
+permissiongroup inherit moderator player
+permissiongroup set moderator falcon.command.kick true
+permissiongroup assign 123456789 moderator
+```
+
+Replace `123456789` with the player's Xbox XUID. Unassigned players use the default group. An explicit
+denial in any assigned or inherited group wins. Commands use their canonical names, and commands reserved
+for the console retain their existing restrictions. Plugin permission nodes use the same groups and retain
+their existing overrides and defaults where the groups have no decision.
+
+Changes are saved to `permission-groups.json` next to `server.properties`. Use `permissiongroup reload`
+after editing it by hand. Other actions are `list`, `delete <group>`, `default -`,
+`unassign <xuid> <group>`, `uninherit <group> <parent>` and `unset <group> <node>`.
+
+## Privacy
+
+To tell the game's client from unofficial ones, the server asks `api.falcon-mc.com` about each NetherNet
+connection. It sends no player name, identifier or address. `allow-unofficial-clients=true` turns this off.
+Telemetry is off unless you set `emit-server-telemetry=true`, and it names no server, world or player.
+
 ## Building
 
-Falcon needs CMake 3.16+, a C++17 compiler, zlib and OpenSSL. On Windows the reference toolchain is
-MSYS2 UCRT64.
+You need CMake 3.16+, a C++20 compiler, zlib and OpenSSL. On Windows, use MSYS2 UCRT64.
 
 ```
 cmake -B build -G Ninja
 cmake --build build
 ```
 
-## Give a star if this project helped you
+Protocol, transport, NBT and game data live in their own repositories under
+[Falcon-MC](https://github.com/Falcon-MC).
+
+## Contributing
+
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and report vulnerabilities as
+[SECURITY.md](SECURITY.md) describes.
 
 [![Contributors](https://contrib.rocks/image?repo=Falcon-MC/Falcon)](https://github.com/Falcon-MC/Falcon/graphs/contributors)
 
-## Licensing information
+## License
 
-Falcon is licensed under the [GNU Lesser General Public License v3.0](LICENSE), which supplements the
-[GNU General Public License v3.0](COPYING). You may use, modify and redistribute it, as long as changes to
-Falcon itself stay under the same license.
-
-Falcon is not affiliated with Mojang. All brands and trademarks belong to their respective owners.
-Falcon is not a Mojang-approved software, nor is it associated with Mojang.
+Falcon is licensed under the [GNU LGPL v3.0](LICENSE), which supplements the [GNU GPL v3.0](COPYING).
+Falcon is not affiliated with or approved by Mojang. All trademarks belong to their owners.

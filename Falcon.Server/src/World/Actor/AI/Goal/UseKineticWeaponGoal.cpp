@@ -39,8 +39,9 @@ UseKineticWeaponGoal::UseKineticWeaponGoal(Settings settings) : mSettings(std::m
 
 const SpearItem *UseKineticWeaponGoal::_heldSpear(const MobActor &mob) {
     const ItemStack &held = mob.getEquipment().getSlot(MobEquipment::MAINHAND);
-    return held.isAir() ? nullptr
-                        : dynamic_cast<const SpearItem *>(VanillaItems::fromIdentifier(held.mDefinition->getIdentifier()));
+    return held.isAir()
+                   ? nullptr
+                   : dynamic_cast<const SpearItem *>(VanillaItems::fromIdentifier(held.mDefinition->getIdentifier()));
 }
 
 MobActor &UseKineticWeaponGoal::_navigator(ServerNetworkHandler &owner, MobActor &mob) const {
@@ -173,8 +174,8 @@ void UseKineticWeaponGoal::_strike(ServerNetworkHandler &owner, MobActor &mob, A
     const float damage = spear.getKineticDamage(speed);
     const float healthBefore = target.getHealth();
     if (ServerPlayer *player = dynamic_cast<ServerPlayer *>(&target)) {
-        owner.hurt(*player, damage, ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(),
-                                                              mob.getPosition()));
+        owner.hurt(*player, damage,
+                   ActorDamageSource::attack(DEATH_MESSAGE, player->getName(), mob, mob.getName(), mob.getPosition()));
     } else if (ServerActor *actor = dynamic_cast<ServerActor *>(&target)) {
         owner.damageActor(*actor, damage, &mob);
     }

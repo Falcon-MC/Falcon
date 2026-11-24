@@ -21,20 +21,22 @@ void ServerPlayerMovementComponent::beginTick(int64_t serverTick, int maxCredits
 
     mBatchSize = batchSize < 0 ? MAX_PENDING_INPUTS : (size_t) batchSize;
     const uint64_t limit = maxCredits < 0 ? std::numeric_limits<uint64_t>::max() : (uint64_t) maxCredits;
-    const uint64_t elapsed = mLastServerTick < 0 ? 1
-                             : serverTick > mLastServerTick ? (uint64_t) (serverTick - mLastServerTick) : 0;
+    const uint64_t elapsed = mLastServerTick < 0            ? 1
+                             : serverTick > mLastServerTick ? (uint64_t) (serverTick - mLastServerTick)
+                                                            : 0;
     mCredits = std::min(mCredits, limit);
     mCredits += std::min(elapsed, limit - mCredits);
     mLastServerTick = std::max(mLastServerTick, serverTick);
 }
 
 std::shared_ptr<const PlayerAuthInputPacket> ServerPlayerMovementComponent::takeNext() {
-    // BDS 1.26.10 tick policy (0x140B45360): discard old inputs beyond credits + 1 or batch size.
+    // tick policy: discard old inputs beyond credits + 1 or batch size
     while (!mInputs.empty()) {
         if (mCredits == 0 && mInputs.size() <= 1)
             return nullptr;
         if (mCredits >= mInputs.size() - 1 && mBatchSize >= mInputs.size())
             break;
+        mDropped.push_back(std::move(mInputs.front()));
         mInputs.pop_front();
     }
 
@@ -66,13 +68,15 @@ bool ServerPlayerMovementComponent::takeFlightRequest(int64_t inputTick, bool in
 }
 
 void ServerPlayerMovementComponent::clearPending() {
-    // A teleport invalidates pending coordinates, but must not reopen the accepted tick sequence.
+    // a teleport invalidates pending coordinates but keeps the accepted tick sequence closed
+    for (auto &input: mInputs)
+        mDropped.push_back(std::move(input));
     mInputs.clear();
     mFlightRequests.clear();
 }
 
 size_t ServerPlayerMovementComponent::catchupSteps(double previousTickMilliseconds) {
-    // BDS catchup loop (0x1432502B0): 2 * min(elapsed 50 ms steps, 20) + 1.
+    // catch-up loop: 2 * min(elapsed 50 ms steps, 20) + 1
     if (!std::isfinite(previousTickMilliseconds) || previousTickMilliseconds <= 0.0)
         return 1;
     const size_t elapsed = (size_t) std::min(previousTickMilliseconds / 50.0, 20.0);

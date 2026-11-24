@@ -19,9 +19,13 @@ public:
 
     static double maintainPrecision(double value);
 
-    double getPersistence() const { return mPersistence; }
+    double getPersistence() const {
+        return mPersistence;
+    }
 
-    double getLacunarity() const { return mLacunarity; }
+    double getLacunarity() const {
+        return mLacunarity;
+    }
 
 private:
     static void _skipOctave(IRandom &rand);

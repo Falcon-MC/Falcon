@@ -1,6 +1,7 @@
 #include "Server/Commands/TestForBlocksCommand.h"
 
 #include "World/Level/Level.h"
+#include "World/Level/Block/BlockNames.h"
 
 #include <algorithm>
 #include <cmath>
@@ -61,7 +62,7 @@ bool TestForBlocksCommand::execute(CommandOrigin &sender, const std::vector<std:
         for (int32_t y = minimum.y; y <= maximum.y; ++y) {
             for (int32_t z = minimum.z; z <= maximum.z; ++z) {
                 const BlockState source = level->getBlockState(x, y, z);
-                if (masked && source.mName == "minecraft:air")
+                if (masked && source.mName == BlockNames::AIR)
                     continue;
 
                 const BlockState target = level->getBlockState(destination.x + (x - minimum.x),

@@ -8,9 +8,13 @@ public:
 
     using NeutralActor::NeutralActor;
 
-    ActorSize getSize() const override { return ActorSize{0.55f, 0.5f}; }
+    ActorSize getSize() const override {
+        return ActorSize{0.55f, 0.5f};
+    }
 
-    float getDefaultMaxHealth() const override { return 10.0f; }
+    float getDefaultMaxHealth() const override {
+        return 10.0f;
+    }
 
     bool hasGravity() const override {
         return false;
