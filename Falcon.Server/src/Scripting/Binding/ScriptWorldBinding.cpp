@@ -1,4 +1,7 @@
 #include "Scripting/Binding/ScriptApi.h"
+
+#include "Falcon/Plugin/PluginManager.h"
+#include "Falcon/Plugin/PluginPackets.h"
 #include <functional>
 
 #include "World/Actor/ServerActor.h"
@@ -36,6 +39,8 @@
 #endif
 
 using namespace ScriptValues;
+
+#include <map>
 
 namespace {
     JSValue systemRun(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic) {
@@ -437,6 +442,17 @@ namespace {
         packet.mVolume = (float) options.mVolume;
         packet.mPitch = (float) options.mPitch;
         packet.mLoopCount = options.mLoopCount;
+        if (PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_SOUND) != nullptr) {
+            std::map<Level *, std::vector<NetworkIdentifier>> levels;
+            for (auto &entry: api->host().getPlayers()) {
+                if (entry.second.isSpawned())
+                    levels[&api->host().getLevelFor(entry.second)].push_back(entry.first);
+            }
+            for (auto &[level, viewers]: levels)
+                PluginPackets::broadcastWorldEffect(api->host(), *level, packet.mPosition, packet,
+                                                    FALCON_EVENT_WORLD_SOUND, std::move(viewers));
+            return JS_UNDEFINED;
+        }
         for (auto &entry: api->host().getPlayers()) {
             if (entry.second.isSpawned())
                 api->host().sendPacketTo(entry.first, packet);

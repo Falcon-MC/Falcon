@@ -1,3 +1,4 @@
+#include "Falcon/Plugin/PluginPackets.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
@@ -413,6 +414,18 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
     const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
+
+    const auto type = PluginPackets::worldEffectType(packet);
+    if (type != 0 && PluginManager::findWithSubscribers(type) != nullptr) {
+        std::vector<NetworkIdentifier> viewers;
+        for (auto &entry: owner.getPlayers()) {
+            if (&entry.second != except && &owner.getLevelFor(entry.second) == &level
+                && entry.second.getSentChunks().count(key) != 0)
+                viewers.push_back(entry.first);
+        }
+        PluginPackets::broadcastWorldEffect(owner, level, position, packet, type, std::move(viewers));
+        return;
+    }
 
     for (auto &entry: owner.getPlayers()) {
         if (&entry.second == except)

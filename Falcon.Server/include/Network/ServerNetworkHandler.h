@@ -1305,7 +1305,9 @@ private:
 
     void _sendDimensionChange(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
-    World &_openWorld(const std::string &name, int64_t seed);
+    World &_openWorld(const std::string &name, int64_t seed, bool starting = false);
+    void _dispatchWorldOpen(World &world, bool created);
+    std::vector<std::pair<uint32_t, bool>> mStartingWorlds;
 
     WorldManager mWorlds;
     BiomeRegistry mBiomes;
@@ -1408,6 +1410,9 @@ private:
     unsigned long long mSimulatedPlayerCount = 0;
     std::vector<NetworkIdentifier> mSimulatedRemovals;
 
+    void _applyCloudEffects(ServerPlayer &player, const std::vector<MobEffectInstance> &effects);
+    void _applyCloudEffects(ServerActor &actor, const std::vector<MobEffectInstance> &effects);
+
     struct LingeringCloud {
         int32_t mPotionId;
         int32_t mAge;
@@ -1422,6 +1427,7 @@ private:
         DimensionType mDimension = DimensionType::Overworld;
         uint32_t mWorldId = 0;
         int64_t mOwnerUniqueId = -1;
+        std::optional<std::vector<MobEffectInstance>> mEffects;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
