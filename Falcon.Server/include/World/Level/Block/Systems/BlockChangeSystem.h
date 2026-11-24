@@ -14,10 +14,10 @@ enum class BlockChangeCause { Grow, Spread, Form, Fade, Decay };
 class BlockChangeSystem {
 public:
     static bool allows(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
-                       const Vector3i *source = nullptr);
+                       const Vector3i *source = nullptr, ServerPlayer *player = nullptr);
 
     static bool change(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
-                       bool update);
+                       bool update, ServerPlayer *player = nullptr);
 
     static bool spread(Level &level, const Vector3i &source, const Vector3i &position, const BlockState &state,
                        bool update);

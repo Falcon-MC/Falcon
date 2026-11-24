@@ -9,6 +9,7 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Inventory/PlayerInventory.h"
 #include "World/Item/DyeableItems.h"
@@ -278,6 +279,34 @@ int CauldronBlock::getComparatorSignal(Level &level, const Vector3i &position, c
 
 int CauldronBlock::getLightEmission(const BlockState &state, int dataEmission) const {
     return CauldronBlock(state).getLiquid() == Liquid::Lava ? 15 : dataEmission;
+}
+
+void CauldronBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                                 const BlockState &state) const {
+    const CauldronBlock cauldron(state);
+    if (cauldron.getLiquid() != Liquid::Lava || actor.isFireImmune()
+        || actor.hasEffect(MobEffectId::FireResistance))
+        return;
+
+    const float surface = (float) position.y + 0.375f + (float) cauldron.getFillLevel() * 0.125f;
+    if (actor.getPosition().y >= surface)
+        return;
+
+    if (const auto *player = dynamic_cast<const ServerPlayer *>(&actor)) {
+        if (player->isCreative() || player->isSpectator())
+            return;
+    }
+
+    owner.hurtActor(actor, 4.0f, "death.attack.lava", position);
+    constexpr int32_t burnTicks = 8 * 20;
+    if (!actor.isAlive() || actor.getFireTicks() >= burnTicks)
+        return;
+    const int32_t allowed = owner.allowCombustion(actor, burnTicks, nullptr, position);
+    if (allowed > actor.getFireTicks()) {
+        actor.setFireTicks(allowed);
+        if (auto *target = dynamic_cast<ServerActor *>(&actor))
+            owner.syncActorFlags(*target);
+    }
 }
 
 bool CauldronBlock::canReceiveDrip(Level &level, const Vector3i &position, Liquid fluid) {

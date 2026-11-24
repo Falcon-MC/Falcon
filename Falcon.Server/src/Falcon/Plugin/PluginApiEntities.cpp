@@ -2,6 +2,7 @@
 
 #include "World/Actor/DamageCause.h"
 #include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
@@ -79,7 +80,13 @@ namespace {
     FalconEntity *serverEntity(uint64_t runtimeId) {
         if (ServerPlayer *player = owner().getPlayerByRuntimeId(runtimeId))
             return toHandle(static_cast<Actor *>(player));
-        return toHandle(owner().getActorByRuntimeId(runtimeId));
+        if (ServerActor *actor = owner().getActorByRuntimeId(runtimeId))
+            return toHandle(static_cast<Actor *>(actor));
+        for (const auto &item : owner().getItemEntities()) {
+            if (!item->isRemoved() && item->getRuntimeId() == runtimeId)
+                return toHandle(static_cast<Actor *>(item.get()));
+        }
+        return nullptr;
     }
 
     void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
@@ -184,7 +191,12 @@ namespace {
     }
 
     void entityRemove(FalconEntity *target) {
-        ServerActor *actorValue = asActor(entity(target));
+        Actor *value = entity(target);
+        if (auto *item = dynamic_cast<ItemActor *>(value)) {
+            item->setRemoved(true);
+            return;
+        }
+        ServerActor *actorValue = asActor(value);
         if (actorValue == nullptr)
             return;
 
@@ -239,16 +251,21 @@ namespace {
     }
 
     uint32_t levelEntityCount(FalconLevel *handle) {
-        const DimensionType dimension = level(handle)->getDimensionType();
+        const Level &target = *level(handle);
         uint32_t count = 0;
 
         for (auto &entry: owner().getActors()) {
-            if (entry.second->getDimension() == dimension)
+            if (entry.second->isIn(target))
                 count++;
         }
 
         for (auto &entry: owner().getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.getDimension() == dimension)
+            if (entry.second.isSpawned() && entry.second.isIn(target))
+                count++;
+        }
+
+        for (const auto &item : owner().getItemEntities()) {
+            if (!item->isRemoved() && item->isIn(target))
                 count++;
         }
 
@@ -256,11 +273,11 @@ namespace {
     }
 
     FalconEntity *levelEntity(FalconLevel *handle, uint32_t index) {
-        const DimensionType dimension = level(handle)->getDimensionType();
+        const Level &target = *level(handle);
         uint32_t current = 0;
 
         for (auto &entry: owner().getActors()) {
-            if (entry.second->getDimension() != dimension)
+            if (!entry.second->isIn(target))
                 continue;
             if (current == index)
                 return toHandle(static_cast<Actor *>(entry.second.get()));
@@ -268,14 +285,37 @@ namespace {
         }
 
         for (auto &entry: owner().getPlayers()) {
-            if (!entry.second.isSpawned() || entry.second.getDimension() != dimension)
+            if (!entry.second.isSpawned() || !entry.second.isIn(target))
                 continue;
             if (current == index)
                 return toHandle(static_cast<Actor *>(&entry.second));
             current++;
         }
 
+        for (const auto &item : owner().getItemEntities()) {
+            if (item->isRemoved() || !item->isIn(target))
+                continue;
+            if (current == index)
+                return toHandle(static_cast<Actor *>(item.get()));
+            current++;
+        }
+
         return nullptr;
+    }
+
+    FalconItem *itemEntityItem(FalconEntity *target) {
+        auto *item = dynamic_cast<ItemActor *>(entity(target));
+        return item == nullptr ? nullptr : toHandle(new ItemStack(item->getItem()));
+    }
+
+    int32_t itemEntityPickupDelay(FalconEntity *target) {
+        auto *item = dynamic_cast<ItemActor *>(entity(target));
+        return item == nullptr ? 0 : item->getPickupDelay();
+    }
+
+    void itemEntitySetPickupDelay(FalconEntity *target, int32_t pickupDelay) {
+        if (auto *item = dynamic_cast<ItemActor *>(entity(target)))
+            item->setPickupDelay(pickupDelay);
     }
 }
 
@@ -341,4 +381,7 @@ void PluginServerApi::fillEntities(FalconServerApi &api) {
     api.entitySetInvisible = &entitySetInvisible;
     api.levelEntityCount = &levelEntityCount;
     api.levelEntity = &levelEntity;
+    api.itemEntityItem = &itemEntityItem;
+    api.itemEntityPickupDelay = &itemEntityPickupDelay;
+    api.itemEntitySetPickupDelay = &itemEntitySetPickupDelay;
 }

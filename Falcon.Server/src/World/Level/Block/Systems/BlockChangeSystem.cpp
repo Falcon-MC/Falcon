@@ -27,7 +27,7 @@ namespace {
 }
 
 bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
-                               const Vector3i *source) {
+                               const Vector3i *source, ServerPlayer *player) {
     const FalconEventType type = eventTypeOf(cause);
     PluginManager *plugins = PluginManager::findWithSubscribers(type);
     if (plugins == nullptr)
@@ -39,9 +39,11 @@ bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const Blo
     event.mType = type;
     event.mCancellable = true;
     event.mLevel = &level;
+    event.mPlayer = player;
     event.mBlockPosition = position;
     event.mBlockName = state.mName;
     event.mPreviousBlockName = current == nullptr ? std::string() : current->mName;
+    event.mCustomData = PluginWorldEventData::encodeBlock(state);
     if (source != nullptr)
         event.mFrom = Vector3f((float) source->x, (float) source->y, (float) source->z);
     plugins->dispatch(event);
@@ -49,8 +51,8 @@ bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const Blo
 }
 
 bool BlockChangeSystem::change(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
-                               bool update) {
-    if (!allows(level, position, state, cause))
+                               bool update, ServerPlayer *player) {
+    if (!allows(level, position, state, cause, nullptr, player))
         return false;
 
     level.setBlock(position, state, update);

@@ -647,13 +647,13 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
             return;
         if (mScriptEngine.beforePlayerGameModeChange(player, previousGameMode, gameMode))
             return;
+        player.setAllowFlight(std::nullopt);
     }
 
     player.setGameType(gameMode);
     player.setHungerEnabled(gameMode == (int32_t) GameType::Survival || gameMode == (int32_t) GameType::Adventure);
 
-    const bool mayFly = gameMode == (int32_t) GameType::Creative || gameMode == (int32_t) GameType::Spectator;
-    if (!mayFly && player.isFlying()) {
+    if (previousGameMode != gameMode && !player.canToggleFlight() && player.isFlying()) {
         player.setFlying(false);
         player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition(), &player));
     }

@@ -2239,21 +2239,22 @@ void ServerNetworkHandler::handle(const NetworkIdentifier &id, const EmotePacket
         || packet.mEmoteId.empty() || packet.mEmoteId.size() > 256 || !_allowPacket(id, RateLimitedPacket::Emote))
         return;
 
+    std::string emoteId = packet.mEmoteId;
     if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_EMOTE)) {
-        std::string emoteId = packet.mEmoteId;
         PluginEvent emoteEvent;
         emoteEvent.mType = FALCON_EVENT_PLAYER_EMOTE;
         emoteEvent.mCancellable = true;
         emoteEvent.mPlayer = player;
         emoteEvent.mMessage = &emoteId;
         plugins->dispatch(emoteEvent);
-        if (emoteEvent.mCancelled)
+        if (emoteEvent.mCancelled || emoteId.empty() || emoteId.size() > 256)
             return;
     }
 
-    mScriptEngine.onPlayerEmote(*player, packet.mEmoteId);
+    mScriptEngine.onPlayerEmote(*player, emoteId);
 
     EmotePacket emote = packet;
+    emote.mEmoteId = std::move(emoteId);
     emote.mRuntimeActorId = player->getRuntimeId();
     emote.mXuid = player->getXuid();
 

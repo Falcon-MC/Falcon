@@ -21,7 +21,7 @@ bool ServerNetworkHandler::canPlayerSeePlayer(ServerPlayer &viewer, const Server
     if (&viewer == &target || !viewer.isSpawned() || !target.isSpawned())
         return false;
 
-    if (!viewer.sharesLevelWith(target))
+    if (viewer.hidesPlayer(target) || !viewer.sharesLevelWith(target))
         return false;
 
     const Vector3f position = target.getPosition();
@@ -72,6 +72,26 @@ void ServerNetworkHandler::_sendPlayerRemove(ServerPlayer &viewer, const ServerP
     remove.mUniqueActorId = target.getUniqueId();
 
     mNetworkHandler->send(viewer.getNetworkIdentifier(), remove, mCodecContext);
+}
+
+void ServerNetworkHandler::setPlayerVisibleTo(ServerPlayer &viewer, ServerPlayer &target, bool visible) {
+    if (&viewer == &target)
+        return;
+    viewer.setPlayerHidden(target, !visible);
+    if (visible)
+        spawnPlayerTo(viewer, target);
+    else
+        despawnPlayerFrom(viewer, target, true);
+}
+
+void ServerNetworkHandler::spawnPlayerTo(ServerPlayer &viewer, ServerPlayer &target) {
+    if (canPlayerSeePlayer(viewer, target) && viewer.getVisiblePlayers().insert(target.getRuntimeId()).second)
+        _sendPlayerSpawn(viewer, target);
+}
+
+void ServerNetworkHandler::despawnPlayerFrom(ServerPlayer &viewer, const ServerPlayer &target, bool sendPacket) {
+    if (viewer.getVisiblePlayers().erase(target.getRuntimeId()) != 0 && viewer.isSpawned() && sendPacket)
+        _sendPlayerRemove(viewer, target);
 }
 
 void ServerNetworkHandler::updatePlayerVisibility() {

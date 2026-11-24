@@ -69,7 +69,8 @@ TreeWoodType SaplingBlock::getWoodType() const {
     return TreeWoodType::OAK;
 }
 
-bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                            ServerPlayer *player) const {
     TrackingBlockManager manager(level);
     SimpleRandom random(randomSeed());
 
@@ -80,7 +81,7 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
         return false;
 
     const BlockState grown = manager.getBlockAt(position.x, position.y, position.z);
-    if (!BlockChangeSystem::allows(level, position, grown, BlockChangeCause::Grow))
+    if (!BlockChangeSystem::allows(level, position, grown, BlockChangeCause::Grow, nullptr, player))
         return false;
 
     const std::vector<Vector3i> changed = manager.getChanged();
@@ -89,7 +90,7 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
         blocks.reserve(changed.size());
         for (const Vector3i &at: changed)
             blocks.emplace_back(at, manager.getBlockAt(at.x, at.y, at.z));
-        if (!BlockChangeSystem::prepareStructure(level, position, blocks))
+        if (!BlockChangeSystem::prepareStructure(level, position, blocks, player))
             return false;
         BlockChangeSystem::applyStructure(level, blocks, false);
         return true;
@@ -106,18 +107,23 @@ bool SaplingBlock::growTree(ServerNetworkHandler &owner, Level &level, const Vec
 
 void SaplingBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                 const BlockState &state) const {
+    tryGrow(owner, level, position, state, nullptr);
+}
+
+bool SaplingBlock::tryGrow(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           ServerPlayer *player) const {
     if (RandomTickSystem::nextInt(7) != 0)
-        return;
+        return false;
 
     if (RandomTickSystem::getFullLight(level, Vector3i(position.x, position.y + 1, position.z)) < MINIMUM_LIGHT_LEVEL)
-        return;
+        return false;
 
     if (state.mStates.getByte("age_bit") == 0) {
         Tag states = state.mStates;
         states.putByte("age_bit", 1);
-        BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow, false);
-        return;
+        return BlockChangeSystem::change(level, position, BlockState(state.mName, states), BlockChangeCause::Grow,
+                                         false, player);
     }
 
-    growTree(owner, level, position);
+    return growTree(owner, level, position, player);
 }

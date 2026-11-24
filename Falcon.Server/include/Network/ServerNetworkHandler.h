@@ -494,6 +494,10 @@ public:
 
     void updatePlayerVisibility();
 
+    void setPlayerVisibleTo(ServerPlayer &viewer, ServerPlayer &target, bool visible);
+    void spawnPlayerTo(ServerPlayer &viewer, ServerPlayer &target);
+    void despawnPlayerFrom(ServerPlayer &viewer, const ServerPlayer &target, bool sendPacket);
+
     void broadcastPlayerMove(ServerPlayer &player);
 
     /** Despawns the player for every client that has them spawned, as they leave the server. */

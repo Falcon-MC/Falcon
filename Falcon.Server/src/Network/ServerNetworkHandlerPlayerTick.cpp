@@ -95,9 +95,8 @@ void ServerNetworkHandler::_tickPlayer(ServerPlayer &player) {
     // vehicles still travel in tickActors; several rider inputs here would overwrite their controls
     const size_t steps = player.isRiding() ? 1 : 1 + ServerPlayerMovementComponent::catchupSteps(previousTickMs);
     const auto applyFlightRequest = [&](bool flying) {
-        // a server-side game mode change can revoke an already validated queued request
-        if (flying && !player.isCreative()
-            && !player.isSpectator())
+        // flight permission can change while a validated request waits for its movement input
+        if (!player.canToggleFlight())
             return;
         MovementHandler::requestFlight(*this, player.getNetworkIdentifier(), player, flying);
     };

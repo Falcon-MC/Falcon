@@ -350,6 +350,18 @@ public:
         return mFlying;
     }
 
+    bool canToggleFlight() const {
+        return mAllowFlight.value_or(isCreative() || isSpectator());
+    }
+
+    bool hasFlightOverride() const {
+        return mAllowFlight.has_value();
+    }
+
+    void setAllowFlight(std::optional<bool> value) {
+        mAllowFlight = value;
+    }
+
     // what the last PlayerAuthInput reported: held buttons, the movement vector and the input device
     struct InputState {
         int32_t mInputMode = 0;
@@ -1210,6 +1222,17 @@ public:
     }
 
     // the other players this client has spawned
+    bool hidesPlayer(const ServerPlayer &target) const {
+        return mHiddenPlayers.count(target.getUuid()) != 0;
+    }
+
+    void setPlayerHidden(const ServerPlayer &target, bool hidden) {
+        if (hidden)
+            mHiddenPlayers.insert(target.getUuid());
+        else
+            mHiddenPlayers.erase(target.getUuid());
+    }
+
     std::unordered_set<uint64_t> &getVisiblePlayers() {
         return mVisiblePlayers;
     }
@@ -1369,6 +1392,7 @@ private:
     std::unordered_set<int64_t> mSentChunks;
     std::unordered_set<uint64_t> mVisibleActors;
     std::unordered_set<uint64_t> mVisiblePlayers;
+    std::unordered_set<std::string> mHiddenPlayers;
     Vector3f mBroadcastPosition;
     Vector3f mBroadcastRotation;
     size_t mSentChunkCount = 0;
@@ -1386,6 +1410,7 @@ private:
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
+    std::optional<bool> mAllowFlight;
     InputState mInputState;
     ClientDevice mClientDevice;
     CameraState mCameraState;

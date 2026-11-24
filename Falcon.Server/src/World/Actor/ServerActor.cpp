@@ -226,6 +226,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     damageEvent.mCancellable = true;
     damageEvent.mEntity = this;
     damageEvent.mAttacker = attacker;
+    damageEvent.mTarget = damageSource.mDamager;
     damageEvent.mAmount = amount;
     damageEvent.mCause = damageSource.mDeathMessageKey;
     if (damageSource.mBlock) {

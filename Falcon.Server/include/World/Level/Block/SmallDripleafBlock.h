@@ -16,4 +16,7 @@ public:
 
     bool onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                       const BlockState &state) const override;
+
+    bool fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                   ServerPlayer *player) const;
 };

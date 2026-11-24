@@ -3,6 +3,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/ChunkStreamHandler.h"
+#include "Network/Handler/MovementHandler.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Protocol/Codec/ProtocolCodec.h"
 #include "Protocol/Codec/ProtocolCodecRegistry.h"
@@ -18,6 +19,26 @@ namespace {
     bool isValidGameMode(FalconGameMode gameMode) {
         return gameMode == FALCON_GAME_MODE_SURVIVAL || gameMode == FALCON_GAME_MODE_CREATIVE
                || gameMode == FALCON_GAME_MODE_ADVENTURE || gameMode == FALCON_GAME_MODE_SPECTATOR;
+    }
+
+    void playerSetVisibleTo(FalconPlayer *target, FalconPlayer *viewer, int visible) {
+        if (target != nullptr && viewer != nullptr)
+            owner().setPlayerVisibleTo(*player(viewer), *player(target), visible != 0);
+    }
+
+    void playerSpawnTo(FalconPlayer *target, FalconPlayer *viewer) {
+        if (target != nullptr && viewer != nullptr)
+            owner().spawnPlayerTo(*player(viewer), *player(target));
+    }
+
+    void playerDespawnFrom(FalconPlayer *target, FalconPlayer *viewer, int sendPacket) {
+        if (target != nullptr && viewer != nullptr)
+            owner().despawnPlayerFrom(*player(viewer), *player(target), sendPacket != 0);
+    }
+
+    int playerIsSpawnedTo(FalconPlayer *target, FalconPlayer *viewer) {
+        return target != nullptr && viewer != nullptr
+               && player(viewer)->getVisiblePlayers().count(player(target)->getRuntimeId()) != 0;
     }
 
     constexpr size_t MAX_SIMULATED_NAME = 32;
@@ -81,6 +102,33 @@ namespace {
         if (!isValidGameMode(gameMode))
             return;
         owner().setPlayerGameMode(*player(target), (int) gameMode);
+    }
+
+    int playerAllowFlight(FalconPlayer *target) {
+        return player(target)->canToggleFlight();
+    }
+
+    void playerSetAllowFlight(FalconPlayer *target, int allowed) {
+        ServerPlayer &value = *player(target);
+        value.setAllowFlight(allowed != 0);
+        if (value.getLoginState() >= ServerPlayer::LoginState::StartGameSent)
+            owner()._sendAbilities(value);
+    }
+
+    int playerIsFlying(FalconPlayer *target) {
+        return player(target)->isFlying();
+    }
+
+    void playerSetFlying(FalconPlayer *target, int flying) {
+        ServerPlayer &value = *player(target);
+        value.setFlying(flying != 0);
+        if (value.getLoginState() < ServerPlayer::LoginState::StartGameSent)
+            return;
+
+        ServerNetworkHandler &host = owner();
+        if (!flying)
+            value.setOnGround(MovementHandler::checkGroundState(host.getLevelFor(value), value.getPosition(), &value));
+        host._sendAbilities(value);
     }
 
     const char *playerXuid(FalconPlayer *target) {
@@ -159,6 +207,14 @@ void PluginServerApi::fillPlayers(FalconServerApi &api) {
     api.playerHasChunk = &playerHasChunk;
     api.playerGameMode = &playerGameMode;
     api.playerSetGameMode = &playerSetGameMode;
+    api.playerSetVisibleTo = &playerSetVisibleTo;
+    api.playerSpawnTo = &playerSpawnTo;
+    api.playerDespawnFrom = &playerDespawnFrom;
+    api.playerIsSpawnedTo = &playerIsSpawnedTo;
+    api.playerAllowFlight = &playerAllowFlight;
+    api.playerSetAllowFlight = &playerSetAllowFlight;
+    api.playerIsFlying = &playerIsFlying;
+    api.playerSetFlying = &playerSetFlying;
     api.serverSpawnSimulatedPlayer = &serverSpawnSimulatedPlayer;
     api.playerIsSimulated = &playerIsSimulated;
     api.playerRemoveSimulated = &playerRemoveSimulated;

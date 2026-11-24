@@ -23,16 +23,17 @@ private:
     static constexpr int USE_COOLDOWN_TICKS = 4;
 
     // false: the block takes no bone meal
-    static bool fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+    static bool fertilize(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                          ServerPlayer *player = nullptr);
 
     static bool applyToCrop(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                            const BlockState &state);
+                            const BlockState &state, ServerPlayer *player);
 
     static bool applyToSapling(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                               const BlockState &state);
+                               const BlockState &state, ServerPlayer *player);
 
-    static bool applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position);
+    static bool applyToGrass(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ServerPlayer *player);
 
     static bool applyToNylium(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                              const BlockState &state);
+                              const BlockState &state, ServerPlayer *player);
 };

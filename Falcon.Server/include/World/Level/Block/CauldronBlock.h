@@ -36,6 +36,13 @@ public:
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;
 
+    bool hearsActorsInside() const override {
+        return true;
+    }
+
+    void onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                       const BlockState &state) const override;
+
     void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state) const override;
 

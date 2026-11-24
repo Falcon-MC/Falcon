@@ -16,8 +16,11 @@ public:
         return true;
     }
 
+    bool tryGrow(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                 ServerPlayer *player) const;
+
 private:
-    bool growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const;
+    bool growTree(ServerNetworkHandler &owner, Level &level, const Vector3i &position, ServerPlayer *player) const;
 
     TreeWoodType getWoodType() const;
 };

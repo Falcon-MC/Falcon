@@ -443,6 +443,7 @@ add.mMetadata.mEntries.push_back(flags3);
             pluginEvent.mType = FALCON_EVENT_PLAYER_PICKUP_ITEM;
             pluginEvent.mCancellable = true;
             pluginEvent.mPlayer = &player;
+            pluginEvent.mEntity = &actor;
             pluginEvent.mItem = &eventItem;
             PluginManager::getInstance().dispatch(pluginEvent);
             if (actor.isRemoved())
