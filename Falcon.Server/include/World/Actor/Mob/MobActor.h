@@ -857,8 +857,7 @@ private:
 
     void _givePlayerItem(ServerNetworkHandler &owner, ServerPlayer &player, ItemStack item);
 
-    void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle,
-                               const std::string &type);
+    void _emitInteractParticle(ServerNetworkHandler &owner, const ServerPlayer &player, const json::Value &particle);
 
     // true when an attribute the client must hear about changed
     bool _syncMovementAttributes();
@@ -897,9 +896,10 @@ private:
     bool mEquipmentInherited = false;
     const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;
-    int32_t mTimerTicks = 0;
     // the world tick the timer runs out on, as saved; a loaded timer resumes from it
     int64_t mTimerStamp = 0;
+    bool mTimerExecuted = false;
+    // a saved stamp waiting for the timer component to come back after a load
     bool mTimerLoaded = false;
     const json::Value *mBreakBlocksComponent = nullptr;
     std::unordered_set<std::string> mBreakableBlocks;
