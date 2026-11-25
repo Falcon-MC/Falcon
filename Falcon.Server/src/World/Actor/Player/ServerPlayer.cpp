@@ -33,6 +33,7 @@
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Protocol/Types/CameraPresets.h"
 #include "Protocol/Types/StartGameTypes.h"
+#include "Scripting/Binding/ScriptRaycast.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Localization.h"
 #include "World/Item/ItemProperties.h"
@@ -258,6 +259,13 @@ bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &target
     const float threshold = std::clamp(owner.getProperties().getPlayerMovementActionDirectionThreshold(), 0.0f, 1.0f);
     const Vector3f eye(getPosition().x, getPosition().y + getEyeHeight(), getPosition().z);
     const float half = width * 0.5f;
+    const Vector3f look = getLookDirection();
+    // the client only attacks what its look ray hits: from inside the box, the nearest point can be far off the look
+    if (ScriptRaycast::intersectBox(eye, look, Vector3f(targetFeet.x - half, targetFeet.y, targetFeet.z - half),
+                                    Vector3f(targetFeet.x + half, targetFeet.y + height, targetFeet.z + half))
+        >= 0.0f)
+        return true;
+
     const Vector3f closest(std::clamp(eye.x, targetFeet.x - half, targetFeet.x + half),
                            std::clamp(eye.y, targetFeet.y, targetFeet.y + height),
                            std::clamp(eye.z, targetFeet.z - half, targetFeet.z + half));
@@ -266,7 +274,6 @@ bool ServerPlayer::_isFacing(ServerNetworkHandler &owner, const Vector3f &target
     if (length < FACING_MIN_DISTANCE)
         return true;
 
-    const Vector3f look = getLookDirection();
     return (look.x * toTarget.x + look.y * toTarget.y + look.z * toTarget.z) / length >= threshold;
 }
 
