@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <string>
 
-class ItemActor;
+class Actor;
 class Level;
 class NetworkIdentifier;
 class ServerPlayer;
@@ -90,14 +90,14 @@ struct PlayerBlockPickBeforeEvent : public CancellableEvent {
             : mPlayer(player), mLevel(level), mBlockPosition(position), mPicked(picked) {}
 };
 
-// an item entity pick before the item reaches the hotbar; cancelling gives nothing
+// an entity pick before the item reaches the hotbar; cancelling gives nothing
 struct PlayerEntityPickBeforeEvent : public CancellableEvent {
     ServerPlayer &mPlayer;
-    ItemActor &mItemActor;
+    Actor &mEntity;
     ItemStack &mPicked;
 
-    PlayerEntityPickBeforeEvent(ServerPlayer &player, ItemActor &itemActor, ItemStack &picked)
-            : mPlayer(player), mItemActor(itemActor), mPicked(picked) {}
+    PlayerEntityPickBeforeEvent(ServerPlayer &player, Actor &entity, ItemStack &picked)
+            : mPlayer(player), mEntity(entity), mPicked(picked) {}
 };
 
 // an item about to be dropped into the world; cancelling drops nothing
