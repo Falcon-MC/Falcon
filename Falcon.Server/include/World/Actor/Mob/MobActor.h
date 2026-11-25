@@ -462,8 +462,8 @@ public:
 
     bool canTarget(const Actor &actor) const;
 
-    // minecraft:rideable with a free seat and an accepted family
-    bool acceptsRider(const MobActor &rider) const;
+    // minecraft:rideable with a free seat and, when checked, an accepted family
+    bool acceptsRider(const MobActor &rider, bool checkFamilies = true) const;
 
     float distanceSquaredTo(const Actor &other) const;
 
