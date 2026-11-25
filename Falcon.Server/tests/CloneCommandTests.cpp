@@ -61,6 +61,17 @@ namespace {
                 "the blocks did not land in place");
         require(level.getBlockActors().find(Vector3i(6, 65, 0)) != nullptr, "the block actor was not copied");
 
+        // ~ coordinates written without spaces, from the console at 0 0 0
+        require(commands.dispatch(console, "clone ~~64~ ~1~65~ ~40~64~") && console.mLast == "commands.clone.success|4",
+                "unspaced relative coordinates were refused: " + console.mLast);
+        require(nameAt(level, 40, 64, 0) == "minecraft:stone", "unspaced relative coordinates copied elsewhere");
+        std::vector<std::string> tokens = {"~~-1.5~", "~hi~", "~", "5~"};
+        std::vector<size_t> starts = {0, 8, 13, 15};
+        CommandMap::splitRelativeCoordinates(tokens, &starts);
+        require(tokens == std::vector<std::string>{"~", "~-1.5", "~", "~hi~", "~", "5~"}
+                        && starts == std::vector<size_t>{0, 1, 6, 8, 13, 15},
+                "relative coordinates were split wrongly");
+
         // the console faces south: ^ forward is +z, ^ up is +y
         require(commands.dispatch(console, "setblock ^ ^64.5 ^50.5 stone")
                         && nameAt(level, 0, 64, 50) == "minecraft:stone",
