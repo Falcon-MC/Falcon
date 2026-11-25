@@ -1,0 +1,51 @@
+name: Protocol check
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - Falcon.Protocol/**
+  pull_request:
+    paths:
+      - Falcon.Protocol/**
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Compare with the protocol documentation
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch the documentation of our protocol version
+        run: |
+          set -euo pipefail
+          protocol=$(grep -oP 'CURRENT_PROTOCOL\s*=\s*\K[0-9]+' Falcon.Protocol/include/Protocol/ProtocolInfo.h)
+          git clone --quiet --filter=blob:none https://github.com/Mojang/bedrock-protocol-docs.git docs
+          found=""
+          for commit in $(git -C docs log --format=%H -- json/ActorEventPacket.json); do
+            if git -C docs show "$commit:json/ActorEventPacket.json" | grep -q "\"x-protocol-version\": $protocol\b"; then
+              found=$commit
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "::warning::No documentation found for protocol $protocol, using the latest one"
+            found=$(git -C docs rev-parse HEAD)
+          fi
+          git -C docs checkout --quiet "$found"
+          echo "Protocol $protocol, documentation commit $found"
+
+      - name: Compare
+        run: |
+          python3 Falcon.Protocol/tools/check_protocol.py --docs docs/json --report protocol-report.md > /dev/null
+          cat protocol-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v7
+        with:
+          name: protocol-report
+          path: protocol-report.md
