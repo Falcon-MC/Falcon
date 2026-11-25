@@ -8,6 +8,7 @@ FALCON_REGISTER_ITEM(ShearsItem, 130);
 #include "World/Actor/Mob/Passive/SheepActor.h"
 #include "World/Item/ItemDurability.h"
 #include "World/Inventory/Container.h"
+#include "World/Level/Block/BeehiveBlock.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/DispenseSource.h"
 #include "World/Level/Block/CobwebBlock.h"
@@ -16,6 +17,7 @@ FALCON_REGISTER_ITEM(ShearsItem, 130);
 #include "World/Level/Block/VineBlock.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "World/Level/Vibration/GameEvent.h"
 
 #include <cmath>
@@ -35,6 +37,15 @@ namespace {
         return position.x + halfWidth > (float) block.x && position.x - halfWidth < (float) block.x + 1.0f
                && position.z + halfWidth > (float) block.z && position.z - halfWidth < (float) block.z + 1.0f
                && position.y + size.mHeight > (float) block.y && position.y < (float) block.y + 1.0f;
+    }
+
+    void wearFromDispenser(const DispenseSource &source) {
+        ItemStack shears = source.getItem();
+        ItemDurability::apply(nullptr, shears, 1);
+        source.mContainer.setContainerItem(source.mSlot, std::move(shears));
+        source.mOwner.refreshContainerViewers(source.mBlockPosition);
+        source.playClick();
+        source.mLevel.postGameEvent(GameEvents::SHEAR, source.mPosition);
     }
 }
 
@@ -88,6 +99,15 @@ bool ShearsItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player,
 bool ShearsItem::dispense(const DispenseSource &source) const {
     const Vector3i block((int32_t) std::floor(source.mPosition.x), (int32_t) std::floor(source.mPosition.y),
                          (int32_t) std::floor(source.mPosition.z));
+    // a full hive comes before any mob; its bees stay calm, unlike when a player shears it
+    if (BeehiveBlock::isHarvestable(source.mLevel.getBlockState(block.x, block.y, block.z))) {
+        BeehiveBlock::dropHoneycombs(source.mOwner, source.mLevel, block);
+        BeehiveBlock::setHoneyLevel(source.mLevel, block, 0);
+        source.mOwner.playLevelSound(source.mLevel, LevelSoundEvent::BEEHIVE_SHEAR, source.mPosition);
+        wearFromDispenser(source);
+        return true;
+    }
+
     const Vector3f center((float) block.x + 0.5f, (float) block.y + 0.5f, (float) block.z + 0.5f);
     SheepActor *sheep = nullptr;
     source.mOwner.forEachActorNear(center, DISPENSE_SEARCH_RADIUS, [&](ServerActor &actor) {
@@ -100,17 +120,12 @@ bool ShearsItem::dispense(const DispenseSource &source) const {
             return;
         sheep = candidate;
     });
+    // the game keeps the shears in the dispenser even with nothing to shear, unworn and silent
     if (sheep == nullptr)
-        return false;
+        return true;
 
     sheep->shearFromDispenser(source.mOwner);
     source.mOwner.playLevelSound(source.mLevel, SHEAR_SOUND, source.mPosition);
-
-    ItemStack shears = source.getItem();
-    ItemDurability::apply(nullptr, shears, 1);
-    source.mContainer.setContainerItem(source.mSlot, std::move(shears));
-    source.mOwner.refreshContainerViewers(source.mBlockPosition);
-    source.playClick();
-    source.mLevel.postGameEvent(GameEvents::SHEAR, source.mPosition);
+    wearFromDispenser(source);
     return true;
 }
