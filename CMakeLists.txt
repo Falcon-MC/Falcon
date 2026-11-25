@@ -80,23 +80,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libdatachannel)
 
-FetchContent_Declare(
-    falcon_protocol
-    GIT_REPOSITORY https://github.com/Falcon-MC/Protocol.git
-    GIT_TAG main
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(falcon_protocol)
-
-FetchContent_Declare(
-    falcon_network
-    GIT_REPOSITORY https://github.com/Falcon-MC/Network.git
-    GIT_TAG main
-    GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(falcon_network)
+add_subdirectory(Falcon.Protocol)
+add_subdirectory(Falcon.Network)
 
 FetchContent_Declare(
     falcon_block_state_updater

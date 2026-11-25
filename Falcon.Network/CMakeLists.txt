@@ -7,14 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 
 if (NOT TARGET FalconProtocol)
-    FetchContent_Declare(
-        falcon_protocol
-        GIT_REPOSITORY https://github.com/Falcon-MC/Protocol.git
-        GIT_TAG main
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-    )
-    FetchContent_MakeAvailable(falcon_protocol)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../Falcon.Protocol ${CMAKE_CURRENT_BINARY_DIR}/Falcon.Protocol)
 endif ()
 
 if (NOT TARGET LibDataChannel::LibDataChannelStatic)

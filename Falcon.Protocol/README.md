@@ -33,42 +33,45 @@ NBT tags and binary streams come from [NBT](https://github.com/Falcon-MC/NBT), f
 
 ## Usage
 
-The library is a plain CMake target named `FalconProtocol`. The easiest way to use it is
-`FetchContent`:
+The library is a plain CMake target named `FalconProtocol`, part of the
+[Falcon](https://github.com/Falcon-MC/Falcon) repository. Falcon builds it with
+`add_subdirectory(Falcon.Protocol)`. Another project can take it from the Falcon repository:
 
 ```cmake
 include(FetchContent)
 
 FetchContent_Declare(
-    falcon_protocol
-    GIT_REPOSITORY https://github.com/Falcon-MC/Protocol.git
-    GIT_TAG main
+    falcon
+    GIT_REPOSITORY https://github.com/Falcon-MC/Falcon.git
+    GIT_TAG dev
     GIT_SHALLOW TRUE
+    SOURCE_SUBDIR Falcon.Protocol
 )
-FetchContent_MakeAvailable(falcon_protocol)
+FetchContent_MakeAvailable(falcon)
 
 target_link_libraries(your_target PRIVATE FalconProtocol)
 ```
 
 ## Building
 
-Only CMake 3.16+ and a C++17 compiler are required.
+Only CMake 3.16+ and a C++17 compiler are required. From this folder:
 
 ```
 cmake -B build -G Ninja
 cmake --build build
 ```
 
-## Related repositories
+## Related folders and repositories
 
-- [Falcon](https://github.com/Falcon-MC/Falcon) - the server
-- [Network](https://github.com/Falcon-MC/Network) - RakNet and NetherNet transport
+- [Falcon.Server](../Falcon.Server) - the server
+- [Falcon.Network](../Falcon.Network) - RakNet and NetherNet transport
 - [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
 - [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
+
 ## Licensing information
 
-Falcon Protocol is licensed under the [GNU Lesser General Public License v3.0](LICENSE), which supplements
-the [GNU General Public License v3.0](COPYING). It can be linked from projects under any license, as long as
+Falcon Protocol is licensed under the [GNU Lesser General Public License v3.0](../LICENSE), which supplements
+the [GNU General Public License v3.0](../COPYING). It can be linked from projects under any license, as long as
 changes to this library itself stay under the same license.
 
 Falcon is not affiliated with Mojang. All brands and trademarks belong to their respective owners.

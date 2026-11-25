@@ -89,7 +89,8 @@ cmake -B build -G Ninja
 cmake --build build
 ```
 
-Protocol, transport, NBT and game data live in their own repositories under
+The protocol and the transport are built from [Falcon.Protocol](Falcon.Protocol) and
+[Falcon.Network](Falcon.Network). NBT and game data live in their own repositories under
 [Falcon-MC](https://github.com/Falcon-MC).
 
 ## Contributing

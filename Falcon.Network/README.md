@@ -19,7 +19,7 @@
 
 Everything between the socket and a decoded Bedrock packet. It is the transport layer of
 [Falcon](https://github.com/Falcon-MC/Falcon) and builds on top of
-[Protocol](https://github.com/Falcon-MC/Protocol).
+[Falcon.Protocol](../Falcon.Protocol).
 
 - **RakNet** - own implementation of the peer, sockets, bit stream, reliability layer and connection
   handshake
@@ -32,19 +32,22 @@ Everything between the socket and a decoded Bedrock packet. It is the transport 
 
 ## Usage
 
-The library is a plain CMake target named `FalconNetwork`. When it is built on its own, it fetches
-Protocol and libdatachannel automatically:
+The library is a plain CMake target named `FalconNetwork`, part of the
+[Falcon](https://github.com/Falcon-MC/Falcon) repository. Falcon builds it with
+`add_subdirectory(Falcon.Network)`; on its own it builds [Falcon.Protocol](../Falcon.Protocol) from the
+folder next to it and fetches libdatachannel. Another project can take it from the Falcon repository:
 
 ```cmake
 include(FetchContent)
 
 FetchContent_Declare(
-    falcon_network
-    GIT_REPOSITORY https://github.com/Falcon-MC/Network.git
-    GIT_TAG main
+    falcon
+    GIT_REPOSITORY https://github.com/Falcon-MC/Falcon.git
+    GIT_TAG dev
     GIT_SHALLOW TRUE
+    SOURCE_SUBDIR Falcon.Network
 )
-FetchContent_MakeAvailable(falcon_network)
+FetchContent_MakeAvailable(falcon)
 
 target_link_libraries(your_target PRIVATE FalconNetwork)
 ```
@@ -52,23 +55,24 @@ target_link_libraries(your_target PRIVATE FalconNetwork)
 ## Building
 
 Requires CMake 3.16+, a C++17 compiler, zlib and OpenSSL. The first configure needs network access to
-fetch the dependencies.
+fetch the dependencies. From this folder:
 
 ```
 cmake -B build -G Ninja
 cmake --build build
 ```
 
-## Related repositories
+## Related folders and repositories
 
-- [Falcon](https://github.com/Falcon-MC/Falcon) - the server
-- [Protocol](https://github.com/Falcon-MC/Protocol) - packets and network types
+- [Falcon.Server](../Falcon.Server) - the server
+- [Falcon.Protocol](../Falcon.Protocol) - packets and network types
 - [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
 - [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
+
 ## Licensing information
 
-Falcon Network is licensed under the [GNU Lesser General Public License v3.0](LICENSE), which supplements
-the [GNU General Public License v3.0](COPYING). It can be linked from projects under any license, as long as
+Falcon Network is licensed under the [GNU Lesser General Public License v3.0](../LICENSE), which supplements
+the [GNU General Public License v3.0](../COPYING). It can be linked from projects under any license, as long as
 changes to this library itself stay under the same license.
 
 Falcon is not affiliated with Mojang. All brands and trademarks belong to their respective owners.

@@ -4,7 +4,12 @@ on:
   push:
     branches:
       - main
+      - dev
+    paths:
+      - Falcon.Protocol/**
   pull_request:
+    paths:
+      - Falcon.Protocol/**
   workflow_dispatch:
 
 jobs:
@@ -18,7 +23,7 @@ jobs:
       - name: Fetch the documentation of our protocol version
         run: |
           set -euo pipefail
-          protocol=$(grep -oP 'CURRENT_PROTOCOL\s*=\s*\K[0-9]+' include/Protocol/ProtocolInfo.h)
+          protocol=$(grep -oP 'CURRENT_PROTOCOL\s*=\s*\K[0-9]+' Falcon.Protocol/include/Protocol/ProtocolInfo.h)
           git clone --quiet --filter=blob:none https://github.com/Mojang/bedrock-protocol-docs.git docs
           found=""
           for commit in $(git -C docs log --format=%H -- json/ActorEventPacket.json); do
@@ -36,7 +41,7 @@ jobs:
 
       - name: Compare
         run: |
-          python3 tools/check_protocol.py --docs docs/json --report protocol-report.md > /dev/null
+          python3 Falcon.Protocol/tools/check_protocol.py --docs docs/json --report protocol-report.md > /dev/null
           cat protocol-report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the report
