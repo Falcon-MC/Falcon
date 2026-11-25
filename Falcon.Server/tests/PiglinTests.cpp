@@ -175,6 +175,39 @@ namespace {
         require(piglin.getEquipment().getSlot(MobEquipment::OFFHAND).isAir(), "the ingot was not spent");
     }
 
+    // the countdown is not saved: a piglin reloaded mid-admire admires its off hand ingot again, then barters
+    void barterAfterReload() {
+        Arena arena(DimensionType::Nether);
+        ServerPlayer &player = arena.player(1, Vector3f(0.5f, 64.0f, 4.5f));
+        MobActor &piglin = arena.spawn("minecraft:piglin", Vector3f(0.5f, 64.0f, 6.5f), "spawn_adult_melee");
+        player.getInventory().setArmor(0, arena.mOwner.createItemStack("minecraft:golden_helmet", 1));
+        player.getInventory().setItemInHand(arena.mOwner.createItemStack("minecraft:gold_ingot", 1));
+        require(InventoryHandler::interactWithEntity(arena.mOwner, player, piglin.getRuntimeId(), Vector3f()),
+                "the gold ingot did not reach the piglin");
+        arena.ticks(4 * TICKS_PER_SECOND);
+        require(piglin.getFlags().get(ActorFlag::Admiring), "the piglin stopped admiring early");
+
+        const Tag data = piglin.saveNbt();
+        const Vector3f position = piglin.getPosition();
+        arena.mOwner.removeActor(piglin.getUniqueId());
+        MobActor *loaded = dynamic_cast<MobActor *>(
+                arena.mOwner.spawnActor(arena.mLevel, "minecraft:piglin", position));
+        require(loaded != nullptr, "no piglin to load into");
+        loaded->loadNbt(data);
+        loaded->getEquipment().loadNbt(data, arena.mOwner.getCodecContext());
+        require(heldName(*loaded, MobEquipment::OFFHAND) == "minecraft:gold_ingot", "the reload lost the ingot");
+
+        ServerNetworkHandler::DropCapture capture;
+        arena.mOwner.setDropCapture(&capture);
+        arena.ticks(1);
+        require(loaded->getFlags().get(ActorFlag::Admiring), "the reloaded piglin does not admire its ingot");
+        arena.ticks(8 * TICKS_PER_SECOND + 20);
+        arena.mOwner.setDropCapture(nullptr);
+        require(!loaded->getFlags().get(ActorFlag::Admiring), "the reloaded piglin admires forever");
+        require(!capture.mItems.empty(), "the reloaded piglin did not barter");
+        require(loaded->getEquipment().getSlot(MobEquipment::OFFHAND).isAir(), "the reloaded piglin kept the ingot");
+    }
+
     // 15 s of shaking outside the Nether, then a zombified piglin with the same gear; the countdown survives a reload
     void zombification() {
         Arena arena(DimensionType::Overworld);
@@ -225,6 +258,7 @@ int main() {
         goldArmorNeutrality();
         angerFollowsTheCooldown();
         barter();
+        barterAfterReload();
         zombification();
         babiesAndBrutes();
     } catch (const std::exception &error) {

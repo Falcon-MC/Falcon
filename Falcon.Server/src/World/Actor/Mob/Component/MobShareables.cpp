@@ -65,6 +65,11 @@ const json::Value *MobShareables::findEntry(const MobActor &mob, const ItemStack
     return nullptr;
 }
 
+bool MobShareables::isAdmired(const MobActor &mob, const ItemStack &item) {
+    const json::Value *entry = findEntry(mob, item);
+    return entry != nullptr && flagIn(*entry, "admire");
+}
+
 bool MobShareables::isBarterCurrency(const MobActor &mob, const ItemStack &item) {
     const json::Value *entry = findEntry(mob, item);
     return entry != nullptr && flagIn(*entry, "barter");

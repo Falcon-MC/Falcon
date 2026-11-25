@@ -18,6 +18,8 @@ public:
 
     static bool store(ServerNetworkHandler &owner, MobActor &mob, const ItemStack &item);
 
+    static bool isAdmired(const MobActor &mob, const ItemStack &item);
+
     static bool isBarterCurrency(const MobActor &mob, const ItemStack &item);
 
     static int findEquippableInventorySlot(const MobActor &mob);

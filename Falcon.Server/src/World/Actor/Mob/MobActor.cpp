@@ -2979,6 +2979,7 @@ void MobActor::loadNbt(const Tag &data) {
     mTargetCaptainId = data.getLong(TAG_TARGET_CAPTAIN, 0);
     mEconomy.loadNbt(data);
     mDweller.loadNbt(data);
+    mAdmiration.resumeAfterLoad();
     if (data.contains(TAG_AIR))
         mAirSupply = data.getShort(TAG_AIR, 0);
     mRolledMovementSpeed = data.getFloat(TAG_MOVEMENT_SPEED, attributeIn(data, "minecraft:movement", -1.0f));
