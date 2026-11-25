@@ -1284,7 +1284,8 @@ int MobActor::getInventoryCapacity() const {
         return 0;
     const int base = std::clamp((int) numberIn(inventory, "inventory_size", (float) DEFAULT_INVENTORY_SIZE), 0, 256);
     const int perStrength = std::clamp((int) numberIn(inventory, "additional_slots_per_strength", 0.0f), 0, 256);
-    if (_isMountInventory() && getInventoryStrength() > 0)
+    // a bred llama has no strength, so its chest holds nothing: the client reads the same 0
+    if (_isMountInventory() && perStrength > 0)
         return std::min(256, _equippableSlotCount() + getInventoryStrength() * perStrength);
     return base;
 }
@@ -2377,10 +2378,12 @@ void MobActor::_appendDefinitionData(EntityDataMap &metadata) const {
                 (int32_t) numberIn(inventory, "inventory_size", DEFAULT_INVENTORY_SIZE));
         pushInt(ActorFlags::CONTAINER_STRENGTH_DATA_ID, (int32_t) numberIn(inventory, "additional_slots_per_strength", 0));
     }
-    if (const json::Value *strength = getComponent("minecraft:strength")) {
+    const json::Value *strength = getComponent("minecraft:strength");
+    const json::Value *inventory = getComponent(INVENTORY_COMPONENT);
+    if (strength != nullptr || (_isMountInventory() && numberIn(inventory, "additional_slots_per_strength", 0) > 0))
         pushInt(ActorFlags::STRENGTH_DATA_ID, getInventoryStrength());
+    if (strength != nullptr)
         pushInt(ActorFlags::MAX_STRENGTH_DATA_ID, (int32_t) numberIn(strength, "max", 5));
-    }
 
     if (MobEconomy::isTrader(*this))
         mEconomy.appendMetadata(metadata);

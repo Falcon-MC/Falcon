@@ -154,20 +154,9 @@ namespace {
         return slots == nullptr || !slots->isArray() ? 0 : (int) slots->mArray.size();
     }
 
-    // a mount without its chest has none; a strength gives its own count, as the llama's
+    // a mount without its chest has none; the capacity already follows a llama's strength
     int chestSlotCount(const MobActor &mob, int capacity, int equippable) {
-        if (mob.getComponent("minecraft:is_chested") == nullptr)
-            return 0;
-
-        const json::Value *strength = mob.getComponent("minecraft:strength");
-        const json::Value *value = strength == nullptr ? nullptr : strength->get("value");
-        const int strengthValue = value == nullptr ? 0 : value->integer(0);
-        if (strengthValue <= 0)
-            return capacity - equippable;
-
-        const json::Value *inventory = mob.getComponent("minecraft:inventory");
-        const json::Value *perStrength = inventory == nullptr ? nullptr : inventory->get("additional_slots_per_strength");
-        return (perStrength == nullptr ? 0 : perStrength->integer(0)) * strengthValue;
+        return mob.getComponent("minecraft:is_chested") == nullptr ? 0 : std::max(0, capacity - equippable);
     }
 
     Outcome replaceMainhand(ServerNetworkHandler &owner, ServerPlayer *player, MobActor *mob, const Request &request) {

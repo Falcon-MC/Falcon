@@ -1505,7 +1505,7 @@ bool InventoryManager::openEntityContainer(ServerActor &actor, ContainerType typ
     if (mContainerWindowId != CONTAINER_ID_NONE)
         return mContainerActorId == actor.getUniqueId();
     if (mMainInventoryWindowId != CONTAINER_ID_NONE || mCraftingTableWindowId != CONTAINER_ID_NONE
-        || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mTradeWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
+        || mFurnaceWindowId != CONTAINER_ID_NONE || mAnvilWindowId != CONTAINER_ID_NONE || mHasPendingCloseWindow)
         return false;
 
     const int windowId = _getNewWindowId();

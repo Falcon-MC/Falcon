@@ -130,8 +130,9 @@ namespace {
             return "container";
 
         switch (type) {
+            // plugins see a mount's equipment and chest as one container, numbered by containerSlot
             case ContainerSlotType::HorseEquip:
-                return "horse_equip";
+                return "container";
             case ContainerSlotType::Hotbar:
                 return "hotbar";
             case ContainerSlotType::Inventory:
@@ -190,6 +191,15 @@ namespace {
     bool hasDestination(ItemStackRequestActionType type) {
         return type == ItemStackRequestActionType::Take || type == ItemStackRequestActionType::Place
                || type == ItemStackRequestActionType::Swap;
+    }
+
+    // the client numbers a mount's chest after its own equipment range; plugins get the container index
+    int containerSlot(const Container *openContainer, ContainerSlotType type, int slot) {
+        if (openContainer == nullptr || openContainer->getEquipmentSlotCount() == 0
+            || (!isBlockContainer(type) && type != ContainerSlotType::HorseEquip))
+            return slot;
+        const int index = openContainer->getNetworkSlotIndex(type, slot);
+        return index < 0 ? slot : index;
     }
 
     ItemStack itemAt(const PlayerInventory &inventory, Container *openContainer, ContainerSlotType type, int slot) {
@@ -315,9 +325,13 @@ namespace {
                 actionsJson += actionCount++ == 0 ? "[" : ",";
                 actionsJson += "[\"" + std::string(name) + "\",\""
                                + containerName(action.mSource.mContainerName.mContainer) + "\","
-                               + std::to_string(action.mSource.mSlot) + ",\""
+                               + std::to_string(containerSlot(openContainer, action.mSource.mContainerName.mContainer,
+                                                              action.mSource.mSlot)) + ",\""
                                + (destination ? containerName(action.mDestination.mContainerName.mContainer) : "")
-                               + "\"," + std::to_string(destination ? action.mDestination.mSlot : -1)
+                               + "\","
+                               + std::to_string(destination ? containerSlot(openContainer,
+                                                                            action.mDestination.mContainerName.mContainer,
+                                                                            action.mDestination.mSlot) : -1)
                                + "," + std::to_string(action.mCount) + "]";
             }
             if (actionCount > 1)
@@ -339,10 +353,11 @@ namespace {
             transactionEvent.mItem = &item;
             transactionEvent.mAmount = (double) action.mCount;
             transactionEvent.mSourceContainer = containerName(sourceType);
-            transactionEvent.mSourceSlot = action.mSource.mSlot;
+            transactionEvent.mSourceSlot = containerSlot(openContainer, sourceType, action.mSource.mSlot);
             if (hasDestination(action.mType)) {
-                transactionEvent.mDestinationContainer = containerName(action.mDestination.mContainerName.mContainer);
-                transactionEvent.mDestinationSlot = action.mDestination.mSlot;
+                const ContainerSlotType destinationType = action.mDestination.mContainerName.mContainer;
+                transactionEvent.mDestinationContainer = containerName(destinationType);
+                transactionEvent.mDestinationSlot = containerSlot(openContainer, destinationType, action.mDestination.mSlot);
             }
 
             // The first in a group carries the complete request. Individual callbacks still receive each action.

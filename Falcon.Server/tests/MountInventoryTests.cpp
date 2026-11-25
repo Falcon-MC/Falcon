@@ -1,3 +1,7 @@
+#include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginApiHelpers.h"
+#include "Falcon/Plugin/PluginManager.h"
+#include "Falcon/Plugin/PluginServerApi.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
@@ -43,6 +47,10 @@ namespace {
                 for (int z = -1; z <= 1; ++z)
                     mLevel.insertChunk(LevelChunk(x, z)).setPopulated(true);
             }
+            listen();
+        }
+
+        void listen() {
             mOwner.getNetworkHandler().setOutboundFilter([this](const NetworkIdentifier &id, std::string &bytes) {
                 ReadOnlyBinaryStream header(bytes);
                 unsigned char sender = 0, recipient = 0;
@@ -82,15 +90,19 @@ namespace {
             return player;
         }
 
-        MobActor &spawn(const char *identifier, ServerPlayer &player) {
+        MobActor &spawn(const char *identifier, ServerPlayer &player, const char *event = "minecraft:spawn_adult",
+                        bool tame = true) {
             auto *mob = dynamic_cast<MobActor *>(mOwner.spawnActor(mLevel, identifier, Vector3f(0.5f, 100.0f, 0.5f),
-                    [](ServerActor &actor) {
-                        static_cast<MobActor &>(actor).setSpawnEvent("minecraft:spawn_adult");
+                    [event](ServerActor &actor) {
+                        static_cast<MobActor &>(actor).setSpawnEvent(event);
                     }));
             require(mob != nullptr, "mount did not spawn");
             mob->startDefinition(mOwner);
+            if (!tame)
+                return *mob;
             require(mob->getEntityContainer() == nullptr, "wild mount exposed an inventory");
-            require(mob->tameTo(mOwner, player, "minecraft:tamemount", false), "mount could not be tamed");
+            require(mob->tameTo(mOwner, player, "minecraft:tamemount", false),
+                    std::string(identifier) + " could not be tamed");
             require(mob->getEntityContainer() != nullptr, "tamed mount has no inventory");
             return *mob;
         }
@@ -105,6 +117,15 @@ namespace {
             require(!mContents.empty() && mContents.back().mContainerId == mOpened.mWindowId
                     && mContents.back().mContents.size() == (size_t) mob.getEntityContainer()->getContainerSize(),
                     "open packet did not include the full inventory");
+        }
+
+        void attachChest(ServerPlayer &player, MobActor &mob) {
+            player.getInventory().setSelectedSlot(1);
+            player.getInventory().setItem(1, mOwner.createItemStack("minecraft:chest", 1));
+            require(InventoryHandler::interactWithEntity(mOwner, player, mob.getRuntimeId(), Vector3f()),
+                    "chest interaction was ignored");
+            require(mob.getComponent("minecraft:is_chested") != nullptr && player.getInventory().getItem(1).isAir(),
+                    "chest was not attached and consumed");
         }
 
         void close(ServerPlayer &player) {
@@ -231,12 +252,7 @@ namespace {
         require(container.getContainerItem(0).mDefinition->getIdentifier() == "minecraft:red_carpet",
                 "carpet swaps lost the original equipment");
         arena.close(player);
-        player.getInventory().setSelectedSlot(1);
-        player.getInventory().setItem(1, arena.mOwner.createItemStack("minecraft:chest", 1));
-        require(InventoryHandler::interactWithEntity(arena.mOwner, player, llama.getRuntimeId(), Vector3f()),
-                "chest interaction was ignored");
-        require(llama.getComponent("minecraft:is_chested") != nullptr && player.getInventory().getItem(1).isAir(),
-                "chest was not attached and consumed");
+        arena.attachChest(player, llama);
         require(container.getContainerSize() == 1 + 3 * strength, "llama capacity does not follow strength");
         EntityDataMap metadata;
         llama.fillSpawnMetadata(metadata);
@@ -289,6 +305,93 @@ namespace {
         arena.open(player, *restored);
         arena.close(player);
     }
+
+    int intData(MobActor &mob, int id) {
+        EntityDataMap metadata;
+        mob.fillSpawnMetadata(metadata);
+        for (const auto &entry: metadata.mEntries) {
+            if (entry.mId == id)
+                return entry.mFormat == EntityDataFormat::Int ? entry.mIntValue : -2;
+        }
+        return -1;
+    }
+
+    // offspring get no strength group, so the client works out an empty chest; the server must agree
+    void bredLlama(Arena &arena) {
+        auto &player = arena.player(5300);
+        auto &llama = arena.spawn("minecraft:llama", player, "minecraft:entity_born", false);
+        require(llama.getComponent("minecraft:is_baby") != nullptr, "born llama is not a baby");
+        llama.fireEvent(arena.mOwner, "minecraft:ageable_grow_up");
+        require(llama.getComponent("minecraft:strength") == nullptr, "bred llama got a strength");
+        require(llama.tameTo(arena.mOwner, player, "minecraft:tamemount", false), "bred llama could not be tamed");
+        arena.attachChest(player, llama);
+        auto &container = *llama.getEntityContainer();
+        require(container.getContainerSize() == 1 && container.getEquipmentSlotCount() == 1,
+                "strength-less llama exposed cargo");
+        require(intData(llama, ActorFlags::STRENGTH_DATA_ID) == 0, "client was not told the llama has no strength");
+        arena.open(player, llama);
+        player.getInventory().setItem(2, arena.mOwner.createItemStack("minecraft:diamond", 4));
+        arena.send(player, {arena.move(player, container, 2, ContainerSlotType::LevelEntity, 0, 1)}, false);
+        require(player.getInventory().getItem(2).mCount == 4, "strength-less llama accepted cargo");
+        arena.close(player);
+    }
+
+    void donkey(Arena &arena) {
+        auto &player = arena.player(5400);
+        auto &donkey = arena.spawn("minecraft:donkey", player);
+        auto &container = *donkey.getEntityContainer();
+        require(container.getContainerSize() == 1 && container.getEquipmentSlotCount() == 1, "unchested donkey slots");
+        arena.attachChest(player, donkey);
+        require(container.getContainerSize() == 16, "chested donkey has no fifteen cargo slots");
+        arena.open(player, donkey);
+
+
+        struct Seen {
+            std::string mSource, mDestination;
+            int mSourceSlot = -2, mDestinationSlot = -2;
+            std::string mItem;
+        } seen;
+        const FalconServerApi &api = PluginServerApi::get();
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Mount fixture";
+        listener.mEnabled = true;
+        const auto subscription = api.subscribe(
+                PluginManager::toHandle(listener), FALCON_EVENT_INVENTORY_TRANSACTION, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *data) {
+                    const FalconServerApi &events = PluginServerApi::get();
+                    auto &record = *static_cast<Seen *>(data);
+                    record.mSource = events.eventSourceContainer(event);
+                    record.mSourceSlot = events.eventSourceSlot(event);
+                    record.mDestination = events.eventDestinationContainer(event);
+                    record.mDestinationSlot = events.eventDestinationSlot(event);
+                    const ItemStack *item = PluginApiHelpers::item(events.eventItem(event));
+                    record.mItem = item == nullptr || item->isAir() ? "" : item->mDefinition->getIdentifier();
+                }, &seen);
+        // a subscription resets the outbound filter
+        arena.listen();
+
+        player.getInventory().setItem(0, arena.mOwner.createItemStack("minecraft:saddle", 1));
+        arena.send(player, {arena.move(player, container, 0, ContainerSlotType::HorseEquip, 0, 1)}, true);
+        require(donkey.getComponent("minecraft:is_saddled") != nullptr, "donkey saddle did not enable riding control");
+        require(seen.mDestination == "container" && seen.mDestinationSlot == 0, "plugins saw the wrong saddle slot");
+
+        player.getInventory().setItem(2, arena.mOwner.createItemStack("minecraft:stone", 3));
+        arena.send(player, {arena.move(player, container, 2, ContainerSlotType::LevelEntity, 0, 1)}, true);
+        require(seen.mDestination == "container" && seen.mDestinationSlot == 1,
+                "plugins saw the client cargo slot instead of the container index");
+        arena.send(player, {arena.move(player, container, 2, ContainerSlotType::LevelEntity, 14, 1)}, true);
+        arena.send(player, {arena.move(player, container, 2, ContainerSlotType::LevelEntity, 15, 1)}, false);
+        require(container.getContainerItem(0).mDefinition->getIdentifier() == "minecraft:saddle"
+                && container.getContainerItem(1).mCount == 1 && container.getContainerItem(15).mCount == 1,
+                "donkey cargo overwrote the saddle or used the wrong slot");
+
+        arena.send(player, {arena.move(player, container, 3, ContainerSlotType::LevelEntity, 14, 1, true)}, true);
+        require(seen.mSource == "container" && seen.mSourceSlot == 15 && seen.mItem == "minecraft:stone",
+                "plugins saw the wrong cargo item or slot");
+        api.unsubscribe(subscription);
+        arena.listen();
+        arena.close(player);
+    }
 }
 
 int main() {
@@ -304,6 +407,8 @@ int main() {
         horse(arena);
         for (int strength = 1; strength <= 5; ++strength)
             llama(arena, strength);
+        bredLlama(arena);
+        donkey(arena);
         std::cout << "mount inventory checks passed\n";
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
