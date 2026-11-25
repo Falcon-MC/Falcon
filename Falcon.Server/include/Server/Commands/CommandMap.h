@@ -29,6 +29,9 @@ public:
     static std::vector<std::string> tokenize(const std::string &commandLine, std::vector<size_t> *starts = nullptr,
                                              bool *endsInToken = nullptr);
 
+    // ~~5~ written without spaces becomes ~, ~5 and ~; starts, when given, follow the split tokens
+    static void splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts = nullptr);
+
 private:
 
     static std::string _skipFields(const std::string &commandLine, size_t count);

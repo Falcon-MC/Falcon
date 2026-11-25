@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <utility>
 
 namespace {
     std::string toLowerCase(const std::string &value) {
@@ -9,6 +11,37 @@ namespace {
         std::transform(lowered.begin(), lowered.end(), lowered.begin(),
                        [](unsigned char character) { return (char) std::tolower(character); });
         return lowered;
+    }
+
+    // the parts of a token made only of ~ coordinates, or nothing
+    std::vector<std::string> relativeParts(const std::string &token) {
+        if (token.empty() || token[0] != '~')
+            return {};
+
+        std::vector<std::string> parts;
+        for (size_t begin = 0; begin < token.size();) {
+            const size_t end = token.find('~', begin + 1);
+            parts.push_back(token.substr(begin, end == std::string::npos ? std::string::npos : end - begin));
+            begin = end;
+        }
+
+        float ignored = 0.0f;
+        for (const std::string &part: parts) {
+            if (!Command::parseCoordinate(part, 0.0f, ignored))
+                return {};
+        }
+        return parts;
+    }
+
+    // a message keeps its text as typed
+    bool takesMessage(const Command &command) {
+        for (const CommandOverloadData &overload: command.getOverloads()) {
+            for (const CommandParamData &parameter: overload.mParameters) {
+                if (parameter.mHasType && parameter.mType == CommandParamType::Message)
+                    return true;
+            }
+        }
+        return false;
     }
 }
 
@@ -137,6 +170,26 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
     return tokens;
 }
 
+void CommandMap::splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts) {
+    for (size_t index = 0; index < tokens.size(); ++index) {
+        const std::vector<std::string> parts = relativeParts(tokens[index]);
+        if (parts.size() < 2)
+            continue;
+
+        tokens.erase(tokens.begin() + (std::ptrdiff_t) index);
+        tokens.insert(tokens.begin() + (std::ptrdiff_t) index, parts.begin(), parts.end());
+        if (starts != nullptr && index < starts->size()) {
+            size_t start = (*starts)[index];
+            starts->erase(starts->begin() + (std::ptrdiff_t) index);
+            for (size_t part = 0; part < parts.size(); ++part) {
+                starts->insert(starts->begin() + (std::ptrdiff_t) (index + part), start);
+                start += parts[part].size();
+            }
+        }
+        index += parts.size() - 1;
+    }
+}
+
 std::string CommandMap::_skipFields(const std::string &commandLine, size_t count) {
     size_t index = 0;
     size_t skipped = 0;
@@ -183,6 +236,15 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
     std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
 
     const size_t rawIndex = command->getRawArgumentIndex();
+    // the game reads ~ as a token of its own, spaces or not; a chained command splits under its own rules
+    if (rawIndex == (size_t) -1 && !takesMessage(*command)) {
+        const auto tail = command->chainsCommands() ? std::find(arguments.begin(), arguments.end(), "run")
+                                                    : arguments.end();
+        std::vector<std::string> split(arguments.begin(), tail);
+        splitRelativeCoordinates(split);
+        split.insert(split.end(), tail, arguments.end());
+        arguments = std::move(split);
+    }
     if (rawIndex != (size_t) -1 && arguments.size() > rawIndex) {
         const std::string raw = _skipFields(line, rawIndex + 1);
         if (!raw.empty()) {

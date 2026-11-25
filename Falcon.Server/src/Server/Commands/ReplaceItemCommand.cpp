@@ -501,7 +501,8 @@ std::vector<CommandOverloadData> ReplaceItemCommand::getOverloads() const {
 bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     const std::string line = arguments.empty() ? std::string() : arguments[0];
     std::vector<size_t> starts;
-    const std::vector<std::string> tokens = CommandMap::tokenize(line, &starts);
+    std::vector<std::string> tokens = CommandMap::tokenize(line, &starts);
+    CommandMap::splitRelativeCoordinates(tokens, &starts);
 
     const bool entity = !tokens.empty() && tokens[0] == "entity";
     if (!entity && (tokens.empty() || tokens[0] != "block")) {
