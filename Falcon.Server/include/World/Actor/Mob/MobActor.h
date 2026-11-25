@@ -22,6 +22,7 @@
 #include "World/Actor/Mob/Component/MobAmbientSounds.h"
 #include "World/Actor/Mob/Component/MobAngerLevel.h"
 #include "World/Actor/Mob/Component/MobEffectAura.h"
+#include "World/Actor/Mob/Component/MobTeleport.h"
 #include "World/Actor/Mob/Component/MobDweller.h"
 #include "World/Actor/Mob/Component/MobEconomy.h"
 #include "World/Actor/Mob/MobEntitySpawner.h"
@@ -195,6 +196,15 @@ public:
     }
 
     void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
+
+    bool dodgeProjectile(ServerNetworkHandler &owner, const ServerActor &projectile) override {
+        return mTeleport.dodge(owner, *this, projectile);
+    }
+
+    // one try at a spot of minecraft:teleport's random_teleport_cube; false without the component
+    bool randomTeleport(ServerNetworkHandler &owner) {
+        return mTeleport.randomTeleport(owner, *this);
+    }
 
     bool senseDamage(ServerNetworkHandler &owner, float &amount, const ActorDamageSource &source) override;
 
@@ -945,6 +955,7 @@ private:
     MobAngerLevel mAngerLevel;
     MobAmbientSounds mAmbientSounds;
     MobEffectAura mEffectAura;
+    MobTeleport mTeleport;
     std::optional<Vector3i> mSuspectPosition;
     int64_t mSuspectTick = 0;
     MobDweller mDweller;

@@ -400,6 +400,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
     mAngerLevel.tick(owner, *this);
     mAmbientSounds.tick(owner, *this);
     mEffectAura.tick(owner, *this);
+    mTeleport.tick(owner, *this);
     mAdmiration.tick(owner, *this);
     mDweller.tick(owner, *this);
     mEconomy.tick(owner, *this);
