@@ -2,6 +2,7 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Level.h"
 #include "Falcon/Plugin/PluginManager.h"
 
 PlayerCommandOrigin::PlayerCommandOrigin(ServerNetworkHandler &handler, ServerPlayer &player,
@@ -46,6 +47,9 @@ void PlayerCommandOrigin::_collect(std::string text, std::vector<std::string> pa
 
 void PlayerCommandOrigin::sendCollectedOutput(bool success) {
     mCollecting = false;
+    // sendcommandfeedback false hides what a player's commands say when they work; errors still show
+    if (success && !mHandler.getLevelFor(mPlayer).getGameRules().getBool("sendcommandfeedback"))
+        mCollected.clear();
     if (mCollected.empty())
         return;
     std::vector<CommandOutputMessage> messages;

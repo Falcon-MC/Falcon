@@ -182,6 +182,18 @@ namespace {
         const CommandOutputPacket succeeded = request("/time set 1000");
         require(succeeded.mSuccessCount == 1 && !succeeded.mMessages.empty() && succeeded.mMessages[0].mInternal,
                 "a successful command was shown as an error");
+
+        // sendcommandfeedback false: nothing for a command that works, the error still for one that fails
+        level.getGameRules().setFromString("sendcommandfeedback", "false");
+        outputs.clear();
+        CommandRequestPacket quiet;
+        quiet.mCommand = "/time set 2000";
+        quiet.handle(id, server);
+        require(outputs.empty() && level.getDayTime() == 2000, "sendcommandfeedback false still showed a success");
+        const CommandOutputPacket stillFailed = request("/summon cow 1 2 x");
+        require(stillFailed.mSuccessCount == 0 && stillFailed.mMessages.size() == 1,
+                "sendcommandfeedback false hid an error");
+        level.getGameRules().setFromString("sendcommandfeedback", "true");
         server.getNetworkHandler().setOutboundFilter(nullptr);
     }
 }
