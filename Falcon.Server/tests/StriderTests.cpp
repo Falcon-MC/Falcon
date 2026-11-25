@@ -2,6 +2,7 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/AI/Goal/MoveToLiquidGoal.h"
 #include "World/Actor/AI/Goal/RiseToLiquidLevelGoal.h"
+#include "World/Actor/AI/Navigation/Path.h"
 #include "World/Actor/AI/Navigation/PathFinder.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
@@ -130,6 +131,51 @@ namespace {
         require(!goal.canUse(arena.mOwner, strider), "the goal runs out of any liquid");
     }
 
+    // navigation can_walk_in_lava without can_sink: no gravity or lava drag in lava, the rise goal lifts the strider
+    // to the surface; its paths run and end on top of the lava, and it climbs out onto the bank
+    void walksOnDeepLava() {
+        Arena arena(DimensionType::Nether);
+        for (int32_t x = -8; x <= 8; x++) {
+            for (int32_t z = -8; z <= 8; z++) {
+                const bool pool = x >= -4 && x <= 4 && z >= -3 && z <= 3;
+                for (int32_t y = 57; y <= 63; y++)
+                    arena.mLevel.setBlockState(x, y, z,
+                                               BlockState(pool && y > 57 ? "minecraft:lava" : "minecraft:stone"));
+            }
+        }
+        ServerPlayer &player = arena.player(1, Vector3f(8.5f, 64.0f, 0.5f));
+        MobActor &strider = arena.spawn("minecraft:strider", Vector3f(0.5f, 58.0f, 0.5f), "spawn_adult");
+        // the rise goal settles the feet half a block into the top lava block
+        int32_t surfaced = -1;
+        for (int32_t tick = 0; tick < 10 * TICKS_PER_SECOND && surfaced < 0; tick++) {
+            arena.ticks(1);
+            const Vector3f position = strider.getPosition();
+            const bool overLava = std::fabs(position.x) < 4.0f && std::fabs(position.z) < 3.0f;
+            if (overLava && position.y > 63.2f && position.y < 64.0f)
+                surfaced = tick;
+        }
+        require(surfaced >= 0, "a strider in deep lava stayed at " + std::to_string(strider.getPosition().y));
+
+        // from the lava bed to the lava bed: the path starts, runs and ends on top of the lava
+        strider.setPosition(Vector3f(-2.5f, 58.0f, 0.5f));
+        Path path;
+        require(PathFinder::get().findPath(arena.mLevel, strider, Vector3f(3.5f, 58.0f, 0.5f),
+                                           strider.getNavigation().getOptions(), path)
+                        && path.reachesTarget(),
+                "no path across the lava");
+        for (const Vector3f &waypoint: path.getWaypoints())
+            require(waypoint.y == 64.0f, "a path node sits in the lava at " + std::to_string(waypoint.y));
+
+        strider.setPosition(Vector3f(-0.5f, 63.5f, 0.5f));
+        strider.setMotion(Vector3f());
+        player.getInventory().setItemInHand(arena.mOwner.createItemStack("minecraft:warped_fungus", 1));
+        arena.ticks(15 * TICKS_PER_SECOND);
+        const Vector3f end = strider.getPosition();
+        require(end.x > 5.0f && end.y >= 64.0f,
+                "the tempted strider did not cross the lava onto the bank: " + std::to_string(end.x) + ", "
+                        + std::to_string(end.y));
+    }
+
     void shiversOnLand() {
         Arena arena(DimensionType::Nether);
         MobActor &strider = arena.spawn("minecraft:strider", Vector3f(0.5f, 64.0f, 0.5f), "spawn_adult");
@@ -216,6 +262,7 @@ int main() {
     try {
         EntityDefinitions::initialize();
         risesToTheSurface();
+        walksOnDeepLava();
         shiversOnLand();
         findsTheLava();
         saddleAndStick();

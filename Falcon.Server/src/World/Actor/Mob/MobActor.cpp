@@ -1249,6 +1249,8 @@ PhysicsComponent MobActor::getPhysics() const {
     if (definition.mHasAutoStep)
         physics.mStepHeight = getPassengers().empty() ? definition.mAutoStep : definition.mControlledAutoStep;
     physics.mBuoyancy = definition.mBuoyancy;
+    physics.mWalksInLava = mNavigation.getOptions().mCanWalkInLava;
+    physics.mSinksInLava = mNavigation.getOptions().mCanSink;
     return physics;
 }
 

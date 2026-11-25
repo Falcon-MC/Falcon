@@ -37,6 +37,8 @@ private:
 
     void _tickSwimming(MobActor &mob);
 
+    static float _lavaSpeedRatio(const MobActor &mob);
+
     void _steerTowards(MobActor &mob, float cruise);
 
     Vector3f mWantedPosition;

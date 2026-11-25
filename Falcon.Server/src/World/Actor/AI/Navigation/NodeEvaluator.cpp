@@ -85,6 +85,10 @@ bool NodeEvaluator::isStandable(int32_t x, int32_t y, int32_t z) {
     if ((ground & Lava) != 0 && !mOptions->mCanPathOverLava && !mOptions->mCanWalkInLava)
         return false;
 
+    // a mob floating on lava stands on its surface, never in it or on its bed
+    if ((feet & Lava) != 0 && mOptions->floatsOnLava())
+        return false;
+
     if ((ground & Water) != 0 && mOptions->mAvoidWater && !mInWater)
         return false;
 
@@ -98,6 +102,14 @@ bool NodeEvaluator::isStandable(int32_t x, int32_t y, int32_t z) {
         return false;
 
     return isPassable((float) x + HALF_BLOCK, (float) (y + 1), (float) z + HALF_BLOCK);
+}
+
+int32_t NodeEvaluator::aboveLava(int32_t x, int32_t y, int32_t z) {
+    if (!mOptions->floatsOnLava())
+        return y;
+    while ((_block(x, y, z).mFlags & Lava) != 0)
+        ++y;
+    return y;
 }
 
 bool NodeEvaluator::canClimb(int32_t x, int32_t feetY, int32_t z) {

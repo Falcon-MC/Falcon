@@ -28,5 +28,9 @@ struct PhysicsComponent {
     float mFrictionModifier = 1.0f;
     float mAirDragModifier = 1.0f;
     bool mUniformAirDrag = false;
+    // navigation can_walk_in_lava: in lava the game drops the lava drag for ground friction; without can_sink
+    // there is no gravity either and the mob holds its height
+    bool mWalksInLava = false;
+    bool mSinksInLava = true;
     BuoyancySettings mBuoyancy;
 };

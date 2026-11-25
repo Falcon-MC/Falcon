@@ -21,6 +21,7 @@ namespace {
     const float FLY_APPROACH_FACTOR = 0.25f;
     const float FLY_STEERING = 0.3f;
     const char *const UNDERWATER_MOVEMENT_COMPONENT = "minecraft:underwater_movement";
+    const char *const LAVA_MOVEMENT_COMPONENT = "minecraft:lava_movement";
 }
 
 void MoveControl::setWantedPosition(const Vector3f &position, float speed) {
@@ -45,16 +46,19 @@ void MoveControl::tick(ServerNetworkHandler &owner, MobActor &mob, JumpControl &
     }
 
     const Vector3f motion = mob.getMotion();
-    const bool inWater = LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition()).water;
+    const LiquidContact feet = LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition());
+    const bool inWater = feet.water;
     if (inWater && mob.canSwim()) {
         _tickSwimming(mob);
         return;
     }
-    // a mob without gravity has no jump arc to wait out
-    if (mob.hasGravity() && !jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && motion.y > 0.0f)
+    // a mob without gravity has no jump arc to wait out; a lava walker rising in lava has none either
+    const bool lavaWalking = feet.lava && mob.getNavigation().getOptions().mCanWalkInLava;
+    if (mob.hasGravity() && !jumpControl.isCoolingDown() && !mob.isOnGround() && !inWater && !lavaWalking
+        && motion.y > 0.0f)
         return;
 
-    const float speed = mSpeed * mob.getMovementSpeedMultiplier();
+    const float speed = mSpeed * mob.getMovementSpeedMultiplier() * (lavaWalking ? _lavaSpeedRatio(mob) : 1.0f);
     if (motion.x * motion.x + motion.z * motion.z > speed * speed * SATURATED_SPEED_RATIO)
         return;
 
@@ -89,6 +93,14 @@ void MoveControl::_tickSwimming(MobActor &mob) {
     const float multiplier = walkSpeed > 0.0f ? mSpeed / walkSpeed : 1.0f;
     const float swimSpeed = value == nullptr ? mSpeed : (float) value->number(mSpeed) * multiplier;
     _steerTowards(mob, swimSpeed * mob.getMovementSpeedMultiplier() * SPEED_FACTOR);
+}
+
+// the game moves a mob in lava at its minecraft:lava_movement speed in place of minecraft:movement
+float MoveControl::_lavaSpeedRatio(const MobActor &mob) {
+    const json::Value *lava = mob.getComponent(LAVA_MOVEMENT_COMPONENT);
+    const json::Value *value = lava == nullptr ? nullptr : lava->get("value");
+    const float walkSpeed = mob.getMovementSpeed();
+    return value == nullptr || walkSpeed <= 0.0f ? 1.0f : (float) value->number(walkSpeed) / walkSpeed;
 }
 
 void MoveControl::_tickFlying(MobActor &mob) {

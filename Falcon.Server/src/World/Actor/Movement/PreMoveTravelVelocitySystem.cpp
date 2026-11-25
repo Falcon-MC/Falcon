@@ -1,6 +1,7 @@
 #include "World/Actor/Movement/PreMoveTravelVelocitySystem.h"
 
 #include "World/Actor/Movement/ActorPushSystem.h"
+#include "World/Actor/Movement/MobMovementFrictionSystem.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
@@ -95,6 +96,13 @@ void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const
     if (std::fabs(motion.x) < PRECISION && std::fabs(motion.y) < PRECISION && std::fabs(motion.z) < PRECISION)
         return;
 
+    if (feet.lava && physics.mWalksInLava) {
+        const float friction = MobMovementFrictionSystem::lavaWalkFriction(physics.mFrictionModifier);
+        motion.x = snap(motion.x * friction);
+        motion.z = snap(motion.z * friction);
+        return;
+    }
+
     const float waterFriction = physics.mSwims ? SWIMMER_WATER_FRICTION : WATER_FRICTION;
     const float factor = feet.lava ? LAVA_FRICTION : feet.water ? waterFriction : AIR_FRICTION;
 
@@ -106,10 +114,18 @@ void PreMoveTravelVelocitySystem::_applyPassableFriction(Vector3f &motion, const
 
 void PreMoveTravelVelocitySystem::applyVerticalAfterMove(Vector3f &motion, const PhysicsComponent &physics,
                                                          const LiquidContact &feet, float gravity) {
-    if (physics.mHasGravity && !feet.bubble && !(physics.mSwims && feet.water))
+    const bool lavaWalking = feet.lava && physics.mWalksInLava;
+    if (physics.mHasGravity && !feet.bubble && !(physics.mSwims && feet.water)
+        && !(lavaWalking && !physics.mSinksInLava))
         motion.y -= gravity;
     if (feet.bubble)
         return;
+
+    if (lavaWalking) {
+        motion.y = snap(motion.y * MobMovementFrictionSystem::lavaWalkDrag(physics.mUniformAirDrag, physics.mHasGravity,
+                                                                           physics.mAirDragModifier));
+        return;
+    }
 
     // the uniform air drag already slowed the vertical speed
     if (physics.mUniformAirDrag && !feet.water && !feet.lava)
