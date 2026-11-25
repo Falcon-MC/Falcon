@@ -471,7 +471,8 @@ namespace {
 }
 
 ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier,
-                                                   float launchPower, float verticalOffset, const ItemStack *weapon) {
+                                                   float launchPower, float verticalOffset, const ItemStack *weapon,
+                                                   float yawOffset) {
     Vector3f spawnPosition = player.getPosition();
     spawnPosition.y += player.getEyeHeight() + verticalOffset;
 
@@ -490,7 +491,8 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
         // the current game adds angle_offset to the pitch as is
         const Vector3f &rotation = player.getRotation();
         const float pitch = (rotation.x + component.mAngleOffset) * MathConstants::DEGREES_TO_RADIANS_F;
-        const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
+        // a turn about the vertical axis, as multishot's side shots: their facing is in the spawn packet too
+        const float yaw = (rotation.y + yawOffset) * MathConstants::DEGREES_TO_RADIANS_F;
         const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
         const float uncertainty = MobShooter::uncertainty(component.mUncertaintyBase, component.mUncertaintyMultiplier,
                                                           (int32_t) getProperties().getDifficulty());
