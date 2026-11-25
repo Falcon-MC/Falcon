@@ -66,7 +66,7 @@ void SwoopAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (!MobAttack::isTouching(mob, *target, mDamageReach))
         return;
 
-    MobAttack::hit(owner, mob, *target, mob.getAttackDamage(owner.getProperties().getDifficulty()));
+    MobAttack::hit(owner, mob, *target, mob.getAttackDamage());
     mDone = true;
 }
 

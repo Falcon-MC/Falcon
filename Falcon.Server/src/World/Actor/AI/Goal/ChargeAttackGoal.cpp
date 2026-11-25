@@ -74,7 +74,7 @@ void ChargeAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
         return;
     // touching: the strike ends the charge; close enough still: the aim follows the eyes
     if (MobAttack::isTouching(mob, *target, 0.0f)) {
-        MobAttack::hit(owner, mob, *target, mob.getAttackDamage(owner.getProperties().getDifficulty()));
+        MobAttack::hit(owner, mob, *target, mob.getAttackDamage());
         setCharging(owner, mob, false);
         return;
     }

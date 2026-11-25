@@ -68,13 +68,12 @@ namespace {
         bool lowest = false;
         bool highest = false;
         for (int32_t roll = 0; roll < 4000; ++roll) {
-            const float damage = golem.getAttackDamage(Difficulty::Normal);
+            const float damage = golem.getAttackDamage();
             require(damage >= 7.0f && damage <= 21.0f, "iron golem damage left its 7 to 21 range");
             lowest = lowest || damage == 7.0f;
             highest = highest || damage == 21.0f;
         }
         require(lowest && highest, "iron golem damage never reached an end of its range");
-        require(golem.getAttackDamage(Difficulty::Peaceful) == 0.0f, "iron golem hurts on peaceful");
     }
 
     void ingotRepair(Arena &arena) {

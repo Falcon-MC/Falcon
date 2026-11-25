@@ -95,9 +95,11 @@ namespace {
             const std::string name = std::to_string((int) entry.mDifficulty);
             player.setHealth(20.0f);
             player.setNoDamageTicks(0);
-            MobAttack::hit(arena.mOwner, zombie, player, zombie.getAttackDamage(entry.mDifficulty));
+            MobAttack::hit(arena.mOwner, zombie, player, zombie.getAttackDamage());
             require(20.0f - player.getHealth() == entry.mDealt,
                     "zombie hit on difficulty " + name + " dealt " + std::to_string(20.0f - player.getHealth()));
+            // a hit scaled to nothing still lands: it starts the hurt window like any 0 hit
+            require(player.getNoDamageTicks() > 0, "zombie hit on difficulty " + name + " did not land");
 
             // the scaling sits in the player's hurt: peaceful zeroes a hit handed straight to it too
             require(arena.hitBy(player, zombie, 3.0f, false) == entry.mDealt,
@@ -120,8 +122,15 @@ namespace {
         MobActor &zombie = arena.spawn("minecraft:zombie", Vector3f(-0.5f, 100.0f, 0.5f));
         MobActor &villager = arena.spawn("minecraft:villager_v2", Vector3f(-1.5f, 100.0f, 0.5f));
         const float before = villager.getHealth();
-        MobAttack::hit(arena.mOwner, zombie, villager, zombie.getAttackDamage(Difficulty::Hard));
+        MobAttack::hit(arena.mOwner, zombie, villager, zombie.getAttackDamage());
         require(before - villager.getHealth() == 3.0f, "zombie hit on a villager was scaled");
+
+        // peaceful included: only a player's hurt is scaled
+        arena.mOwner.changeDifficulty(Difficulty::Peaceful);
+        villager.setNoDamageTicks(0);
+        const float healthy = villager.getHealth();
+        MobAttack::hit(arena.mOwner, zombie, villager, zombie.getAttackDamage());
+        require(healthy - villager.getHealth() == 3.0f, "zombie hit on a villager was zeroed on peaceful");
     }
 }
 

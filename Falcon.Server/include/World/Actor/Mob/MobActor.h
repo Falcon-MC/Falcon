@@ -230,7 +230,8 @@ public:
 
     bool shieldFromSunlight() const override;
 
-    virtual float getAttackDamage(Difficulty difficulty) const;
+    // the same on every difficulty: a player takes the difficulty's share when it is hurt
+    virtual float getAttackDamage() const;
 
     const json::Value *getDefinition() const;
 

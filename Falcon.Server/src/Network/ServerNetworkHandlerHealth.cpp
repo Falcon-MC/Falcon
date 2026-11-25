@@ -160,9 +160,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     // a mob's own hit, not its projectile: the game scales it before the invulnerability window and armor
     const MobActor *mobAttacker = dynamic_cast<const MobActor *>(source.mAttacker);
     if (mobAttacker != nullptr && !source.mProjectile && mobAttacker->scalesDamageWithDifficulty()) {
+        // peaceful scales it to 0: the hit still lands, with its knockback and hurt animation
         amount = DamageCause::scaleForDifficulty(amount, mProperties.getDifficulty());
-        if (amount <= 0.0f)
-            return DamageResult::Ignored;
     }
 
     if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount < 0.0f)
