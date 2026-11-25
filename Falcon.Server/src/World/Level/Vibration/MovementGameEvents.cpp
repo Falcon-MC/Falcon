@@ -12,18 +12,28 @@
 #include "World/Level/Vibration/GameEvent.h"
 
 #include <cmath>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
+struct MovementTracking {
+    // minecraft:game_event_movement_tracking: without it an actor steps and swims but never flaps
+    bool mDefined = false;
+    bool mEmitMove = true;
+    bool mEmitSwim = true;
+    bool mEmitFlap = false;
+    // minecraft:movement_sound_distance_offset, 1 without it
+    float mStepOffset = 1.0f;
+};
+
 namespace {
-    struct Tracking {
-        // minecraft:game_event_movement_tracking: without it an actor steps and swims but never flaps
-        bool mDefined = false;
-        bool mEmitMove = true;
-        bool mEmitSwim = true;
-        bool mEmitFlap = false;
-        // minecraft:movement_sound_distance_offset, 0 without it
-        float mStepOffset = 0.0f;
+    struct NameHash {
+        using is_transparent = void;
+
+        size_t operator()(std::string_view name) const {
+            return std::hash<std::string_view>{}(name);
+        }
     };
 
     bool readBool(const json::Value *component, const char *name, bool fallback) {
@@ -31,8 +41,8 @@ namespace {
         return value != nullptr && value->mType == json::Value::Type::Boolean ? value->mBoolean : fallback;
     }
 
-    Tracking readTracking(const std::string &identifier) {
-        Tracking tracking;
+    MovementTracking readTracking(const std::string &identifier) {
+        MovementTracking tracking;
         const json::Value *definition = EntityDefinitions::find(identifier);
         const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
         if (components == nullptr)
@@ -51,12 +61,15 @@ namespace {
         return tracking;
     }
 
-    const Tracking &trackingOf(const Actor &actor) {
-        static std::unordered_map<std::string, Tracking> cache;
-        const std::string identifier = actor.getIdentifier();
+    // nodes stay put as the map grows: the state keeps a pointer to its entry
+    const MovementTracking &trackingOf(const Actor &actor) {
+        static std::unordered_map<std::string, MovementTracking, NameHash, std::equal_to<>> cache;
+        const std::string_view identifier = actor.getIdentifier();
         auto found = cache.find(identifier);
-        if (found == cache.end())
-            found = cache.emplace(identifier, readTracking(identifier)).first;
+        if (found == cache.end()) {
+            const std::string name(identifier);
+            found = cache.emplace(name, readTracking(name)).first;
+        }
         return found->second;
     }
 
@@ -81,11 +94,12 @@ namespace MovementGameEvents {
         if (!state.mStarted) {
             state.mStarted = true;
             state.mLast = position;
+            state.mTracking = &trackingOf(actor);
             return;
         }
 
         Level &level = owner.getLevelFor(actor);
-        const Tracking &tracking = trackingOf(actor);
+        const MovementTracking &tracking = *state.mTracking;
         const int32_t x = (int32_t) std::floor(position.x);
         const int32_t y = (int32_t) std::floor(position.y);
         const int32_t z = (int32_t) std::floor(position.z);

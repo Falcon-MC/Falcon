@@ -8,8 +8,12 @@ class Actor;
 class ServerNetworkHandler;
 
 // what an actor's movement has added up to: a step, a swim stroke or a flap is due once it passes mNextStep
+struct MovementTracking;
+
 struct MovementGameEventState {
     bool mStarted = false;
+    // the actor type's settings, looked up once when the tracking starts
+    const MovementTracking *mTracking = nullptr;
     Vector3f mLast;
     float mDistance = 0.0f;
     float mNextStep = 0.0f;

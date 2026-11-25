@@ -446,6 +446,11 @@ namespace {
         require(fixture.ticksUntilReceived(5) == 3, "a step on the ground made no entity_move");
         require(fixture.mProbe->mReceived.front().mEvent == &GameEvents::ENTITY_MOVE, "the step was not entity_move");
         require(cow->getMovementGameEventState().mDistance == 1.5f, "half a block did not add up to 1.5");
+        // the default offset of 1: the next step is due at 2, a tenth of a block later is not one
+        fixture.mProbe->mReceived.clear();
+        cow->setPosition(Vector3f(10.9f, 64.0f, 8.5f));
+        MovementGameEvents::track(fixture.mOwner, *cow);
+        require(fixture.ticksUntilReceived(5) == 0, "moving on right after a step made another one");
 
         fixture.mProbe->mReceived.clear();
         cow->setOnGround(false);
