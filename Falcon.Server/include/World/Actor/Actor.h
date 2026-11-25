@@ -472,7 +472,10 @@ public:
 
     void kill();
 
+    // takes the amount as is: resistance belongs to the caller, see resistDamage
     float reduceHealth(float amount);
+
+    float resistDamage(float amount) const;
 
     float heal(float amount, HealCause cause = HealCause::Heal);
 

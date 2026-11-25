@@ -218,10 +218,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
         amount = ArmorProtection::apply(armor.data(), armor.size(), amount, key, source.mArmorEfficiency);
     }
 
-    if (key != "death.attack.outOfWorld" && key != "death.attack.suicide") {
-        if (const MobEffectInstance *resistance = player.getEffect(MobEffectId::Resistance))
-            amount *= 1.0f - std::min(1.0f, 0.2f * (float) resistance->level());
-    }
+    if (key != "death.attack.outOfWorld" && key != "death.attack.suicide")
+        amount = player.resistDamage(amount);
 
     if (amount > 0.0f && player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld"
         && key != "death.attack.suicide" && TotemItem::consume(*this, player))
