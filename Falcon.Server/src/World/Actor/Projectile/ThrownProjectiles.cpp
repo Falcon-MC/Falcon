@@ -54,18 +54,24 @@ namespace {
         owner.knockBack(target, position.x - hitPosition.x, position.z - hitPosition.z, force);
     }
 
-    // a harmless throwable still hurts the player for nothing and pushes, even into a raised shield
-    void strikePlayer(ServerNetworkHandler &owner, ServerActor &projectile, const Vector3f &hitPosition,
-                      ServerPlayer &player, float force) {
+    // the thrower is the attacker: the one a hit mob turns on
+    ActorDamageSource thrownBy(ServerNetworkHandler &owner, ServerActor &projectile, const Vector3f &hitPosition,
+                               const Actor &target) {
         Actor *shooter = owner.getEntity(projectile.getOwnerUniqueId());
         const Vector3f motion = projectile.getMotion();
         const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
 
-        ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", player.getName());
+        ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", target.getName());
         source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
         source.mAttacker = shooter;
         source.fromOrigin(origin).asProjectile().withDamager(&projectile);
-        if (owner.hurt(player, 0.0f, source) != DamageResult::Ignored)
+        return source;
+    }
+
+    // a harmless throwable still hurts the player for nothing and pushes, even into a raised shield
+    void strikePlayer(ServerNetworkHandler &owner, ServerActor &projectile, const Vector3f &hitPosition,
+                      ServerPlayer &player, float force) {
+        if (owner.hurt(player, 0.0f, thrownBy(owner, projectile, hitPosition, player)) != DamageResult::Ignored)
             knockBackFrom(owner, player, hitPosition, force);
     }
 }
@@ -80,7 +86,7 @@ bool SnowballActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPositi
 
 bool SnowballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
     const float damage = dynamic_cast<const BlazeActor *>(&hitActor) != nullptr ? SNOWBALL_BLAZE_DAMAGE : 0.0f;
-    owner.damageActor(hitActor, damage, nullptr);
+    owner.damageActor(hitActor, damage, thrownBy(owner, *this, hitPosition, hitActor), 0);
     knockBackFrom(owner, hitActor, hitPosition, SNOWBALL_KNOCKBACK);
     owner.spawnParticleEffect(owner.getLevelFor(*this), SNOWBALL_PARTICLE, hitPosition);
     return true;
@@ -111,7 +117,7 @@ bool EggActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, S
 }
 
 bool EggActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
-    owner.damageActor(hitActor, 0.0f, nullptr);
+    owner.damageActor(hitActor, 0.0f, thrownBy(owner, *this, hitPosition, hitActor), 0);
     knockBackFrom(owner, hitActor, hitPosition, EGG_KNOCKBACK);
     return true;
 }

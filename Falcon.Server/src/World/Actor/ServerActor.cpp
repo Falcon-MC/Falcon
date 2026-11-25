@@ -276,7 +276,8 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
     owner.getScriptEngine().onEntityHurt(*this, amount, damageSource);
 
-    if (source != nullptr) {
+    // a projectile pushes along its own flight, not away from whoever shot it
+    if (source != nullptr && !damageSource.mProjectile) {
         const Vector3f sourcePosition = source->getPosition();
         owner.knockBack(*this, getPosition().x - sourcePosition.x, getPosition().z - sourcePosition.z,
                         ATTACK_KNOCKBACK);

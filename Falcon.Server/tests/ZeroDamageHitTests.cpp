@@ -119,6 +119,23 @@ namespace {
         require(pushed(zombie), "snowball: the zombie was not knocked back");
     }
 
+    // the mob turns on the thrower and is pushed along the throw, not away from the thrower
+    void thrownByPlayer(const std::filesystem::path &directory) {
+        Arena arena(directory);
+        ServerPlayer &thrower = arena.player(9006, Vector3f(-5.5f, 100.0f, 0.5f));
+        thrower.setUniqueId(424242);
+        MobActor &zombie = arena.mob("minecraft:zombie", Vector3f(0.5f, 100.0f, 0.5f));
+        auto &snowball = arena.projectile<SnowballActor>("minecraft:snowball", Vector3f(0.5f, 101.0f, -0.5f));
+        snowball.setOwnerUniqueId(thrower.getUniqueId());
+        snowball.setMotion(Vector3f(0.0f, 0.0f, 1.0f));
+        snowball.onHitActor(arena.mOwner, Vector3f(0.5f, 101.0f, 0.2f), zombie);
+        require(zombie.getLastHurtBy() == thrower.getRuntimeId(), "thrown: the zombie did not note its thrower");
+        require(thrower.getLastAttackedRuntimeId() == zombie.getRuntimeId(), "thrown: the throw was not the thrower's");
+        const Vector3f motion = zombie.getMotion();
+        require(motion.z > 0.0f && std::fabs(motion.x) < 0.0001f,
+                "thrown: the zombie was pushed away from the thrower");
+    }
+
     void resistantPlayerHitByPlayer(const std::filesystem::path &directory) {
         Arena arena(directory);
         ServerPlayer &attacker = arena.player(9003, Vector3f(0.5f, 100.0f, 0.5f));
@@ -160,6 +177,7 @@ int main() {
         snowballOnPlayer(directory);
         eggOnPlayer(directory);
         snowballOnMob(directory);
+        thrownByPlayer(directory);
         resistantPlayerHitByPlayer(directory);
         resistantPlayerHitByMob(directory);
         std::cout << "zero damage hit checks passed\n";
