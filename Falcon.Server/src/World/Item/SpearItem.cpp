@@ -49,6 +49,30 @@ namespace {
         return speed;
     }
 
+    // the game's kinetic_weapon damage conditions per tier: the charge hurts only after its delay, for a limited
+    // time, and only an entity the holder closes in on at 4.6 blocks a second or more
+    const float MIN_RELATIVE_SPEED = 4.6f;
+    const float TICKS_PER_SECOND = 20.0f;
+
+    struct ChargeTiming {
+        const char *mIdentifier;
+        int32_t mDelayTicks;
+        int32_t mDamageTicks;
+    };
+
+    const ChargeTiming CHARGE_TIMINGS[] = {{"minecraft:wooden_spear", 15, 300},  {"minecraft:stone_spear", 14, 275},
+                                           {"minecraft:copper_spear", 13, 250},  {"minecraft:iron_spear", 12, 225},
+                                           {"minecraft:golden_spear", 14, 275},  {"minecraft:diamond_spear", 10, 200},
+                                           {"minecraft:netherite_spear", 8, 175}};
+
+    const ChargeTiming *chargeTimingOf(const std::string &identifier) {
+        for (const ChargeTiming &timing: CHARGE_TIMINGS) {
+            if (identifier == timing.mIdentifier)
+                return &timing;
+        }
+        return nullptr;
+    }
+
     std::string tierNameOf(const std::string &identifier) {
         const size_t colon = identifier.find(':');
         return colon == std::string::npos ? identifier : identifier.substr(colon + 1);
@@ -129,6 +153,19 @@ Actor *SpearItem::findTarget(ServerNetworkHandler &owner, ServerPlayer &player, 
     }
 
     return best;
+}
+
+float SpearItem::closingSpeedOf(ServerNetworkHandler &owner, const ServerPlayer &player, const Actor &target) const {
+    // a rider charges at its mount's speed
+    const ServerActor *vehicle = player.isRiding() ? owner.getActor(player.getVehicleId()) : nullptr;
+    const Vector3f holder = vehicle != nullptr               ? vehicle->getMotion()
+                            : player.hasSimulatedVelocity() ? player.getSimulatedVelocity()
+                                                            : player.getMotion();
+    const Vector3f other = target.getMotion();
+    const Vector3f direction = player.getLookDirection();
+    return ((holder.x - other.x) * direction.x + (holder.y - other.y) * direction.y
+            + (holder.z - other.z) * direction.z)
+           * TICKS_PER_SECOND;
 }
 
 Actor *SpearItem::findSweepTarget(ServerNetworkHandler &owner, ServerPlayer &player) const {
@@ -293,7 +330,11 @@ void SpearItem::stab(ServerNetworkHandler &owner, ServerPlayer &player, const It
 
 void SpearItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                             int32_t elapsedTicks) const {
-    if (elapsedTicks <= 0 || elapsedTicks % SWEEP_INTERVAL_TICKS != 0)
+    const ChargeTiming *timing = chargeTimingOf(getIdentifier());
+    if (timing == nullptr || elapsedTicks < timing->mDelayTicks
+        || elapsedTicks > timing->mDelayTicks + timing->mDamageTicks)
+        return;
+    if ((elapsedTicks - timing->mDelayTicks) % SWEEP_INTERVAL_TICKS != 0)
         return;
 
     const float speed = movementSpeedOf(player);
@@ -301,7 +342,7 @@ void SpearItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player, c
         return;
 
     Actor *target = findSweepTarget(owner, player);
-    if (target == nullptr)
+    if (target == nullptr || closingSpeedOf(owner, player, *target) < MIN_RELATIVE_SPEED)
         return;
 
     applySpearDamage(owner, player, *target, getKineticDamage(speed));
