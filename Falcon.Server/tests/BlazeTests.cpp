@@ -65,23 +65,6 @@ namespace {
                 mOwner.tickActors();
             }
         }
-
-        size_t countOf(const char *identifier) {
-            size_t found = 0;
-            for (auto &entry: mOwner.getActors()) {
-                if (entry.second->getTypeId() == identifier && !entry.second->isDead())
-                    ++found;
-            }
-            return found;
-        }
-
-        MobActor *first(const char *identifier) {
-            for (auto &entry: mOwner.getActors()) {
-                if (entry.second->getTypeId() == identifier && !entry.second->isDead())
-                    return dynamic_cast<MobActor *>(entry.second.get());
-            }
-            return nullptr;
-        }
     };
 
     // ranged_mode: burst_shots 3, burst_interval 0.3 s
