@@ -186,7 +186,6 @@ namespace {
             data.mFlameTicks = std::max(data.mFlameTicks, FLAME_FIRE_TICKS);
     }
 
-
     // multishot fires three at -10, 0 and 10 degrees for one ammunition; the weapon wears by one
     void shoot(ServerNetworkHandler &owner, ServerPlayer &player, const CustomItemDefinition &item,
                int32_t elapsedTicks, const Ammunition *charged) {

@@ -16,7 +16,6 @@ FALCON_REGISTER_ITEM_CUSTOM(
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
-
 using namespace RangedWeaponHelpers;
 
 namespace {
