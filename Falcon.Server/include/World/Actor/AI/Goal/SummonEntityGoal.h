@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
 #include <cstdint>
@@ -43,7 +44,7 @@ public:
         // ARGB
         int32_t mParticleColor = -1;
         int32_t mCastDuration = 0;
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         std::string mStartSoundEvent;
         std::vector<Spawn> mSequence;
     };

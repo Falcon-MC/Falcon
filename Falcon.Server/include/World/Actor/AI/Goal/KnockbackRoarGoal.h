@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 
 #include <cstdint>
 #include <memory>
@@ -23,8 +24,8 @@ public:
         float mHeightCap = 0.4f;
         int32_t mRange = 4;
         int32_t mCooldown = 2;
-        std::shared_ptr<json::Value> mKnockbackFilters;
-        std::shared_ptr<json::Value> mDamageFilters;
+        CompiledEntityFilter mKnockbackFilters;
+        CompiledEntityFilter mDamageFilters;
         std::shared_ptr<json::Value> mOnRoarEnd;
     };
 

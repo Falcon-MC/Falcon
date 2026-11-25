@@ -33,7 +33,7 @@ int64_t PlayGoal::_findFriend(ServerNetworkHandler &owner, MobActor &mob) const 
                                    || !ActorPushSystem::boundingBoxOf(actor).intersectsWith(box))
                                    return;
                                bool matches = mSettings.mFriendFilters.empty();
-                               for (const std::shared_ptr<json::Value> &filters: mSettings.mFriendFilters)
+                               for (const CompiledEntityFilter &filters: mSettings.mFriendFilters)
                                    matches = matches || filters == nullptr
                                              || EntityFilter::test(*filters, owner, mob, &actor);
                                const float distance = mob.distanceSquaredTo(actor);

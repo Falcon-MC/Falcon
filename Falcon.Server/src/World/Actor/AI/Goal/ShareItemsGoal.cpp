@@ -83,7 +83,7 @@ bool ShareItemsGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
     });
 
     // the entity types in their order, then the mobs, then the items
-    for (const std::shared_ptr<json::Value> &filters: mSettings.mFilters) {
+    for (const CompiledEntityFilter &filters: mSettings.mFilters) {
         for (MobActor *candidate: nearby) {
             if (filters != nullptr && !EntityFilter::test(*filters, owner, mob, candidate))
                 continue;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 
 #include <cstdint>
@@ -16,7 +17,7 @@ public:
         int32_t mMinLookTicks = 40;
         int32_t mMaxLookTicks = 80;
         float mHorizontalAngle = 360.0f;
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
     };
 
     explicit LookAtEntityGoal(Settings settings);

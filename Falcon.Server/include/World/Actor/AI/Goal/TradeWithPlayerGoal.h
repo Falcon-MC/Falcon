@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
 #include <memory>
@@ -17,6 +18,6 @@ public:
     void start(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    std::shared_ptr<json::Value> mFilters;
+    CompiledEntityFilter mFilters;
     float mMaxDistanceSquared;
 };

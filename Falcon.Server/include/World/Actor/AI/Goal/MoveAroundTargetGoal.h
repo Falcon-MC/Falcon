@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 
 #include <memory>
 #include <random>
@@ -13,7 +14,7 @@ namespace json {
 class MoveAroundTargetGoal : public Goal {
 public:
     struct Settings {
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         float mSpeed = 1.0f;
         float mSpreadDegrees = 360.0f;
         float mMinDistance = 4.0f;

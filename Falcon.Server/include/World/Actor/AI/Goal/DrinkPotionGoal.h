@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
 #include <cstdint>
@@ -14,7 +15,7 @@ public:
     struct Potion {
         int32_t mId = 0;
         float mChance = 1.0f;
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
     };
 
     explicit DrinkPotionGoal(std::vector<Potion> potions);

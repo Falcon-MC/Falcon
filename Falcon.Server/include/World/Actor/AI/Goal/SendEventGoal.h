@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 
 #include <cstdint>
 #include <memory>
@@ -32,7 +33,7 @@ public:
         bool mLookAtTarget = true;
         // ARGB
         int32_t mParticleColor = -1;
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         std::string mStartSoundEvent;
         std::vector<Step> mSequence;
     };
