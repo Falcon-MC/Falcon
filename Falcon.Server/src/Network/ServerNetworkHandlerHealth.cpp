@@ -142,7 +142,8 @@ void ServerNetworkHandler::_handleSuffocationDamage(ServerPlayer &player) {
 
 DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, const ActorDamageSource &source) {
     const std::string &key = source.mDeathMessageKey;
-    if (!player.isSpawned() || player.isDead() || amount <= 0.0f)
+    // a hit for nothing still lands: the player flinches and is pushed, health untouched
+    if (!player.isSpawned() || player.isDead() || amount < 0.0f)
         return DamageResult::Ignored;
 
     const int32_t gameType = player.getGameType();
@@ -155,7 +156,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (isDamageDisabledByGameRule(getWorldFor(player).getOverworld().getGameRules(), key))
         return DamageResult::Ignored;
 
-    if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount <= 0.0f)
+    if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount < 0.0f)
         return DamageResult::Ignored;
 
     // inside the 10-tick invulnerability window only a stronger hit lands, dealing the difference
@@ -184,7 +185,7 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
             return DamageResult::Ignored;
 
         amount = event.mDamage;
-        if (amount <= 0.0f)
+        if (amount < 0.0f)
             return DamageResult::Ignored;
 
         // rechecked: a listener may have lowered the amount
@@ -222,11 +223,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
             amount *= 1.0f - std::min(1.0f, 0.2f * (float) resistance->level());
     }
 
-    if (amount <= 0.0f)
-        return DamageResult::Ignored;
-
-    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" && key != "death.attack.suicide"
-        && TotemItem::consume(*this, player))
+    if (amount > 0.0f && player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld"
+        && key != "death.attack.suicide" && TotemItem::consume(*this, player))
         return DamageResult::Dealt;
 
     const float health = player.reduceHealth(amount);
