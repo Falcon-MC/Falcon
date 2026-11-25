@@ -581,7 +581,7 @@ void BedrockListener::_finishLogin(PendingLogin &login) {
     stack.mForcedToAccept = false;
     stack.mGameVersion = mSettings.mGameVersion;
     stack.mExperimentsPreviouslyToggled = false;
-    stack.mHasEditorPacks = false;
+    stack.mEditorPackTypes = 0;
     connection.send(stack);
     connection.flush();
 }
