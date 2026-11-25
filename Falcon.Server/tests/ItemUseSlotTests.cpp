@@ -110,6 +110,28 @@ namespace {
         require(player.getItemUseSlot() == player.getInventory().getSelectedSlot(), "the use lost its slot");
     }
 
+    // the spyglass and the goat horn are held like food; the horn's use runs out after its duration
+    void checkHeldUses(ServerNetworkHandler &owner, ServerPlayer &player) {
+        player.getFlags().set(ActorFlag::UsingItem, false);
+        player.getInventory().setItemInHand(owner.createItemStack("minecraft:spyglass", 1));
+        owner._useHeldItem(player);
+        require(player.getFlags().get(ActorFlag::UsingItem), "the spyglass did not start an item use");
+        ServerTickProbe::advance(owner, 100);
+        owner._tickItemUse(player);
+        require(player.getFlags().get(ActorFlag::UsingItem), "the spyglass use ended on its own");
+
+        player.getFlags().set(ActorFlag::UsingItem, false);
+        player.getInventory().setItemInHand(owner.createItemStack("minecraft:goat_horn", 1));
+        owner._useHeldItem(player);
+        require(player.getFlags().get(ActorFlag::UsingItem), "the goat horn did not start an item use");
+        ServerTickProbe::advance(owner, 19);
+        owner._tickItemUse(player);
+        require(player.getFlags().get(ActorFlag::UsingItem), "the toot ended early");
+        ServerTickProbe::advance(owner, 1);
+        owner._tickItemUse(player);
+        require(!player.getFlags().get(ActorFlag::UsingItem), "the toot outlived its duration");
+    }
+
     // a drawn bow switched for a golden apple must not hand the apple its elapsed time
     void run() {
         ServerNetworkHandler owner("Item use slot", "", 1);
@@ -150,6 +172,7 @@ namespace {
         checkFishingInput(owner, player);
         checkSprintingEatInput(owner, player);
         checkBrushUse(owner, player);
+        checkHeldUses(owner, player);
     }
 }
 
