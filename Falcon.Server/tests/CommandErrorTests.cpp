@@ -114,6 +114,11 @@ namespace {
                 "a bad enum value was not pointed at: " + only(run(server, level, "/difficulty impossible")));
         require(only(run(server, level, "/setblock 1 2")) == "commands.generic.syntax|tblock 1 2||",
                 "a missing coordinate was not pointed at: " + only(run(server, level, "/setblock 1 2")));
+        // coordinates written without spaces are read as the command reads them: the error is the mode
+        require(only(run(server, level, "/fill ~~~ ~2~2~2 stone badmode"))
+                        == "commands.generic.syntax|2~2 stone |badmode|",
+                "unspaced coordinates moved the syntax error: "
+                        + only(run(server, level, "/fill ~~~ ~2~2~2 stone badmode")));
         require(only(run(server, level, "/nosuchcommand")) == "commands.generic.unknown|nosuchcommand",
                 "an unknown command lost its message");
         // a well formed line that fails for another reason keeps that reason

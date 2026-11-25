@@ -41,8 +41,11 @@ public:
 
     static const DispatchContext *currentDispatch();
 
-    // ~~5~ written without spaces becomes ~, ~5 and ~; starts, when given, follow the split tokens
-    static void splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts = nullptr);
+    // ~~5~ written without spaces becomes ~, ~5 and ~, for the tokens in [first, last); starts and ends, when
+    // given, follow the split tokens
+    static void splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts = nullptr,
+                                         std::vector<size_t> *ends = nullptr, size_t first = 0,
+                                         size_t last = (size_t) -1);
 
 private:
 
