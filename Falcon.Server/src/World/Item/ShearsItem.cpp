@@ -4,18 +4,38 @@
 
 FALCON_REGISTER_ITEM(ShearsItem, 130);
 
+#include "World/Actor/ActorFlags.h"
+#include "World/Actor/Mob/Passive/SheepActor.h"
+#include "World/Item/ItemDurability.h"
+#include "World/Inventory/Container.h"
 #include "World/Level/Block/BlockData.h"
+#include "World/Level/Block/DispenseSource.h"
 #include "World/Level/Block/CobwebBlock.h"
 #include "World/Level/Block/PumpkinBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Block/VineBlock.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Vibration/GameEvent.h"
+
+#include <cmath>
 
 namespace {
     const float WEB_AND_LEAVES_SPEED = 15.0f;
     const float WOOL_SPEED = 5.0f;
     const float VINE_SPEED = 2.0f;
+    const char *const SHEAR_SOUND = "shear";
+    // covers a mob whose box overlaps the faced block from a neighbouring one
+    const float DISPENSE_SEARCH_RADIUS = 2.0f;
+
+    bool overlapsBlock(const MobActor &actor, const Vector3i &block) {
+        const Vector3f position = actor.getPosition();
+        const ActorSize size = actor.getSize();
+        const float halfWidth = size.mWidth * 0.5f;
+        return position.x + halfWidth > (float) block.x && position.x - halfWidth < (float) block.x + 1.0f
+               && position.z + halfWidth > (float) block.z && position.z - halfWidth < (float) block.z + 1.0f
+               && position.y + size.mHeight > (float) block.y && position.y < (float) block.y + 1.0f;
+    }
 }
 
 ShearsItem::ShearsItem(const Item &base) : Item(base) {}
@@ -62,5 +82,35 @@ bool ShearsItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player,
     if (pumpkin == nullptr)
         return false;
     pumpkin->carve(owner, player, blockPosition, face);
+    return true;
+}
+
+bool ShearsItem::dispense(const DispenseSource &source) const {
+    const Vector3i block((int32_t) std::floor(source.mPosition.x), (int32_t) std::floor(source.mPosition.y),
+                         (int32_t) std::floor(source.mPosition.z));
+    const Vector3f center((float) block.x + 0.5f, (float) block.y + 0.5f, (float) block.z + 0.5f);
+    SheepActor *sheep = nullptr;
+    source.mOwner.forEachActorNear(center, DISPENSE_SEARCH_RADIUS, [&](ServerActor &actor) {
+        auto *candidate = dynamic_cast<SheepActor *>(&actor);
+        // the game reads the flags; their components are read too: the flags sync on the mob's next tick
+        if (sheep != nullptr || candidate == nullptr || !candidate->isAlive() || !candidate->isIn(source.mLevel)
+            || candidate->getFlags().get(ActorFlag::Sheared) || candidate->getFlags().get(ActorFlag::Baby)
+            || candidate->getComponent("minecraft:is_sheared") != nullptr
+            || candidate->getComponent("minecraft:is_baby") != nullptr || !overlapsBlock(*candidate, block))
+            return;
+        sheep = candidate;
+    });
+    if (sheep == nullptr)
+        return false;
+
+    sheep->shearFromDispenser(source.mOwner);
+    source.mOwner.playLevelSound(source.mLevel, SHEAR_SOUND, source.mPosition);
+
+    ItemStack shears = source.getItem();
+    ItemDurability::apply(nullptr, shears, 1);
+    source.mContainer.setContainerItem(source.mSlot, std::move(shears));
+    source.mOwner.refreshContainerViewers(source.mBlockPosition);
+    source.playClick();
+    source.mLevel.postGameEvent(GameEvents::SHEAR, source.mPosition);
     return true;
 }
