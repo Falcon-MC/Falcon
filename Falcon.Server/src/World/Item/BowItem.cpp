@@ -37,7 +37,8 @@ namespace {
 
 BowItem::BowItem(const Item &base) : Item(base) {}
 
-int32_t BowItem::getUseDuration() const {
+int32_t BowItem::getUseDuration(const ItemStack &item) const {
+    (void) item;
     return 72000;
 }
 

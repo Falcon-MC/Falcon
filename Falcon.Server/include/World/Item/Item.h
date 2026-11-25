@@ -134,7 +134,8 @@ public:
     }
 
     // 0: the item's minecraft:use_duration
-    virtual int32_t getUseDuration() const {
+    virtual int32_t getUseDuration(const ItemStack &item) const {
+        (void) item;
         return 0;
     }
 

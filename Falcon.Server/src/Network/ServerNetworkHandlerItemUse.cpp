@@ -371,7 +371,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
         if (itemType != nullptr && !player.getFlags().get(ActorFlag::UsingItem)
             && itemType->onStartUsing(*this, player, heldItem)) {
-            const int32_t duration = itemType->getUseDuration();
+            const int32_t duration = itemType->getUseDuration(heldItem);
             startItemUse(player, heldItem, duration > 0 ? duration : (int32_t) useDurationTicksFor(heldItem));
             return;
         }
