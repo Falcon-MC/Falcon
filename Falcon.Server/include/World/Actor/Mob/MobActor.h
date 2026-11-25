@@ -354,6 +354,14 @@ public:
         _setFlag(owner, ActorFlag::Resting, resting);
     }
 
+    void setSneakingFlag(ServerNetworkHandler &owner, bool sneaking) {
+        _setFlag(owner, ActorFlag::Sneaking, sneaking);
+    }
+
+    void setSprintingFlag(ServerNetworkHandler &owner, bool sprinting) {
+        _setFlag(owner, ActorFlag::Sprinting, sprinting);
+    }
+
     void setWantsToWake(ServerNetworkHandler &owner, bool wants) {
         _setFlag(owner, ActorFlag::WantsToWake, wants);
     }

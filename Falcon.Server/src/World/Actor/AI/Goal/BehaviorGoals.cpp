@@ -63,6 +63,7 @@
 #include "World/Actor/AI/Goal/MoveTowardsHomeRestrictionGoal.h"
 #include "World/Actor/AI/Goal/MoveTowardsTargetGoal.h"
 #include "World/Actor/AI/Goal/NearestAttackableTargetGoal.h"
+#include "World/Actor/AI/Goal/OcelotAttackGoal.h"
 #include "World/Actor/AI/Goal/OcelotSitOnBlockGoal.h"
 #include "World/Actor/AI/Goal/OfferFlowerGoal.h"
 #include "World/Actor/AI/Goal/OpenDoorGoal.h"
@@ -162,6 +163,9 @@ namespace {
     const float FOLLOW_OWNER_STOP = 2.0f;
 
     const float WORK_DEFAULT_SPEED = 0.5f;
+    const float OCELOT_WALK_SPEED = 0.8f;
+    const float OCELOT_SNEAK_SPEED = 0.6f;
+    const float OCELOT_SPRINT_SPEED = 1.33f;
     // the definition gives no search fields: eight blocks around, one layer up and down
     const int32_t OCELOT_SIT_SEARCH_RANGE = 8;
     const int32_t OCELOT_SIT_SEARCH_HEIGHT = 1;
@@ -874,6 +878,20 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "melee_attack")
         return std::make_unique<MeleeAttackGoal>(speed, followRange(mob), meleeCoolDown(component),
                                                  attackReachSquared(mob));
+
+    if (behavior == "ocelotattack") {
+        const float base = mob.getMovementSpeed();
+        OcelotAttackGoal::Settings settings;
+        settings.mCoolDownTicks = meleeCoolDown(component);
+        settings.mMaxDistance = numberOf(component, "max_distance", settings.mMaxDistance);
+        settings.mMaxSneakRange = numberOf(component, "max_sneak_range", settings.mMaxSneakRange);
+        settings.mMaxSprintRange = numberOf(component, "max_sprint_range", settings.mMaxSprintRange);
+        settings.mReachMultiplier = numberOf(component, "reach_multiplier", settings.mReachMultiplier);
+        settings.mWalkSpeed = base * numberOf(component, "walk_speed_multiplier", OCELOT_WALK_SPEED);
+        settings.mSneakSpeed = base * numberOf(component, "sneak_speed_multiplier", OCELOT_SNEAK_SPEED);
+        settings.mSprintSpeed = base * numberOf(component, "sprint_speed_multiplier", OCELOT_SPRINT_SPEED);
+        return std::make_unique<OcelotAttackGoal>(settings);
+    }
 
     if (behavior == "delayed_attack") {
         // seconds truncated to ticks; the hit lands that share of the swing in, truncated
