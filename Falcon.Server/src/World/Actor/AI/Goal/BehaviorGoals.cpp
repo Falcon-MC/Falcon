@@ -845,7 +845,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                 (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL), targetSight(component));
 
     if (behavior == "defend_village_target") {
-        std::vector<std::shared_ptr<json::Value>> filters;
+        std::vector<CompiledEntityFilter> filters;
         for (NearestAttackableTargetGoal::Entry &entry: targetEntries(component))
             filters.push_back(std::move(entry.mFilters));
         return std::make_unique<DefendVillageTargetGoal>(

@@ -1,6 +1,7 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 
 #include "Core/Debug/BedrockLog.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "EntityDefinitionsJson.h"
 
 std::unique_ptr<json::Value> &EntityDefinitions::_root() {
@@ -14,6 +15,8 @@ std::map<std::string, std::vector<ActorPropertyDescription>> &EntityDefinitions:
 }
 
 void EntityDefinitions::initialize() {
+    // the compiled filters point into the definitions they come from
+    EntityFilter::compileDefinitions(nullptr);
     _root() = json::parse(FalconEntityData::kEntityDefinitionsJson);
     _properties().clear();
     if (_root() == nullptr || !_root()->isObject()) {
@@ -32,6 +35,7 @@ void EntityDefinitions::initialize() {
         if (!schema.empty())
             _properties()[identifier] = std::move(schema);
     }
+    EntityFilter::compileDefinitions(_root().get());
 }
 
 const json::Value *EntityDefinitions::find(const std::string &identifier) {

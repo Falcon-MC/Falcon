@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Protocol/Types/ItemStack.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
@@ -16,7 +17,7 @@ public:
         float mSpeed = 0.0f;
         // the search cube's half side, whole blocks
         int32_t mMaxDistance = 0;
-        std::vector<std::shared_ptr<json::Value>> mFilters;
+        std::vector<CompiledEntityFilter> mFilters;
     };
 
     explicit ShareItemsGoal(Settings settings);

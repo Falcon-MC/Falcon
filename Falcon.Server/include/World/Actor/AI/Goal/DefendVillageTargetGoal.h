@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 
 #include <cstdint>
@@ -13,7 +14,7 @@ class Actor;
 // once the village holds them hostile
 class DefendVillageTargetGoal : public Goal {
 public:
-    DefendVillageTargetGoal(float attackChance, float range, std::vector<std::shared_ptr<json::Value>> filters);
+    DefendVillageTargetGoal(float attackChance, float range, std::vector<CompiledEntityFilter> filters);
 
     // the aggressor the goal would pick, before the chance roll and the entity_types filters
     static Actor *pickAggressor(ServerNetworkHandler &owner, const MobActor &mob);
@@ -29,6 +30,6 @@ public:
 private:
     float mAttackChance;
     float mRangeSquared;
-    std::vector<std::shared_ptr<json::Value>> mFilters;
+    std::vector<CompiledEntityFilter> mFilters;
     uint64_t mFoundRuntimeId = 0;
 };

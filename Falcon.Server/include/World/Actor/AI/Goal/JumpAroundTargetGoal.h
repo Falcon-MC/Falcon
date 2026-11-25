@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
 #include <cstdint>
@@ -22,7 +23,7 @@ class JumpAroundTargetGoal : public Goal {
 public:
     // times in ticks
     struct Settings {
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         int32_t mCooldown = 10;
         int32_t mHurtCooldown = 2;
         int32_t mLastHurtDuration = 40;

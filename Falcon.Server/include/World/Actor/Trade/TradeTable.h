@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Level/Storage/Loot/LootContext.h"
 #include "World/Level/Storage/Loot/LootFunction.h"
 
@@ -28,7 +29,7 @@ struct TradeItemChoice {
     int32_t mMaxCount = 1;
     float mPriceMultiplier = 0.0f;
     std::vector<std::unique_ptr<TradeItemFunction>> mFunctions;
-    std::unique_ptr<json::Value> mFilters;
+    CompiledEntityFilter mFilters;
 };
 
 struct TradeItemEntry {

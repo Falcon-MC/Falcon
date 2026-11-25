@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Math/Vector3f.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
@@ -18,7 +19,7 @@ public:
         float mFollowDistance = 0.0f;
         bool mAlwaysLookForLeader = false;
         int32_t mSearchCooldownTicks = 20;
-        std::shared_ptr<json::Value> mLeaderFilters;
+        CompiledEntityFilter mLeaderFilters;
     };
 
     explicit FollowTargetLeaderGoal(Settings settings);

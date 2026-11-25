@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Level/Block/BlockState.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3i.h"
@@ -15,7 +16,7 @@ class PlaceBlockGoal : public Goal {
 public:
     struct Entry {
         BlockState mState;
-        std::shared_ptr<json::Value> mFilter;
+        CompiledEntityFilter mFilter;
     };
 
     struct Range {
@@ -38,7 +39,7 @@ private:
     bool _findPlacement(ServerNetworkHandler &owner, Level &level, MobActor &mob);
 
     std::vector<Entry> mEntries;
-    std::shared_ptr<json::Value> mCanPlace;
+    CompiledEntityFilter mCanPlace;
     float mChance;
     Range mXzRange;
     Range mYRange;

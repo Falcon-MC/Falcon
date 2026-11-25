@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Math/Vector3f.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
 #include <cstdint>
@@ -22,7 +23,7 @@ public:
     // times in ticks, ranges squared
     struct Settings {
         std::string mProjectile;
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         float mMinRangeSquared = 0.0f;
         float mMaxRangeSquared = 0.0f;
         int32_t mCooldown = 0;

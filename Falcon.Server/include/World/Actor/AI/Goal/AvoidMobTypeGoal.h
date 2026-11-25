@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3f.h"
 
@@ -14,7 +15,7 @@ class Actor;
 class AvoidMobTypeGoal : public Goal {
 public:
     struct Entry {
-        std::shared_ptr<json::Value> mFilters;
+        CompiledEntityFilter mFilters;
         float mMaxDistance = 3.0f;
         float mWalkSpeed = 0.25f;
         float mSprintSpeed = 0.25f;

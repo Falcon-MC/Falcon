@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Math/Vector3f.h"
 #include "World/Actor/AI/Goal/Goal.h"
 
@@ -19,7 +20,7 @@ public:
         int32_t mMaxPlayTicks = 0;
         int32_t mRandomRange = 0;
         int32_t mRandomHeight = 0;
-        std::vector<std::shared_ptr<json::Value>> mFriendFilters;
+        std::vector<CompiledEntityFilter> mFriendFilters;
     };
 
     explicit PlayGoal(Settings settings);
