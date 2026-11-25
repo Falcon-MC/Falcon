@@ -1693,7 +1693,7 @@ bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, 
     return false;
 }
 
-bool MobActor::acceptsRider(const MobActor &rider) const {
+bool MobActor::acceptsRider(const MobActor &rider, bool checkFamilies) const {
     const json::Value *rideable = getComponent(RIDEABLE_COMPONENT);
     if (rideable == nullptr || !isAlive() || isRiding())
         return false;
@@ -1704,7 +1704,7 @@ bool MobActor::acceptsRider(const MobActor &rider) const {
         return false;
 
     const json::Value *families = rideable->get("family_types");
-    if (families == nullptr || !families->isArray())
+    if (!checkFamilies || families == nullptr || !families->isArray())
         return true;
 
     for (const std::string &family: rider.getFamilies()) {

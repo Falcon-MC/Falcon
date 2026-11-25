@@ -54,6 +54,7 @@
 #include "World/Actor/AI/Goal/MoveIndoorsGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
 #include "World/Actor/AI/Goal/MoveToRandomBlockGoal.h"
+#include "World/Actor/AI/Goal/MoveToLiquidGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveThroughVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveToWaterGoal.h"
@@ -73,6 +74,7 @@
 #include "World/Actor/AI/Goal/RandomHoverGoal.h"
 #include "World/Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "World/Actor/AI/Goal/RandomStrollGoal.h"
+#include "World/Actor/AI/Goal/RiseToLiquidLevelGoal.h"
 #include "World/Actor/AI/Goal/RandomSwimGoal.h"
 #include "World/Actor/AI/Goal/RangedAttackGoal.h"
 #include "World/Actor/AI/Goal/ReceiveLoveGoal.h"
@@ -272,6 +274,7 @@ namespace {
     const int32_t FERTILIZE_GIVE_UP_TICKS = 160;
     // the inspect_bookshelf definition defaults
     const float BOOKSHELF_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float LIQUID_DEFAULT_GOAL_RADIUS = 0.5f;
     const float BOOKSHELF_DEFAULT_COUNT = 10.0f;
     const float BOOKSHELF_DEFAULT_HEIGHT = 1.0f;
     const int32_t BOOKSHELF_GIVE_UP_TICKS = 160;
@@ -1311,6 +1314,25 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                                  (int32_t) numberOf(component, "search_height", 0.0f),
                                                  numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
                                                  behavior == "move_to_water");
+
+    if (behavior == "move_to_liquid") {
+        // the game's own search scans the box nearest first: search_count stays unused
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", 0.0f);
+        settings.mGoalRadius = numberOf(component, "goal_radius", LIQUID_DEFAULT_GOAL_RADIUS);
+        const std::string material = stringOf(component, "material_type");
+        const MoveToLiquidGoal::Material liquid = material == "Lava"    ? MoveToLiquidGoal::Material::Lava
+                                                  : material == "Water" ? MoveToLiquidGoal::Material::Water
+                                                                        : MoveToLiquidGoal::Material::Any;
+        return std::make_unique<MoveToLiquidGoal>(settings, liquid);
+    }
+
+    if (behavior == "rise_to_liquid_level")
+        return std::make_unique<RiseToLiquidLevelGoal>(numberOf(component, "liquid_y_offset", 0.0f),
+                                                       numberOf(component, "rise_delta", 0.0f),
+                                                       numberOf(component, "sink_delta", 0.0f));
 
     if (behavior == "barter")
         return std::make_unique<BarterGoal>();
