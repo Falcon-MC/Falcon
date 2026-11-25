@@ -623,11 +623,13 @@ void ContainerBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player,
     blockActors.insert(std::move(created));
 }
 
-// a shelf placed against a live power source starts powered
+// a shelf placed against a live power source starts powered; a hopper there starts locked: the game's hopper
+// takes the first circuit update a new block gets
 void ContainerBlock::onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                      const BlockState &state) const {
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
-    if (definition != nullptr && definition->mKind == ContainerBlockKind::Shelf)
+    if (definition != nullptr
+        && (definition->mKind == ContainerBlockKind::Shelf || definition->mKind == ContainerBlockKind::Hopper))
         onRedstonePower(owner, level, position, state);
 }
 

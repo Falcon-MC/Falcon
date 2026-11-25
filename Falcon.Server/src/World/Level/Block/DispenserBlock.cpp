@@ -105,6 +105,12 @@ void DispenserBlock::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
         level.scheduleUpdate(position, TRIGGER_DELAY_TICKS);
 }
 
+void DispenserBlock::onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    ContainerBlock::onPlacedInLevel(owner, level, position, state);
+    onRedstoneUpdate(owner, level, position, state);
+}
+
 void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) const {
     ContainerBlockActor *actor = level.getBlockActors().find<ContainerBlockActor>(position);

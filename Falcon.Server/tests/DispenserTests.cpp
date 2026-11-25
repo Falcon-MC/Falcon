@@ -209,6 +209,30 @@ namespace {
         require(probe.mPositions[0].x == 8.5f && probe.mPositions[0].y == 100.5f,
                 "dispense_fail was not posted at the dispenser center");
     }
+
+    // placed beside a live source the dispenser takes its first update as a rising edge and fires 4 ticks later
+    void placedPowered() {
+        Fixture fixture;
+        fixture.mLevel.setOwner(&fixture.mOwner);
+        fixture.load("minecraft:arrow", 2);
+        const auto triggered = [&]() {
+            return fixture.mLevel.getBlockState(AT.x, AT.y, AT.z).mStates.getByte("triggered_bit", 0) != 0;
+        };
+
+        fixture.mLevel.onBlockPlaced(AT, fixture.mState);
+        require(!triggered() && !fixture.mLevel.isUpdateScheduled(AT),
+                "a dispenser placed without power was triggered");
+
+        fixture.mLevel.setBlock(Vector3i(AT.x - 1, AT.y, AT.z), VanillaBlocks::REDSTONE_BLOCK().toBlockState(),
+                                false);
+        fixture.mLevel.onBlockPlaced(AT, fixture.mState);
+        require(triggered(), "a dispenser placed beside a redstone block was not triggered");
+        require(fixture.mLevel.isUpdateScheduled(AT), "a dispenser placed beside a redstone block scheduled no shot");
+
+        fixture.fire();
+        require(fixture.count() == 1 && fixture.find("minecraft:arrow") != nullptr,
+                "a dispenser placed beside a redstone block shot nothing");
+    }
 }
 
 int main() {
@@ -225,6 +249,7 @@ int main() {
         tnt();
         boneMeal();
         dropped();
+        placedPowered();
     } catch (const std::exception &error) {
         std::clog << "Dispenser regression failed: " << error.what() << '\n';
         result = 1;
