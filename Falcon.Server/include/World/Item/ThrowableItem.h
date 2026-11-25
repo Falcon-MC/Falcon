@@ -12,7 +12,7 @@ public:
     // the game does for data-driven projectiles
     enum class DispenseMode { None, Shoot, ShootWithClick };
 
-    ThrowableItem(const Item &base, std::string entityIdentifier, float throwForce, int32_t cooldownTicks,
+    ThrowableItem(const Item &base, std::string entityIdentifier, float launchPower, int32_t cooldownTicks,
                   DispenseMode dispenseMode);
 
     bool onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
@@ -24,7 +24,8 @@ protected:
     ServerActor *_shootFrom(const DispenseSource &source) const;
 
     std::string mEntityIdentifier;
-    float mThrowForce;
+    // scales the projectile definition's power
+    float mLaunchPower;
     int32_t mCooldownTicks;
     DispenseMode mDispenseMode;
 };

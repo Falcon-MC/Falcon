@@ -158,6 +158,14 @@ public:
     bool onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) override;
 
     bool onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) override;
+
+protected:
+    // the game data carries no ice ball definition: thrown at a power of 1
+    ProjectileComponent _undefinedProjectileComponent() const override {
+        ProjectileComponent component = ThrownProjectileActor::_undefinedProjectileComponent();
+        component.mPower = 1.0f;
+        return component;
+    }
 };
 
 class EggActor final : public ThrownProjectileActor {

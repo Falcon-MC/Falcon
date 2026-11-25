@@ -14,7 +14,7 @@ namespace {
     struct ThrowableDefinition {
         const char *mIdentifier;
         const char *mProjectile;
-        float mThrowForce;
+        float mLaunchPower;
         int32_t mCooldownTicks;
         ThrowableItem::DispenseMode mDispenseMode;
     };
@@ -22,12 +22,12 @@ namespace {
     using Mode = ThrowableItem::DispenseMode;
 
     // snowball, egg and experience bottle; the ender pearl keeps its own dispense; ice ball and wind charge
-    // are items made of components
+    // are items made of components: their minecraft:throwable launch power scales the projectile's
     const ThrowableDefinition THROWABLES[] = {
             {"minecraft:ice_ball", "minecraft:ice_ball", 1.0f, 0, Mode::ShootWithClick},
-            {"minecraft:snowball", "minecraft:snowball", 1.5f, 0, Mode::Shoot},
-            {"minecraft:egg", "minecraft:egg", 1.5f, 0, Mode::Shoot},
-            {"minecraft:ender_pearl", "minecraft:ender_pearl", 1.5f, 20, Mode::None},
+            {"minecraft:snowball", "minecraft:snowball", 1.0f, 0, Mode::Shoot},
+            {"minecraft:egg", "minecraft:egg", 1.0f, 0, Mode::Shoot},
+            {"minecraft:ender_pearl", "minecraft:ender_pearl", 1.0f, 20, Mode::None},
             {"minecraft:experience_bottle", "minecraft:xp_bottle", 1.0f, 0, Mode::Shoot},
             {"minecraft:wind_charge", "minecraft:wind_charge_projectile", 1.5f, 10, Mode::ShootWithClick}};
 
@@ -45,20 +45,20 @@ FALCON_REGISTER_ITEM_CUSTOM(
         ThrowableItem, 10, [](const std::string &identifier) { return findThrowable(identifier) != nullptr; },
         [](const Item &item) -> std::unique_ptr<Item> {
             const ThrowableDefinition *definition = findThrowable(item.getIdentifier());
-            return std::make_unique<ThrowableItem>(item, definition->mProjectile, definition->mThrowForce,
+            return std::make_unique<ThrowableItem>(item, definition->mProjectile, definition->mLaunchPower,
                                                    definition->mCooldownTicks, definition->mDispenseMode);
         });
 
-ThrowableItem::ThrowableItem(const Item &base, std::string entityIdentifier, float throwForce, int32_t cooldownTicks,
+ThrowableItem::ThrowableItem(const Item &base, std::string entityIdentifier, float launchPower, int32_t cooldownTicks,
                              DispenseMode dispenseMode)
-        : Item(base), mEntityIdentifier(std::move(entityIdentifier)), mThrowForce(throwForce),
+        : Item(base), mEntityIdentifier(std::move(entityIdentifier)), mLaunchPower(launchPower),
           mCooldownTicks(cooldownTicks), mDispenseMode(dispenseMode) {}
 
 bool ThrowableItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
     if (player.hasItemCooldown(item, owner.getCurrentTick()))
         return true;
 
-    ServerActor *projectile = owner.spawnProjectile(player, mEntityIdentifier, mThrowForce,
+    ServerActor *projectile = owner.spawnProjectile(player, mEntityIdentifier, mLaunchPower,
                                                     ServerNetworkHandler::THROWN_PROJECTILE_DROP);
     if (projectile == nullptr)
         return false;

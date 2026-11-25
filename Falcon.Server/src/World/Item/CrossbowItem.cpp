@@ -12,6 +12,7 @@ FALCON_REGISTER_ITEM_CUSTOM(
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/RangedWeaponHelpers.h"
+#include "Core/Math/MathConstants.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
@@ -25,7 +26,8 @@ namespace {
     const char *CHARGED_LOAD_TICK_TAG = "LoadTick";
     const int64_t CROSSBOW_FIRE_DELAY_TICKS = 5;
 
-    const float CROSSBOW_FORCE = 3.15f;
+    // multishot turns the side arrows this far off the middle one
+    const float MULTISHOT_SPREAD_DEGREES = 10.0f;
     const int32_t CROSSBOW_LOAD_TICKS = 25;
     const int32_t CROSSBOW_QUICK_CHARGE_TICKS = 5;
 
@@ -64,7 +66,7 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
     const int32_t shots = multishot > 0 ? 3 : 1;
 
     for (int32_t index = 0; index < shots; ++index) {
-        ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, CROSSBOW_FORCE);
+        ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR);
         if (arrow == nullptr)
             continue;
 
@@ -79,7 +81,8 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
         }
 
         if (index > 0) {
-            const float spread = index == 1 ? -0.17f : 0.17f;
+            const float spread = (index == 1 ? -MULTISHOT_SPREAD_DEGREES : MULTISHOT_SPREAD_DEGREES)
+                                 * MathConstants::DEGREES_TO_RADIANS_F;
             Vector3f motion = arrow->getMotion();
             const float x = motion.x * std::cos(spread) - motion.z * std::sin(spread);
             const float z = motion.x * std::sin(spread) + motion.z * std::cos(spread);

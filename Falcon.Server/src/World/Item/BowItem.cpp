@@ -17,7 +17,6 @@ FALCON_REGISTER_ITEM_CUSTOM(
 using namespace RangedWeaponHelpers;
 
 namespace {
-    const float BOW_MAX_FORCE = 3.0f;
     const int32_t BOW_MINIMUM_TICKS = 3;
     const int32_t FLAME_ARROW_FIRE_TICKS = 5 * 20;
 
@@ -59,17 +58,18 @@ bool BowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, con
     if (finiteResources && arrowSlot < 0)
         return false;
 
-    const float force = chargeForce(elapsedTicks, BOW_MAX_FORCE);
-    if (force < 0.1f || elapsedTicks < BOW_MINIMUM_TICKS)
+    // the draw scales the player arrow's power
+    const float draw = chargeForce(elapsedTicks, 1.0f);
+    if (draw < 0.1f || elapsedTicks < BOW_MINIMUM_TICKS)
         return false;
 
-    ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, force, 0.0f, &item);
+    ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, draw, 0.0f, &item);
     if (arrow == nullptr)
         return false;
 
     ProjectileData &data = arrow->getProjectileData();
     data.mBaseDamage = ARROW_BASE_DAMAGE;
-    data.mCritical = force >= BOW_MAX_FORCE;
+    data.mCritical = draw >= 1.0f;
     if (arrowSlot >= 0) {
         data.mPickupItem = arrowAt(player, arrowSlot);
         data.mPickupItem.mCount = 1;

@@ -12,6 +12,7 @@
 #include "World/Actor/DynamicPropertyStore.h"
 #include "World/Actor/ActorClassRegistry.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Mob/Component/MobShooter.h"
 #include "World/Actor/Movement/BandwidthOptimization.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/ServerActor.h"
@@ -462,16 +463,26 @@ namespace {
         const float pitch = std::atan2(motion.y, horizontal) / MathConstants::DEGREES_TO_RADIANS_F;
         actor.setRotation(Vector3f(pitch, yaw, yaw));
     }
+
+    // the direction normalized, a gaussian of 0.0075 per uncertainty unit on each axis, times the power
+    Vector3f shotMotion(const Vector3f &direction, float uncertainty, float power) {
+        static std::mt19937 generator{std::random_device{}()};
+        std::normal_distribution<float> gaussian(0.0f, 1.0f);
+        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
+                                       + direction.z * direction.z);
+        Vector3f motion;
+        if (length >= 0.001f)
+            motion = Vector3f(direction.x / length, direction.y / length, direction.z / length);
+        const float spread = 0.0075f * uncertainty;
+        motion.x = (motion.x + gaussian(generator) * spread) * power;
+        motion.y = (motion.y + gaussian(generator) * spread) * power;
+        motion.z = (motion.z + gaussian(generator) * spread) * power;
+        return motion;
+    }
 }
 
-ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
-                                                   float verticalOffset, const ItemStack *weapon) {
-    const Vector3f &rotation = player.getRotation();
-    const float pitch = rotation.x * MathConstants::DEGREES_TO_RADIANS_F;
-    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
-
-    const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
-
+ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const std::string &identifier,
+                                                   float launchPower, float verticalOffset, const ItemStack *weapon) {
     Vector3f spawnPosition = player.getPosition();
     spawnPosition.y += player.getEyeHeight() + verticalOffset;
 
@@ -483,7 +494,26 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     projectile->setOwnerUniqueId(player.getUniqueId());
     projectile->getProjectileData().mLootingLevel = ItemEnchantments::getLevel(player.getInventory().getItemInHand(),
                                                                                EnchantmentIds::LOOTING);
-    projectile->setMotion(Vector3f(direction.x * speed, direction.y * speed, direction.z * speed));
+
+    ProjectileComponent component;
+    const bool defined = ProjectileComponent::findSpawned(*this, *projectile, player, component);
+    if (defined)
+        projectile->getProjectileComponent() = component;
+    else
+        component = projectile->getProjectileComponent();
+    // no minecraft:projectile and no projectile class: nothing gives it a power, it stays put
+    const float speed = defined || dynamic_cast<ProjectileActor *>(projectile) != nullptr
+                                ? component.mPower * launchPower
+                                : 0.0f;
+
+    // the current game adds angle_offset to the pitch as is
+    const Vector3f &rotation = player.getRotation();
+    const float pitch = (rotation.x + component.mAngleOffset) * MathConstants::DEGREES_TO_RADIANS_F;
+    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
+    const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
+    const float uncertainty = MobShooter::uncertainty(component.mUncertaintyBase, component.mUncertaintyMultiplier,
+                                                      (int32_t) getProperties().getDifficulty());
+    projectile->setMotion(shotMotion(direction, uncertainty, speed));
     if (weapon != nullptr) {
         EventSignal<PlayerShootBowBeforeEvent> &shootBow = mEventBus.before().mPlayerShootBow;
         if (shootBow.hasSubscribers()) {
@@ -520,8 +550,7 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
-// a projectile spawned without an owner, then shot:
-// the direction normalized, a gaussian of 0.0075 per uncertainty unit, times the power
+// a projectile spawned without an owner, then shot along direction with uncertainty_base alone
 ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
                                                             const Vector3f &position, const Vector3f &direction,
                                                             const std::function<void(ServerActor &)> &configure) {
@@ -532,17 +561,7 @@ ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const 
     projectile->setProjectile(true);
     ProjectileComponent component;
     if (ProjectileComponent::find(identifier, projectile->getDefinition(), component)) {
-        static std::mt19937 generator{std::random_device{}()};
-        std::normal_distribution<float> gaussian(0.0f, 1.0f);
-        const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y
-                                       + direction.z * direction.z);
-        Vector3f motion;
-        if (length >= 0.001f)
-            motion = Vector3f(direction.x / length, direction.y / length, direction.z / length);
-        const float spread = 0.0075f * component.mUncertaintyBase;
-        motion.x = (motion.x + gaussian(generator) * spread) * component.mPower;
-        motion.y = (motion.y + gaussian(generator) * spread) * component.mPower;
-        motion.z = (motion.z + gaussian(generator) * spread) * component.mPower;
+        const Vector3f motion = shotMotion(direction, component.mUncertaintyBase, component.mPower);
         projectile->setMotion(motion);
         faceMotion(*projectile, motion);
         broadcastActorMove(*projectile);

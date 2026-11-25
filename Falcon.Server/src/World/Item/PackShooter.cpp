@@ -6,7 +6,6 @@
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
-#include "World/Actor/Projectile/ProjectileComponent.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Inventory/ItemStackNbt.h"
 #include "World/Item/EnchantmentData.h"
@@ -173,11 +172,7 @@ namespace {
     // speed is the entity's own projectile power times the launch power
     ServerActor *launch(ServerNetworkHandler &owner, ServerPlayer &player, const std::string &entity, float power,
                         float minimumCriticalPower, float verticalOffset) {
-        ProjectileComponent component;
-        const bool found = ProjectileComponent::find(
-                entity, CustomContentRegistry::getInstance().getActorDefinition(entity), component);
-        ServerActor *projectile = owner.spawnProjectile(player, entity, found ? component.mPower * power : 0.0f,
-                                                        verticalOffset);
+        ServerActor *projectile = owner.spawnProjectile(player, entity, power, verticalOffset);
         if (projectile != nullptr)
             projectile->getProjectileData().mCritical = minimumCriticalPower >= 0.0f && power >= minimumCriticalPower;
         return projectile;
