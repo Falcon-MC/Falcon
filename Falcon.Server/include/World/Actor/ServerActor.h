@@ -48,6 +48,8 @@ struct ProjectileData {
     bool mStuck = false;
     int32_t mStuckTicks = 0;
     Vector3i mStuckBlock;
+    // the point it struck: it stays while that point is inside the block's shape
+    Vector3f mStuckAt;
     bool mPickupCreativeOnly = false;
     ItemStack mPickupItem;
     int32_t mFavoredSlot = -1;

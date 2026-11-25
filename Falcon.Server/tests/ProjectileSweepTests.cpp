@@ -79,6 +79,35 @@ namespace {
                 "the arrow did not stop on the wall's face, z " + std::to_string(arrow->getPosition().z));
     }
 
+    // a planted arrow stays while its block still covers the point it struck, and drops once it does not
+    void arrowReleased(ServerNetworkHandler &owner, Level &level) {
+        const BlockState stone = VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState();
+        level.setBlock(Vector3i(14, 100, 40), stone, false);
+        ServerActor *arrow = owner.spawnActor(level, "minecraft:arrow", Vector3f(14.5f, 100.8f, 10.5f));
+        require(arrow != nullptr, "no fixture arrow");
+        arrow->setProjectile(true);
+        for (int tick = 0; tick < 2; ++tick) {
+            arrow->setMotion(Vector3f(0.0f, 0.0f, 0.0f));
+            arrow->setPosition(Vector3f(14.5f, 100.8f, 10.5f));
+            owner.tickActors();
+        }
+        arrow->setMotion(Vector3f(0.0f, 0.0f, 40.0f));
+        owner.tickActors();
+        require(arrow->getProjectileData().mStuck, "the arrow did not plant in the stone");
+
+        level.setBlock(Vector3i(14, 100, 40), VanillaBlocks::fromIdentifier("minecraft:dirt")->toBlockState(), false);
+        owner.tickActors();
+        require(arrow->getProjectileData().mStuck, "an arrow fell out of a block swapped for another full one");
+
+        BlockState slab = VanillaBlocks::fromIdentifier("minecraft:smooth_stone_slab")->toBlockState();
+        slab.mStates.putString("minecraft:vertical_half", "bottom");
+        level.setBlock(Vector3i(14, 100, 40), slab, false);
+        owner.tickActors();
+        require(!arrow->getProjectileData().mStuck, "an arrow stayed above the bottom slab its block became");
+        const Vector3f motion = arrow->getMotion();
+        require(motion.x == 0.0f && motion.z == 0.0f, "a released arrow kept a horizontal motion");
+    }
+
     // a fast sweep still meets the mob it crosses; a non finite one is dropped instead of walked
     void run() {
         ServerNetworkHandler owner("Projectile sweep", "", 1);
@@ -118,6 +147,7 @@ namespace {
 
         clipFaces(level);
         arrowIntoWall(owner, level);
+        arrowReleased(owner, level);
     }
 }
 

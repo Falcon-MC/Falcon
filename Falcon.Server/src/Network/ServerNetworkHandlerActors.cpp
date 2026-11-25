@@ -18,6 +18,7 @@
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Misc/PaintingActor.h"
 #include "World/Level/Block/BlockClip.h"
+#include "World/Level/Block/BlockShape.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "Server/Commands/ExecuteCommandOrigin.h"
 #include "Server/Commands/ServerCommandOrigin.h"
@@ -705,6 +706,7 @@ void ServerNetworkHandler::dropProjectileItem(ServerActor &projectile, const Vec
 void ServerNetworkHandler::plantProjectile(ServerActor &projectile, const Vector3i &block) {
     ProjectileData &data = projectile.getProjectileData();
     data.mStuckBlock = block;
+    data.mStuckAt = projectile.getPosition();
     data.mStuckTicks = 0;
     data.mCritical = false;
     projectile.setMotion(Vector3f());
@@ -721,15 +723,21 @@ void ServerNetworkHandler::plantProjectile(ServerActor &projectile, const Vector
 // true once the planted projectile is gone: picked up or expired
 bool ServerNetworkHandler::tickPlantedProjectile(ServerActor &projectile, Level &level) {
     ProjectileData &data = projectile.getProjectileData();
-    if (++data.mStuckTicks >= STUCK_ARROW_LIFETIME)
-        return true;
+    // held still every tick: the game's release scales this zero motion by a random fifth, so it just drops
+    projectile.setMotion(Vector3f());
 
+    // the block went or no longer covers the point it struck: it falls again; an unloaded one holds it
     const Vector3i &block = data.mStuckBlock;
-    if (!level.isSolidAt(block.x, block.y, block.z)) {
-        // the block went: the arrow falls again
+    const BlockState *state = level.peekBlockPtr(block.x, block.y, block.z);
+    if (state != nullptr
+        && !BlockShape::isPositionInside(*state, block.x, block.y, block.z, data.mStuckAt.x, data.mStuckAt.y,
+                                         data.mStuckAt.z, &projectile)) {
         data.mStuck = false;
         return false;
     }
+
+    if (++data.mStuckTicks >= STUCK_ARROW_LIFETIME)
+        return true;
 
     const Vector3f &position = projectile.getPosition();
     for (auto &entry: mPlayers) {
