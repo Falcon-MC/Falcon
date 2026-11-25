@@ -1,6 +1,5 @@
 #include "Network/ServerNetworkHandler.h"
 #include "World/Actor/AI/Goal/MobAttack.h"
-#include "World/Actor/AI/Navigation/PathFinder.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -52,33 +51,6 @@ namespace {
             require(mob != nullptr, identifier);
             mob->startDefinition(mOwner);
             return *mob;
-        }
-
-        void ticks(int32_t count) {
-            // the world tick moves with the overworld, as a server tick does
-            for (int32_t tick = 0; tick < count; tick++) {
-                mOwner.getWorlds().getDefault().getOverworld().tickTime();
-                // the server tick stays put without a full tick: a reservation for another tick frees the path budget
-                PathFinder::tryReserveSearch(-1);
-                mOwner.tickActors();
-            }
-        }
-
-        size_t countOf(const char *identifier) {
-            size_t found = 0;
-            for (auto &entry: mOwner.getActors()) {
-                if (entry.second->getTypeId() == identifier && !entry.second->isDead())
-                    ++found;
-            }
-            return found;
-        }
-
-        MobActor *first(const char *identifier) {
-            for (auto &entry: mOwner.getActors()) {
-                if (entry.second->getTypeId() == identifier && !entry.second->isDead())
-                    return dynamic_cast<MobActor *>(entry.second.get());
-            }
-            return nullptr;
         }
     };
 
