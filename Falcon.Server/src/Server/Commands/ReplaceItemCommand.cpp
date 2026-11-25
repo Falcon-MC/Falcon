@@ -559,10 +559,9 @@ bool ReplaceItemCommand::execute(CommandOrigin &sender, const std::vector<std::s
         }
     } else {
         const Vector3f origin = sender.getPosition();
-        const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                                   (int32_t) std::floor(origin.z));
+        const Vector3f rotation = sender.getRotation();
         Level *level = sender.getLevel();
-        if (slotName != BLOCK_SLOT || level == nullptr || !parseBlockPosition(tokens, 1, originBlock, position)) {
+        if (slotName != BLOCK_SLOT || level == nullptr || !parseBlockPosition(tokens, 1, origin, rotation, position)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }

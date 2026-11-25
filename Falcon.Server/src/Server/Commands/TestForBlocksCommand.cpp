@@ -31,15 +31,14 @@ bool TestForBlocksCommand::execute(CommandOrigin &sender, const std::vector<std:
     }
 
     const Vector3f origin = sender.getPosition();
-    const Vector3i originBlock((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
-                               (int32_t) std::floor(origin.z));
+    const Vector3f rotation = sender.getRotation();
 
     Vector3i begin;
     Vector3i end;
     Vector3i destination;
-    if (arguments.size() < 9 || !parseBlockPosition(arguments, 0, originBlock, begin)
-        || !parseBlockPosition(arguments, 3, originBlock, end)
-        || !parseBlockPosition(arguments, 6, originBlock, destination)) {
+    if (arguments.size() < 9 || !parseBlockPosition(arguments, 0, origin, rotation, begin)
+        || !parseBlockPosition(arguments, 3, origin, rotation, end)
+        || !parseBlockPosition(arguments, 6, origin, rotation, destination)) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
     }

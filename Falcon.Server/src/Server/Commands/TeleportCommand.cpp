@@ -47,12 +47,11 @@ std::vector<CommandOverloadData> TeleportCommand::getOverloads() const {
 }
 
 bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
-                                    Vector3f &out) {
+                                    const Vector3f &rotation, Vector3f &out) {
     if (arguments.size() != first + 3)
         return false;
 
-    if (!parseCoordinate(arguments[first], origin.x, out.x) || !parseCoordinate(arguments[first + 1], origin.y, out.y)
-        || !parseCoordinate(arguments[first + 2], origin.z, out.z))
+    if (!Command::parsePosition(arguments, first, origin, rotation, out))
         return false;
     // the game centers an absolute whole x or z on its block, as CommandPosition does; y stays
     const auto whole = [](const std::string &value) {
@@ -105,7 +104,7 @@ bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vecto
     EventSignal<ActorTeleportBeforeEvent> &teleport = mHandler.getEventBus().before().mActorTeleport;
     for (ServerPlayer *victim: victims) {
         Vector3f destination;
-        if (!parsePosition(arguments, first, victim->getPosition(), destination)) {
+        if (!parsePosition(arguments, first, victim->getPosition(), victim->getRotation(), destination)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }

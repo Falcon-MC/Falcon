@@ -86,7 +86,7 @@ bool SpawnPointCommand::execute(CommandOrigin &sender, const std::vector<std::st
         Vector3i spawn((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
                        (int32_t) std::floor(position.z));
 
-        if (explicitPosition && !parseBlockPosition(arguments, positionIndex, spawn, spawn)) {
+        if (explicitPosition && !parseBlockPosition(arguments, positionIndex, position, target->getRotation(), spawn)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }

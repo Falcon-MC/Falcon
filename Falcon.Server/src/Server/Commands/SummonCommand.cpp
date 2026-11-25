@@ -76,10 +76,7 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
     if (arguments.size() == 2) {
         nameTag = arguments[1];
     } else if (arguments.size() >= 4) {
-        const Vector3f origin = position;
-
-        if (!parseCoordinate(arguments[1], origin.x, position.x) || !parseCoordinate(arguments[2], origin.y, position.y)
-            || !parseCoordinate(arguments[3], origin.z, position.z)) {
+        if (!parsePosition(arguments, 1, sender.getPosition(), sender.getRotation(), position)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }

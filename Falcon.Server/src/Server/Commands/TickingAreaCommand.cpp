@@ -109,9 +109,7 @@ bool TickingAreaCommand::execute(CommandOrigin &sender, const std::vector<std::s
         return false;
     }
 
-    const Vector3f position = sender.getPosition();
-    const Vector3i origin((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
-                          (int32_t) std::floor(position.z));
+    const Vector3f origin = sender.getPosition();
     const std::string &mode = arguments[0];
 
     if (mode == "add")
@@ -130,7 +128,7 @@ bool TickingAreaCommand::execute(CommandOrigin &sender, const std::vector<std::s
 }
 
 bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::string> &arguments,
-                              const Vector3i &origin) {
+                              const Vector3f &origin) {
     World &world = mHandler.getWorldOf(*sender.getLevel());
     TickingAreaManager &areas = world.getTickingAreas();
     const bool circle = arguments.size() > 1 && arguments[1] == "circle";
@@ -140,7 +138,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
     if (circle) {
         Vector3i center;
         int32_t radius = 0;
-        if (arguments.size() < 6 || !parseBlockPosition(arguments, 2, origin, center)
+        if (arguments.size() < 6 || !parseBlockPosition(arguments, 2, origin, sender.getRotation(), center)
             || !parseInteger(arguments[5], radius) || radius < 0) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
@@ -156,8 +154,8 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
     } else {
         Vector3i from;
         Vector3i to;
-        if (arguments.size() < 7 || !parseBlockPosition(arguments, 1, origin, from)
-            || !parseBlockPosition(arguments, 4, origin, to)) {
+        if (arguments.size() < 7 || !parseBlockPosition(arguments, 1, origin, sender.getRotation(), from)
+            || !parseBlockPosition(arguments, 4, origin, sender.getRotation(), to)) {
             sender.sendTranslation("commands.generic.usage", {getUsage()});
             return false;
         }
@@ -208,7 +206,7 @@ bool TickingAreaCommand::_add(CommandOrigin &sender, const std::vector<std::stri
 }
 
 bool TickingAreaCommand::_remove(CommandOrigin &sender, const std::vector<std::string> &arguments,
-                                 const Vector3i &origin) {
+                                 const Vector3f &origin) {
     if (arguments.size() < 2) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
@@ -216,7 +214,8 @@ bool TickingAreaCommand::_remove(CommandOrigin &sender, const std::vector<std::s
 
     const DimensionType dimension = sender.getLevel()->getDimensionType();
     Vector3i position;
-    const bool byPosition = arguments.size() >= 4 && parseBlockPosition(arguments, 1, origin, position);
+    const bool byPosition = arguments.size() >= 4
+                            && parseBlockPosition(arguments, 1, origin, sender.getRotation(), position);
     const std::string name = arguments[1];
 
     World &world = mHandler.getWorldOf(*sender.getLevel());
@@ -297,7 +296,7 @@ bool TickingAreaCommand::_list(CommandOrigin &sender, const std::vector<std::str
 }
 
 bool TickingAreaCommand::_preload(CommandOrigin &sender, const std::vector<std::string> &arguments,
-                                  const Vector3i &origin) {
+                                  const Vector3f &origin) {
     if (arguments.size() < 2) {
         sender.sendTranslation("commands.generic.usage", {getUsage()});
         return false;
@@ -305,7 +304,8 @@ bool TickingAreaCommand::_preload(CommandOrigin &sender, const std::vector<std::
 
     const DimensionType dimension = sender.getLevel()->getDimensionType();
     Vector3i position;
-    const bool byPosition = arguments.size() >= 4 && parseBlockPosition(arguments, 1, origin, position);
+    const bool byPosition = arguments.size() >= 4
+                            && parseBlockPosition(arguments, 1, origin, sender.getRotation(), position);
     const size_t valueIndex = byPosition ? 4 : 2;
     const std::string name = arguments[1];
 

@@ -55,6 +55,17 @@ CommandParamData Command::makeEnumParameter(const std::string &name, const std::
     return parameter;
 }
 
+namespace {
+    bool toBlockCoordinate(float value, int32_t &out) {
+        const float floored = std::floor(value);
+        if (floored < -30000000.0f || floored > 30000000.0f)
+            return false;
+
+        out = (int32_t) floored;
+        return true;
+    }
+}
+
 bool Command::parseCoordinate(const std::string &value, float origin, float &out) {
     const bool relative = !value.empty() && value[0] == '~';
     const std::string number = relative ? value.substr(1) : value;
@@ -114,25 +125,28 @@ bool Command::parsePosition(const std::vector<std::string> &arguments, size_t fi
 
 bool Command::parseBlockCoordinate(const std::string &value, int32_t origin, int32_t &out) {
     float parsed = 0.0f;
-    if (!parseCoordinate(value, (float) origin, parsed))
-        return false;
-
-    const float floored = std::floor(parsed);
-    if (floored < -30000000.0f || floored > 30000000.0f)
-        return false;
-
-    out = (int32_t) floored;
-    return true;
+    return parseCoordinate(value, (float) origin, parsed) && toBlockCoordinate(parsed, out);
 }
 
-bool Command::parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3i &origin,
-                                 Vector3i &out) {
+bool Command::parseBlockPosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
+                                 const Vector3f &rotation, Vector3i &out) {
     if (arguments.size() < first + 3)
         return false;
 
-    return parseBlockCoordinate(arguments[first], origin.x, out.x)
-           && parseBlockCoordinate(arguments[first + 1], origin.y, out.y)
-           && parseBlockCoordinate(arguments[first + 2], origin.z, out.z);
+    bool local = false;
+    for (size_t index = first; index < first + 3; ++index)
+        local |= !arguments[index].empty() && arguments[index][0] == '^';
+    if (local) {
+        Vector3f position;
+        return parsePosition(arguments, first, origin, rotation, position) && toBlockCoordinate(position.x, out.x)
+               && toBlockCoordinate(position.y, out.y) && toBlockCoordinate(position.z, out.z);
+    }
+
+    const Vector3i block((int32_t) std::floor(origin.x), (int32_t) std::floor(origin.y),
+                         (int32_t) std::floor(origin.z));
+    return parseBlockCoordinate(arguments[first], block.x, out.x)
+           && parseBlockCoordinate(arguments[first + 1], block.y, out.y)
+           && parseBlockCoordinate(arguments[first + 2], block.z, out.z);
 }
 
 std::string Command::joinArguments(const std::vector<std::string> &arguments, size_t first) {
