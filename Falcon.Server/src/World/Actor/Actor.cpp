@@ -251,18 +251,7 @@ float Actor::getMaxFood() const {
 }
 
 void Actor::setFood(float food) {
-    const float old = mAttributes.get(ATTRIBUTE_HUNGER);
     mAttributes.setClamped(ATTRIBUTE_HUNGER, food);
-
-    const float updated = mAttributes.get(ATTRIBUTE_HUNGER);
-    const float bounds[3] = {17.0f, 6.0f, 0.0f};
-
-    for (float bound: bounds) {
-        if ((old > bound) != (updated > bound)) {
-            mFoodTickTimer = 0;
-            break;
-        }
-    }
 }
 
 void Actor::addFood(float amount) {
@@ -473,33 +462,31 @@ bool Actor::tickHunger(int tickDiff, int difficulty, bool naturalRegeneration) {
     float food = previousFood;
     const float maxHealth = getMaxHealth();
 
-    mFoodTickTimer += tickDiff;
-    if (mFoodTickTimer >= FOOD_TICK_PERIOD)
-        mFoodTickTimer = 0;
-
-    if (difficulty == DIFFICULTY_PEACEFUL && mFoodTickTimer % 10 == 0) {
+    mHungerTicks += tickDiff;
+    if (difficulty == DIFFICULTY_PEACEFUL && mHungerTicks % 10 == 0) {
         if (food < getMaxFood()) {
             addFood(1.0f);
             food = getFood();
         }
 
-        if (mFoodTickTimer % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
+        if (mHungerTicks % 20 == 0 && naturalRegeneration && getHealth() < maxHealth)
             heal(1.0f, HealCause::SelfHeal);
     }
 
-    if (mFoodTickTimer == 0) {
-        if (food >= 18.0f && naturalRegeneration) {
-            if (getHealth() < maxHealth) {
-                heal(1.0f, HealCause::SelfHeal);
-                exhaust(6.0f);
-            }
-        } else if (food <= 0.0f) {
-            const float health = getHealth();
-            const bool starve = (difficulty == DIFFICULTY_EASY && health > 10.0f)
-                                || (difficulty == DIFFICULTY_NORMAL && health > 1.0f) || difficulty == DIFFICULTY_HARD;
-
-            if (starve)
-                mPendingStarveDamage = true;
+    // the game compares whole hearts: 19.5 of 20 no longer heals
+    const float health = std::ceil(getHealth());
+    const bool regenerating = food >= 18.0f && naturalRegeneration && health > 0.0f && health < std::ceil(maxHealth);
+    // the timer only runs while healing or starving: 80 ticks from the moment either starts
+    if (!regenerating && food > 0.0f) {
+        mFoodTickTimer = 0;
+    } else if ((mFoodTickTimer += tickDiff) >= FOOD_TICK_PERIOD) {
+        mFoodTickTimer = 0;
+        if (regenerating) {
+            heal(1.0f, HealCause::SelfHeal);
+            exhaust(6.0f);
+        } else if ((difficulty == DIFFICULTY_EASY && health > 10.0f) || (difficulty == DIFFICULTY_NORMAL && health > 1.0f)
+                   || difficulty == DIFFICULTY_HARD) {
+            mPendingStarveDamage = true;
         }
     }
 

@@ -603,6 +603,8 @@ protected:
     ExperienceManager mExperience;
     MobEffectManager mEffects;
     int mFoodTickTimer = 0;
+    // never reset: the peaceful food and health cadence
+    int mHungerTicks = 0;
     bool mHungerEnabled = true;
     int mDifficulty = 2;
     bool mPendingStarveDamage = false;
