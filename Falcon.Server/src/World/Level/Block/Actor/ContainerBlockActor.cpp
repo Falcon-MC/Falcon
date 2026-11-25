@@ -1,7 +1,11 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 
+#include "Protocol/Types/ItemDefinition.h"
 #include "World/Inventory/ItemStackNbt.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/Level.h"
+
+#include <algorithm>
 
 namespace {
     const char *TAG_PAGE = "page";
@@ -13,6 +17,9 @@ namespace {
     const char *TAG_CRAFTING_TICKS = "crafting_ticks_remaining";
     const char *STATE_CRAFTING = "crafting";
     const uint16_t ALL_SLOTS = 0x1FF;
+    const char *TAG_ITEMS = "Items";
+    const char *TAG_LAST_INTERACTED_SLOT = "LastInteractedSlot";
+    const char *TAG_BOOKSHELF_BOOKS = "minecraft:bookshelf_books";
 }
 
 Tag ShulkerBoxBlockActor::saveNbt() const {
@@ -36,6 +43,81 @@ Tag ShelfBlockActor::getSpawnCompound() const {
     Tag data = BlockActor::getSpawnCompound();
     data.put("Items", mInventory.saveItems());
     return data;
+}
+
+Tag ChiseledBookshelfBlockActor::saveNbt() const {
+    Tag data = Tag::ofCompound();
+    std::vector<Tag> items;
+    for (int slot = 0; slot < SIZE; ++slot)
+        items.push_back(ItemStackNbt::write(mInventory.getContainerItem(slot)));
+    data.put(TAG_ITEMS, Tag::ofList(Tag::Type::Compound, std::move(items)));
+    data.putInt(TAG_LAST_INTERACTED_SLOT, mLastInteractedSlot);
+    return data;
+}
+
+// the game reads the slot from the position in Items and drops anything that is not a book
+void ChiseledBookshelfBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    mInventory.clear();
+    const Tag *items = data.get(TAG_ITEMS);
+    if (items != nullptr && items->isList()) {
+        int slot = 0;
+        for (const Tag &entry: items->getList()) {
+            if (slot >= SIZE)
+                break;
+            ItemStack book = ItemStackNbt::read(entry, context);
+            if (isBook(book)) {
+                book.mCount = 1;
+                mInventory.setContainerItem(slot, std::move(book));
+            }
+            ++slot;
+        }
+    }
+    mLastInteractedSlot = std::clamp(data.getInt(TAG_LAST_INTERACTED_SLOT, 0), 0, SIZE);
+}
+
+Tag ChiseledBookshelfBlockActor::getSpawnCompound() const {
+    Tag data = BlockActor::getSpawnCompound();
+    const Tag saved = saveNbt();
+    data.put(TAG_ITEMS, *saved.get(TAG_ITEMS));
+    data.putInt(TAG_LAST_INTERACTED_SLOT, mLastInteractedSlot);
+    return data;
+}
+
+bool ChiseledBookshelfBlockActor::isBook(const ItemStack &item) {
+    if (item.isAir() || item.mCount <= 0 || item.mDefinition == nullptr)
+        return false;
+    const std::vector<std::string> &tags = CraftingRecipeTable::getItemTags(std::string(item.mDefinition->getIdentifier()));
+    return std::find(tags.begin(), tags.end(), TAG_BOOKSHELF_BOOKS) != tags.end();
+}
+
+bool ChiseledBookshelfBlockActor::insertBook(int slot, const ItemStack &book) {
+    if (slot < 0 || slot >= SIZE || !isBook(book) || !mInventory.getContainerItem(slot).isAir())
+        return false;
+    ItemStack single = book;
+    single.mCount = 1;
+    mInventory.setContainerItem(slot, std::move(single));
+    mLastInteractedSlot = slot + 1;
+    return true;
+}
+
+ItemStack ChiseledBookshelfBlockActor::takeBook(int slot) {
+    if (slot < 0 || slot >= SIZE)
+        return ItemStack::air();
+    ItemStack book = mInventory.getContainerItem(slot);
+    if (book.isAir())
+        return book;
+    mInventory.setContainerItem(slot, ItemStack::air());
+    mLastInteractedSlot = slot + 1;
+    return book;
+}
+
+int ChiseledBookshelfBlockActor::getBooksStored() const {
+    int bits = 0;
+    for (int slot = 0; slot < SIZE; ++slot) {
+        if (!mInventory.getContainerItem(slot).isAir())
+            bits |= 1 << slot;
+    }
+    return bits;
 }
 
 Tag ContainerBlockActor::saveNbt() const {

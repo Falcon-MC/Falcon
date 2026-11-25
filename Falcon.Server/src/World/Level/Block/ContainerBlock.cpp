@@ -471,6 +471,97 @@ namespace {
         level.postGameEvent(GameEvents::SINGLE_ITEM_SWAP, center, &player);
         return true;
     }
+
+    // the face the books show on: direction 0 to 3 is south, west, north, east
+    int bookshelfFront(const BlockState &state) {
+        static const int FRONTS[4] = {3, 4, 2, 5};
+        return FRONTS[state.mStates.getInt("direction", 0) & 3];
+    }
+
+    // the game cuts the front in thirds across at 0.3125 and 0.6875 and in halves up at 0.5: slots 0 to 2 along
+    // the top, 3 to 5 along the bottom; -1 off the front
+    int bookshelfSlotAt(int face, const Vector3f &click) {
+        float across = 0.0f;
+        switch (face) {
+            case 2:
+                across = 1.0f - click.x;
+                break;
+            case 3:
+                across = click.x;
+                break;
+            case 4:
+                across = click.z;
+                break;
+            case 5:
+                across = 1.0f - click.z;
+                break;
+            default:
+                return -1;
+        }
+        if (across < 0.0f || across > 1.0f || click.y < 0.0f || click.y > 1.0f)
+            return -1;
+        const int column = across <= 0.3125f ? 0 : across <= 0.6875f ? 1 : 2;
+        return (click.y >= 0.5f ? 0 : 3) + column;
+    }
+
+    bool isEnchantedBook(const ItemStack &item) {
+        return !item.isAir() && item.mDefinition != nullptr
+               && item.mDefinition->getIdentifier() == "minecraft:enchanted_book";
+    }
+
+    // books_stored follows the slots; comparators read the slot last used
+    void syncBookshelf(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                       ChiseledBookshelfBlockActor &bookshelf) {
+        Tag states = state.mStates;
+        states.putInt("books_stored", bookshelf.getBooksStored());
+        const BlockState updated(state.mName, states);
+        level.setBlock(position, updated, true);
+        BlockActionHandler::broadcastBlockUpdate(owner, level, position, updated);
+        BlockActionHandler::broadcastBlockActorData(owner, level, bookshelf);
+        RedstoneSystem::queueRedstoneNotification(level, position);
+    }
+
+    // a book from the hand into an empty slot, or the book in the slot into the inventory, dropped when it is full;
+    // any other click on a slot does nothing but is still used up
+    bool useBookshelf(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                      const BlockState &state, int face, const Vector3f &clickPosition) {
+        if (player.isSpectator() || face != bookshelfFront(state))
+            return false;
+        const int slot = bookshelfSlotAt(face, clickPosition);
+        if (slot < 0)
+            return false;
+
+        Level &level = owner.getLevelFor(player);
+        ChiseledBookshelfBlockActor &bookshelf = level.getBlockActors().getOrCreate<ChiseledBookshelfBlockActor>(position);
+        PlayerInventory &inventory = player.getInventory();
+        const char *sound = nullptr;
+        if (!bookshelf.getInventory().getContainerItem(slot).isAir()) {
+            ItemStack book = bookshelf.takeBook(slot);
+            sound = isEnchantedBook(book) ? "pickup_enchanted" : "pickup";
+            std::vector<int> touched;
+            const int remaining = inventory.addItemPartial(book, touched);
+            for (const int changed: touched)
+                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, changed);
+            if (remaining > 0) {
+                book.mCount = remaining;
+                owner._throwItem(player, book);
+            }
+        } else {
+            ItemStack held = inventory.getItemInHand();
+            if (!bookshelf.insertBook(slot, held))
+                return true;
+            sound = isEnchantedBook(held) ? "insert_enchanted" : "insert";
+            if (!player.isCreative()) {
+                --held.mCount;
+                inventory.setItemInHand(held.mCount > 0 ? std::move(held) : ItemStack::air());
+                player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
+                                                      inventory.getSelectedSlot());
+            }
+        }
+        syncBookshelf(owner, level, position, state, bookshelf);
+        owner.playLevelSound(level, sound, VectorMath::centerOf(position));
+        return true;
+    }
 }
 
 ContainerBlock::ContainerBlock(const Block &base) : Block(base) {}
@@ -495,6 +586,8 @@ bool ContainerBlock::onInteractAt(ServerNetworkHandler &owner, ServerPlayer &pla
     const ContainerBlockDefinition *definition = findDefinition(state.mName);
     if (definition != nullptr && definition->mKind == ContainerBlockKind::Shelf)
         return useShelf(owner, player, position, state, face, clickPosition);
+    if (definition != nullptr && definition->mKind == ContainerBlockKind::ChiseledBookshelf)
+        return useBookshelf(owner, player, position, state, face, clickPosition);
     return onInteract(owner, player, position, state);
 }
 
@@ -716,6 +809,12 @@ BlockState ContainerBlock::applyPlacementOrientation(const BlockState &state,
                 states.putString("minecraft:facing_direction", faceName(context.mFace));
             break;
         }
+        // the front faces the player
+        case ContainerBlockKind::ChiseledBookshelf: {
+            if (states.contains("direction"))
+                states.putInt("direction", horizontalOrdinal(context.mOppositeFacing));
+            break;
+        }
         case ContainerBlockKind::Shelf:
         case ContainerBlockKind::Campfire: {
             if (states.contains("minecraft:cardinal_direction"))
@@ -758,6 +857,11 @@ int ContainerBlock::getComparatorSignal(Level &level, const Vector3i &position, 
         case ContainerBlockKind::BrewingStand:
         case ContainerBlockKind::DecoratedPot:
             return containerSignal(level, position);
+        case ContainerBlockKind::ChiseledBookshelf: {
+            const ChiseledBookshelfBlockActor *bookshelf =
+                    level.getBlockActors().find<ChiseledBookshelfBlockActor>(position);
+            return bookshelf == nullptr ? 0 : bookshelf->getLastInteractedSlot();
+        }
         default:
             return -1;
     }

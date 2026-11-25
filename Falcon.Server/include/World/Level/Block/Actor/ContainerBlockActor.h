@@ -252,6 +252,33 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    // Items holds all six slots by position, empty ones too, as the game saves them
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    // an item of the minecraft:bookshelf_books tag: the only items a slot takes
+    static bool isBook(const ItemStack &item);
+
+    // one book in an empty slot; the slot becomes the last one used
+    bool insertBook(int slot, const ItemStack &book);
+
+    // the book in the slot, air without one; the slot becomes the last one used
+    ItemStack takeBook(int slot);
+
+    // books_stored: bit n set while slot n holds a book
+    int getBooksStored() const;
+
+    // 1 to 6 for the slot last filled or emptied, 0 before any; read by comparators
+    int getLastInteractedSlot() const {
+        return mLastInteractedSlot;
+    }
+
+private:
+    int mLastInteractedSlot = 0;
 };
 
 class DecoratedPotBlockActor final : public ContainerBlockActor {
