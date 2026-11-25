@@ -1,6 +1,9 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Misc/ItemActor.h"
+#include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Projectile/ProjectileActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
@@ -24,6 +27,7 @@
 
 namespace {
     const Vector3i AT(8, 100, 8);
+    const Vector3i FRONT(9, 100, 8);
     const int32_t FACING_EAST = 5;
 
     void require(bool condition, const std::string &message) {
@@ -113,6 +117,71 @@ namespace {
             mLevel.getBlockActors().insert(std::move(probe));
             return result;
         }
+
+        // a viewer of the chunk: sounds reach only those
+        void hear() {
+            const NetworkIdentifier id("9001", 9001);
+            ServerPlayer &player = mOwner.getPlayers().try_emplace(id, id, 9001).first->second;
+            player.moveToLevel(mLevel);
+            player.setPosition(Vector3f(8.5f, 100.0f, 8.5f));
+            player.setLoginState(ServerPlayer::LoginState::Spawned);
+            player.getSentChunks().insert(0);
+            mOwner.getNetworkHandler().setOutboundFilter([this](const NetworkIdentifier &, std::string &bytes) {
+                ReadOnlyBinaryStream header(bytes);
+                unsigned char sender = 0, recipient = 0;
+                if (Packet::peekId(header, sender, recipient) != MinecraftPacketIds::LevelSoundEvent)
+                    return false;
+                ReadOnlyBinaryStream body(bytes);
+                LevelSoundEventPacket packet;
+                packet.readHeader(body);
+                packet.read(body, mOwner.getCodecContext());
+                mSounds.push_back(packet.mSound);
+                return false;
+            });
+        }
+
+        ~Fixture() {
+            mOwner.getNetworkHandler().setOutboundFilter(nullptr);
+        }
+
+        int32_t sounds(const std::string &sound) const {
+            int32_t total = 0;
+            for (const std::string &heard: mSounds)
+                total += heard == sound ? 1 : 0;
+            return total;
+        }
+
+        const ItemStack &slot(int32_t index) const {
+            return mActor->getInventory().getContainerItem(index);
+        }
+
+        // in front of the dispenser
+        void hive(int32_t honeyLevel) {
+            BlockState state = VanillaBlocks::fromIdentifier("minecraft:beehive")->toBlockState();
+            Tag states = state.mStates;
+            states.putInt("honey_level", honeyLevel);
+            mLevel.setBlock(FRONT, BlockState(state.mName, states), false);
+        }
+
+        int32_t honeyLevel() {
+            return mLevel.getBlockState(FRONT.x, FRONT.y, FRONT.z).mStates.getInt("honey_level", -1);
+        }
+
+        // dropped items, by identifier, removed as they are counted
+        int32_t collect(const std::string &identifier) {
+            int32_t total = 0;
+            for (auto &entity: mOwner.getItemEntities()) {
+                ItemActor *item = entity.get();
+                if (item == nullptr || item->getItem().isAir()
+                    || item->getItem().mDefinition->getIdentifier() != identifier)
+                    continue;
+                total += item->getItem().mCount;
+                item->setItem(ItemStack::air());
+            }
+            return total;
+        }
+
+        std::vector<std::string> mSounds;
 
         ServerActor *find(const std::string &identifier) {
             for (auto &entry: mOwner.getActors()) {
@@ -210,6 +279,72 @@ namespace {
                 "dispense_fail was not posted at the dispenser center");
     }
 
+    // a full hive gives three honeycombs and calms down to empty; the shears stay, worn once
+    void hiveShears() {
+        Fixture fixture;
+        fixture.hear();
+        RecordingBlockActor &probe = fixture.listen();
+        fixture.hive(5);
+        fixture.load("minecraft:shears", 1);
+        fixture.fire();
+        require(fixture.collect("minecraft:honeycomb") == 3, "the full hive did not drop three honeycombs");
+        require(fixture.honeyLevel() == 0, "the sheared hive kept its honey");
+        require(fixture.count() == 1 && fixture.slot(0).mDamage == 1, "the shears were not kept and worn once");
+        require(fixture.sounds("block.beehive.shear") == 1 && fixture.sounds("block.click") == 1,
+                "the hive shearing did not sound as the game's");
+        require(probe.mEvents.size() == 1 && probe.mEvents[0] == &GameEvents::SHEAR,
+                "the hive shearing posted no shear vibration");
+
+        fixture.fire();
+        require(fixture.collect("minecraft:honeycomb") == 0, "an empty hive dropped honeycombs");
+        require(fixture.count() == 1 && fixture.slot(0).mDamage == 1, "the shears left or wore on an empty hive");
+
+        Fixture empty;
+        empty.load("minecraft:shears", 1);
+        empty.fire();
+        require(empty.count() == 1 && empty.slot(0).mDamage == 0, "shears with nothing in front left or wore");
+        require(empty.collect("minecraft:shears") == 0, "shears with nothing in front were dropped");
+    }
+
+    // a bottle fills from a full hive into the dispenser, or out of it when no slot takes the honey
+    void hiveBottle() {
+        Fixture fixture;
+        fixture.hear();
+        RecordingBlockActor &probe = fixture.listen();
+        fixture.hive(5);
+        fixture.load("minecraft:glass_bottle", 2);
+        fixture.fire();
+        require(fixture.count() == 1, "the bottle was not used");
+        require(fixture.slot(1).mDefinition != nullptr && fixture.slot(1).mCount == 1
+                        && fixture.slot(1).mDefinition->getIdentifier() == "minecraft:honey_bottle",
+                "the honey bottle did not go into the dispenser");
+        require(fixture.honeyLevel() == 0, "the bottled hive kept its honey");
+        require(fixture.sounds("block.click") == 1 && fixture.sounds("bottle.fill") == 0,
+                "the hive bottling did not sound as the game's");
+        require(probe.mEvents.size() == 1 && probe.mEvents[0] == &GameEvents::FLUID_PICKUP,
+                "the hive bottling posted no fluid_pickup vibration");
+
+        // every slot full of bottles, whichever the dispenser picks: none has room for the honey
+        Fixture full;
+        full.hive(5);
+        Container &inventory = full.mActor->getInventory();
+        for (int32_t index = 0; index < inventory.getContainerSize(); ++index)
+            inventory.setContainerItem(index, full.mOwner.createItemStack("minecraft:glass_bottle", 64));
+        full.fire();
+        int32_t bottles = 0;
+        for (int32_t index = 0; index < inventory.getContainerSize(); ++index)
+            bottles += inventory.getContainerItem(index).mCount;
+        require(bottles == inventory.getContainerSize() * 64 - 1, "the bottle was not used before a full dispenser");
+        require(full.collect("minecraft:honey_bottle") == 1, "the honey bottle was not ejected from a full dispenser");
+
+        Fixture unripe;
+        unripe.hive(4);
+        unripe.load("minecraft:glass_bottle", 2);
+        unripe.fire();
+        require(unripe.honeyLevel() == 4 && unripe.count() == 1 && unripe.collect("minecraft:glass_bottle") == 1,
+                "a bottle before a hive not yet full was not dropped");
+    }
+
     // placed beside a live source the dispenser takes its first update as a rising edge and fires 4 ticks later
     void placedPowered() {
         Fixture fixture;
@@ -250,6 +385,8 @@ int main() {
         boneMeal();
         dropped();
         placedPowered();
+        hiveShears();
+        hiveBottle();
     } catch (const std::exception &error) {
         std::clog << "Dispenser regression failed: " << error.what() << '\n';
         result = 1;

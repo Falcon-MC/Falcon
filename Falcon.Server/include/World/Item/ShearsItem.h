@@ -15,7 +15,7 @@ public:
     bool onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
                       const Vector3i &blockPosition, int32_t face, const Vector3f &clickPosition) const override;
 
-    // shears the first adult, unsheared sheep in the block in front; any other target still ejects the shears
+    // harvests a full hive in front, else shears the first adult, unsheared sheep there; never ejects the shears
     bool dispense(const DispenseSource &source) const override;
 
     bool wearsOnAttack() const override {

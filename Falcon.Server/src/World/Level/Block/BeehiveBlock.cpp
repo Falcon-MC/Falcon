@@ -6,6 +6,7 @@
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/ContainerBlock.h"
 #include "World/Level/Block/Components/PlacementOrientation.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Item/BucketItem.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
@@ -64,6 +65,15 @@ void BeehiveBlock::setHoneyLevel(Level &level, const Vector3i &position, int32_t
     level.setBlock(position, state, true);
 }
 
+bool BeehiveBlock::isHarvestable(const BlockState &state) {
+    return VanillaBlocks::getAs<BeehiveBlock>(state.mName) != nullptr && getHoneyLevel(state) >= MAX_HONEY_LEVEL;
+}
+
+void BeehiveBlock::dropHoneycombs(ServerNetworkHandler &owner, Level &level, const Vector3i &position) {
+    for (int32_t count = 0; count < SHEARED_HONEYCOMBS; ++count)
+        owner.spawnItemActor(level, HONEYCOMB, 1, blockCenter(position));
+}
+
 int BeehiveBlock::getFrontFace(const BlockState &state) {
     return DIRECTION_FACES[state.mStates.getInt(DIRECTION, 0) & 3];
 }
@@ -78,8 +88,7 @@ bool BeehiveBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player,
     const Vector3f center = blockCenter(position);
 
     if (Block::isShears(held)) {
-        for (int32_t count = 0; count < SHEARED_HONEYCOMBS; ++count)
-            owner.spawnItemActor(level, HONEYCOMB, 1, center);
+        dropHoneycombs(owner, level, position);
         owner.playLevelSound(level, LevelSoundEvent::BEEHIVE_SHEAR, center);
         owner.damagePlayerHeldItem(player, 1);
     } else if (isGlassBottle(held)) {
