@@ -75,11 +75,14 @@ bool PathFinder::findPath(Level &level, const Actor &actor, const ActorSize &siz
     const bool inWater = LiquidBlocksFetch::at(level, position).water;
     mEvaluator.prepare(level, actor, size.mWidth, size.mHeight, position, inWater, options);
 
+    // a mob floating on lava paths from and to the lava surface: its paths end on top of the lava
     mTargetX = (int32_t) std::floor(target.x);
-    mTargetY = (int32_t) std::floor(target.y);
     mTargetZ = (int32_t) std::floor(target.z);
+    mTargetY = mEvaluator.aboveLava(mTargetX, (int32_t) std::floor(target.y), mTargetZ);
 
-    _offer((int32_t) std::floor(position.x), (int32_t) std::floor(position.y), (int32_t) std::floor(position.z), 0, -1);
+    const int32_t startX = (int32_t) std::floor(position.x);
+    const int32_t startZ = (int32_t) std::floor(position.z);
+    _offer(startX, mEvaluator.aboveLava(startX, (int32_t) std::floor(position.y), startZ), startZ, 0, -1);
     int32_t current = _heapPop();
     mNodes[current].mClosed = true;
 

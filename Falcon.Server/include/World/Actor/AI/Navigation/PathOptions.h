@@ -45,6 +45,11 @@ struct PathOptions {
         return mMode == NavigationMode::Swim || mMode == NavigationMode::Fly;
     }
 
+    // can_walk_in_lava without can_sink: the mob holds its height in lava and walks on top of it
+    bool floatsOnLava() const {
+        return mCanWalkInLava && !mCanSink;
+    }
+
     bool swimsThroughWater() const {
         return mCanSwim || mIsAmphibious || mMode == NavigationMode::Swim;
     }

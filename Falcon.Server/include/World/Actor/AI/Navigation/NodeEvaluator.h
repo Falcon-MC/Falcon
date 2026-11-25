@@ -35,6 +35,9 @@ public:
 
     bool isStandable(int32_t x, int32_t y, int32_t z);
 
+    // a mob floating on lava: the first y over the lava column through y; y otherwise
+    int32_t aboveLava(int32_t x, int32_t y, int32_t z);
+
     // body fits and a solid block is beside it
     bool canClimb(int32_t x, int32_t feetY, int32_t z);
 
