@@ -345,6 +345,11 @@ public:
         _setFlag(owner, ActorFlag::Sleeping, sleeping);
     }
 
+    // the pose alone: isSitting stays the owner's order to sit
+    void setSittingFlag(ServerNetworkHandler &owner, bool sitting) {
+        _setFlag(owner, ActorFlag::Sitting, sitting);
+    }
+
     void setWantsToWake(ServerNetworkHandler &owner, bool wants) {
         _setFlag(owner, ActorFlag::WantsToWake, wants);
     }

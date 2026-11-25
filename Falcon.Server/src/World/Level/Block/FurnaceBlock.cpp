@@ -23,6 +23,12 @@ bool FurnaceBlock::matches(const std::string &identifier) {
            || identifier == "minecraft:smoker" || identifier == "minecraft:lit_smoker";
 }
 
+bool FurnaceBlock::seatsPet(Level &level, const Vector3i &position, const BlockState &state) const {
+    (void) level;
+    (void) position;
+    return kind(state) == FurnaceKind::Furnace;
+}
+
 FurnaceKind FurnaceBlock::kind(const BlockState &state) {
     if (state.mName == "minecraft:blast_furnace" || state.mName == "minecraft:lit_blast_furnace") {
         return FurnaceKind::BlastFurnace;
