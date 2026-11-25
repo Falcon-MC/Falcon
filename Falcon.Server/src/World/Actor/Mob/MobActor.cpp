@@ -1957,6 +1957,13 @@ bool MobActor::_tryInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
                 owner.playLevelSound(level, entry->string(), getPosition(), getIdentifier());
         }
 
+        const json::Value *vibration = interaction->get("vibration");
+        const GameEvent *gameEvent = vibration != nullptr && vibration->isString()
+                                             ? GameEvents::fromName(vibration->mString)
+                                             : nullptr;
+        if (gameEvent != nullptr)
+            level.postGameEvent(*gameEvent, getPosition(), &player);
+
         mInteractCooldown = (int32_t) (numberIn(interaction, "cooldown", 0.0f) * TICKS_PER_SECOND);
 
         EntityEvents::fireTrigger(owner, *this, onInteract, &player);
