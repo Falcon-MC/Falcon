@@ -9,6 +9,7 @@ FALCON_REGISTER_ITEM_CUSTOM(
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Inventory/ItemStackNbt.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/RangedWeaponHelpers.h"
@@ -22,7 +23,7 @@ using namespace RangedWeaponHelpers;
 
 namespace {
     const char *CHARGED_ITEM_TAG = "chargedItem";
-    const char *CHARGED_NAME_TAG = "Name";
+    const char *CHARGED_DAMAGE_TAG = "Damage";
     const char *CHARGED_LOAD_TICK_TAG = "LoadTick";
     const int64_t CROSSBOW_FIRE_DELAY_TICKS = 5;
 
@@ -44,6 +45,22 @@ namespace {
             return 0;
 
         return (int64_t) charged->getInt(CHARGED_LOAD_TICK_TAG);
+    }
+
+    // the game saves the loaded arrow as a whole stack: without its Count the client reads it empty, unloaded
+    void putChargedArrow(ServerNetworkHandler &owner, ItemStack &crossbow, const ItemStack *arrow) {
+        ItemStack charged;
+        if (arrow != nullptr)
+            charged = *arrow;
+        else
+            charged.mDefinition = owner.getItemDefinitions().getDefinition(ARROW_IDENTIFIER);
+        charged.mCount = 1;
+
+        Tag chargedItem = ItemStackNbt::write(charged);
+        chargedItem.putInt(CHARGED_LOAD_TICK_TAG, (int32_t) owner.getCurrentTick());
+        if (crossbow.mTag.getType() != Tag::Type::Compound)
+            crossbow.mTag = Tag::ofCompound();
+        crossbow.mTag.put(CHARGED_ITEM_TAG, std::move(chargedItem));
     }
 }
 
@@ -76,7 +93,7 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
         data.mPiercingLevel = piercing;
         const Tag *charged = item.mTag.get(CHARGED_ITEM_TAG);
         if (charged != nullptr) {
-            const int32_t damage = charged->getInt("Damage", 0);
+            const int32_t damage = charged->getShort(CHARGED_DAMAGE_TAG, 0);
             data.mPotionId = damage > 0 ? damage - 1 : -1;
         }
 
@@ -116,13 +133,7 @@ void CrossbowItem::loadHeld(ServerNetworkHandler &owner, MobActor &mob) {
     if (held.isAir() || isCrossbowLoaded(held))
         return;
 
-    if (held.mTag.getType() != Tag::Type::Compound)
-        held.mTag = Tag::ofCompound();
-
-    Tag chargedItem = Tag::ofCompound();
-    chargedItem.put(CHARGED_NAME_TAG, Tag::ofString(ARROW_IDENTIFIER));
-    chargedItem.putInt(CHARGED_LOAD_TICK_TAG, (int32_t) owner.getCurrentTick());
-    held.mTag.put(CHARGED_ITEM_TAG, std::move(chargedItem));
+    putChargedArrow(owner, held, nullptr);
     mob.getEquipment().setSlot(MobEquipment::MAINHAND, std::move(held));
     mob.getEquipment().broadcast(owner, mob);
 }
@@ -166,15 +177,7 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
         return;
 
     ItemStack updated = item;
-    if (updated.mTag.getType() != Tag::Type::Compound)
-        updated.mTag = Tag::ofCompound();
-
-    Tag chargedItem = Tag::ofCompound();
-    chargedItem.put(CHARGED_NAME_TAG, Tag::ofString(ARROW_IDENTIFIER));
-    if (arrowSlot >= 0)
-        chargedItem.putInt("Damage", arrowAt(player, arrowSlot).mDamage);
-    chargedItem.putInt(CHARGED_LOAD_TICK_TAG, (int32_t) owner.getCurrentTick());
-    updated.mTag.put(CHARGED_ITEM_TAG, std::move(chargedItem));
+    putChargedArrow(owner, updated, arrowSlot >= 0 ? &arrowAt(player, arrowSlot) : nullptr);
     player.getInventory().setItemInHand(std::move(updated));
     player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory,
                                           player.getInventory().getSelectedSlot());
@@ -189,6 +192,11 @@ void CrossbowItem::onUsingTick(ServerNetworkHandler &owner, ServerPlayer &player
                                  ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END
                                  : LevelSoundEvent::CROSSBOW_LOADING_END,
                          player.getPosition(), "minecraft:player");
+
+    // the game ends the use once the charge time runs out: kept on, each shot would reload at once
+    player.getFlags().set(ActorFlag::UsingItem, false);
+    owner._sendEntityData(player);
+    owner.getScriptEngine().onItemStopUse(player, player.getInventory().getItemInHand(), 0, false);
 }
 
 bool CrossbowItem::onStopUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item,
