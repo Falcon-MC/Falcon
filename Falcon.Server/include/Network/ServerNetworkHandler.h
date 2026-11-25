@@ -647,6 +647,9 @@ public:
 
     void emitItemUse(ServerPlayer &player);
 
+    // starts holding the selected item: the client keeps its own use only while the flag stays on
+    void startItemUse(ServerPlayer &player, const ItemStack &item, int32_t durationTicks);
+
     // ticks left before the held item's use completes, 0 once it could
     int32_t getItemUseTicksLeft(const ServerPlayer &player) const;
 
