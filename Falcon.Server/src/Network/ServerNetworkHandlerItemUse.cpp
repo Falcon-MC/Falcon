@@ -250,6 +250,14 @@ void ServerNetworkHandler::emitItemUse(ServerPlayer &player) {
     mScriptEngine.onItemUse(player);
 }
 
+void ServerNetworkHandler::startItemUse(ServerPlayer &player, const ItemStack &item, int32_t durationTicks) {
+    player.getFlags().set(ActorFlag::UsingItem, true);
+    player.setItemUseStartTick(mCurrentTick);
+    player.setItemUseSource(player.getInventory().getSelectedSlot(), item);
+    _sendEntityData(player);
+    mScriptEngine.onItemStartUse(player, item, durationTicks);
+}
+
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
     const ArmorSlot slot = itemType.getArmorSlot();
     if (slot == ArmorSlot::None)
@@ -338,11 +346,7 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
         if (packUse == PackShooter::Use::Done)
             return;
         if (packUse == PackShooter::Use::Drawing) {
-            player.getFlags().set(ActorFlag::UsingItem, true);
-            player.setItemUseStartTick(mCurrentTick);
-            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
-            _sendEntityData(player);
-            mScriptEngine.onItemStartUse(player, heldItem, drawDuration);
+            startItemUse(player, heldItem, drawDuration);
             return;
         }
 
@@ -358,13 +362,8 @@ void ServerNetworkHandler::_useHeldItem(ServerPlayer &player) {
 
         if (itemType != nullptr && !player.getFlags().get(ActorFlag::UsingItem)
             && itemType->onStartUsing(*this, player, heldItem)) {
-            player.getFlags().set(ActorFlag::UsingItem, true);
-            player.setItemUseStartTick(mCurrentTick);
-            player.setItemUseSource(player.getInventory().getSelectedSlot(), heldItem);
-            _sendEntityData(player);
             const int32_t duration = itemType->getUseDuration();
-            mScriptEngine.onItemStartUse(player, heldItem,
-                                         duration > 0 ? duration : (int32_t) useDurationTicksFor(heldItem));
+            startItemUse(player, heldItem, duration > 0 ? duration : (int32_t) useDurationTicksFor(heldItem));
             return;
         }
     }

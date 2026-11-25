@@ -6,6 +6,8 @@
 #include "World/Actor/ActorAttributes.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Projectile/FishingHookActor.h"
+#include "World/Item/VanillaItems.h"
+#include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -92,6 +94,22 @@ namespace {
             require(usingItem, "flags sent with the eating input cleared UsingItem on the client");
     }
 
+    // a brush on a block is held like food: without the flag the client drops the brushing
+    void checkBrushUse(ServerNetworkHandler &owner, ServerPlayer &player) {
+        Level &level = owner.getLevelFor(player);
+        const Vector3i position(1, 99, 0);
+        level.setBlock(position, VanillaBlocks::fromIdentifier("minecraft:stone")->toBlockState(), false);
+        player.getInventory().setItemInHand(owner.createItemStack("minecraft:brush", 1));
+        player.getFlags().set(ActorFlag::UsingItem, false);
+        const Item *brush = VanillaItems::fromIdentifier("minecraft:brush");
+        require(brush != nullptr, "no brush item");
+        require(brush->onUseOnBlock(owner, player, player.getInventory().getItemInHand(), position, 1,
+                                    Vector3f(0.5f, 1.0f, 0.5f)),
+                "the brush did not take the block");
+        require(player.getFlags().get(ActorFlag::UsingItem), "brushing did not start an item use");
+        require(player.getItemUseSlot() == player.getInventory().getSelectedSlot(), "the use lost its slot");
+    }
+
     // a drawn bow switched for a golden apple must not hand the apple its elapsed time
     void run() {
         ServerNetworkHandler owner("Item use slot", "", 1);
@@ -131,6 +149,7 @@ namespace {
         require(inventory.getItem(1).mCount == 1, "a full use of the apple did not eat it");
         checkFishingInput(owner, player);
         checkSprintingEatInput(owner, player);
+        checkBrushUse(owner, player);
     }
 }
 
