@@ -277,6 +277,35 @@ namespace {
         require(puppy->getColor() == ORANGE, "red and yellow collars did not mix into orange");
     }
 
+    // one wheat heals a hurt horse and adds its temper, taken once
+    void horseFeeding() {
+        Arena arena;
+        ServerPlayer &player = arena.player(7351);
+        MobActor &horse = arena.spawn("minecraft:horse", "minecraft:spawn_adult");
+        const float max = horse.getMaxHealth();
+        horse.setHealth(max - 5.0f);
+        arena.hold(player, "minecraft:wheat", 2);
+        arena.interact(player, horse);
+        require(horse.getHealth() == max - 3.0f, "wheat did not heal the hurt horse by 2");
+        require(horse.saveNbt().getInt("Temper", 0) == 3, "healing the horse cut its temper");
+        require(arena.held(player) == 1, "one feeding took more than one wheat");
+    }
+
+    // horses set inherit_tamed false in minecraft:offspring: the foal of tamed parents stays wild
+    void horseFoalStaysWild() {
+        Arena arena;
+        ServerPlayer &player = arena.player(7361);
+        MobActor &mother = arena.spawn("minecraft:horse", "minecraft:spawn_tame_adult");
+        MobActor &father = arena.spawn("minecraft:horse", "minecraft:spawn_tame_adult");
+        mother.tameTo(arena.mOwner, player, "minecraft:tamemount", false);
+        father.tameTo(arena.mOwner, player, "minecraft:tamemount", false);
+        require(mother.isOwnedBy(player) && father.isOwnedBy(player), "the parents were not tamed");
+
+        MobActor &foal = arena.spawn("minecraft:horse", "minecraft:entity_born");
+        foal.inheritOwner(arena.mOwner, mother, father);
+        require(!foal.isTamed() && !foal.getFlags().get(ActorFlag::Tamed), "the foal of tamed horses was born owned");
+    }
+
     void wolfDefendsOwner() {
         Arena arena;
         ServerPlayer &player = arena.player(7351);
@@ -374,6 +403,8 @@ int main() {
         wolfCollar();
         wolfHealing();
         wolfBreeding();
+        horseFeeding();
+        horseFoalStaysWild();
         wolfDefendsOwner();
         wolfPersistence();
         catTaming();

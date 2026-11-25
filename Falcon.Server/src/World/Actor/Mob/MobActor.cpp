@@ -1551,10 +1551,21 @@ bool MobActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     const ItemStack held = player.getInventory().getItemInHand();
     if (_tryNameTag(owner, player, held) || _tryTieLeads(owner, player) || _tryLeash(owner, player, held)
         || _tryInteract(owner, player)
-        || _trySpawnEggBaby(owner, player, held) || _tryTame(owner, player, held) || _tryDye(owner, player, held)
-        || _tryHeal(owner, player, held) || _tryFeedBaby(owner, player, held) || _tryStartLove(owner, player, held)
-        || _trySit(owner, player) || _tryFeedMount(owner, player, held) || _tryMount(owner, player)
-        || _tryTrade(owner, player))
+        || _trySpawnEggBaby(owner, player, held) || _tryTame(owner, player, held) || _tryDye(owner, player, held))
+        return true;
+
+    // one food does all it can at once, as feeding a hurt foal heals it, ages it and adds temper; love comes before
+    // the heal, so require_full_health still sees the hurt
+    bool used = false;
+    bool fed = _tryFeedBaby(owner, held, used);
+    fed = _tryStartLove(owner, held, used) || fed;
+    fed = _tryHeal(owner, player, held, used) || fed;
+    if (!fed && _trySit(owner, player))
+        return true;
+    fed = _tryFeedMount(owner, held, used) || fed;
+    if (used)
+        player.consumeOneHeldItem();
+    if (fed || _tryMount(owner, player) || _tryTrade(owner, player))
         return true;
 
     return ServerActor::onInteract(owner, player);
@@ -1667,7 +1678,7 @@ bool MobActor::_tryLeash(ServerNetworkHandler &owner, ServerPlayer &player, cons
     return true;
 }
 
-bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, const ItemStack &held, bool &used) {
     const json::Value *tamemount = getComponent(TAMEMOUNT_COMPONENT);
     if (tamemount == nullptr || held.isAir())
         return false;
@@ -1695,7 +1706,7 @@ bool MobActor::_tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, 
 
         const int32_t maximum = (int32_t) numberIn(tamemount, "max_temper", 100.0f);
         mTemper = std::min(maximum, mTemper + (int32_t) numberIn(entry.get(), "temper_mod", 0.0f));
-        player.consumeOneHeldItem();
+        used = true;
         owner.playLevelSound(owner.getLevelFor(*this), "eat", getPosition(), getIdentifier());
         return true;
     }
@@ -2178,20 +2189,20 @@ bool MobActor::tameWithoutOwner(ServerNetworkHandler &owner, const char *compone
     return true;
 }
 
-bool MobActor::_tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryFeedBaby(ServerNetworkHandler &owner, const ItemStack &held, bool &used) {
     const json::Value *ageable = getComponent("minecraft:ageable");
     if (ageable == nullptr || getComponent("minecraft:is_baby") == nullptr
         || !BehaviorItems(ageable->get("feed_items")).contains(held))
         return false;
 
-    player.consumeOneHeldItem();
+    used = true;
     const float duration = numberIn(ageable, "duration", DEFAULT_AGEABLE_SECONDS) * TICKS_PER_SECOND;
     mAgeTicks += (int32_t) (duration * DEFAULT_FEED_GROWTH);
     owner.broadcastActorEvent(*this, EntityEventType::BabyAge);
     return true;
 }
 
-bool MobActor::_tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryStartLove(ServerNetworkHandler &owner, const ItemStack &held, bool &used) {
     const json::Value *breedable = getComponent("minecraft:breedable");
     if (breedable == nullptr || getComponent("minecraft:is_baby") != nullptr || isInLove() || mBreedCooldown > 0
         || !BehaviorItems(breedable->get("breed_items")).contains(held))
@@ -2205,7 +2216,7 @@ bool MobActor::_tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, 
     if (requireFullHealth != nullptr && requireFullHealth->boolean(false) && getHealth() < getMaxHealth())
         return false;
 
-    player.consumeOneHeldItem();
+    used = true;
     mLoveTicks = LOVE_TICKS;
     _setFlag(owner, ActorFlag::InLove, true);
     owner.broadcastActorEvent(*this, EntityEventType::InLoveHearts);
@@ -2234,7 +2245,7 @@ bool MobActor::_tryDye(ServerNetworkHandler &owner, ServerPlayer &player, const 
     return true;
 }
 
-bool MobActor::_tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held) {
+bool MobActor::_tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held, bool &used) {
     const json::Value *healable = getComponent(HEALABLE_COMPONENT);
     if (healable == nullptr || held.isAir())
         return false;
@@ -2257,7 +2268,7 @@ bool MobActor::_tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const
             || !BehaviorItems(item.get()).contains(held))
             continue;
 
-        player.consumeOneHeldItem();
+        used = true;
         heal(numberIn(item.get(), "heal_amount", 0.0f));
         owner.syncActorAttributes(*this);
         return true;
@@ -2326,8 +2337,8 @@ int32_t MobActor::_mixColors(int32_t first, int32_t second) {
 }
 
 void MobActor::inheritOwner(ServerNetworkHandler &owner, const MobActor &firstParent, const MobActor &secondParent) {
-    const json::Value *breedable = firstParent.getComponent("minecraft:breedable");
-    const json::Value *inherit = breedable == nullptr ? nullptr : breedable->get("inherit_tamed");
+    const json::Value *offspring = getComponent("minecraft:offspring");
+    const json::Value *inherit = offspring == nullptr ? nullptr : offspring->get("inherit_tamed");
     if (inherit != nullptr && !inherit->boolean(true))
         return;
 

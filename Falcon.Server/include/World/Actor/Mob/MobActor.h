@@ -802,17 +802,18 @@ private:
 
     bool _tryTame(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
-    bool _tryFeedBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    // the feeding steps set used when they take the held item: onInteract uses it up once for all of them
+    bool _tryFeedBaby(ServerNetworkHandler &owner, const ItemStack &held, bool &used);
 
     bool _trySpawnEggBaby(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
-    bool _tryStartLove(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    bool _tryStartLove(ServerNetworkHandler &owner, const ItemStack &held, bool &used);
 
     bool _trySit(ServerNetworkHandler &owner, ServerPlayer &player);
 
     bool _tryDye(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
 
-    bool _tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    bool _tryHeal(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held, bool &used);
 
     int32_t _mixColors(int32_t first, int32_t second);
 
@@ -824,7 +825,7 @@ private:
 
     bool _tryTieLeads(ServerNetworkHandler &owner, ServerPlayer &player);
 
-    bool _tryFeedMount(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &held);
+    bool _tryFeedMount(ServerNetworkHandler &owner, const ItemStack &held, bool &used);
 
     bool _tryMount(ServerNetworkHandler &owner, ServerPlayer &player);
 

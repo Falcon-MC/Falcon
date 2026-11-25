@@ -31,6 +31,8 @@ namespace {
         Item,
         Tamed,
         Npc,
+        // the mob's own color, dyed or inherited, else the definition's
+        Color,
     };
 
     struct ComponentClass {
@@ -46,7 +48,7 @@ namespace {
             {"minecraft:can_climb", "EntityCanClimbComponent", Backing::Definition},
             {"minecraft:can_fly", "EntityCanFlyComponent", Backing::Definition},
             {"minecraft:can_power_jump", "EntityCanPowerJumpComponent", Backing::Definition},
-            {"minecraft:color", "EntityColorComponent", Backing::Definition},
+            {"minecraft:color", "EntityColorComponent", Backing::Color},
             {"minecraft:color2", "EntityColor2Component", Backing::Definition},
             {"minecraft:fire_immune", "EntityFireImmuneComponent", Backing::Definition},
             {"minecraft:floats_in_liquid", "EntityFloatsInLiquidComponent", Backing::Definition},
@@ -179,6 +181,10 @@ namespace {
             }
             case Backing::Npc:
                 return dynamic_cast<NpcActor *>(&actor) != nullptr;
+            case Backing::Color: {
+                MobActor *mob = dynamic_cast<MobActor *>(&actor);
+                return mob != nullptr ? mob->hasColor() : definitionOf(actor, component.mId) != nullptr;
+            }
         }
         return false;
     }
@@ -245,7 +251,6 @@ namespace {
             {"EntityBreathableComponent", "inhaleTime", "inhale_time"},
             {"EntityBreathableComponent", "suffocateTime", "suffocate_time"},
             {"EntityBreathableComponent", "totalSupply", "total_supply"},
-            {"EntityColorComponent", "value", "value"},
             {"EntityColor2Component", "value", "value"},
             {"EntityFlyingSpeedComponent", "value", "value"},
             {"EntityFrictionModifierComponent", "value", "value"},
@@ -309,6 +314,16 @@ namespace {
         MobActor *mob = dynamic_cast<MobActor *>(target.mActor);
         if (mob != nullptr)
             return JS_NewInt32(ctx, mob->getVariant());
+        return jsonToJs(ctx, fieldOf(target, "value"));
+    }
+
+    JSValue colorGetValue(JSContext *ctx, JSValueConst thisVal, int, JSValueConst *) {
+        ComponentTarget target;
+        if (!componentOf(ctx, thisVal, target))
+            return JS_EXCEPTION;
+        MobActor *mob = dynamic_cast<MobActor *>(target.mActor);
+        if (mob != nullptr)
+            return JS_NewInt32(ctx, mob->getColor());
         return jsonToJs(ctx, fieldOf(target, "value"));
     }
 
@@ -1232,6 +1247,7 @@ void ScriptApi::_bindEntityComponents() {
         propertyMagic(prototypeOf(field.mClass), field.mClass, field.mProperty, fieldGetter, (int) i);
     }
     property(prototypeOf("EntityVariantComponent"), "EntityVariantComponent", "value", variantGetValue);
+    property(prototypeOf("EntityColorComponent"), "EntityColorComponent", "value", colorGetValue);
 
     method(prototypeOf("EntityAgeableComponent"), "EntityAgeableComponent", "getDropItems", ageableGetDropItems, 0);
     method(prototypeOf("EntityBreathableComponent"), "EntityBreathableComponent", "getBreatheBlocks",
