@@ -40,6 +40,7 @@
 #include <optional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -230,8 +231,7 @@ public:
 
     const json::Value *getComponent(const std::string &name) const;
 
-    // component names exceed the small string buffer: a temporary std::string per tick lookup allocates;
-    // this reuses one key buffer
+    // found by definition component id: no std::string is built for the literal
     const json::Value *getComponent(const char *name) const;
 
     // minecraft:persistent in the active groups keeps the mob too
@@ -732,6 +732,8 @@ private:
 
     void _rebuildComponents() const;
 
+    const json::Value *_findComponent(std::string_view name) const;
+
     const SensorComponents &_getSensorComponents() const;
 
     void _registerGoals(ServerNetworkHandler &owner);
@@ -940,15 +942,9 @@ private:
     mutable bool mDefinitionResolved = false;
     mutable std::unordered_map<std::string, const json::Value *> mComponents;
     mutable bool mComponentsDirty = true;
-    mutable std::string mComponentKey;
-    struct RecentComponent {
-        const char *mAddress;
-        std::string mName;
-        const json::Value *mValue;
-    };
-    static constexpr size_t MAX_RECENT_COMPONENTS = 64;
-    // emptied with the components: a group added or removed changes what a name finds
-    mutable std::vector<RecentComponent> mRecentComponents;
+    // mComponents by definition component id, filled as names are looked up; emptied with the components: a group
+    // added or removed changes what a name finds
+    mutable std::vector<const json::Value *> mRecentComponents;
     mutable SensorComponents mSensorComponents;
     mutable bool mSensorComponentsStale = true;
     int64_t mLastHurtTick = INT64_MIN / 2;

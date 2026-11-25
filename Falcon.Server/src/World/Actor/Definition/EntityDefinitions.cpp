@@ -4,6 +4,35 @@
 #include "World/Actor/Definition/EntityFilter.h"
 #include "EntityDefinitionsJson.h"
 
+#include <deque>
+#include <unordered_map>
+
+namespace {
+    struct ComponentIds {
+        // a deque keeps every name in place: the keys of the index point into it
+        std::deque<std::string> mNames;
+        std::unordered_map<std::string_view, uint32_t> mIds;
+    };
+
+    ComponentIds &componentIds() {
+        static ComponentIds ids;
+        return ids;
+    }
+
+    void internComponents(const json::Value *components) {
+        if (components == nullptr)
+            return;
+
+        ComponentIds &ids = componentIds();
+        for (const std::string &name: components->mKeys) {
+            if (ids.mIds.find(name) != ids.mIds.end())
+                continue;
+            ids.mNames.push_back(name);
+            ids.mIds.emplace(ids.mNames.back(), (uint32_t) (ids.mNames.size() - 1));
+        }
+    }
+}
+
 std::unique_ptr<json::Value> &EntityDefinitions::_root() {
     static std::unique_ptr<json::Value> root;
     return root;
@@ -26,7 +55,14 @@ void EntityDefinitions::initialize() {
     }
 
     for (const std::string &identifier: _root()->mKeys) {
-        const json::Value *description = _root()->get(identifier)->get("description");
+        const json::Value *definition = _root()->get(identifier);
+        internComponents(definition->get("components"));
+        if (const json::Value *groups = definition->get("component_groups")) {
+            for (const std::string &group: groups->mKeys)
+                internComponents(groups->get(group));
+        }
+
+        const json::Value *description = definition->get("description");
         const json::Value *properties = description == nullptr ? nullptr : description->get("properties");
         if (properties == nullptr)
             continue;
@@ -40,6 +76,16 @@ void EntityDefinitions::initialize() {
 
 const json::Value *EntityDefinitions::find(const std::string &identifier) {
     return _root() == nullptr ? nullptr : _root()->get(identifier);
+}
+
+uint32_t EntityDefinitions::findComponentId(std::string_view name) {
+    const ComponentIds &ids = componentIds();
+    const auto found = ids.mIds.find(name);
+    return found == ids.mIds.end() ? NO_COMPONENT : found->second;
+}
+
+const std::string &EntityDefinitions::getComponentName(uint32_t id) {
+    return componentIds().mNames[id];
 }
 
 const std::vector<ActorPropertyDescription> *EntityDefinitions::findProperties(const std::string &identifier) {

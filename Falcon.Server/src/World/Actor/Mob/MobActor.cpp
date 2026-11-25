@@ -165,6 +165,8 @@ namespace {
     const char *const HEALTH_COMPONENT = "minecraft:health";
     const char *const COLLISION_BOX_COMPONENT = "minecraft:collision_box";
     const char *const PUSHABLE_BY_ENTITY_COMPONENT = "minecraft:pushable_by_entity";
+    // a recent component not looked up yet
+    const json::Value UNRESOLVED_COMPONENT;
 
     struct MovementAttribute {
         const char *mComponent;
@@ -2691,27 +2693,32 @@ const MobActor::SensorComponents &MobActor::_getSensorComponents() const {
 }
 
 const json::Value *MobActor::getComponent(const std::string &name) const {
-    const std::unordered_map<std::string, const json::Value *> &components = getComponents();
-    const auto found = components.find(name);
-    return found == components.end() ? nullptr : found->second;
+    return _findComponent(name);
 }
 
-// the tick asks for the same few names from the same literals: their address finds the answer again, and the
-// text is still compared, since a caller may pass a buffer it reuses
 const json::Value *MobActor::getComponent(const char *name) const {
+    return _findComponent(name);
+}
+
+const json::Value *MobActor::_findComponent(std::string_view name) const {
     if (mComponentsDirty)
         _rebuildComponents();
 
-    for (const RecentComponent &recent: mRecentComponents) {
-        if (recent.mAddress == name && recent.mName == name)
-            return recent.mValue;
+    const uint32_t id = EntityDefinitions::findComponentId(name);
+    // a name no definition has: only components set by hand hold it
+    if (id == EntityDefinitions::NO_COMPONENT) {
+        const auto found = mComponents.find(std::string(name));
+        return found == mComponents.end() ? nullptr : found->second;
     }
 
-    mComponentKey.assign(name);
-    const json::Value *value = getComponent(mComponentKey);
-    if (mRecentComponents.size() < MAX_RECENT_COMPONENTS)
-        mRecentComponents.push_back({name, mComponentKey, value});
-    return value;
+    if (id >= mRecentComponents.size())
+        mRecentComponents.resize((size_t) id + 1, &UNRESOLVED_COMPONENT);
+    const json::Value *&recent = mRecentComponents[id];
+    if (recent == &UNRESOLVED_COMPONENT) {
+        const auto found = mComponents.find(EntityDefinitions::getComponentName(id));
+        recent = found == mComponents.end() ? nullptr : found->second;
+    }
+    return recent;
 }
 
 bool MobActor::ignoresMovementSlowdown(const std::string &blockName) const {
