@@ -258,6 +258,15 @@ void ServerNetworkHandler::startItemUse(ServerPlayer &player, const ItemStack &i
     mScriptEngine.onItemStartUse(player, item, durationTicks);
 }
 
+void ServerNetworkHandler::stopItemUse(ServerPlayer &player) {
+    if (!player.getFlags().get(ActorFlag::UsingItem))
+        return;
+
+    player.getFlags().set(ActorFlag::UsingItem, false);
+    _sendEntityData(player);
+    mScriptEngine.onItemStopUse(player, player.getItemUseItem(), getItemUseTicksLeft(player), false);
+}
+
 bool ServerNetworkHandler::_equipHeldArmor(ServerPlayer &player, const Item &itemType) {
     const ArmorSlot slot = itemType.getArmorSlot();
     if (slot == ArmorSlot::None)
