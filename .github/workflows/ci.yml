@@ -170,9 +170,11 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DFALCON_BUILD_EMBEDDED_TESTS=ON \
+            -DFALCON_SHARED_BUILD_TESTS=ON \
             -DFALCON_PROTOCOL_BUILD_TESTS=ON \
             -DFALCON_NETWORK_BUILD_TESTS=ON
           cmake --build build --parallel
+          ctest --test-dir build/Falcon.Shared --output-on-failure --parallel 2
           ctest --test-dir build/Falcon.Protocol --output-on-failure --parallel 2
           ctest --test-dir build/Falcon.Network --output-on-failure --parallel 2
           ctest --test-dir build/Falcon.Server --output-on-failure --parallel 2

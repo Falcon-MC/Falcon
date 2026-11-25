@@ -66,7 +66,7 @@ cmake --build build
 
 - [Falcon.Server](../Falcon.Server) - the server
 - [Falcon.Protocol](../Falcon.Protocol) - packets and network types
-- [NBT](https://github.com/Falcon-MC/NBT) - NBT tags and binary streams
+- [Falcon.Shared](../Falcon.Shared) - NBT, binary streams, JSON, math and logging
 - [BedrockData](https://github.com/Falcon-MC/BedrockData) - game data files, versioned by protocol
 
 ## Licensing information

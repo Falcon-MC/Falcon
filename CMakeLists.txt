@@ -80,6 +80,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libdatachannel)
 
+add_subdirectory(Falcon.Shared)
 add_subdirectory(Falcon.Protocol)
 add_subdirectory(Falcon.Network)
 
