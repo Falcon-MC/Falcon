@@ -3050,6 +3050,15 @@ void MobActor::dropLoot(ServerNetworkHandler &owner, Level &level, const ServerP
     if (killer != nullptr)
         context.mKillerIdentifier = killer->getIdentifier();
 
+    // the game reads both off the fatal source: its owning entity, then the one that struck (itself for a blow)
+    if (const ActorDamageSource *fatal = getFatalSource()) {
+        if (fatal->mAttacker != nullptr)
+            context.mKillerIdentifier = fatal->mAttacker->getIdentifier();
+        const Actor *damaging = fatal->mDamager != nullptr ? fatal->mDamager : fatal->mAttacker;
+        if (damaging != nullptr)
+            context.mDamagingIdentifier = damaging->getIdentifier();
+    }
+
     const Vector3f position = getPosition();
     for (const LootDrop &drop: table->roll(context)) {
         const ItemStack stack = LootItems::toItemStack(owner, drop);

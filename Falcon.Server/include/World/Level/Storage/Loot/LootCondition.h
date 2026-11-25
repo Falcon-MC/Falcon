@@ -81,6 +81,16 @@ private:
     std::string mEntityType;
 };
 
+class DamagedByEntityCondition final : public LootCondition {
+public:
+    explicit DamagedByEntityCondition(const json::Value &definition);
+
+    bool test(const LootContext &context) const override;
+
+private:
+    std::string mEntityType;
+};
+
 class HasMarkVariantCondition final : public LootCondition {
 public:
     explicit HasMarkVariantCondition(const json::Value &definition);
