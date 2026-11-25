@@ -33,6 +33,7 @@ namespace {
     const char *ENDER_PEARL_DEATH_MESSAGE = "death.fell.accident.generic";
     const char *ENDER_PEARL_PARTICLE = "minecraft:endermanpop_emitter";
     const float WIND_CHARGE_FACE_OFFSET = 0.25f;
+    const float WIND_CHARGE_HALF_BLOCK = 0.5f;
     const char *const BREEZE_WIND_CHARGE = "minecraft:breeze_wind_charge_projectile";
     const char *const BREEZE_WIND_CHARGE_PARTICLE = "minecraft:breeze_wind_explosion_emitter";
     const char *const BREEZE_WIND_CHARGE_SOUND = "breeze_wind_charge.burst";
@@ -152,7 +153,8 @@ bool WindChargeActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
         return true;
     }
 
-    // a block hit bursts a quarter block out of the face it struck
+    // a block hit bursts a quarter block out of the face it struck; hitPosition is the block's middle: a burst
+    // left inside the block reaches no actor
     const Vector3f motion = getMotion();
     const float ax = std::fabs(motion.x);
     const float ay = std::fabs(motion.y);
@@ -164,8 +166,9 @@ bool WindChargeActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
         out.y = motion.y > 0.0f ? -1.0f : 1.0f;
     else
         out.z = motion.z > 0.0f ? -1.0f : 1.0f;
-    _burst(owner, Vector3f(hitPosition.x + out.x * WIND_CHARGE_FACE_OFFSET, hitPosition.y + out.y * WIND_CHARGE_FACE_OFFSET,
-                           hitPosition.z + out.z * WIND_CHARGE_FACE_OFFSET));
+    const float offset = WIND_CHARGE_HALF_BLOCK + WIND_CHARGE_FACE_OFFSET;
+    _burst(owner,
+           Vector3f(hitPosition.x + out.x * offset, hitPosition.y + out.y * offset, hitPosition.z + out.z * offset));
     return true;
 }
 
