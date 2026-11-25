@@ -3,6 +3,7 @@
 #include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/Actor/SculkSensorBlockActor.h"
 #include "World/Level/Block/BlockNames.h"
 #include "World/Level/Block/SculkSensorBlock.h"
 #include "World/Level/Block/Systems/RedstoneSystem.h"
@@ -350,6 +351,71 @@ namespace {
             ServerTickProbe::tick(owner, level);
         require(phase() == SculkSensorBlock::PHASE_INACTIVE, "a vibration heard while cooling down activated it");
     }
+
+    void calibratedSensorFilters() {
+        ServerNetworkHandler owner("Calibrated", "", 1);
+        Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
+        level.setOwner(&owner);
+        std::vector<int64_t> columns;
+        for (int32_t chunkX = -1; chunkX <= 1; ++chunkX) {
+            for (int32_t chunkZ = -1; chunkZ <= 1; ++chunkZ) {
+                level.getChunk(chunkX, chunkZ);
+                columns.push_back(((int64_t) chunkX << 32) | (uint32_t) chunkZ);
+            }
+        }
+        level.setActiveColumns(columns);
+        for (int x = 0; x < 16; ++x) {
+            for (int z = 0; z < 16; ++z) {
+                for (int y = 60; y <= 72; ++y)
+                    level.setBlockState(x, y, z, BlockState(BlockNames::AIR));
+                level.setBlockState(x, 63, z, VanillaBlocks::STONE().toBlockState());
+            }
+        }
+
+        // facing south: the input is the block north of it
+        const BlockState base = VanillaBlocks::CALIBRATED_SCULK_SENSOR().toBlockState();
+        Tag states = base.mStates;
+        states.putString("minecraft:cardinal_direction", "south");
+        const BlockState sensor(base.mName, states);
+        require(CalibratedSculkSensorBlock::inputFace(sensor) == RedstoneFace::NORTH,
+                "a sensor facing south does not take its input from the north");
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z, sensor);
+        level.onBlockPlaced(LISTENER, sensor);
+        require(level.getBlockActors().find<CalibratedSculkSensorBlockActor>(LISTENER) != nullptr,
+                "a placed calibrated sensor has no block actor of its own");
+
+        const auto phase = [&level]() {
+            return SculkSensorBlock::phaseOf(level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z));
+        };
+        const auto ticksUntilActive = [&owner, &level, &phase](int limit) {
+            for (int ticks = 1; ticks <= limit; ++ticks) {
+                ServerTickProbe::tick(owner, level);
+                if (phase() == SculkSensorBlock::PHASE_ACTIVE)
+                    return ticks;
+            }
+            return 0;
+        };
+
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z - 1, VanillaBlocks::REDSTONE_BLOCK().toBlockState());
+        require(CalibratedSculkSensorBlock::inputSignal(owner, level, LISTENER, sensor) == 15,
+                "the redstone block at the input does not read 15");
+        level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(12.5f, 64.5f, 8.5f));
+        require(ticksUntilActive(10) == 0, "an input of 15 let block_change (11) through");
+        level.postGameEvent(GameEvents::ENTITY_DIE, Vector3f(12.5f, 64.5f, 8.5f));
+        require(ticksUntilActive(10) == 4, "an input of 15 kept entity_die (15) out");
+
+        const BlockState active = level.getBlockState(LISTENER.x, LISTENER.y, LISTENER.z);
+        const Block *block = VanillaBlocks::fromState(active);
+        require(block != nullptr && block->getEmittedSignal(level, LISTENER, active, RedstoneFace::SOUTH, false) == 0
+                        && block->getEmittedSignal(level, LISTENER, active, RedstoneFace::NORTH, false) > 0,
+                "the calibrated sensor powers its own input side");
+
+        for (int i = 0; i < 60 && phase() != SculkSensorBlock::PHASE_INACTIVE; ++i)
+            ServerTickProbe::tick(owner, level);
+        level.setBlockState(LISTENER.x, LISTENER.y, LISTENER.z - 1, BlockState(BlockNames::AIR));
+        level.postGameEvent(GameEvents::BLOCK_CHANGE, Vector3f(12.5f, 64.5f, 8.5f));
+        require(ticksUntilActive(10) == 4, "with no input the calibrated sensor did not hear every frequency");
+    }
 }
 
 int main() {
@@ -364,6 +430,7 @@ int main() {
         closestThenFrequency();
         savesTheSignalInFlight();
         sculkSensorActivates();
+        calibratedSensorFilters();
         std::cout << "vibration checks passed\n";
         return 0;
     } catch (const std::exception &error) {
