@@ -171,7 +171,7 @@ Localization::Entries Localization::_parse(const std::string &content) {
 }
 
 std::string Localization::_format(const std::string &locale, const std::string &text,
-                                  const std::vector<std::string> &parameters) const {
+                                  const std::vector<std::string> &parameters, bool expandKeys) const {
     std::string result;
     result.reserve(text.size());
     size_t nextParameter = 0;
@@ -211,10 +211,15 @@ std::string Localization::_format(const std::string &locale, const std::string &
             continue;
         }
 
+        if (!expandKeys) {
+            result += text[index];
+            continue;
+        }
+
         size_t keyEnd = 0;
         const std::string inlineText = _inlineKey(locale, text, index + 1, keyEnd);
         if (!inlineText.empty()) {
-            result += inlineText;
+            result += _format(locale, inlineText, parameters, false);
             index = keyEnd - 1;
             continue;
         }

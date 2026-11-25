@@ -1,19 +1,12 @@
 #include "World/Level/LevelGen/Feature/Tree/BeeNestGenerator.h"
 
-#include "World/Actor/Mob/Neutral/BeeActor.h"
-#include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/LevelGen/Feature/BlockManager.h"
 #include "World/Level/LevelGen/Feature/Tree/TreeBlockFace.h"
 #include "World/Level/Level.h"
 #include "World/Level/Block/BlockNames.h"
 
-#include <utility>
-
 namespace {
-
-    const char *const ACTOR_IDENTIFIER_TAG = "identifier";
-    const int32_t GENERATED_STAY_TICKS = 600;
 
     const char *FLOWER_BLOCKS[] = {"minecraft:dandelion",       "minecraft:poppy",
                                    "minecraft:blue_orchid",     "minecraft:allium",
@@ -63,12 +56,7 @@ void BeeNestGenerator::placeAt(BlockManager &manager, int32_t x, int32_t y, int3
     state.mStates.putInt("honey_level", 0);
     manager.setBlockStateAt(x, y, z, BlockState(state.mName, state.mStates));
 
-    BeehiveBlockActor &hive = manager.getLevel().getBlockActors().getOrCreate<BeehiveBlockActor>(Vector3i(x, y, z));
-    for (int32_t bee = 0; bee < beeCount; bee++) {
-        Tag saveData = Tag::ofCompound();
-        saveData.putString(ACTOR_IDENTIFIER_TAG, BeeActor::IDENTIFIER);
-        hive.addOccupant(BeeActor::IDENTIFIER, std::move(saveData), GENERATED_STAY_TICKS);
-    }
+    manager.populateBeeNest(x, y, z, beeCount);
 }
 
 bool BeeNestGenerator::hasNearbyFlower(BlockManager &manager, int32_t x, int32_t y, int32_t z) {

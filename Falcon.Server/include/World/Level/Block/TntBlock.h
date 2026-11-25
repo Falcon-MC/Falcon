@@ -11,7 +11,12 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    static void prime(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse);
+    // lit by igniter, or by redstone when null: the primed TNT posts prime_fuse
+    static void prime(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse,
+                      Actor *igniter = nullptr);
+
+    // set off by another explosion: no prime_fuse
+    static void primeByExplosion(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse);
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                     const BlockState &state) const override;

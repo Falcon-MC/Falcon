@@ -5,6 +5,7 @@
 
 namespace {
     const char *const FORTRESS = "minecraft:fortress";
+    const char *const MONUMENT = "minecraft:monument";
     const char *const MONSTER = "monster";
 
     struct Entry {
@@ -42,13 +43,33 @@ namespace {
         }
         return rules;
     }
+
+    // the monument's entry in the client's structure spawn table: guardians alone, in herds of 2 to 4, in water
+    std::vector<SpawnRule> buildMonument() {
+        SpawnCondition condition;
+        condition.mOnSurface = true;
+        condition.mUnderground = true;
+        condition.mUnderwater = true;
+        condition.mWeight = 1;
+        condition.mHerds.push_back(SpawnHerd{2, 4});
+        condition.mMinDifficulty = MIN_MONSTER_DIFFICULTY;
+
+        SpawnRule rule;
+        rule.mIdentifier = "minecraft:guardian";
+        rule.mPopulation = MONSTER;
+        rule.mConditions.push_back(std::move(condition));
+        return {rule};
+    }
 }
 
 const std::vector<SpawnRule> *StructureSpawnOverrides::forStructure(const std::string &structure,
                                                                     const std::string &population) {
     static const std::vector<SpawnRule> fortress = buildFortress();
+    static const std::vector<SpawnRule> monument = buildMonument();
     if (structure == FORTRESS && population == MONSTER)
         return &fortress;
+    if (structure == MONUMENT && population == MONSTER)
+        return &monument;
     return nullptr;
 }
 

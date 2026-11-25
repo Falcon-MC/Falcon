@@ -65,6 +65,8 @@ public:
         return BLOCK_ACTOR_ID;
     }
 
+    bool shouldListen(Level &level, const GameEvent &event, const GameEventContext &context) override;
+
 protected:
     uint32_t getRange() const override {
         return RANGE;

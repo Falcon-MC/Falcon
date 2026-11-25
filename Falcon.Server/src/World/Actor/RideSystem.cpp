@@ -4,7 +4,8 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
 
@@ -128,15 +129,11 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
             return false;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_MOUNT)) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_MOUNT;
-        event.mCancellable = true;
-        event.mEntity = &rider;
-        event.mTarget = &vehicle;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(&rider);
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    EventSignal<ActorMountBeforeEvent> &mounting = owner.getEventBus().before().mActorMount;
+    if (mounting.hasSubscribers()) {
+        ActorMountBeforeEvent event(rider, vehicle);
+        mounting.emit(event);
+        if (event.isCancelled())
             return false;
     }
 
@@ -157,19 +154,16 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
     refreshSeats(owner, vehicle);
 
     vehicle.onPassengerAdded(owner, rider);
+    owner.getLevelFor(rider).postGameEvent(GameEvents::ENTITY_MOUNT, rider.getPosition(), &rider);
     return true;
 }
 
 void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderInitiated) {
     Actor *vehicle = resolve(owner, rider.getVehicleId());
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ENTITY_DISMOUNT);
-    if (plugins != nullptr && vehicle != nullptr) {
-        PluginEvent event;
-        event.mType = FALCON_EVENT_ENTITY_DISMOUNT;
-        event.mEntity = &rider;
-        event.mTarget = vehicle;
-        event.mPlayer = dynamic_cast<ServerPlayer *>(&rider);
-        plugins->dispatch(event);
+    EventSignal<ActorDismountBeforeEvent> &dismounting = owner.getEventBus().before().mActorDismount;
+    if (dismounting.hasSubscribers() && vehicle != nullptr) {
+        ActorDismountBeforeEvent event(rider, *vehicle);
+        dismounting.emit(event);
         // a handler may have mounted the rider elsewhere or removed the vehicle
         vehicle = resolve(owner, rider.getVehicleId());
     }
@@ -205,6 +199,7 @@ void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderI
 
     if (serverVehicle != nullptr)
         serverVehicle->onPassengerRemoved(owner, rider);
+    owner.getLevelFor(rider).postGameEvent(GameEvents::ENTITY_DISMOUNT, rider.getPosition(), &rider);
 }
 
 void RideSystem::ejectAll(ServerNetworkHandler &owner, Actor &vehicle) {

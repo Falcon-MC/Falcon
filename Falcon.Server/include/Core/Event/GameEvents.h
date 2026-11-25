@@ -68,6 +68,28 @@ struct PlayerJoinAfterEvent : public Event {
     explicit PlayerJoinAfterEvent(ServerPlayer &player) : mPlayer(player) {}
 };
 
+// the join or leave message about to go out: mDefault while it is the game's own translation, which mMessage gives
+// in English; an empty replacement sends nothing
+struct PlayerJoinMessageBeforeEvent : public Event {
+    ServerPlayer &mPlayer;
+    std::string mMessage;
+    bool mDefault = true;
+
+    PlayerJoinMessageBeforeEvent(ServerPlayer &player, std::string message)
+            : mPlayer(player), mMessage(std::move(message)) {}
+};
+
+struct PlayerLeaveMessageBeforeEvent : public Event {
+    ServerPlayer &mPlayer;
+    std::string mMessage;
+    bool mDefault = true;
+    // the kick reason, or what the connection gave
+    std::string mReason;
+
+    PlayerLeaveMessageBeforeEvent(ServerPlayer &player, std::string message, std::string reason)
+            : mPlayer(player), mMessage(std::move(message)), mReason(std::move(reason)) {}
+};
+
 struct PlayerLeaveAfterEvent : public Event {
     std::string mPlayerName;
     ServerPlayer *mPlayer;

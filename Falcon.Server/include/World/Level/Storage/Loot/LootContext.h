@@ -21,7 +21,9 @@ struct LootContext {
     bool mOnFire = false;
     int32_t mMarkVariant = 0;
     int32_t mColorIndex = 0;
+    // the fatal hit's entity and the one it came through, such as an arrow or a fireball
     std::string mKillerIdentifier;
+    std::string mDamagingIdentifier;
 };
 
 struct LootDrop {

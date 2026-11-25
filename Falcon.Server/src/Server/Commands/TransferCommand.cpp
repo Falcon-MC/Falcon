@@ -25,7 +25,7 @@ std::vector<CommandOverloadData> TransferCommand::getOverloads() const {
 
 bool TransferCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

@@ -2,7 +2,6 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <cerrno>
 #include <cmath>
@@ -48,12 +47,11 @@ std::vector<CommandOverloadData> TeleportCommand::getOverloads() const {
 }
 
 bool TeleportCommand::parsePosition(const std::vector<std::string> &arguments, size_t first, const Vector3f &origin,
-                                    Vector3f &out) {
+                                    const Vector3f &rotation, Vector3f &out) {
     if (arguments.size() != first + 3)
         return false;
 
-    if (!parseCoordinate(arguments[first], origin.x, out.x) || !parseCoordinate(arguments[first + 1], origin.y, out.y)
-        || !parseCoordinate(arguments[first + 2], origin.z, out.z))
+    if (!Command::parsePosition(arguments, first, origin, rotation, out))
         return false;
     // the game centers an absolute whole x or z on its block, as CommandPosition does; y stays
     const auto whole = [](const std::string &value) {
@@ -79,12 +77,19 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
     }
 
     ServerPlayer &target = *targets.front();
+    EventSignal<ActorTeleportBeforeEvent> &teleport = mHandler.getEventBus().before().mActorTeleport;
     for (ServerPlayer *victim: victims) {
         Vector3f destination = target.getPosition();
-        if (!PluginEvents::teleport(*victim, destination, "command"))
-            continue;
-        if (!victim->sharesLevelWith(target))
-            mHandler.changePlayerLevel(*victim, mHandler.getLevelFor(target), destination);
+        Level *level = &mHandler.getLevelFor(target);
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*victim, destination, TeleportCause::Command, level);
+            teleport.emit(event);
+            if (event.isCancelled())
+                continue;
+            level = event.mDestination;
+        }
+        if (!victim->isIn(*level))
+            mHandler.changePlayerLevel(*victim, *level, destination);
         else
             victim->teleport(mHandler, destination);
 
@@ -96,16 +101,26 @@ bool TeleportCommand::teleportToPlayer(CommandOrigin &sender, const std::vector<
 
 bool TeleportCommand::teleportToPosition(CommandOrigin &sender, const std::vector<ServerPlayer *> &victims,
                                          const std::vector<std::string> &arguments, size_t first) {
+    EventSignal<ActorTeleportBeforeEvent> &teleport = mHandler.getEventBus().before().mActorTeleport;
     for (ServerPlayer *victim: victims) {
         Vector3f destination;
-        if (!parsePosition(arguments, first, victim->getPosition(), destination)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+        if (!parsePosition(arguments, first, victim->getPosition(), victim->getRotation(), destination)) {
+            sendUsageError(sender);
             return false;
         }
 
-        if (!PluginEvents::teleport(*victim, destination, "command"))
-            continue;
-        victim->teleport(mHandler, destination);
+        Level *level = &mHandler.getLevelFor(*victim);
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*victim, destination, TeleportCause::Command, level);
+            teleport.emit(event);
+            if (event.isCancelled())
+                continue;
+            level = event.mDestination;
+        }
+        if (!victim->isIn(*level))
+            mHandler.changePlayerLevel(*victim, *level, destination);
+        else
+            victim->teleport(mHandler, destination);
         sender.sendTranslation("commands.tp.success.coordinates",
                                {victim->getName(), formatCoordinate(destination.x), formatCoordinate(destination.y),
                                 formatCoordinate(destination.z)});
@@ -141,6 +156,6 @@ bool TeleportCommand::execute(CommandOrigin &sender, const std::vector<std::stri
         return teleportToPosition(sender, victims, arguments, 1);
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }

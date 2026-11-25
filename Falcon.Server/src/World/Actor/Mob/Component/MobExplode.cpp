@@ -5,6 +5,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/ServerNetworkHandler.h"
 
 #include <random>
@@ -66,6 +67,9 @@ void MobExplode::_sync(ServerNetworkHandler &owner, MobActor &mob) {
     mFuseTicks = component == nullptr ? -1 : (int32_t) (fuseSeconds(component->get("fuse_length")) * TICKS_PER_SECOND);
     mLit = component != nullptr && flagIn(*component, "fuse_lit", false);
     _setIgnited(owner, mob, mLit);
+    // the game posts it with the fuse drawn, lit or not, from the actor and with no source
+    if (component != nullptr)
+        owner.getLevelFor(mob).postGameEvent(GameEvents::PRIME_FUSE, mob.getPosition());
 }
 
 void MobExplode::setFuseLength(ServerNetworkHandler &owner, MobActor &mob, int32_t ticks) {

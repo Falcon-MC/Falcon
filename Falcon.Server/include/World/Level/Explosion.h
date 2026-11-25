@@ -130,15 +130,6 @@ public:
 
     bool isPositionInside(int32_t index, int32_t x, int32_t y, int32_t z, float pointX, float pointY, float pointZ);
 
-    // read from a helper thread: a packed chunk is left alone, and the read reported as failed
-    void setHelperOwned(bool helperOwned) {
-        mHelperOwned = helperOwned;
-    }
-
-    bool hasFailed() const {
-        return mFailed;
-    }
-
     // the ray sampled as the level walk samples it: 1 stopped by a whole cube, 0 free, -1 when a sample
     // needs a shape or leaves the field
     int walk(double srcX, double srcY, double srcZ, double dstX, double dstY, double dstZ, double stepSize) const;
@@ -187,8 +178,6 @@ private:
 
     bool mRead = false;
     bool mCovers = false;
-    bool mHelperOwned = false;
-    bool mFailed = false;
     bool mKeepShapes = true;
     // the sums behind isBoxClear, made only for an explosion with targets
     bool mSummed = false;
@@ -399,6 +388,8 @@ private:
     size_t mUpcomingCount = 0;
     std::vector<Hit> mHits;
     BlastField mApartField;
+    // the blocks around the explosions that break nothing, one read per region, for the helpers settling them
+    std::vector<BlastField> mQuietFields;
     bool mApartLive = false;
     bool mApartStale = false;
     std::vector<std::vector<BlastReach>> mRaySlices;
@@ -484,8 +475,6 @@ private:
     bool _allowByScripts();
 
     static float _calculateEntityDamage(double doubleRadius, double impact);
-
-    float _scaleDamageForDifficulty(float damage) const;
 
     void _damageEntities();
 

@@ -16,6 +16,7 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/Map/MapRequestQueue.h"
 #include "World/Inventory/PlayerInventory.h"
+#include "World/Inventory/RecipeUnlocking.h"
 #include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/NetworkIdentifier.h"
 #include "Network/PacketSender.h"
@@ -30,6 +31,8 @@
 #include "World/Actor/Player/PlayerBossBars.h"
 #include "World/Actor/Player/PlayerRaidState.h"
 #include "World/Actor/Player/SimulatedPlayerController.h"
+#include "World/Actor/Player/WardenSpawnTracker.h"
+#include "World/Actor/Movement/MovementConstants.h"
 #include "Protocol/Types/StartGameTypes.h"
 
 #include <chrono>
@@ -43,6 +46,9 @@
 class CameraInstructionPacket;
 class SharedPacket;
 class ServerNetworkHandler;
+
+struct ResourcePackOffer;
+struct PendingPlayerLogin;
 
 class ServerPlayer : public Actor {
 public:
@@ -99,6 +105,14 @@ public:
         return mSimulated.get();
     }
 
+    void setResourcePackOffer(std::shared_ptr<const ResourcePackOffer> offer) {
+        mResourcePackOffer = std::move(offer);
+    }
+
+    const ResourcePackOffer *getResourcePackOffer() const {
+        return mResourcePackOffer.get();
+    }
+
     LoginState getLoginState() const {
         return mLoginState;
     }
@@ -151,6 +165,14 @@ public:
 
     void setName(const std::string &name) {
         mName = name;
+    }
+
+    const std::optional<std::string> &getPluginNameTag() const {
+        return mPluginNameTag;
+    }
+
+    void setPluginNameTag(std::string nameTag) {
+        mPluginNameTag = std::move(nameTag);
     }
 
     const std::string &getUuid() const {
@@ -286,6 +308,16 @@ public:
         return mGameType == (int32_t) GameType::Spectator;
     }
 
+    // where a wind burst that spares the fall threw the player from: a landing above it hurts nothing, one
+    // below counts the fall from there
+    const std::optional<float> &getWindImpulseHeight() const {
+        return mWindImpulseHeight;
+    }
+
+    void setWindImpulseHeight(std::optional<float> height) {
+        mWindImpulseHeight = height;
+    }
+
     int64_t getLastActiveTick() const {
         return mLastActiveTick;
     }
@@ -318,6 +350,50 @@ public:
 
     bool isFlying() const {
         return mFlying;
+    }
+
+    float getScale() const {
+        return mScale.value_or(1.0f);
+    }
+
+    bool hasScaleOverride() const {
+        return mScale.has_value();
+    }
+
+    void setScale(float scale) {
+        mScale = scale;
+        mHasSimulatedBox = false;
+    }
+
+    float getBodyWidth() const {
+        return MovementPhysics::PLAYER_WIDTH * getScale();
+    }
+
+    float getBodyHeight() const;
+
+    float getEyeHeight() const {
+        return MovementPhysics::PLAYER_EYE_HEIGHT * getScale();
+    }
+
+    Vector3f getEyePosition() const {
+        return Vector3f(getPosition().x, getPosition().y + getEyeHeight(), getPosition().z);
+    }
+
+    float getBaseOffset() const {
+        return (isSleeping() ? MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET : MovementPhysics::PLAYER_BASE_OFFSET)
+               * getScale();
+    }
+
+    bool canToggleFlight() const {
+        return mAllowFlight.value_or(isCreative() || isSpectator());
+    }
+
+    bool hasFlightOverride() const {
+        return mAllowFlight.has_value();
+    }
+
+    void setAllowFlight(std::optional<bool> value) {
+        mAllowFlight = value;
     }
 
     // what the last PlayerAuthInput reported: held buttons, the movement vector and the input device
@@ -692,6 +768,14 @@ public:
         mEffectsNetworkReady = ready;
     }
 
+    PlayerRecipeUnlocks &getRecipeUnlocks() {
+        return mRecipeUnlocks;
+    }
+
+    const PlayerRecipeUnlocks &getRecipeUnlocks() const {
+        return mRecipeUnlocks;
+    }
+
     PlayerBossBars &getBossBars() {
         return mBossBars;
     }
@@ -827,6 +911,22 @@ public:
 
     bool isSleeping() const {
         return mSleeping;
+    }
+
+    // ticks since the player last slept: past three days, phantoms may spawn above it
+    int32_t getTimeSinceRest() const {
+        return mTimeSinceRest;
+    }
+
+    void setTimeSinceRest(int32_t ticks) {
+        mTimeSinceRest = ticks;
+    }
+
+    // one tick more awake; back to 1 asleep or with doinsomnia off; a spectator's stays as it is
+    void tickInsomnia(bool doInsomnia) {
+        if (isSpectator())
+            return;
+        mTimeSinceRest = doInsomnia && !mSleeping ? mTimeSinceRest + 1 : 1;
     }
 
     const Vector3i &getSleepingPosition() const {
@@ -977,6 +1077,20 @@ public:
     void startItemCooldown(const ItemStack &item, int64_t currentTick, int ticks = 0);
 
     void tickItemCooldowns(int64_t currentTick);
+
+    // a catalyst takes what this death drops, unless the inventory is kept or nothing would drop
+    int32_t takeDeathExperience(ServerNetworkHandler &owner) override;
+
+    bool isDeathExperienceTaken() const {
+        return mDeathExperienceTaken;
+    }
+
+    // a respawned player can feed a catalyst again
+    void clearSculkCatalystState();
+
+    WardenSpawnTracker &getWardenSpawnTracker() {
+        return mWardenSpawnTracker;
+    }
 
     bool hasLastRightClick() const {
         return mHasLastRightClick;
@@ -1164,6 +1278,17 @@ public:
     }
 
     // the other players this client has spawned
+    bool hidesPlayer(const ServerPlayer &target) const {
+        return mHiddenPlayers.count(target.getUuid()) != 0;
+    }
+
+    void setPlayerHidden(const ServerPlayer &target, bool hidden) {
+        if (hidden)
+            mHiddenPlayers.insert(target.getUuid());
+        else
+            mHiddenPlayers.erase(target.getUuid());
+    }
+
     std::unordered_set<uint64_t> &getVisiblePlayers() {
         return mVisiblePlayers;
     }
@@ -1228,6 +1353,7 @@ public:
                          bool disablesShield);
 
 private:
+    std::optional<float> mWindImpulseHeight;
     float _applyAttackerModifiers(float baseDamage, float damage) const;
 
     bool _isCriticalHit() const;
@@ -1236,6 +1362,9 @@ private:
 
     // the playerItemAttackEntity before event; true when a script cancelled the attack
     bool _scriptsCancelAttack(ServerNetworkHandler &owner, Actor &target, const Vector3f *hitPosition);
+
+    bool _attackProjectile(ServerNetworkHandler &owner, ServerActor &target, const Vector3f *hitPosition,
+                           bool checkReach);
 
     bool _hasShieldReady(int64_t currentTick) const;
 
@@ -1248,10 +1377,14 @@ private:
     static const int MAX_PACK_CHUNK_REQUESTS = 3;
 
     NetworkIdentifier mId;
+    friend class LoginHandler;
+    std::shared_ptr<PendingPlayerLogin> mPendingLogin;
     LoginState mLoginState;
     std::unordered_map<std::string, int> mPackChunkRequests;
+    std::shared_ptr<const ResourcePackOffer> mResourcePackOffer;
     std::shared_ptr<const ProtocolCodec> mCodec;
     std::string mName;
+    std::optional<std::string> mPluginNameTag;
     std::string mUuid;
     std::unordered_map<std::string, DynamicPropertyValue> mDynamicProperties;
     int64_t mLastItemUseTick = -1000;
@@ -1276,6 +1409,7 @@ private:
     static constexpr int32_t DEEP_SLEEP_TICKS = 100;
 
     bool mSleeping = false;
+    int32_t mTimeSinceRest = 1;
     int32_t mSleepCounter = 0;
     Vector3i mSleepingPosition;
     Vector3f mBedEnterPosition;
@@ -1319,6 +1453,7 @@ private:
     std::unordered_set<int64_t> mSentChunks;
     std::unordered_set<uint64_t> mVisibleActors;
     std::unordered_set<uint64_t> mVisiblePlayers;
+    std::unordered_set<std::string> mHiddenPlayers;
     Vector3f mBroadcastPosition;
     Vector3f mBroadcastRotation;
     size_t mSentChunkCount = 0;
@@ -1336,6 +1471,8 @@ private:
     int64_t mFirstPlayed = 0;
     bool mIsOp = false;
     bool mFlying = false;
+    std::optional<bool> mAllowFlight;
+    std::optional<float> mScale;
     InputState mInputState;
     ClientDevice mClientDevice;
     CameraState mCameraState;
@@ -1383,6 +1520,7 @@ private:
     bool mEffectsNetworkReady = false;
     PlayerRaidState mRaidState;
     PlayerBossBars mBossBars;
+    PlayerRecipeUnlocks mRecipeUnlocks;
     bool mHiddenHudElements[HUD_ELEMENT_COUNT] = {};
     uint32_t mInputLocks = 0;
     DebugHud mDebugHud;
@@ -1391,4 +1529,6 @@ private:
     int32_t mShieldInterruptTicks = 0;
     bool mShieldReblockAfterAttack = false;
     int64_t mShieldDisabledUntilTick = 0;
+    WardenSpawnTracker mWardenSpawnTracker;
+    bool mDeathExperienceTaken = false;
 };

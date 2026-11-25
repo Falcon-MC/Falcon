@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 
 #include <cstdint>
@@ -19,6 +20,6 @@ public:
     void stop(ServerNetworkHandler &owner, MobActor &mob) override;
 
 private:
-    std::shared_ptr<json::Value> mFilters;
+    CompiledEntityFilter mFilters;
     uint32_t mHandledHurtCount = 0;
 };

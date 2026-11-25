@@ -10,7 +10,6 @@
 #include "Network/Handler/ItemActorHandler.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "Scripting/Content/CustomContentRegistry.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <chrono>
@@ -41,6 +40,11 @@ void ServerNetworkHandler::_savePlayerData(const ServerPlayer &player, bool chec
         return;
 
     Tag data = player.saveNbt(getWorldFor(player).getName());
+    EventSignal<PlayerDataSaveBeforeEvent> &dataSave = mEventBus.before().mPlayerDataSave;
+    if (dataSave.hasSubscribers()) {
+        PlayerDataSaveBeforeEvent event(player, data);
+        dataSave.emit(event);
+    }
     if (!player.getXuid().empty())
         data.putString(PlayerDataProvider::TAG_OWNER_XUID, player.getXuid());
 
@@ -296,12 +300,11 @@ void ServerNetworkHandler::autoSave(bool wait) {
         return;
 
     // before anything is written: a plugin can store its own state in the same save
-    if (mPluginManager->hasSubscribers(FALCON_EVENT_WORLD_SAVE)) {
+    EventSignal<WorldSaveAfterEvent> &worldSave = mEventBus.after().mWorldSave;
+    if (worldSave.hasSubscribers()) {
         for (World *world: mWorlds.getWorlds()) {
-            PluginEvent event;
-            event.mType = FALCON_EVENT_WORLD_SAVE;
-            event.mWorldName = world->getName();
-            mPluginManager->dispatch(event);
+            WorldSaveAfterEvent event(*world);
+            worldSave.emit(event);
         }
     }
 

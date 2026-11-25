@@ -15,9 +15,9 @@
 #include "World/Item/ItemData.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/AddItemActorPacket.h"
 #include "Protocol/Packets/MoveActorAbsolutePacket.h"
 #include "Protocol/Packets/RemoveActorPacket.h"
@@ -29,6 +29,8 @@
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 #include <random>
 #include <string>
@@ -146,10 +148,11 @@ namespace {
         return free;
     }
 
-    void spawnItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
-        if (!player.sharesLevelWith(actor))
-            return;
+    // rebuilt once a tick for the visibility pass; buckets cleared, not freed
+    thread_local std::unordered_map<int64_t, std::vector<ItemActor *>> itemsByColumn;
+    thread_local std::vector<std::pair<uint64_t, ItemActor *>> itemsById;
 
+    void spawnItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
         AddItemActorPacket add;
         add.mUniqueActorId = actor.getUniqueId();
         add.mRuntimeActorId = actor.getRuntimeId();
@@ -194,11 +197,25 @@ add.mMetadata.mEntries.push_back(flags3);
         owner.getNetworkHandler().send(player.getNetworkIdentifier(), add, owner.getCodecContext());
     }
 
+    // sent once, to a client holding the item's chunk, as other actors: moves and removals follow that set
+    void showItemActorTo(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
+        std::unordered_set<uint64_t> &visible = player.getVisibleActors();
+        if (visible.count(actor.getRuntimeId()) != 0 || !owner.canPlayerSeeActor(player, actor))
+            return;
+
+        visible.insert(actor.getRuntimeId());
+        spawnItemActorTo(owner, player, actor);
+    }
+
+    void removeItemActorFrom(ServerNetworkHandler &owner, ServerPlayer &player, const ItemActor &actor) {
+        RemoveActorPacket remove;
+        remove.mUniqueActorId = actor.getUniqueId();
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), remove, owner.getCodecContext());
+    }
+
     void broadcastItemActorSpawn(ServerNetworkHandler &owner, const ItemActor &actor) {
-        for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned())
-                spawnItemActorTo(owner, entry.second, actor);
-        }
+        for (auto &entry: owner.getPlayers())
+            showItemActorTo(owner, entry.second, actor);
     }
 
     void broadcastItemActorMove(ServerNetworkHandler &owner, const ItemActor &actor, bool teleported = false) {
@@ -211,18 +228,15 @@ add.mMetadata.mEntries.push_back(flags3);
         move.mForceMove = false;
 
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
+            if (entry.second.getVisibleActors().count(actor.getRuntimeId()) != 0)
                 owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), move, owner.getCodecContext());
         }
     }
 
     void broadcastItemActorRemove(ServerNetworkHandler &owner, const ItemActor &actor) {
-        RemoveActorPacket remove;
-        remove.mUniqueActorId = actor.getUniqueId();
-
         for (auto &entry: owner.getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.sharesLevelWith(actor))
-                owner.getNetworkHandler().send(entry.second.getNetworkIdentifier(), remove, owner.getCodecContext());
+            if (entry.second.getVisibleActors().erase(actor.getRuntimeId()) != 0)
+                removeItemActorFrom(owner, entry.second, actor);
         }
     }
 
@@ -301,6 +315,20 @@ add.mMetadata.mEntries.push_back(flags3);
 
         motion.y -= ITEM_GRAVITY;
 
+        // the block an item runs into may send it off itself, as a bell does
+        const auto hits = [&](int32_t x, int32_t y, int32_t z) {
+            const BlockState *state = level.peekBlockPtr(x, y, z);
+            const Block *block = state == nullptr ? nullptr : VanillaBlocks::fromIdentifier(state->mName);
+            if (block == nullptr)
+                return false;
+            const BlockState copy = *state;
+            actor.setMotion(motion);
+            if (!block->onItemHit(owner, level, Vector3i(x, y, z), copy, actor))
+                return false;
+            broadcastItemActorMove(owner, actor);
+            return true;
+        };
+
         Vector3f next = position;
 
         const int32_t currentY = (int32_t) std::floor(position.y);
@@ -308,8 +336,11 @@ add.mMetadata.mEntries.push_back(flags3);
 
         if (motion.x != 0.0f) {
             const float candidateX = position.x + motion.x;
-            if (blocksItem(level, actor, (int32_t) std::floor(candidateX), currentY, currentZ, position.y))
+            if (blocksItem(level, actor, (int32_t) std::floor(candidateX), currentY, currentZ, position.y)) {
+                if (hits((int32_t) std::floor(candidateX), currentY, currentZ))
+                    return;
                 motion.x = 0.0f;
+            }
             else
                 next.x = candidateX;
         }
@@ -317,8 +348,11 @@ add.mMetadata.mEntries.push_back(flags3);
         if (motion.z != 0.0f) {
             const float candidateZ = position.z + motion.z;
             if (blocksItem(level, actor, (int32_t) std::floor(next.x), currentY, (int32_t) std::floor(candidateZ),
-                           position.y))
+                           position.y)) {
+                if (hits((int32_t) std::floor(next.x), currentY, (int32_t) std::floor(candidateZ)))
+                    return;
                 motion.z = 0.0f;
+            }
             else
                 next.z = candidateZ;
         }
@@ -331,6 +365,7 @@ add.mMetadata.mEntries.push_back(flags3);
 
         bool solid = level.isSolidAt(blockX, blockY, blockZ);
         float landing = solid ? itemFloor(level, actor, blockX, blockY, blockZ) : 0.0f;
+        int32_t landingY = blockY;
         // a fall can cross a low floor such as a snow layer's look in one tick: land on the first one crossed
         if (motion.y < 0.0f) {
             for (int32_t y = (int32_t) std::floor(position.y); y > blockY; --y) {
@@ -340,15 +375,20 @@ add.mMetadata.mEntries.push_back(flags3);
                 if (position.y >= floor && next.y < floor) {
                     solid = true;
                     landing = floor;
+                    landingY = y;
                     break;
                 }
             }
         }
         if (motion.y < 0.0f && solid && next.y < landing) {
+            if (hits(blockX, landingY, blockZ))
+                return;
             next.y = landing;
             motion = Vector3f(0.0f, 0.0f, 0.0f);
             actor.setOnGround(true);
         } else if (motion.y > 0.0f && solid) {
+            if (hits(blockX, blockY, blockZ))
+                return;
             next.y = position.y;
             motion.y = 0.0f;
         } else {
@@ -397,16 +437,16 @@ add.mMetadata.mEntries.push_back(flags3);
             ItemStack pickedItem = actor.getItem();
             pickedItem.mCount = pickupCount;
 
-            ItemStack eventItem = pickedItem;
-            PluginEvent pluginEvent;
-            pluginEvent.mType = FALCON_EVENT_PLAYER_PICKUP_ITEM;
-            pluginEvent.mCancellable = true;
-            pluginEvent.mPlayer = &player;
-            pluginEvent.mItem = &eventItem;
-            PluginManager::getInstance().dispatch(pluginEvent);
+            bool cancelled = false;
+            EventSignal<PlayerPickupItemBeforeEvent> &pickup = owner.getEventBus().before().mPlayerPickupItem;
+            if (pickup.hasSubscribers()) {
+                PlayerPickupItemBeforeEvent pickupEvent(player, actor, pickedItem);
+                pickup.emit(pickupEvent);
+                cancelled = pickupEvent.isCancelled();
+            }
             if (actor.isRemoved())
                 return;
-            if (pluginEvent.mCancelled)
+            if (cancelled)
                 continue;
             if (owner.getScriptEngine().beforeEntityItemPickup(player, actor, pickedItem)) {
                 if (actor.isRemoved())
@@ -531,6 +571,13 @@ namespace {
 
                             ItemActor *kept = theirs.mCount >= mine.mCount ? other : self;
                             ItemActor *gone = kept == other ? self : other;
+                            EventSignal<ItemMergeBeforeEvent> &merge = owner.getEventBus().before().mItemMerge;
+                            if (merge.hasSubscribers()) {
+                                ItemMergeBeforeEvent event(*gone, *kept);
+                                merge.emit(event);
+                                if (event.isCancelled() || gone->isRemoved() || kept->isRemoved())
+                                    continue;
+                            }
                             ItemStack stack = kept->getItem();
                             stack.mCount += gone->getItem().mCount;
                             kept->setItem(stack);
@@ -577,7 +624,7 @@ void ItemActorHandler::collect(ServerNetworkHandler &owner, ItemActor &item, con
     take.mRuntimeActorId = collector.getRuntimeId();
 
     for (auto &viewer: owner.getPlayers()) {
-        if (viewer.second.isSpawned() && viewer.second.sharesLevelWith(item))
+        if (viewer.second.getVisibleActors().count(item.getRuntimeId()) != 0)
             owner.getNetworkHandler().send(viewer.second.getNetworkIdentifier(), take, owner.getCodecContext());
     }
 
@@ -618,8 +665,57 @@ void ItemActorHandler::teleport(ServerNetworkHandler &owner, Level &level, ItemA
 void ItemActorHandler::sendItemActorsTo(ServerNetworkHandler &owner, ServerPlayer &player) {
     for (const std::unique_ptr<ItemActor> &actor: owner.getItemEntities()) {
         if (!actor->isRemoved())
-            spawnItemActorTo(owner, player, *actor);
+            showItemActorTo(owner, player, *actor);
     }
+}
+
+void ItemActorHandler::indexForViewers(ServerNetworkHandler &owner) {
+    for (auto it = itemsByColumn.begin(); it != itemsByColumn.end();) {
+        if (it->second.empty()) {
+            it = itemsByColumn.erase(it);
+            continue;
+        }
+        it->second.clear();
+        ++it;
+    }
+
+    itemsById.clear();
+    for (const std::unique_ptr<ItemActor> &actor: owner.getItemEntities()) {
+        if (actor->isRemoved())
+            continue;
+
+        const Vector3f &position = actor->getPosition();
+        const int32_t chunkX = (int32_t) std::floor(position.x) >> 4;
+        const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
+        itemsByColumn[ChunkStreamHandler::packChunk(chunkX, chunkZ)].push_back(actor.get());
+        itemsById.emplace_back(actor->getRuntimeId(), actor.get());
+    }
+
+    // ids grow along the list: sorted only if something broke that order
+    if (!std::is_sorted(itemsById.begin(), itemsById.end()))
+        std::sort(itemsById.begin(), itemsById.end());
+}
+
+void ItemActorHandler::hideIfOutOfView(ServerNetworkHandler &owner, ServerPlayer &player, uint64_t runtimeId) {
+    const auto found = std::lower_bound(itemsById.begin(), itemsById.end(), runtimeId,
+                                        [](const std::pair<uint64_t, ItemActor *> &entry, uint64_t id) {
+                                            return entry.first < id;
+                                        });
+    if (found == itemsById.end() || found->first != runtimeId || owner.canPlayerSeeActor(player, *found->second))
+        return;
+
+    player.getVisibleActors().erase(runtimeId);
+    removeItemActorFrom(owner, player, *found->second);
+}
+
+void ItemActorHandler::showColumnTo(ServerNetworkHandler &owner, ServerPlayer &player, int32_t chunkX,
+                                    int32_t chunkZ) {
+    const auto bucket = itemsByColumn.find(ChunkStreamHandler::packChunk(chunkX, chunkZ));
+    if (bucket == itemsByColumn.end())
+        return;
+
+    for (const ItemActor *actor: bucket->second)
+        showItemActorTo(owner, player, *actor);
 }
 
 void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
@@ -650,7 +746,19 @@ void ItemActorHandler::tickItemActors(ServerNetworkHandler &owner) {
         if (index >= actors.size() || actors[index].get() != &actor)
             continue;
 
-        if (actor.isRemoved() || (actor.isExpired() && despawns(actor.getItem()))) {
+        bool expired = !actor.isRemoved() && actor.isExpired() && despawns(actor.getItem());
+        if (expired) {
+            EventSignal<ItemDespawnBeforeEvent> &despawn = owner.getEventBus().before().mItemDespawn;
+            if (despawn.hasSubscribers()) {
+                ItemDespawnBeforeEvent event(actor);
+                despawn.emit(event);
+                if (event.isCancelled()) {
+                    actor.setAge(0);
+                    expired = false;
+                }
+            }
+        }
+        if (actor.isRemoved() || expired) {
             broadcastItemActorRemove(owner, actor);
             owner.getLevelFor(actor).eraseEntity(actor.getUniqueId());
             // taken out of the list in one sweep below: an explosion removes thousands a tick, and each

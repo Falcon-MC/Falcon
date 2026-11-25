@@ -29,9 +29,9 @@ namespace {
         ServerNetworkHandler owner("Crowd", "", 1);
         Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
 
-        ServerPlayer &near = owner.spawnSimulatedPlayer("near", level, Vector3f(8.5f, 100.0f, 8.5f), 0.0f, 1);
-        ServerPlayer &beside = owner.spawnSimulatedPlayer("beside", level, Vector3f(40.5f, 100.0f, 8.5f), 0.0f, 1);
-        ServerPlayer &far = owner.spawnSimulatedPlayer("far", level, Vector3f(2000.5f, 100.0f, 2000.5f), 0.0f, 1);
+        ServerPlayer &near = *owner.spawnSimulatedPlayer("near", level, Vector3f(8.5f, 100.0f, 8.5f), 0.0f, 1);
+        ServerPlayer &beside = *owner.spawnSimulatedPlayer("beside", level, Vector3f(40.5f, 100.0f, 8.5f), 0.0f, 1);
+        ServerPlayer &far = *owner.spawnSimulatedPlayer("far", level, Vector3f(2000.5f, 100.0f, 2000.5f), 0.0f, 1);
 
         const std::set<std::string> around = namesNear(owner, near.getPosition(), 48.0f);
         require(around.count("near") == 1 && around.count("beside") == 1, "players within the radius are visited");
@@ -43,7 +43,7 @@ namespace {
         require(owner.getPlayerByRuntimeId(0xffffffffULL) == nullptr, "an unknown runtime id finds nobody");
 
         // joined after the index was built: still found, by id and by place
-        ServerPlayer &late = owner.spawnSimulatedPlayer("late", level, Vector3f(9.5f, 100.0f, 9.5f), 0.0f, 1);
+        ServerPlayer &late = *owner.spawnSimulatedPlayer("late", level, Vector3f(9.5f, 100.0f, 9.5f), 0.0f, 1);
         require(owner.getPlayerByRuntimeId(late.getRuntimeId()) == &late, "a player who just joined is found by id");
 
         const uint64_t besideId = beside.getRuntimeId();
@@ -56,7 +56,7 @@ namespace {
     void listEntryCache() {
         ServerNetworkHandler owner("Crowd list", "", 1);
         Level &level = owner.getWorlds().getDefault().getLevel(DimensionType::Overworld);
-        ServerPlayer &player = owner.spawnSimulatedPlayer("listed", level, Vector3f(0.5f, 100.0f, 0.5f), 0.0f, 1);
+        ServerPlayer &player = *owner.spawnSimulatedPlayer("listed", level, Vector3f(0.5f, 100.0f, 0.5f), 0.0f, 1);
 
         std::shared_ptr<const SharedPacket> &slot = player.getListEntryPacket(1);
         slot = std::make_shared<const SharedPacket>(std::string("entry"));

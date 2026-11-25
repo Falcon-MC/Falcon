@@ -45,7 +45,7 @@ bool TntBlock::matches(const std::string &identifier) {
     return identifier == "minecraft:tnt";
 }
 
-void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse) {
+void TntBlock::primeByExplosion(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse) {
     const BlockState air("minecraft:air");
     level.setBlockState(position.x, position.y, position.z, air);
     BlockActionHandler::broadcastBlockUpdate(owner, level, position,
@@ -54,6 +54,13 @@ void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &
     const Vector3f spawnPosition((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f);
     owner.spawnPrimedTnt(level, spawnPosition, primeMotion(), fuse);
     owner.playNamedSound(level, PlaySoundName::FUSE, spawnPosition, 1.0f, 1.0f);
+}
+
+void TntBlock::prime(ServerNetworkHandler &owner, Level &level, const Vector3i &position, int32_t fuse,
+                     Actor *igniter) {
+    primeByExplosion(owner, level, position, fuse);
+    level.postGameEvent(GameEvents::PRIME_FUSE,
+                        Vector3f((float) position.x + 0.5f, (float) position.y, (float) position.z + 0.5f), igniter);
 }
 
 // TntBlock::dispense: refused while tntexplodes is off (the game reads game rule
@@ -88,19 +95,19 @@ bool TntBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, con
 
     if (identifier == "minecraft:flint_and_steel") {
         owner.damagePlayerHeldItem(player, 1);
-        prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+        prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE, &player);
         return true;
     }
 
     if (identifier == "minecraft:fire_charge") {
         player.consumeOneHeldItem();
-        prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+        prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE, &player);
         return true;
     }
 
     if (ItemEnchantments::getLevel(held, EnchantmentIds::FIRE_ASPECT) > 0) {
         owner.damagePlayerHeldItem(player, 1);
-        prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+        prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE, &player);
         return true;
     }
 
@@ -117,6 +124,6 @@ bool TntBlock::onProjectileHit(ServerNetworkHandler &owner, Level &level, const 
     if (identifier != SMALL_FIREBALL && !burningArrow)
         return false;
 
-    prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE);
+    prime(owner, level, position, PrimedTntActor::DEFAULT_FUSE, &projectile);
     return true;
 }

@@ -68,6 +68,8 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
     r.bullet = read("minecraft:shulker_bullet");
     const snowball = world.getDimension("overworld").getEntities({ type: "minecraft:snowball" })[0];
     const p = snowball.getComponent("projectile");
+    p.owner = world.getDimension("overworld").getEntities({ type: "minecraft:pig" })[0];
+    r.owner = String(p.owner?.typeId);
     p.gravity = 0;
     p.airInertia = 0.5;
     r.badParticle = fail(() => { p.hitParticle = "none"; }) + ":" + fail(() => { p.hitParticle = "nope"; })
@@ -123,6 +125,10 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         ServerActor &snowball = spawn(owner, level, "minecraft:snowball", 0.5f);
         ServerActor &trident = spawn(owner, level, "minecraft:thrown_trident", 2.5f);
         spawn(owner, level, "minecraft:shulker_bullet", 4.5f);
+        // unique ids saved by the game can be negative: only -1 means no owner
+        ServerActor *pig = owner.spawnActor(level, "minecraft:pig", Vector3f(6.5f, 120.0f, 0.5f),
+                                            [](ServerActor &spawned) { spawned.setUniqueId(-8589934591LL); });
+        require(pig != nullptr, "no fixture minecraft:pig");
         engine.tick(0);
 
         // the definitions set the physics: thrown_trident.json gravity 0.1, liquid_inertia 0.99
@@ -152,6 +158,18 @@ system.afterEvents.scriptEventReceive.subscribe((e) => {
         // none and unknown names are ParticleType 0, which the setter refuses; names are case sensitive
         expect(*r, "badParticle", "InvalidArgumentError:InvalidArgumentError:InvalidArgumentError");
         expect(*r, "crit", "crit");
+        expect(*r, "owner", "minecraft:pig");
+        // the engine reads the same unique id back: the pig shot the snowball
+        require(snowball.getOwnerUniqueId() == pig->getUniqueId()
+                        && owner.getEntity(snowball.getOwnerUniqueId()) == pig,
+                "the engine does not find the owner a script set");
+        // saved under the game's key: an arrow from a world the game wrote keeps its shooter
+        const Tag saved = snowball.saveNbt();
+        require(saved.getLong("OwnerNew", -1) == pig->getUniqueId(), "the owner was not saved as OwnerNew");
+        const std::unique_ptr<ServerActor> loaded = ActorClassRegistry::create(2, "minecraft:snowball");
+        require(loaded != nullptr, "no snowball to load");
+        loaded->loadNbt(saved);
+        require(loaded->getOwnerUniqueId() == pig->getUniqueId(), "the loaded snowball lost its owner");
         require(ProjectileComponent::particleType("iceballbreak") == 105 && ProjectileComponent::particleType("x") == 0
                         && std::string(ProjectileComponent::particleName(72)) == "blueflame",
                 "the particle type table does not follow the game");

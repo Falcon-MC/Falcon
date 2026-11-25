@@ -78,6 +78,9 @@ public:
     // uses, the player's experience, the trader's experience and tier after a granted trade
     void onTrade(ServerNetworkHandler &owner, MobActor &mob, int32_t offerIndex, int32_t crafts);
 
+    // a trader that reached a new tier rewards the player and regenerates once the trade screen is closed
+    void tick(ServerNetworkHandler &owner, MobActor &mob);
+
     // keep_level of a transformation: the tier, the experience and the cure discounts
     void inheritLevel(const MobEconomy &from);
 
@@ -131,6 +134,8 @@ private:
     int32_t mNearbyCuredDiscount = 0;
     int32_t mNearbyCuredDiscountTimeStamp = 0;
     int64_t mTradingPlayer = NO_PLAYER;
+    int32_t mTierUpCountdown = 0;
+    int64_t mTierUpPlayer = NO_PLAYER;
 
     static constexpr int64_t NO_PLAYER = -1;
 };

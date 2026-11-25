@@ -6,6 +6,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "Server/Commands/CommandMap.h"
 #include "Server/Commands/ServerCommandOrigin.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "Core/Debug/BedrockLog.h"
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -263,14 +265,25 @@ void CommandBlockSystem::remove(Level &level, const Vector3i &position) {
 
 void CommandBlockSystem::onCommandBlockUpdate(ServerNetworkHandler &owner, ServerPlayer &player,
                                               const CommandBlockUpdatePacket &packet) {
-    if (!packet.mBlock)
-        return;
-
     // operator-only in the game, screen only in creative: both required, or a non-op creative player
     // runs commands at the internal permission level
     if (!player.isOp() || !player.isCreative()) {
         LOG_INFO(LogAreaID::Server, "Rejected command block update from %s: missing permission",
                  player.getName().c_str());
+        return;
+    }
+
+    if (!packet.mBlock) {
+        // a command block minecart in reach keeps its command, name and output setting
+        auto *minecart = dynamic_cast<MinecartActor *>(owner.getActorByRuntimeId(packet.mMinecartRuntimeActorId));
+        if (minecart == nullptr || minecart->getKind() != MinecartActor::Kind::CommandBlock
+            || !minecart->sharesLevelWith(player)
+            || !BlockActionHandler::canInteractWithBlock(
+                    player, Vector3i((int32_t) std::floor(minecart->getPosition().x),
+                                     (int32_t) std::floor(minecart->getPosition().y),
+                                     (int32_t) std::floor(minecart->getPosition().z))))
+            return;
+        minecart->setCommand(owner, packet.mCommand, packet.mName, packet.mOutputTracked);
         return;
     }
 

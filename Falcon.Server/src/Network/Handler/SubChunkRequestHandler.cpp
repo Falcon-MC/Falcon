@@ -13,7 +13,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <set>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -72,10 +74,16 @@ void SubChunkRequestHandler::handleRequest(ServerNetworkHandler &owner, ServerPl
     const ChunkStreamState &state = player.getChunkStreamState();
     const bool wrongDimension = packet.mDimension != level.getDimensionId();
 
+    // the game batches every pending sub-chunk of a frame into one request, uncapped: only repeats are dropped,
+    // the view radius bounds the rest
     std::vector<SubChunkData> entries;
     entries.reserve(packet.mPositionOffsets.size());
+    std::set<std::tuple<int32_t, int32_t, int32_t>> seen;
 
     for (const Vector3i &offset: packet.mPositionOffsets) {
+        if (!seen.emplace(offset.x, offset.y, offset.z).second)
+            continue;
+
         SubChunkData entry;
         entry.mPosition = offset;
 

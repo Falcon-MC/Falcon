@@ -20,7 +20,7 @@ std::vector<CommandOverloadData> TagCommand::getOverloads() const {
 
 bool TagCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -60,7 +60,7 @@ bool TagCommand::execute(CommandOrigin &sender, const std::vector<std::string> &
     }
 
     if ((action != "add" && action != "remove") || arguments.size() < 3) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

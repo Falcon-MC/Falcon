@@ -57,6 +57,12 @@ bool BrushItem::onUseOnBlock(ServerNetworkHandler &owner, ServerPlayer &player, 
         }
     }
 
+    // the game holds the brush as an item use on any block it touches, the same as eating
+    if (!player.getFlags().get(ActorFlag::UsingItem)) {
+        const ItemStack &held = player.getInventory().getItemInHand();
+        owner.startItemUse(player, held, getUseDuration(held));
+    }
+
     int64_t &next = soundTicks[player.getRuntimeId()];
     if (tick > next) {
         // the default state of the clicked block, not its current one

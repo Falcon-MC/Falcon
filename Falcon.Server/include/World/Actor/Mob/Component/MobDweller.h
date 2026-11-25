@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Json/Json.h"
+#include "Core/NBT/Tag.h"
 #include "World/Village/Village.h"
 
 #include <cstdint>
@@ -47,6 +48,11 @@ public:
         return mVillage.lock();
     }
 
+    // only for a mob with the component, as the game saves it
+    void saveNbt(const MobActor &mob, Tag &data) const;
+
+    void loadNbt(const Tag &data);
+
 private:
     void _read(const json::Value &component);
 
@@ -56,12 +62,17 @@ private:
 
     void _tryJoinRaid(ServerNetworkHandler &owner, const MobActor &mob);
 
+    // an inhabitant joining its first village raises every player the village knows by first_founding_reward
+    void _onJoined(Village &village);
+
     const json::Value *mComponent = nullptr;
     DwellerRole mRole = DwellerRole::None;
     bool mCanFindPoi = false;
     bool mCanMigrate = false;
     bool mHasJoinedVillage = false;
     bool mRaidJoinQueued = false;
+    bool mRewardsFirstFounding = true;
+    int32_t mFirstFoundingReward = 0;
     int64_t mUpdateIntervalBase = 0;
     int32_t mUpdateIntervalVariant = 0;
     float mBoundsTolerance = 0.0f;

@@ -24,6 +24,8 @@ public:
     static void handleClientToServerHandshake(ServerNetworkHandler &owner, const NetworkIdentifier &id,
                                               ServerPlayer &player);
 
+    static void encryptionEnabled(ServerPlayer &player, bool usesAccountKey);
+
     // a signed login proves its account only through the handshake: without it, whoever once received the
     // same login could present it again
     static bool requiresEncryption(bool configured, bool signedLogin) {
@@ -83,4 +85,8 @@ public:
     static void checkTerrainReady(ServerNetworkHandler &owner, ServerPlayer &player);
 
     static void registerVanillaDefinitions(ServerNetworkHandler &owner);
+
+private:
+    static void admitLogin(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
+                           bool accountKeyProven);
 };

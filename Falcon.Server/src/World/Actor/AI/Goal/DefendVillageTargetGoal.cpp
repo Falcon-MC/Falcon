@@ -17,7 +17,7 @@ namespace {
 }
 
 DefendVillageTargetGoal::DefendVillageTargetGoal(float attackChance, float range,
-                                                 std::vector<std::shared_ptr<json::Value>> filters)
+                                                 std::vector<CompiledEntityFilter> filters)
         : mAttackChance(attackChance), mRangeSquared(range * range), mFilters(std::move(filters)) {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Target);
 }
@@ -43,7 +43,7 @@ bool DefendVillageTargetGoal::canUse(ServerNetworkHandler &owner, MobActor &mob)
     if (aggressor == nullptr || !aggressor->isAlive() || !mob.canTarget(*aggressor))
         return false;
 
-    for (const std::shared_ptr<json::Value> &filters: mFilters) {
+    for (const CompiledEntityFilter &filters: mFilters) {
         if (filters != nullptr && !EntityFilter::test(*filters, owner, mob, aggressor))
             return false;
     }

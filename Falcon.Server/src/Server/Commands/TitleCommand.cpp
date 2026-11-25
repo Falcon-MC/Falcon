@@ -96,13 +96,13 @@ bool TitleCommand::applyToTarget(ServerPlayer &target, const std::string &action
 
 bool TitleCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
     const std::string action = arguments[1];
     if (std::find(ACTIONS.begin(), ACTIONS.end(), action) == ACTIONS.end()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -114,7 +114,7 @@ bool TitleCommand::execute(CommandOrigin &sender, const std::vector<std::string>
 
     for (ServerPlayer *target: targets) {
         if (!applyToTarget(*target, action, arguments)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
     }

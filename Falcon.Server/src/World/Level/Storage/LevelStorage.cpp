@@ -1020,6 +1020,7 @@ std::vector<std::pair<std::string, Tag>> LevelStorage::loadSavedDataWithPrefix(c
             break;
 
         ReadOnlyBinaryStream stream(iterator->value().ToString());
+        stream.setEncodingSettings(_storageEncodingSettings());
         try {
             entries.emplace_back(key.substr(prefix.size()), NbtIo::readTag(stream, NbtVariant::LittleEndian));
         } catch (const std::exception &exception) {
@@ -1172,6 +1173,7 @@ bool LevelStorage::loadSavedData(const std::string &key, Tag &data, bool wrapped
         return false;
 
     ReadOnlyBinaryStream stream(raw);
+    stream.setEncodingSettings(_storageEncodingSettings());
 
     try {
         const Tag root = NbtIo::readTag(stream, NbtVariant::LittleEndian);

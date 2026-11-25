@@ -264,6 +264,17 @@ std::shared_ptr<const FeatureExpression> FeatureExpression::parse(const std::str
     return cache.emplace(text, result).first->second;
 }
 
+const FeatureExpression *FeatureExpression::find(const std::string &text) {
+    thread_local std::unordered_map<std::string, const FeatureExpression *> local;
+    const auto found = local.find(text);
+    if (found != local.end())
+        return found->second;
+    // the shared cache keeps the expression alive
+    const FeatureExpression *expression = parse(text).get();
+    local.emplace(text, expression);
+    return expression;
+}
+
 float FeatureExpression::evaluate(const Context &context) const {
     return _evaluate(mRoot, context);
 }

@@ -162,26 +162,6 @@ private:
     std::shared_ptr<ItemDefinition> mBrewingIngredient;
 };
 
-class BeaconBlockActor final : public ContainerBlockActor {
-public:
-    static constexpr const char *BLOCK_ACTOR_ID = "Beacon";
-
-    static const int SIZE = 1;
-
-    BeaconBlockActor() : ContainerBlockActor(SIZE) {}
-
-    const char *getBlockActorId() const override {
-        return BLOCK_ACTOR_ID;
-    }
-
-    Tag saveNbt() const override;
-
-    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
-
-    int mPrimaryEffect = 0;
-    int mSecondaryEffect = 0;
-};
-
 class CrafterBlockActor final : public ContainerBlockActor {
 public:
     static constexpr const char *BLOCK_ACTOR_ID = "Crafter";
@@ -256,6 +236,9 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    // the client draws the items: they travel with the block actor
+    Tag getSpawnCompound() const override;
 };
 
 class ChiseledBookshelfBlockActor final : public ContainerBlockActor {
@@ -269,6 +252,33 @@ public:
     const char *getBlockActorId() const override {
         return BLOCK_ACTOR_ID;
     }
+
+    // Items holds all six slots by position, empty ones too, as the game saves them
+    Tag saveNbt() const override;
+
+    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
+
+    Tag getSpawnCompound() const override;
+
+    // an item of the minecraft:bookshelf_books tag: the only items a slot takes
+    static bool isBook(const ItemStack &item);
+
+    // one book in an empty slot; the slot becomes the last one used
+    bool insertBook(int slot, const ItemStack &book);
+
+    // the book in the slot, air without one; the slot becomes the last one used
+    ItemStack takeBook(int slot);
+
+    // books_stored: bit n set while slot n holds a book
+    int getBooksStored() const;
+
+    // 1 to 6 for the slot last filled or emptied, 0 before any; read by comparators
+    int getLastInteractedSlot() const {
+        return mLastInteractedSlot;
+    }
+
+private:
+    int mLastInteractedSlot = 0;
 };
 
 class DecoratedPotBlockActor final : public ContainerBlockActor {
@@ -300,38 +310,6 @@ public:
 
 private:
     Tag mSherds;
-};
-
-class JukeboxBlockActor final : public ContainerBlockActor {
-public:
-    static constexpr const char *BLOCK_ACTOR_ID = "Jukebox";
-
-    static const int SIZE = 1;
-
-    JukeboxBlockActor() : ContainerBlockActor(SIZE) {}
-
-    const char *getBlockActorId() const override {
-        return BLOCK_ACTOR_ID;
-    }
-
-    Tag saveNbt() const override;
-
-    void loadNbt(const Tag &data, const PacketCodecContext &context) override;
-
-    Tag getSpawnCompound() const override;
-
-    bool isPlaying() const {
-        return !mFinishedRecording;
-    }
-
-    void setPlaying(bool playing) {
-        mFinishedRecording = !playing;
-        mTicksPlaying = 0;
-    }
-
-private:
-    bool mFinishedRecording = true;
-    int mTicksPlaying = 0;
 };
 
 class LecternBlockActor final : public ContainerBlockActor {

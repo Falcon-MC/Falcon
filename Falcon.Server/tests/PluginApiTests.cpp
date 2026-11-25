@@ -1,11 +1,19 @@
 #include "Falcon/Plugin/LoadedPlugin.h"
+#include "Falcon/Plugin/PluginActor.h"
 #include "Falcon/Plugin/PluginCommand.h"
-#include "Falcon/Plugin/PluginEvents.h"
+#include "Falcon/Plugin/PluginEvent.h"
 #include "Falcon/Plugin/PluginManager.h"
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/WasmHost.h"
+#include "Core/Archive/ZipArchive.h"
+#include "Network/Handler/ChunkStreamHandler.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Protocol/Packets/AvailableCommandsPacket.h"
+#include "Protocol/Types/ItemDefinition.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Server/Commands/CommandMap.h"
+#include "Server/Commands/ExecuteCommandOrigin.h"
+#include "Server/Commands/PlayerCommandOrigin.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/ActorAttributes.h"
 #include "World/Inventory/PlayerInventory.h"
@@ -21,9 +29,12 @@
 #include "World/Level/World.h"
 #include "World/Level/WorldManager.h"
 
+#include <wasmtime.h>
+
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -33,6 +44,32 @@ class ServerTickProbe {
 public:
     static void removeSimulated(ServerNetworkHandler &owner) {
         owner._removeSimulatedPlayers();
+    }
+
+    // what the start of a tick does for the spawns that tick may make
+    static void reserveSpawns(ServerNetworkHandler &owner) {
+        owner._reserveSimulatedSpawns();
+    }
+
+    static void flushPostedTasks(ServerNetworkHandler &owner) {
+        std::vector<std::function<void()>> tasks;
+        tasks.swap(owner.mMainThreadTasks);
+        for (const auto &task: tasks)
+            task();
+    }
+
+    static EntityDataMap playerMetadata(ServerNetworkHandler &owner, ServerPlayer &player) {
+        return owner._buildPlayerData(player);
+    }
+
+    static void useItem(ServerNetworkHandler &owner, ServerPlayer &player) {
+        owner.mCurrentTick += 10;
+        owner._useHeldItem(player);
+    }
+
+    static void advanceItemUse(ServerNetworkHandler &owner, ServerPlayer &player, int64_t ticks) {
+        owner.mCurrentTick += ticks;
+        owner._tickItemUse(player);
     }
 };
 
@@ -49,6 +86,8 @@ namespace {
 
         Fixture() {
             level = &owner.getWorlds().getDefault().getOverworld();
+            // the world is never opened here: give the level the server open() would, so its actors reach the bus
+            level->setOwner(&owner);
             level->insertChunk(LevelChunk(0, 0));
             NetworkIdentifier id;
             player = &owner.getPlayers().try_emplace(id, id, 7001).first->second;
@@ -68,6 +107,103 @@ namespace {
             return reinterpret_cast<FalconLevel *>(level);
         }
     };
+
+    void customItems(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin plugin;
+        plugin.mDescription.mName = "CustomItems";
+        plugin.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(plugin);
+        FalconCustomItemDescriptor legacy{};
+        legacy.identifier = "test:legacy";
+        legacy.maxStackSize = 12;
+        require(api.registerCustomItem(handle, &legacy) == 1, "legacy descriptor was rejected");
+        require(CustomContentRegistry::getInstance().findItem(legacy.identifier)->mMaxStackSize == 12,
+                "legacy descriptor defaults changed");
+
+        FalconCustomItemDescriptorV2 snack{};
+        snack.item.identifier = "test:snack";
+        snack.item.maxStackSize = 16;
+        snack.components = "[]";
+        snack.componentsSize = 2;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 0, "a non-object was accepted");
+        snack.components = "{";
+        snack.componentsSize = 1;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 0, "malformed components were accepted");
+        snack.componentsSize = FALCON_CUSTOM_ITEM_COMPONENTS_MAX_BYTES + 1;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 0, "oversized component bytes were accepted");
+        require(CustomContentRegistry::getInstance().findItem(snack.item.identifier) == nullptr,
+                "a rejected registration reserved the identifier");
+
+        constexpr char components[] = R"({
+            "minecraft:food": {"nutrition": 4, "saturation_modifier": 0.5},
+            "minecraft:use_modifiers": {"use_duration": 1.0},
+            "minecraft:use_animation": "eat",
+            "minecraft:max_stack_size": 8
+        })";
+        snack.components = components;
+        snack.componentsSize = sizeof(components) - 1;
+        require(api.registerCustomItemWithComponents(handle, &snack) == 1, "the component descriptor was rejected");
+        const ItemStack stack = fixture.owner.createItemStack(snack.item.identifier, 2);
+        require(!stack.isAir(), "the component item is unavailable in the inventory");
+        const Tag *wireComponents = stack.mDefinition->getComponentData().get("components");
+        const Tag *food = wireComponents == nullptr ? nullptr : wireComponents->get("minecraft:food");
+        require(food != nullptr && food->getInt("nutrition", 0) == 4, "food was omitted from the client definition");
+        require(ServerNetworkHandler::useDurationTicksFor(stack) == 20, "use duration did not come from the component");
+        require(CustomContentRegistry::getInstance().findItem(snack.item.identifier)->mMaxStackSize == 8,
+                "the explicit stack-size component did not override the descriptor");
+
+        ServerPlayer &player = *fixture.player;
+        player.getInventory().setItemInHand(stack);
+        player.setFood(20.0f);
+        ServerTickProbe::useItem(fixture.owner, player);
+        require(!player.getFlags().get(ActorFlag::UsingItem), "the snack could be eaten at full hunger");
+        player.setFood(12.0f);
+        player.setSaturation(0.0f);
+        ServerTickProbe::useItem(fixture.owner, player);
+        require(player.getFlags().get(ActorFlag::UsingItem), "the snack did not enter the normal use path");
+        ServerTickProbe::advanceItemUse(fixture.owner, player, 19);
+        require(player.getFood() == 12.0f && player.getInventory().getItemInHand().mCount == 2,
+                "the snack was consumed before its use duration");
+        ServerTickProbe::advanceItemUse(fixture.owner, player, 1);
+        require(player.getFood() == 16.0f && player.getSaturation() == 4.0f
+                        && player.getInventory().getItemInHand().mCount == 1,
+                "the snack did not apply its food component and consume one item");
+        player.getInventory().clear();
+    }
+
+    void wasmCustomItems() {
+        constexpr char module[] = R"((module
+          (import "falcon:plugin/content@1.0.6" "register-custom-item-with-components"
+            (func $register (param i32) (result i32)))
+          (memory (export "memory") 1)
+          (data (i32.const 128) "test:wasm_item")
+          (data (i32.const 160) "{\22minecraft:food\22:{\22nutrition\22:3}}")
+          (func (export "falcon:plugin/plugin@1.0.6#on-enable") (result i32)
+            (i32.store (i32.const 0) (i32.const 128))
+            (i32.store (i32.const 4) (i32.const 14))
+            (i32.store (i32.const 60) (i32.const 160))
+            (i32.store (i32.const 64) (i32.const 34))
+            (call $register (i32.const 0))))
+        )";
+        LoadedPlugin plugin;
+        plugin.mDescription.mName = "WasmItems";
+        plugin.mDescription.mVersion = "1.0.0";
+        plugin.mDescription.mMain = "items.wasm";
+        const auto directory = ServerPaths::getRoot() / "plugins" / "WasmItems";
+        plugin.mDirectory = directory.string();
+        plugin.mDataFolder = (directory / "data").string();
+        std::filesystem::create_directories(plugin.mDataFolder);
+
+        wasm_byte_vec_t wasm;
+        require(wasmtime_wat2wasm(module, sizeof(module) - 1, &wasm) == nullptr, "the item module did not assemble");
+        std::ofstream(directory / plugin.mDescription.mMain, std::ios::binary)
+                .write(wasm.data, (std::streamsize) wasm.size);
+        wasm_byte_vec_delete(&wasm);
+        require(WasmHost::load(plugin), "the item module did not load");
+        require(plugin.mCallbacks.onEnable(plugin.mCallbacks.userData) == 1, "the Wasm components were rejected");
+        const auto *item = CustomContentRegistry::getInstance().findItem("test:wasm_item");
+        require(item != nullptr && item->mIsFood && item->mNutrition == 3, "the Wasm food payload was not registered");
+    }
 
     void effects(const FalconServerApi &api, Fixture &fixture) {
         FalconEntity *body = api.playerEntity(fixture.playerHandle());
@@ -124,6 +260,19 @@ namespace {
                 "a value above the maximum was accepted");
         require(api.entitySetAttribute(body, "minecraft:movement", std::nanf("")) == 0, "nan was accepted");
         require(api.entitySetAttribute(body, "minecraft:nothing", 1.0f) == 0, "an unknown attribute was set");
+        FalconAttribute previousHealth{};
+        require(api.entityAttribute(body, "minecraft:health", &previousHealth) == 1, "health was not reported");
+        require(api.entitySetMaxHealth(body, 22) == 1, "maximum health was not set");
+        FalconAttribute health{};
+        require(api.entityAttribute(body, "minecraft:health", &health) == 1 && health.maximum == 22.0f,
+                "increased maximum health was not reported");
+        require(api.entitySetMaxHealth(body, 10) == 1, "maximum health was not lowered");
+        require(api.entityAttribute(body, "minecraft:health", &health) == 1 && health.maximum == 10.0f &&
+                        health.value <= 10.0f,
+                "current health was not clamped after lowering the maximum");
+        require(api.entitySetMaxHealth(body, std::nanf("")) == 0, "nan maximum health was accepted");
+        require(api.entitySetMaxHealth(body, previousHealth.maximum) == 1, "maximum health was not restored");
+        require(api.entitySetAttribute(body, "minecraft:health", previousHealth.value) == 1, "health was not restored");
     }
 
     // nobody listens on the fixture's connection: these only have to reach the send path without failing
@@ -335,6 +484,49 @@ namespace {
                 "the enum values were lost");
         require(overloads[0].mParameters[1].mType == CommandParamType::Int && overloads[0].mParameters[1].mOptional,
                 "the int parameter was lost");
+        const FalconCommandParameter rest{"message", FALCON_COMMAND_PARAM_RAWTEXT, 1, nullptr, 0};
+        require(api.commandAddOverload(handle, "probe", &rest, 1) == 1, "the raw text overload was refused");
+        const std::vector<CommandOverloadData> both = command->getOverloads();
+        require(both.size() == 2 && both[1].mParameters.size() == 1
+                        && both[1].mParameters[0].mType == CommandParamType::RawText && both[1].mParameters[0].mOptional,
+                "the raw text parameter was lost");
+
+        struct CommandPacketProbe {
+            FalconPlayer *recipient = nullptr;
+            std::string payload;
+        } sent;
+        const uint64_t sendId = api.subscribe(
+                handle, FALCON_EVENT_DATA_PACKET_SEND, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *userData) {
+                    const FalconServerApi &api = PluginServerApi::get();
+                    if (api.eventPacketId(event) != static_cast<uint32_t>(MinecraftPacketIds::AvailableCommands))
+                        return;
+                    auto &sent = *static_cast<CommandPacketProbe *>(userData);
+                    sent.recipient = api.eventPlayer(event);
+                    uint32_t length = 0;
+                    const uint8_t *payload = api.eventPacketData(event, &length);
+                    sent.payload.assign(reinterpret_cast<const char *>(payload), length);
+                    api.eventSetCancelled(event, 1);
+                },
+                &sent);
+        const int didSend = api.playerSendCommands(fixture.playerHandle());
+        api.unsubscribe(sendId);
+        require(didSend == 1 && sent.recipient == fixture.playerHandle() && !sent.payload.empty(),
+                "available commands did not reach the plugin send event");
+        AvailableCommandsPacket packet;
+        ReadOnlyBinaryStream stream(sent.payload);
+        packet.read(stream, fixture.owner.getCodecContext());
+        const auto advertised = std::find_if(packet.mCommands.begin(), packet.mCommands.end(),
+                                             [](const CommandData &entry) { return entry.mName == "probe"; });
+        require(advertised != packet.mCommands.end() && advertised->mOverloads.size() == 2
+                        && advertised->mOverloads[1].mParameters.size() == 1
+                        && advertised->mOverloads[1].mParameters[0].mType == CommandParamType::RawText
+                        && advertised->mOverloads[1].mParameters[0].mOptional,
+                "the outgoing list lost the optional raw text overload");
+
+        fixture.player->setLoginState(ServerPlayer::LoginState::StartGameSent);
+        require(api.playerSendCommands(fixture.playerHandle()) == 0, "commands went to a player not in the world");
+        fixture.player->setLoginState(ServerPlayer::LoginState::Spawned);
 
         require(api.serverExecuteCommand("probe fast 3") == 1 && probe.calls == 1 && !probe.player,
                 "the console did not run the command");
@@ -342,7 +534,108 @@ namespace {
         require(api.playerExecuteCommand(fixture.playerHandle(), "probe slow") == 1 && probe.calls == 2 && probe.player,
                 "the player did not run the command");
         require(api.serverExecuteCommand("") == 0, "an empty line ran");
+
+        const char *aliases[3] = {"pr", "PROBER", "kick"};
+        require(api.commandSetAliases(handle, "probe", aliases, 3) == 1, "the aliases were refused");
+        require(api.commandSetAliases(PluginManager::toHandle(other), "probe", aliases, 1) == 0,
+                "another plugin gave the command aliases");
+        require(api.serverExecuteCommand("pr fast") == 1 && probe.calls == 3, "an alias did not run the command");
+        require(api.serverExecuteCommand("prober slow") == 1 && probe.calls == 4,
+                "an alias in another case did not run the command");
+        require(fixture.owner.getCommands().getCommand("kick") != command, "an alias took another command's name");
+        require(command->getAliases() == std::vector<std::string>{"pr", "prober"}, "the aliases were not kept");
+        const char *replacement[1] = {"pb"};
+        require(api.commandSetAliases(handle, "probe", replacement, 1) == 1, "the new aliases were refused");
+        require(fixture.owner.getCommands().getCommand("pr") == nullptr
+                        && fixture.owner.getCommands().getCommand("pb") == command,
+                "the old aliases stayed in place of the new ones");
         fixture.owner.getCommands().unregisterCommand("probe");
+        require(fixture.owner.getCommands().getCommand("pb") == nullptr, "an alias outlived its command");
+    }
+
+    struct MessageProbe {
+        int calls = 0;
+        std::string message;
+        bool isDefault = false;
+        std::string reason;
+        const char *replacement = nullptr;
+    };
+
+    void messageHandler(FalconEvent *event, void *userData) {
+        const FalconServerApi &api = PluginServerApi::get();
+        auto &probe = *static_cast<MessageProbe *>(userData);
+        probe.calls++;
+        probe.message = api.eventMessage(event);
+        probe.isDefault = api.eventMessageIsDefault(event) != 0;
+        probe.reason = api.eventCause(event);
+        if (probe.replacement != nullptr)
+            api.eventSetMessage(event, probe.replacement);
+    }
+
+    void joinAndLeaveMessages(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Greeter";
+        listener.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(listener);
+        MessageProbe join;
+        MessageProbe quit;
+        const uint64_t joinId = api.subscribe(handle, FALCON_EVENT_PLAYER_JOIN, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &join);
+        const uint64_t quitId = api.subscribe(handle, FALCON_EVENT_PLAYER_QUIT, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &quit);
+        EventBus &bus = fixture.owner.getEventBus();
+
+        PlayerJoinMessageBeforeEvent untouched(*fixture.player, "§eTester joined the game");
+        bus.before().mPlayerJoinMessage.emit(untouched);
+        require(join.calls == 1 && join.message == "§eTester joined the game" && join.isDefault,
+                "the join event did not carry the game's message");
+        require(untouched.mDefault, "a message left alone stopped being the game's own");
+
+        join.replacement = "§aTester is here";
+        PlayerJoinMessageBeforeEvent replaced(*fixture.player, "§eTester joined the game");
+        bus.before().mPlayerJoinMessage.emit(replaced);
+        require(!replaced.mDefault && replaced.mMessage == "§aTester is here", "the join message was not replaced");
+
+        join.replacement = "";
+        PlayerJoinMessageBeforeEvent silenced(*fixture.player, "§eTester joined the game");
+        bus.before().mPlayerJoinMessage.emit(silenced);
+        require(!silenced.mDefault && silenced.mMessage.empty(), "the join message was not emptied");
+
+        quit.replacement = "§cTester went away";
+        PlayerLeaveMessageBeforeEvent leaving(*fixture.player, "§eTester left the game", "Kicked by an operator");
+        bus.before().mPlayerLeaveMessage.emit(leaving);
+        require(quit.calls == 1 && quit.isDefault && quit.message == "§eTester left the game",
+                "the quit event did not carry the game's message");
+        require(quit.reason == "Kicked by an operator", "the quit event lost the reason");
+        require(!leaving.mDefault && leaving.mMessage == "§cTester went away", "the leave message was not replaced");
+
+        // a simulated player goes through the real join and leave, kicked with a reason
+        join.replacement = nullptr;
+        quit.replacement = nullptr;
+        FalconPlayer *bot = api.serverSpawnSimulatedPlayer("Greeted", fixture.levelHandle(),
+                                                           FalconVec3{4.5, 100.0, 4.5}, 0.0f,
+                                                           FALCON_GAME_MODE_SURVIVAL);
+        require(bot != nullptr, "the greeted player was refused");
+        require(join.calls == 4 && join.message == "§eGreeted joined the game" && join.isDefault,
+                "joining did not fire the join event before the message");
+        const NetworkIdentifier botId = reinterpret_cast<ServerPlayer *>(bot)->getNetworkIdentifier();
+        fixture.owner._disconnect(botId, DisconnectReason::Kicked, "Too loud");
+        ServerTickProbe::removeSimulated(fixture.owner);
+        require(quit.calls == 2 && quit.message == "§eGreeted left the game" && quit.reason == "Too loud",
+                "leaving did not fire the quit event with the kick reason");
+
+        api.unsubscribe(joinId);
+        api.unsubscribe(quitId);
+
+        MessageProbe chat;
+        chat.replacement = "said for the player";
+        const uint64_t chatId = api.subscribe(handle, FALCON_EVENT_PLAYER_CHAT, FALCON_PRIORITY_NORMAL, 0,
+                                              &messageHandler, &chat);
+        require(api.playerChat(fixture.playerHandle(), "hello\nsecond line") == 1 && chat.calls == 1
+                        && chat.message == "hello",
+                "a chat line for the player did not go through the chat event, one line only");
+        require(api.playerChat(fixture.playerHandle(), "   ") == 0 && chat.calls == 1, "a blank chat line was said");
+        api.unsubscribe(chatId);
     }
 
     bool hasOutput(ServerNetworkHandler &owner, const std::string &identifier) {
@@ -456,6 +749,10 @@ namespace {
         FalconEntity *body = api.playerEntity(fixture.playerHandle());
         FalconEntity *zombie = api.levelSpawnEntity(level, "minecraft:zombie", FalconVec3{6.5, 100.0, 6.5});
         require(zombie != nullptr, "no zombie spawned");
+
+        require(api.serverEntity(api.entityRuntimeId(zombie)) == zombie, "the zombie was not found by its runtime id");
+        require(api.serverEntity(api.entityRuntimeId(body)) == body, "the player was not found by their runtime id");
+        require(api.serverEntity(0xFFFFFFFFull) == nullptr, "an unknown runtime id found something");
 
         api.entitySetNameTag(zombie, "Bob");
         uint32_t savedLength = 0;
@@ -622,12 +919,17 @@ namespace {
         teleport.moveTo = true;
         teleport.to = FalconVec3{3.5, 101.0, 3.5};
         Vector3f destination(1.5f, 100.0f, 1.5f);
-        require(PluginEvents::teleport(*fixture.player, destination, "command"), "an allowed teleport was refused");
+        EventSignal<ActorTeleportBeforeEvent> &teleportSignal = fixture.owner.getEventBus().before().mActorTeleport;
+        ActorTeleportBeforeEvent allowed(*fixture.player, destination, TeleportCause::Command);
+        teleportSignal.emit(allowed);
+        require(!allowed.isCancelled(), "an allowed teleport was refused");
         require(teleport.calls == 1 && teleport.cause == "command", "the teleport event did not fire");
         require(std::fabs(destination.x - 3.5f) < 1e-4f, "the new destination was ignored");
         teleport.moveTo = false;
         teleport.cancel = true;
-        require(!PluginEvents::teleport(*fixture.player, destination, "command"), "a cancelled teleport went through");
+        ActorTeleportBeforeEvent cancelled(*fixture.player, destination, TeleportCause::Command);
+        teleportSignal.emit(cancelled);
+        require(cancelled.isCancelled(), "a cancelled teleport went through");
         api.unsubscribe(teleportId);
 
         Probe effect;
@@ -657,7 +959,8 @@ namespace {
         const ItemStack before[PlayerInventory::ARMOR_SIZE] = {inventory.getArmor(0), inventory.getArmor(1),
                                                                inventory.getArmor(2), inventory.getArmor(3)};
         inventory.setArmor(PlayerInventory::ARMOR_HEAD, fixture.owner.createItemStack("minecraft:iron_helmet", 1));
-        PluginEvents::armorChanged(*fixture.player, before);
+        PlayerArmorChangeAfterEvent armorChange(*fixture.player, before);
+        fixture.owner.getEventBus().after().mPlayerArmorChange.emit(armorChange);
         require(armor.calls == 1, "one changed slot gave " + std::to_string(armor.calls) + " events");
         api.unsubscribe(armorId);
 
@@ -665,12 +968,15 @@ namespace {
         bucket.cancel = true;
         const uint64_t bucketId = api.subscribe(handle, FALCON_EVENT_PLAYER_BUCKET_FILL, FALCON_PRIORITY_NORMAL, 0,
                                                 &probeHandler, &bucket);
-        require(!PluginEvents::bucket(*fixture.player, *fixture.level, Vector3i(2, 100, 2), true,
-                                      fixture.owner.createItemStack("minecraft:bucket", 1)),
-                "a cancelled bucket fill went through");
-        require(PluginEvents::bucket(*fixture.player, *fixture.level, Vector3i(2, 100, 2), false,
-                                     fixture.owner.createItemStack("minecraft:water_bucket", 1)),
-                "emptying fired the fill listener");
+        EventSignal<PlayerBucketUseBeforeEvent> &bucketSignal = fixture.owner.getEventBus().before().mPlayerBucketUse;
+        const ItemStack emptyBucket = fixture.owner.createItemStack("minecraft:bucket", 1);
+        PlayerBucketUseBeforeEvent fill(*fixture.player, *fixture.level, Vector3i(2, 100, 2), true, emptyBucket);
+        bucketSignal.emit(fill);
+        require(fill.isCancelled(), "a cancelled bucket fill went through");
+        const ItemStack waterBucket = fixture.owner.createItemStack("minecraft:water_bucket", 1);
+        PlayerBucketUseBeforeEvent empty(*fixture.player, *fixture.level, Vector3i(2, 100, 2), false, waterBucket);
+        bucketSignal.emit(empty);
+        require(!empty.isCancelled(), "emptying fired the fill listener");
         api.unsubscribe(bucketId);
     }
 
@@ -717,6 +1023,129 @@ namespace {
         api.unsubscribe(spawnId);
     }
 
+    // packets such as UpdateAbilities name the player by this id, which outlives the session's runtime id
+    void windowClosed(FalconPlayer *, uint32_t window, void *userData) {
+        auto &closes = *static_cast<std::vector<uint32_t> *>(userData);
+        closes.push_back(window);
+    }
+
+    void pluginWindows(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin owned;
+        owned.mDescription.mName = "Menus";
+        owned.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(owned);
+        std::vector<uint32_t> closes;
+        const FalconWindowDescriptor chest{0, FalconBlockPos{2, 102, 2}, -1, 27, &windowClosed, &closes};
+        const uint32_t window = api.playerOpenWindow(handle, fixture.playerHandle(), &chest);
+        require(window != 0, "the window did not open");
+        require(api.playerOpenWindow(handle, fixture.playerHandle(), &chest) == 0, "a second window opened over the first");
+        const FalconWindowDescriptor empty{0, FalconBlockPos{2, 102, 2}, -1, 0, &windowClosed, &closes};
+        require(api.playerOpenWindow(handle, fixture.playerHandle(), &empty) == 0, "a window without slots opened");
+
+        FalconItem *diamonds = api.itemCreate("minecraft:diamond", 5);
+        require(api.playerSetWindowItem(fixture.playerHandle(), window, 3, diamonds) == 1, "the slot was not set");
+        require(api.playerSetWindowItem(fixture.playerHandle(), window, 27, diamonds) == 0, "a slot past the size was set");
+        api.itemDestroy(diamonds);
+        FalconItem *read = api.playerWindowItem(fixture.playerHandle(), window, 3);
+        require(read != nullptr && std::string(api.itemIdentifier(read)) == "minecraft:diamond" && api.itemCount(read) == 5,
+                "the slot did not read back");
+        api.itemDestroy(read);
+        require(fixture.player->getInventoryManager().getContainer() != nullptr, "the window is not the open container");
+
+        api.playerCloseWindow(fixture.playerHandle(), window + 1);
+        require(closes.empty(), "another window id closed the window");
+        api.playerCloseWindow(fixture.playerHandle(), window);
+        require(closes == std::vector<uint32_t>{window}, "the close handler did not run once with the window");
+        require(api.playerWindowItem(fixture.playerHandle(), window, 3) == nullptr, "a closed window still read");
+        // the client confirms the close before another window opens
+        fixture.player->getInventoryManager().onClientRemoveWindow(window);
+        const uint32_t again = api.playerOpenWindow(handle, fixture.playerHandle(), &chest);
+        require(again != 0, "a window did not open once the first closed");
+        api.playerCloseWindow(fixture.playerHandle(), again);
+        fixture.player->getInventoryManager().onClientRemoveWindow(again);
+        require(closes.size() == 2, "the second window's handler did not run");
+
+        const uint32_t chestId = api.serverBlockNetworkId("minecraft:chest", "{\"minecraft:cardinal_direction\":\"north\"}");
+        require(api.levelSetBlock(fixture.levelHandle(), FalconBlockPos{3, 101, 3}, "minecraft:chest",
+                                  "{\"minecraft:cardinal_direction\":\"north\"}") == 1,
+                "the chest was not placed");
+        require(chestId != 0 && chestId == (uint32_t) fixture.level->getBlockState(3, 101, 3).getHash(),
+                "the chest's network id is not the one Falcon sends it by");
+        require(api.serverBlockNetworkId("minecraft:not_a_block", "{}") == 0, "an unknown block has a network id");
+        require(api.serverBlockNetworkId("chest", "{\"minecraft:cardinal_direction\":\"north\"}") == chestId,
+                "the namespace changed the id");
+    }
+
+    void wasmWindowsAndMetadata(Fixture &fixture) {
+        constexpr char module[] = R"((module
+          (import "falcon:plugin/server@1.0.6" "find-player" (func $find (param i32 i32 i32)))
+          (import "falcon:plugin/server@1.0.6" "server-item-info" (func $info (param i32 i32 i32)))
+          (import "falcon:plugin/players@1.0.6" "player-open-window"
+            (func $open (param i64 i32 i32 i32 i32 i64 i32 i32 i32) (result i32)))
+          (import "falcon:plugin/players@1.0.6" "player-set-name-tag"
+            (func $tag (param i64 i32 i32) (result i32)))
+          (memory (export "memory") 1)
+          (data (i32.const 128) "Tester")
+          (data (i32.const 144) "minecraft:diamond_sword")
+          (data (i32.const 176) "Window closed")
+          (global $player (mut i64) (i64.const 0))
+          (global $window (mut i32) (i32.const 0))
+          (global $closed (mut i32) (i32.const 0))
+          (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32)
+            (i32.const 256))
+          (func (export "falcon:plugin/plugin@1.0.6#on-enable") (result i32)
+            (call $info (i32.const 144) (i32.const 23) (i32.const 16))
+            (if (i32.ne (i32.load8_u (i32.const 16)) (i32.const 1))
+              (then (return (i32.const 0))))
+            (if (i32.ne (i32.load (i32.const 32)) (i32.const 1561))
+              (then (return (i32.const 0))))
+            (call $find (i32.const 128) (i32.const 6) (i32.const 0))
+            (if (i32.ne (i32.load8_u (i32.const 0)) (i32.const 1))
+              (then (return (i32.const 0))))
+            (global.set $player (i64.load (i32.const 8)))
+            (global.set $window (call $open (global.get $player) (i32.const 0)
+              (i32.const 2) (i32.const 102) (i32.const 2) (i64.const -1)
+              (i32.const 27) (i32.const 1) (i32.const 42)))
+            (i32.ne (global.get $window) (i32.const 0)))
+          (func (export "falcon:plugin/plugin@1.0.6#on-window-close") (param $handler i32) (param $who i64) (param $id i32)
+            (global.set $closed
+              (i32.and (i32.eq (local.get $handler) (i32.const 42))
+                (i32.and (i64.eq (local.get $who) (global.get $player))
+                         (i32.eq (local.get $id) (global.get $window))))))
+          (func (export "falcon:plugin/plugin@1.0.6#on-disable")
+            (if (global.get $closed)
+              (then (drop (call $tag (global.get $player) (i32.const 176) (i32.const 13))))))))";
+        const auto root = ServerPaths::getRoot() / "wasm-fixture";
+        const auto directory = root / "WasmWindows";
+        std::filesystem::create_directories(directory);
+        std::ofstream(directory / "plugin.json")
+                << R"({"name":"WasmWindows","version":"1.0.0","main":"windows.wasm","runtime":"wasm"})";
+        wasm_byte_vec_t wasm;
+        require(wasmtime_wat2wasm(module, sizeof(module) - 1, &wasm) == nullptr, "the window module did not assemble");
+        std::ofstream(directory / "windows.wasm", std::ios::binary).write(wasm.data, (std::streamsize) wasm.size);
+        wasm_byte_vec_delete(&wasm);
+
+        auto &plugins = fixture.owner.getPluginManager();
+        plugins.loadAll(root.string());
+        plugins.enableAll();
+        auto &inventories = fixture.player->getInventoryManager();
+        const int window = inventories.getContainerWindowId();
+        require(inventories.getPluginWindow(window) != nullptr, "the Wasm plugin did not read item info and open a window");
+
+        plugins.disableAll();
+        require(inventories.getPluginWindow(window) == nullptr, "the disabled Wasm plugin left a window open");
+        require(fixture.player->getPluginNameTag() == "Window closed",
+                "Wasm did not receive the correct close callback before on-disable");
+        inventories.onClientRemoveWindow(window);
+    }
+
+    void uniqueId(const FalconServerApi &api, Fixture &fixture) {
+        fixture.player->setUniqueId(-4242);
+        require(api.playerUniqueId(fixture.playerHandle()) == -4242, "the player's unique id was not the one they keep");
+        require(api.playerUniqueId(fixture.playerHandle()) != (int64_t) api.entityRuntimeId(api.playerEntity(fixture.playerHandle())),
+                "the unique id was the runtime id");
+    }
+
     void simulatedPlayers(const FalconServerApi &api, Fixture &fixture) {
         FalconLevel *level = fixture.levelHandle();
         const FalconVec3 at{4.5, 100.0, 4.5};
@@ -757,11 +1186,16 @@ namespace {
         require(api.serverSpawnSimulatedPlayer("Bot_2", nullptr, at, 0.0f, FALCON_GAME_MODE_SURVIVAL) == nullptr,
                 "a missing level was taken");
 
-        // no cap: as many as a load test wants
+        // no cap over time: a tick takes a bounded number of spawns, the next tick takes more
         std::vector<FalconPlayer *> crowd;
         for (int index = 0; index < 250; index++) {
-            FalconPlayer *extra = api.serverSpawnSimulatedPlayer(("Crowd_" + std::to_string(index)).c_str(), level, at,
-                                                                0.0f, FALCON_GAME_MODE_SURVIVAL);
+            const std::string name = "Crowd_" + std::to_string(index);
+            FalconPlayer *extra = api.serverSpawnSimulatedPlayer(name.c_str(), level, at, 0.0f,
+                                                                FALCON_GAME_MODE_SURVIVAL);
+            if (extra == nullptr) {
+                ServerTickProbe::reserveSpawns(fixture.owner);
+                extra = api.serverSpawnSimulatedPlayer(name.c_str(), level, at, 0.0f, FALCON_GAME_MODE_SURVIVAL);
+            }
             require(extra != nullptr, "a simulated player past 200 was refused");
             crowd.push_back(extra);
         }
@@ -774,10 +1208,320 @@ namespace {
         require(api.findPlayer("Bot_1") == nullptr, "the simulated player is still online");
     }
 
+    void pluginResourcePacks(const FalconServerApi &api, Fixture &fixture) {
+        constexpr char uuid[] = "a3d60853-adde-4a23-a8a9-5e50aa433a77";
+        ZipWriter writer;
+        writer.addFile("manifest.json", R"({"header":{"uuid":"a3d60853-adde-4a23-a8a9-5e50aa433a77","version":[1,2,3],"name":"Fixture"}})");
+        const std::string archive = writer.finish();
+        const FalconResourcePackDescriptor good{archive.data(), (uint32_t) archive.size(), "fixture-key"};
+        LoadedPlugin plugin;
+        plugin.mDescription.mName = "resource-fixture";
+        auto *handle = PluginManager::toHandle(plugin);
+        require(api.resourcePacksReplace(handle, &good, 1, 1) == 1, "valid plugin resource pack was rejected");
+        auto &packs = fixture.owner.getResourcePacks();
+        const auto held = packs.getOffer(false);
+        const auto *pack = held->findById(uuid);
+        require(held->mRequired && pack != nullptr && pack->mVersion == "1.2.3" && pack->mData == archive
+                && pack->mContentKey == "fixture-key", "plugin resource pack was not published to the offer");
+
+        const FalconResourcePackDescriptor invalid{"bad", 3, nullptr};
+        require(api.resourcePacksReplace(handle, &invalid, 1, 0) == 0, "invalid pack was accepted");
+        require(packs.getOffer(false) == held, "a rejected replacement changed the active offer");
+        require(api.resourcePacksReplace(handle, nullptr, 0, 0) == 1, "plugin pack was not removed");
+        require(packs.getOffer(false)->findById(uuid) == nullptr && !packs.getOffer(false)->mRequired,
+                "removed plugin pack stayed in new offers");
+        require(held->findById(uuid) == pack && held->mRequired, "a replacement changed an in-flight offer");
+    }
+
+    void playerCompatibility(const FalconServerApi &api, Fixture &fixture) {
+        require(api.playerSetNameTag(fixture.playerHandle(), "New tag") == 1, "the name tag was refused");
+        require(fixture.player->getName() == "Tester", "the name tag changed the login identity");
+        const EntityDataMap metadata = ServerTickProbe::playerMetadata(fixture.owner, *fixture.player);
+        const auto tag = std::find_if(metadata.mEntries.begin(), metadata.mEntries.end(), [](const auto &entry) {
+            return entry.mId == 4 && entry.mFormat == EntityDataFormat::String;
+        });
+        require(tag != metadata.mEntries.end() && tag->mStringValue == "New tag", "the tag was not in spawn metadata");
+
+        LoadedPlugin plugin;
+        plugin.mEnabled = true;
+        std::vector<uint32_t> packets;
+        const auto send = api.subscribe(
+                PluginManager::toHandle(plugin), FALCON_EVENT_DATA_PACKET_SEND, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *data) {
+                    const uint32_t id = PluginServerApi::get().eventPacketId(event);
+                    if (id == (uint32_t) MinecraftPacketIds::ModalFormRequest
+                        || id == (uint32_t) MinecraftPacketIds::ClientboundCloseForm)
+                        static_cast<std::vector<uint32_t> *>(data)->push_back(id);
+                }, &packets);
+        std::vector<uint32_t> cancelled;
+        const auto response = api.subscribe(
+                PluginManager::toHandle(plugin), FALCON_EVENT_PLAYER_FORM_RESPONSE, FALCON_PRIORITY_NORMAL, 0,
+                [](FalconEvent *event, void *data) {
+                    const auto &api = PluginServerApi::get();
+                    if (api.eventState(event))
+                        static_cast<std::vector<uint32_t> *>(data)->push_back(api.eventFormId(event));
+                }, &cancelled);
+        const auto first = api.playerSendForm(fixture.playerHandle(), "{}");
+        const int close = api.playerCloseForms(fixture.playerHandle());
+        const auto second = api.playerSendForm(fixture.playerHandle(), "{}");
+        ServerTickProbe::flushPostedTasks(fixture.owner);
+        api.unsubscribe(send);
+        api.unsubscribe(response);
+        require(first != 0 && second != 0 && close == 1, "a queued form operation was refused");
+        require(packets == std::vector<uint32_t>{(uint32_t) MinecraftPacketIds::ClientboundCloseForm,
+                                                  (uint32_t) MinecraftPacketIds::ModalFormRequest},
+                "a form discarded before close reached the client");
+        require(cancelled == std::vector<uint32_t>{first}, "the discarded form did not receive cancellation");
+    }
+
+    void permissionGroups(const FalconServerApi &api, Fixture &fixture) {
+        auto &permissions = fixture.owner.getPluginManager().getPermissions();
+        require(permissions.updateGroups({"create", "member"}), "could not create member group");
+        require(permissions.updateGroups({"create", "moderator"}), "could not create moderator group");
+        require(permissions.updateGroups({"default", "member"}), "could not set the default group");
+        require(permissions.updateGroups({"set", "member", "test.read", "true"}), "could not set a default node");
+        require(permissions.updateGroups({"inherit", "moderator", "member"}), "could not inherit the member group");
+        require(!permissions.updateGroups({"inherit", "member", "moderator"}), "an inheritance cycle was accepted");
+        require(permissions.updateGroups({"set", "moderator", "falcon.command.weather", "true"}),
+                "could not set a command node");
+        require(permissions.updateGroups({"set", "moderator", "falcon.command.permissiongroup", "true"}),
+                "could not record a console command node");
+        require(permissions.updateGroups({"assign", "12345", "moderator"}), "could not assign a player");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "default group was ignored");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.read") == 1, "no explicit group grant");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.unknown") == 0, "a missing node was explicit");
+
+        // a group grants game commands, never server management such as kick
+        const auto *weather = fixture.owner.getCommands().getCommand("weather");
+        const auto *admin = fixture.owner.getCommands().getCommand("permissiongroup");
+        require(weather != nullptr && admin != nullptr, "the test commands were not registered");
+        PlayerCommandOrigin sender(fixture.owner, *fixture.player, CommandOriginData{});
+        require(!sender.canExecuteCommand(*weather), "an unassigned player received a group command");
+        fixture.player->setXuid("12345");
+        fixture.player->setName("Renamed");
+        PluginPermissions reloaded(fixture.owner.getEventBus());
+        require(reloaded.commandPermission(*fixture.player, *weather) == true, "the XUID assignment was not saved");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "inherited plugin node was ignored");
+        LoadedPlugin plugin;
+        permissions.setPermission(plugin, *fixture.player, "test.read", false);
+        require(!api.playerHasPermission(fixture.playerHandle(), "test.read"), "a plugin denial was ignored");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.read") == -1, "no explicit plugin denial");
+        permissions.clearPlugin(plugin);
+        require(api.playerHasPermission(fixture.playerHandle(), "test.read"), "the inherited node was not restored");
+        require(permissions.registerPermission("test.legacy", FALCON_PERMISSION_DEFAULT_TRUE),
+                "an existing plugin permission default could not be registered");
+        require(api.playerHasPermission(fixture.playerHandle(), "test.legacy"), "the plugin default was ignored");
+        require(sender.canExecuteCommand(*weather) && !sender.canExecuteCommand(*admin),
+                "the group did not grant exactly the permitted command level");
+        ExecuteCommandOrigin chained(sender, nullptr, Vector3f(), Vector3f(), fixture.level);
+        require(chained.canExecuteCommand(*weather) && !chained.canExecuteCommand(*admin),
+                "execute did not preserve the source command permissions");
+        require(permissions.updateGroups({"set", "member", "falcon.command.weather", "false"}),
+                "could not set an inherited denial");
+        fixture.player->setOp(true);
+        require(api.playerPermissionOverride(fixture.playerHandle(), "test.unknown") == 0, "operator fallback was explicit");
+        require(api.playerPermissionOverride(fixture.playerHandle(), "falcon.command.weather") == -1, "group denial was lost");
+        require(!sender.canExecuteCommand(*weather),
+                "an inherited denial did not take precedence over operator access");
+        fixture.player->setOp(false);
+        fixture.player->setXuid("");
+        fixture.player->setName("Tester");
+    }
+
+    struct DeathProbe {
+        uint32_t drops = 0;
+        std::string firstDrop;
+        int keptByRule = -1;
+    };
+
+    void deathHandler(FalconEvent *event, void *userData) {
+        const FalconServerApi &api = PluginServerApi::get();
+        auto &probe = *static_cast<DeathProbe *>(userData);
+        probe.drops = api.eventDropCount(event);
+        FalconItem *first = api.eventDropAt(event, 0);
+        probe.firstDrop = first == nullptr ? "" : api.itemIdentifier(first);
+        probe.keptByRule = api.eventKeepInventory(event);
+        api.eventSetKeepInventory(event, 1);
+    }
+
+    // a plugin reads what an item or a block type is, and what an event drops, and changes it
+    void dropsAndTypes(const FalconServerApi &api, Fixture &fixture) {
+        FalconItemInfo sword{};
+        require(api.serverItemInfo("minecraft:diamond_sword", &sword) == 1, "the sword has no info");
+        require(sword.maxStackSize == 1 && sword.maxDurability == 1561 && sword.toolType == 1 && sword.toolTier == 6
+                        && sword.attackDamage == 7 && std::string(sword.name) == "Diamond Sword",
+                "the sword's info is wrong");
+        FalconItemInfo apple{};
+        require(api.serverItemInfo("apple", &apple) == 1 && apple.nutrition == 4, "the apple is not food");
+        FalconBlockInfo stone{};
+        require(api.serverBlockInfo("minecraft:stone", &stone) == 1 && stone.hardness == 1.5f && stone.toolType == 3
+                        && stone.solid == 1,
+                "the stone's info is wrong");
+        require(api.serverItemInfo("minecraft:not_an_item", &apple) == 0
+                        && api.serverBlockInfo("minecraft:not_a_block", &stone) == 0,
+                "an unknown type has info");
+
+        require(api.levelSetBlock(fixture.levelHandle(), FalconBlockPos{5, 101, 5}, "minecraft:chest", "{}") == 1,
+                "the chest was not placed");
+        require(api.levelContainerSize(fixture.levelHandle(), FalconBlockPos{5, 101, 5}) == 27,
+                "a chest a plugin placed holds nothing");
+
+        std::vector<ItemStack> drops;
+        int32_t experience = 3;
+        float horizontal = 0.4f;
+        float vertical = 0.4f;
+        PluginEvent synthetic;
+        synthetic.mDrops = &drops;
+        synthetic.mExperience = &experience;
+        synthetic.mKnockbackHorizontal = &horizontal;
+        synthetic.mKnockbackVertical = &vertical;
+        FalconEvent *event = reinterpret_cast<FalconEvent *>(&synthetic);
+        FalconItem *diamonds = api.itemCreate("minecraft:diamond", 2);
+        FalconItem *set[] = {diamonds, nullptr};
+        api.eventSetDrops(event, set, 2);
+        api.itemDestroy(diamonds);
+        require(api.eventDropCount(event) == 1 && api.itemCount(api.eventDropAt(event, 0)) == 2, "the drops were not set");
+        api.eventSetExperience(event, -5);
+        require(api.eventExperience(event) == 0, "the experience went below zero");
+        float readHorizontal = 0.0f, readVertical = 0.0f;
+        api.eventSetKnockback(event, 1.0f, 0.2f);
+        require(api.eventKnockback(event, &readHorizontal, &readVertical) == 1 && readHorizontal == 1.0f
+                        && readVertical == 0.2f,
+                "the knockback was not set");
+        PluginEvent none;
+        require(api.eventKnockback(reinterpret_cast<FalconEvent *>(&none), &readHorizontal, &readVertical) == 0
+                        && api.eventDropCount(reinterpret_cast<FalconEvent *>(&none)) == 0,
+                "an event without them carries drops or a push");
+
+        LoadedPlugin listener;
+        listener.mDescription.mName = "Keeper";
+        listener.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(listener);
+        DeathProbe probe;
+        const uint64_t id = api.subscribe(handle, FALCON_EVENT_PLAYER_DEATH, FALCON_PRIORITY_NORMAL, 0, &deathHandler,
+                                          &probe);
+        fixture.player->getInventory().clear();
+        FalconItem *emeralds = api.itemCreate("minecraft:emerald", 7);
+        api.playerSetInventoryItem(fixture.playerHandle(), 4, emeralds);
+        api.itemDestroy(emeralds);
+        // an earlier check killed the player and turned keepInventory on: they live again, and the rule drops
+        require(api.levelSetGameRule(fixture.levelHandle(), "keepinventory", "false") == 1, "keepinventory stayed on");
+        fixture.player->setDead(false);
+        fixture.player->setHealth(20.0f);
+        fixture.owner.killPlayer(*fixture.player, "death.attack.generic", {"Tester"});
+        api.unsubscribe(id);
+        require(probe.keptByRule == 0, "the event did not follow the keepInventory rule");
+        require(probe.drops == 1 && probe.firstDrop == "minecraft:emerald", "the death did not show what would drop");
+        FalconItem *kept = api.playerInventoryItem(fixture.playerHandle(), 4);
+        require(kept != nullptr && std::string(api.itemIdentifier(kept)) == "minecraft:emerald" && api.itemCount(kept) == 7,
+                "the kept inventory was not given back");
+        api.itemDestroy(kept);
+    }
+
+    void countTeleports(FalconEvent *event, void *userData) {
+        (void) event;
+        ++*static_cast<int *>(userData);
+    }
+
+    // an entity its plugin draws: Falcon sends nothing for it and leaves it where it is put, hits still find it
+    void pluginDrawnEntities(const FalconServerApi &api, Fixture &fixture) {
+        LoadedPlugin painter;
+        painter.mDescription.mName = "Painter";
+        painter.mEnabled = true;
+        FalconPlugin *handle = PluginManager::toHandle(painter);
+        FalconCustomEntityDescriptor descriptor{};
+        descriptor.identifier = "painter:ghost";
+        descriptor.width = 0.6f;
+        descriptor.height = 1.8f;
+        require(api.registerCustomEntity(handle, &descriptor) == 1, "the custom entity was refused");
+
+        FalconEntity *ghost = api.levelSpawnEntity(fixture.levelHandle(), "painter:ghost", FalconVec3{4.5, 110.0, 4.5});
+        require(ghost != nullptr, "the custom entity did not spawn");
+        auto *actor = dynamic_cast<PluginActor *>(reinterpret_cast<Actor *>(ghost));
+        require(actor != nullptr, "the custom entity is not a plugin actor");
+        fixture.player->getSentChunks().insert(ChunkStreamHandler::packChunk(0, 0));
+        LevelChunk *chunk = fixture.level->peekChunkPtr(0, 0);
+        require(chunk != nullptr, "the fixture's chunk is gone");
+        chunk->setPopulated(true);
+        const bool seenBefore = fixture.owner.canPlayerSeeActor(*fixture.player, *actor);
+
+        require(api.entitySetPluginDrawn(api.playerEntity(fixture.playerHandle()), 1) == 0,
+                "a player was handed to a plugin to draw");
+        require(api.entitySetPluginDrawn(ghost, 1) == 1 && api.entityIsPluginDrawn(ghost) == 1,
+                "the custom entity is not drawn by its plugin");
+        require(seenBefore, "the custom entity was not shown before its plugin drew it");
+        require(!fixture.owner.canPlayerSeeActor(*fixture.player, *actor), "Falcon still shows an entity its plugin draws");
+
+        for (int tick = 0; tick < 5; ++tick)
+            actor->tick(fixture.owner);
+        require(actor->getPosition().y == 110.0f, "an entity its plugin draws fell on its own");
+
+        int teleports = 0;
+        const uint64_t id = api.subscribe(handle, FALCON_EVENT_ENTITY_TELEPORT, FALCON_PRIORITY_NORMAL, 0,
+                                          &countTeleports, &teleports);
+        api.entityTeleport(ghost, nullptr, FalconVec3{8.5, 110.0, 8.5});
+        api.unsubscribe(id);
+        require(teleports == 0 && actor->getPosition().x == 8.5f, "moving a drawn entity was taken for a teleport");
+
+        require(api.entitySetSize(ghost, 3.0f, 2.0f) == 1, "the size was refused");
+        require(api.entitySetSize(ghost, 0.0f, 2.0f) == 0 && api.entitySetSize(ghost, std::nanf(""), 1.0f) == 0,
+                "a broken size was accepted");
+        require(actor->getSize().mWidth == 3.0f && actor->getSize().mHeight == 2.0f, "the size did not apply");
+        // only a box three wide reaches across to x 10
+        FalconEntity *found[4] = {};
+        bool reached = false;
+        const uint32_t count = api.levelEntitiesInBox(fixture.levelHandle(), FalconVec3{9.9, 110.0, 8.0},
+                                                      FalconVec3{10.5, 111.0, 9.0}, found, 4);
+        for (uint32_t index = 0; index < count && index < 4; ++index)
+            reached = reached || found[index] == ghost;
+        require(reached, "the entity's new box is not found");
+
+        PluginActor reloaded(9001, "painter:ghost");
+        reloaded.loadNbt(actor->saveNbt());
+        require(reloaded.isDrawnByPlugin() && reloaded.getSize().mWidth == 3.0f,
+                "a saved entity forgot it is drawn by its plugin");
+        require(api.entitySetPluginDrawn(ghost, 0) == 1 && api.entityIsPluginDrawn(ghost) == 0,
+                "Falcon did not take the drawing back");
+
+        require(api.levelSetBlock(fixture.levelHandle(), FalconBlockPos{6, 101, 6}, "minecraft:stone", "{}") == 1,
+                "the stone was not placed");
+        FalconBox boxes[8] = {};
+        const uint32_t boxCount = api.levelCollisionBoxes(fixture.levelHandle(), FalconVec3{5.5, 100.5, 5.5},
+                                                          FalconVec3{7.5, 102.5, 7.5}, boxes, 8);
+        bool stone = false;
+        for (uint32_t index = 0; index < boxCount && index < 8; ++index)
+            stone = stone
+                    || (boxes[index].min.x == 6.0 && boxes[index].min.y == 101.0 && boxes[index].min.z == 6.0
+                        && boxes[index].max.x == 7.0 && boxes[index].max.y == 102.0 && boxes[index].max.z == 7.0);
+        require(stone, "the stone's box is not among " + std::to_string(boxCount));
+        require(api.levelCollisionBoxes(fixture.levelHandle(), FalconVec3{5.5, 100.5, 5.5}, FalconVec3{7.5, 102.5, 7.5},
+                                        nullptr, 0)
+                        == boxCount,
+                "counting the boxes gave another number");
+
+        require(api.playerHasChunk(fixture.playerHandle(), 0, 0) == 1, "the sent chunk is not held");
+        require(api.playerHasChunk(fixture.playerHandle(), 5, 5) == 0, "an unsent chunk is held");
+
+        FalconItem *sword = api.itemCreate("minecraft:diamond_sword", 1);
+        FalconItem *stoneItem = api.itemCreate("minecraft:stone", 1);
+        int32_t swordBlock = -1;
+        int32_t stoneBlock = 0;
+        const int32_t swordId = api.itemNetworkId(sword, &swordBlock);
+        const int32_t stoneId = api.itemNetworkId(stoneItem, &stoneBlock);
+        require(swordId != 0 && swordBlock == 0, "the sword has no network id, or a block");
+        require(stoneId != 0 && stoneId != swordId && stoneBlock != 0, "the stone item has no block network id");
+        require(api.itemNetworkId(nullptr, nullptr) == 0, "no item has a network id");
+        api.itemDestroy(sword);
+        api.itemDestroy(stoneItem);
+        api.entityRemove(ghost);
+    }
+
     void run() {
         Fixture fixture;
         const FalconServerApi &api = PluginServerApi::get();
         require(api.size == sizeof(FalconServerApi), "the table size is not the header's");
+        customItems(api, fixture);
+        wasmCustomItems();
         attributes(api, fixture);
         effects(api, fixture);
         soundsAndParticles(api, fixture);
@@ -785,6 +1529,7 @@ namespace {
         containers(api, fixture);
         persistentData(api, fixture);
         commands(api, fixture);
+        joinAndLeaveMessages(api, fixture);
         recipes(api, fixture);
         world(api, fixture);
         entitiesAndPlayers(api, fixture);
@@ -792,6 +1537,14 @@ namespace {
         playerAndEntityEvents(api, fixture);
         worldEvents(api, fixture);
         simulatedPlayers(api, fixture);
+        uniqueId(api, fixture);
+        pluginWindows(api, fixture);
+        wasmWindowsAndMetadata(fixture);
+        permissionGroups(api, fixture);
+        playerCompatibility(api, fixture);
+        pluginResourcePacks(api, fixture);
+        dropsAndTypes(api, fixture);
+        pluginDrawnEntities(api, fixture);
     }
 }
 

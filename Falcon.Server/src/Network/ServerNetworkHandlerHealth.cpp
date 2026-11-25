@@ -1,6 +1,10 @@
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/InventoryHandler.h"
 
+#include "World/Level/Vibration/GameEvent.h"
+#include "World/Actor/Mob/Hostile/WitherActor.h"
+#include "World/Actor/DamageCause.h"
+#include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
 #include "World/Actor/RideSystem.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -19,7 +23,6 @@
 #include "World/Level/Level.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "Network/Handler/ItemActorHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/DeathInfoPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
@@ -77,7 +80,12 @@ void ServerNetworkHandler::_handleFallDamage(ServerPlayer &player, const Block *
         return;
 
     const float multiplier = supportBlock == nullptr ? 1.0f : supportBlock->getFallDistanceMultiplier();
-    float damage = player.computeFallDamage(player.getFallDistance() * multiplier);
+    float distance = player.getFallDistance();
+    if (const std::optional<float> &impulse = player.getWindImpulseHeight(); impulse.has_value()) {
+        const float landing = player.getPosition().y;
+        distance = landing <= *impulse ? std::min(*impulse - landing, distance) : 0.0f;
+    }
+    float damage = player.computeFallDamage(distance * multiplier);
     if (supportBlock != nullptr) {
         const std::optional<float> blockDamage = supportBlock->getFallDamage(player, damage);
         if (blockDamage.has_value())
@@ -136,7 +144,8 @@ void ServerNetworkHandler::_handleSuffocationDamage(ServerPlayer &player) {
 
 DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, const ActorDamageSource &source) {
     const std::string &key = source.mDeathMessageKey;
-    if (!player.isSpawned() || player.isDead() || amount <= 0.0f)
+    // a hit for nothing still lands: the player flinches and is pushed, health untouched
+    if (!player.isSpawned() || player.isDead() || amount < 0.0f)
         return DamageResult::Ignored;
 
     const int32_t gameType = player.getGameType();
@@ -149,7 +158,14 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
     if (isDamageDisabledByGameRule(getWorldFor(player).getOverworld().getGameRules(), key))
         return DamageResult::Ignored;
 
-    if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount <= 0.0f)
+    // a mob's own hit, not its projectile: the game scales it before the invulnerability window and armor
+    const MobActor *mobAttacker = dynamic_cast<const MobActor *>(source.mAttacker);
+    if (mobAttacker != nullptr && !source.mProjectile && mobAttacker->scalesDamageWithDifficulty()) {
+        // peaceful scales it to 0: the hit still lands, with its knockback and hurt animation
+        amount = DamageCause::scaleForDifficulty(amount, mProperties.getDifficulty());
+    }
+
+    if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount < 0.0f)
         return DamageResult::Ignored;
 
     // inside the 10-tick invulnerability window only a stronger hit lands, dealing the difference
@@ -161,26 +177,30 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
         player.recordHurtBy(source.mAttacker->getRuntimeId(), mCurrentTick);
         if (ServerPlayer *attacker = dynamic_cast<ServerPlayer *>(source.mAttacker))
             attacker->recordAttacked(player.getRuntimeId(), mCurrentTick);
+        else if (MobActor *mob = dynamic_cast<MobActor *>(source.mAttacker))
+            mob->setLastHurtMob(player.getRuntimeId());
     }
 
-    PluginEvent damageEvent;
-    damageEvent.mType = FALCON_EVENT_ENTITY_DAMAGE;
-    damageEvent.mCancellable = true;
-    damageEvent.mEntity = &player;
-    damageEvent.mAttacker = source.mAttacker;
-    damageEvent.mAmount = amount;
-    damageEvent.mCause = key;
-    PluginManager::getInstance().dispatch(damageEvent);
-    if (damageEvent.mCancelled)
-        return DamageResult::Ignored;
+    // a hit from an attacker pushes: listeners see the game's push and may change it
+    float knockbackHorizontal = 0.4f;
+    float knockbackVertical = 0.4f;
+    EventSignal<ActorDamageBeforeEvent> &damage = mEventBus.before().mActorDamage;
+    if (damage.hasSubscribers()) {
+        ActorDamageBeforeEvent event(player, source, amount, knockbackHorizontal, knockbackVertical);
+        damage.emit(event);
+        if (source.mAttacker != nullptr && (knockbackHorizontal != 0.4f || knockbackVertical != 0.4f))
+            player.setKnockbackOverride(knockbackHorizontal, knockbackVertical);
+        if (event.isCancelled())
+            return DamageResult::Ignored;
 
-    amount = (float) damageEvent.mAmount;
-    if (amount <= 0.0f)
-        return DamageResult::Ignored;
+        amount = event.mDamage;
+        if (amount < 0.0f)
+            return DamageResult::Ignored;
 
-    // rechecked: a plugin may have lowered the amount
-    if (cooling && player.getLastDamageAmount() >= amount)
-        return DamageResult::Ignored;
+        // rechecked: a listener may have lowered the amount
+        if (cooling && player.getLastDamageAmount() >= amount)
+            return DamageResult::Ignored;
+    }
 
     if (source.mOrigin.has_value()) {
         Actor *knockedBack = source.mProjectile ? nullptr : source.mAttacker;
@@ -207,16 +227,11 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
         amount = ArmorProtection::apply(armor.data(), armor.size(), amount, key, source.mArmorEfficiency);
     }
 
-    if (key != "death.attack.outOfWorld" && key != "death.attack.suicide") {
-        if (const MobEffectInstance *resistance = player.getEffect(MobEffectId::Resistance))
-            amount *= 1.0f - std::min(1.0f, 0.2f * (float) resistance->level());
-    }
+    if (key != "death.attack.outOfWorld" && key != "death.attack.suicide")
+        amount = player.resistDamage(amount);
 
-    if (amount <= 0.0f)
-        return DamageResult::Ignored;
-
-    if (player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld" && key != "death.attack.suicide"
-        && TotemItem::consume(*this, player))
+    if (amount > 0.0f && player.getHealth() - amount < 1.0f && key != "death.attack.outOfWorld"
+        && key != "death.attack.suicide" && TotemItem::consume(*this, player))
         return DamageResult::Dealt;
 
     const float health = player.reduceHealth(amount);
@@ -238,6 +253,8 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
 
     _sendHealth(player);
     _broadcastEntityEvent(player, (uint8_t) EntityEventType::HurtAnimation);
+    // with the hurt event, from the one hurt
+    getLevelFor(player).postGameEvent(GameEvents::ENTITY_DAMAGE, player.getPosition(), &player);
     return DamageResult::Dealt;
 }
 
@@ -263,25 +280,14 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
 
     player.getInventoryManager().onCurrentWindowRemove();
 
+    if (mFatalSource != nullptr && WitherActor::isWitherDamage(*this, *mFatalSource))
+        WitherActor::leaveWitherRose(*this, player);
+
+    // heard before the experience drops: a sculk catalyst near takes it
+    getLevelFor(player).postGameEvent(GameEvents::ENTITY_DIE, player.getPosition(), &player);
+
     const GameRules &rules = getWorldFor(player).getOverworld().getGameRules();
-    const bool keepInventory = rules.getBool("keepinventory");
-
-    if (!keepInventory) {
-        _dropInventoryOnDeath(player);
-
-        if (!player.isCreative()) {
-            const int droppedExperience = player.getExperience().getXpDropAmount();
-            if (droppedExperience > 0)
-                spawnExperienceOrbs(getLevelFor(player), player.getPosition(), droppedExperience);
-        }
-
-        player.getExperience().reset();
-        player.syncExperience();
-        _sendAttributes(player);
-    }
-
-    _sendHealth(player);
-    _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
+    const bool ruleKeepsInventory = rules.getBool("keepinventory");
 
     const std::string key = deathMessageKey.empty() ? "death.attack.generic" : deathMessageKey;
     const std::vector<std::string> parameters = deathMessageParameters.empty()
@@ -289,12 +295,19 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
                                                         : deathMessageParameters;
 
     std::string deathMessage = key;
-    PluginEvent deathEvent;
-    deathEvent.mType = FALCON_EVENT_PLAYER_DEATH;
-    deathEvent.mPlayer = &player;
-    deathEvent.mEntity = &player;
-    deathEvent.mMessage = &deathMessage;
-    PluginManager::getInstance().dispatch(deathEvent);
+    EventSignal<PlayerDeathBeforeEvent> &death = mEventBus.before().mPlayerDeath;
+    if (!death.hasSubscribers()) {
+        if (!ruleKeepsInventory) {
+            _dropInventoryOnDeath(player);
+            _dropExperienceOnDeath(player, player.isCreative() ? 0 : player.getExperience().getXpDropAmount());
+        }
+    } else {
+        _killPlayerWithListeners(death, player, deathMessage, ruleKeepsInventory);
+    }
+
+    player.clearSculkCatalystState();
+    _sendHealth(player);
+    _broadcastEntityEvent(player, (uint8_t) EntityEventType::DeathAnimation);
 
     if (rules.getBool("showdeathmessages")) {
         if (deathMessage == key)
@@ -319,6 +332,72 @@ void ServerNetworkHandler::killPlayer(ServerPlayer &player, const std::string &d
     mNetworkHandler->send(player.getNetworkIdentifier(), info, mCodecContext);
 
     LOG_INFO(LogAreaID::Server, "%s died", player.getName().c_str());
+}
+
+// the death of a player listeners hear: they see what will drop and whether the player keeps it, and change it
+void ServerNetworkHandler::_killPlayerWithListeners(EventSignal<PlayerDeathBeforeEvent> &death, ServerPlayer &player,
+                                                    std::string &deathMessage, bool ruleKeepsInventory) {
+    PlayerInventory &inventory = player.getInventory();
+
+    // the inventory as it was, given back when a plugin keeps it after the rule dropped it
+    std::vector<ItemStack> items, armor;
+    for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
+        items.push_back(inventory.getItem(slot));
+    for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
+        armor.push_back(inventory.getArmor(slot));
+    const ItemStack offhand = inventory.getOffhand();
+    const ItemStack bodyArmor = inventory.getBodyArmor();
+
+    DropCapture capture;
+    if (!ruleKeepsInventory) {
+        DropCapture *previous = setDropCapture(&capture);
+        _dropInventoryOnDeath(player);
+        setDropCapture(previous);
+    }
+
+    bool keepInventory = ruleKeepsInventory;
+    bool keepExperience = ruleKeepsInventory;
+    int32_t experience = player.isCreative() || player.isDeathExperienceTaken() ? 0 : player.getExperience().getXpDropAmount();
+    PlayerDeathBeforeEvent event(player, deathMessage, capture.mItems, experience, keepInventory, keepExperience);
+    death.emit(event);
+
+    if (keepInventory && !ruleKeepsInventory) {
+        for (int slot = 0; slot < PlayerInventory::CONTAINER_SIZE; ++slot)
+            inventory.setItem(slot, items[(size_t) slot]);
+        for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
+            inventory.setArmor(slot, armor[(size_t) slot]);
+        inventory.setOffhand(offhand);
+        inventory.setBodyArmor(bodyArmor);
+        _sendInventory(player);
+    } else if (!keepInventory) {
+        if (ruleKeepsInventory) {
+            // a plugin drops what the rule kept: the inventory goes with what it set
+            DropCapture kept;
+            DropCapture *previous = setDropCapture(&kept);
+            _dropInventoryOnDeath(player);
+            setDropCapture(previous);
+            for (ItemStack &item: kept.mItems)
+                capture.mItems.push_back(std::move(item));
+        }
+        Level &level = getLevelFor(player);
+        const Vector3f position = player.getPosition();
+        const Vector3f dropPosition(position.x, position.y + ITEM_DROP_HEIGHT, position.z);
+        for (const ItemStack &item: capture.mItems)
+            dropItem(level, dropPosition, item, ItemActorHandler::randomDropAroundMotion(),
+                     ItemActorHandler::DEATH_DROP_PICKUP_DELAY);
+    }
+
+    if (!keepExperience)
+        _dropExperienceOnDeath(player, experience);
+}
+
+void ServerNetworkHandler::_dropExperienceOnDeath(ServerPlayer &player, int32_t experience) {
+    // a sculk catalyst near took it already
+    if (experience > 0 && !player.isDeathExperienceTaken())
+        spawnExperienceOrbs(getLevelFor(player), player.getPosition(), experience);
+    player.getExperience().reset();
+    player.syncExperience();
+    _sendAttributes(player);
 }
 
 void ServerNetworkHandler::_throwItem(ServerPlayer &player, const ItemStack &item) {
@@ -386,7 +465,6 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
     for (int slot = 0; slot < PlayerInventory::CRAFTING_TABLE_SIZE; ++slot)
         dropOnDeath(inventory.getCraftingTableItem(slot));
 
-    // clear() leaves the anvil, cartography, stonecutter and enchanting slots alone
     for (int slot = 0; slot < PlayerInventory::ANVIL_SIZE; ++slot) {
         dropOnDeath(inventory.getAnvilItem(slot));
         inventory.setAnvilItem(slot, ItemStack::air());
@@ -397,6 +475,18 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
         inventory.setCartographyItem(slot, ItemStack::air());
     }
 
+    for (int slot = 0; slot < PlayerInventory::TRADE_SIZE; ++slot) {
+        dropOnDeath(inventory.getTradeItem(slot));
+        inventory.setTradeItem(slot, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+        const ItemStack &item = inventory.getGrindstoneItem(index);
+        if (!item.isAir())
+            dropOnDeath(item);
+        inventory.setGrindstoneItem(index, ItemStack::air());
+    }
+
     for (int index = 0; index < PlayerInventory::SMITHING_SIZE; ++index) {
         const ItemStack &item = inventory.getSmithingItem(index);
         if (!item.isAir())
@@ -404,9 +494,20 @@ void ServerNetworkHandler::_dropInventoryOnDeath(ServerPlayer &player) {
         inventory.setSmithingItem(index, ItemStack::air());
     }
 
+    for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+        const ItemStack &item = inventory.getLoomItem(index);
+        if (!item.isAir())
+            dropOnDeath(item);
+        inventory.setLoomItem(index, ItemStack::air());
+    }
+
     dropOnDeath(inventory.getStonecutterInput());
     inventory.setStonecutterInput(ItemStack::air());
 
+    dropOnDeath(inventory.getBeaconPayment());
+    inventory.setBeaconPayment(ItemStack::air());
+
+    // clear() leaves the enchanting slots alone
     for (const ContainerSlotType type: {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
         ItemStack *slot = inventory.resolveSlot(type, 0);
         if (slot == nullptr)
@@ -481,14 +582,17 @@ void ServerNetworkHandler::_respawnPlayer(ServerPlayer &player) {
     std::optional<Vector3i> anchor;
     Vector3f spawn = _respawnPositionFor(player, destination, anchor);
 
-    PluginEvent respawnEvent;
-    respawnEvent.mType = FALCON_EVENT_PLAYER_RESPAWN;
-    respawnEvent.mPlayer = &player;
-    respawnEvent.mTo = spawn;
-    PluginManager::getInstance().dispatch(respawnEvent);
-    // a plugin position carries no dimension: it is an overworld one, and the anchor was not used
-    if (respawnEvent.mToChanged) {
-        spawn = respawnEvent.mTo;
+    bool spawnChanged = false;
+    EventSignal<PlayerRespawnBeforeEvent> &respawning = mEventBus.before().mPlayerRespawn;
+    if (respawning.hasSubscribers()) {
+        PlayerRespawnBeforeEvent event(player, spawn);
+        respawning.emit(event);
+        spawnChanged = event.mSpawnChanged;
+        if (spawnChanged)
+            spawn = event.mSpawn;
+    }
+    // a listener's position carries no dimension: it is an overworld one, and the anchor was not used
+    if (spawnChanged) {
         destination = &getWorldFor(player).getOverworld();
     } else if (anchor.has_value()) {
         RespawnAnchorBlock::addCharge(*this, *destination, *anchor, -1);

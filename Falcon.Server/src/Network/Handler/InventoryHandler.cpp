@@ -16,10 +16,14 @@
 #include "World/Item/ItemData.h"
 #include "World/Item/MapItem.h"
 #include "World/Item/PackShooter.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
 #include "World/Level/Block/AnvilBlock.h"
 #include "World/Level/Block/CartographyTableBlock.h"
 #include "World/Level/Block/StonecutterBlock.h"
 #include "World/Level/Block/SmithingTableBlock.h"
+#include "World/Level/Block/GrindstoneBlock.h"
+#include "World/Level/Block/LoomBlock.h"
 #include "World/Level/Block/VanillaBlocks.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -30,7 +34,6 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "Protocol/Packets/ContainerClosePacket.h"
 #include "Protocol/Packets/CraftingEventPacket.h"
@@ -44,9 +47,9 @@
 #include "Protocol/Types/ContainerSlotType.h"
 #include "Protocol/Types/InventoryActionData.h"
 #include "Protocol/Types/InventorySource.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
+#include <random>
 #include <string>
 #include <utility>
 
@@ -59,87 +62,6 @@ namespace {
 
         for (int slot: touchedSlots)
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, slot);
-    }
-
-    bool isBlockContainer(ContainerSlotType type) {
-        return type == ContainerSlotType::LevelEntity || type == ContainerSlotType::Barrel
-               || type == ContainerSlotType::ShulkerBox || type == ContainerSlotType::CrafterBlockContainer;
-    }
-
-    std::string containerName(ContainerSlotType type) {
-        if (isBlockContainer(type))
-            return "container";
-
-        switch (type) {
-            case ContainerSlotType::Hotbar:
-                return "hotbar";
-            case ContainerSlotType::Inventory:
-                return "inventory";
-            case ContainerSlotType::HotbarAndInventory:
-                return "hotbar_and_inventory";
-            case ContainerSlotType::Armor:
-                return "armor";
-            case ContainerSlotType::Offhand:
-                return "offhand";
-            case ContainerSlotType::Cursor:
-                return "cursor";
-            case ContainerSlotType::CraftingInput:
-                return "crafting_input";
-            case ContainerSlotType::CraftingOutput:
-            case ContainerSlotType::CreatedOutput:
-                return "crafting_output";
-            case ContainerSlotType::FurnaceIngredient:
-            case ContainerSlotType::BlastFurnaceIngredient:
-            case ContainerSlotType::SmokerIngredient:
-                return "furnace_ingredient";
-            case ContainerSlotType::FurnaceFuel:
-                return "furnace_fuel";
-            case ContainerSlotType::FurnaceResult:
-                return "furnace_result";
-            case ContainerSlotType::EnchantingInput:
-                return "enchanting_input";
-            case ContainerSlotType::EnchantingMaterial:
-                return "enchanting_material";
-            case ContainerSlotType::DynamicContainer:
-                return "bundle";
-            default:
-                return "other";
-        }
-    }
-
-    const char *transactionName(ItemStackRequestActionType type) {
-        switch (type) {
-            case ItemStackRequestActionType::Take:
-                return "take";
-            case ItemStackRequestActionType::Place:
-                return "place";
-            case ItemStackRequestActionType::Swap:
-                return "swap";
-            case ItemStackRequestActionType::Drop:
-                return "drop";
-            case ItemStackRequestActionType::Destroy:
-                return "destroy";
-            case ItemStackRequestActionType::Consume:
-                return "consume";
-            default:
-                return nullptr;
-        }
-    }
-
-    bool hasDestination(ItemStackRequestActionType type) {
-        return type == ItemStackRequestActionType::Take || type == ItemStackRequestActionType::Place
-               || type == ItemStackRequestActionType::Swap;
-    }
-
-    ItemStack itemAt(const PlayerInventory &inventory, Container *openContainer, ContainerSlotType type, int slot) {
-        if (isBlockContainer(type)) {
-            if (openContainer == nullptr || slot < 0 || slot >= openContainer->getContainerSize())
-                return ItemStack::air();
-            return openContainer->getContainerItem(slot);
-        }
-
-        const ItemStack *item = inventory.resolveSlot(type, slot);
-        return item == nullptr ? ItemStack::air() : *item;
     }
 
     // ServerPlayer::attackActor bounds a hit the same way
@@ -175,21 +97,56 @@ namespace {
         return type == ContainerSlotType::EnchantingInput || type == ContainerSlotType::EnchantingMaterial;
     }
 
+    bool isEnchantCraft(const ItemStackRequestAction &action) {
+        return (action.mType == ItemStackRequestActionType::CraftRecipe
+                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
+               && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
+    }
+
     bool usesEnchantingTable(const ItemStackRequestAction &action) {
         if (isEnchantingSlot(action.mSource.mContainerName.mContainer)
             || isEnchantingSlot(action.mDestination.mContainerName.mContainer))
             return true;
 
-        return action.mType == ItemStackRequestActionType::CraftRecipe
-               && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE;
+        return isEnchantCraft(action);
     }
 
-    // the table's two slots live in the player inventory: nothing else gives them back
-    bool returnEnchantingItems(ServerPlayer &player) {
+    bool craftsEnchant(const ItemStackRequest &request) {
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (isEnchantCraft(action))
+                return true;
+        }
+        return false;
+    }
+
+    // an option belongs to the player it was sent to and to the item then in the table: not another player's
+    // net id, nor an item swapped in by an earlier action of the same request
+    bool takesForeignEnchant(const InventoryManager &manager, const PlayerInventory &inventory,
+                             const ItemStackRequest &request) {
+        const ItemStack *input = inventory.resolveSlot(ContainerSlotType::EnchantingInput, 0);
+        bool inputMoved = false;
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (isEnchantCraft(action)
+                && (inputMoved || input == nullptr || !manager.offersEnchant(action.mRecipeNetworkId, *input)))
+                return true;
+
+            if (action.mSource.mContainerName.mContainer == ContainerSlotType::EnchantingInput
+                || action.mDestination.mContainerName.mContainer == ContainerSlotType::EnchantingInput)
+                inputMoved = true;
+        }
+        return false;
+    }
+
+    // the enchanting table's two slots and the beacon's payment live in the player inventory: nothing else gives
+    // them back
+    bool returnScreenItems(ServerPlayer &player) {
         bool returned = false;
-        for (const ContainerSlotType type:
-             {ContainerSlotType::EnchantingInput, ContainerSlotType::EnchantingMaterial}) {
-            ItemStack *slot = player.getInventory().resolveSlot(type, 0);
+        const std::pair<ContainerSlotType, int> slots[] = {
+                {ContainerSlotType::EnchantingInput, 0},
+                {ContainerSlotType::EnchantingMaterial, 0},
+                {ContainerSlotType::BeaconPayment, PlayerInventory::BEACON_PAYMENT_NETWORK_SLOT}};
+        for (const auto &[type, index]: slots) {
+            ItemStack *slot = player.getInventory().resolveSlot(type, index);
             if (slot == nullptr || slot->isAir())
                 continue;
 
@@ -201,103 +158,14 @@ namespace {
         return returned;
     }
 
-    bool isCraft(const ItemStackRequestAction &action) {
-        if (action.mType == ItemStackRequestActionType::CraftCreative)
-            return true;
-
-        return (action.mType == ItemStackRequestActionType::CraftRecipe
-                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
-               && action.mRecipeNetworkId < EnchantmentHelper::RECIPE_ID_BASE;
-    }
-
-    ItemStack craftResult(ServerNetworkHandler &owner, const ItemStackRequestAction &action) {
-        if (action.mType == ItemStackRequestActionType::CraftCreative) {
-            for (const CreativeItemData &entry: owner.getCreativeItems()) {
-                if (entry.mNetId == action.mCreativeItemNetworkId)
-                    return entry.mItem;
-            }
-            return ItemStack::air();
-        }
-
-        const std::vector<ItemStack> &outputs = owner.getRecipeOutputs();
-        const int32_t netId = action.mRecipeNetworkId;
-        if (netId <= 0 || (size_t) netId > outputs.size())
-            return ItemStack::air();
-
-        return outputs[(size_t) netId - 1];
-    }
-
     bool allowRequest(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request) {
-        PluginManager &plugins = owner.getPluginManager();
-        const bool transactions = plugins.hasSubscribers(FALCON_EVENT_INVENTORY_TRANSACTION);
-        const bool crafts = plugins.hasSubscribers(FALCON_EVENT_CRAFT_ITEM);
-        const bool enchants = plugins.hasSubscribers(FALCON_EVENT_ITEM_ENCHANT);
-        if (!transactions && !crafts && !enchants)
+        EventSignal<InventoryRequestBeforeEvent> &requested = owner.getEventBus().before().mInventoryRequest;
+        if (!requested.hasSubscribers())
             return true;
 
-        const PlayerInventory &inventory = player.getInventory();
-        Container *openContainer = player.getInventoryManager().getContainer();
-
-        for (const ItemStackRequestAction &action: request.mActions) {
-            int32_t enchantCost = 0;
-            if (enchants && action.mType == ItemStackRequestActionType::CraftRecipe
-                && action.mRecipeNetworkId >= EnchantmentHelper::RECIPE_ID_BASE
-                && EnchantmentHelper::peekOptionCost(action.mRecipeNetworkId, enchantCost)) {
-                ItemStack enchanted = itemAt(inventory, openContainer, ContainerSlotType::EnchantingInput, 0);
-                PluginEvent enchantEvent;
-                enchantEvent.mType = FALCON_EVENT_ITEM_ENCHANT;
-                enchantEvent.mCancellable = true;
-                enchantEvent.mPlayer = &player;
-                enchantEvent.mItem = &enchanted;
-                enchantEvent.mAmount = (double) enchantCost;
-                plugins.dispatch(enchantEvent);
-                if (enchantEvent.mCancelled)
-                    return false;
-                continue;
-            }
-
-            if (isCraft(action)) {
-                if (!crafts)
-                    continue;
-
-                ItemStack result = craftResult(owner, action);
-                PluginEvent craftEvent;
-                craftEvent.mType = FALCON_EVENT_CRAFT_ITEM;
-                craftEvent.mCancellable = true;
-                craftEvent.mPlayer = &player;
-                craftEvent.mItem = &result;
-                craftEvent.mAmount = (double) std::max(1, action.mNumberOfRequestedCrafts);
-                plugins.dispatch(craftEvent);
-                if (craftEvent.mCancelled)
-                    return false;
-                continue;
-            }
-
-            const char *name = transactionName(action.mType);
-            if (!transactions || name == nullptr)
-                continue;
-
-            const ContainerSlotType sourceType = action.mSource.mContainerName.mContainer;
-            ItemStack item = itemAt(inventory, openContainer, sourceType, action.mSource.mSlot);
-            PluginEvent transactionEvent;
-            transactionEvent.mType = FALCON_EVENT_INVENTORY_TRANSACTION;
-            transactionEvent.mCancellable = true;
-            transactionEvent.mPlayer = &player;
-            transactionEvent.mCause = name;
-            transactionEvent.mItem = &item;
-            transactionEvent.mAmount = (double) action.mCount;
-            transactionEvent.mSourceContainer = containerName(sourceType);
-            transactionEvent.mSourceSlot = action.mSource.mSlot;
-            if (hasDestination(action.mType)) {
-                transactionEvent.mDestinationContainer = containerName(action.mDestination.mContainerName.mContainer);
-                transactionEvent.mDestinationSlot = action.mDestination.mSlot;
-            }
-
-            plugins.dispatch(transactionEvent);
-            if (transactionEvent.mCancelled)
-                return false;
-        }
-        return true;
+        InventoryRequestBeforeEvent event(player, request);
+        requested.emit(event);
+        return !event.isCancelled();
     }
 
     void playBundleSounds(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStackRequest &request,
@@ -480,17 +348,12 @@ void InventoryHandler::handleMobEquipment(ServerNetworkHandler &owner, ServerPla
 
     if (packet.mHotbarSlot != previousSlot && packet.mHotbarSlot >= 0
         && packet.mHotbarSlot < PlayerInventory::HOTBAR_SIZE) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_ITEM_HELD)) {
-            ItemStack next = inventory.getItem(packet.mHotbarSlot);
-            PluginEvent heldEvent;
-            heldEvent.mType = FALCON_EVENT_PLAYER_ITEM_HELD;
-            heldEvent.mCancellable = true;
-            heldEvent.mPlayer = &player;
-            heldEvent.mSourceSlot = previousSlot;
-            heldEvent.mDestinationSlot = packet.mHotbarSlot;
-            heldEvent.mItem = &next;
-            plugins->dispatch(heldEvent);
-            if (heldEvent.mCancelled) {
+        EventSignal<PlayerItemHeldBeforeEvent> &held = owner.getEventBus().before().mPlayerItemHeld;
+        if (held.hasSubscribers()) {
+            PlayerItemHeldBeforeEvent heldEvent(player, previousSlot, packet.mHotbarSlot,
+                                                inventory.getItem(packet.mHotbarSlot));
+            held.emit(heldEvent);
+            if (heldEvent.isCancelled()) {
                 sendHeldItem(owner, player);
                 return;
             }
@@ -571,7 +434,7 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
 
     InventoryManager &manager = player.getInventoryManager();
     Level &level = owner.getLevelFor(player);
-    const Vector3i &anvilPosition = manager.getAnvilPosition();
+    const Vector3i anvilPosition = manager.getAnvilPosition();
 
     Level &mapLevel = MapItem::getMapLevel(owner, player);
     CartographyRecipes::Maps cartographyMaps;
@@ -579,24 +442,42 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     cartographyMaps.mExpand = [&mapLevel](int64_t mapId, bool scaled) {
         return mapLevel.getMaps().expandMap(mapLevel.getMapStorage(), mapId, scaled);
     };
-    // the client draws the copy id and sends it in MapCreateLockedCopyPacket; reusing it keeps its item in step
-    cartographyMaps.mAllocateLockId = [&mapLevel, &manager](int64_t mapId) {
-        const CartographyLock &requested = manager.getClientMapLock();
-        if (requested.mOriginalId == mapId && requested.mCopyId != MapItemSavedData::INVALID_ID
-            && mapLevel.getMapData(requested.mCopyId) == nullptr)
-            return requested.mCopyId;
-
-        // the game draws the id of the locked copy at random
-        int64_t copyId = (int64_t) (uint32_t) MapItem::random()();
-        while (copyId == MapItemSavedData::INVALID_ID || mapLevel.getMapData(copyId) != nullptr)
-            copyId = (int64_t) (uint32_t) MapItem::random()();
+    // the client's copy id from MapCreateLockedCopyPacket is ignored: it could claim an id the counter hands a
+    // later map, and creating that map would replace the copy
+    cartographyMaps.mAllocateLockId = [&owner, &mapLevel](int64_t) {
+        int64_t copyId = owner.allocateActorUniqueId();
+        while (mapLevel.getMapData(copyId) != nullptr)
+            copyId = owner.allocateActorUniqueId();
         return copyId;
     };
 
-    const bool leftSmithing = manager.isSmithingOpen() && !withinContainerReach(
+    const bool grindstoneOpen = manager.isGrindstoneOpenIn(level) && VanillaBlocks::getAs<GrindstoneBlock>(
+            level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName) != nullptr;
+    const bool leftGrindstone = manager.isGrindstoneOpen() && (!grindstoneOpen || !withinContainerReach(
             player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
-                             (float) anvilPosition.z + 0.5f));
-    const bool leftContainer = leftSmithing || hasLeftOpenContainer(owner, player);
+                             (float) anvilPosition.z + 0.5f)));
+    if (leftGrindstone)
+        manager.onCurrentWindowRemove();
+
+    const bool loomOpen = manager.isLoomOpenIn(level) && VanillaBlocks::getAs<LoomBlock>(
+            level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName) != nullptr;
+    const bool leftLoom = manager.isLoomOpen() && (!loomOpen || !withinContainerReach(
+            player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                             (float) anvilPosition.z + 0.5f)));
+    if (leftLoom)
+        manager.onCurrentWindowRemove();
+
+    const bool leftSmithing = manager.isSmithingOpen() && (!manager.isWorkbenchOpenIn(level) || !withinContainerReach(
+            player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                             (float) anvilPosition.z + 0.5f)));
+
+    const bool leftWorkbench =
+            (manager.isAnvilOpen() || manager.isCartographyOpen() || manager.isStonecutterOpen())
+            && (!manager.isWorkbenchOpenIn(level) || !withinContainerReach(
+                    player, Vector3f((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                                     (float) anvilPosition.z + 0.5f)));
+    if (leftWorkbench)
+        manager.onCurrentWindowRemove();
 
     // the mount window fills the saddle and armor slots without an interaction: their events run after
     const int64_t containerActorId = manager.getContainerActorId();
@@ -608,6 +489,23 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                                              : nullptr;
     if (trader != nullptr && trader->getEconomy().getTradingPlayer() != player.getUniqueId())
         trader = nullptr;
+
+    // the same bound as opening the screen: a trader left behind or in another world closes it
+    const bool leftTrade = trader != nullptr
+                           && (!trader->sharesLevelWith(player)
+                               || trader->distanceSquaredTo(player) > ENTITY_INTERACT_REACH * ENTITY_INTERACT_REACH);
+    if (leftTrade) {
+        manager.onCurrentWindowRemove();
+        trader = nullptr;
+    }
+
+    const bool leftContainer = leftGrindstone || leftLoom || leftSmithing || leftWorkbench || leftTrade
+                               || hasLeftOpenContainer(owner, player);
+
+    BeaconBlockActor *beacon = nullptr;
+    if (manager.isContainerOpen() && manager.getCurrentWindowType() == ContainerType::Beacon
+        && containerActorId == -1)
+        beacon = level.getBlockActors().find<BeaconBlockActor>(manager.getContainerPosition());
 
     for (const ItemStackRequest &request: packet.mRequests) {
         // nothing to run: the same answer as a request run on a copy of the inventory, without the copy
@@ -627,7 +525,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
         int32_t enchantLevelsConsumed = 0;
         int32_t anvilLevelsConsumed = 0;
         bool anvilUsed = false;
+        int32_t grindstoneXpCost = -1;
+        BeaconChoice beaconChoice;
         CartographyLock cartographyLock;
+        CartographyExpansion cartographyExpansion;
         const bool cartographyOpen = manager.isCartographyOpen()
                                      && level.getBlockState(anvilPosition.x, anvilPosition.y, anvilPosition.z).mName
                                                 == CartographyTableBlock::IDENTIFIER;
@@ -651,7 +552,16 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 strayEnchanting = strayEnchanting || usesEnchantingTable(action);
         }
 
-        if (leftContainer || renumberedBundles || strayEnchanting
+        // with doLimitedCrafting a locked recipe does not craft
+        bool lockedRecipe = false;
+        for (const ItemStackRequestAction &action: request.mActions) {
+            if (action.mType == ItemStackRequestActionType::CraftRecipe
+                || action.mType == ItemStackRequestActionType::CraftRecipeAuto)
+                lockedRecipe = lockedRecipe || !RecipeUnlockSystem::mayCraft(owner, player, action.mRecipeNetworkId);
+        }
+
+        if (leftContainer || renumberedBundles || strayEnchanting || lockedRecipe
+            || takesForeignEnchant(manager, inventory, request)
             || (creativeCraft && gameType != (int32_t) GameType::Creative)
             || !allowRequest(owner, player, request)) {
             ItemStackResponseEntry rejected;
@@ -675,7 +585,31 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 &anvilLevelsConsumed, &anvilUsed, cartographyOpen ? &cartographyMaps : nullptr, &cartographyLock,
                 stonecutterOpen ? &owner.getStonecutterRecipeIndices() : nullptr, &craftedRecipeItem, tradeOffers,
                 &trade, smithingOpen ? &owner.getCachedCraftingData() : nullptr,
-                player.getCodec() ? player.getCodec()->getProtocolVersion() : 0);
+                player.getCodec() ? player.getCodec()->getProtocolVersion() : 0,
+                grindstoneOpen && !leftGrindstone && gameType != (int32_t) GameType::Spectator, &grindstoneXpCost,
+                beacon == nullptr ? -1 : beacon->getLevels(), &beaconChoice,
+                loomOpen && !leftLoom && gameType != (int32_t) GameType::Spectator,
+                cartographyOpen ? nullptr : &cartographyMaps, &cartographyExpansion, &player, &owner.getEventBus());
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK)
+            CartographyRecipes::applyExpansion(cartographyExpansion, cartographyMaps);
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && beacon != nullptr && beaconChoice.mPaid) {
+            beacon->applyPayment(beaconChoice.mPrimary, beaconChoice.mSecondary);
+            BlockActionHandler::broadcastBlockActorData(owner, level, *beacon);
+        }
+
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && grindstoneXpCost >= 0) {
+            const Vector3f at((float) anvilPosition.x + 0.5f, (float) anvilPosition.y + 0.5f,
+                              (float) anvilPosition.z + 0.5f);
+            owner.playLevelSound(level, "block.grindstone.use", at);
+            if (grindstoneXpCost > 0) {
+                const int32_t minimum = (grindstoneXpCost + 1) / 2;
+                static thread_local std::mt19937 random(std::random_device{}());
+                const int32_t xp = minimum + std::uniform_int_distribution<int32_t>(0, minimum - 1)(random);
+                owner.spawnExperienceOrbs(level, at, xp);
+            }
+        }
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && trader != nullptr && trade.mOfferIndex >= 0)
             trader->getEconomy().onTrade(owner, *trader, trade.mOfferIndex, trade.mCrafts);
@@ -685,8 +619,16 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             && cartographyLock.mCopyId != MapItemSavedData::INVALID_ID
             && mapLevel.getMaps().copyAndLockMap(mapLevel.getMapStorage(), cartographyLock.mOriginalId,
                                                  cartographyLock.mCopyId)
-                       != nullptr)
+                       != nullptr) {
+            // the client's item still names the id it drew: the response carries no tag
+            if (manager.getClientMapLock().mCopyId != cartographyLock.mCopyId)
+                needsResync = true;
             manager.setClientMapLock(CartographyLock());
+        }
+
+        // the item is enchanted now: its other options go with it, the next ones are rolled for what it became
+        if (entry.mResult == ItemStackRequestHandler::RESULT_OK && craftsEnchant(request))
+            manager.clearEnchantOptions();
 
         if (entry.mResult == ItemStackRequestHandler::RESULT_OK && enchantLevelsConsumed > 0) {
             player.getExperience().subtractXpLevels(enchantLevelsConsumed);
@@ -701,14 +643,10 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
                 owner._sendAttributes(player);
             }
             AnvilBlock::onUsed(owner, level, anvilPosition, gameType == (int32_t) GameType::Creative);
-            if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ANVIL_USE)) {
-                PluginEvent anvilEvent;
-                anvilEvent.mType = FALCON_EVENT_ANVIL_USE;
-                anvilEvent.mPlayer = &player;
-                anvilEvent.mLevel = &level;
-                anvilEvent.mBlockPosition = anvilPosition;
-                anvilEvent.mAmount = (double) anvilLevelsConsumed;
-                plugins->dispatch(anvilEvent);
+            EventSignal<AnvilUseAfterEvent> &anvilUse = owner.getEventBus().after().mAnvilUse;
+            if (anvilUse.hasSubscribers()) {
+                AnvilUseAfterEvent anvilEvent(player, level, anvilPosition, anvilLevelsConsumed);
+                anvilUse.emit(anvilEvent);
             }
         }
 
@@ -733,7 +671,11 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     }
 
     player.getInventoryManager().storeFurnaceView(owner);
-    PluginEvents::armorChanged(player, armorBefore);
+    EventSignal<PlayerArmorChangeAfterEvent> &armorChange = owner.getEventBus().after().mPlayerArmorChange;
+    if (armorChange.hasSubscribers()) {
+        PlayerArmorChangeAfterEvent armorEvent(player, armorBefore);
+        armorChange.emit(armorEvent);
+    }
 
     for (const BundleSyncData &bundle: bundles) {
         const ItemStack *owned = inventory.resolveSlot(bundle.mOwnerContainer, bundle.mOwnerSlot);
@@ -750,16 +692,16 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
             player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Offhand, 0);
     }
 
+    EventSignal<PlayerDropItemBeforeEvent> &drop = owner.getEventBus().before().mPlayerDropItem;
     for (const ItemStack &dropped: droppedItems) {
-        ItemStack droppedCopy = dropped;
-        PluginEvent dropEvent;
-        dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
-        dropEvent.mCancellable = true;
-        dropEvent.mPlayer = &player;
-        dropEvent.mItem = &droppedCopy;
-        PluginManager::getInstance().dispatch(dropEvent);
+        bool cancelled = false;
+        if (drop.hasSubscribers()) {
+            PlayerDropItemBeforeEvent dropEvent(player, dropped);
+            drop.emit(dropEvent);
+            cancelled = dropEvent.isCancelled();
+        }
 
-        if (!dropEvent.mCancelled) {
+        if (!cancelled) {
             owner._throwItem(player, dropped);
             continue;
         }
@@ -803,12 +745,15 @@ void InventoryHandler::handleItemStackRequest(ServerNetworkHandler &owner, const
     if (needsResync) {
         owner._sendInventory(player);
         manager.syncSmithingInputs();
+        manager.syncGrindstoneInputs();
+        manager.syncLoomInputs();
     }
-    if (renumberedBundles) {
+    if (!leftContainer && (needsResync || renumberedBundles)) {
         manager.refreshOpenContainer(manager.getContainerPosition());
         manager.refreshEntityContainer(manager.getContainerActorId());
-        manager.syncBundles();
     }
+    if (renumberedBundles)
+        manager.syncBundles();
 }
 
 void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -829,6 +774,28 @@ void InventoryHandler::_updateEnchantOptions(ServerNetworkHandler &owner, Server
     if (!current.isAir())
         packet.mOptions = EnchantmentHelper::getEnchantOptions(
                 owner.getLevelFor(player), manager.getContainerPosition(), current, manager.getEnchantSeed());
+
+    EventSignal<EnchantingOptionsBeforeEvent> &options = owner.getEventBus().before().mEnchantingOptions;
+    if (options.hasSubscribers()) {
+        const ItemStack *material = player.getInventory().resolveSlot(ContainerSlotType::EnchantingMaterial, 0);
+        EnchantingOptionsBeforeEvent event(player, owner.getLevelFor(player), manager.getContainerPosition(), current,
+                                           material == nullptr ? empty : *material, packet.mOptions);
+        options.emit(event);
+
+        if (event.isCancelled() || event.mReplaced) {
+            std::vector<int32_t> obsolete;
+            for (const auto &option: packet.mOptions)
+                obsolete.push_back(option.mEnchantNetId);
+            EnchantmentHelper::discardOptions(obsolete);
+            packet.mOptions = event.isCancelled() ? std::vector<EnchantOptionData>() : std::move(event.mReplacement);
+            EnchantmentHelper::registerOptions(packet.mOptions);
+        }
+    }
+
+    std::vector<int32_t> offered;
+    for (const EnchantOptionData &option: packet.mOptions)
+        offered.push_back(option.mEnchantNetId);
+    manager.setEnchantOptions(std::move(offered));
 
     owner.getNetworkHandler().send(player.getNetworkIdentifier(), packet, owner.getCodecContext());
 }
@@ -858,14 +825,13 @@ bool InventoryHandler::interactWithEntity(ServerNetworkHandler &owner, ServerPla
     if (target == nullptr)
         return false;
 
-    PluginEvent event;
-    event.mType = FALCON_EVENT_PLAYER_INTERACT_ENTITY;
-    event.mCancellable = true;
-    event.mPlayer = &player;
-    event.mEntity = target;
-    PluginManager::getInstance().dispatch(event);
-    if (event.mCancelled)
-        return false;
+    EventSignal<PlayerInteractEntityBeforeEvent> &interact = owner.getEventBus().before().mPlayerInteractEntity;
+    if (interact.hasSubscribers()) {
+        PlayerInteractEntityBeforeEvent event(player, *target);
+        interact.emit(event);
+        if (event.isCancelled())
+            return false;
+    }
 
     target = owner.getActorByRuntimeId(runtimeId);
     // a sneaking click opens a tamed mount's inventory instead of riding it
@@ -939,7 +905,7 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
             const ItemStack released = releasedItem;
             const int32_t ticksLeft = owner.getItemUseTicksLeft(player);
             const CustomItemDefinition *pack =
-                    itemType == nullptr
+                    releasedItem.mDefinition->isComponentBased()
                             ? CustomContentRegistry::getInstance().findItem(releasedItem.mDefinition->getIdentifier())
                             : nullptr;
             if ((itemType != nullptr && itemType->onStopUsing(owner, player, releasedItem, elapsedTicks))
@@ -1006,16 +972,14 @@ void InventoryHandler::handleTransaction(ServerNetworkHandler &owner, ServerPlay
     thrown.mUsingNetId = false;
     thrown.mNetId = 0;
 
-    ItemStack eventItem = thrown;
-    PluginEvent dropEvent;
-    dropEvent.mType = FALCON_EVENT_PLAYER_DROP_ITEM;
-    dropEvent.mCancellable = true;
-    dropEvent.mPlayer = &player;
-    dropEvent.mItem = &eventItem;
-    PluginManager::getInstance().dispatch(dropEvent);
-    if (dropEvent.mCancelled) {
-        player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
-        return;
+    EventSignal<PlayerDropItemBeforeEvent> &drop = owner.getEventBus().before().mPlayerDropItem;
+    if (drop.hasSubscribers()) {
+        PlayerDropItemBeforeEvent dropEvent(player, thrown);
+        drop.emit(dropEvent);
+        if (dropEvent.isCancelled()) {
+            player.getInventoryManager().syncSlot(InventoryManager::InventoryId::Inventory, sourceSlot);
+            return;
+        }
     }
 
     item->mCount -= droppedCount;
@@ -1075,7 +1039,7 @@ void InventoryHandler::handleContainerClose(ServerPlayer &player, const Containe
         manager.syncSlot(InventoryManager::InventoryId::Cursor, 0);
     }
 
-    if (returnEnchantingItems(player))
+    if (returnScreenItems(player))
         manager.syncAll();
 
     manager.onClientRemoveWindow(windowId);
@@ -1117,9 +1081,27 @@ void InventoryHandler::resetInventory(ServerNetworkHandler &owner, ServerPlayer 
         inventory.setSmithingItem(index, ItemStack::air());
     }
 
+    for (int index = 0; index < PlayerInventory::GRINDSTONE_SIZE; ++index) {
+        const ItemStack &item = inventory.getGrindstoneItem(index);
+        if (!item.isAir())
+            returned.push_back(item);
+        inventory.setGrindstoneItem(index, ItemStack::air());
+    }
+
+    for (int index = 0; index < PlayerInventory::LOOM_SIZE; ++index) {
+        const ItemStack &item = inventory.getLoomItem(index);
+        if (!item.isAir())
+            returned.push_back(item);
+        inventory.setLoomItem(index, ItemStack::air());
+    }
+
     if (!inventory.getStonecutterInput().isAir())
         returned.push_back(inventory.getStonecutterInput());
     inventory.setStonecutterInput(ItemStack::air());
+
+    if (!inventory.getBeaconPayment().isAir())
+        returned.push_back(inventory.getBeaconPayment());
+    inventory.setBeaconPayment(ItemStack::air());
 
     if (!inventory.getCursor().isAir())
         returned.push_back(inventory.getCursor());

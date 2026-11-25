@@ -32,6 +32,7 @@ enum class ActorFlag : int {
     ShowBottom = 38,
     Rearing = 39,
     Shaking = 40,
+    Casting = 42,
     Charging = 43,
     WasdControlled = 44,
     CanPowerJump = 45,
@@ -40,6 +41,9 @@ enum class ActorFlag : int {
     HasGravity = 49,
     SpinAttack = 56,
     Swimming = 57,
+    // set for minecraft:block_climber: scaffolding at the feet layer, then the layer below
+    InScaffolding = 69,
+    OverScaffolding = 70,
     Blocking = 72,
     TransitionBlocking = 73,
     BlockedUsingShield = 74,
@@ -47,12 +51,24 @@ enum class ActorFlag : int {
     Sleeping = 76,
     // a player asked a sleeping villager to get up
     WantsToWake = 77,
+    // a trader holds up what it would give for the item a player holds
+    TradeInterest = 78,
+    Roaring = 84,
+    DelayedAttacking = 85,
     FacingTargetToRangeAttack = 88,
     // read by Player.isEmoting
     Emoting = 92,
     Celebrating = 93,
     Admiring = 94,
     CelebratingSpecial = 95,
+    // the same layers: scaffolding resting on something, or powder snow the actor stands on
+    InAscendingBlock = 99,
+    OverDescendingBlock = 100,
+    JumpGoalJump = 103,
+    Emerging = 104,
+    Sniffing = 105,
+    Digging = 106,
+    SonicBoom = 107,
     HasDashCooldown = 108,
     PushTowardsClosestSpace = 109,
     Crawling = 114,
@@ -84,6 +100,10 @@ public:
     static const int32_t CARRIED_BLOCK_DATA_ID = 23;
     static const int32_t SCALE_DATA_ID = 38;
     static const int32_t MARK_VARIANT_DATA_ID = 43;
+    static const int32_t CONTAINER_SIZE_DATA_ID = 45;
+    static const int32_t CONTAINER_STRENGTH_DATA_ID = 46;
+    static const int32_t STRENGTH_DATA_ID = 75;
+    static const int32_t MAX_STRENGTH_DATA_ID = 76;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
     static const int32_t BED_POSITION_DATA_ID = 28;
     static const int32_t BED_ENTER_POSITION_DATA_ID = 133;

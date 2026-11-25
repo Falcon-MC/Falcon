@@ -24,4 +24,9 @@ public:
     static bool matches(const std::string &identifier);
 
     const char *getBlockActorId() const override;
+
+    bool resistsWither(bool charging) const override {
+        (void) charging;
+        return true;
+    }
 };

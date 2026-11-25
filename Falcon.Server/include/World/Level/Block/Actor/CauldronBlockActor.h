@@ -31,8 +31,26 @@ public:
         mPotionId = potionId;
     }
 
+    void setPotion(int16_t potionId, int16_t potionType) {
+        mPotionId = potionId;
+        mPotionType = potionType;
+    }
+
+    void clearPotion() {
+        mPotionId = -1;
+    }
+
     bool hasPotion() const {
         return mPotionId >= 0;
+    }
+
+    int16_t getPotionId() const {
+        return mPotionId;
+    }
+
+    // 0 drinkable, 1 splash, 2 lingering; -1 for a generated cauldron
+    int16_t getPotionType() const {
+        return mPotionType;
     }
 
     bool hasColor() const {
@@ -44,7 +62,8 @@ public:
         return mColor;
     }
 
-    // the water as the level events show it: the custom color with full alpha, else the game's fallback
+    // the liquid as the level events show it: the potion's color, else the custom color with full alpha, else the
+    // game's fallback
     uint32_t getEventColor() const;
 
     // an emptied cauldron forgets its potion and its color

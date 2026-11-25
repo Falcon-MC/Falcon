@@ -5,14 +5,13 @@
 #include "World/Level/LevelGen/Overworld/OverworldGenerator.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <algorithm>
 #include <vector>
 #include <stdexcept>
 
-World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
+World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed, bool starting) {
+    const bool newWorld = !WorldManager::exists(name);
     World &world = mWorlds.add(name, _getServerViewDistance(), seed);
     const Level::PacketBroadcaster broadcaster = [this](Level &level, const Vector3f &position, const Packet &packet) {
         BlockActionHandler::broadcastToViewers(*this, level, position, packet);
@@ -26,14 +25,27 @@ World &ServerNetworkHandler::_openWorld(const std::string &name, int64_t seed) {
     AutoCompaction::track(world.getOverworld());
     LOG_INFO(LogAreaID::Server, "Loaded world %s", name.c_str());
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_LOAD)) {
-        PluginEvent loadEvent;
-        loadEvent.mType = FALCON_EVENT_WORLD_LOAD;
-        loadEvent.mWorldName = name;
-        loadEvent.mLevel = &world.getOverworld();
-        plugins->dispatch(loadEvent);
-    }
+    if (starting)
+        mStartingWorlds.emplace_back(world.getId(), newWorld);
+    else
+        _dispatchWorldOpen(world, newWorld);
     return world;
+}
+
+void ServerNetworkHandler::_dispatchWorldOpen(World &world, bool created) {
+    if (created) {
+        EventSignal<WorldOpenAfterEvent> &init = mEventBus.after().mWorldInit;
+        if (init.hasSubscribers()) {
+            WorldOpenAfterEvent event(world);
+            init.emit(event);
+        }
+    }
+
+    EventSignal<WorldOpenAfterEvent> &load = mEventBus.after().mWorldLoad;
+    if (load.hasSubscribers()) {
+        WorldOpenAfterEvent event(world);
+        load.emit(event);
+    }
 }
 
 World *ServerNetworkHandler::loadWorld(const std::string &name, bool create, int64_t seed) {
@@ -73,14 +85,11 @@ bool ServerNetworkHandler::unloadWorld(const std::string &name, std::string &err
         }
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_WORLD_UNLOAD)) {
-        PluginEvent unloadEvent;
-        unloadEvent.mType = FALCON_EVENT_WORLD_UNLOAD;
-        unloadEvent.mCancellable = true;
-        unloadEvent.mWorldName = name;
-        unloadEvent.mLevel = &world->getOverworld();
-        plugins->dispatch(unloadEvent);
-        if (unloadEvent.mCancelled) {
+    EventSignal<WorldUnloadBeforeEvent> &unload = mEventBus.before().mWorldUnload;
+    if (unload.hasSubscribers()) {
+        WorldUnloadBeforeEvent event(*world, name);
+        unload.emit(event);
+        if (event.isCancelled()) {
             error = "falcon.commands.world.unload.cancelled";
             return false;
         }

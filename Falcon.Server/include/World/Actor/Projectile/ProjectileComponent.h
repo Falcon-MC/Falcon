@@ -6,6 +6,9 @@
 #include <cstdint>
 #include <string>
 
+class Actor;
+class ServerActor;
+class ServerNetworkHandler;
 struct CustomActorDefinition;
 
 // minecraft:projectile as one entity carries it; scripts read and change it through EntityProjectileComponent
@@ -22,12 +25,21 @@ struct ProjectileComponent {
     float mLiquidInertia = 0.6f;
     float mOnFireTime = 5.0f;
     float mPower = 1.3f;
+    // degrees added to the shooter's pitch at launch, negative aims higher
+    float mAngleOffset = 0.0f;
+    // the launch spread: uncertainty_base less difficulty times uncertainty_multiplier
     float mUncertaintyBase = 0.0f;
+    float mUncertaintyMultiplier = 0.0f;
     bool mCatchFire = false;
     bool mCritParticleOnHurt = false;
     bool mDestroyOnHurt = false;
     bool mLightning = false;
     bool mStopOnHurt = false;
+    // steers toward the shooter's target instead of flying straight
+    bool mHoming = false;
+    // a melee hit sends it back where the attacker looks, once reflect_immunity has passed
+    bool mReflectOnHurt = false;
+    float mReflectImmunity = 0.0f;
     Bounce mShouldBounce = Bounce::No;
     // LevelSoundEvent numbers, UNDEFINED for none
     int32_t mHitSound = LevelSoundEventIds::UNDEFINED;
@@ -45,4 +57,13 @@ struct ProjectileComponent {
 
     // the entity's own definition: a behavior pack one first, else the vanilla one; false when it has none
     static bool find(const std::string &identifier, const CustomActorDefinition *custom, ProjectileComponent &out);
+
+    // as find, after the projectile's minecraft:entity_spawned event added its group for that shooter: arrow.json
+    // player_arrow, player_crossbow_arrow
+    static bool findSpawned(ServerNetworkHandler &owner, const ServerActor &projectile, const Actor &shooter,
+                            ProjectileComponent &out);
+
+    // the group minecraft:entity_spawned adds to the definition, the shooter as other; null when none
+    static const json::Value *spawnedGroup(ServerNetworkHandler &owner, const json::Value &definition,
+                                           const ServerActor &self, const Actor &shooter);
 };

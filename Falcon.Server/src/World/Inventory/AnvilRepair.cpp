@@ -410,6 +410,49 @@ int32_t AnvilRepair::getRepairCost(const ItemStack &item) {
     return item.mTag.getInt(TAG_REPAIR_COST, 0);
 }
 
+bool AnvilRepair::isTypedName(const std::string &name) {
+    // UTF-8 takes at most four bytes a character
+    if (name.size() > MAX_NAME_LENGTH * 4)
+        return false;
+
+    // the smallest code point each sequence length may carry: anything below is an overlong form
+    static const uint32_t MINIMUM[] = {0, 0, 0x80, 0x800, 0x10000};
+    size_t characters = 0;
+    for (size_t at = 0; at < name.size(); ++characters) {
+        const unsigned char lead = (unsigned char) name[at];
+        if (lead < 0x20 || lead == 0x7f)
+            return false;
+
+        size_t length = 1;
+        uint32_t codePoint = lead;
+        if ((lead & 0xe0) == 0xc0) {
+            length = 2;
+            codePoint = lead & 0x1f;
+        } else if ((lead & 0xf0) == 0xe0) {
+            length = 3;
+            codePoint = lead & 0x0f;
+        } else if ((lead & 0xf8) == 0xf0) {
+            length = 4;
+            codePoint = lead & 0x07;
+        } else if (lead >= 0x80) {
+            return false;
+        }
+        if (name.size() - at < length)
+            return false;
+
+        for (size_t next = 1; next < length; ++next) {
+            const unsigned char byte = (unsigned char) name[at + next];
+            if ((byte & 0xc0) != 0x80)
+                return false;
+            codePoint = (codePoint << 6) | (byte & 0x3f);
+        }
+        if (codePoint < MINIMUM[length] || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff))
+            return false;
+        at += length;
+    }
+    return characters <= MAX_NAME_LENGTH;
+}
+
 bool AnvilRepair::hasCustomName(const ItemStack &item) {
     if (item.isAir() || !item.mTag.isCompound())
         return false;
@@ -450,8 +493,9 @@ int32_t AnvilRepair::mergeEnchantments(const ItemStack &input, const ItemStack &
         for (EnchantmentInstance &existing: merged) {
             if (existing.mId == incoming.mId) {
                 if (existing.mLevel < data->mMaxLevel) {
-                    existing.mLevel = existing.mLevel == incoming.mLevel ? existing.mLevel + 1
-                                                                         : std::max(existing.mLevel, incoming.mLevel);
+                    existing.mLevel = std::min(data->mMaxLevel, existing.mLevel == incoming.mLevel
+                                                                        ? existing.mLevel + 1
+                                                                        : std::max(existing.mLevel, incoming.mLevel));
                     ++changed;
                 }
                 handled = true;
@@ -467,6 +511,7 @@ int32_t AnvilRepair::mergeEnchantments(const ItemStack &input, const ItemStack &
 
         if (!handled) {
             merged.push_back(incoming);
+            merged.back().mLevel = std::min(merged.back().mLevel, data->mMaxLevel);
             ++changed;
         }
     }
@@ -523,7 +568,7 @@ AnvilResult AnvilRepair::createResult(const ItemStack &input, const ItemStack &m
     ItemStack result = input;
     const bool mapInput = isMap(input);
     const bool book = isEnchantedBook(material);
-    const int32_t penalty = getRepairCost(input) + getRepairCost(material);
+    const int64_t penalty = (int64_t) getRepairCost(input) + getRepairCost(material);
     int32_t cost = 0;
 
     if (!material.isAir()) {
@@ -614,7 +659,7 @@ AnvilResult AnvilRepair::createResult(const ItemStack &input, const ItemStack &m
     if (cost <= 0)
         return AnvilResult();
 
-    int32_t total = cost + penalty;
+    int32_t total = (int32_t) std::min<int64_t>(cost + penalty, INT32_MAX);
     if (renameCost > 0 && renameCost == cost && total >= TOO_EXPENSIVE_COST)
         total = TOO_EXPENSIVE_COST - 1;
 
@@ -623,7 +668,7 @@ AnvilResult AnvilRepair::createResult(const ItemStack &input, const ItemStack &m
 
     int32_t repairCost = std::max(getRepairCost(result), getRepairCost(material));
     if (!mapInput && (renameCost == 0 || cost != renameCost))
-        repairCost = repairCost * 2 + 1;
+        repairCost = (int32_t) std::clamp<int64_t>((int64_t) repairCost * 2 + 1, 0, INT32_MAX);
 
     if (!result.mTag.isCompound())
         result.mTag = Tag::ofCompound();

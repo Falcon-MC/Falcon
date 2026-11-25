@@ -69,7 +69,7 @@ GameRules::GameRules() {
     _addBool("showdaysplayed", false);
     _addBool("showrecipemessages", true);
     _addBool("locatorbar", true);
-    _addBool("recipesunlock", false);
+    _addBool("recipesunlock", true);
 }
 
 void GameRules::_addBool(const std::string &name, bool value) {

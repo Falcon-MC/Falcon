@@ -1,23 +1,25 @@
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 
+#include "Protocol/Types/ItemDefinition.h"
 #include "World/Inventory/ItemStackNbt.h"
+#include "World/Item/CraftingRecipeTable.h"
 #include "World/Level/Level.h"
 
+#include <algorithm>
+
 namespace {
-    const char *TAG_PRIMARY = "Primary";
-    const char *TAG_SECONDARY = "Secondary";
     const char *TAG_PAGE = "page";
     const char *TAG_TOTAL_PAGES = "totalPages";
     const char *TAG_HAS_BOOK = "hasBook";
     const char *TAG_BOOK = "book";
     const char *TAG_FACING = "facing";
-    const char *TAG_RECORD_ITEM = "RecordItem";
-    const char *TAG_FINISHED_RECORDING = "FinishedRecording";
-    const char *TAG_TICKS_PLAYING = "TicksPlaying";
     const char *TAG_DISABLED_SLOTS = "disabled_slots";
     const char *TAG_CRAFTING_TICKS = "crafting_ticks_remaining";
     const char *STATE_CRAFTING = "crafting";
     const uint16_t ALL_SLOTS = 0x1FF;
+    const char *TAG_ITEMS = "Items";
+    const char *TAG_LAST_INTERACTED_SLOT = "LastInteractedSlot";
+    const char *TAG_BOOKSHELF_BOOKS = "minecraft:bookshelf_books";
 }
 
 Tag ShulkerBoxBlockActor::saveNbt() const {
@@ -37,25 +39,93 @@ Tag ShulkerBoxBlockActor::getSpawnCompound() const {
     return data;
 }
 
+Tag ShelfBlockActor::getSpawnCompound() const {
+    Tag data = BlockActor::getSpawnCompound();
+    data.put("Items", mInventory.saveItems());
+    return data;
+}
+
+Tag ChiseledBookshelfBlockActor::saveNbt() const {
+    Tag data = Tag::ofCompound();
+    std::vector<Tag> items;
+    for (int slot = 0; slot < SIZE; ++slot)
+        items.push_back(ItemStackNbt::write(mInventory.getContainerItem(slot)));
+    data.put(TAG_ITEMS, Tag::ofList(Tag::Type::Compound, std::move(items)));
+    data.putInt(TAG_LAST_INTERACTED_SLOT, mLastInteractedSlot);
+    return data;
+}
+
+// the game reads the slot from the position in Items and drops anything that is not a book
+void ChiseledBookshelfBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
+    mInventory.clear();
+    const Tag *items = data.get(TAG_ITEMS);
+    if (items != nullptr && items->isList()) {
+        int slot = 0;
+        for (const Tag &entry: items->getList()) {
+            if (slot >= SIZE)
+                break;
+            ItemStack book = ItemStackNbt::read(entry, context);
+            if (isBook(book)) {
+                book.mCount = 1;
+                mInventory.setContainerItem(slot, std::move(book));
+            }
+            ++slot;
+        }
+    }
+    mLastInteractedSlot = std::clamp(data.getInt(TAG_LAST_INTERACTED_SLOT, 0), 0, SIZE);
+}
+
+Tag ChiseledBookshelfBlockActor::getSpawnCompound() const {
+    Tag data = BlockActor::getSpawnCompound();
+    const Tag saved = saveNbt();
+    data.put(TAG_ITEMS, *saved.get(TAG_ITEMS));
+    data.putInt(TAG_LAST_INTERACTED_SLOT, mLastInteractedSlot);
+    return data;
+}
+
+bool ChiseledBookshelfBlockActor::isBook(const ItemStack &item) {
+    if (item.isAir() || item.mCount <= 0 || item.mDefinition == nullptr)
+        return false;
+    const std::vector<std::string> &tags = CraftingRecipeTable::getItemTags(std::string(item.mDefinition->getIdentifier()));
+    return std::find(tags.begin(), tags.end(), TAG_BOOKSHELF_BOOKS) != tags.end();
+}
+
+bool ChiseledBookshelfBlockActor::insertBook(int slot, const ItemStack &book) {
+    if (slot < 0 || slot >= SIZE || !isBook(book) || !mInventory.getContainerItem(slot).isAir())
+        return false;
+    ItemStack single = book;
+    single.mCount = 1;
+    mInventory.setContainerItem(slot, std::move(single));
+    mLastInteractedSlot = slot + 1;
+    return true;
+}
+
+ItemStack ChiseledBookshelfBlockActor::takeBook(int slot) {
+    if (slot < 0 || slot >= SIZE)
+        return ItemStack::air();
+    ItemStack book = mInventory.getContainerItem(slot);
+    if (book.isAir())
+        return book;
+    mInventory.setContainerItem(slot, ItemStack::air());
+    mLastInteractedSlot = slot + 1;
+    return book;
+}
+
+int ChiseledBookshelfBlockActor::getBooksStored() const {
+    int bits = 0;
+    for (int slot = 0; slot < SIZE; ++slot) {
+        if (!mInventory.getContainerItem(slot).isAir())
+            bits |= 1 << slot;
+    }
+    return bits;
+}
+
 Tag ContainerBlockActor::saveNbt() const {
     return mInventory.saveNbt();
 }
 
 void ContainerBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
     mInventory.loadNbt(data, context);
-}
-
-Tag BeaconBlockActor::saveNbt() const {
-    Tag data = ContainerBlockActor::saveNbt();
-    data.putInt(TAG_PRIMARY, mPrimaryEffect);
-    data.putInt(TAG_SECONDARY, mSecondaryEffect);
-    return data;
-}
-
-void BeaconBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    ContainerBlockActor::loadNbt(data, context);
-    mPrimaryEffect = data.getInt(TAG_PRIMARY);
-    mSecondaryEffect = data.getInt(TAG_SECONDARY);
 }
 
 // nothing at all without a book, else the book and where it is open
@@ -96,34 +166,6 @@ ItemStack LecternBlockActor::takeBook() {
     mPage = 0;
     mTotalPages = 0;
     return book;
-}
-
-// the record alone goes to disk; TicksPlaying and FinishedRecording ride the update packet only
-Tag JukeboxBlockActor::saveNbt() const {
-    Tag data = Tag::ofCompound();
-    const ItemStack &record = mInventory.getContainerItem(0);
-    if (!record.isAir() && record.mCount > 0)
-        data.put(TAG_RECORD_ITEM, ItemStackNbt::write(record));
-    return data;
-}
-
-void JukeboxBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context) {
-    mFinishedRecording = true;
-    mTicksPlaying = 0;
-    mInventory.clear();
-    if (const Tag *record = data.get(TAG_RECORD_ITEM))
-        mInventory.setContainerItem(0, ItemStackNbt::read(*record, context));
-}
-
-// the client reads both back from the update packet to start or stop the disc
-Tag JukeboxBlockActor::getSpawnCompound() const {
-    Tag data = BlockActor::getSpawnCompound();
-    data.putByte(TAG_FINISHED_RECORDING, mFinishedRecording ? 1 : 0);
-    data.putInt(TAG_TICKS_PLAYING, mTicksPlaying);
-    const ItemStack &record = mInventory.getContainerItem(0);
-    if (!record.isAir() && record.mCount > 0)
-        data.put(TAG_RECORD_ITEM, ItemStackNbt::write(record));
-    return data;
 }
 
 Tag CrafterBlockActor::saveNbt() const {

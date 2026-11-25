@@ -1,4 +1,5 @@
 #include "Falcon/Plugin/PluginServerApi.h"
+#include "Falcon/Plugin/PluginWorldEventData.h"
 
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Block/BlockPaletteRegistry.h"
@@ -14,6 +15,10 @@
 #include "Falcon/Plugin/PluginApiHelpers.h"
 #include "Protocol/Types/ItemStack.h"
 #include "World/Level/Block/BlockNames.h"
+#include "World/Level/Block/Actor/BlockActorStore.h"
+#include "World/Level/Block/VanillaBlocks.h"
+#include "World/Level/Block/BlockData.h"
+#include "World/Item/ItemData.h"
 
 #include <memory>
 #include <string>
@@ -144,12 +149,7 @@ namespace {
         return hold(value->getBlockState(position.x, position.y, position.z).mName);
     }
 
-    const char *levelGetBlockStates(FalconLevel *handle, FalconBlockPos position) {
-        Level *value = level(handle);
-        if (!isInside(*value, position))
-            return hold("{}");
-
-        const BlockState state = value->getBlockState(position.x, position.y, position.z);
+    std::string blockPropertiesToJson(const BlockState &state) {
         const std::vector<std::string> &keys = state.mStates.getKeys();
         const std::vector<Tag> &values = state.mStates.getValues();
 
@@ -160,7 +160,15 @@ namespace {
             result += "\"" + json::escape(keys[index]) + "\":" + stateValueToJson(values[index]);
         }
         result += "}";
-        return hold(result);
+        return result;
+    }
+
+    const char *levelGetBlockStates(FalconLevel *handle, FalconBlockPos position) {
+        Level *value = level(handle);
+        if (!isInside(*value, position))
+            return hold("{}");
+
+        return hold(blockPropertiesToJson(value->getBlockState(position.x, position.y, position.z)));
     }
 
     int levelSetBlock(FalconLevel *handle, FalconBlockPos position, const char *name, const char *statesJson) {
@@ -175,7 +183,107 @@ namespace {
         if (!resolveState(withNamespace(name), statesJson, state))
             return 0;
 
-        return SetBlockCommand::placeBlock(owner(), *value, toVector3i(position), state, "replace") ? 1 : 0;
+        const Vector3i at = toVector3i(position);
+        if (!SetBlockCommand::placeBlock(owner(), *value, at, state, "replace"))
+            return 0;
+
+        // a chest or a sign a plugin places holds items or text at once, as one a player places does
+        const Block *placed = VanillaBlocks::fromState(state);
+        const char *actorId = placed == nullptr ? nullptr : placed->getBlockActorId();
+        BlockActorStore &actors = value->getBlockActors();
+        if (actorId != nullptr && actors.find(at) == nullptr) {
+            if (std::unique_ptr<BlockActor> created = BlockActorStore::create(actorId)) {
+                created->setPosition(at);
+                actors.insert(std::move(created));
+            }
+        }
+        return 1;
+    }
+
+    const char *levelGetBlockLayer(FalconLevel *handle, FalconBlockPos position, uint32_t layer,
+                                   const char **statesJson) {
+        Level *value = level(handle);
+        const Vector3i at = toVector3i(position);
+        if (layer > 1 || !isInside(*value, position) || !value->isChunkResident(at.x >> 4, at.z >> 4))
+            return nullptr;
+
+        const BlockState state = value->getBlockStateAtLayer(at.x, at.y, at.z, (int) layer);
+        if (statesJson != nullptr)
+            *statesJson = hold(blockPropertiesToJson(state));
+        return hold(state.mName);
+    }
+
+    int levelSetBlockLayer(FalconLevel *handle, FalconBlockPos position, uint32_t layer,
+                           const char *name, const char *statesJson) {
+        if (layer == 0)
+            return levelSetBlock(handle, position, name, statesJson);
+
+        Level *value = level(handle);
+        const Vector3i at = toVector3i(position);
+        if (layer != 1 || name == nullptr || !isInside(*value, position) || !value->isChunkResident(at.x >> 4, at.z >> 4))
+            return 0;
+
+        BlockState state;
+        if (!resolveState(withNamespace(name), statesJson, state))
+            return 0;
+
+        const BlockState previous = value->getBlockStateAtLayer(at.x, at.y, at.z, 1);
+        value->setBlockStateAtLayer(at.x, at.y, at.z, 1, state);
+        const BlockState current = value->getBlockStateAtLayer(at.x, at.y, at.z, 1);
+        if (current != previous)
+            BlockActionHandler::broadcastBlockUpdate(owner(), *value, at, current, 1);
+        return 1;
+    }
+
+    // the hash clients know the state by: Falcon sends every block by it
+    uint32_t serverBlockNetworkId(const char *name, const char *statesJson) {
+        if (name == nullptr)
+            return 0;
+        BlockState state;
+        if (!resolveState(withNamespace(name), statesJson, state))
+            return 0;
+        return (uint32_t) state.getHash();
+    }
+
+    int serverItemInfo(const char *identifier, FalconItemInfo *out) {
+        if (identifier == nullptr || out == nullptr)
+            return 0;
+        const ItemData *data = ItemDataTable::find(withNamespace(identifier));
+        if (data == nullptr)
+            return 0;
+        out->name = data->mName;
+        out->maxStackSize = (uint32_t) std::max(1, data->mMaxStackSize);
+        out->maxDurability = data->mMaxDurability;
+        out->toolType = (uint32_t) data->mToolType;
+        out->toolTier = (uint32_t) std::max(0, data->mToolTier);
+        out->attackDamage = data->mAttackDamage;
+        out->armorSlot = (uint32_t) data->mArmorSlot;
+        out->armorPoints = data->mArmorPoints;
+        out->armorToughness = data->mArmorToughness;
+        out->nutrition = data->mNutrition;
+        out->saturation = data->mSaturation;
+        return 1;
+    }
+
+    int serverBlockInfo(const char *identifier, FalconBlockInfo *out) {
+        if (identifier == nullptr || out == nullptr)
+            return 0;
+        const std::string name = withNamespace(identifier);
+        const BlockData *data = BlockDataTable::find(name.c_str());
+        if (data == nullptr)
+            return 0;
+        out->name = data->mName;
+        out->hardness = data->mHardness;
+        out->blastResistance = data->mResistance;
+        out->toolType = (uint32_t) data->mToolType;
+        out->toolTier = (uint32_t) data->mToolTier;
+        out->lightEmission = data->mLightEmission;
+        out->transparent = data->mTransparent ? 1 : 0;
+        out->solid = data->mSolid ? 1 : 0;
+        out->flameEncouragement = data->mBurnChance;
+        out->flammability = data->mBurnAbility;
+        out->maxStackSize = (uint32_t) std::max(1, data->mMaxStackSize);
+        return 1;
     }
 
     int levelBreakBlock(FalconLevel *handle, FalconBlockPos position, int dropItems) {
@@ -189,6 +297,15 @@ namespace {
 
         BlockActionHandler::destroyBlock(owner(), *value, toVector3i(position), existing, dropItems != 0,
                                          ItemStack::air());
+        return 1;
+    }
+
+    int levelLoadChunk(FalconLevel *handle, int32_t chunkX, int32_t chunkZ) {
+        static constexpr int32_t MAX_CHUNK_COORDINATE = 30'000'000 >> 4;
+        if (handle == nullptr || chunkX < -MAX_CHUNK_COORDINATE || chunkX > MAX_CHUNK_COORDINATE
+            || chunkZ < -MAX_CHUNK_COORDINATE || chunkZ > MAX_CHUNK_COORDINATE)
+            return 0;
+        level(handle)->getChunk(chunkX, chunkZ);
         return 1;
     }
 
@@ -245,6 +362,20 @@ namespace {
         return FalconVec3{(double) spawn.x, (double) spawn.y, (double) spawn.z};
     }
 
+    int levelSetSpawnPosition(FalconLevel *handle, FalconBlockPos position) {
+        if (handle == nullptr)
+            return 0;
+
+        Level &target = *level(handle);
+        if (position.y < target.getMinY() || position.y > target.getMaxY()
+            || position.x < -30'000'000 || position.x > 30'000'000
+            || position.z < -30'000'000 || position.z > 30'000'000)
+            return 0;
+
+        owner().changeWorldSpawn(target, toVector3i(position));
+        return 1;
+    }
+
     FalconEntity *levelSpawnEntity(FalconLevel *handle, const char *identifier, FalconVec3 position) {
         if (identifier == nullptr)
             return nullptr;
@@ -256,13 +387,19 @@ namespace {
         return toHandle(static_cast<Actor *>(spawned));
     }
 
-    void levelDropItem(FalconLevel *handle, FalconVec3 position, FalconItem *dropped) {
-        if (dropped == nullptr)
-            return;
+    FalconEntity *levelSpawnItem(FalconLevel *handle, FalconVec3 position, FalconItem *dropped,
+                                 const FalconVec3 *motion, int32_t pickupDelay) {
+        if (handle == nullptr || dropped == nullptr)
+            return nullptr;
 
         const ItemStack copy = *item(dropped);
-        owner().dropItem(*level(handle), toVector3f(position), copy, ItemActorHandler::randomDropMotion(),
-                         ItemActorHandler::DROP_PICKUP_DELAY);
+        const Vector3f initialMotion = motion == nullptr ? ItemActorHandler::randomDropMotion() : toVector3f(*motion);
+        return toHandle(static_cast<Actor *>(owner().dropItem(*level(handle), toVector3f(position), copy,
+                                                              initialMotion, pickupDelay)));
+    }
+
+    void levelDropItem(FalconLevel *handle, FalconVec3 position, FalconItem *dropped) {
+        levelSpawnItem(handle, position, dropped, nullptr, ItemActorHandler::DROP_PICKUP_DELAY);
     }
 
     void levelStrikeLightning(FalconLevel *handle, FalconVec3 position) {
@@ -320,6 +457,36 @@ namespace {
     }
 }
 
+std::string PluginWorldEventData::encodeBlock(const BlockState &state) {
+    return "{\"identifier\":\"" + json::escape(state.mName) + "\",\"states\":" + blockPropertiesToJson(state) + "}";
+}
+
+bool PluginWorldEventData::decodeBlock(const json::Value &value, BlockState &state) {
+    if (!value.isObject())
+        return false;
+    const auto *identifier = value.get("identifier");
+    const auto *properties = value.get("states");
+    if (identifier == nullptr || !identifier->isString() || properties == nullptr)
+        return false;
+    if (properties->isString())
+        return resolveState(identifier->mString, properties->mString.c_str(), state);
+    if (!properties->isObject())
+        return false;
+    if (!SetBlockCommand::resolveBlock(identifier->mString, state))
+        return false;
+
+    for (const auto &entry: properties->mObject) {
+        if (!applyStateValue(state.mStates, entry.first, *entry.second))
+            return false;
+    }
+    return isKnownPermutation(state.mName, state.mStates);
+}
+
+bool PluginWorldEventData::decodeBlock(const std::string &payload, BlockState &state) {
+    const auto value = json::parse(payload);
+    return value != nullptr && decodeBlock(*value, state);
+}
+
 void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.serverLevel = &serverLevel;
     api.levelDimension = &levelDimension;
@@ -327,8 +494,14 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelGetBlock = &levelGetBlock;
     api.levelGetBlockStates = &levelGetBlockStates;
     api.levelSetBlock = &levelSetBlock;
+    api.levelGetBlockLayer = &levelGetBlockLayer;
+    api.levelSetBlockLayer = &levelSetBlockLayer;
+    api.serverBlockNetworkId = &serverBlockNetworkId;
+    api.serverItemInfo = &serverItemInfo;
+    api.serverBlockInfo = &serverBlockInfo;
     api.levelBreakBlock = &levelBreakBlock;
     api.levelIsChunkLoaded = &levelIsChunkLoaded;
+    api.levelLoadChunk = &levelLoadChunk;
     api.levelHighestBlockY = &levelHighestBlockY;
     api.levelTime = &levelTime;
     api.levelSetTime = &levelSetTime;
@@ -337,8 +510,10 @@ void PluginServerApi::fillWorld(FalconServerApi &api) {
     api.levelIsThundering = &levelIsThundering;
     api.levelSetThundering = &levelSetThundering;
     api.levelSpawnPosition = &levelSpawnPosition;
+    api.levelSetSpawnPosition = &levelSetSpawnPosition;
     api.levelSpawnEntity = &levelSpawnEntity;
     api.levelDropItem = &levelDropItem;
+    api.levelSpawnItem = &levelSpawnItem;
     api.levelStrikeLightning = &levelStrikeLightning;
     api.levelCreateExplosion = &levelCreateExplosion;
     api.serverWorldCount = &serverWorldCount;

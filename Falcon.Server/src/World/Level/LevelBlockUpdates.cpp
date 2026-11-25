@@ -98,7 +98,9 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
     if (mOwner == nullptr || !isChunkReady(*this, position))
         return;
 
-    if (type != BlockUpdateType::Scheduled) {
+    EventSignal<BlockUpdateBeforeEvent> &blockUpdate = mOwner->getEventBus().before().mBlockUpdate;
+    const bool notify = type == BlockUpdateType::Normal && changed != nullptr && blockUpdate.hasSubscribers();
+    if (!notify && type != BlockUpdateType::Scheduled) {
         const BlockState *inPlace = peekBlockPtr(position.x, position.y, position.z);
         if (inPlace != nullptr && BlockUpdates::ignores(*inPlace))
             return;
@@ -111,6 +113,15 @@ void Level::updateAt(const Vector3i &position, BlockUpdateType type, const Vecto
     }
 
     ++mUpdateDepth;
+    if (notify) {
+        BlockUpdateBeforeEvent event(*this, position);
+        blockUpdate.emit(event);
+        const BlockState *inPlace = peekBlockPtr(position.x, position.y, position.z);
+        if (event.isCancelled() || (inPlace != nullptr && BlockUpdates::ignores(*inPlace))) {
+            --mUpdateDepth;
+            return;
+        }
+    }
 
     ServerNetworkHandler &owner = *mOwner;
     // the state the chunk holds lives as long as the process: read in place, copied only to be reshaped

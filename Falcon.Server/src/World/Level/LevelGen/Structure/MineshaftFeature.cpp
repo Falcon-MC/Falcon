@@ -15,9 +15,18 @@ MineshaftFeature::MineshaftFeature() : StructureFeature("mineshaft", 1, 0, 0, Sp
 
 bool MineshaftFeature::rollStart(int64_t seed, int32_t chunkX, int32_t chunkZ, std::mt19937 &random) {
     const uint32_t worldSeed = (uint32_t) seed;
-    random.seed(worldSeed);
-    const uint32_t xMultiplier = (uint32_t) GameRandom::nextInt(random);
-    const uint32_t zMultiplier = (uint32_t) GameRandom::nextInt(random);
+    // the multipliers only follow the world seed: one twister seeding less per roll
+    thread_local bool known = false;
+    thread_local uint32_t knownSeed = 0;
+    thread_local uint32_t xMultiplier = 0;
+    thread_local uint32_t zMultiplier = 0;
+    if (!known || knownSeed != worldSeed) {
+        random.seed(worldSeed);
+        xMultiplier = (uint32_t) GameRandom::nextInt(random);
+        zMultiplier = (uint32_t) GameRandom::nextInt(random);
+        knownSeed = worldSeed;
+        known = true;
+    }
     random.seed(worldSeed ^ (xMultiplier * (uint32_t) chunkX) ^ (zMultiplier * (uint32_t) chunkZ));
     random.discard(1);
     const float chance = GameRandom::nextFloat(random);

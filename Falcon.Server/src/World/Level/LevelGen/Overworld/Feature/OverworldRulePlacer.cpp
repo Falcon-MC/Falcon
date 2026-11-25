@@ -51,6 +51,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -82,7 +83,7 @@ namespace {
     using FeatureRandom::nextFloat;
     using FeatureRandom::nextInt;
 
-    // HashedString's hash (FNV-1, 64 bits), kept by each feature rule
+    // the FNV-1 64-bit hash of a name, kept by each feature rule
     uint64_t hashedString(const std::string &value) {
         uint64_t hash = 0xCBF29CE484222325ULL;
         for (char character: value)
@@ -90,7 +91,7 @@ namespace {
         return hash;
     }
 
-    using ExpressionPtr = std::shared_ptr<const FeatureExpression>;
+    using ExpressionPtr = const FeatureExpression *;
 
     // boost-style combine of the decoration seed with the rule's hash
     uint32_t ruleSeed(uint32_t decorationSeed, const std::string &identifier) {
@@ -101,8 +102,8 @@ namespace {
     // one axis of a scatter: a single value or a distribution between two bounds
     struct Axis {
         int32_t mDistribution = 0;
-        ExpressionPtr mMin;
-        ExpressionPtr mMax;
+        ExpressionPtr mMin = nullptr;
+        ExpressionPtr mMax = nullptr;
         bool mReadsWorld = false;
         // step_size and grid_offset of a fixed_grid
         int32_t mStep = 0;
@@ -118,14 +119,14 @@ namespace {
     // uniform, gaussian and triangle are the only distributions the ported rules use
     bool parseAxis(int32_t distribution, const std::string &min, const std::string &max, Axis &axis) {
         axis.mDistribution = distribution;
-        axis.mMin = FeatureExpression::parse(min);
+        axis.mMin = FeatureExpression::find(min);
         axis.mReadsWorld = readsWorld(min);
         if (axis.mMin == nullptr)
             return false;
         if (distribution == 0)
             return true;
 
-        axis.mMax = FeatureExpression::parse(max);
+        axis.mMax = FeatureExpression::find(max);
         axis.mReadsWorld = axis.mReadsWorld || readsWorld(max);
         return axis.mMax != nullptr && (distribution == 1 || distribution == 2 || distribution == 6);
     }
@@ -216,6 +217,10 @@ namespace {
         // the second gaussian value, kept for the next call
         const std::mt19937 *mGaussianOwner = nullptr;
         float mGaussian = 0.0f;
+        // the rules of a pass and biome share their molang variables: a scatter leaves variable.origin* at its
+        // input, read by the rules after it
+        bool mSharesOrigin = false;
+        float mOrigin[3] = {0.0f, 0.0f, 0.0f};
     };
     thread_local PlacementContext placementContext;
 
@@ -291,8 +296,19 @@ namespace {
         ScatterVariables(BlockManager &blocks, const int32_t origin[3]) : mBlocks(blocks) {
             for (size_t axis = 0; axis < 3; axis++) {
                 mOrigin[axis] = static_cast<float>(origin[axis]);
+                mOriginVariable[axis] = mOrigin[axis];
                 mWorld[axis] = 0.0f;
             }
+        }
+
+        // the rule's variable.origin*, left by the last scatter
+        static ScatterVariables forRule(BlockManager &blocks, const int32_t origin[3]) {
+            ScatterVariables variables(blocks, origin);
+            if (placementContext.mSharesOrigin) {
+                for (size_t axis = 0; axis < 3; axis++)
+                    variables.mOriginVariable[axis] = placementContext.mOrigin[axis];
+            }
+            return variables;
         }
 
         float variable(const std::string &name) const override {
@@ -300,7 +316,7 @@ namespace {
             static const char *const WORLDS[] = {"worldx", "worldy", "worldz"};
             for (size_t axis = 0; axis < 3; axis++) {
                 if (name == ORIGINS[axis])
-                    return mOrigin[axis];
+                    return mOriginVariable[axis];
                 if (name == WORLDS[axis])
                     return mWorld[axis];
             }
@@ -340,6 +356,7 @@ namespace {
     private:
         BlockManager &mBlocks;
         float mOrigin[3];
+        float mOriginVariable[3];
         float mWorld[3];
     };
 
@@ -811,8 +828,8 @@ struct OverworldRulePlacer::ScatterDefinition {
     const char *mChancePercent = "100";
 
     // parsed once with the definition, a placement only evaluates them
-    ExpressionPtr mParsedIterations = FeatureExpression::parse(mIterations);
-    ExpressionPtr mParsedChance = FeatureExpression::parse(mChancePercent);
+    ExpressionPtr mParsedIterations = FeatureExpression::find(mIterations);
+    ExpressionPtr mParsedChance = FeatureExpression::find(mChancePercent);
     std::array<Axis, 3> mParsedAxes = _parseAxes(mAxes);
 
     static std::array<Axis, 3> _parseAxes(const AxisText (&texts)[3]) {
@@ -2538,12 +2555,67 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
         feature.mPlaced.mSingleBlock = &SINGLE_BLOCKS[12];
     // jigsaw feature pieces, drawn from the post process random of their chunk
     if (entry.mPass.empty()) {
+        // Saplings use standing trees only. The two jungle variants omit canopy vines and cocoa.
+        static const TreeDefinition JUNGLE_PLAIN = [] {
+            TreeDefinition result = JUNGLE_TREES[0];
+            result.mTree.mVineChance = 0;
+            result.mTree.mCanopyVineNumerator = 0;
+            result.mTree.mCanopyVineDenominator = 0;
+            result.mTree.mCanopyVineSteps = 0;
+            return result;
+        }();
+        static const TreeDefinition JUNGLE_VINES = [] {
+            TreeDefinition result = JUNGLE_PLAIN;
+            result.mTree.mVineChance = 100;
+            return result;
+        }();
+        static const ScatterDefinition OPTIONAL_JUNGLE_VINES = optional(
+                "minecraft:optional_undecorated_jungle_tree_with_vines_feature", tree(JUNGLE_VINES), 12);
+        static const AggregateDefinition STANDING_JUNGLE = {"minecraft:select_undecorated_jungle_tree_feature",
+                                                            {scatter(OPTIONAL_JUNGLE_VINES), tree(JUNGLE_PLAIN)},
+                                                            2};
+        static const TreeDefinition PALE_OAK = [] {
+            TreeDefinition result = ROOFED_TREES[0];
+            result.mTree.mIdentifier = "minecraft:pale_oak_tree_feature";
+            result.mTree.mLog = &VanillaBlocks::PALE_OAK_LOG;
+            result.mTree.mLeaves = &VanillaBlocks::PALE_OAK_LEAVES;
+            return result;
+        }();
+        static const AggregateDefinition PLANTED_OAK = {
+                "minecraft:select_standing_oak_tree_feature", {scatter(OPTIONAL_TREES[1]), tree(TREES[0])}, 2};
+        static const WeightedDefinition OAK_SAPLING = {"minecraft:random_oak_tree_from_sapling_feature",
+                                                       {{aggregate(PLANTED_OAK), 9}, {tree(TREES[2]), 1}}};
+        static const AggregateDefinition OAK_NEST = {
+                "minecraft:oak_tree_with_beehive_feature", {tree(TREES[0]), BEEHIVE_SEARCH}, 1};
+        static const AggregateDefinition FANCY_NEST = {
+                "minecraft:fancy_oak_tree_with_beehive_feature", {tree(TREES[2]), BEEHIVE_SEARCH}, 1};
+        static const AggregateDefinition BIRCH_NEST = {
+                "minecraft:birch_tree_with_beehive_feature", {tree(TREES[4]), BEEHIVE_SEARCH}, 1};
+        static const WeightedDefinition OAK_SAPLING_NEST = {
+                "minecraft:random_oak_tree_with_beehive_from_sapling_feature",
+                {{aggregate(OAK_NEST), 9}, {aggregate(FANCY_NEST), 1}}};
+        static const WeightedDefinition POPLAR_SAPLING = {
+                "minecraft:select_poplar_tree_feature",
+                {{tree(POPLAR_TREES[1]), 1}, {tree(POPLAR_TREES[0]), 1}, {tree(POPLAR_TREES[2]), 1}}};
         static const auto function = [](bool (*place)(BlockManager &, int32_t, int32_t, int32_t, std::mt19937 &)) {
             Placed placed;
             placed.mFunction = place;
             return placed;
         };
-        static const std::pair<const char *, Placed> JIGSAW_FEATURES[] = {
+        static const std::pair<const char *, Placed> NAMED_FEATURES[] = {
+                {OAK_SAPLING.mIdentifier, weightedOf(OAK_SAPLING)},
+                {OAK_SAPLING_NEST.mIdentifier, weightedOf(OAK_SAPLING_NEST)},
+                {BIRCH_NEST.mIdentifier, aggregate(BIRCH_NEST)},
+                {CHERRY_WITH_BEEHIVE.mIdentifier, aggregate(CHERRY_WITH_BEEHIVE)},
+                {TREES[4].mTree.mIdentifier, tree(TREES[4])},
+                {STANDING_SPRUCE.mIdentifier, aggregate(STANDING_SPRUCE)},
+                {MEGA_TREES[0].mTree.mIdentifier, tree(MEGA_TREES[0])},
+                {STANDING_JUNGLE.mIdentifier, aggregate(STANDING_JUNGLE)},
+                {MEGA_JUNGLE_TREE.mTree.mIdentifier, tree(MEGA_JUNGLE_TREE)},
+                {SELECT_ROOFED.mIdentifier, aggregate(SELECT_ROOFED)},
+                {PALE_OAK.mTree.mIdentifier, tree(PALE_OAK)},
+                {CHERRY_TREE.mTree.mIdentifier, tree(CHERRY_TREE)},
+                {POPLAR_SAPLING.mIdentifier, weightedOf(POPLAR_SAPLING)},
                 {"minecraft:select_oak_tree_feature", aggregate(SELECT_OAK)},
                 {"minecraft:select_spruce_tree_feature", aggregate(SELECT_SPRUCE)},
                 {"minecraft:pine_tree_feature", tree(TREES[9])},
@@ -2555,9 +2627,9 @@ OverworldRulePlacer::Feature OverworldRulePlacer::_find(const BiomeFeatureEntry 
                 {"minecraft:pumpkin_pile_feature", function(&BlockPileFeature::placePumpkin)},
                 {"minecraft:snow_pile_feature", function(&BlockPileFeature::placeSnow)},
                 {"minecraft:ice_pile_feature", function(&BlockPileFeature::placeIce)}};
-        for (const auto &jigsaw: JIGSAW_FEATURES) {
-            if (entry.mFeature == jigsaw.first)
-                feature.mPlaced = jigsaw.second;
+        for (const auto &named: NAMED_FEATURES) {
+            if (entry.mFeature == named.first)
+                feature.mPlaced = named.second;
         }
     }
     if (entry.mPass == SURFACE_PASS || entry.mPass == AFTER_SURFACE_PASS) {
@@ -2593,10 +2665,10 @@ bool OverworldRulePlacer::handles(const BiomeFeatureEntry &entry) {
     if (!_find(entry).isPorted() || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
         return false;
 
-    if (FeatureExpression::parse(entry.mIterations) == nullptr)
+    if (FeatureExpression::find(entry.mIterations) == nullptr)
         return false;
     if ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0)
-        && FeatureExpression::parse(entry.mChancePercent) == nullptr)
+        && FeatureExpression::find(entry.mChancePercent) == nullptr)
         return false;
 
     Axis axes[3];
@@ -2639,6 +2711,10 @@ void OverworldRulePlacer::_apply(BlockManager &blocks, const LevelChunk &chunk, 
             if (rules == nullptr)
                 continue;
 
+            placementContext.mSharesOrigin = true;
+            placementContext.mOrigin[0] = static_cast<float>(chunk.getX() << 4);
+            placementContext.mOrigin[1] = 0.0f;
+            placementContext.mOrigin[2] = static_cast<float>(chunk.getZ() << 4);
             for (const BiomeFeatureEntry &entry: *rules) {
                 if (entry.mPass != pass)
                     continue;
@@ -2668,8 +2744,8 @@ void OverworldRulePlacer::drawBiomeRules(BlockManager &blocks, const LevelChunk 
 
             shared.seed(ruleSeed(decorationSeed, entry.mIdentifier));
             ScatterVariables variables(blocks, origin);
-            const ExpressionPtr iterationsExpression = FeatureExpression::parse(entry.mIterations);
-            const ExpressionPtr percent = FeatureExpression::parse(entry.mChancePercent);
+            const ExpressionPtr iterationsExpression = FeatureExpression::find(entry.mIterations);
+            const ExpressionPtr percent = FeatureExpression::find(entry.mChancePercent);
             if (iterationsExpression == nullptr || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
                 continue;
 
@@ -2726,8 +2802,8 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
     if (!coordinatesDraw && !percentDraws && !draws(entry.mIterations))
         return;
 
-    const ExpressionPtr iterationsExpression = FeatureExpression::parse(entry.mIterations);
-    const ExpressionPtr percent = FeatureExpression::parse(entry.mChancePercent);
+    const ExpressionPtr iterationsExpression = FeatureExpression::find(entry.mIterations);
+    const ExpressionPtr percent = FeatureExpression::find(entry.mChancePercent);
     if (iterationsExpression == nullptr
         || ((entry.mChanceNumerator <= 0 || entry.mChanceDenominator <= 0) && percent == nullptr)
         || entry.mEvalOrder < 0 || entry.mEvalOrder > 5)
@@ -2743,7 +2819,7 @@ void OverworldRulePlacer::_drawUnported(BlockManager &blocks, const LevelChunk &
     const uint32_t seed = ruleSeed(decorationSeed, entry.mIdentifier);
     std::mt19937 scatter(seed);
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
-    ScatterVariables variables(blocks, origin);
+    ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
     int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator, percent, iterationsExpression,
                                       variables, scatter);
     if (!coordinatesDraw)
@@ -2761,10 +2837,10 @@ void OverworldRulePlacer::_placeRule(BlockManager &blocks, const LevelChunk &chu
     std::mt19937 scatter(seed);
 
     const int32_t origin[3] = {chunk.getX() << 4, 0, chunk.getZ() << 4};
-    ScatterVariables variables(blocks, origin);
+    ScatterVariables variables = ScatterVariables::forRule(blocks, origin);
     int32_t iterations = iterationsOf(entry.mChanceNumerator, entry.mChanceDenominator,
-                                      FeatureExpression::parse(entry.mChancePercent),
-                                      FeatureExpression::parse(entry.mIterations), variables, scatter);
+                                      FeatureExpression::find(entry.mChancePercent),
+                                      FeatureExpression::find(entry.mIterations), variables, scatter);
     if (iterations == 0)
         return;
 
@@ -2985,9 +3061,14 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
         maxZ = std::max(maxZ, static_cast<int32_t>(std::floor(sphere->mZ + sphere->mRadius)));
     }
 
-    std::vector<BlockState> states;
-    for (const ReplaceRule &rule: ore.mRules)
-        states.push_back(rule.mPlaces().toBlockState());
+    // built once per thread: a vein is tried hundreds of times a chunk
+    thread_local std::unordered_map<const OreDefinition *, std::vector<BlockState>> placedStates;
+    std::vector<BlockState> &states = placedStates[&ore];
+    if (states.size() != ore.mRules.size()) {
+        states.clear();
+        for (const ReplaceRule &rule: ore.mRules)
+            states.push_back(rule.mPlaces().toBlockState());
+    }
 
     bool placed = false;
     float centerX = static_cast<float>(minX) + 0.5f;
@@ -3033,7 +3114,7 @@ bool OverworldRulePlacer::_placeOre(BlockManager &blocks, const OreDefinition &o
                         continue;
 
                     const BlockState &state = states[index];
-                    if (current == state)
+                    if (current.getHash() == state.getHash() && current == state)
                         continue;
 
                     const float discard = ore.mDiscardChanceOnAirExposure;
@@ -4225,6 +4306,8 @@ bool OverworldRulePlacer::_placeScatter(BlockManager &blocks, const ScatterDefin
     // the iterations, positions and the placed feature all draw from the
     // rule's placement twister
     const int32_t origin[3] = {x, y, z};
+    for (size_t axis = 0; axis < 3; axis++)
+        placementContext.mOrigin[axis] = static_cast<float>(origin[axis]);
     ScatterVariables variables(blocks, origin);
     const int32_t iterations = iterationsOf(scatter.mChanceNumerator, scatter.mChanceDenominator, scatter.mParsedChance,
                                             scatter.mParsedIterations, variables, random);

@@ -209,6 +209,23 @@ namespace {
         return count;
     }
 
+    uint32_t levelCollisionBoxes(FalconLevel *handle, FalconVec3 from, FalconVec3 to, FalconBox *boxes,
+                                 uint32_t capacity) {
+        if (!std::isfinite(from.x) || !std::isfinite(from.y) || !std::isfinite(from.z) || !std::isfinite(to.x)
+            || !std::isfinite(to.y) || !std::isfinite(to.z))
+            return 0;
+        const AxisAlignedBB area((float) std::min(from.x, to.x), (float) std::min(from.y, to.y),
+                                 (float) std::min(from.z, to.z), (float) std::max(from.x, to.x),
+                                 (float) std::max(from.y, to.y), (float) std::max(from.z, to.z));
+        const std::vector<AxisAlignedBB> found = level(handle)->getCollisionBoxes(area);
+        for (uint32_t index = 0; boxes != nullptr && index < capacity && index < found.size(); ++index) {
+            const AxisAlignedBB &box = found[index];
+            boxes[index] = FalconBox{FalconVec3{box.mMinX, box.mMinY, box.mMinZ},
+                                     FalconVec3{box.mMaxX, box.mMaxY, box.mMaxZ}};
+        }
+        return (uint32_t) found.size();
+    }
+
     int levelPlaceStructure(FalconLevel *handle, const char *structure, FalconBlockPos position, uint32_t rotation,
                             FalconMirror mirror, int includeEntities, float integrity) {
         if (structure == nullptr || !ScriptStructureRegistry::isValidIdentifier(structure) || rotation > 3
@@ -302,6 +319,7 @@ void PluginServerApi::fillWorldQueries(FalconServerApi &api) {
     api.levelRaycastBlock = &levelRaycastBlock;
     api.levelRaycastEntity = &levelRaycastEntity;
     api.levelEntitiesInBox = &levelEntitiesInBox;
+    api.levelCollisionBoxes = &levelCollisionBoxes;
     api.levelPlaceStructure = &levelPlaceStructure;
     api.levelAddTickingArea = &levelAddTickingArea;
     api.levelRemoveTickingArea = &levelRemoveTickingArea;

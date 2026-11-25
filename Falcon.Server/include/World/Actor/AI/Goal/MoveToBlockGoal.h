@@ -1,6 +1,7 @@
 #pragma once
 
 #include "World/Actor/AI/Goal/Goal.h"
+#include "World/Actor/Definition/EntityFilter.h"
 #include "Core/Json/Json.h"
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
@@ -25,7 +26,7 @@ public:
         bool mRandomTarget = false;
         Vector3f mTargetOffset;
         std::unordered_set<std::string> mTargetBlocks;
-        std::shared_ptr<json::Value> mTargetFilters;
+        CompiledEntityFilter mTargetFilters;
         std::shared_ptr<json::Value> mOnReach;
         std::shared_ptr<json::Value> mOnStayCompleted;
     };

@@ -553,7 +553,7 @@ void DragonFlamingGoal::_breathe(ServerNetworkHandler &owner, EnderDragon &drago
     settings.mDuration = mSettings.mSmokeTicks;
     settings.mParticle = DRAGON_BREATH_PARTICLE;
     settings.mColor = mSettings.mSmokeColor;
-    settings.mOwnerRuntimeId = (int64_t) dragon.getRuntimeId();
+    settings.mOwnerUniqueId = dragon.getUniqueId();
     owner.spawnAreaEffectCloud(level, Vector3f(x, std::floor(y) + 1.0f, z), settings);
 }
 

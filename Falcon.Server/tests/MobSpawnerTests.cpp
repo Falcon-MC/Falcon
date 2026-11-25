@@ -728,6 +728,31 @@ namespace {
                 TrialSpawnerBlockActor::spawnOminousProjectile(arena.mOwner, *arena.mLevel, position, arrow));
         require(arrowActor != nullptr && arrowActor->getProjectileData().mPotionId == 5,
                 "ominous tipped arrow lost its effect");
+
+        // a wind charge has no gravity: unless it is shot down it hangs where it appeared
+        LootDrop wind;
+        wind.mIdentifier = "minecraft:wind_charge";
+        ServerActor *charge = TrialSpawnerBlockActor::spawnOminousProjectile(arena.mOwner, *arena.mLevel, position, wind);
+        require(charge != nullptr && charge->getMotion().y < -0.5f
+                        && std::fabs(charge->getMotion().x) < 0.2f && std::fabs(charge->getMotion().z) < 0.2f,
+                "ominous wind charge was not shot down");
+
+        const auto keysOnGround = [&arena]() {
+            size_t keys = 0;
+            for (const auto &item: arena.mOwner.getItemEntities()) {
+                if (!item->getItem().isAir()
+                    && item->getItem().mDefinition->getIdentifier() == "minecraft:ominous_trial_key")
+                    ++keys;
+            }
+            return keys;
+        };
+        const size_t keysBefore = keysOnGround();
+        LootDrop key;
+        key.mIdentifier = "minecraft:ominous_trial_key";
+        key.mCount = 1;
+        require(TrialSpawnerBlockActor::spawnOminousProjectile(arena.mOwner, *arena.mLevel, position, key) == nullptr,
+                "an ominous item that does not shoot became a projectile");
+        require(keysOnGround() == keysBefore + 1, "an ominous item that does not shoot was not dropped");
         arena.clear();
     }
 

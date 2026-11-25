@@ -2,6 +2,8 @@
 
 #include "Scripting/Content/CustomContentRegistry.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/Definition/EntityFilter.h"
+#include "World/Actor/ServerActor.h"
 
 
 namespace {
@@ -142,12 +144,17 @@ ProjectileComponent ProjectileComponent::read(const json::Value &component) {
     readNumber(component, "liquid_inertia", nullptr, projectile.mLiquidInertia);
     readNumber(component, "on_fire_time", "onFireTime", projectile.mOnFireTime);
     readNumber(component, "power", nullptr, projectile.mPower);
+    readNumber(component, "angle_offset", "angleoffset", projectile.mAngleOffset);
     readNumber(component, "uncertainty_base", "uncertaintyBase", projectile.mUncertaintyBase);
+    readNumber(component, "uncertainty_multiplier", "uncertaintyMultiplier", projectile.mUncertaintyMultiplier);
     readFlag(component, "catch_fire", "catchFire", projectile.mCatchFire);
     readFlag(component, "crit_particle_on_hurt", "critParticleOnHurt", projectile.mCritParticleOnHurt);
     readFlag(component, "destroy_on_hurt", "destroyOnHurt", projectile.mDestroyOnHurt);
     readFlag(component, "lightning", nullptr, projectile.mLightning);
     readFlag(component, "stop_on_hurt", "stopOnHurt", projectile.mStopOnHurt);
+    readFlag(component, "homing", nullptr, projectile.mHoming);
+    readFlag(component, "reflect_on_hurt", "reflectOnHurt", projectile.mReflectOnHurt);
+    readNumber(component, "reflect_immunity", nullptr, projectile.mReflectImmunity);
     // a sound name the game does not know becomes the undefined sound event
     std::string sound;
     readText(component, "hit_sound", "hitSound", sound);
@@ -198,6 +205,47 @@ bool ProjectileComponent::find(const std::string &identifier, const CustomActorD
     const json::Value *component = components == nullptr ? nullptr : components->get("minecraft:projectile");
     if (component == nullptr)
         return false;
+    out = read(*component);
+    return true;
+}
+
+const json::Value *ProjectileComponent::spawnedGroup(ServerNetworkHandler &owner, const json::Value &definition,
+                                                     const ServerActor &self, const Actor &shooter) {
+    const json::Value *events = definition.get("events");
+    const json::Value *spawned = events == nullptr ? nullptr : events->get("minecraft:entity_spawned");
+    const json::Value *choices = spawned == nullptr ? nullptr : spawned->get("first_valid");
+    const json::Value *groups = definition.get("component_groups");
+    if (choices == nullptr || !choices->isArray() || groups == nullptr)
+        return nullptr;
+
+    for (const std::unique_ptr<json::Value> &choice: choices->mArray) {
+        const json::Value *filters = choice->get("filters");
+        if (filters != nullptr && !EntityFilter::test(*filters, owner, self, &shooter))
+            continue;
+
+        const json::Value *add = choice->get("add");
+        const json::Value *names = add == nullptr ? nullptr : add->get("component_groups");
+        if (names == nullptr || !names->isArray() || names->mArray.empty())
+            return nullptr;
+
+        return groups->get(names->mArray.front()->string());
+    }
+    return nullptr;
+}
+
+// a group replaces the whole component, as component groups do
+bool ProjectileComponent::findSpawned(ServerNetworkHandler &owner, const ServerActor &projectile, const Actor &shooter,
+                                      ProjectileComponent &out) {
+    const CustomActorDefinition *custom = projectile.getDefinition();
+    const std::string identifier = projectile.getIdentifier();
+    if (custom != nullptr && custom->mHasProjectileComponent)
+        return find(identifier, custom, out);
+
+    const json::Value *definition = EntityDefinitions::find(identifier);
+    const json::Value *group = definition == nullptr ? nullptr : spawnedGroup(owner, *definition, projectile, shooter);
+    const json::Value *component = group == nullptr ? nullptr : group->get("minecraft:projectile");
+    if (component == nullptr)
+        return find(identifier, custom, out);
     out = read(*component);
     return true;
 }

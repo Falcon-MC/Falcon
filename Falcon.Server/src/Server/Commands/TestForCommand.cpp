@@ -15,7 +15,7 @@ std::vector<CommandOverloadData> TestForCommand::getOverloads() const {
 
 bool TestForCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

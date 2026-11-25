@@ -7,6 +7,9 @@
 #include "World/Level/Block/Systems/RandomTickSystem.h"
 #include "World/Level/LevelGen/Overworld/Feature/Decoration/DecorationSupport.h"
 #include "World/Level/Level.h"
+#include "Network/ServerNetworkHandler.h"
+
+#include <string_view>
 
 FALCON_REGISTER_BLOCK(SweetBerryBushBlock, 318);
 
@@ -26,10 +29,15 @@ bool SweetBerryBushBlock::matches(const std::string &identifier) {
 
 void SweetBerryBushBlock::onActorInside(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
                                         const BlockState &state) const {
-    (void) owner;
-    (void) position;
-    (void) state;
+    const std::string_view name = actor.getIdentifier();
+    if (name == "minecraft:fox" || name == "minecraft:bee")
+        return;
+
     actor.makeStuckInBlock(STUCK_MULTIPLIER);
+    if (state.mStates.getInt(GROWTH, 0) > 0) {
+        actor.resetFallDistance();
+        owner.hurtActor(actor, 1.0f, "death.attack.sweetBerry", position);
+    }
 }
 
 void SweetBerryBushBlock::onRandomTick(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -50,5 +58,14 @@ void SweetBerryBushBlock::onRandomTick(ServerNetworkHandler &owner, Level &level
 bool SweetBerryBushBlock::getStuckMultiplier(const Actor &actor, Vector3f &multiplier) const {
     (void) actor;
     multiplier = STUCK_MULTIPLIER;
+    return true;
+}
+
+bool SweetBerryBushBlock::getDrops(const BlockState &state, const ItemStack &, int32_t fortune,
+                                   std::vector<BlockDrop> &drops) const {
+    const int growth = state.mStates.getInt(GROWTH);
+    if (growth >= 2)
+        drops.push_back({"minecraft:sweet_berries",
+                         growth - 1 + RandomTickSystem::nextInt(2) + RandomTickSystem::nextInt(fortune + 1)});
     return true;
 }

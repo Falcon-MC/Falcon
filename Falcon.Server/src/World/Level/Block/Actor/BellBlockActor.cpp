@@ -29,3 +29,17 @@ void BellBlockActor::loadNbt(const Tag &data, const PacketCodecContext &context)
     mRinging = data.getBool(TAG_RINGING, false);
     mTicks = data.getInt(TAG_TICKS, 0);
 }
+
+bool BellBlockActor::tick(ServerNetworkHandler &owner) {
+    (void) owner;
+    ++mTicks;
+    if (mRinging)
+        ++mTicks;
+    if (mTicks >= RING_TICKS) {
+        mRinging = false;
+        mTicks = 0;
+    }
+    if (mAlertCooldown > 0)
+        --mAlertCooldown;
+    return true;
+}

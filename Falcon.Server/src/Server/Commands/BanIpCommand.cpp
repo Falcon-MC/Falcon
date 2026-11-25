@@ -38,7 +38,7 @@ std::vector<CommandOverloadData> BanIpCommand::getOverloads() const {
 
 bool BanIpCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

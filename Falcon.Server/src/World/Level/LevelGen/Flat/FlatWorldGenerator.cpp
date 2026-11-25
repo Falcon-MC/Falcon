@@ -166,6 +166,8 @@ void FlatWorldGenerator::generate(LevelChunk &chunk) const {
     }
 
     chunk.setBiome((uint32_t) mBiomeId);
+    // All flat terrain is ready on the first pass because this generator has no decoration.
+    chunk.setPopulated(true);
     chunk.clearDirty();
 }
 

@@ -1,6 +1,7 @@
 #include "World/Actor/DamageCause.h"
 
 #include "World/Actor/ActorDamageSource.h"
+#include "Server/PropertiesSettings.h"
 
 #include <algorithm>
 
@@ -27,6 +28,7 @@ namespace {
                                  {"magic", "death.attack.magic"},
                                  {"magma", "death.attack.hotFloor"},
                                  {"projectile", "death.attack.arrow"},
+                                 {"sonic_boom", "death.attack.sonicBoom"},
                                  {"stalagmite", "death.attack.stalagmite"},
                                  {"starve", "death.attack.starve"},
                                  {"suffocation", "death.attack.inWall"},
@@ -69,4 +71,17 @@ bool DamageCause::matches(const std::string &cause, const ActorDamageSource &sou
     if (source.mCause.empty())
         return matches(cause, source.mDeathMessageKey);
     return cause.empty() || cause == ALL_CAUSES || cause == source.mCause;
+}
+
+float DamageCause::scaleForDifficulty(float damage, Difficulty difficulty) {
+    switch (difficulty) {
+        case Difficulty::Peaceful:
+            return 0.0f;
+        case Difficulty::Easy:
+            return damage > 2.0f ? damage * 0.5f + 1.0f : damage;
+        case Difficulty::Hard:
+            return damage * 1.5f;
+        default:
+            return damage;
+    }
 }

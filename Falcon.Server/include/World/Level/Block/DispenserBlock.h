@@ -13,6 +13,10 @@ public:
     static void onRedstoneUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
 
+    // the game's dispenser takes the first circuit update a new block gets: placed beside power, it fires
+    void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                         const BlockState &state) const override;
+
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
 

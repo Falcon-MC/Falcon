@@ -1,4 +1,5 @@
 #include "Scripting/Binding/ScriptApi.h"
+
 #include <functional>
 
 #include "World/Actor/ServerActor.h"
@@ -36,6 +37,8 @@
 #endif
 
 using namespace ScriptValues;
+
+#include <map>
 
 namespace {
     JSValue systemRun(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int magic) {
@@ -437,6 +440,21 @@ namespace {
         packet.mVolume = (float) options.mVolume;
         packet.mPitch = (float) options.mPitch;
         packet.mLoopCount = options.mLoopCount;
+        EventSignal<WorldEffectBeforeEvent> &worldSound = api->host().getEventBus().before().mWorldSound;
+        if (worldSound.hasSubscribers()) {
+            std::map<Level *, std::vector<NetworkIdentifier>> levels;
+            for (auto &entry: api->host().getPlayers()) {
+                if (entry.second.isSpawned())
+                    levels[&api->host().getLevelFor(entry.second)].push_back(entry.first);
+            }
+            for (auto &[level, viewers]: levels) {
+                WorldEffectBeforeEvent event(*level, packet.mPosition, packet, viewers);
+                worldSound.emit(event);
+                if (!event.isCancelled())
+                    api->host().getNetworkHandler().sendToMany(viewers, packet, api->host().getCodecContext());
+            }
+            return JS_UNDEFINED;
+        }
         for (auto &entry: api->host().getPlayers()) {
             if (entry.second.isSpawned())
                 api->host().sendPacketTo(entry.first, packet);

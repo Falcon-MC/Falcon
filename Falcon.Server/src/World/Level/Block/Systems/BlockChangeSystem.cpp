@@ -1,73 +1,83 @@
 #include "World/Level/Block/Systems/BlockChangeSystem.h"
 
 #include "World/Level/Level.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
+#include "Network/ServerNetworkHandler.h"
 
 namespace {
-    FalconEventType eventTypeOf(BlockChangeCause cause) {
+    EventSignal<BlockChangeBeforeEvent> &signalOf(BeforeEvents &before, BlockChangeCause cause) {
         switch (cause) {
             case BlockChangeCause::Grow:
-                return FALCON_EVENT_BLOCK_GROW;
+                return before.mBlockGrow;
             case BlockChangeCause::Spread:
-                return FALCON_EVENT_BLOCK_SPREAD;
+                return before.mBlockSpread;
             case BlockChangeCause::Form:
-                return FALCON_EVENT_BLOCK_FORM;
+                return before.mBlockForm;
             case BlockChangeCause::Fade:
-                return FALCON_EVENT_BLOCK_FADE;
+                return before.mBlockFade;
             case BlockChangeCause::Decay:
-                return FALCON_EVENT_LEAVES_DECAY;
+                return before.mLeavesDecay;
         }
-        return FALCON_EVENT_BLOCK_GROW;
+        return before.mBlockGrow;
     }
 }
 
 bool BlockChangeSystem::allows(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
-                               const Vector3i *source) {
-    const FalconEventType type = eventTypeOf(cause);
-    PluginManager *plugins = PluginManager::findWithSubscribers(type);
-    if (plugins == nullptr)
+                               const Vector3i *source, ServerPlayer *player) {
+    ServerNetworkHandler *owner = level.getOwner();
+    if (owner == nullptr)
+        return true;
+    EventSignal<BlockChangeBeforeEvent> &signal = signalOf(owner->getEventBus().before(), cause);
+    if (!signal.hasSubscribers())
         return true;
 
-    const BlockState *current = level.peekBlockPtr(position.x, position.y, position.z);
-
-    PluginEvent event;
-    event.mType = type;
-    event.mCancellable = true;
-    event.mLevel = &level;
-    event.mBlockPosition = position;
-    event.mBlockName = state.mName;
-    event.mPreviousBlockName = current == nullptr ? std::string() : current->mName;
-    if (source != nullptr)
-        event.mFrom = Vector3f((float) source->x, (float) source->y, (float) source->z);
-    plugins->dispatch(event);
-    return !event.mCancelled;
+    BlockChangeBeforeEvent event(level, position, state, level.peekBlockPtr(position.x, position.y, position.z), source,
+                                 player);
+    signal.emit(event);
+    return !event.isCancelled();
 }
 
 bool BlockChangeSystem::change(Level &level, const Vector3i &position, const BlockState &state, BlockChangeCause cause,
-                               bool update) {
-    if (!allows(level, position, state, cause))
+                               bool update, ServerPlayer *player) {
+    if (!allows(level, position, state, cause, nullptr, player))
         return false;
 
     level.setBlock(position, state, update);
     return true;
 }
 
-bool BlockChangeSystem::allowsFlow(Level &level, const Vector3i &source, const Vector3i &position,
-                                   const BlockState &liquid) {
-    PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_LIQUID_FLOW);
-    if (plugins == nullptr)
+bool BlockChangeSystem::prepareStructure(Level &level, const Vector3i &origin, StructureBlocks &blocks,
+                                         ServerPlayer *player) {
+    ServerNetworkHandler *owner = level.getOwner();
+    if (owner == nullptr)
+        return true;
+    EventSignal<StructureGrowBeforeEvent> &structureGrow = owner->getEventBus().before().mStructureGrow;
+    if (!structureGrow.hasSubscribers())
         return true;
 
-    PluginEvent event;
-    event.mType = FALCON_EVENT_LIQUID_FLOW;
-    event.mCancellable = true;
-    event.mLevel = &level;
-    event.mBlockPosition = position;
-    event.mBlockName = liquid.mName;
-    event.mFrom = Vector3f((float) source.x, (float) source.y, (float) source.z);
-    plugins->dispatch(event);
-    return !event.mCancelled;
+    StructureGrowBeforeEvent event(level, origin, blocks, player);
+    structureGrow.emit(event);
+    if (event.isCancelled())
+        return false;
+    return !blocks.empty();
+}
+
+void BlockChangeSystem::applyStructure(Level &level, const StructureBlocks &blocks, bool update) {
+    for (const auto &[position, state]: blocks)
+        level.setBlock(position, state, update);
+}
+
+bool BlockChangeSystem::allowsFlow(Level &level, const Vector3i &source, const Vector3i &position,
+                                   const BlockState &liquid) {
+    ServerNetworkHandler *owner = level.getOwner();
+    if (owner == nullptr)
+        return true;
+    EventSignal<LiquidFlowBeforeEvent> &liquidFlow = owner->getEventBus().before().mLiquidFlow;
+    if (!liquidFlow.hasSubscribers())
+        return true;
+
+    LiquidFlowBeforeEvent event(level, source, position, liquid);
+    liquidFlow.emit(event);
+    return !event.isCancelled();
 }
 
 bool BlockChangeSystem::spread(Level &level, const Vector3i &source, const Vector3i &position, const BlockState &state,

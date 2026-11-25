@@ -16,7 +16,7 @@ bool PlayerMovementValidator::takeDismountPosition(const Vector3f &simulated, co
     if (distanceSquared < 1.0e-6f && --mDismountInputsLeft > 0)
         return false;
     mDismountPending = false;
-    return distanceSquared <= 225.0f;
+    return distanceSquared <= MAX_STEP_SQUARED;
 }
 
 bool PlayerMovementValidator::stillSeated(const Vector3f &start, const Vector3f &reported) {

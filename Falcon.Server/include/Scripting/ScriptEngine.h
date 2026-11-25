@@ -382,6 +382,9 @@ public:
 
     bool isHoldingJoin(const NetworkIdentifier &id) const;
 
+    // the connection closed: a later session on the same address and port must not inherit its holds
+    void forgetPlayerJoins(const NetworkIdentifier &id);
+
     // the join event's natives; false once the player left or a script already turned it away
     bool isJoinPending(uint32_t token) const;
 
@@ -478,6 +481,8 @@ private:
     std::unordered_map<const Level *, std::unordered_map<int64_t, int32_t>> mRedstonePower;
     struct PendingJoin {
         NetworkIdentifier mId;
+        // the session that asked: the identifier alone also names a reconnect
+        const ServerPlayer *mPlayer = nullptr;
         int32_t mOutstanding = 0;
         bool mRefused = false;
         std::function<void()> mDone;

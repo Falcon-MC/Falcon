@@ -1,14 +1,17 @@
 #include "World/Actor/Projectile/ProjectileActor.h"
 
+#include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Mob/Hostile/BlazeActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Level.h"
+#include "World/Level/WindBurst.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Protocol/Packets/MovePlayerPacket.h"
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,10 +33,11 @@ namespace {
     const float ENDER_PEARL_DAMAGE = 5.0f;
     const char *ENDER_PEARL_DEATH_MESSAGE = "death.fell.accident.generic";
     const char *ENDER_PEARL_PARTICLE = "minecraft:endermanpop_emitter";
-    const float WIND_CHARGE_RADIUS = 3.5f;
-    const float WIND_CHARGE_KNOCKBACK_STRENGTH = 0.2f;
-    const float WIND_CHARGE_LIFT = 0.6f;
-    const float WIND_CHARGE_BURST_HEIGHT = 1.0f;
+    const float WIND_CHARGE_FACE_OFFSET = 0.25f;
+    const float WIND_CHARGE_HALF_BLOCK = 0.5f;
+    const char *const BREEZE_WIND_CHARGE = "minecraft:breeze_wind_charge_projectile";
+    const char *const BREEZE_WIND_CHARGE_PARTICLE = "minecraft:breeze_wind_explosion_emitter";
+    const char *const BREEZE_WIND_CHARGE_SOUND = "breeze_wind_charge.burst";
     const char *WIND_CHARGE_PARTICLE = "minecraft:wind_explosion_emitter";
     const int32_t EXPERIENCE_BOTTLE_MIN_XP = 3;
     const int32_t EXPERIENCE_BOTTLE_MAX_XP = 11;
@@ -49,11 +53,32 @@ namespace {
         const Vector3f position = target.getPosition();
         owner.knockBack(target, position.x - hitPosition.x, position.z - hitPosition.z, force);
     }
+
+    // the thrower is the attacker: the one a hit mob turns on
+    ActorDamageSource thrownBy(ServerNetworkHandler &owner, ServerActor &projectile, const Vector3f &hitPosition,
+                               const Actor &target) {
+        Actor *shooter = owner.getEntity(projectile.getOwnerUniqueId());
+        const Vector3f motion = projectile.getMotion();
+        const Vector3f origin(hitPosition.x - motion.x, hitPosition.y - motion.y, hitPosition.z - motion.z);
+
+        ActorDamageSource source = ActorDamageSource::environment("death.attack.arrow", target.getName());
+        source.mDeathMessageParameters.push_back(shooter == nullptr ? std::string() : shooter->getName());
+        source.mAttacker = shooter;
+        source.fromOrigin(origin).asProjectile().withDamager(&projectile);
+        return source;
+    }
+
+    // a harmless throwable still hurts the player for nothing and pushes, even into a raised shield
+    void strikePlayer(ServerNetworkHandler &owner, ServerActor &projectile, const Vector3f &hitPosition,
+                      ServerPlayer &player, float force) {
+        if (owner.hurt(player, 0.0f, thrownBy(owner, projectile, hitPosition, player)) != DamageResult::Ignored)
+            knockBackFrom(owner, player, hitPosition, force);
+    }
 }
 
 bool SnowballActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
     if (hitPlayer != nullptr)
-        knockBackFrom(owner, *hitPlayer, hitPosition, SNOWBALL_KNOCKBACK);
+        strikePlayer(owner, *this, hitPosition, *hitPlayer, SNOWBALL_KNOCKBACK);
 
     owner.spawnParticleEffect(owner.getLevelFor(*this), SNOWBALL_PARTICLE, hitPosition);
     return true;
@@ -61,7 +86,7 @@ bool SnowballActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPositi
 
 bool SnowballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
     const float damage = dynamic_cast<const BlazeActor *>(&hitActor) != nullptr ? SNOWBALL_BLAZE_DAMAGE : 0.0f;
-    owner.damageActor(hitActor, damage, nullptr);
+    owner.damageActor(hitActor, damage, thrownBy(owner, *this, hitPosition, hitActor), 0);
     knockBackFrom(owner, hitActor, hitPosition, SNOWBALL_KNOCKBACK);
     owner.spawnParticleEffect(owner.getLevelFor(*this), SNOWBALL_PARTICLE, hitPosition);
     return true;
@@ -84,14 +109,15 @@ bool IceBallActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPo
 }
 
 bool EggActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
-    (void) hitPlayer;
+    if (hitPlayer != nullptr)
+        strikePlayer(owner, *this, hitPosition, *hitPlayer, EGG_KNOCKBACK);
 
     _hatchChicks(owner, hitPosition);
     return true;
 }
 
 bool EggActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
-    owner.damageActor(hitActor, 0.0f, nullptr);
+    owner.damageActor(hitActor, 0.0f, thrownBy(owner, *this, hitPosition, hitActor), 0);
     knockBackFrom(owner, hitActor, hitPosition, EGG_KNOCKBACK);
     return true;
 }
@@ -120,12 +146,17 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
     const int64_t ownerId = getOwnerUniqueId();
     for (auto &entry: owner.getPlayers()) {
         ServerPlayer &shooter = entry.second;
-        if ((int64_t) shooter.getRuntimeId() != ownerId)
+        if (shooter.getUniqueId() != ownerId)
             continue;
 
         Vector3f destination = hitPosition;
-        if (!PluginEvents::teleport(shooter, destination, "ender_pearl"))
-            break;
+        EventSignal<ActorTeleportBeforeEvent> &teleport = owner.getEventBus().before().mActorTeleport;
+        if (teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(shooter, destination, TeleportCause::EnderPearl);
+            teleport.emit(event);
+            if (event.isCancelled())
+                break;
+        }
         shooter.teleport(owner, destination, MovePlayerTeleportationCause::Behavior);
         owner.hurt(shooter, ENDER_PEARL_DAMAGE,
                    ActorDamageSource::environment(ENDER_PEARL_DEATH_MESSAGE, shooter.getName())
@@ -139,37 +170,55 @@ bool EnderPearlActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosi
 }
 
 bool WindChargeActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
-    (void) hitPlayer;
-
-    const float radiusSquared = WIND_CHARGE_RADIUS * WIND_CHARGE_RADIUS;
-
-    for (auto &entry: owner.getPlayers()) {
-        ServerPlayer &nearby = entry.second;
-        if (!nearby.isSpawned() || !nearby.sharesLevelWith(*this))
-            continue;
-
-        if (distanceSquared(nearby.getPosition(), hitPosition) > radiusSquared)
-            continue;
-
-        owner.pushFrom(nearby, hitPosition, WIND_CHARGE_KNOCKBACK_STRENGTH, WIND_CHARGE_LIFT);
+    if (hitPlayer != nullptr) {
+        _hitTarget(owner, hitPosition, *hitPlayer);
+        _burst(owner, getPosition());
+        return true;
     }
 
-    for (auto &entry: owner.getActors()) {
-        ServerActor &nearby = *entry.second;
-        if (!nearby.isAlive() || nearby.isProjectile() || !nearby.sharesLevelWith(*this))
-            continue;
-
-        if (distanceSquared(nearby.getPosition(), hitPosition) > radiusSquared)
-            continue;
-
-        owner.pushFrom(nearby, hitPosition, WIND_CHARGE_KNOCKBACK_STRENGTH, WIND_CHARGE_LIFT);
-    }
-
-    Level &level = owner.getLevelFor(*this);
-    const Vector3f burstPosition(hitPosition.x, hitPosition.y + WIND_CHARGE_BURST_HEIGHT, hitPosition.z);
-    owner.spawnParticleEffect(level, WIND_CHARGE_PARTICLE, burstPosition);
-    owner.playLevelSound(level, LevelSoundEvent::WIND_CHARGE_BURST, burstPosition);
+    // a block hit bursts a quarter block out of the face it struck; hitPosition is the block's middle: a burst
+    // left inside the block reaches no actor
+    const Vector3f motion = getMotion();
+    const float ax = std::fabs(motion.x);
+    const float ay = std::fabs(motion.y);
+    const float az = std::fabs(motion.z);
+    Vector3f out;
+    if (ax >= ay && ax >= az)
+        out.x = motion.x > 0.0f ? -1.0f : 1.0f;
+    else if (ay >= az)
+        out.y = motion.y > 0.0f ? -1.0f : 1.0f;
+    else
+        out.z = motion.z > 0.0f ? -1.0f : 1.0f;
+    const float offset = WIND_CHARGE_HALF_BLOCK + WIND_CHARGE_FACE_OFFSET;
+    _burst(owner,
+           Vector3f(hitPosition.x + out.x * offset, hitPosition.y + out.y * offset, hitPosition.z + out.z * offset));
     return true;
+}
+
+bool WindChargeActor::onHitActor(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerActor &hitActor) {
+    _hitTarget(owner, hitPosition, hitActor);
+    _burst(owner, getPosition());
+    return true;
+}
+
+void WindChargeActor::_burst(ServerNetworkHandler &owner, const Vector3f &center) {
+    Level &level = owner.getLevelFor(*this);
+    const bool breeze = getIdentifier() == BREEZE_WIND_CHARGE;
+
+    WindBurst::Settings settings;
+    const json::Value *definition = EntityDefinitions::find(getIdentifier());
+    const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+    const json::Value *explode = components == nullptr ? nullptr : components->get("minecraft:explode");
+    if (explode != nullptr)
+        settings = WindBurst::fromComponent(*explode);
+    settings.mNeedsMobGriefing = breeze;
+    WindBurst::burst(owner, level, center, settings, this);
+
+    owner.spawnParticleEffect(level, breeze ? BREEZE_WIND_CHARGE_PARTICLE : WIND_CHARGE_PARTICLE, center);
+    if (breeze)
+        owner.playLevelSound(level, BREEZE_WIND_CHARGE_SOUND, center);
+    else
+        owner.playLevelSound(level, LevelSoundEvent::WIND_CHARGE_BURST, center);
 }
 
 bool ExperienceBottleActor::onHit(ServerNetworkHandler &owner, const Vector3f &hitPosition, ServerPlayer *hitPlayer) {
@@ -243,7 +292,7 @@ void DragonFireballActor::_burst(ServerNetworkHandler &owner, const Vector3f &hi
     settings.mDuration = DRAGON_BREATH_DURATION;
     settings.mReapplicationDelay = DRAGON_BREATH_REAPPLICATION_DELAY;
     settings.mParticle = DRAGON_BREATH_PARTICLE;
-    settings.mOwnerRuntimeId = getOwnerUniqueId();
+    settings.mOwnerUniqueId = getOwnerUniqueId();
     owner.spawnAreaEffectCloud(level, hitPosition, settings);
 }
 
@@ -260,3 +309,16 @@ bool DragonFireballActor::onHitActor(ServerNetworkHandler &owner, const Vector3f
     _burst(owner, hitPosition);
     return true;
 }
+
+namespace {
+    bool dangerousSkull(const std::string &identifier) {
+        const json::Value *definition = EntityDefinitions::find(identifier);
+        const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+        const json::Value *projectile = components == nullptr ? nullptr : components->get("minecraft:projectile");
+        const json::Value *dangerous = projectile == nullptr ? nullptr : projectile->get("is_dangerous");
+        return dangerous != nullptr && dangerous->boolean(false);
+    }
+}
+
+WitherSkullActor::WitherSkullActor(uint64_t runtimeId, const std::string &identifier, const ActorSize &size)
+        : DefinitionProjectileActor(runtimeId, identifier, size), mDangerous(dangerousSkull(identifier)) {}

@@ -362,7 +362,12 @@ void NaturalSpawner::_spawnCluster(ServerNetworkHandler &owner, Level &level, co
             continue;
 
         const std::string identifier = permute(condition, rule.mIdentifier, _nextInt(permutationWeight(condition)));
-        ServerActor *spawned = owner.spawnActor(level, identifier, position, [&condition](ServerActor &actor) {
+        Vector3f placed = position;
+        const MobActor *prototype = ActorClassRegistry::getMobPrototype(identifier);
+        if (prototype != nullptr && !prototype->placeNaturalSpawn(owner, level, placed, mRandom))
+            continue;
+
+        ServerActor *spawned = owner.spawnActor(level, identifier, placed, [&condition](ServerActor &actor) {
             actor.setPersistent(false);
             MobActor *mob = dynamic_cast<MobActor *>(&actor);
             if (mob != nullptr && !condition.mSpawnEvent.empty())

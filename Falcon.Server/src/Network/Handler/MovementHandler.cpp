@@ -5,6 +5,8 @@
 #include "World/Actor/Movement/MovementConstants.h"
 #include "World/Actor/Movement/RideControlSystem.h"
 #include "World/Actor/RideSystem.h"
+#include "World/Actor/Vehicle/BoatActor.h"
+#include "World/Actor/Vehicle/MinecartActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Block/Block.h"
 #include "World/Level/Block/FrostedIceBlock.h"
@@ -14,6 +16,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Block/Systems/WaterMoveSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/MovementGameEvents.h"
 #include "World/Item/ElytraItem.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
@@ -22,8 +25,6 @@
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginEvent.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 #include "Scripting/ScriptEngine.h"
 #include "Protocol/Packets/SetActorMotionPacket.h"
@@ -33,8 +34,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <optional>
+#include <utility>
 
 namespace {
+    // not a game limit: the client lists a few actions per input; each one may run a break check
+    const size_t MAX_PLAYER_ACTIONS = 32;
+
     LiquidContact liquidContact(Level &level, const ServerPlayer &player, const Vector3f &feet) {
         const ActorFlags &flags = player.getFlags();
         const bool sneaking = player.hasSimulatedVelocity() ? player.isSimulatedSneaking()
@@ -42,19 +48,17 @@ namespace {
         return LiquidBlocksFetch::at(
                 level, feet,
                 flags.get(ActorFlag::Swimming) || flags.get(ActorFlag::Gliding) || flags.get(ActorFlag::Crawling),
-                sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT);
+                sneaking ? MovementPhysics::PLAYER_SNEAKING_HEIGHT : MovementPhysics::PLAYER_HEIGHT, player.getScale());
     }
 
-    void dispatchPlayerState(ServerPlayer &player, FalconEventType type, bool state) {
-        PluginManager *plugins = PluginManager::findWithSubscribers(type);
-        if (plugins == nullptr)
-            return;
+    template <typename T, typename... Args>
+    bool allowPlayerState(EventSignal<T> &signal, Args &&...args) {
+        if (!signal.hasSubscribers())
+            return true;
 
-        PluginEvent event;
-        event.mType = type;
-        event.mPlayer = &player;
-        event.mState = state;
-        plugins->dispatch(event);
+        T event(std::forward<Args>(args)...);
+        signal.emit(event);
+        return !event.isCancelled();
     }
 
     // Respiration N skips the air loss on a tick with probability N / (N + 1)
@@ -64,7 +68,8 @@ namespace {
         return respiration <= 0 || std::rand() % (respiration + 1) == 0;
     }
 
-    void freezeWaterUnderfoot(Level &level, const ServerPlayer &player, const Vector3f &feetPosition) {
+    void freezeWaterUnderfoot(ServerNetworkHandler &owner, Level &level, ServerPlayer &player,
+                              const Vector3f &feetPosition) {
         if (player.isSpectator())
             return;
 
@@ -73,31 +78,45 @@ namespace {
         if (frostWalker <= 0)
             return;
 
-        const int32_t radius = 2 + frostWalker;
+        int32_t radius = 2 + frostWalker;
         const int32_t centerX = (int32_t) std::floor(feetPosition.x);
         const int32_t y = (int32_t) std::floor(feetPosition.y) - 1;
         const int32_t centerZ = (int32_t) std::floor(feetPosition.z);
         if (y < level.getMinY() || y >= level.getMaxY())
             return;
 
+        Tag properties = Tag::ofCompound();
+        properties.putInt("age", 0);
+        BlockState target(FrostedIceBlock::IDENTIFIER, properties);
+        BlockState liquid(BlockNames::WATER);
+        bool customLiquid = false;
+        EventSignal<PlayerFrostWalkerBeforeEvent> &freeze = owner.getEventBus().before().mPlayerFrostWalker;
+        if (freeze.hasSubscribers()) {
+            PlayerFrostWalkerBeforeEvent event(level, player, Vector3i(centerX, y, centerZ), radius, liquid, target);
+            freeze.emit(event);
+            if (event.isCancelled())
+                return;
+            radius = event.mRadius;
+            customLiquid = event.mExactLiquid;
+        }
+
         for (int32_t x = centerX - radius; x <= centerX + radius; ++x) {
             for (int32_t z = centerZ - radius; z <= centerZ + radius; ++z) {
                 // a column not loaded is unknown, never read through: that would generate it here
                 const BlockState *water = level.peekBlockPtr(x, y, z);
-                if (water == nullptr || water->mName != BlockNames::WATER
-                    || water->mStates.getInt("liquid_depth", 0) != 0)
+                if (water == nullptr || (customLiquid ? !(*water == liquid)
+                                                       : water->mName != BlockNames::WATER
+                                                               || water->mStates.getInt("liquid_depth", 0) != 0))
                     continue;
 
                 const BlockState *above = level.peekBlockPtr(x, y + 1, z);
                 if (above == nullptr || above->mName != BlockNames::AIR)
                     continue;
 
-                Tag states = Tag::ofCompound();
-                states.putInt("age", 0);
-
                 const Vector3i position(x, y, z);
-                level.setBlock(position, BlockState(FrostedIceBlock::IDENTIFIER, states), false);
-                level.scheduleUpdate(position, FrostedIceBlock::nextMeltDelay());
+                level.setBlock(position, target, false);
+                if (target.mName == FrostedIceBlock::IDENTIFIER)
+                    level.scheduleUpdate(position, FrostedIceBlock::nextMeltDelay());
             }
         }
     }
@@ -117,7 +136,7 @@ namespace {
     const float DROWNING_DAMAGE = 2.0f;
     const int AIR_REFILL_PER_TICK = 5;
 
-    void ignitePlayer(ServerPlayer &player) {
+    void ignitePlayer(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &block) {
         int fireProtectionLevel = 0;
         const PlayerInventory &inventory = player.getInventory();
         for (int slot = 0; slot < PlayerInventory::ARMOR_SIZE; ++slot)
@@ -127,16 +146,20 @@ namespace {
 
         const int reducedSeconds = (int) (8.0f * (float) fireProtectionLevel * 0.15f);
         const int fireTicks = std::max(1, 8 - std::min(8, reducedSeconds)) * 20;
-        player.setFireTicks(std::max(player.getFireTicks(), fireTicks));
+        if (player.getFireTicks() < fireTicks) {
+            const int32_t duration = owner.allowCombustion(player, fireTicks, nullptr, block);
+            player.setFireTicks(std::max(player.getFireTicks(), duration));
+        }
     }
 
-    bool findSupportBlock(Level &level, const Vector3f &feetPosition, BlockState &support) {
+    bool findSupportBlock(Level &level, const Vector3f &feetPosition, float halfWidth, BlockState &support) {
         const int32_t lowestY = (int32_t) std::floor(feetPosition.y - GROUND_PROBE_DEPTH);
         const int32_t highestY = (int32_t) std::floor(feetPosition.y);
-        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH + AABB_EPSILON);
-        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH - AABB_EPSILON);
-        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH + AABB_EPSILON);
-        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH - AABB_EPSILON);
+        const float inset = std::min(halfWidth, AABB_EPSILON);
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - halfWidth + inset);
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + halfWidth - inset);
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - halfWidth + inset);
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + halfWidth - inset);
 
         for (int32_t y = highestY; y >= lowestY; --y) {
             BlockState firstSolid;
@@ -164,11 +187,11 @@ namespace {
     }
 
     // every column the player's box touches is in memory
-    bool columnsResident(const Level &level, const Vector3f &feetPosition) {
-        const int32_t minX = (int32_t) std::floor(feetPosition.x - PLAYER_HALF_WIDTH) >> 4;
-        const int32_t maxX = (int32_t) std::floor(feetPosition.x + PLAYER_HALF_WIDTH) >> 4;
-        const int32_t minZ = (int32_t) std::floor(feetPosition.z - PLAYER_HALF_WIDTH) >> 4;
-        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + PLAYER_HALF_WIDTH) >> 4;
+    bool columnsResident(const Level &level, const Vector3f &feetPosition, float halfWidth) {
+        const int32_t minX = (int32_t) std::floor(feetPosition.x - halfWidth) >> 4;
+        const int32_t maxX = (int32_t) std::floor(feetPosition.x + halfWidth) >> 4;
+        const int32_t minZ = (int32_t) std::floor(feetPosition.z - halfWidth) >> 4;
+        const int32_t maxZ = (int32_t) std::floor(feetPosition.z + halfWidth) >> 4;
 
         for (int32_t chunkX = minX; chunkX <= maxX; ++chunkX) {
             for (int32_t chunkZ = minZ; chunkZ <= maxZ; ++chunkZ) {
@@ -195,11 +218,13 @@ namespace {
 }
 
 bool MovementHandler::checkGroundState(Level &level, const Vector3f &feetPosition, const Actor *actor) {
-    const float shrink = 0.01f;
-    const float minX = feetPosition.x - PLAYER_HALF_WIDTH + shrink;
-    const float maxX = feetPosition.x + PLAYER_HALF_WIDTH - shrink;
-    const float minZ = feetPosition.z - PLAYER_HALF_WIDTH + shrink;
-    const float maxZ = feetPosition.z + PLAYER_HALF_WIDTH - shrink;
+    const auto *player = dynamic_cast<const ServerPlayer *>(actor);
+    const float halfWidth = player == nullptr ? PLAYER_HALF_WIDTH : player->getBodyWidth() * 0.5f;
+    const float shrink = std::min(0.01f, halfWidth);
+    const float minX = feetPosition.x - halfWidth + shrink;
+    const float maxX = feetPosition.x + halfWidth - shrink;
+    const float minZ = feetPosition.z - halfWidth + shrink;
+    const float maxZ = feetPosition.z + halfWidth - shrink;
 
     const AxisAlignedBB support(minX, feetPosition.y - AABB_EPSILON, minZ, maxX, feetPosition.y, maxZ);
     for (const AxisAlignedBB &shape: level.getCollisionBoxes(support, actor)) {
@@ -238,7 +263,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
     Level &level = owner.getLevelFor(player);
     // an unloaded column is unknown, not air: the probes below would generate it on the tick thread
-    if (!columnsResident(level, feetPosition))
+    if (!columnsResident(level, feetPosition, player.getBodyWidth() * 0.5f))
         return;
 
     const bool wasOnGround = player.isOnGround();
@@ -260,11 +285,11 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
     }
 
     if (onGround)
-        freezeWaterUnderfoot(level, player, feetPosition);
+        freezeWaterUnderfoot(owner, level, player, feetPosition);
 
     if (onGround) {
         BlockState support;
-        const bool hasSupport = findSupportBlock(level, feetPosition, support);
+        const bool hasSupport = findSupportBlock(level, feetPosition, player.getBodyWidth() * 0.5f, support);
         const Block supportBlock = hasSupport ? Block(support) : Block();
 
         if (!wasOnGround) {
@@ -275,6 +300,7 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
                 owner._handleFallDamage(player, hasSupport ? &supportBlock : nullptr);
 
             BlockContactSystem::land(owner, player, player.getFallDistance());
+            player.setWindImpulseHeight(std::nullopt);
         }
 
         player.resetFallDistance();
@@ -288,6 +314,12 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
         player.updateFallDistance();
     }
+
+    // a teleport is no step: the tracking starts again from where it lands
+    if (player.wasRecentlyTeleported())
+        player.getMovementGameEventState().mLast = feetPosition;
+    else
+        MovementGameEvents::track(owner, player);
 }
 
 void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer &player) {
@@ -302,14 +334,13 @@ void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer
     const bool creative = player.isCreative();
     const bool fireResistance = player.hasEffect(MobEffectId::FireResistance);
     if (contact.lava || fireContact.fire)
-        ignitePlayer(player);
+        ignitePlayer(owner, player, contact.lava ? contact.lavaBlock : fireContact.fireBlock);
 
     if (!creative && !fireResistance) {
         if (contact.lava)
-            owner.hurt(player, 4.0f, ActorDamageSource::environment("death.attack.lava", player.getName()));
+            owner.hurtActor(player, 4.0f, "death.attack.lava", contact.lavaBlock);
         if (fireContact.fire)
-            owner.hurt(player, fireContact.damage,
-                       ActorDamageSource::environment("death.attack.onFire", player.getName()));
+            owner.hurtActor(player, fireContact.damage, "death.attack.onFire", fireContact.fireBlock);
     }
 
     tickBreathing(owner, player, contact.eyeInWater);
@@ -365,11 +396,11 @@ void MovementHandler::tickBreathing(ServerNetworkHandler &owner, ServerPlayer &p
 
 bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkIdentifier &id, ServerPlayer &player,
                                     bool flying, bool deferUntilInput) {
-    const int32_t gameType = player.getGameType();
-    const bool mayFly = gameType == (int32_t) GameType::Creative || gameType == (int32_t) GameType::Spectator;
-
-    if (flying && !mayFly) {
-        owner._disconnect(id, DisconnectReason::Kicked, player.localize("falcon.disconnect.flyingDisabled"));
+    if (flying != player.isFlying() && !player.canToggleFlight()) {
+        if (flying && !player.hasFlightOverride())
+            owner._disconnect(id, DisconnectReason::Kicked, player.localize("falcon.disconnect.flyingDisabled"));
+        else
+            owner._sendAbilities(player);
         return false;
     }
 
@@ -381,14 +412,11 @@ bool MovementHandler::requestFlight(ServerNetworkHandler &owner, const NetworkId
     }
 
     if (flying != player.isFlying()) {
-        if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_TOGGLE_FLIGHT)) {
-            PluginEvent flightEvent;
-            flightEvent.mType = FALCON_EVENT_PLAYER_TOGGLE_FLIGHT;
-            flightEvent.mCancellable = true;
-            flightEvent.mPlayer = &player;
-            flightEvent.mState = flying;
-            plugins->dispatch(flightEvent);
-            if (flightEvent.mCancelled) {
+        EventSignal<PlayerToggleBeforeEvent> &toggleFlight = owner.getEventBus().before().mPlayerToggleFlight;
+        if (toggleFlight.hasSubscribers()) {
+            PlayerToggleBeforeEvent flightEvent(player, flying);
+            toggleFlight.emit(flightEvent);
+            if (flightEvent.isCancelled() || !player.canToggleFlight()) {
                 owner._sendAbilities(player);
                 return false;
             }
@@ -449,7 +477,8 @@ static void recordInput(ServerNetworkHandler &owner, ServerPlayer &player, const
         scripts.onPlayerButtonInput(player, "Jump", jump);
     if (sneakChanged)
         scripts.onPlayerButtonInput(player, "Sneak", sneak);
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing))
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::MissedSwing)
+        && allowPlayerState(owner.getEventBus().before().mPlayerMissSwing, player))
         scripts.onPlayerSwingStart(player, "Attack");
 }
 
@@ -475,11 +504,34 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     // sprint resolved before replay: physics and advertised state agree; the client sprints from StartSprinting
     // to StopSprinting; the Sprinting bit can miss the tick after a start, and stays set when one tick starts+stops
-    bool sprinting = player.getFlags().get(ActorFlag::Sprinting)
+    const bool wasSprinting = player.getFlags().get(ActorFlag::Sprinting);
+    bool sprinting = wasSprinting
                      || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSprinting);
 
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSprinting) || !player.canSprint())
         sprinting = false;
+    BeforeEvents &before = owner.getEventBus().before();
+    if (sprinting != wasSprinting && !allowPlayerState(before.mPlayerToggleSprint, player, sprinting))
+        sprinting = wasSprinting && player.canSprint();
+
+    const bool wasSneaking = player.getFlags().get(ActorFlag::Sneaking);
+    const bool sneakPressed = packet.hasInputFlag((int32_t) PlayerAuthInputData::SneakDown)
+                              || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
+    bool sneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking) || sneakPressed;
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
+        sneaking = false;
+    std::optional<PlayerAuthInputPacket> adjustedPose;
+    if (sneaking != wasSneaking && !allowPlayerState(before.mPlayerToggleSneak, player, sneaking, sneakPressed)) {
+        adjustedPose = packet;
+        std::erase_if(adjustedPose->mInputData, [](int32_t flag) {
+            return flag == (int32_t) PlayerAuthInputData::Sneaking || flag == (int32_t) PlayerAuthInputData::SneakDown
+                    || flag == (int32_t) PlayerAuthInputData::StartSneaking
+                    || flag == (int32_t) PlayerAuthInputData::StopSneaking;
+        });
+        if (wasSneaking)
+            adjustedPose->mInputData.push_back((int32_t) PlayerAuthInputData::SneakDown);
+        sneaking = wasSneaking;
+    }
 
     // wire positions are at eye height; the server works in feet positions
     Vector3f feetPosition(packet.mPosition.x, packet.mPosition.y - PLAYER_BASE_OFFSET, packet.mPosition.z);
@@ -499,7 +551,9 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
         transactionBreakPending = false;
         BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
     };
-    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+    const size_t actionCount = std::min(packet.mPlayerActions.size(), MAX_PLAYER_ACTIONS);
+    for (size_t index = 0; index < actionCount; ++index) {
+        const PlayerBlockActionData &action = packet.mPlayerActions[index];
         if (action.mAction == PlayerActionType::AbortBreak
             || ((action.mAction == PlayerActionType::StartBreak
                  || action.mAction == PlayerActionType::BlockContinueDestroy)
@@ -544,7 +598,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             BlockActionHandler::completeBreakingBlock(owner, player, transactionBreakPosition);
     }
 
-    PlayerMovementSimulator::apply(owner, id, player, packet, feetPosition, sprinting);
+    PlayerMovementSimulator::apply(owner, id, player, adjustedPose ? *adjustedPose : packet, feetPosition, sprinting);
 
     // the client keeps its old travel for the input carrying a flight toggle: the new state applies from the next
     const bool stopFlying = packet.hasInputFlag((int32_t) PlayerAuthInputData::StopFlying);
@@ -554,8 +608,11 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     player.queueMove(feetPosition, packet.mRotation);
     if (!player.hasSimulatedVelocity())
         player.setMotion(packet.mDelta);
-    if (player.isRiding())
+    if (player.isRiding()) {
         RideControlSystem::receiveInput(owner, player, packet);
+        BoatActor::followController(owner, player, feetPosition, packet);
+        MinecartActor::readRider(owner, player, packet);
+    }
 
     if (player.isSpawned()) {
         const int32_t chunkX = (int32_t) std::floor(feetPosition.x) >> 4;
@@ -570,13 +627,7 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
 
     flags.set(ActorFlag::Sprinting, sprinting);
 
-    bool sneaking = packet.hasInputFlag((int32_t) PlayerAuthInputData::Sneaking)
-                    || packet.hasInputFlag((int32_t) PlayerAuthInputData::StartSneaking);
-
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopSneaking))
-        sneaking = false;
-
-    if (player.hasSimulatedVelocity())
+    if (!adjustedPose && player.hasSimulatedVelocity())
         sneaking = player.isSimulatedSneaking();
     flags.set(ActorFlag::Sneaking, sneaking);
 
@@ -596,6 +647,14 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
     if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StopGliding))
         flags.set(ActorFlag::Gliding, false);
 
+    for (const auto &[flag, toggle]: {std::pair{ActorFlag::Swimming, &before.mPlayerToggleSwim},
+                                      std::pair{ActorFlag::Gliding, &before.mPlayerToggleGlide}}) {
+        const bool wasActive = previous.get(flag);
+        const bool active = flags.get(flag);
+        if (active != wasActive && !allowPlayerState(*toggle, player, active))
+            flags.set(flag, wasActive);
+    }
+
     flags.set(ActorFlag::Emoting, packet.hasInputFlag((int32_t) PlayerAuthInputData::Emoting));
 
     if (player.hasSimulatedVelocity()) {
@@ -607,41 +666,46 @@ void MovementHandler::handlePlayerAuthInput(ServerNetworkHandler &owner, const N
             flags.set(ActorFlag::Crawling, false);
     }
 
-    if (flags.getLowBits() != previous.getLowBits() || flags.getHighBits() != previous.getHighBits())
-        owner._sendEntityData(player);
+    const bool flagsChanged = flags.getLowBits() != previous.getLowBits()
+                              || flags.getHighBits() != previous.getHighBits();
 
-    if (sneaking != previous.get(ActorFlag::Sneaking)) {
-        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SNEAK, sneaking);
+    if (sneaking != previous.get(ActorFlag::Sneaking))
         owner.getScriptEngine().onEntitySneak(player, sneaking);
-    }
     recordInput(owner, player, packet);
     if (sprinting != previous.get(ActorFlag::Sprinting)) {
         // sprint changes the movement attribute too; client-requested: no validation reset
         owner._sendAttributes(player, false);
-        dispatchPlayerState(player, FALCON_EVENT_PLAYER_TOGGLE_SPRINT, sprinting);
     }
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping))
-        dispatchPlayerState(player, FALCON_EVENT_PLAYER_JUMP, true);
-
-    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem)) {
-        player.clearAwaitingConsumableRelease();
-        owner._useHeldItem(player);
+    EventSignal<PlayerJumpAfterEvent> &jump = owner.getEventBus().after().mPlayerJump;
+    if (packet.hasInputFlag((int32_t) PlayerAuthInputData::StartJumping) && jump.hasSubscribers()) {
+        PlayerJumpAfterEvent event(player);
+        jump.emit(event);
     }
 
-    for (const PlayerBlockActionData &action: packet.mPlayerActions) {
+    bool startsUsingItem = packet.hasInputFlag((int32_t) PlayerAuthInputData::StartUsingItem);
+    for (size_t index = 0; index < actionCount; ++index) {
+        const PlayerBlockActionData &action = packet.mPlayerActions[index];
         if (action.mAction == PlayerActionType::Jump) {
             if (!liquidContact(owner.getLevelFor(player), player, player.getPosition()).eyeInWater)
                 player.exhaust(player.getFlags().get(ActorFlag::Sprinting) ? SPRINT_JUMP_EXHAUSTION : JUMP_EXHAUSTION);
         } else if (action.mAction == PlayerActionType::StartUsingItem) {
-            player.clearAwaitingConsumableRelease();
-            owner._useHeldItem(player);
+            startsUsingItem = true;
         }
     }
 
+    if (startsUsingItem)
+        player.clearAwaitingConsumableRelease();
+    // a single click can carry both a start signal and a use-in-air transaction
     if (packet.mHasItemUseTransaction && packet.mItemUseTransaction.mActionType == 1) {
         const ActiveHandScope hand(owner, player, packet.mItemUseTransaction.mHand);
         owner._useHeldItem(player);
+    } else if (startsUsingItem) {
+        owner._useHeldItem(player);
     }
+    // the input starting a use also stops the sprint: flags sent before the use clear UsingItem and the client
+    // drops the use it just began
+    if (flagsChanged)
+        owner._sendEntityData(player);
 
     // the input flag and the player action carry the same key press: one swap per input
     bool swapOffhand = packet.hasInputFlag((int32_t) PlayerAuthInputData::SwapOffhand);

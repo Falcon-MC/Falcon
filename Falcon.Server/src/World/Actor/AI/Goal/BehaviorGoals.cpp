@@ -11,10 +11,13 @@
 #include "World/Actor/AI/Goal/DefendVillageTargetGoal.h"
 #include "World/Actor/AI/Goal/DragonGoals.h"
 #include "World/Actor/AI/Goal/CelebrateGoal.h"
+#include "World/Actor/AI/Goal/CelebrateSurviveGoal.h"
 #include "World/Actor/AI/Goal/ChargeHeldItemGoal.h"
 #include "World/Actor/AI/Goal/CircleAroundAnchorGoal.h"
 #include "World/Actor/AI/Goal/EatBlockGoal.h"
 #include "World/Actor/AI/Goal/EquipItemGoal.h"
+#include "World/Actor/AI/Goal/ExploreOutskirtsGoal.h"
+#include "World/Actor/AI/Goal/FertilizeFarmBlockGoal.h"
 #include "World/Actor/AI/Goal/FindMountGoal.h"
 #include "World/Actor/AI/Goal/FleeSunGoal.h"
 #include "World/Actor/AI/Goal/FloatGoal.h"
@@ -22,18 +25,36 @@
 #include "World/Actor/AI/Goal/FollowMobGoal.h"
 #include "World/Actor/AI/Goal/FollowOwnerGoal.h"
 #include "World/Actor/AI/Goal/FollowParentGoal.h"
+#include "World/Actor/AI/Goal/FollowTargetLeaderGoal.h"
 #include "World/Actor/AI/Goal/GoHomeGoal.h"
 #include "World/Actor/AI/Goal/GoalSelector.h"
 #include "World/Actor/AI/Goal/GuardianAttackGoal.h"
+#include "World/Actor/AI/Goal/HarvestFarmBlockGoal.h"
+#include "World/Actor/AI/Goal/HideGoal.h"
+#include "World/Actor/AI/Goal/DelayedAttackGoal.h"
+#include "World/Actor/AI/Goal/ChargeAttackGoal.h"
+#include "World/Actor/AI/Goal/DrinkPotionGoal.h"
+#include "World/Actor/AI/Goal/HoldGroundGoal.h"
+#include "World/Actor/AI/Goal/KnockbackRoarGoal.h"
+#include "World/Actor/AI/Goal/FireAtTargetGoal.h"
+#include "World/Actor/AI/Goal/JumpAroundTargetGoal.h"
+#include "World/Actor/AI/Goal/MoveAroundTargetGoal.h"
 #include "World/Actor/AI/Goal/HurtByTargetGoal.h"
+#include "World/Actor/AI/Goal/InspectBookshelfGoal.h"
 #include "World/Actor/AI/Goal/JumpToBlockGoal.h"
 #include "World/Actor/AI/Goal/LeapAtTargetGoal.h"
 #include "World/Actor/AI/Goal/LookAtEntityGoal.h"
 #include "World/Actor/AI/Goal/LookAtPlayerGoal.h"
+#include "World/Actor/AI/Goal/LookAtTradingPlayerGoal.h"
+#include "World/Actor/AI/Goal/MakeLoveGoal.h"
 #include "World/Actor/AI/Goal/MeleeAttackGoal.h"
 #include "World/Actor/AI/Goal/MeleeBoxAttackGoal.h"
+#include "World/Actor/AI/Goal/MingleGoal.h"
 #include "World/Actor/AI/Goal/MountPathingGoal.h"
+#include "World/Actor/AI/Goal/MoveIndoorsGoal.h"
 #include "World/Actor/AI/Goal/MoveToBlockGoal.h"
+#include "World/Actor/AI/Goal/MoveToRandomBlockGoal.h"
+#include "World/Actor/AI/Goal/MoveToLiquidGoal.h"
 #include "World/Actor/AI/Goal/MoveToVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveThroughVillageGoal.h"
 #include "World/Actor/AI/Goal/MoveToWaterGoal.h"
@@ -46,21 +67,28 @@
 #include "World/Actor/AI/Goal/OwnerTargetGoal.h"
 #include "World/Actor/AI/Goal/PanicGoal.h"
 #include "World/Actor/AI/Goal/PickupItemsGoal.h"
+#include "World/Actor/AI/Goal/PlayGoal.h"
 #include "World/Actor/AI/Goal/PlaceBlockGoal.h"
+#include "World/Actor/AI/Goal/PlayerRideTamedGoal.h"
 #include "World/Actor/AI/Goal/RamAttackGoal.h"
 #include "World/Actor/AI/Goal/RandomHoverGoal.h"
 #include "World/Actor/AI/Goal/RandomLookAroundGoal.h"
 #include "World/Actor/AI/Goal/RandomStrollGoal.h"
+#include "World/Actor/AI/Goal/RiseToLiquidLevelGoal.h"
 #include "World/Actor/AI/Goal/RandomSwimGoal.h"
 #include "World/Actor/AI/Goal/RangedAttackGoal.h"
+#include "World/Actor/AI/Goal/ReceiveLoveGoal.h"
 #include "World/Actor/AI/Goal/RunAroundLikeCrazyGoal.h"
 #include "World/Actor/AI/Goal/SilverfishGoals.h"
+#include "World/Actor/AI/Goal/ShareItemsGoal.h"
 #include "World/Actor/AI/Goal/SitGoal.h"
 #include "World/Actor/AI/Goal/SleepGoal.h"
 #include "World/Actor/AI/Goal/SlimeGoals.h"
 #include "World/Actor/AI/Goal/SquidMovementGoal.h"
 #include "World/Actor/AI/Goal/StompAttackGoal.h"
 #include "World/Actor/AI/Goal/StompTurtleEggGoal.h"
+#include "World/Actor/AI/Goal/SendEventGoal.h"
+#include "World/Actor/AI/Goal/SummonEntityGoal.h"
 #include "World/Actor/AI/Goal/SwellGoal.h"
 #include "World/Actor/AI/Goal/SwimIdleGoal.h"
 #include "World/Actor/AI/Goal/SwoopAttackGoal.h"
@@ -68,10 +96,15 @@
 #include "World/Actor/AI/Goal/TemptGoal.h"
 #include "World/Actor/AI/Goal/TeleportToOwnerGoal.h"
 #include "World/Actor/AI/Goal/TimerFlagGoal.h"
+#include "World/Actor/AI/Goal/TradeInterestGoal.h"
 #include "World/Actor/AI/Goal/UseKineticWeaponGoal.h"
 #include "World/Actor/AI/Goal/TradeWithPlayerGoal.h"
+#include "World/Actor/AI/Goal/WardenGoals.h"
+#include "World/Actor/AI/Goal/WitherGoals.h"
+#include "World/Actor/AI/Goal/WorkComposterGoal.h"
 #include "World/Actor/AI/Goal/WorkGoal.h"
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Actor/Mob/Passive/VillagerV2Actor.h"
 #include "World/Level/Storage/BlockStateUpgrades.h"
 
 #include <algorithm>
@@ -96,8 +129,15 @@ namespace {
     const float LOOK_DEFAULT_PROBABILITY = 0.02f;
     const int32_t LOOK_PROBABILITY_SCALE = 1000;
     const int32_t LOOK_DURATION = 60;
+    const char *const IS_TARGET_FILTER = "{\"test\":\"is_target\",\"subject\":\"other\"}";
+    // what the game adds to a follow_target_captain it loads as follow_target_leader
+    const char *const CAPTAIN_LEADER_FILTER =
+            "{\"test\":\"has_component\",\"subject\":\"other\",\"value\":\"minecraft:is_illager_captain\"}";
+    const int32_t CAPTAIN_SEARCH_COOLDOWN_TICKS = 1;
+    const int32_t LEADER_DEFAULT_SEARCH_COOLDOWN_TICKS = 20;
+    const float HOLD_GROUND_DEFAULT_MIN_RADIUS = 10.0f;
+    const int32_t RANDOM_BLOCK_DEFAULT_DISTANCE = 16;
 
-    const float TARGET_DEFAULT_RANGE = 16.0f;
     const int32_t TICKS_PER_SECOND = 20;
     const float MELEE_ATTACK_RANGE_SQUARED = 2.5f;
     const float MELEE_NO_ATTACK = -1.0f;
@@ -192,11 +232,63 @@ namespace {
     const Vector3f OFFER_FLOWER_DEFAULT_AREA(6.0f, 2.0f, 6.0f);
     const float STOMP_DEFAULT_RANGE_MULTIPLIER = 2.0f;
     const float STOMP_DEFAULT_NO_DAMAGE_MULTIPLIER = 2.0f;
+    // the hide, mingle, play and explore_outskirts definition defaults
+    const float HIDE_DEFAULT_DURATION = 1.0f;
+    const float MINGLE_DEFAULT_DURATION = 1.0f;
+    const float MINGLE_DEFAULT_DISTANCE = 2.0f;
+    const float PLAY_DEFAULT_FOLLOW_DISTANCE = 2.0f;
+    const Vector3f PLAY_DEFAULT_SEARCH_AREA(6.0f, 3.0f, 6.0f);
+    const float PLAY_DEFAULT_SECONDS = 50.0f;
+    const float PLAY_DEFAULT_RANGE = 16.0f;
+    const float PLAY_DEFAULT_HEIGHT = 3.0f;
+    const float EXPLORE_DEFAULT_DISTANCE = 5.0f;
+    const float EXPLORE_DEFAULT_MIN_DISTANCE = 2.2f;
+    const float EXPLORE_DEFAULT_WAIT_SECONDS = 3.0f;
+    const float CELEBRATE_SURVIVE_DEFAULT_MIN = 10.0f;
+    const float CELEBRATE_SURVIVE_DEFAULT_MAX = 20.0f;
 
     float numberOf(const json::Value &component, const char *key, float fallback) {
         const json::Value *value = component.get(key);
         return value == nullptr ? fallback : (float) value->number(fallback);
     }
+
+    // the share_items definition defaults
+    const int32_t SHARE_DEFAULT_MAX_DISTANCE = 1;
+    // the harvest_farm_block definition defaults
+    const float HARVEST_DEFAULT_SPEED = 0.5f;
+    const float HARVEST_DEFAULT_RANGE = 16.0f;
+    const float HARVEST_DEFAULT_HEIGHT = 1.0f;
+    const float HARVEST_DEFAULT_GOAL_RADIUS = 1.5f;
+    const float HARVEST_DEFAULT_SEARCH_SECONDS = 1.0f;
+    const float HARVEST_DEFAULT_COOLDOWN_SECONDS = 8.0f;
+    const float HARVEST_DEFAULT_TASK_SECONDS = 0.5f;
+    // the fertilize_farm_block definition defaults
+    const float FERTILIZE_DEFAULT_SPEED = 0.5f;
+    const float FERTILIZE_DEFAULT_RANGE = 1.0f;
+    const float FERTILIZE_DEFAULT_HEIGHT = 1.0f;
+    const float FERTILIZE_DEFAULT_COUNT = 9.0f;
+    const float FERTILIZE_DEFAULT_GOAL_RADIUS = 1.5f;
+    const float FERTILIZE_DEFAULT_USES = 1.0f;
+    const float FERTILIZE_DEFAULT_COOLDOWN_SECONDS = 8.0f;
+    // the wait after a stuck walk, which no field of the definition sets
+    const int32_t FERTILIZE_GIVE_UP_TICKS = 160;
+    // the inspect_bookshelf definition defaults
+    const float BOOKSHELF_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float LIQUID_DEFAULT_GOAL_RADIUS = 0.5f;
+    const float BOOKSHELF_DEFAULT_COUNT = 10.0f;
+    const float BOOKSHELF_DEFAULT_HEIGHT = 1.0f;
+    const int32_t BOOKSHELF_GIVE_UP_TICKS = 160;
+    // the trade_interest definition defaults
+    const float TRADE_INTEREST_DEFAULT_SECONDS = 45.0f;
+    const float TRADE_INTEREST_DEFAULT_REMOVE_SECONDS = 1.0f;
+    const float TRADE_INTEREST_DEFAULT_SWITCH_SECONDS = 2.0f;
+    const float TRADE_INTEREST_DEFAULT_COOLDOWN_SECONDS = 2.0f;
+    // the work_composter definition defaults
+    const float COMPOSTER_DEFAULT_USE_MIN = 100.0f;
+    const float COMPOSTER_DEFAULT_USE_MAX = 200.0f;
+    const float COMPOSTER_DEFAULT_INTERACTIONS = 1.0f;
+    const float COMPOSTER_DEFAULT_ITEMS_PER_USE = 20.0f;
+    const float COMPOSTER_DEFAULT_MIN_ITEMS = 10.0f;
 
     // vanilla 26.60 nearest_attackable_target defaults: must_see false, forget after 3 s
     const int32_t TARGET_SCAN_INTERVAL = 10;
@@ -255,8 +347,7 @@ namespace {
         if (radius > 0.0f)
             return radius;
 
-        const json::Value *followRange = mob.getComponent("minecraft:follow_range");
-        return followRange == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*followRange, "value", TARGET_DEFAULT_RANGE);
+        return mob.getFollowRange();
     }
 
     float rangeValue(const json::Value &component, const char *key, const char *field, float fallback) {
@@ -423,8 +514,7 @@ namespace {
     }
 
     float followRange(const MobActor &mob) {
-        const json::Value *follow = mob.getComponent("minecraft:follow_range");
-        return follow == nullptr ? TARGET_DEFAULT_RANGE : numberOf(*follow, "value", TARGET_DEFAULT_RANGE);
+        return mob.getFollowRange();
     }
 
     float attackReachSquared(const MobActor &mob) {
@@ -537,6 +627,24 @@ namespace {
         return settings;
     }
 
+    // the game drops the fraction of a tick: seconds * 20, truncated
+    int32_t secondsAsTicks(const json::Value &component, const char *key, float fallback) {
+        return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+    }
+
+    WorkGoal::Settings workSettings(const MobActor &mob, const json::Value &component) {
+        WorkGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", WORK_DEFAULT_SPEED);
+        settings.mActiveTicks = (int32_t) numberOf(component, "active_time", 0.0f);
+        settings.mCanWorkInRain = isFlagSet(component, "can_work_in_rain");
+        settings.mRainToleranceTicks = (int32_t) numberOf(component, "work_in_rain_tolerance", -1.0f);
+        settings.mCooldownTicks = (int32_t) numberOf(component, "goal_cooldown", 0.0f);
+        settings.mSoundDelayMin = (int32_t) numberOf(component, "sound_delay_min", 0.0f);
+        settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
+        settings.mOnArrival = cloneOf(component.get("on_arrival"));
+        return settings;
+    }
+
     MoveToBlockGoal::Settings moveToBlockSettings(const json::Value &component, float speed) {
         MoveToBlockGoal::Settings settings;
         settings.mSpeed = speed;
@@ -554,6 +662,99 @@ namespace {
         settings.mOnReach = cloneOf(component.get("on_reach"));
         settings.mOnStayCompleted = cloneOf(component.get("on_stay_completed"));
         return settings;
+    }
+
+    // seconds truncated to ticks, as the summon_entity definition stores them
+    int32_t summonTicks(const json::Value &component, const char *key, float fallback) {
+        return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+    }
+
+    // "#AARRGGBB", or "#RRGGBB" opaque; anything else keeps the game's white
+    int32_t particleColorOf(const json::Value &choice) {
+        const std::string text = stringOf(choice, "particle_color");
+        const size_t digits = text.size() - 1;
+        if (text.empty() || text[0] != '#' || (digits != 6 && digits != 8)
+            || text.find_first_not_of("0123456789abcdefABCDEF", 1) != std::string::npos)
+            return -1;
+        uint32_t value = (uint32_t) std::stoul(text.substr(1), nullptr, 16);
+        if (digits == 6)
+            value |= 0xFF000000u;
+        return (int32_t) value;
+    }
+
+    SummonEntityGoal::Spawn summonSpawnOf(const json::Value &entry) {
+        SummonEntityGoal::Spawn spawn;
+        spawn.mShape = stringOf(entry, "shape") == "circle" ? SummonEntityGoal::Shape::Circle
+                                                            : SummonEntityGoal::Shape::Line;
+        spawn.mAroundTarget = stringOf(entry, "target") == "target";
+        spawn.mSize = numberOf(entry, "size", spawn.mSize);
+        spawn.mBaseDelay = summonTicks(entry, "base_delay", 0.0f);
+        spawn.mDelayPerSummon = summonTicks(entry, "delay_per_summon", 0.0f);
+        spawn.mCount = (int32_t) numberOf(entry, "num_entities_spawned", (float) spawn.mCount);
+        spawn.mLifespan = summonTicks(entry, "entity_lifespan", -1.0f);
+        spawn.mSummonCap = (int32_t) numberOf(entry, "summon_cap", 0.0f);
+        spawn.mSummonCapRadius = numberOf(entry, "summon_cap_radius", 0.0f);
+        spawn.mEntityType = stringOf(entry, "entity_type");
+        spawn.mSoundEvent = stringOf(entry, "sound_event");
+        spawn.mSummonEvent = stringOf(entry, "summon_event");
+        return spawn;
+    }
+
+    SummonEntityGoal::Choice summonChoiceOf(const json::Value &entry) {
+        SummonEntityGoal::Choice choice;
+        choice.mMinRange = numberOf(entry, "min_activation_range", choice.mMinRange);
+        choice.mMaxRange = numberOf(entry, "max_activation_range", choice.mMaxRange);
+        choice.mCooldown = summonTicks(entry, "cooldown_time", 0.0f);
+        choice.mWeight = numberOf(entry, "weight", choice.mWeight);
+        const json::Value *casting = entry.get("do_casting");
+        choice.mDoCasting = casting == nullptr || casting->boolean(true);
+        choice.mParticleColor = particleColorOf(entry);
+        choice.mFilters = cloneOf(entry.get("filters"));
+        choice.mStartSoundEvent = stringOf(entry, "start_sound_event");
+        // no cast_duration: the whole sequence's delays
+        float sequenceTicks = 0.0f;
+        const json::Value *sequence = entry.get("sequence");
+        if (sequence != nullptr && sequence->isArray()) {
+            for (const std::unique_ptr<json::Value> &step: sequence->mArray) {
+                choice.mSequence.push_back(summonSpawnOf(*step));
+                const SummonEntityGoal::Spawn &spawn = choice.mSequence.back();
+                sequenceTicks += (float) spawn.mBaseDelay;
+                if (spawn.mCount >= 2)
+                    sequenceTicks += (float) ((spawn.mCount - 1) * spawn.mDelayPerSummon);
+            }
+        }
+        choice.mCastDuration = summonTicks(entry, "cast_duration", sequenceTicks / TICKS_PER_SECOND);
+        return choice;
+    }
+
+    SendEventGoal::Choice eventChoiceOf(const json::Value &entry) {
+        SendEventGoal::Choice choice;
+        choice.mMinRange = numberOf(entry, "min_activation_range", choice.mMinRange);
+        choice.mMaxRange = numberOf(entry, "max_activation_range", choice.mMaxRange);
+        choice.mCooldown = summonTicks(entry, "cooldown_time", 0.0f);
+        choice.mWeight = numberOf(entry, "weight", choice.mWeight);
+        const json::Value *look = entry.get("look_at_target");
+        choice.mLookAtTarget = look == nullptr || look->boolean(true);
+        const json::Value *casting = entry.get("do_casting");
+        choice.mDoCasting = casting == nullptr || casting->boolean(true);
+        choice.mParticleColor = particleColorOf(entry);
+        choice.mFilters = cloneOf(entry.get("filters"));
+        choice.mStartSoundEvent = stringOf(entry, "start_sound_event");
+        // no cast_duration: the sum of the steps' delays
+        float sequenceTicks = 0.0f;
+        const json::Value *sequence = entry.get("sequence");
+        if (sequence != nullptr && sequence->isArray()) {
+            for (const std::unique_ptr<json::Value> &item: sequence->mArray) {
+                SendEventGoal::Step step;
+                step.mBaseDelay = summonTicks(*item, "base_delay", 0.0f);
+                step.mEvent = stringOf(*item, "event");
+                step.mSoundEvent = stringOf(*item, "sound_event");
+                sequenceTicks += (float) step.mBaseDelay;
+                choice.mSequence.push_back(step);
+            }
+        }
+        choice.mCastDuration = summonTicks(entry, "cast_duration", sequenceTicks / TICKS_PER_SECOND);
+        return choice;
     }
 }
 
@@ -589,8 +790,17 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior.rfind("dragon", 0) == 0)
         return DragonGoals::create(mob, behavior, component);
 
+    if (behavior.rfind("wither", 0) == 0)
+        return WitherGoals::create(mob, behavior, component);
+
+    if (std::unique_ptr<Goal> warden = WardenGoals::create(mob, behavior, component))
+        return warden;
+
     if (behavior == "float")
         return std::make_unique<FloatGoal>();
+
+    if (behavior == "player_ride_tamed")
+        return std::make_unique<PlayerRideTamedGoal>();
 
     if (behavior == "panic") {
         PanicGoal::Settings settings;
@@ -638,7 +848,7 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                 (int32_t) numberOf(component, "scan_interval", (float) TARGET_SCAN_INTERVAL), targetSight(component));
 
     if (behavior == "defend_village_target") {
-        std::vector<std::shared_ptr<json::Value>> filters;
+        std::vector<CompiledEntityFilter> filters;
         for (NearestAttackableTargetGoal::Entry &entry: targetEntries(component))
             filters.push_back(std::move(entry.mFilters));
         return std::make_unique<DefendVillageTargetGoal>(
@@ -655,6 +865,15 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "melee_attack")
         return std::make_unique<MeleeAttackGoal>(speed, followRange(mob), meleeCoolDown(component),
                                                  attackReachSquared(mob));
+
+    if (behavior == "delayed_attack") {
+        // seconds truncated to ticks; the hit lands that share of the swing in, truncated
+        const int32_t duration = (int32_t) (numberOf(component, "attack_duration", 0.75f) * TICKS_PER_SECOND);
+        const int32_t hitDelay = (int32_t) ((float) duration * numberOf(component, "hit_delay_pct", 0.5f));
+        return std::make_unique<DelayedAttackGoal>(speed, followRange(mob),
+                                                   numberOf(component, "reach_multiplier", 2.0f), duration,
+                                                   hitDelay);
+    }
 
     if (behavior == "melee_box_attack")
         return std::make_unique<MeleeBoxAttackGoal>(
@@ -691,6 +910,26 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
         settings.mMinHeightAboveTarget = rangeValue(component, "height_above_target_range", "min", 0.0f);
         settings.mMaxHeightAboveTarget = rangeValue(component, "height_above_target_range", "max", 0.0f);
         return std::make_unique<CircleAroundAnchorGoal>(settings);
+    }
+
+    if (behavior == "send_event") {
+        std::vector<SendEventGoal::Choice> choices;
+        const json::Value *list = component.get("event_choices");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: list->mArray)
+                choices.push_back(eventChoiceOf(*entry));
+        }
+        return std::make_unique<SendEventGoal>(std::move(choices));
+    }
+
+    if (behavior == "summon_entity") {
+        std::vector<SummonEntityGoal::Choice> choices;
+        const json::Value *list = component.get("summon_choices");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: list->mArray)
+                choices.push_back(summonChoiceOf(*entry));
+        }
+        return std::make_unique<SummonEntityGoal>(std::move(choices));
     }
 
     if (behavior == "swoop_attack")
@@ -739,6 +978,160 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
 
     if (behavior == "silverfish_wake_up_friends")
         return std::make_unique<SilverfishWakeUpFriendsGoal>();
+
+    if (behavior == "follow_target_leader" || behavior == "follow_target_captain") {
+        const bool captain = behavior == "follow_target_captain";
+        FollowTargetLeaderGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mWithinRadius = numberOf(component, "within_radius", 0.0f);
+        settings.mFollowDistance = numberOf(component, "follow_distance", 0.0f);
+        settings.mAlwaysLookForLeader = isFlagSet(component, "always_look_for_leader");
+        settings.mSearchCooldownTicks = (int32_t) numberOf(
+                component, "search_cooldown",
+                (float) (captain ? CAPTAIN_SEARCH_COOLDOWN_TICKS : LEADER_DEFAULT_SEARCH_COOLDOWN_TICKS));
+        const json::Value *filters = component.get("leader_filters");
+        if (filters != nullptr)
+            settings.mLeaderFilters = std::shared_ptr<json::Value>(filters->clone());
+        else if (captain)
+            settings.mLeaderFilters = std::shared_ptr<json::Value>(json::parse(CAPTAIN_LEADER_FILTER));
+        // the game refuses a leader goal with nothing to pick its leader by
+        if (settings.mLeaderFilters == nullptr)
+            return nullptr;
+        return std::make_unique<FollowTargetLeaderGoal>(std::move(settings));
+    }
+
+    if (behavior == "fire_at_target") {
+        const auto ticksOf = [&](const char *key, float fallback) {
+            return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+        };
+        const auto anchorOf = [&](const char *key, FireAtTargetGoal::Anchor fallback) {
+            return (FireAtTargetGoal::Anchor) (int32_t) numberOf(component, key, (float) (int32_t) fallback);
+        };
+        FireAtTargetGoal::Settings settings;
+        const json::Value *projectile = component.get("projectile_def");
+        settings.mProjectile = projectile == nullptr ? "" : projectile->string();
+        settings.mFilters = cloneOf(component.get("filters"));
+        const float minimum = rangeValue(component, "attack_range", "min", 0.0f);
+        const float maximum = rangeValue(component, "attack_range", "max", 0.0f);
+        settings.mMinRangeSquared = minimum * minimum;
+        settings.mMaxRangeSquared = maximum * maximum;
+        settings.mCooldown = ticksOf("attack_cooldown", 0.5f);
+        settings.mPreShootDelay = ticksOf("pre_shoot_delay", 0.75f);
+        settings.mPostShootDelay = ticksOf("post_shoot_delay", 0.2f);
+        settings.mOwnerAnchor = anchorOf("owner_anchor", settings.mOwnerAnchor);
+        settings.mTargetAnchor = anchorOf("target_anchor", settings.mTargetAnchor);
+        settings.mOwnerOffset = vectorOf(component, "owner_offset");
+        settings.mTargetOffset = vectorOf(component, "target_offset");
+        return std::make_unique<FireAtTargetGoal>(std::move(settings));
+    }
+
+    if (behavior == "jump_around_target") {
+        const auto ticksOf = [&](const char *key, float fallback) {
+            return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+        };
+        JumpAroundTargetGoal::Settings settings;
+        settings.mFilters = cloneOf(component.get("filters"));
+        settings.mCooldown = ticksOf("jump_cooldown_duration", 0.5f);
+        settings.mHurtCooldown = ticksOf("jump_cooldown_when_hurt_duration", 0.1f);
+        settings.mLastHurtDuration = ticksOf("last_hurt_duration", 2.0f);
+        settings.mPrepareDuration = ticksOf("prepare_jump_duration", 0.5f);
+        settings.mMaxJumpVelocity = numberOf(component, "max_jump_velocity", settings.mMaxJumpVelocity);
+        settings.mBoxScale = numberOf(component, "entity_bounding_box_scale", settings.mBoxScale);
+        const json::Value *check = component.get("check_collision");
+        settings.mCheckCollision = check != nullptr && check->boolean(false);
+        settings.mLineOfSightIgnoredHeight = (int32_t) numberOf(component, "line_of_sight_obstruction_height_ignore",
+                                                                (float) settings.mLineOfSightIgnoredHeight);
+        settings.mMinTargetDistance = rangeValue(component, "valid_distance_to_target", "min", settings.mMinTargetDistance);
+        settings.mMaxTargetDistance = rangeValue(component, "valid_distance_to_target", "max", settings.mMaxTargetDistance);
+        settings.mLandingSpreadDegrees =
+                numberOf(component, "landing_position_spread_degrees", settings.mLandingSpreadDegrees);
+        settings.mMinLandingDistance =
+                rangeValue(component, "landing_distance_from_target", "min", settings.mMinLandingDistance);
+        settings.mMaxLandingDistance =
+                rangeValue(component, "landing_distance_from_target", "max", settings.mMaxLandingDistance);
+        settings.mRequiredVerticalSpace =
+                (int32_t) numberOf(component, "required_vertical_space", (float) settings.mRequiredVerticalSpace);
+        settings.mSnapRange = (int32_t) numberOf(component, "snap_to_surface_block_range", (float) settings.mSnapRange);
+        const json::Value *angles = component.get("jump_angles");
+        if (angles != nullptr && angles->isArray()) {
+            for (const std::unique_ptr<json::Value> &angle: angles->mArray)
+                settings.mJumpAngles.push_back((float) angle->number(0.0));
+        } else {
+            settings.mJumpAngles = {40.0f, 55.0f, 60.0f, 75.0f, 80.0f};
+        }
+        return std::make_unique<JumpAroundTargetGoal>(std::move(settings));
+    }
+
+    if (behavior == "move_around_target") {
+        MoveAroundTargetGoal::Settings settings;
+        settings.mFilters = cloneOf(component.get("filters"));
+        settings.mSpeed = numberOf(component, "movement_speed", settings.mSpeed);
+        settings.mSpreadDegrees = numberOf(component, "destination_pos_spread_degrees", settings.mSpreadDegrees);
+        settings.mMinDistance = rangeValue(component, "destination_position_range", "min", settings.mMinDistance);
+        settings.mMaxDistance = rangeValue(component, "destination_position_range", "max", settings.mMaxDistance);
+        return std::make_unique<MoveAroundTargetGoal>(std::move(settings));
+    }
+
+    if (behavior == "knockback_roar") {
+        // seconds truncated to ticks, as the definition stores them
+        const auto ticksOf = [&](const char *key, float fallback) {
+            return (int32_t) (numberOf(component, key, fallback) * TICKS_PER_SECOND);
+        };
+        KnockbackRoarGoal::Settings settings;
+        settings.mDuration = ticksOf("duration", 1.0f);
+        settings.mAttackTime = ticksOf("attack_time", 0.5f);
+        settings.mDamage = (int32_t) numberOf(component, "knockback_damage", (float) settings.mDamage);
+        settings.mHorizontalStrength =
+                (int32_t) numberOf(component, "knockback_horizontal_strength", (float) settings.mHorizontalStrength);
+        settings.mHeightCap = numberOf(component, "knockback_height_cap", settings.mHeightCap);
+        settings.mRange = (int32_t) numberOf(component, "knockback_range", (float) settings.mRange);
+        settings.mCooldown = ticksOf("cooldown_time", 0.1f);
+        settings.mKnockbackFilters = cloneOf(component.get("knockback_filters"));
+        settings.mDamageFilters = cloneOf(component.get("damage_filters"));
+        settings.mOnRoarEnd = triggerOf(component, "on_roar_end");
+        return std::make_unique<KnockbackRoarGoal>(std::move(settings));
+    }
+
+    if (behavior == "charge_attack") {
+        ChargeAttackGoal::Settings settings;
+        settings.mMinDistance = numberOf(component, "min_distance", settings.mMinDistance);
+        settings.mMaxDistance = numberOf(component, "max_distance", settings.mMaxDistance);
+        settings.mSuccessRate = numberOf(component, "success_rate", settings.mSuccessRate);
+        settings.mSpeedMultiplier = numberOf(component, "speed_multiplier", settings.mSpeedMultiplier);
+        return std::make_unique<ChargeAttackGoal>(settings);
+    }
+
+    if (behavior == "drink_potion") {
+        std::vector<DrinkPotionGoal::Potion> potions;
+        const json::Value *list = component.get("potions");
+        if (list != nullptr && list->isArray()) {
+            for (const std::unique_ptr<json::Value> &entry: list->mArray) {
+                if (entry == nullptr || !entry->isObject())
+                    continue;
+                DrinkPotionGoal::Potion potion;
+                potion.mId = (int32_t) numberOf(*entry, "id", 0.0f);
+                potion.mChance = numberOf(*entry, "chance", 1.0f);
+                if (const json::Value *filters = entry->get("filters"))
+                    potion.mFilters = std::shared_ptr<json::Value>(filters->clone());
+                potions.push_back(std::move(potion));
+            }
+        }
+        return std::make_unique<DrinkPotionGoal>(std::move(potions));
+    }
+
+    if (behavior == "hold_ground") {
+        HoldGroundGoal::Settings settings;
+        settings.mMinRadius = numberOf(component, "min_radius", HOLD_GROUND_DEFAULT_MIN_RADIUS);
+        settings.mBroadcast = isFlagSet(component, "broadcast");
+        settings.mBroadcastRange = numberOf(component, "broadcast_range", 0.0f);
+        settings.mWithinRadiusEvent = cloneOf(component.get("within_radius_event"));
+        return std::make_unique<HoldGroundGoal>(std::move(settings));
+    }
+
+    if (behavior == "move_to_random_block")
+        return std::make_unique<MoveToRandomBlockGoal>(
+                speed, numberOf(component, "within_radius", 0.0f),
+                (int32_t) numberOf(component, "block_distance", (float) RANDOM_BLOCK_DEFAULT_DISTANCE));
 
     if (behavior == "beg")
         return std::make_unique<BegGoal>(
@@ -867,6 +1260,20 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "teleport_to_owner")
         return std::make_unique<TeleportToOwnerGoal>(cloneOf(component.get("filters")));
 
+    // look_at_entity whose only candidate is the mob's target: the game builds the is_target filter itself
+    if (behavior == "look_at_target") {
+        LookAtEntityGoal::Settings settings;
+        settings.mRange = numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE);
+        settings.mProbability = numberOf(component, "probability", LOOK_DEFAULT_PROBABILITY);
+        settings.mMinLookTicks = secondsToTicks(
+                rangeValue(component, "look_time", "min", LOOK_ENTITY_DEFAULT_MIN_TIME));
+        settings.mMaxLookTicks = secondsToTicks(
+                rangeValue(component, "look_time", "max", LOOK_ENTITY_DEFAULT_MAX_TIME));
+        settings.mHorizontalAngle = numberOf(component, "angle_of_view_horizontal", LOOK_ENTITY_FULL_ANGLE);
+        settings.mFilters = std::shared_ptr<json::Value>(json::parse(IS_TARGET_FILTER));
+        return std::make_unique<LookAtEntityGoal>(settings);
+    }
+
     if (behavior == "look_at_entity") {
         LookAtEntityGoal::Settings settings;
         settings.mRange = numberOf(component, "look_distance", LOOK_DEFAULT_DISTANCE);
@@ -907,6 +1314,25 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                                                  (int32_t) numberOf(component, "search_height", 0.0f),
                                                  numberOf(component, "goal_radius", PICKUP_DEFAULT_GOAL_RADIUS),
                                                  behavior == "move_to_water");
+
+    if (behavior == "move_to_liquid") {
+        // the game's own search scans the box nearest first: search_count stays unused
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", 0.0f);
+        settings.mGoalRadius = numberOf(component, "goal_radius", LIQUID_DEFAULT_GOAL_RADIUS);
+        const std::string material = stringOf(component, "material_type");
+        const MoveToLiquidGoal::Material liquid = material == "Lava"    ? MoveToLiquidGoal::Material::Lava
+                                                  : material == "Water" ? MoveToLiquidGoal::Material::Water
+                                                                        : MoveToLiquidGoal::Material::Any;
+        return std::make_unique<MoveToLiquidGoal>(settings, liquid);
+    }
+
+    if (behavior == "rise_to_liquid_level")
+        return std::make_unique<RiseToLiquidLevelGoal>(numberOf(component, "liquid_y_offset", 0.0f),
+                                                       numberOf(component, "rise_delta", 0.0f),
+                                                       numberOf(component, "sink_delta", 0.0f));
 
     if (behavior == "barter")
         return std::make_unique<BarterGoal>();
@@ -1014,6 +1440,74 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
     if (behavior == "move_through_village")
         return std::make_unique<MoveThroughVillageGoal>(speed, isFlagSet(component, "only_at_night"));
 
+    if (behavior == "hide")
+        return std::make_unique<HideGoal>(speed, PoiType::Bed,
+                                          (int32_t) (numberOf(component, "duration", HIDE_DEFAULT_DURATION)
+                                                     * TICKS_PER_SECOND));
+
+    if (behavior == "move_indoors" || behavior == "move_outdoors")
+        return std::make_unique<MoveIndoorsGoal>(
+                behavior == "move_indoors" ? MoveIndoorsGoal::Direction::Indoors : MoveIndoorsGoal::Direction::Outdoors,
+                speed, (int32_t) (numberOf(component, "timeout_cooldown", 0.0f) * TICKS_PER_SECOND));
+
+    if (behavior == "celebrate_survive") {
+        CelebrateSurviveGoal::Settings settings;
+        settings.mDurationTicks = (int32_t) (numberOf(component, "duration", CELEBRATE_DEFAULT_DURATION)
+                                             * TICKS_PER_SECOND);
+        settings.mFireworksMinTicks = (int32_t) (rangeValue(component, "fireworks_interval", "min",
+                                                            CELEBRATE_SURVIVE_DEFAULT_MIN)
+                                                 * TICKS_PER_SECOND);
+        settings.mFireworksMaxTicks = (int32_t) (rangeValue(component, "fireworks_interval", "max",
+                                                            CELEBRATE_SURVIVE_DEFAULT_MAX)
+                                                 * TICKS_PER_SECOND);
+        settings.mOnEnd = cloneOf(component.get("on_celebration_end_event"));
+        return std::make_unique<CelebrateSurviveGoal>(std::move(settings));
+    }
+
+    if (behavior == "mingle") {
+        MingleGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mDurationTicks = (int32_t) (numberOf(component, "duration", MINGLE_DEFAULT_DURATION)
+                                             * TICKS_PER_SECOND);
+        settings.mCooldownTicks = (int32_t) (numberOf(component, "cooldown_time", 0.0f) * TICKS_PER_SECOND);
+        settings.mMingleDistance = numberOf(component, "mingle_distance", MINGLE_DEFAULT_DISTANCE);
+        settings.mPartnerType = stringOf(component, "mingle_partner_type");
+        if (settings.mPartnerType.empty())
+            settings.mPartnerType = mob.getIdentifier();
+        return std::make_unique<MingleGoal>(std::move(settings));
+    }
+
+    if (behavior == "play") {
+        PlayGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mChanceToStart = numberOf(component, "chance_to_start", 0.0f);
+        settings.mFollowDistance = numberOf(component, "follow_distance", PLAY_DEFAULT_FOLLOW_DISTANCE);
+        const json::Value *area = component.get("friend_search_area");
+        settings.mFriendSearchArea = area != nullptr && area->isArray() && area->mArray.size() >= 3
+                                             ? vectorOf(component, "friend_search_area")
+                                             : PLAY_DEFAULT_SEARCH_AREA;
+        settings.mMaxPlayTicks = (int32_t) (numberOf(component, "max_play_duration_seconds", PLAY_DEFAULT_SECONDS)
+                                            * TICKS_PER_SECOND);
+        settings.mRandomRange = (int32_t) numberOf(component, "random_pos_search_range", PLAY_DEFAULT_RANGE);
+        settings.mRandomHeight = (int32_t) numberOf(component, "random_pos_search_height", PLAY_DEFAULT_HEIGHT);
+        const json::Value *friends = component.get("friend_types");
+        if (friends != nullptr && friends->isArray()) {
+            for (const std::unique_ptr<json::Value> &type: friends->mArray)
+                settings.mFriendFilters.push_back(cloneOf(type->get("filters")));
+        }
+        return std::make_unique<PlayGoal>(std::move(settings));
+    }
+
+    if (behavior == "explore_outskirts") {
+        ExploreOutskirtsGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mExploreDistance = numberOf(component, "explore_dist", EXPLORE_DEFAULT_DISTANCE);
+        settings.mMinDistanceFromTarget = numberOf(component, "min_dist_from_target", EXPLORE_DEFAULT_MIN_DISTANCE);
+        settings.mMaxWaitTicks = (int32_t) (numberOf(component, "max_wait_time", EXPLORE_DEFAULT_WAIT_SECONDS)
+                                            * TICKS_PER_SECOND);
+        return std::make_unique<ExploreOutskirtsGoal>(settings);
+    }
+
     if (behavior == "move_towards_dwelling_restriction")
         return std::make_unique<MoveTowardsDwellingRestrictionGoal>(speed);
 
@@ -1038,17 +1532,99 @@ std::unique_ptr<Goal> BehaviorGoals::_create(const MobActor &mob, const std::str
                 numberOf(component, "max_distance_from_player", TRADE_DEFAULT_MAX_DISTANCE));
     }
 
-    if (behavior == "work") {
-        WorkGoal::Settings settings;
-        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", WORK_DEFAULT_SPEED);
-        settings.mActiveTicks = (int32_t) numberOf(component, "active_time", 0.0f);
-        settings.mCanWorkInRain = isFlagSet(component, "can_work_in_rain");
-        settings.mRainToleranceTicks = (int32_t) numberOf(component, "work_in_rain_tolerance", -1.0f);
-        settings.mCooldownTicks = (int32_t) numberOf(component, "goal_cooldown", 0.0f);
-        settings.mSoundDelayMin = (int32_t) numberOf(component, "sound_delay_min", 0.0f);
-        settings.mSoundDelayMax = (int32_t) numberOf(component, "sound_delay_max", 0.0f);
-        settings.mOnArrival = cloneOf(component.get("on_arrival"));
-        return std::make_unique<WorkGoal>(std::move(settings));
+    if (behavior == "work")
+        return std::make_unique<WorkGoal>(workSettings(mob, component));
+
+    if (behavior == "look_at_trading_player")
+        return std::make_unique<LookAtTradingPlayerGoal>();
+
+    if (behavior == "trade_interest") {
+        TradeInterestGoal::Settings settings;
+        settings.mRadius = numberOf(component, "within_radius", 0.0f);
+        settings.mInterestTicks = secondsAsTicks(component, "interest_time", TRADE_INTEREST_DEFAULT_SECONDS);
+        settings.mRemoveItemTicks = secondsAsTicks(component, "remove_item_time", TRADE_INTEREST_DEFAULT_REMOVE_SECONDS);
+        settings.mSwitchTicks = secondsAsTicks(component, "carried_item_switch_time",
+                                               TRADE_INTEREST_DEFAULT_SWITCH_SECONDS);
+        settings.mCooldownTicks = secondsAsTicks(component, "cooldown", TRADE_INTEREST_DEFAULT_COOLDOWN_SECONDS);
+        return std::make_unique<TradeInterestGoal>(settings);
+    }
+
+    if (behavior == "inspect_bookshelf") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", 0.0f);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", BOOKSHELF_DEFAULT_HEIGHT);
+        settings.mSearchCount = (int32_t) numberOf(component, "search_count", BOOKSHELF_DEFAULT_COUNT);
+        settings.mGoalRadius = numberOf(component, "goal_radius", BOOKSHELF_DEFAULT_GOAL_RADIUS);
+        settings.mGiveUpTicks = BOOKSHELF_GIVE_UP_TICKS;
+        return std::make_unique<InspectBookshelfGoal>(settings);
+    }
+
+    if (behavior == "work_composter") {
+        WorkComposterGoal::Composting composting;
+        composting.mUseBlockMin = (int32_t) numberOf(component, "use_block_min", COMPOSTER_DEFAULT_USE_MIN);
+        composting.mUseBlockMax = (int32_t) numberOf(component, "use_block_max", COMPOSTER_DEFAULT_USE_MAX);
+        composting.mBlockInteractionMax = (int32_t) numberOf(component, "block_interaction_max",
+                                                             COMPOSTER_DEFAULT_INTERACTIONS);
+        composting.mItemsPerUseMax =
+                (int32_t) numberOf(component, "items_per_use_max", COMPOSTER_DEFAULT_ITEMS_PER_USE);
+        composting.mMinItemCount = (int32_t) numberOf(component, "min_item_count", COMPOSTER_DEFAULT_MIN_ITEMS);
+        const json::Value *canEmpty = component.get("can_empty_composter");
+        composting.mCanEmpty = canEmpty == nullptr || canEmpty->boolean(true);
+        const json::Value *canFill = component.get("can_fill_composter");
+        composting.mCanFill = canFill == nullptr || canFill->boolean(true);
+        return std::make_unique<WorkComposterGoal>(workSettings(mob, component), composting);
+    }
+
+    // the game refuses these goals on anything but a villager
+    const bool villager = dynamic_cast<const VillagerV2Actor *>(&mob) != nullptr;
+    if (behavior == "make_love")
+        return villager ? std::make_unique<MakeLoveGoal>() : nullptr;
+
+    if (behavior == "receive_love")
+        return villager ? std::make_unique<ReceiveLoveGoal>() : nullptr;
+
+    if (behavior == "share_items") {
+        ShareItemsGoal::Settings settings;
+        settings.mSpeed = speed;
+        settings.mMaxDistance = (int32_t) numberOf(component, "max_dist", (float) SHARE_DEFAULT_MAX_DISTANCE);
+        const json::Value *types = component.get("entity_types");
+        if (types != nullptr && types->isArray()) {
+            for (const std::unique_ptr<json::Value> &type: types->mArray)
+                settings.mFilters.push_back(cloneOf(type->get("filters")));
+        } else if (types != nullptr) {
+            settings.mFilters.push_back(cloneOf(types->get("filters")));
+        }
+        return std::make_unique<ShareItemsGoal>(std::move(settings));
+    }
+
+    if (behavior == "harvest_farm_block") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", HARVEST_DEFAULT_SPEED);
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", HARVEST_DEFAULT_RANGE);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", HARVEST_DEFAULT_HEIGHT);
+        settings.mSearchCount = (int32_t) numberOf(component, "search_count", 0.0f);
+        settings.mGoalRadius = numberOf(component, "goal_radius", HARVEST_DEFAULT_GOAL_RADIUS);
+        HarvestFarmBlockGoal::Timing timing;
+        timing.mMaxTicksBeforeSearch = secondsAsTicks(component, "max_seconds_before_search",
+                                                      HARVEST_DEFAULT_SEARCH_SECONDS);
+        timing.mSearchCooldownTicks = secondsAsTicks(component, "search_cooldown_max_seconds",
+                                                     HARVEST_DEFAULT_COOLDOWN_SECONDS);
+        timing.mTicksUntilNewTask = secondsAsTicks(component, "seconds_until_new_task", HARVEST_DEFAULT_TASK_SECONDS);
+        return std::make_unique<HarvestFarmBlockGoal>(settings, timing);
+    }
+
+    if (behavior == "fertilize_farm_block") {
+        BaseMoveToBlockGoal::Settings settings;
+        settings.mSpeed = mob.getMovementSpeed() * numberOf(component, "speed_multiplier", FERTILIZE_DEFAULT_SPEED);
+        settings.mSearchRange = (int32_t) numberOf(component, "search_range", FERTILIZE_DEFAULT_RANGE);
+        settings.mSearchHeight = (int32_t) numberOf(component, "search_height", FERTILIZE_DEFAULT_HEIGHT);
+        settings.mSearchCount = (int32_t) numberOf(component, "search_count", FERTILIZE_DEFAULT_COUNT);
+        settings.mGoalRadius = numberOf(component, "goal_radius", FERTILIZE_DEFAULT_GOAL_RADIUS);
+        settings.mGiveUpTicks = FERTILIZE_GIVE_UP_TICKS;
+        return std::make_unique<FertilizeFarmBlockGoal>(
+                settings, (int32_t) numberOf(component, "max_fertilizer_usage", FERTILIZE_DEFAULT_USES),
+                secondsAsTicks(component, "search_cooldown_max_seconds", FERTILIZE_DEFAULT_COOLDOWN_SECONDS));
     }
 
     if (behavior == "sleep") {

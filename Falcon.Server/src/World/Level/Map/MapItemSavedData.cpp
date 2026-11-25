@@ -215,13 +215,18 @@ bool MapItemSavedData::writePixels(int32_t x, int32_t y, int32_t width, int32_t 
 }
 
 bool MapItemSavedData::applyClientPixels(const std::vector<MapPixel> &pixels) {
-    if (mImage)
+    if (mImage || mLocked)
         return false;
 
     bool changed = false;
     for (const MapPixel &pixel: pixels) {
         // the game indexes its array without a bound check
         if (pixel.mPixel == 0 || pixel.mIndex < 0 || pixel.mIndex >= PIXEL_COUNT)
+            continue;
+
+        // the client only fills what the map lacks: never let it repaint explored pixels
+        const uint32_t current = mPixels[(size_t) pixel.mIndex];
+        if (current != 0 && current != UNEXPLORED_PIXEL)
             continue;
 
         changed |= setPixel(pixel.mIndex & 0x7f, pixel.mIndex >> 7, (uint32_t) pixel.mPixel);

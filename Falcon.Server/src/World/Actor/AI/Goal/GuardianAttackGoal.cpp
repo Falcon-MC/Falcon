@@ -81,7 +81,7 @@ void GuardianAttackGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
     owner.broadcastActorEvent(mob, GUARDIAN_ATTACK);
 
     const Difficulty difficulty = owner.getProperties().getDifficulty();
-    MobAttack::hit(owner, mob, *target, mob.getAttackDamage(difficulty));
+    MobAttack::hit(owner, mob, *target, mob.getAttackDamage());
     if (difficulty == Difficulty::Normal || difficulty == Difficulty::Hard)
         hurtWithMagic(owner, mob, *target);
 }

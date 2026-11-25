@@ -22,3 +22,13 @@ void SculkCatalystBlock::onPlacedInLevel(ServerNetworkHandler &owner, Level &lev
     (void) state;
     level.getBlockActors().getOrCreate<SculkCatalystBlockActor>(position);
 }
+
+void SculkCatalystBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                           const BlockState &state) const {
+    (void) owner;
+    if (state.mStates.getByte("bloom", 0) == 0)
+        return;
+    Tag states = state.mStates;
+    states.putByte("bloom", 0);
+    level.setBlock(position, BlockState(state.mName, states), true);
+}

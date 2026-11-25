@@ -6,6 +6,8 @@
 #include "Protocol/Types/ContainerType.h"
 #include "Protocol/Types/ItemStack.h"
 
+#include <functional>
+#include <memory>
 #include <string>
 
 #include <cstdint>
@@ -81,6 +83,16 @@ public:
 
     bool isCartographyOpen() const;
 
+    bool onClientOpenGrindstone(const Vector3i &position);
+    bool isGrindstoneOpen() const;
+    bool isGrindstoneOpenIn(const Level &level) const;
+    void syncGrindstoneInputs();
+
+    bool onClientOpenLoom(const Vector3i &position);
+    bool isLoomOpen() const;
+    bool isLoomOpenIn(const Level &level) const;
+    void syncLoomInputs();
+
     bool onClientOpenSmithing(const Vector3i &position);
     bool isSmithingOpen() const;
     void syncSmithingInputs();
@@ -115,6 +127,8 @@ public:
     }
 
     const Vector3i &getAnvilPosition() const;
+
+    bool isWorkbenchOpenIn(const Level &level) const;
 
     bool openContainer(ContainerType type, const Vector3i &position);
 
@@ -169,6 +183,17 @@ public:
     // a ContainerOpenPacket naming the actor; false while another window is open or it has no container
     bool openEntityContainer(ServerActor &actor, ContainerType type);
 
+    // a plugin's container, drawn from a block or an actor the client knows: no block actor holds it. The window id,
+    // CONTAINER_ID_NONE while another window is open; onClosed runs once it closes
+    int openPluginWindow(std::shared_ptr<Container> container, ContainerType type, const Vector3i &position,
+                         int64_t actorId, std::function<void(int)> onClosed);
+
+    // the plugin window with that id, nullptr once it closed
+    Container *getPluginWindow(int windowId);
+
+    // resends the plugin window after the plugin changed a slot
+    void refreshPluginWindow();
+
     // the trade screen opens from UpdateTradePacket alone, no ContainerOpenPacket
     bool openTrade(int64_t traderId, UpdateTradePacket &packet);
 
@@ -216,6 +241,14 @@ public:
     }
 
     bool refreshEnchantInput(const ItemStack &current, int32_t newSeed);
+
+    // the options last sent to this player: the only ones it may take, and the earlier ones are dropped
+    void setEnchantOptions(std::vector<int32_t> enchantNetIds);
+
+    // false for another player's option, and once the item the options were rolled for left the table
+    bool offersEnchant(int32_t enchantNetId, const ItemStack &input) const;
+
+    void clearEnchantOptions();
 
     int32_t getEnchantSeed() const {
         return mEnchantSeed;
@@ -269,7 +302,8 @@ private:
 
     void _animateChest(ChestBlockActor &chest, bool open);
 
-    void _animateBlockContainer(const Vector3i &position, bool open, const char *openSound, const char *closeSound);
+    void _animateBlockContainer(const Vector3i &position, bool open, const char *openSound, const char *closeSound,
+                                int32_t openData = 2);
 
     void _animateBarrel(const Vector3i &position, bool open);
 
@@ -311,11 +345,15 @@ private:
     int mAnvilWindowId = CONTAINER_ID_NONE;
     ContainerType mAnvilWindowType = ContainerType::Anvil;
     Vector3i mAnvilPosition;
+    // the world the workbench window was opened in
+    const Level *mWorkbenchLevel = nullptr;
     CartographyLock mClientMapLock;
     int32_t mStonecutterSelectedRecipe = 0;
     int mContainerWindowId = CONTAINER_ID_NONE;
     Vector3i mContainerPosition;
     int64_t mContainerActorId = -1;
+    std::shared_ptr<Container> mPluginWindow;
+    std::function<void(int)> mPluginWindowClosed;
     int mTradeWindowId = CONTAINER_ID_NONE;
     int64_t mTradeActorId = -1;
     std::vector<std::pair<const Level *, int64_t>> mTouchedColumns;
@@ -323,6 +361,7 @@ private:
     int32_t mEnchantInputCount = 0;
     int32_t mEnchantInputDamage = 0;
     int32_t mEnchantSeed = 0;
+    std::vector<int32_t> mEnchantOptionIds;
     int mFurnaceWindowId;
     Vector3i mFurnacePosition;
     FurnaceKind mFurnaceKind;

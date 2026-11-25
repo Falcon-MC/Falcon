@@ -1,6 +1,8 @@
 #include "Network/Handler/BlockActionHandler.h"
 #include "Protocol/Packets/PlayerAuthInputPacket.h"
 
+#include "World/Item/FarmSeedItem.h"
+#include "World/Level/Block/CropBlock.h"
 #include "World/Item/ItemProperties.h"
 #include "World/Level/Block/BlockData.h"
 #include "World/Level/Block/BlockSupport.h"
@@ -29,12 +31,12 @@
 #include "World/Item/StringToItemParser.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/NetworkHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Falcon/Plugin/PluginBlock.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Protocol/BlockStateHasher.h"
 #include "Protocol/Packets/ActorEventPacket.h"
 #include "Protocol/Packets/LevelEventPacket.h"
@@ -62,6 +64,30 @@
 namespace {
     const float MOVEMENT_BLOCK_RANGE = 3.0f;
 
+    // the sound and particle packets plugins may filter; null for any other packet
+    EventSignal<WorldEffectBeforeEvent> *worldEffectSignal(ServerNetworkHandler &owner, const Packet &packet) {
+        BeforeEvents &before = owner.getEventBus().before();
+        switch (packet.getId()) {
+            case MinecraftPacketIds::PlaySound:
+            case MinecraftPacketIds::LevelSoundEvent:
+                return &before.mWorldSound;
+            case MinecraftPacketIds::SpawnParticleEffect:
+            case MinecraftPacketIds::LevelEventGeneric:
+                return &before.mWorldParticle;
+            case MinecraftPacketIds::LevelEvent: {
+                const int32_t id = static_cast<const LevelEventPacket &>(packet).mEventId;
+                if ((1000 <= id && id <= 1066) || (3512 <= id && id <= 3515))
+                    return &before.mWorldSound;
+                if ((id & 0x4000) != 0 || (2000 <= id && id <= 2040) || id == 3510 || id == 3511
+                    || (3603 <= id && id <= 3614) || id == LevelEventPacket::ParticleSmashAttackGroundDust)
+                    return &before.mWorldParticle;
+                return nullptr;
+            }
+            default:
+                return nullptr;
+        }
+    }
+
     bool isNearPlayer(const ServerPlayer &player, const Vector3f &position) {
         const Vector3f &feet = player.getPosition();
         const float dx = position.x - feet.x;
@@ -70,7 +96,6 @@ namespace {
         return dx * dx + dy * dy + dz * dz <= MOVEMENT_BLOCK_RANGE * MOVEMENT_BLOCK_RANGE;
     }
 
-    using MovementPhysics::PLAYER_BASE_OFFSET;
     const double BREAK_SPEED_CHANGE_EPSILON = 0.0001;
     const double BREAK_PROGRESS_EPSILON = 0.000001;
     // progress counts server ticks from the tick after the start, not input ticks:
@@ -321,9 +346,11 @@ namespace {
         update.mRuntimeId = (uint32_t) BlockStateHasher::hash(state.mName, state.mStates);
         update.mFlags = UpdateBlockPacket::Flag::All;
         update.mDataLayer = 0;
-        BlockActionHandler::broadcastToViewers(
-                owner, level, Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
-                update);
+        // a correction for the requester only: a broadcast would let one client flood every viewer
+        owner.getNetworkHandler().send(player.getNetworkIdentifier(), update, owner.getCodecContext());
+        if (isNearPlayer(player,
+                         Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f)))
+            player.awaitMovementChange();
     }
 
     void syncBlocksNearby(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &clicked, int face) {
@@ -412,17 +439,43 @@ void BlockActionHandler::broadcastToViewers(ServerNetworkHandler &owner, Level &
     const int32_t chunkZ = (int32_t) std::floor(position.z) >> 4;
     const int64_t key = ((int64_t) chunkX << 32) | (uint32_t) chunkZ;
 
+    EventSignal<WorldEffectBeforeEvent> *worldEffect = worldEffectSignal(owner, packet);
+    if (worldEffect != nullptr && worldEffect->hasSubscribers()) {
+        std::vector<NetworkIdentifier> viewers;
+        for (auto &entry: owner.getPlayers()) {
+            if (&entry.second != except && entry.second.getWorldId() == level.getWorldId()
+                && entry.second.getDimension() == level.getDimensionType()
+                && entry.second.getSentChunks().count(key) != 0)
+                viewers.push_back(entry.first);
+        }
+        WorldEffectBeforeEvent event(level, position, packet, viewers);
+        worldEffect->emit(event);
+        if (!event.isCancelled())
+            owner.getNetworkHandler().sendToMany(viewers, packet, owner.getCodecContext());
+        return;
+    }
+
+    const bool individualHooks = owner.getNetworkHandler().hasSendHook();
+    std::vector<NetworkIdentifier> viewers;
+    if (!individualHooks)
+        viewers.reserve(owner.getPlayers().size());
     for (auto &entry: owner.getPlayers()) {
         if (&entry.second == except)
             continue;
 
-        if (&owner.getLevelFor(entry.second) != &level || entry.second.getSentChunks().count(key) == 0)
+        if (entry.second.getWorldId() != level.getWorldId()
+            || entry.second.getDimension() != level.getDimensionType() || entry.second.getSentChunks().count(key) == 0)
             continue;
 
-        owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+        if (individualHooks)
+            owner.getNetworkHandler().send(entry.first, packet, owner.getCodecContext());
+        else
+            viewers.push_back(entry.first);
         if (packet.getId() == MinecraftPacketIds::UpdateBlock && isNearPlayer(entry.second, position))
             entry.second.awaitMovementChange();
     }
+    if (!individualHooks)
+        owner.getNetworkHandler().sendToMany(viewers, packet, owner.getCodecContext());
 }
 
 void BlockActionHandler::broadcastBlockUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
@@ -460,7 +513,7 @@ bool BlockActionHandler::_canInteractWithBlock(ServerPlayer &player, const Vecto
     const float maxDistance = player.isCreative() ? 13.0f : 7.0f;
 
     const Vector3f feet = player.getPosition();
-    const Vector3f eyePosition(feet.x, feet.y + PLAYER_BASE_OFFSET, feet.z);
+    const Vector3f eyePosition(feet.x, feet.y + player.getBaseOffset(), feet.z);
     const Vector3f target((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
 
     const float dx = target.x - eyePosition.x;
@@ -531,26 +584,46 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
         return;
     }
 
-    PluginEvent pluginEvent;
-    pluginEvent.mType = FALCON_EVENT_BLOCK_BREAK;
-    pluginEvent.mCancellable = true;
-    pluginEvent.mPlayer = &player;
-    pluginEvent.mBlockPosition = position;
-    pluginEvent.mBlockName = brokenState.mName;
-    PluginManager::getInstance().dispatch(pluginEvent);
-    if (pluginEvent.mCancelled) {
-        sendCurrentBlockState(owner, player, position);
-        return;
-    }
-
     const std::string brokenIdentifier = brokenState.mName;
     const BlockData *brokenData = BlockDataTable::find(brokenState.mName.c_str());
     const bool creative = player.isCreative();
     const ItemStack heldItem = player.getInventory().getItemInHand();
-
     // a block the held item cannot harvest drops nothing for a player; explosions and pistons still drop it
     const bool harvested = brokenData == nullptr || canHarvest(*brokenData, heldItem);
-    destroyBlock(owner, level, position, brokenState, !creative && harvested, heldItem, &player);
+    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
+
+    // plugins listening see the drops and the experience, worked out once, and may change them
+    EventSignal<PlayerDestroyBlockBeforeEvent> &destroy = owner.getEventBus().before().mPlayerDestroyBlock;
+    const bool listening = destroy.hasSubscribers();
+    std::vector<ItemStack> drops;
+    int32_t experience = 0;
+    if (listening) {
+        if (!creative && harvested && level.getGameRules().getBool("dotiledrops"))
+            drops = blockDrops(owner, &level, position, brokenState, heldItem);
+        if (!creative && !silkTouch && harvested)
+            experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+
+        PlayerDestroyBlockBeforeEvent destroyEvent(player, position, brokenState, drops, experience);
+        destroy.emit(destroyEvent);
+        if (destroyEvent.isCancelled()) {
+            sendCurrentBlockState(owner, player, position);
+            return;
+        }
+    }
+
+    if (const Block *broken = VanillaBlocks::fromState(brokenState))
+        broken->onPlayerWillDestroy(owner, player, level, position, brokenState);
+    // the game posts it as the player is about to destroy the block, with the block still there
+    level.postGameEvent(GameEvents::BLOCK_DESTROY,
+                        Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
+                        &player, &brokenState);
+    destroyBlock(owner, level, position, brokenState, !listening && !creative && harvested, heldItem, &player);
+    if (listening) {
+        const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        for (const ItemStack &drop: drops)
+            owner.dropItem(level, dropPosition, drop, ItemActorHandler::randomDropMotion(),
+                           ItemActorHandler::DROP_PICKUP_DELAY);
+    }
     BlockSensor::onBlockBroken(owner, level, position, brokenState, player);
     PluginBlock::brokenBy(player, position, brokenIdentifier);
 
@@ -563,13 +636,11 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
     brokenEvent.mItemAfterBreak = player.getInventory().getItemInHand();
     owner.getEventBus().after().mPlayerBreakBlock.emit(brokenEvent);
 
-    const bool silkTouch = ItemEnchantments::getLevel(heldItem, EnchantmentIds::SILK_TOUCH) > 0;
-    if (!creative && !silkTouch && harvested) {
-        const int experience = ExperienceValues::getOreDropExperience(brokenState.mName);
-        if (experience > 0) {
-            const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
-            owner.spawnExperienceOrbs(level, orbPosition, experience);
-        }
+    if (!listening && !creative && !silkTouch && harvested)
+        experience = ExperienceValues::getOreDropExperience(brokenState.mName);
+    if (experience > 0) {
+        const Vector3f orbPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
+        owner.spawnExperienceOrbs(level, orbPosition, experience);
     }
 
     player.exhaust(0.005f);
@@ -655,7 +726,9 @@ std::vector<ItemStack> BlockActionHandler::blockDrops(ServerNetworkHandler &owne
 
         ItemStack drop;
         drop.mDefinition = owner.getItemDefinitions().getDefinition(parsed->second);
-        drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsed->second);
+        // Several crops share a name with the harvest item, which carries no block runtime ID.
+        if (parsed->second != brokenState.mName || dynamic_cast<const CropBlock *>(brokenBlock) == nullptr)
+            drop.mBlockDefinition = owner.getBlockDefinitions().getDefinition(parsed->second);
         drop.mCount = count;
 
         if (brokenBlock != nullptr && level != nullptr)
@@ -1203,15 +1276,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (scripts.beforePlayerInteractWithBlock(player, transaction.mBlockPosition, face))
         return false;
 
-    PluginEvent interactPluginEvent;
-    interactPluginEvent.mType = FALCON_EVENT_PLAYER_INTERACT_BLOCK;
-    interactPluginEvent.mCancellable = true;
-    interactPluginEvent.mPlayer = &player;
-    interactPluginEvent.mBlockPosition = transaction.mBlockPosition;
-    interactPluginEvent.mBlockFace = (uint32_t) face;
-    PluginManager::getInstance().dispatch(interactPluginEvent);
-    if (interactPluginEvent.mCancelled)
-        return false;
+    EventSignal<PlayerInteractBlockBeforeEvent> &interact = owner.getEventBus().before().mPlayerInteractBlock;
+    if (interact.hasSubscribers()) {
+        PlayerInteractBlockBeforeEvent interactEvent(player, transaction.mBlockPosition, face);
+        interact.emit(interactEvent);
+        if (interactEvent.isCancelled())
+            return false;
+    }
 
     scripts.onPlayerInteractWithBlock(player, clickedState.mName, transaction.mBlockPosition, face,
                                       transaction.mClickPosition);
@@ -1242,7 +1313,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         return true;
 
     if (!onCooldown && useBlock && clickedBlock != nullptr
-        && clickedBlock->onInteract(owner, player, transaction.mBlockPosition, clickedState))
+        && clickedBlock->onInteractAt(owner, player, transaction.mBlockPosition, clickedState, transaction.mBlockFace,
+                                      transaction.mClickPosition))
         return true;
 
     if (!itemFirst && itemType != nullptr
@@ -1251,7 +1323,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         return true;
 
     // a pack item with minecraft:entity_placer puts its entity against the clicked face, like a spawn egg
-    if (itemType == nullptr && !onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr) {
+    if (!onCooldown && !interactItem.isAir() && interactItem.mDefinition != nullptr
+        && interactItem.mDefinition->isComponentBased()) {
         const CustomItemDefinition *placer =
                 CustomContentRegistry::getInstance().findItem(interactItem.mDefinition->getIdentifier());
         if (placer != nullptr && placer->mHasEntityPlacer
@@ -1270,11 +1343,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
         }
     }
 
-    if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success) {
-        return true;
-    }
-
     const ItemStack &heldItem = inventory.getItemInHand();
+    const Tag *seed = FarmSeedItem::getSeedComponent(heldItem);
+    const bool cocoaBeans = heldItem.mDefinition != nullptr
+                            && heldItem.mDefinition->getIdentifier() == "minecraft:cocoa_beans";
+    // Planting is an item use. The client may omit a successful block-placement prediction.
+    if (transaction.mClientInteractPrediction != ItemUsePredictedResult::Success && seed == nullptr && !cocoaBeans)
+        return true;
 
     // a pack item with minecraft:block_placer places that block, on the blocks it lists when it lists any
     std::shared_ptr<BlockDefinition> placerDefinition;
@@ -1286,6 +1361,22 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
                 || std::find(placer->mPlacerUseOn.begin(), placer->mPlacerUseOn.end(), clickedState.mName)
                            != placer->mPlacerUseOn.end()))
             placerDefinition = owner.getBlockDefinitions().getDefinition(placer->mPlacerBlock);
+    }
+
+    if (seed != nullptr) {
+        if (onCooldown || PlacementOrientation::faceFromName(seed->getString("plant_at_face")) != face
+            || !(FarmSeedItem::plantsOn(*seed, clickedState.mName)
+                 || (seed->getBool("plant_at_any_solid_surface") && BlockSupport::isSolid(clickedState))))
+            return false;
+        placerDefinition = owner.getBlockDefinitions().getDefinition(seed->getString("crop_result"));
+        if (!placerDefinition)
+            return false;
+    } else if (dynamic_cast<const CropBlock *>(heldBlock) != nullptr && heldItem.mDefinition != nullptr
+               && BlockPickItem::identifierFor(heldBlock->getIdentifier()) != heldItem.mDefinition->getIdentifier()) {
+        // Wheat and beetroot share their identifiers with crops, but only their seeds can plant them.
+        return false;
+    } else if (!onCooldown && cocoaBeans) {
+        placerDefinition = owner.getBlockDefinitions().getDefinition("minecraft:cocoa");
     }
 
     const bool bucket = BucketItem::isBucket(heldItem);
@@ -1320,8 +1411,7 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (!isBlockChangeAllowed(level, target, player) || PistonSystem::isMovingInto(level, target))
         return false;
 
-    const BlockDefinition &definition = heldItem.mBlockDefinition != nullptr ? *heldItem.mBlockDefinition
-                                                                             : *placerDefinition;
+    const BlockDefinition &definition = placerDefinition != nullptr ? *placerDefinition : *heldItem.mBlockDefinition;
 
     BlockState mergedState(definition.getIdentifier(), definition.getState());
     PlacementMergeResult mergeResult = PlacementMergeResult::None;
@@ -1375,15 +1465,13 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     if (scripts.beforePlayerPlaceBlock(player, level, target, face, transaction.mClickPosition, placedState))
         return false;
 
-    PluginEvent placePluginEvent;
-    placePluginEvent.mType = FALCON_EVENT_BLOCK_PLACE;
-    placePluginEvent.mCancellable = true;
-    placePluginEvent.mPlayer = &player;
-    placePluginEvent.mBlockPosition = target;
-    placePluginEvent.mBlockName = placedState.mName;
-    PluginManager::getInstance().dispatch(placePluginEvent);
-    if (placePluginEvent.mCancelled)
-        return false;
+    EventSignal<PlayerPlaceBlockBeforeEvent> &place = owner.getEventBus().before().mPlayerPlaceBlock;
+    if (place.hasSubscribers()) {
+        PlayerPlaceBlockBeforeEvent placeEvent(player, target, placedState);
+        place.emit(placeEvent);
+        if (placeEvent.isCancelled())
+            return false;
+    }
 
     std::vector<BlockPlacementEntry> placementBlocks;
 
@@ -1458,6 +1546,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     }
 
     owner.playBlockSound(level, LevelSoundEvent::PLACE, targetCenter, (int32_t) blockHash);
+    // after the place sound, with the placed block: wool and carpets dampen it
+    level.postGameEvent(GameEvents::BLOCK_PLACE, targetCenter, &player, &placedState);
 
     if (placedBlock != nullptr)
         placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, placementFace);

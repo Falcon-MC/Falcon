@@ -1,5 +1,8 @@
 #include "Network/ServerNetworkHandler.h"
 
+#include "Falcon/Plugin/PluginManager.h"
+#include "Server/Commands/ServerCommandOrigin.h"
+
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Server/Commands/AboutCommand.h"
@@ -22,11 +25,14 @@
 #include "Server/Commands/GameModeCommand.h"
 #include "Server/Commands/GameRuleCommand.h"
 #include "Server/Commands/GiveCommand.h"
+#include "Server/Commands/HudCommand.h"
+#include "Server/Commands/InputPermissionCommand.h"
 #include "Server/Commands/KickCommand.h"
 #include "Server/Commands/KillCommand.h"
 #include "Server/Commands/ListCommand.h"
 #include "Server/Commands/LocateCommand.h"
 #include "Server/Commands/MeCommand.h"
+#include "Server/Commands/MusicCommand.h"
 #include "Server/Commands/OpCommand.h"
 #include "Server/Commands/PardonCommand.h"
 #include "Server/Commands/PardonIpCommand.h"
@@ -41,17 +47,23 @@
 #include "Server/Commands/GameTestCommand.h"
 #include "Server/Commands/ScriptEventCommand.h"
 #include "Server/Commands/SeedCommand.h"
+#include "Server/Commands/CloneCommand.h"
+#include "Server/Commands/FunctionCommand.h"
+#include "Server/Commands/PlayAnimationCommand.h"
 #include "Server/Commands/SetBlockCommand.h"
 #include "Server/Commands/SetMaxPlayersCommand.h"
 #include "Server/Commands/SetWorldSpawnCommand.h"
 #include "Server/Commands/SpawnPointCommand.h"
+#include "Server/Commands/SpreadPlayersCommand.h"
 #include "Server/Commands/AimAssistCommand.h"
 #include "Server/Commands/CameraShakeCommand.h"
+#include "Server/Commands/FogCommand.h"
 #include "Server/Commands/DebugHudCommand.h"
 #include "Server/Commands/StatusCommand.h"
 #include "Server/Commands/StopCommand.h"
 #include "Server/Commands/StopSoundCommand.h"
 #include "Server/Commands/SummonCommand.h"
+#include "Server/Commands/RecipeCommand.h"
 #include "Server/Commands/TagCommand.h"
 #include "Server/Commands/TickingAreaCommand.h"
 #include "Server/Commands/TeleportCommand.h"
@@ -83,6 +95,55 @@
 #include <vector>
 
 namespace {
+    class PermissionGroupsCommand final : public Command {
+    public:
+        explicit PermissionGroupsCommand(ServerNetworkHandler &owner)
+                : Command("permissiongroup", "Manages permission groups",
+                          "permissiongroup <list|create|delete|default|assign|unassign|inherit|uninherit|set|unset|reload>"),
+                  mOwner(owner) {}
+
+        CommandPermission getRequiredPermission() const override {
+            return CommandPermission::Internal;
+        }
+
+        std::vector<CommandOverloadData> getOverloads() const override {
+            CommandOverloadData overload;
+            overload.mParameters = {
+                    makeEnumParameter("action", "PermissionGroupAction", {"list", "create", "delete", "default",
+                                                                           "assign", "unassign", "inherit", "uninherit",
+                                                                           "set", "unset", "reload"}),
+                    makeTypedParameter("arguments", CommandParamType::RawText, true)};
+            return {std::move(overload)};
+        }
+
+        bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) override {
+            // the console's alone
+            if (dynamic_cast<ServerCommandOrigin *>(&sender) == nullptr) {
+                sender.sendTranslation("commands.generic.error.permissions", {getName()});
+                return false;
+            }
+            auto &permissions = mOwner.getPluginManager().getPermissions();
+            if (arguments.size() == 1 && arguments[0] == "list") {
+                const auto names = permissions.groupNames();
+                sender.sendMessage(names.empty() ? "No permission groups." : Command::joinArguments(names, 0));
+                return true;
+            }
+            if (!permissions.updateGroups(arguments)) {
+                sender.sendMessage("Could not update permission groups. Check the arguments and configuration.");
+                return false;
+            }
+            for (auto &[id, player]: mOwner.getPlayers()) {
+                if (player.isSpawned())
+                    mOwner._sendAvailableCommands(player);
+            }
+            sender.sendMessage("Permission groups updated.");
+            return true;
+        }
+
+    private:
+        ServerNetworkHandler &mOwner;
+    };
+
     std::string toLowerCopy(const std::string &value) {
         std::string lowered = value;
         for (char &character: lowered) {
@@ -195,8 +256,8 @@ namespace {
     }
 
     // "@k" and "@k[key=value,...]"; only type, name, c and scores: an unknown argument invalidates the selector
-    // instead of widening it to every target
-    SelectorFilter parseSelector(const std::string &selector) {
+    // instead of widening it to every target; scores off: they read objectives a low sender can't see
+    SelectorFilter parseSelector(const std::string &selector, bool scores) {
         SelectorFilter filter;
         if (selector.size() < 2 || selector[0] != '@')
             return filter;
@@ -284,7 +345,7 @@ namespace {
                 if (filter.mLimit == 0)
                     return filter;
             } else if (key == "scores") {
-                if (negated || !parseScores(value, filter.mScores))
+                if (negated || !scores || !parseScores(value, filter.mScores))
                     return filter;
             } else {
                 return filter;
@@ -315,10 +376,13 @@ namespace {
 }
 
 void ServerNetworkHandler::_registerCommands() {
+    mCommands.registerCommand(std::make_shared<PermissionGroupsCommand>(*this));
     mCommands.registerCommand(std::make_shared<GameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<OpCommand>(*this));
     mCommands.registerCommand(std::make_shared<DeopCommand>(*this));
     mCommands.registerCommand(std::make_shared<GiveCommand>(*this));
+    mCommands.registerCommand(std::make_shared<HudCommand>(*this));
+    mCommands.registerCommand(std::make_shared<InputPermissionCommand>(*this));
     mCommands.registerCommand(std::make_shared<ReplaceItemCommand>(*this));
     mCommands.registerCommand(std::make_shared<EnchantCommand>(*this));
     mCommands.registerCommand(std::make_shared<EffectCommand>(*this));
@@ -334,12 +398,14 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TitleCommand>(*this, true));
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, false));
     mCommands.registerCommand(std::make_shared<SpawnPointCommand>(*this, true));
+    mCommands.registerCommand(std::make_shared<SpreadPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetWorldSpawnCommand>(*this));
     mCommands.registerCommand(std::make_shared<SayCommand>(*this));
     mCommands.registerCommand(std::make_shared<ScriptEventCommand>(*this));
     mCommands.registerCommand(std::make_shared<GameTestCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellCommand>(*this));
     mCommands.registerCommand(std::make_shared<MeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<MusicCommand>(*this));
     mCommands.registerCommand(std::make_shared<TellRawCommand>(*this));
     mCommands.registerCommand(std::make_shared<TimeCommand>(*this));
     mCommands.registerCommand(std::make_shared<WorldCommand>(*this));
@@ -360,6 +426,11 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<PardonIpCommand>(*this));
     mCommands.registerCommand(std::make_shared<BanListCommand>(*this));
     mCommands.registerCommand(std::make_shared<SeedCommand>(*this));
+    mCommands.registerCommand(std::make_shared<CloneCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FunctionCommand>(*this));
+    mCommands.registerCommand(std::make_shared<PlayAnimationCommand>(*this));
+    // no help: the client keeps its own and runs it; a server one clashes with it and the client then drops
+    // the arguments of the other commands
     mCommands.registerCommand(std::make_shared<DefaultGameModeCommand>(*this));
     mCommands.registerCommand(std::make_shared<SetMaxPlayersCommand>(*this));
     mCommands.registerCommand(std::make_shared<StopCommand>(*this));
@@ -369,6 +440,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<StatusCommand>(*this));
     mCommands.registerCommand(std::make_shared<DebugHudCommand>(*this));
     mCommands.registerCommand(std::make_shared<CameraShakeCommand>(*this));
+    mCommands.registerCommand(std::make_shared<FogCommand>(*this));
     mCommands.registerCommand(std::make_shared<AimAssistCommand>(*this));
     mCommands.registerCommand(std::make_shared<TransferCommand>(*this));
     mCommands.registerCommand(std::make_shared<PlaySoundCommand>(*this));
@@ -380,6 +452,7 @@ void ServerNetworkHandler::_registerCommands() {
     mCommands.registerCommand(std::make_shared<TestForBlockCommand>());
     mCommands.registerCommand(std::make_shared<TestForBlocksCommand>());
     mCommands.registerCommand(std::make_shared<TagCommand>(*this));
+    mCommands.registerCommand(std::make_shared<RecipeCommand>(*this));
     mCommands.registerCommand(std::make_shared<ScoreboardCommand>(*this));
     mCommands.registerCommand(std::make_shared<TickingAreaCommand>(*this));
 }
@@ -445,7 +518,8 @@ std::vector<ServerPlayer *> ServerNetworkHandler::resolveTargets(CommandOrigin &
         return targets;
     }
 
-    const SelectorFilter filter = parseSelector(selector);
+    const SelectorFilter filter =
+            parseSelector(selector, sender.getCommandPermission() >= CommandPermission::GameDirectors);
     if (!filter.mValid || !matchesType(filter, "minecraft:player"))
         return targets;
 
@@ -521,7 +595,8 @@ std::vector<ServerActor *> ServerNetworkHandler::resolveActorTargets(CommandOrig
                                                                      const std::string &selector) {
     std::vector<ServerActor *> targets;
 
-    const SelectorFilter filter = parseSelector(selector);
+    const SelectorFilter filter =
+            parseSelector(selector, sender.getCommandPermission() >= CommandPermission::GameDirectors);
     // @s of an entity that is not a player: the executing actor itself
     if (filter.mValid && filter.mKind == 's') {
         ServerActor *self = dynamic_cast<ServerActor *>(sender.getEntity());
@@ -564,24 +639,22 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
     const int32_t previousGameMode = player.getGameType();
 
     if (previousGameMode != gameMode) {
-        PluginEvent gameModeEvent;
-        gameModeEvent.mType = FALCON_EVENT_PLAYER_GAME_MODE_CHANGE;
-        gameModeEvent.mCancellable = true;
-        gameModeEvent.mPlayer = &player;
-        gameModeEvent.mGameMode = gameMode;
-        gameModeEvent.mPreviousGameMode = previousGameMode;
-        mPluginManager->dispatch(gameModeEvent);
-        if (gameModeEvent.mCancelled)
-            return;
+        EventSignal<PlayerGameModeChangeBeforeEvent> &gameModeChange = mEventBus.before().mPlayerGameModeChange;
+        if (gameModeChange.hasSubscribers()) {
+            PlayerGameModeChangeBeforeEvent gameModeEvent(player, previousGameMode, gameMode);
+            gameModeChange.emit(gameModeEvent);
+            if (gameModeEvent.isCancelled())
+                return;
+        }
         if (mScriptEngine.beforePlayerGameModeChange(player, previousGameMode, gameMode))
             return;
+        player.setAllowFlight(std::nullopt);
     }
 
     player.setGameType(gameMode);
     player.setHungerEnabled(gameMode == (int32_t) GameType::Survival || gameMode == (int32_t) GameType::Adventure);
 
-    const bool mayFly = gameMode == (int32_t) GameType::Creative || gameMode == (int32_t) GameType::Spectator;
-    if (!mayFly && player.isFlying()) {
+    if (previousGameMode != gameMode && !player.canToggleFlight() && player.isFlying()) {
         player.setFlying(false);
         player.setOnGround(MovementHandler::checkGroundState(getLevelFor(player), player.getPosition(), &player));
     }
@@ -604,6 +677,16 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
         mEventBus.after().mPlayerGameModeChange.emit(event);
         mScriptEngine.onPlayerGameModeChange(player, previousGameMode, gameMode);
     }
+}
+
+void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
+                                             std::vector<CommandOutputMessage> messages, bool success) {
+    CommandOutputPacket output;
+    output.mOrigin = origin;
+    output.mType = CommandOutputType::AllOutput;
+    output.mSuccessCount = success ? 1 : 0;
+    output.mMessages = std::move(messages);
+    mNetworkHandler->send(player.getNetworkIdentifier(), output, mCodecContext);
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,

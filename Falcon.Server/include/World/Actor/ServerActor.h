@@ -21,8 +21,13 @@
 #include <vector>
 
 struct CustomActorDefinition;
+class ActorLeash;
+class GameEventListener;
 class Container;
 class ServerNetworkHandler;
+namespace json {
+    struct Value;
+}
 class ServerPlayer;
 
 struct ProjectileData {
@@ -43,6 +48,8 @@ struct ProjectileData {
     bool mStuck = false;
     int32_t mStuckTicks = 0;
     Vector3i mStuckBlock;
+    // the point it struck: it stays while that point is inside the block's shape
+    Vector3f mStuckAt;
     bool mPickupCreativeOnly = false;
     ItemStack mPickupItem;
     int32_t mFavoredSlot = -1;
@@ -76,6 +83,35 @@ public:
         return ActorSize{DEFAULT_WIDTH, DEFAULT_HEIGHT};
     }
 
+    // the listener an entity carries for game events, as a block actor can
+    virtual GameEventListener *getGameEventListener() {
+        return nullptr;
+    }
+
+    // another entity's box overlapped this one's and pushed it
+    virtual void onPushedBy(ServerNetworkHandler &owner, int64_t pusherId) {
+        (void) owner;
+        (void) pusherId;
+    }
+
+    // the collision box against blocks, scaled around its middle; the jump of behavior.jump_around_target shrinks it
+    float getCollisionScale() const {
+        return mCollisionScale;
+    }
+
+    void setCollisionScale(float scale) {
+        mCollisionScale = scale;
+    }
+
+    // the ground's friction is left out, as in the air: a long jump keeps its speed
+    bool discardsFriction() const {
+        return mDiscardsFriction;
+    }
+
+    void setDiscardsFriction(bool discards) {
+        mDiscardsFriction = discards;
+    }
+
     virtual bool isExpired() const {
         return false;
     }
@@ -84,6 +120,13 @@ public:
         (void) owner;
         (void) amount;
         (void) source;
+        return false;
+    }
+
+    // true when the actor got out of the way: the projectile keeps flying, nothing is hit
+    virtual bool dodgeProjectile(ServerNetworkHandler &owner, const ServerActor &projectile) {
+        (void) owner;
+        (void) projectile;
         return false;
     }
 
@@ -138,6 +181,11 @@ public:
         (void) owner;
     }
 
+    // shown to clients by a plugin's own packets: none of Falcon's go out for it
+    virtual bool isDrawnByPlugin() const {
+        return false;
+    }
+
     virtual bool isInvulnerable() const {
         return false;
     }
@@ -156,8 +204,26 @@ public:
         (void) context;
     }
 
+    // the item a pick block on this actor gives; by default its spawn egg, which may not exist
+    virtual std::string getPickItem() const;
+
     // the minecraft:inventory a player can open: chest vehicles, chested and tamed mounts
     virtual Container *getEntityContainer() {
+        return nullptr;
+    }
+
+    // minecraft:leashable of the active definition; nullptr: no lead holds this actor
+    virtual const json::Value *getLeashableComponent() const {
+        return nullptr;
+    }
+
+    // the lead of a leashable actor
+    virtual ActorLeash *getActorLeash() {
+        return nullptr;
+    }
+
+    // minecraft:leashable_to: the leads a player holds can be tied to this actor
+    virtual const json::Value *getLeashableToComponent() const {
         return nullptr;
     }
 
@@ -234,6 +300,16 @@ public:
     bool needsMovementSync() const;
 
     void markMovementSynced();
+
+    // the last move packet each viewer got, by its runtime id
+    struct MoveSent {
+        int64_t mTick = 0;
+        bool mOnGround = false;
+    };
+
+    std::unordered_map<uint64_t, MoveSent> &getMovesSent() {
+        return mMovesSent;
+    }
 
     const char *getIdentifier() const override {
         return mIdentifier.c_str();
@@ -340,6 +416,20 @@ public:
         mLifetimeTicks++;
     }
 
+    // a summoned actor's entity_lifespan in ticks; the client counts it down from actor data 78
+    void setLimitedLife(int32_t ticks) {
+        mLimitedLifeTicks = ticks;
+    }
+
+    int32_t getLimitedLifeTicks() const {
+        return mLimitedLifeTicks;
+    }
+
+    // true on the tick the limited life runs out
+    bool tickLimitedLife() {
+        return mLimitedLifeTicks > 0 && --mLimitedLifeTicks == 0;
+    }
+
     void setExperienceValue(int32_t value) {
         mExperienceValue = value;
     }
@@ -381,7 +471,7 @@ public:
         mNameTag = nameTag;
     }
 
-    bool isPersistent() const {
+    virtual bool isPersistent() const {
         return mPersistent || !mNameTag.empty();
     }
 
@@ -433,18 +523,35 @@ protected:
         return ProjectileComponent();
     }
 
+    // null outside the kill() a hurt() runs
+    const ActorDamageSource *getFatalSource() const {
+        return mFatalSource;
+    }
+
+    // the loot and experience a death gathered for the death event, which drops them once plugins saw them
+    void holdDeathDrops(std::vector<ItemStack> items, int32_t experience) {
+        mDeathDrops = std::move(items);
+        mDeathExperience = experience;
+        mDeathDropsHeld = true;
+    }
+
 private:
     std::string mIdentifier;
+    float mCollisionScale = 1.0f;
+    bool mDiscardsFriction = false;
     double mBuoyancyTimer = 0.0;
     int64_t mPushSoundTick = INT64_MIN / 2;
     Vector3f mSyncedPosition;
     Vector3f mSyncedRotation;
     bool mMovementSynced = false;
+    std::unordered_map<uint64_t, MoveSent> mMovesSent;
     const CustomActorDefinition *mDefinition = nullptr;
     bool mIsProjectile = false;
     int64_t mOwnerUniqueId = -1;
     uint32_t mOwnerPlayerHandle = 0xFFFFFFFF;
     int32_t mLifetimeTicks = 0;
+    // -1: no limited life
+    int32_t mLimitedLifeTicks = -1;
     int32_t mDeathTicks = 0;
     int32_t mExperienceValue = 0;
     int32_t mPickupDelay = 0;
@@ -457,6 +564,9 @@ private:
     std::vector<int64_t> mPendingPassengers;
     // the hit being dealt while kill() runs from hurt(): the death event reports its cause
     const ActorDamageSource *mFatalSource = nullptr;
+    std::vector<ItemStack> mDeathDrops;
+    int32_t mDeathExperience = 0;
+    bool mDeathDropsHeld = false;
 
     std::unordered_map<std::string, int32_t> mIntProperties;
     std::unordered_map<std::string, float> mFloatProperties;

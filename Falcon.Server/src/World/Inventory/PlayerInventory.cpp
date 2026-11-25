@@ -22,6 +22,7 @@ PlayerInventory::PlayerInventory()
         item = ItemStack::air();
     }
     mStonecutterInput = ItemStack::air();
+    mBeaconPayment = ItemStack::air();
 
     for (ItemStack &item: mItems) {
         item = ItemStack::air();
@@ -189,6 +190,33 @@ void PlayerInventory::setTradeItem(int slot, ItemStack item) {
     mTrade[(size_t) slot] = std::move(item);
 }
 
+int PlayerInventory::grindstoneIndex(ContainerSlotType container) {
+    switch (container) {
+        case ContainerSlotType::GrindstoneInput: return 0;
+        case ContainerSlotType::GrindstoneAdditional: return 1;
+        default: return -1;
+    }
+}
+
+void PlayerInventory::setGrindstoneItem(int index, ItemStack item) {
+    assignNetId(item);
+    mGrindstone[(size_t) index] = std::move(item);
+}
+
+int PlayerInventory::loomIndex(ContainerSlotType container) {
+    switch (container) {
+        case ContainerSlotType::LoomInput: return 0;
+        case ContainerSlotType::LoomDye: return 1;
+        case ContainerSlotType::LoomMaterial: return 2;
+        default: return -1;
+    }
+}
+
+void PlayerInventory::setLoomItem(int index, ItemStack item) {
+    assignNetId(item);
+    mLoom[(size_t) index] = std::move(item);
+}
+
 int PlayerInventory::smithingIndex(ContainerSlotType container) {
     switch (container) {
         case ContainerSlotType::SmithingTableInput: return 0;
@@ -206,6 +234,11 @@ void PlayerInventory::setSmithingItem(int index, ItemStack item) {
 void PlayerInventory::setStonecutterInput(ItemStack item) {
     assignNetId(item);
     mStonecutterInput = std::move(item);
+}
+
+void PlayerInventory::setBeaconPayment(ItemStack item) {
+    assignNetId(item);
+    mBeaconPayment = std::move(item);
 }
 
 void PlayerInventory::setOffhand(ItemStack item) {
@@ -303,6 +336,19 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
         case ContainerSlotType::Trade2Ingredient2:
             return &mTrade[1];
 
+        case ContainerSlotType::GrindstoneInput:
+        case ContainerSlotType::GrindstoneAdditional: {
+            const int index = grindstoneIndex(container);
+            return slot == GRINDSTONE_FIRST_SLOT + index ? &mGrindstone[(size_t) index] : nullptr;
+        }
+
+        case ContainerSlotType::LoomInput:
+        case ContainerSlotType::LoomDye:
+        case ContainerSlotType::LoomMaterial: {
+            const int index = loomIndex(container);
+            return slot == LOOM_FIRST_SLOT + index ? &mLoom[(size_t) index] : nullptr;
+        }
+
         case ContainerSlotType::SmithingTableInput:
         case ContainerSlotType::SmithingTableMaterial:
         case ContainerSlotType::SmithingTableTemplate: {
@@ -315,6 +361,12 @@ const ItemStack *PlayerInventory::resolveSlot(ContainerSlotType container, int s
                 return nullptr;
             }
             return &mStonecutterInput;
+
+        case ContainerSlotType::BeaconPayment:
+            if (slot != BEACON_PAYMENT_NETWORK_SLOT) {
+                return nullptr;
+            }
+            return &mBeaconPayment;
 
         case ContainerSlotType::CraftingInput:
             if (slot >= CRAFTING_NETWORK_SLOT_FIRST && slot < CRAFTING_NETWORK_SLOT_FIRST + CRAFTING_SIZE) {
@@ -489,6 +541,21 @@ void PlayerInventory::clear() {
     for (ItemStack &item: mTrade) {
         item = ItemStack::air();
     }
+
+    for (ItemStack &item: mSmithing) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mGrindstone) {
+        item = ItemStack::air();
+    }
+
+    for (ItemStack &item: mLoom) {
+        item = ItemStack::air();
+    }
+
+    mStonecutterInput = ItemStack::air();
+    mBeaconPayment = ItemStack::air();
 }
 
 void PlayerInventory::assignNetId(ItemStack &item) {

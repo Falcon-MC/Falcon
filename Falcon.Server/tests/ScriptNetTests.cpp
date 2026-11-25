@@ -188,7 +188,7 @@ namespace {
             const std::string path = head.substr(head.find(' ') + 1,
                                                  head.find(' ', head.find(' ') + 1) - head.find(' ') - 1);
 
-            if (path == "/ws" || path == "/ws-bye" || path == "/ws-big") {
+            if (path == "/ws" || path == "/ws-bye" || path == "/ws-big" || path == "/ws-rsv") {
                 const std::string key = header(head, "sec-websocket-key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
                 unsigned char digest[SHA_DIGEST_LENGTH];
                 SHA1((const unsigned char *) key.data(), key.size(), digest);
@@ -204,6 +204,13 @@ namespace {
                         header.push_back((char) (((uint64_t) 1 << 30) >> shift));
                     sendAll(client, header + "yyyy");
                     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+                    TEST_CLOSE(client);
+                    return;
+                }
+                if (path == "/ws-rsv") {
+                    // RSV1 set with no extension negotiated: the client must drop the message
+                    frame(client, 0x41, "rsv");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
                     TEST_CLOSE(client);
                     return;
                 }
@@ -251,6 +258,12 @@ namespace {
             } else if (path == "/structure") {
                 Gzip::decompress(body, reply);
                 type = "Application/X-Minecraft-NBT;  Type=structure";
+            } else if (path == "/bad-chunk") {
+                // a negative size once read as the largest chunk the client could hold
+                sendAll(client, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+                                "-1\r\nxx\r\n0\r\n\r\n");
+                TEST_CLOSE(client);
+                return;
             } else if (path == "/missing") {
                 sendAll(client, "HTTP/1.1 404 Not Found\r\nContent-Length: 4\r\nConnection: close\r\n\r\nnope");
                 TEST_CLOSE(client);
@@ -333,6 +346,15 @@ world.afterEvents.worldLoad.subscribe(async () => {
             (e) => describe(e) + "|" + e.inFlightRequests + "|" + e.maxConcurrentRequests);
         net.http.cancelAll("stop");
         r.cancelled = await slow.then(() => "resolved", (e) => describe(e) + "|" + (e instanceof Error));
+        // the cancelled request keeps its slot until its aborted thread ends
+        await new Promise((resolve) => system.runTimeout(resolve, 5));
+
+        r.badChunk = await net.http.get(base + "/bad-chunk").then(() => "resolved", (e) => e.name);
+        r.injected = await net.http.request(new net.HttpRequest(base + "/echo").addHeader("X-Bad", "a\r\nX-Evil: 1"))
+            .then(() => "resolved", (e) => e.name + ": " + e.errorMessage);
+        const hosted = await net.http.request(new net.HttpRequest(base + "/echo").addHeader("Host", "evil.example"));
+        r.host = hosted.body.includes("\r\nHost: 127.0.0.1:" + admin.variables.get("port") + "\r\n")
+            && !hosted.body.includes("evil.example");
 
         const structure = world.structureManager.createEmpty("test:source", { x: 2, y: 1, z: 3 });
         const uploaded = await net.http.request(new net.HttpRequest(base + "/structure").setMethod(net.HttpRequestMethod.Put)
@@ -374,6 +396,12 @@ world.afterEvents.worldLoad.subscribe(async () => {
             const seen = [];
             big.afterEvents.message.subscribe((event) => seen.push(event.message));
             big.afterEvents.close.subscribe((event) => resolve(seen.length + "|" + event.reason));
+        });
+        const rsv = await net.websocket.connect(ws + "/ws-rsv");
+        r.closedRsv = await new Promise((resolve) => {
+            const seen = [];
+            rsv.afterEvents.message.subscribe((event) => seen.push(event.message));
+            rsv.afterEvents.close.subscribe(() => resolve(String(seen.length)));
         });
         r.refused = await net.websocket.connect("ws://127.0.0.1:1/ws").then(() => "resolved", (e) => e.name);
     } catch (e) {
@@ -529,6 +557,9 @@ world.afterEvents.worldLoad.subscribe(async () => {
                "RequestBodyTooLargeError: HTTP request or Web Socket message body exceeds allowed size.|4096|5000");
         expect(*values, "limit", "HttpRequestLimitExceededError: Maximum concurrent HTTP requests exceeded.|1|1");
         expect(*values, "cancelled", "Error: stop|true");
+        expect(*values, "badChunk", "InternalHttpRequestError");
+        expect(*values, "injected", "InternalHttpRequestError: invalid header");
+        expect(*values, "host", "true");
         expect(*values, "deserialized", "test:copy:2,1,3");
         expect(*values, "again", "SerializableParseError: A structure named 'test:copy' already exists.");
         expect(*values, "wrongType", "SerializableParseError: No deserializer registered for Content-Type: .");
@@ -547,6 +578,7 @@ world.afterEvents.worldLoad.subscribe(async () => {
         expect(*values, "closeClosed", "WebSocketNotConnectedError: This web socket is not connected.");
         expect(*values, "closedByServer", "bye|0");
         expect(*values, "closedTooLarge", "0|2");
+        expect(*values, "closedRsv", "0");
         expect(*values, "refused", "InternalWebSocketError");
         expect(*values, "sent", "TextPacket:1:Guest;TextPacket:1:none;");
         expect(*values, "received", "TextPacket:42:Guest;");

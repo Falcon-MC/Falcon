@@ -1,6 +1,7 @@
 #include "World/Level/Block/DispenserBlock.h"
 
 #include "World/Level/Block/BlockClassRegistry.h"
+#include "World/Level/Block/ComposterBlock.h"
 #include "World/Level/Block/DispenseSource.h"
 
 // before ContainerBlock, which matches the dispenser and the dropper too
@@ -17,7 +18,6 @@ FALCON_REGISTER_BLOCK(DispenserBlock, 45);
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Core/Math/VectorMath.h"
-#include "Falcon/Plugin/PluginManager.h"
 
 #include <random>
 
@@ -104,6 +104,12 @@ void DispenserBlock::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
         level.scheduleUpdate(position, TRIGGER_DELAY_TICKS);
 }
 
+void DispenserBlock::onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                                     const BlockState &state) const {
+    ContainerBlock::onPlacedInLevel(owner, level, position, state);
+    onRedstoneUpdate(owner, level, position, state);
+}
+
 void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                        const BlockState &state) const {
     ContainerBlockActor *actor = level.getBlockActors().find<ContainerBlockActor>(position);
@@ -124,18 +130,25 @@ void DispenserBlock::onScheduledUpdate(ServerNetworkHandler &owner, Level &level
     if (facing < 0 || facing >= 6)
         facing = 0;
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_BLOCK_DISPENSE)) {
-        ItemStack fired = inventory.getContainerItem(slot);
-        PluginEvent event;
-        event.mType = FALCON_EVENT_BLOCK_DISPENSE;
-        event.mCancellable = true;
-        event.mLevel = &level;
-        event.mBlockPosition = position;
-        event.mBlockName = state.mName;
-        event.mItem = &fired;
-        plugins->dispatch(event);
-        if (event.mCancelled)
+    EventSignal<BlockDispenseBeforeEvent> &dispense = owner.getEventBus().before().mBlockDispense;
+    if (dispense.hasSubscribers()) {
+        BlockDispenseBeforeEvent event(level, position, state, inventory.getContainerItem(slot));
+        dispense.emit(event);
+        if (event.isCancelled())
             return;
+    }
+
+    // a composter in front takes the item as a player gives it; one it refuses is dispensed as usual
+    const Vector3i front(position.x + FACE_OFFSETS[facing][0], position.y + FACE_OFFSETS[facing][1],
+                         position.z + FACE_OFFSETS[facing][2]);
+    const BlockState *frontState = level.peekBlockPtr(front.x, front.y, front.z);
+    ItemStack composted = inventory.getContainerItem(slot);
+    if (frontState != nullptr && ComposterBlock::matches(frontState->mName)
+        && ComposterBlock::addItem(owner, level, front, composted)) {
+        --composted.mCount;
+        inventory.setContainerItem(slot, composted.mCount <= 0 ? ItemStack::air() : std::move(composted));
+        owner.refreshContainerViewers(position);
+        return;
     }
 
     const ContainerBlockDefinition *definition = findDefinition(state.mName);

@@ -3,15 +3,19 @@
 #include "Network/ServerNetworkHandler.h"
 
 #include "World/Level/Block/Actor/BannerBlockActor.h"
+#include "World/Level/Block/Actor/BeaconBlockActor.h"
 #include "World/Level/Block/Actor/VaultBlockActor.h"
 #include "World/Level/Block/Actor/BeehiveBlockActor.h"
 #include "World/Level/Block/Actor/BellBlockActor.h"
+#include "World/Level/Block/Actor/NoteBlockActor.h"
 #include "World/Level/Block/Actor/BrushableBlockActor.h"
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 #include "World/Level/Block/Actor/FlowerPotBlockActor.h"
 #include "World/Level/Block/Actor/SignBlockActor.h"
+#include "World/Level/Block/Actor/SkullBlockActor.h"
 #include "World/Level/Block/Actor/ChestBlockActor.h"
 #include "World/Level/Block/Actor/CommandBlockActor.h"
+#include "World/Level/Block/Actor/ConduitBlockActor.h"
 #include "World/Level/Block/Actor/ContainerBlockActor.h"
 #include "World/Level/Block/Actor/CopperGolemStatueBlockActor.h"
 #include "World/Level/Block/Actor/DataDrivenBlockActor.h"
@@ -21,6 +25,7 @@
 #include "World/Level/Block/Actor/BlockActorClassRegistry.h"
 #include "World/Level/Block/Actor/FurnaceBlockActor.h"
 #include "World/Level/Block/Actor/HopperBlockActor.h"
+#include "World/Level/Block/Actor/JukeboxBlockActor.h"
 #include "World/Level/Block/Actor/ItemFrameBlockActor.h"
 #include "World/Level/Block/Actor/LodestoneBlockActor.h"
 #include "World/Level/Block/Actor/MobSpawnerBlockActor.h"
@@ -357,11 +362,14 @@ FALCON_REGISTER_BLOCK_ACTOR(BeehiveBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(DataDrivenBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(EndGatewayBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BellBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(NoteBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(StructureBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(LodestoneBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(ConduitBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(MobSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(TrialSpawnerBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(BannerBlockActor);
+FALCON_REGISTER_BLOCK_ACTOR(SkullBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(FlowerPotBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(CauldronBlockActor);
 FALCON_REGISTER_BLOCK_ACTOR(SignBlockActor);

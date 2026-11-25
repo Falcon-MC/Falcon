@@ -14,15 +14,15 @@ public:
     std::vector<CommandOverloadData> getOverloads() const override;
 
 private:
-    bool _add(CommandOrigin &sender, const std::vector<std::string> &arguments, const Vector3i &origin);
+    bool _add(CommandOrigin &sender, const std::vector<std::string> &arguments, const Vector3f &origin);
 
-    bool _remove(CommandOrigin &sender, const std::vector<std::string> &arguments, const Vector3i &origin);
+    bool _remove(CommandOrigin &sender, const std::vector<std::string> &arguments, const Vector3f &origin);
 
     bool _removeAll(CommandOrigin &sender);
 
     bool _list(CommandOrigin &sender, const std::vector<std::string> &arguments);
 
-    bool _preload(CommandOrigin &sender, const std::vector<std::string> &arguments, const Vector3i &origin);
+    bool _preload(CommandOrigin &sender, const std::vector<std::string> &arguments, const Vector3f &origin);
 
     void _sendInUse(CommandOrigin &sender);
 

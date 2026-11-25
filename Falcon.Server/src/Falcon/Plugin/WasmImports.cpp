@@ -1,6 +1,7 @@
 #include "Falcon/Plugin/WasmPlugin.h"
 
 #include "World/Actor/Mob/MobActor.h"
+#include "World/Level/Map/ImageMap.h"
 #include "World/Level/Level.h"
 #include "World/Level/WorldManager.h"
 #include "Network/ServerNetworkHandler.h"
@@ -8,6 +9,7 @@
 #include "Falcon/Plugin/PluginServerApi.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -176,6 +178,98 @@ namespace {
         return call.write(call.u32(index), buffer, sizeof(buffer));
     }
 
+    const uint8_t *guestList(Call &call, uint32_t address, uint32_t count, uint32_t elementSize) {
+        size_t memorySize = 0;
+        const uint8_t *memory = call.plugin().memoryData(memorySize);
+        if (memory == nullptr || (uint64_t) address + (uint64_t) count * elementSize > memorySize) {
+            call.fail("out of bounds list");
+            return nullptr;
+        }
+        return memory + address;
+    }
+
+    bool returnList(Call &call, size_t result, const void *data, uint32_t count, uint32_t size, uint32_t alignment) {
+        uint32_t address = 0;
+        if (!call.lower(data, (size_t) count * size, alignment, address))
+            return false;
+        const uint32_t list[] = {address, count};
+        return call.write(call.u32(result), list, sizeof(list));
+    }
+
+    struct GuestItemInfo {
+        uint32_t mPresent = 1;
+        uint32_t mName = 0;
+        uint32_t mNameLength;
+        uint32_t mMaxStackSize;
+        int32_t mMaxDurability;
+        uint32_t mToolType;
+        uint32_t mToolTier;
+        int32_t mAttackDamage;
+        uint32_t mArmorSlot;
+        int32_t mArmorPoints;
+        int32_t mArmorToughness;
+        int32_t mNutrition;
+        float mSaturation;
+    };
+
+    struct GuestBlockInfo {
+        uint32_t mPresent = 1;
+        uint32_t mName = 0;
+        uint32_t mNameLength;
+        float mHardness;
+        float mBlastResistance;
+        uint32_t mToolType;
+        uint32_t mToolTier;
+        int32_t mLightEmission;
+        uint8_t mTransparent;
+        uint8_t mSolid;
+        uint16_t mPadding = 0;
+        int32_t mFlameEncouragement;
+        int32_t mFlammability;
+        uint32_t mMaxStackSize;
+    };
+
+    static_assert(sizeof(GuestItemInfo) == 52);
+    static_assert(sizeof(GuestBlockInfo) == 48);
+
+    bool returnImageGrid(Call &call, size_t result, const int64_t *ids, uint32_t count, uint32_t columns,
+                         uint32_t rows) {
+        if (count == 0) {
+            const uint8_t absent = 0;
+            return call.write(call.u32(result), &absent, 1);
+        }
+        uint32_t address = 0;
+        if (!call.lower(ids, (size_t) count * sizeof(*ids), alignof(int64_t), address))
+            return false;
+        const uint32_t grid[] = {1, address, count, columns, rows};
+        return call.write(call.u32(result), grid, sizeof(grid));
+    }
+
+    void runWindowClose(FalconPlayer *player, uint32_t window, void *userData) {
+        auto *target = static_cast<WasmPlugin::WindowClose *>(userData);
+        const auto close = target->mPlugin.takeWindowClose(target);
+        if (!close)
+            return;
+        wasmtime_val_raw_t values[3];
+        values[0].i32 = (int32_t) close->mHandler;
+        values[1].i64 = (int64_t) idOf(player);
+        values[2].i32 = (int32_t) window;
+        close->mPlugin.call(Export::WindowClose, values, 3);
+    }
+
+    // native collision scans run outside the guest's instruction budget
+    bool collisionBounds(const FalconVec3 &lower, const FalconVec3 &upper) {
+        const double a[] = {lower.x, lower.y, lower.z};
+        const double b[] = {upper.x, upper.y, upper.z};
+        double cells = 1;
+        for (size_t axis = 0; axis < 3; ++axis) {
+            if (std::abs(a[axis]) > 30'000'000 || std::abs(b[axis]) > 30'000'000)
+                return false;
+            cells *= std::abs(std::floor(a[axis]) - std::floor(b[axis])) + 2;
+        }
+        return cells <= 65'536;
+    }
+
     void runEvent(FalconEvent *value, void *userData) {
         auto &binding = *static_cast<Binding *>(userData);
         if (binding.mActive)
@@ -307,8 +401,78 @@ namespace {
         return true;
     }
 
+    void registerCustomItem(Call &call, const std::array<uint32_t, 15> &fields, const std::string *components) {
+        std::string identifier;
+        std::string displayName;
+        std::string icon;
+        std::string category;
+        Binding *binding = nullptr;
+        if (!call.readString(fields[0], fields[1], identifier) || !call.readString(fields[2], fields[3], displayName)
+            || !call.readString(fields[4], fields[5], icon) || !call.readString(fields[6], fields[7], category)
+            || !contentCallbacks(call, fields[11], fields[12], fields[13], fields[14], binding))
+            return;
+
+        const FalconCustomItemDescriptor descriptor{
+                identifier.c_str(), displayName.c_str(), icon.c_str(), category.c_str(), fields[8], fields[9],
+                fields[10] != 0 ? 1 : 0, binding->mHasFirst ? &runItemUse : nullptr,
+                binding->mHasSecond ? &runItemUseOnBlock : nullptr, binding};
+        if (components == nullptr) {
+            call.resultS32(api().registerCustomItem(self(call), &descriptor) != 0);
+            return;
+        }
+
+        const FalconCustomItemDescriptorV2 extended{
+                descriptor, components->data(), (uint32_t) components->size()};
+        call.resultS32(api().registerCustomItemWithComponents(self(call), &extended) != 0);
+    }
+
     std::vector<WasmImports::Definition> build() {
         return {
+                {"server", "server-block-network-id", "iiiii:i", [](Call &call) {
+                    std::string name;
+                    std::string states;
+                    bool present = false;
+                    if (call.string(0, name) && optionalString(call, 2, present, states))
+                        call.resultS32((int32_t) api().serverBlockNetworkId(name.c_str(),
+                                                                         present ? states.c_str() : nullptr));
+                }},
+                {"server", "server-item-info", "iii:", [](Call &call) {
+                    std::string identifier;
+                    if (!call.string(0, identifier))
+                        return;
+                    FalconItemInfo info{};
+                    if (!api().serverItemInfo(identifier.c_str(), &info)) {
+                        const uint8_t absent = 0;
+                        call.write(call.u32(2), &absent, 1);
+                        return;
+                    }
+
+                    const std::string name(info.name == nullptr ? "" : info.name);
+                    GuestItemInfo out{1, 0, (uint32_t) name.size(), info.maxStackSize, info.maxDurability,
+                                      info.toolType, info.toolTier, info.attackDamage, info.armorSlot,
+                                      info.armorPoints, info.armorToughness, info.nutrition, info.saturation};
+                    if (call.lower(name.data(), name.size(), 1, out.mName))
+                        call.write(call.u32(2), &out, sizeof(out));
+                }},
+                {"server", "server-block-info", "iii:", [](Call &call) {
+                    std::string identifier;
+                    if (!call.string(0, identifier))
+                        return;
+                    FalconBlockInfo info{};
+                    if (!api().serverBlockInfo(identifier.c_str(), &info)) {
+                        const uint8_t absent = 0;
+                        call.write(call.u32(2), &absent, 1);
+                        return;
+                    }
+
+                    const std::string name(info.name == nullptr ? "" : info.name);
+                    GuestBlockInfo out{1, 0, (uint32_t) name.size(), info.hardness, info.blastResistance, info.toolType,
+                                       info.toolTier, info.lightEmission, (uint8_t) (info.transparent != 0),
+                                       (uint8_t) (info.solid != 0), 0, info.flameEncouragement, info.flammability,
+                                       info.maxStackSize};
+                    if (call.lower(name.data(), name.size(), 1, out.mName))
+                        call.write(call.u32(2), &out, sizeof(out));
+                }},
                 {"server", "server-version", "i:", [](Call &call) {
                     call.returnString(0, api().serverVersion());
                 }},
@@ -334,6 +498,9 @@ namespace {
                     std::string name;
                     if (call.string(0, name))
                         returnPlayer(call, 2, api().findPlayer(name.c_str()));
+                }},
+                {"server", "server-entity", "Ii:", [](Call &call) {
+                    returnEntity(call, 1, api().serverEntity(call.u64(0)));
                 }},
                 {"server", "broadcast-message", "ii:", [](Call &call) {
                     std::string message;
@@ -454,6 +621,71 @@ namespace {
                     call.resultS32(read && api().serverPluginEnabled(text0.c_str()) != 0);
                 }},
 
+                {"players", "player-open-window", "IiiiiIiii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    bool hasClose = false;
+                    if (!call.option(call.u32(7), hasClose))
+                        return;
+                    WasmPlugin &plugin = call.plugin();
+                    if (target == nullptr || (hasClose && !plugin.hasExport(Export::WindowClose))) {
+                        call.resultS32(0);
+                        return;
+                    }
+
+                    const auto close = hasClose ? plugin.addWindowClose(call.u32(8)) : nullptr;
+                    const FalconWindowDescriptor descriptor{call.u32(1), blockPos(call, 2), call.s64(5),
+                                                            call.u32(6), hasClose ? &runWindowClose : nullptr,
+                                                            close.get()};
+                    const uint32_t window = api().playerOpenWindow(self(call), target, &descriptor);
+                    if (window == 0 && close)
+                        plugin.takeWindowClose(close.get());
+                    call.resultS32((int32_t) window);
+                }},
+                {"players", "player-window-item", "Iiii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    returnItem(call, 3, target == nullptr ? nullptr : api().playerWindowItem(target, call.u32(1),
+                                                                                             call.u32(2)), true);
+                }},
+                {"players", "player-set-window-item", "Iiiii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    FalconItem *stack = nullptr;
+                    const bool valid = optionalItem(call, 3, stack);
+                    call.resultS32(valid && target != nullptr
+                                   && api().playerSetWindowItem(target, call.u32(1), call.u32(2), stack) != 0);
+                }},
+                {"players", "player-close-window", "Ii:", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    if (target != nullptr)
+                        api().playerCloseWindow(target, call.u32(1));
+                }},
+                {"players", "player-has-chunk", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerHasChunk(target, call.s32(1), call.s32(2)) != 0);
+                }},
+                {"players", "player-send-commands", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerSendCommands(target) != 0);
+                }},
+                {"players", "player-close-forms", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerCloseForms(target) != 0);
+                }},
+                {"players", "player-set-name-tag", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string name;
+                    if (call.string(1, name))
+                        call.resultS32(target != nullptr && api().playerSetNameTag(target, name.c_str()) != 0);
+                }},
+                {"players", "player-permission-override", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string node;
+                    if (call.string(1, node))
+                        call.resultS32(target == nullptr ? 0 : api().playerPermissionOverride(target, node.c_str()));
+                }},
+                {"players", "player-ping", "I:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target == nullptr ? -1 : api().playerPing(target));
+                }},
                 {"players", "player-name", "Ii:", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     call.returnString(1, target == nullptr ? "" : api().playerName(target));
@@ -594,6 +826,10 @@ namespace {
                     FalconPlayer *target = player(call.u64(0));
                     call.resultS32(target == nullptr ? 0 : api().playerProtocolVersion(target));
                 }},
+                {"players", "player-unique-id", "I:I", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS64(target == nullptr ? 0 : api().playerUniqueId(target));
+                }},
                 {"players", "player-send-packet", "Iiii:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
                     const uint32_t packetId = call.u32(1);
@@ -616,6 +852,12 @@ namespace {
                     std::string sound;
                     if (optionalString(call, 1, hasSound, sound) && target != nullptr)
                         api().playerStopSound(target, hasSound ? sound.c_str() : nullptr);
+                }},
+                {"players", "player-chat", "Iii:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    std::string message;
+                    const bool read = call.string(1, message);
+                    call.resultS32(read && target != nullptr && api().playerChat(target, message.c_str()) != 0);
                 }},
                 {"players", "player-execute-command", "Iii:i", [](Call &call) {
                     FalconPlayer *target = player(call.u64(0));
@@ -734,6 +976,27 @@ namespace {
                         api().playerSpawnParticle(target, particle.c_str(), position);
                 }},
 
+                {"entities", "entity-set-plugin-drawn", "Ii:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target != nullptr && api().entitySetPluginDrawn(target, call.u32(1) != 0) != 0);
+                }},
+                {"entities", "entity-is-plugin-drawn", "I:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    call.resultS32(target != nullptr && api().entityIsPluginDrawn(target) != 0);
+                }},
+                {"entities", "entity-set-size", "Iff:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    const float width = call.f32(1);
+                    const float height = call.f32(2);
+                    if (finite(call, width) && finite(call, height))
+                        call.resultS32(target != nullptr && api().entitySetSize(target, width, height) != 0);
+                }},
+                {"entities", "entity-set-max-health", "If:i", [](Call &call) {
+                    FalconEntity *target = entity(call.u64(0));
+                    const float maximum = call.f32(1);
+                    if (finite(call, maximum))
+                        call.resultS32(target != nullptr && api().entitySetMaxHealth(target, maximum) != 0);
+                }},
                 {"entities", "entity-type", "Ii:", [](Call &call) {
                     FalconEntity *target = entity(call.u64(0));
                     call.returnString(1, target == nullptr ? "" : api().entityType(target));
@@ -1175,7 +1438,7 @@ namespace {
                     const FalconBlockPos position = blockPos(call, 1);
                     call.resultS32(target == nullptr ? 0 : (int32_t) api().levelContainerSize(target, position));
                 }},
-                {"levels", "level-container-item", "iiiii:", [](Call &call) {
+                {"levels", "level-container-item", "iiiiii:", [](Call &call) {
                     FalconLevel *target = level(call, 0);
                     returnFilledItem(call, 5, target == nullptr ? nullptr
                                                                 : api().levelContainerItem(target, blockPos(call, 1),
@@ -1187,7 +1450,7 @@ namespace {
                     call.resultS32(optionalItem(call, 5, value) && target != nullptr
                                    && api().levelSetContainerItem(target, blockPos(call, 1), call.u32(4), value) != 0);
                 }},
-                {"levels", "level-sign-text", "iiiii:", [](Call &call) {
+                {"levels", "level-sign-text", "iiiiii:", [](Call &call) {
                     FalconLevel *target = level(call, 0);
                     call.returnOptionalString(5, target == nullptr ? nullptr
                                                                    : api().levelSignText(target, blockPos(call, 1),
@@ -1275,6 +1538,31 @@ namespace {
                         std::memcpy(buffer + 16, &distance, 8);
                     }
                     call.write(call.u32(10), buffer, sizeof(buffer));
+                }},
+                {"levels", "level-collision-boxes", "iFFFFFFi:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    FalconVec3 lower;
+                    FalconVec3 upper;
+                    if (!vec3(call, 1, lower) || !vec3(call, 4, upper))
+                        return;
+                    if (target == nullptr) {
+                        returnList(call, 7, nullptr, 0, sizeof(FalconBox), alignof(FalconBox));
+                        return;
+                    }
+                    if (!collisionBounds(lower, upper)) {
+                        call.fail("collision query is too large");
+                        return;
+                    }
+
+                    static_assert(sizeof(FalconBox) == 48 && alignof(FalconBox) == 8);
+                    std::vector<FalconBox> boxes(64);
+                    uint32_t count = api().levelCollisionBoxes(target, lower, upper, boxes.data(), (uint32_t) boxes.size());
+                    if (count > boxes.size()) {
+                        boxes.resize(count);
+                        count = api().levelCollisionBoxes(target, lower, upper, boxes.data(), (uint32_t) boxes.size());
+                    }
+                    returnList(call, 7, boxes.data(), std::min(count, (uint32_t) boxes.size()), sizeof(FalconBox),
+                               alignof(FalconBox));
                 }},
                 {"levels", "level-entities-in-box", "iFFFFFFi:", [](Call &call) {
                     FalconLevel *target = level(call, 0);
@@ -1465,6 +1753,13 @@ namespace {
                 }},
                 {"items", "item-is-empty", "i:i", [](Call &call) {
                     call.resultS32(api().itemIsEmpty(item(call, 0)) != 0);
+                }},
+                {"items", "item-network-id", "ii:", [](Call &call) {
+                    FalconItem *target = item(call, 0);
+                    int32_t ids[2]{};
+                    if (target != nullptr)
+                        ids[0] = api().itemNetworkId(target, &ids[1]);
+                    call.write(call.u32(1), ids, sizeof(ids));
                 }},
                 {"items", "item-identifier", "ii:", [](Call &call) {
                     call.returnString(1, api().itemIdentifier(item(call, 0)));
@@ -1717,6 +2012,10 @@ namespace {
                     if (call.string(0, message) && current != nullptr)
                         api().eventSetMessage(current, message.c_str());
                 }},
+                {"event", "event-message-is-default", ":i", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    call.resultS32(current != nullptr && api().eventMessageIsDefault(current) != 0);
+                }},
                 {"event", "event-entity", "i:", [](Call &call) {
                     FalconEvent *current = event(call);
                     returnEntity(call, 0, current == nullptr ? nullptr : api().eventEntity(current));
@@ -1944,6 +2243,92 @@ namespace {
                     call.returnString(0, current == nullptr ? "" : api().eventFormResponse(current));
                 }},
 
+                {"event", "event-effect", "i:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    FalconEffect effect{};
+                    const bool present = current != nullptr && api().eventEffect(current, &effect) != 0;
+                    returnOptionalEffect(call, 0, present, effect);
+                }},
+                {"event", "event-drop-count", ":i", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    call.resultS32(current == nullptr ? 0 : (int32_t) api().eventDropCount(current));
+                }},
+                {"event", "event-drop-at", "ii:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    FalconItem *drop = current == nullptr ? nullptr : api().eventDropAt(current, call.u32(0));
+                    returnItem(call, 1, drop == nullptr ? nullptr : api().itemCopy(drop), true);
+                }},
+                {"event", "event-set-drops", "ii:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    if (current == nullptr)
+                        return;
+                    const uint32_t count = call.u32(1);
+                    if (count > 4096) {
+                        call.fail("too many drops");
+                        return;
+                    }
+                    const uint8_t *handles = guestList(call, call.u32(0), count, sizeof(uint32_t));
+                    if (handles == nullptr)
+                        return;
+
+                    std::vector<FalconItem *> drops;
+                    drops.reserve(count);
+                    for (uint32_t index = 0; index < count; ++index) {
+                        uint32_t handle;
+                        std::memcpy(&handle, handles + index * sizeof(handle), sizeof(handle));
+                        FalconItem *drop = call.plugin().getItem(handle);
+                        if (drop == nullptr) {
+                            call.fail("invalid drop item handle");
+                            return;
+                        }
+                        drops.push_back(drop);
+                    }
+                    api().eventSetDrops(current, drops.data(), count);
+                }},
+                {"event", "event-experience", ":i", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    call.resultS32(current == nullptr ? 0 : api().eventExperience(current));
+                }},
+                {"event", "event-set-experience", "i:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    if (current != nullptr)
+                        api().eventSetExperience(current, call.s32(0));
+                }},
+                {"event", "event-keep-inventory", ":i", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    call.resultS32(current != nullptr && api().eventKeepInventory(current) != 0);
+                }},
+                {"event", "event-set-keep-inventory", "i:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    if (current != nullptr)
+                        api().eventSetKeepInventory(current, call.u32(0) != 0);
+                }},
+                {"event", "event-keep-experience", ":i", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    call.resultS32(current != nullptr && api().eventKeepExperience(current) != 0);
+                }},
+                {"event", "event-set-keep-experience", "i:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    if (current != nullptr)
+                        api().eventSetKeepExperience(current, call.u32(0) != 0);
+                }},
+                {"event", "event-knockback", "i:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    struct {
+                        uint32_t present = 0;
+                        float horizontal = 0;
+                        float vertical = 0;
+                    } out;
+                    out.present = current != nullptr && api().eventKnockback(current, &out.horizontal, &out.vertical) != 0;
+                    call.write(call.u32(0), &out, sizeof(out));
+                }},
+                {"event", "event-set-knockback", "ff:", [](Call &call) {
+                    FalconEvent *current = event(call);
+                    const float horizontal = call.f32(0);
+                    const float vertical = call.f32(1);
+                    if (current != nullptr && finite(call, horizontal) && finite(call, vertical))
+                        api().eventSetKnockback(current, horizontal, vertical);
+                }},
                 {"commands", "register-command", "iiiiiiii:i", [](Call &call) {
                     const uint32_t handler = call.u32(7);
                     uint32_t permission = 0;
@@ -2000,6 +2385,17 @@ namespace {
                     }
                     const int added = api().commandAddOverload(self(call), command.c_str(), parameters.data(), count);
                     call.resultS32(added != 0 ? 1 : 0);
+                }},
+                {"commands", "command-set-aliases", "iiii:i", [](Call &call) {
+                    std::string command;
+                    std::vector<std::string> aliases;
+                    if (!call.string(0, command) || !call.stringList(call.u32(2), call.u32(3), aliases))
+                        return;
+                    std::vector<const char *> names;
+                    for (const std::string &alias: aliases)
+                        names.push_back(alias.c_str());
+                    call.resultS32(api().commandSetAliases(self(call), command.c_str(), names.data(),
+                                                           (uint32_t) names.size()) != 0);
                 }},
                 {"commands", "execute-command", "ii:i", [](Call &call) {
                     std::string line;
@@ -2112,25 +2508,153 @@ namespace {
                     call.returnOptionalString(4, found != 0 ? copy.c_str() : nullptr);
                 }},
 
-                {"content", "register-custom-item", "iiiiiiiiiiiiiii:i", [](Call &call) {
-                    std::string identifier;
-                    std::string displayName;
-                    std::string icon;
-                    std::string category;
-                    Binding *binding = nullptr;
-                    const uint32_t maxStackSize = call.u32(8);
-                    const uint32_t maxDurability = call.u32(9);
-                    const int32_t handEquipped = call.flag(10) ? 1 : 0;
-                    if (!call.string(0, identifier) || !call.string(2, displayName) || !call.string(4, icon)
-                        || !call.string(6, category)
-                        || !contentCallbacks(call, call.u32(11), call.u32(12), call.u32(13), call.u32(14), binding))
+                {"maps", "map-create-image", "iii:I", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const uint8_t *rgba = guestList(call, call.u32(1), call.u32(2), 1);
+                    if (rgba != nullptr)
+                        call.resultS64(api().mapCreateImage(target, rgba, call.u32(2)));
+                }},
+                {"maps", "map-create-image-grid", "iiiiiiiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const uint8_t *rgba = guestList(call, call.u32(1), call.u32(2), 1);
+                    if (rgba == nullptr)
                         return;
 
-                    const FalconCustomItemDescriptor descriptor{
-                            identifier.c_str(), displayName.c_str(), icon.c_str(), category.c_str(), maxStackSize,
-                            maxDurability, handEquipped, binding->mHasFirst ? &runItemUse : nullptr,
-                            binding->mHasSecond ? &runItemUseOnBlock : nullptr, binding};
-                    call.resultS32(api().registerCustomItem(self(call), &descriptor) != 0);
+                    std::array<int64_t, ImageMap::MAX_GRID_SIDE * ImageMap::MAX_GRID_SIDE> ids;
+                    uint32_t columns = 0;
+                    uint32_t rows = 0;
+                    const uint32_t count = api().mapCreateImageGrid(target, rgba, call.u32(2), call.u32(3), call.u32(4),
+                                                                    call.u32(5), call.u32(6), call.u32(7),
+                                                                    ids.data(), (uint32_t) ids.size(), &columns, &rows);
+                    returnImageGrid(call, 8, ids.data(), count, columns, rows);
+                }},
+                {"maps", "map-create-image-grid-from-png", "iiiiiii:", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const uint8_t *png = guestList(call, call.u32(1), call.u32(2), 1);
+                    if (png == nullptr)
+                        return;
+
+                    std::array<int64_t, ImageMap::MAX_GRID_SIDE * ImageMap::MAX_GRID_SIDE> ids;
+                    uint32_t columns = 0;
+                    uint32_t rows = 0;
+                    const uint32_t count = api().mapCreateImageGridFromPng(target, png, call.u32(2), call.u32(3),
+                                                                           call.u32(4), call.u32(5), ids.data(),
+                                                                           (uint32_t) ids.size(), &columns, &rows);
+                    returnImageGrid(call, 6, ids.data(), count, columns, rows);
+                }},
+                {"maps", "map-place-image-grid", "iiiiiiiiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const uint32_t count = call.u32(6);
+                    std::array<int64_t, ImageMap::MAX_GRID_SIDE * ImageMap::MAX_GRID_SIDE> ids;
+                    if (count > ids.size()) {
+                        call.resultS32(0);
+                        return;
+                    }
+                    const uint8_t *list = guestList(call, call.u32(5), count, sizeof(int64_t));
+                    if (list == nullptr)
+                        return;
+                    std::memcpy(ids.data(), list, count * sizeof(int64_t));
+                    call.resultS32(api().mapPlaceImageGrid(target, blockPos(call, 1), call.u32(4), ids.data(), count,
+                                                         call.u32(7), call.u32(8), call.u32(9) != 0) != 0);
+                }},
+                {"maps", "map-update-image", "iIiiiiii:i", [](Call &call) {
+                    FalconLevel *target = level(call, 0);
+                    const uint8_t *rgba = guestList(call, call.u32(6), call.u32(7), 1);
+                    if (rgba != nullptr)
+                        call.resultS32(api().mapUpdateImage(target, call.s64(1), call.u32(2), call.u32(3), call.u32(4),
+                                                           call.u32(5), rgba, call.u32(7)) != 0);
+                }},
+                {"maps", "map-is-image", "iI:i", [](Call &call) {
+                    call.resultS32(api().mapIsImage(level(call, 0), call.s64(1)) != 0);
+                }},
+                {"maps", "player-give-map", "II:i", [](Call &call) {
+                    FalconPlayer *target = player(call.u64(0));
+                    call.resultS32(target != nullptr && api().playerGiveMap(target, call.s64(1)) != 0);
+                }},
+                {"maps", "map-last-error", "i:", [](Call &call) {
+                    call.returnString(0, api().mapLastError());
+                }},
+                {"maps", "map-delete-image", "iI:i", [](Call &call) {
+                    call.resultS32(api().mapDeleteImage(level(call, 0), call.s64(1)) != 0);
+                }},
+
+                {"resource-packs", "resource-packs-replace", "iii:i", [](Call &call) {
+                    constexpr uint32_t MAX_PACKS = 128;
+                    constexpr uint32_t MAX_BYTES = 128 * 1024 * 1024;
+                    constexpr uint32_t RECORD_SIZE = 20;
+                    const uint32_t count = call.u32(1);
+                    if (count > MAX_PACKS) {
+                        call.resultS32(0);
+                        return;
+                    }
+                    const uint8_t *list = guestList(call, call.u32(0), count, RECORD_SIZE);
+                    if (list == nullptr)
+                        return;
+
+                    uint32_t total = 0;
+                    std::vector<FalconResourcePackDescriptor> packs(count);
+                    std::vector<std::string> keys(count);
+                    for (uint32_t index = 0; index < count; ++index) {
+                        const uint8_t *record = list + index * RECORD_SIZE;
+                        uint32_t fields[5];
+                        std::memcpy(fields, record, sizeof(fields));
+                        const uint32_t size = fields[1];
+                        bool encrypted = false;
+                        if (size == 0 || size > MAX_BYTES - total) {
+                            call.resultS32(0);
+                            return;
+                        }
+                        const uint8_t *archive = guestList(call, fields[0], size, 1);
+                        if (archive == nullptr || !call.option(record[8], encrypted))
+                            return;
+                        total += size;
+                        if (encrypted) {
+                            const uint32_t keySize = fields[4];
+                            if (keySize > MAX_BYTES - total) {
+                                call.resultS32(0);
+                                return;
+                            }
+                            if (!call.readString(fields[3], keySize, keys[index]))
+                                return;
+                            total += keySize;
+                        }
+                        packs[index] = {reinterpret_cast<const char *>(archive), size,
+                                        encrypted ? keys[index].c_str() : nullptr};
+                    }
+                    call.resultS32(api().resourcePacksReplace(self(call), packs.data(), count, call.u32(2) != 0) != 0);
+                }},
+                {"content", "register-custom-item", "iiiiiiiiiiiiiii:i", [](Call &call) {
+                    std::array<uint32_t, 15> fields;
+                    for (size_t index = 0; index < fields.size(); ++index)
+                        fields[index] = call.u32(index);
+                    registerCustomItem(call, fields, nullptr);
+                }},
+                {"content", "register-custom-item-with-components", "i:i", [](Call &call) {
+                    // the extra string takes the canonical ABI record past its flat argument limit
+                    uint8_t record[68];
+                    if (!call.read(call.u32(0), record, sizeof(record)))
+                        return;
+                    const auto field = [&record](size_t offset) {
+                        uint32_t value;
+                        std::memcpy(&value, record + offset, sizeof(value));
+                        return value;
+                    };
+                    const uint32_t size = field(64);
+                    if (size > FALCON_CUSTOM_ITEM_COMPONENTS_MAX_BYTES) {
+                        call.resultS32(0);
+                        return;
+                    }
+                    if (record[40] > 1) {
+                        call.fail("invalid custom item hand-equipped flag");
+                        return;
+                    }
+                    std::string components;
+                    if (!call.readString(field(60), size, components))
+                        return;
+                    const std::array<uint32_t, 15> fields{
+                            field(0), field(4), field(8), field(12), field(16), field(20), field(24), field(28),
+                            field(32), field(36), record[40], record[44], field(48), record[52], field(56)};
+                    registerCustomItem(call, fields, &components);
                 }},
                 {"content", "register-custom-block", "i:i", [](Call &call) {
                     const uint32_t address = call.u32(0);

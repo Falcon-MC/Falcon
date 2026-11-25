@@ -1327,6 +1327,20 @@ namespace {
             require(feet.x == 66.5f && std::fabs(player.getSimulatedVelocity().x - (66.502f - 66.5f)) < 0.00001f
                             && player.getMotion().x == player.getSimulatedVelocity().x,
                     "Fine acceptance did not steer velocity independently of client delta");
+
+            // a pending movement change skips the replay, not the bound: a place too far for one input is put back
+            player.setPosition(Vector3f(66.5f, 250.0f, 2.5f));
+            player.clearMovementSimulation();
+            player.awaitMovementChange();
+            feet = Vector3f(166.5f, 250.0f, 2.5f);
+            packet.mTick = 300;
+            PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
+            require(feet.x == 66.5f && !player.hasSimulatedPosition(),
+                    "An input the simulation skipped moved the player out of reach");
+            feet = Vector3f(70.5f, 250.0f, 2.5f);
+            packet.mTick = 400;
+            PlayerMovementSimulator::apply(owner, id, player, packet, feet, false);
+            require(feet.x == 70.5f, "An input the simulation skipped was refused within reach");
         }
     }
 

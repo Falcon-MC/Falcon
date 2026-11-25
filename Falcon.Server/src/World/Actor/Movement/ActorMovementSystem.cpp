@@ -2,6 +2,7 @@
 
 #include "World/Actor/Movement/ActorCollisionSystem.h"
 #include "World/Actor/ActorFlags.h"
+#include "World/Actor/Movement/Systems/BlockClimberSystem.h"
 #include "World/Actor/Movement/ActorPushSystem.h"
 #include "World/Actor/Movement/BuoyancySystem.h"
 #include "World/Actor/Movement/MobMovementFrictionSystem.h"
@@ -114,6 +115,8 @@ void ActorMovementSystem::tick(ServerNetworkHandler &owner, ServerActor &actor) 
         }
     }
 
+    if (physics.mBlockClimber)
+        BlockClimberSystem::tick(owner, actor);
     _syncMovement(owner, actor);
 
     BlockContactSystem::land(owner, actor, landingFallDistance);
@@ -148,7 +151,7 @@ float ActorMovementSystem::_applyRestitution(Level &level, ServerActor &actor, c
 
 void ActorMovementSystem::_applyMovementFriction(Level &level, ServerActor &actor, const PhysicsComponent &physics) {
     float friction = NO_BLOCK_FRICTION;
-    if (actor.isOnGround()) {
+    if (actor.isOnGround() && !actor.discardsFriction()) {
         const Vector3f position = actor.getPosition();
         const Block *below = _blockAt(level, Vector3f(position.x, position.y - GROUND_PROBE_DEPTH, position.z));
         friction = below == nullptr ? DEFAULT_BLOCK_FRICTION : below->getFrictionFactor();
@@ -199,6 +202,7 @@ void ActorMovementSystem::_syncMovement(ServerNetworkHandler &owner, ServerActor
     if (!actor.needsMovementSync())
         return;
 
-    owner.broadcastActorMove(actor);
-    actor.markMovementSynced();
+    // a skipped far viewer keeps the move owed: the next tick tries again
+    if (owner.broadcastActorMove(actor))
+        actor.markMovementSynced();
 }

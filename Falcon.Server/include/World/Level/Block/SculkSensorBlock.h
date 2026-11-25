@@ -14,7 +14,7 @@ public:
     static constexpr int32_t PHASE_INACTIVE = 0;
     static constexpr int32_t PHASE_ACTIVE = 1;
     static constexpr int32_t PHASE_COOLDOWN = 2;
-    // BlockLegacy +0x378 set at registration: 30 for the sensor, 10 for the calibrated one
+    // how long the game keeps it active: 30 ticks for the sensor, 10 for the calibrated one
     static constexpr int32_t ACTIVE_TICKS = 30;
     // the game schedules the cooldown's end 10 ticks on
     static constexpr int32_t COOLDOWN_TICKS = 10;
@@ -38,6 +38,9 @@ public:
 
     void onScheduledUpdate(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                            const BlockState &state) const override;
+
+    void onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                  const BlockState &state) const override;
 
     bool isSignalSource() const override {
         return true;
@@ -66,7 +69,17 @@ public:
     void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state) const override;
 
+    int getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
+                         bool strong) const override;
+
     int32_t getActiveTicks() const override {
         return ACTIVE_TICKS;
     }
+
+    // the face toward the input neighbour: the side opposite cardinal_direction
+    static int inputFace(const BlockState &state);
+
+    // the power the input neighbour gives the sensor, 0 for none
+    static int inputSignal(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                           const BlockState &state);
 };

@@ -11,7 +11,7 @@
 #include <cstdlib>
 
 namespace {
-    const int32_t DIRECT_MOVE_COST = 10;
+    const int32_t DIRECT_MOVE_COST = NodeEvaluator::BLOCK_COST;
     const int32_t OBLIQUE_MOVE_COST = 14;
     const int32_t MAX_SMOOTH_LOOKAHEAD = 8;
     const float BLOCK_CENTER = 0.5f;
@@ -224,7 +224,8 @@ void PathFinder::_expandGround(int32_t nodeIndex) {
             continue;
 
         const int32_t y = node.mY + offset;
-        _offer(x, y, z, node.mG + DIRECT_MOVE_COST + mEvaluator.extraCost(x, y, z), nodeIndex);
+        const int32_t jump = offset > 0 ? mEvaluator.jumpCost() : 0;
+        _offer(x, y, z, node.mG + DIRECT_MOVE_COST + mEvaluator.extraCost(x, y, z) + jump, nodeIndex);
     }
 
     for (int32_t direction = 0; direction < 4; ++direction) {
@@ -352,9 +353,15 @@ void PathFinder::_buildPath(int32_t endIndex, bool reachesTarget, const Vector3f
     }
     std::reverse(mChain.begin(), mChain.end());
 
+    // a walking path ends on the middle of its last block, as the game's does: the target itself can sit on a block
+    // edge, where the mob stops and slides off
     const Vector3f &last = mChain.empty() ? start : mChain.back();
-    if (reachesTarget && !mEvaluator.hasBarrier(last, target))
+    if (reachesTarget && mEvaluator.getOptions().isVolumetric() && !mEvaluator.hasBarrier(last, target))
         mChain.push_back(target);
+    // already on the target's block: the path is that block alone
+    if (mChain.empty() && reachesTarget && !mNodes.empty())
+        mChain.emplace_back((float) mNodes[0].mX + BLOCK_CENTER, (float) mNodes[0].mY,
+                            (float) mNodes[0].mZ + BLOCK_CENTER);
 
     Vector3f anchor = start;
     const int32_t count = (int32_t) mChain.size();

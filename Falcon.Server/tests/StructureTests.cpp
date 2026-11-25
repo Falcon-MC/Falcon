@@ -15,6 +15,9 @@
 #include "World/Level/Dimension/Dimension.h"
 #include "World/Level/LevelGen/DimensionFactory.h"
 #include "World/Level/LevelGen/GeneratorChunkSource.h"
+#include "World/Level/LevelGen/Overworld/Terrain/TerrainBeard.h"
+#include "World/Level/LevelGen/Structure/EndCityFeature.h"
+#include "World/Level/LevelGen/Structure/EndCityStructure.h"
 #include "World/Level/LevelGen/Structure/JigsawPlacer.h"
 #include "World/Level/LevelGen/Structure/MineshaftStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinFeature.h"
@@ -32,6 +35,7 @@
 #include "World/Level/LevelGen/Structure/StructureTerrain.h"
 #include "World/Level/LevelGen/Structure/VillageStructure.h"
 
+#include <algorithm>
 #include <array>
 #include <initializer_list>
 #include <map>
@@ -466,6 +470,45 @@ namespace {
 }
 
 namespace {
+    void checkEndCity() {
+        const auto generator = DimensionFactory::createGenerator(DimensionType::TheEnd, 42);
+        const StructureFeature *cities = StructureFeature::get("end_city");
+        require(cities != nullptr, "End cities are not registered");
+        require(cities->isStartChunk(*generator, -37, 63), "The seed 42 end city start differs from BDS");
+        std::mt19937 turnRandom = EndCityFeature::createCityRandom(-37, 63);
+        const auto turns = (int32_t) (turnRandom() & 3);
+        const int32_t y = EndCityFeature::getBaseY(*generator, -37, 63, turns);
+        require(turns == 3 && y == 60, "The seed 42 end city pose differs from BDS");
+
+        std::mt19937 random = cities->createStartRandom(generator->getSeed(), -37, 63);
+        const auto pieces = EndCityStructure::plan(-37 * 16 + 8, y, 63 * 16 + 8, turns, random);
+        const auto ship = std::find_if(pieces.begin(), pieces.end(),
+                                       [](const EndCityStructure::Piece &piece) { return piece.mTemplate == "ship"; });
+        require(pieces.size() == 33 && ship != pieces.end() && ship->x == -670 && ship->y == 107 && ship->z == 1018
+                        && ship->mQuarterTurns == 3,
+                "The seed 42 end city layout differs from BDS");
+
+        BlockState out;
+        StructureTemplate::PaletteEntry glass{"minecraft:stained_glass", {{"color", "magenta"}}};
+        require(StructureBlockTable::translate(glass, 0, out) && out.mName == "minecraft:magenta_stained_glass",
+                "Old stained glass lost its color");
+        StructureTemplate::PaletteEntry rod{"minecraft:end_rod", {{"facing", "east"}}};
+        require(StructureBlockTable::translate(rod, 0, out) && out.mStates.getInt("facing_direction", -1) == 4,
+                "A lying end rod faces the wrong side");
+    }
+
+    // the fill the game adds near a buried stronghold piece: full inside, falling to nothing six blocks out
+    void checkStrongholdBury() {
+        TerrainBeard beard;
+        beard.addBuriedBox(0, 0, {0, 10, 0, 4, 14, 4});
+        beard.addBuriedBox(0, 0, {100, 10, 100, 104, 14, 104});
+        require(beard.buried(2, 12, 2) == 1.0f, "A buried piece does not fill its own box");
+        require(beard.buried(7, 12, 2) == 0.5f, "A buried piece fills three blocks out wrongly");
+        require(beard.buried(10, 12, 2) == 0.0f, "A buried piece fills six blocks out");
+        require(beard.buried(2, 20, 2) == 0.5f, "A buried piece fills six blocks above wrongly");
+        require(beard.getMinY() == -2 && beard.getMaxY() == 25, "A buried piece reaches the wrong cells");
+    }
+
     void checkMansionStart() {
         const auto generator = DimensionFactory::createGenerator(DimensionType::Overworld, 42);
         const StructureFeature *mansions = StructureFeature::get("mansion");
@@ -478,6 +521,18 @@ namespace {
         StructureTerrain terrain(*generator);
         require(turn == 0 && MansionFeature::getBaseY(terrain, start.x, start.z, turn) == 74,
                 "The seed 42 woodland mansion entrance pose differs from BDS");
+
+        // a mansion over the sea: BDS stands it on the water at 63, its cobblestone foundation down to the floor
+        const auto oceanGenerator = DimensionFactory::createGenerator(DimensionType::Overworld, -822577560950528980LL);
+        StructureChunkPos oceanStart;
+        require(mansions->findNearest(*oceanGenerator, 680, 800, oceanStart) && oceanStart.x == 41
+                        && oceanStart.z == 46,
+                "The ocean woodland mansion start differs from BDS");
+        auto oceanRandom = mansions->createStartRandom(oceanGenerator->getSeed(), oceanStart.x, oceanStart.z);
+        const int32_t oceanTurn = (int32_t) (oceanRandom() % 4);
+        StructureTerrain oceanTerrain(*oceanGenerator);
+        const int32_t oceanY = MansionFeature::getBaseY(oceanTerrain, oceanStart.x, oceanStart.z, oceanTurn);
+        require(oceanY == 63, "The ocean woodland mansion does not stand on the water");
         const auto plan = MansionLayout::build(random);
         const auto &floor = plan.mBase;
         // carpet footprints on the ground floor, excluding the entrance
@@ -852,7 +907,9 @@ int main() {
         checkMaterials();
         checkOceanRuins();
         checkPillagerOutposts();
+        checkStrongholdBury();
         checkMansionStart();
+        checkEndCity();
         checkMineshaftStarts();
         checkRuinedPortals();
         checkScatteredPieces();

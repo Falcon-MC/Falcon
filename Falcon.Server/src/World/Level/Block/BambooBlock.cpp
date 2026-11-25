@@ -79,12 +79,15 @@ void BambooBlock::grow(Level &level, const Vector3i &position, const BlockState 
     grown = DecorationSupport::withState(grown, AGE_BIT, stopped ? 1 : 0);
     if (!BlockChangeSystem::allows(level, above(position), grown, BlockChangeCause::Grow))
         return;
+    BlockChangeSystem::StructureBlocks blocks;
 
     if (shiftLeaves) {
-        level.setBlock(underPosition, DecorationSupport::withState(under, LEAF_SIZE, "small_leaves"), true);
-        level.setBlock(underUnderPosition, DecorationSupport::withState(underUnder, LEAF_SIZE, "no_leaves"), true);
+        blocks.emplace_back(underPosition, DecorationSupport::withState(under, LEAF_SIZE, "small_leaves"));
+        blocks.emplace_back(underUnderPosition, DecorationSupport::withState(underUnder, LEAF_SIZE, "no_leaves"));
     }
-    level.setBlock(above(position), grown, true);
+    blocks.emplace_back(above(position), grown);
+    if (BlockChangeSystem::prepareStructure(level, position, blocks))
+        BlockChangeSystem::applyStructure(level, blocks, true);
 }
 
 // the stalk grows from the block centre towards +x and +z, then shifts with its position

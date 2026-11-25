@@ -1,10 +1,10 @@
 #include "World/Item/ItemDurability.h"
 
+#include "Core/Event/EventBus.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/ItemData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/ItemProperties.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "Scripting/Content/CustomContentRegistry.h"
 
 #include <random>
@@ -16,7 +16,7 @@ namespace {
     }
 }
 
-bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount, bool rollUnbreaking) {
+bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount, bool rollUnbreaking, EventBus *bus) {
     if (item.isAir() || item.mDefinition == nullptr || amount <= 0)
         return false;
 
@@ -38,18 +38,13 @@ bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount
     if (applied <= 0)
         return false;
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_DAMAGE)) {
-        ItemStack damaged = item;
-        PluginEvent damageEvent;
-        damageEvent.mType = FALCON_EVENT_ITEM_DAMAGE;
-        damageEvent.mCancellable = true;
-        damageEvent.mPlayer = player;
-        damageEvent.mItem = &damaged;
-        damageEvent.mAmount = (double) applied;
-        plugins->dispatch(damageEvent);
-        if (damageEvent.mCancelled)
+    EventBus *events = bus != nullptr ? bus : player != nullptr ? player->getEventBus() : nullptr;
+    if (events != nullptr && events->before().mItemDamage.hasSubscribers()) {
+        ItemDamageBeforeEvent damageEvent(player, item, applied);
+        events->before().mItemDamage.emit(damageEvent);
+        if (damageEvent.isCancelled())
             return false;
-        applied = (int32_t) damageEvent.mAmount;
+        applied = damageEvent.mDamage;
         if (applied <= 0)
             return false;
     }
@@ -58,13 +53,9 @@ bool ItemDurability::apply(ServerPlayer *player, ItemStack &item, int32_t amount
     if (item.mDamage < maxDurability)
         return true;
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_ITEM_BREAK)) {
-        ItemStack broken = item;
-        PluginEvent breakEvent;
-        breakEvent.mType = FALCON_EVENT_ITEM_BREAK;
-        breakEvent.mPlayer = player;
-        breakEvent.mItem = &broken;
-        plugins->dispatch(breakEvent);
+    if (events != nullptr && events->after().mItemBreak.hasSubscribers()) {
+        ItemBreakAfterEvent breakEvent(player, item);
+        events->after().mItemBreak.emit(breakEvent);
     }
 
     item = ItemStack::air();

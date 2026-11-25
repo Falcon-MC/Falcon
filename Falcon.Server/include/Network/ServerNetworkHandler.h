@@ -27,6 +27,7 @@
 #include "Server/OpList.h"
 #include "Core/Event/EventBus.h"
 #include "Scripting/BehaviorPackManager.h"
+#include "Server/Functions/FunctionManager.h"
 #include "Scripting/ScriptEngine.h"
 #include "Server/Profiler.h"
 #include "Server/PropertiesSettings.h"
@@ -66,6 +67,7 @@
 
 class ItemUseTransaction;
 class CommandOrigin;
+class CommandOutputMessage;
 class Block;
 class CraftingEventPacket;
 class CommandBlockUpdatePacket;
@@ -73,6 +75,7 @@ class Item;
 class NetherNetInstance;
 class PluginManager;
 class PlayerMovementRegistry;
+struct KnockbackPreset;
 
 struct QueuedActorCommand {
     Level *mLevel = nullptr;
@@ -153,6 +156,11 @@ public:
     // a player is still waiting for its spawn chunks: the others' streaming makes way
     bool isJoinBurst() const {
         return mJoinBurst;
+    }
+
+    // a player is still waiting for its spawn chunks: the others' generation requests wait for theirs
+    bool hasPlayersAwaitingTerrain() const {
+        return mAwaitingTerrain;
     }
 
     uint64_t getChunkStreamTick() const {
@@ -244,6 +252,9 @@ public:
 
     static int64_t randomSeed();
 
+    // the custom item's use_modifiers, else minecraft:use_duration, else the default
+    static int64_t useDurationTicksFor(const ItemStack &item);
+
     void changePlayerDimension(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
     // goes through the dimension change handshake
@@ -299,8 +310,11 @@ public:
                 if (bucket == mActorIndex.end())
                     continue;
 
-                for (ServerActor *actor: bucket->second)
-                    visit(*actor);
+                // by position, null skipped: a visitor may remove an actor, which empties its slot
+                for (size_t index = 0; index < bucket->second.size(); ++index) {
+                    if (ServerActor *actor = bucket->second[index])
+                        visit(*actor);
+                }
             }
         }
     }
@@ -325,13 +339,17 @@ public:
     // to the players who have this one on screen: what a player wears or holds means nothing to the others
     void sendToPlayerViewers(const ServerPlayer &player, const Packet &packet, bool includeSelf);
 
+    void sendToActorViewers(const Actor &actor, const Packet &packet, bool includeSelf);
+
     // the few actors others stand on, from the index of the tick
     template <typename Visitor>
     void forEachCollidableActor(Visitor &&visit) {
         if (mActorIndexWalks == 0)
             _refreshActorIndex();
-        for (size_t index = 0; index < mCollidableActors.size(); ++index)
-            visit(*mCollidableActors[index]);
+        for (size_t index = 0; index < mCollidableActors.size(); ++index) {
+            if (ServerActor *actor = mCollidableActors[index])
+                visit(*actor);
+        }
     }
 
     // half the width of the widest actor, as each reports it, from the index of the tick
@@ -381,14 +399,21 @@ public:
     // bows fire from eye level; thrown items leave the hand slightly lower
     static constexpr float THROWN_PROJECTILE_DROP = -0.3f;
 
-    ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float speed,
-                                 float verticalOffset = 0.0f);
+    // the definition's power times launchPower, along the look turned by angle_offset and yawOffset degrees,
+    // spread by uncertainty
+    ServerActor *spawnProjectile(ServerPlayer &player, const std::string &identifier, float launchPower = 1.0f,
+                                 float verticalOffset = 0.0f, const ItemStack *weapon = nullptr,
+                                 float yawOffset = 0.0f);
 
     // no shooter: the definition's power and uncertainty_base aim it along direction
     ServerActor *spawnDispensedProjectile(Level &level, const std::string &identifier, const Vector3f &position,
-                                          const Vector3f &direction);
+                                          const Vector3f &direction,
+                                          const std::function<void(ServerActor &)> &configure = nullptr);
 
     bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
+
+    // a projectile's rotation along its flight; set it before the spawn packet goes out
+    static void faceMotion(ServerActor &actor, const Vector3f &motion);
 
     bool onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition, ServerPlayer *hitPlayer);
 
@@ -401,7 +426,7 @@ public:
     void returnProjectileToOwner(ServerPlayer &player, ServerActor &projectile);
 
 
-    void plantProjectile(ServerActor &projectile, Level &level, const Vector3f &from, const Vector3i &block);
+    void plantProjectile(ServerActor &projectile, const Vector3i &block);
 
 
     bool tickPlantedProjectile(ServerActor &projectile, Level &level);
@@ -424,6 +449,8 @@ public:
 
     void addEffect(Actor &actor, MobEffectId effect, int32_t amplifier, int32_t durationTicks);
 
+    void addEffect(Actor &actor, const MobEffectInstance &instance);
+
     // the hunger, saturation and effects of a food item; false for anything else
     bool applyFood(ServerPlayer &player, const ItemStack &item);
 
@@ -441,8 +468,8 @@ public:
         int32_t mReapplicationDelay = 0;
         int32_t mParticle = 0;
         std::optional<int32_t> mColor;
-        // runtime id of the cloud's creator; the cloud leaves it alone
-        int64_t mOwnerRuntimeId = -1;
+        // unique id of the cloud's creator; the cloud leaves it alone
+        int64_t mOwnerUniqueId = -1;
     };
 
     ServerActor *spawnAreaEffectCloud(Level &level, const Vector3f &position, const AreaEffectCloudSettings &settings);
@@ -452,6 +479,9 @@ public:
     ServerActor *getActor(int64_t uniqueId);
 
     ServerActor *getActorByRuntimeId(uint64_t runtimeId);
+
+    // players too: getActor holds every actor but the players
+    Actor *getEntity(int64_t uniqueId);
 
     void removeActor(int64_t uniqueId);
 
@@ -472,6 +502,10 @@ public:
 
     void updatePlayerVisibility();
 
+    void setPlayerVisibleTo(ServerPlayer &viewer, ServerPlayer &target, bool visible);
+    void spawnPlayerTo(ServerPlayer &viewer, ServerPlayer &target);
+    void despawnPlayerFrom(ServerPlayer &viewer, const ServerPlayer &target, bool sendPacket);
+
     void broadcastPlayerMove(ServerPlayer &player);
 
     /** Despawns the player for every client that has them spawned, as they leave the server. */
@@ -479,7 +513,9 @@ public:
 
     bool canPlayerSeeActor(ServerPlayer &player, const Actor &actor);
 
-    void broadcastActorMove(ServerActor &actor, bool teleported = false);
+    // except: a viewer predicting the actor itself, the rider steering it
+    // false: a far viewer was skipped for now and the move is still owed
+    bool broadcastActorMove(ServerActor &actor, bool teleported = false, const ServerPlayer *except = nullptr);
 
     void syncActorProperties(ServerActor &actor);
 
@@ -505,15 +541,23 @@ public:
 
     bool damageActor(ServerActor &actor, float amount, const ActorDamageSource &source, int32_t lootingLevel = -1);
 
-    void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey);
+    void hurtActor(Actor &actor, float amount, const std::string &deathMessageKey,
+                   std::optional<Vector3i> block = std::nullopt);
+    int32_t allowCombustion(Actor &victim, int32_t duration, Actor *source = nullptr,
+                           std::optional<Vector3i> block = std::nullopt);
 
     void sendActorMotion(Actor &actor);
 
     void knockBack(Actor &actor, float deltaX, float deltaZ, float force, float verticalLimit = 0.4f);
 
+    void knockBack(Actor &actor, float deltaX, float deltaZ, const KnockbackPreset &preset);
+
     void pushFrom(Actor &actor, const Vector3f &origin, float strength, float lift);
 
     void playActorAnimation(ServerActor &actor, const std::string &animation);
+
+    // to every spawned player, whatever their level
+    void broadcastToSpawned(const Packet &packet);
 
     void applyActorEffect(ServerActor &actor, int32_t effectId, int32_t amplifier, int32_t durationTicks,
                           bool particles);
@@ -610,6 +654,11 @@ public:
 
     void emitItemUse(ServerPlayer &player);
 
+    // starts holding the selected item: the client keeps its own use only while the flag stays on
+    void startItemUse(ServerPlayer &player, const ItemStack &item, int32_t durationTicks);
+
+    void stopItemUse(ServerPlayer &player);
+
     // ticks left before the held item's use completes, 0 once it could
     int32_t getItemUseTicksLeft(const ServerPlayer &player) const;
 
@@ -631,8 +680,9 @@ public:
 
     int64_t allocateActorUniqueId();
 
-    // gametest: a player with no client, fed inputs by the server; nothing is sent to it
-    ServerPlayer &spawnSimulatedPlayer(const std::string &name, Level &level, const Vector3f &position, float yaw,
+    // gametest: a player with no client, fed inputs by the server; nothing is sent to it;
+    // null once this tick's spawn headroom is used up
+    ServerPlayer *spawnSimulatedPlayer(const std::string &name, Level &level, const Vector3f &position, float yaw,
                                        int32_t gameType);
 
     // leaves at the next safe point of the tick, as a closed connection would
@@ -746,6 +796,10 @@ public:
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message,
                            bool success = true);
 
+    // one command's whole output; successCount 1 when it succeeded
+    void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
+                           std::vector<CommandOutputMessage> messages, bool success);
+
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &key,
                            const std::vector<std::string> &parameters);
 
@@ -772,6 +826,20 @@ public:
 
     ItemActor *dropItem(Level &level, const Vector3f &position, const ItemStack &item, const Vector3f &motion,
                         int pickupDelay);
+
+    // what dropItem and spawnExperienceOrbs keep in place of spawning while a capture is set: a death gathers its
+    // drops so plugins see them before they fall
+    struct DropCapture {
+        std::vector<ItemStack> mItems;
+        int32_t mExperience = 0;
+    };
+
+    // the capture before, given back so captures nest
+    DropCapture *setDropCapture(DropCapture *capture) {
+        DropCapture *previous = mDropCapture;
+        mDropCapture = capture;
+        return previous;
+    }
 
     // single entry point for player damage, in order: game mode and spawn invulnerability, damage game rules,
     // scripts and plugins, invulnerability window, shields, armor, Resistance, totem, then death
@@ -832,6 +900,15 @@ public:
         return mStonecutterRecipeIndices;
     }
 
+    const RecipeUnlockIndex &getRecipeUnlockIndex() {
+        _buildCraftingData();
+        return mRecipeUnlockIndex;
+    }
+
+    RecipeUnlockIndex &getRecipeUnlockIndexMutable() {
+        return mRecipeUnlockIndex;
+    }
+
     // custom recipes absent
     std::unordered_map<int32_t, std::string> &getVanillaRecipeIdsMutable() {
         return mVanillaRecipeIds;
@@ -865,7 +942,16 @@ public:
         // a walk nested in a visitor keeps the index: a refresh clears the outer walk's buckets
         if (mPlayerIndexWalks == 0)
             _refreshPlayerIndex();
-        ++mPlayerIndexWalks;
+        // scoped: a visitor that throws must not leave the index frozen
+        struct WalkScope {
+            int32_t &mWalks;
+            explicit WalkScope(int32_t &walks) : mWalks(walks) {
+                ++mWalks;
+            }
+            ~WalkScope() {
+                --mWalks;
+            }
+        } scope(mPlayerIndexWalks);
         for (int32_t chunkX = minX; chunkX <= maxX; chunkX++) {
             for (int32_t chunkZ = minZ; chunkZ <= maxZ; chunkZ++) {
                 const auto bucket = mPlayerIndex.find(_actorIndexKey(chunkX, chunkZ));
@@ -877,7 +963,6 @@ public:
                     visit(*bucket->second[index]);
             }
         }
-        --mPlayerIndexWalks;
     }
 
     void _refreshActorIndex();
@@ -885,7 +970,9 @@ public:
     void _flushExplosions();
 
     // only players the actor was spawned for; others get the state with the spawn
-    void _sendToViewers(const ServerActor &actor, const Packet &packet);
+    // accept: empty sends to every viewer
+    void _sendToViewers(const ServerActor &actor, const Packet &packet, const ServerPlayer *except = nullptr,
+                        const std::function<bool(ServerPlayer &)> &accept = {});
 
     ServerActor *_registerActor(std::unique_ptr<ServerActor> actor);
 
@@ -905,11 +992,15 @@ public:
 
     void _sendPlayerRemove(ServerPlayer &viewer, const ServerPlayer &target);
 
+    void _invalidatePlayerVisibility(const ServerPlayer &viewer);
+
     void _broadcastEntityEvent(const Actor &entity, uint8_t eventId);
 
     void _broadcastEntityEvent(const Actor &entity, uint8_t eventId, int32_t eventData);
 
     void _sendChunks(ServerPlayer &player);
+
+    void _loadDeferredChunks();
 
     void _handleFallDamage(ServerPlayer &player, const Block *supportBlock = nullptr);
 
@@ -946,6 +1037,13 @@ public:
     CommandMap &getCommands() {
         return mCommands;
     }
+
+    FunctionManager &getFunctions() {
+        return mFunctions;
+    }
+
+    // the entries one function run may take: the maxcommandchainlength game rule
+    int getCommandChainLimit();
 
     BiomeRegistry &getBiomes() {
         return mBiomes;
@@ -1000,6 +1098,7 @@ public:
     void sendModalForm(ServerPlayer &player, uint32_t formId, const std::string &formData,
                        ModalFormCallback callback = {});
     void closeAllForms(ServerPlayer &player);
+    void updatePlayerNameTag(ServerPlayer &player, std::string nameTag);
 
     // the screen binds to propertyPrefix + id in the minecraft store; writable lists the paths the client may set.
     // returns the form id, 0 when the player is not spawned
@@ -1020,6 +1119,8 @@ private:
 
     void onConnectionClosed(const NetworkIdentifier &id, DisconnectFailReason reason,
                             const std::string &message) override;
+
+    void onEncryptionEnabled(const NetworkIdentifier &id, bool usesAccountKey) override;
 
     void onDataReceived(const NetworkIdentifier &id, const std::string &data) override;
 
@@ -1155,6 +1256,9 @@ private:
     bool _isEyeInsideSolidBlock(Level &level, const Vector3f &position, float height);
 
     void _dropInventoryOnDeath(ServerPlayer &player);
+    void _killPlayerWithListeners(EventSignal<PlayerDeathBeforeEvent> &death, ServerPlayer &player,
+                                  std::string &deathMessage, bool ruleKeepsInventory);
+    void _dropExperienceOnDeath(ServerPlayer &player, int32_t experience);
 
     void _respawnPlayer(ServerPlayer &player);
 
@@ -1182,6 +1286,7 @@ private:
     void onReceiveIPSupport(RakPeerHelper::IPSupport support) override;
 
     void _updateServerAnnouncement();
+    void _updateDiscoveryProperties();
 
     void _updateJoinBurst();
 
@@ -1199,7 +1304,8 @@ private:
 
     PropertiesSettings mProperties;
     static const int DEFAULT_VIEW_DISTANCE = 4;
-    static const int MAX_VIEW_DISTANCE = 12;
+    // the game grants no radius below it and puts no cap above view-distance
+    static const int MIN_VIEW_DISTANCE = 5;
 
 public:
     unsigned getChunksPerTick() const {
@@ -1226,7 +1332,9 @@ private:
 
     void _sendDimensionChange(ServerPlayer &player, DimensionType dimension, const Vector3f &position);
 
-    World &_openWorld(const std::string &name, int64_t seed);
+    World &_openWorld(const std::string &name, int64_t seed, bool starting = false);
+    void _dispatchWorldOpen(World &world, bool created);
+    std::vector<std::pair<uint32_t, bool>> mStartingWorlds;
 
     WorldManager mWorlds;
     BiomeRegistry mBiomes;
@@ -1236,6 +1344,7 @@ private:
     std::vector<ItemStack> mRecipeOutputs;
     std::vector<uint32_t> mRecipeSourceIndices;
     std::unordered_map<int32_t, std::string> mVanillaRecipeIds;
+    RecipeUnlockIndex mRecipeUnlockIndex;
     std::unordered_map<int32_t, uint32_t> mStonecutterRecipeIndices;
     std::vector<int32_t> mCreativeSourceIndices;
     PlayerDataProvider mPlayerData;
@@ -1251,7 +1360,14 @@ private:
     ResourcePackManager mResourcePacks;
     CommandMap mCommands;
     PingedCompatibleServer mAnnouncement;
-    // the name and player limit are read by the transport threads answering status queries
+    // copies of the properties the discovery answer needs: mProperties belongs to the main thread
+    struct DiscoveryProperties {
+        std::string mLevelName;
+        GameType mGameType = GameType::Survival;
+        bool mOnlineMode = false;
+    };
+    DiscoveryProperties mDiscoveryProperties;
+    // the announcement and discovery properties are read by the transport threads answering status queries
     mutable std::mutex mAnnouncementMutex;
     int mMaxPlayers;
     bool mIsListening;
@@ -1271,6 +1387,21 @@ private:
     std::vector<ServerActor *> mCollidableActors;
     std::unordered_map<int64_t, std::vector<ServerPlayer *>> mPlayerIndex;
     std::unordered_map<uint64_t, ServerPlayer *> mPlayersByRuntimeId;
+    struct PlayerVisibilityState {
+        ServerPlayer *mPlayer = nullptr;
+        uint32_t mWorld = 0;
+        DimensionType mDimension = DimensionType::Overworld;
+        int32_t mChunkX = 0;
+        int32_t mChunkZ = 0;
+        bool mSpawned = false;
+        bool mPopulated = false;
+        bool mRefresh = false;
+        bool mDirty = false;
+        bool mSeen = false;
+        std::string mUuid;
+        size_t mVisibleCount = 0;
+    };
+    std::unordered_map<uint64_t, PlayerVisibilityState> mPlayerVisibility;
     bool mPlayerIndexDirty = true;
     int32_t mPlayerIndexWalks = 0;
     uint64_t mActorSetSerial = 0;
@@ -1283,6 +1414,12 @@ private:
         bool mFromTnt;
     };
     std::vector<PendingExplosion> mPendingExplosions;
+    struct ConfiguredExplosion {
+        PendingExplosion mExplosion;
+        bool mBreakBlocks;
+        double mFireChance;
+    };
+    std::vector<ConfiguredExplosion> mConfiguredExplosions;
     std::chrono::steady_clock::time_point mTickStarted;
     bool mLastTickLate = false;
     int32_t mPackHoldTicks = 0;
@@ -1295,6 +1432,8 @@ private:
     std::vector<QueuedActorCommand> mQueuedActorCommands;
     NaturalSpawner mNaturalSpawner;
     std::unordered_map<NetworkIdentifier, PacketRateLimiter, NetworkIdentifier::Hasher> mRateLimiters;
+    // the message a player was disconnected with, kept until the connection closes
+    std::unordered_map<NetworkIdentifier, std::string, NetworkIdentifier::Hasher> mLeaveReasons;
     ClientProbeTracker mClientProbes;
 
     // a client the attestation service asked to remove, kept until it has said what platform it is on
@@ -1307,8 +1446,14 @@ private:
 
     void _tickSimulatedPlayer(ServerPlayer &player);
     void _removeSimulatedPlayers();
+    void _reserveSimulatedSpawns();
+    // spawns a tick may make without a rehash of mPlayers: they can run inside a walk over it
+    static constexpr size_t SIMULATED_SPAWN_HEADROOM = 64;
     unsigned long long mSimulatedPlayerCount = 0;
     std::vector<NetworkIdentifier> mSimulatedRemovals;
+
+    void _applyCloudEffects(ServerPlayer &player, const std::vector<MobEffectInstance> &effects);
+    void _applyCloudEffects(ServerActor &actor, const std::vector<MobEffectInstance> &effects);
 
     struct LingeringCloud {
         int32_t mPotionId;
@@ -1323,7 +1468,8 @@ private:
         Vector3f mPosition;
         DimensionType mDimension = DimensionType::Overworld;
         uint32_t mWorldId = 0;
-        int64_t mOwnerRuntimeId = -1;
+        int64_t mOwnerUniqueId = -1;
+        std::optional<std::vector<MobEffectInstance>> mEffects;
     };
 
     std::unordered_map<int64_t, LingeringCloud> mLingeringClouds;
@@ -1339,9 +1485,13 @@ private:
         std::string mProperty;
         DataStoreChangeValue mValue;
         int32_t mUpdateCount = 0;
+        // the update count last resent to a stale client write: one resend per count
+        int32_t mResentUpdateCount = 0;
         std::unordered_map<std::string, int32_t> mPathUpdateCounts;
         std::unordered_set<std::string> mWritable;
         DataDrivenScreenCallbacks mCallbacks;
+        // a programmatic close reason is only believed once the server sent the close
+        bool mCloseRequested = false;
     };
 
     std::unordered_map<NetworkIdentifier, std::unordered_map<int32_t, DataDrivenScreen>, NetworkIdentifier::Hasher>
@@ -1353,6 +1503,7 @@ private:
     int64_t mPlayerIdleTimeoutTicks = 0;
     uint64_t mChunkStreamTick = 0;
     bool mJoinBurst = false;
+    bool mAwaitingTerrain = false;
     static const int64_t JOIN_BURST_TICKS = 200;
     static const uint64_t CHUNK_PACKET_EXPIRY_INTERVAL = 20;
     std::chrono::steady_clock::time_point mStartTime = std::chrono::steady_clock::now();
@@ -1362,8 +1513,10 @@ private:
     ScriptEngine mScriptEngine;
     // the hit hurt() is dealing while killPlayer runs: the death event reports its cause
     const ActorDamageSource *mFatalSource = nullptr;
+    DropCapture *mDropCapture = nullptr;
     const char *mSpawnCause = nullptr;
     BehaviorPackManager mBehaviorPacks;
+    FunctionManager mFunctions;
 
     std::map<std::pair<int, int>, std::shared_ptr<const SharedPacket>> mSharedLoginPackets;
     ChunkPacketCache mChunkPacketCache;

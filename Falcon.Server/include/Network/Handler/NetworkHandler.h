@@ -27,6 +27,11 @@ class PacketCodecContext;
 
 class NetworkHandler : public Connector::ConnectionCallbacks {
 public:
+    struct InboundUsage {
+        std::atomic<size_t> mPackets{0};
+        std::atomic<size_t> mBytes{0};
+    };
+
     class Connection {
     public:
         Connection(const NetworkIdentifier &id, std::shared_ptr<NetworkPeer> peer);
@@ -51,6 +56,12 @@ public:
             return mBatchedPeer.get();
         }
 
+        bool enableEncryption(const EncryptionKey &key);
+
+        const std::shared_ptr<InboundUsage> &inboundUsage() const {
+            return mInboundUsage;
+        }
+
         bool isFailureReported() const {
             return mFailureReported;
         }
@@ -65,6 +76,7 @@ public:
         std::shared_ptr<EncryptedNetworkPeer> mEncryptedPeer;
         std::shared_ptr<CompressedNetworkPeer> mCompressedPeer;
         std::shared_ptr<BatchedNetworkPeer> mBatchedPeer;
+        std::shared_ptr<InboundUsage> mInboundUsage = std::make_shared<InboundUsage>();
         bool mFailureReported = false;
     };
 
@@ -87,17 +99,21 @@ public:
 
         virtual void onDataReceived(const NetworkIdentifier &, const std::string &) {}
 
+        virtual void onEncryptionEnabled(const NetworkIdentifier &, bool) {}
+
         virtual void onConnectionFailed(const NetworkIdentifier &) {}
     };
 
     struct InboundEvent {
-        enum class Kind : int { Data = 0, Opened = 1, Closed = 2, Failed = 3 };
+        enum class Kind : int { Data = 0, Opened = 1, Closed = 2, Failed = 3, EncryptionEnabled = 4 };
 
         Kind mKind = Kind::Data;
         NetworkIdentifier mId;
         std::string mData;
         DisconnectFailReason mReason = DisconnectFailReason::Unknown;
         uint16_t mMtuSize = 0;
+        bool mUsesAccountKey = false;
+        std::shared_ptr<InboundUsage> mConnectionUsage;
     };
 
     struct OutboundCommand {
@@ -125,6 +141,7 @@ public:
         std::unique_ptr<Connection> mConnection;
         // sent in place of mData: one encoding and one compression for every recipient
         std::shared_ptr<const SharedPacket> mShared;
+        std::shared_ptr<const std::string> mEncoded;
         // released once the shard has taken the data
         std::shared_ptr<std::atomic<size_t>> mPendingBytes;
     };
@@ -196,7 +213,8 @@ public:
     void enableCompression(const NetworkIdentifier &id, CompressedNetworkPeer::CompressionAlgorithm algorithm,
                            unsigned short threshold);
 
-    void enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key);
+    void enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key,
+                          const std::string &loginPublicKey = {});
 
     // sends nothing, then reports the connection closed
     void closeConnection(const NetworkIdentifier &id);
@@ -224,6 +242,10 @@ public:
     void setOutboundFilter(OutboundFilter filter);
 
     void setSendHook(SendHook hook);
+
+    bool hasSendHook() const {
+        return static_cast<bool>(mSendHook);
+    }
 
     // callers keep passing the server's context whatever version the client speaks
     void setContextResolver(ContextResolver resolver);
@@ -253,6 +275,7 @@ private:
 
     // a connection always maps to one shard: its order is kept while compression spreads over cores
     struct Shard {
+        InboundUsage mInboundUsage;
         TaskQueue<OutboundCommand> mOutbound;
         std::deque<OutboundCommand> mBacklog;
         std::unordered_map<NetworkIdentifier, std::unique_ptr<Connection>, NetworkIdentifier::Hasher> mConnections;

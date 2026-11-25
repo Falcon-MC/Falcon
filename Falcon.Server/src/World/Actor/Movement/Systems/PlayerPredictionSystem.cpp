@@ -183,16 +183,21 @@ void PlayerPredictionSystem::tick(PlayerMovementContext &context) {
                  entry.movementSpeed);
     }
 
+    correct(context, state.simulated, state.velocity, state.onGround);
+}
+
+void PlayerPredictionSystem::correct(PlayerMovementContext &context, const Vector3f &position,
+                                     const Vector3f &velocity, bool onGround) {
+    const PlayerAuthInputPacket &packet = context.input.getPacket();
     // the client rewinds to the correction's tick and replays from the server's position and velocity;
     // position at eye level like other player positions
     CorrectPlayerMovePredictionPacket correction;
     correction.mPredictionType = PredictionType::Player;
-    correction.mPosition = Vector3f(state.simulated.x, state.simulated.y + PlayerMovementSimulator::PLAYER_BASE_OFFSET,
-                                    state.simulated.z);
-    correction.mDelta = state.velocity;
-    correction.mVehicleRotation = Vector2f(input.getPacket().mRotation.x, input.getPacket().mRotation.y);
+    correction.mPosition = Vector3f(position.x, position.y + PlayerMovementSimulator::PLAYER_BASE_OFFSET, position.z);
+    correction.mDelta = velocity;
+    correction.mVehicleRotation = Vector2f(packet.mRotation.x, packet.mRotation.y);
     correction.mHasVehicleAngularVelocity = false;
-    correction.mOnGround = state.onGround;
-    correction.mTick = (uint64_t) input.getPacket().mTick;
+    correction.mOnGround = onGround;
+    correction.mTick = (uint64_t) packet.mTick;
     context.owner.getNetworkHandler().send(context.id, correction, context.owner.getCodecContext());
 }

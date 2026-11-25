@@ -136,6 +136,40 @@ namespace {
         require(above.remaining() == 1 && target.getInventory().getContainerItem(FurnaceInventory::SLOT_INPUT).mCount == 1,
                 "the fuel filter rejected a top insertion into the input slot");
     }
+
+    int composterLevel(Level &level, const Vector3i &position) {
+        return level.getBlockState(position.x, position.y, position.z).mStates.getInt("composter_fill_level", -1);
+    }
+
+    void composter() {
+        const Vector3i top(SOURCE.x, SOURCE.y + 1, SOURCE.z);
+        for (const int fill: {7, 8}) {
+            Fixture fixture(0);
+            BlockState state = VanillaBlocks::COMPOSTER().toBlockState();
+            state.mStates.putInt("composter_fill_level", fill);
+            fixture.mLevel.setBlock(top, state, false);
+            fixture.tick();
+            const ItemStack &pulled = fixture.mSource->getInventory().getContainerItem(0);
+            if (fill == 7) {
+                require(pulled.isAir() && composterLevel(fixture.mLevel, top) == 7,
+                        "a composter that was not ready gave bone meal");
+                continue;
+            }
+            require(!pulled.isAir() && pulled.mDefinition->getIdentifier() == "minecraft:bone_meal"
+                            && pulled.mCount == 1,
+                    "a ready composter did not give one bone meal");
+            require(composterLevel(fixture.mLevel, top) == 0, "the composter was not emptied");
+        }
+
+        Fixture full(0);
+        BlockState ready = VanillaBlocks::COMPOSTER().toBlockState();
+        ready.mStates.putInt("composter_fill_level", 8);
+        full.mLevel.setBlock(top, ready, false);
+        for (int slot = 0; slot < HopperBlockActor::SIZE; ++slot)
+            full.mSource->getInventory().setContainerItem(slot, full.mOwner.createItemStack("minecraft:dirt", 64));
+        full.tick();
+        require(composterLevel(full.mLevel, top) == 8, "a full hopper emptied the composter");
+    }
 }
 
 int main(int argc, char **argv) {
@@ -147,11 +181,13 @@ int main(int argc, char **argv) {
     try {
         std::filesystem::create_directories(directory);
         ServerPaths::setRoot(directory);
-        require(argc == 2, "expected horizontal or fuel");
+        require(argc == 2, "expected horizontal, fuel or composter");
         if (std::string(argv[1]) == "horizontal")
             horizontal();
         else if (std::string(argv[1]) == "fuel")
             fuel();
+        else if (std::string(argv[1]) == "composter")
+            composter();
         else
             throw std::runtime_error("unknown test case");
     } catch (const std::exception &error) {

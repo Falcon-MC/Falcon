@@ -20,7 +20,6 @@
 #include "World/Level/Level.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
-#include "Falcon/Plugin/PluginManager.h"
 #include "World/Level/Block/BlockNames.h"
 
 namespace {
@@ -233,14 +232,11 @@ bool BedBlock::use(ServerNetworkHandler &owner, ServerPlayer &player, const Vect
         return true;
     }
 
-    if (PluginManager *plugins = PluginManager::findWithSubscribers(FALCON_EVENT_PLAYER_BED_ENTER)) {
-        PluginEvent bedEvent;
-        bedEvent.mType = FALCON_EVENT_PLAYER_BED_ENTER;
-        bedEvent.mCancellable = true;
-        bedEvent.mPlayer = &player;
-        bedEvent.mBlockPosition = head;
-        plugins->dispatch(bedEvent);
-        if (bedEvent.mCancelled)
+    EventSignal<PlayerBedEnterBeforeEvent> &bedEnter = owner.getEventBus().before().mPlayerBedEnter;
+    if (bedEnter.hasSubscribers()) {
+        PlayerBedEnterBeforeEvent event(player, head);
+        bedEnter.emit(event);
+        if (event.isCancelled())
             return true;
     }
 

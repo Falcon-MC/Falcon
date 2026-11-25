@@ -1,9 +1,12 @@
 #include "Network/ServerNetworkHandler.h"
+#include "Server/Commands/EffectCommand.h"
 #include "Server/Commands/ExecuteCommand.h"
 #include "Server/Commands/ServerCommandOrigin.h"
 #include "Server/PropertiesSettings.h"
 #include "Server/ServerPaths.h"
 #include "World/Actor/Definition/EntityDefinitions.h"
+#include "World/Actor/MobEffect.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Level/Chunk/LevelChunk.h"
 #include "World/Level/Level.h"
 #include "World/Level/World.h"
@@ -52,6 +55,22 @@ namespace {
                 level.insertChunk(LevelChunk(x, z)).setPopulated(true);
         }
 
+        size_t start = 0;
+        const auto includes = [](const std::vector<std::string> &values, const std::string &name) {
+            return std::find(values.begin(), values.end(), name) != values.end();
+        };
+        const auto &commands = owner.getCommands();
+        require(includes(commands.complete("/wo", {}, start), "world") && start == 1,
+                "console did not complete a command after the slash");
+        require(includes(commands.complete("world lo", {}, start), "load") && start == 6,
+                "console did not complete a subcommand");
+        require(includes(commands.complete("give Ale", {"Alex Stone"}, start), "\"Alex Stone\""),
+                "console did not quote a player name");
+        require(includes(commands.complete("give @p", {}, start), "@p"), "console did not complete a selector");
+        require(includes(commands.complete("give @a dia", {}, start), "diamond"), "console did not complete an item");
+        require(includes(commands.complete("setblock ~ ~ ~ minecraft:ston", {}, start), "minecraft:stone"),
+                "console did not complete a block after a position");
+
         ExecuteCommand execute(owner);
 
         // a block test far from any loaded chunk is refused instead of generating the column
@@ -75,6 +94,21 @@ namespace {
             require(!origin.sent(NO_TARGET), std::string("execute ") + subcommand + " did not find the cow");
             require(origin.sent(OUT_OF_WORLD), std::string("execute ") + subcommand + " did not run for the cow");
         }
+
+        // /effect takes any entity, as the game's target does: a zombie can be kept from burning
+        ServerActor *zombie = owner.spawnActor(level, "minecraft:zombie", Vector3f(4.5f, 100.0f, 0.5f));
+        require(zombie != nullptr, "the zombie did not spawn");
+        EffectCommand effect(owner);
+        RecordingOrigin effectOrigin(&owner);
+        require(effect.execute(effectOrigin, {"@e[type=zombie]", "fire_resistance", "60", "0", "true"}),
+                "effect refused the zombie");
+        require(zombie->hasEffect(MobEffectId::FireResistance), "the zombie got no fire resistance");
+        RecordingOrigin clearOrigin(&owner);
+        require(effect.execute(clearOrigin, {"@e[type=zombie]", "clear"}), "effect clear refused the zombie");
+        require(!zombie->hasEffect(MobEffectId::FireResistance), "effect clear left the zombie's effect");
+        RecordingOrigin noneOrigin(&owner);
+        require(!effect.execute(noneOrigin, {"@e[type=creeper]", "speed"}), "effect ran with no target");
+        require(noneOrigin.sent(NO_TARGET), "an effect without a target was not answered as no target");
     }
 }
 

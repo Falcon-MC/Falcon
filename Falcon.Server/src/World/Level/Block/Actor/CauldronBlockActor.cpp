@@ -1,5 +1,7 @@
 #include "World/Level/Block/Actor/CauldronBlockActor.h"
 
+#include "World/Item/PotionEffects.h"
+
 #include <algorithm>
 
 namespace {
@@ -72,6 +74,8 @@ void CauldronBlockActor::addDye(int32_t dyeColor) {
 
 // the float color packed as ARGB, each channel truncated
 uint32_t CauldronBlockActor::getEventColor() const {
+    if (hasPotion())
+        return (uint32_t) getPotionColor(mPotionId);
     if (!mHasColor)
         return byteOf(NO_DYE_COLOR[3]) << 24 | byteOf(NO_DYE_COLOR[0]) << 16 | byteOf(NO_DYE_COLOR[1]) << 8
                | byteOf(NO_DYE_COLOR[2]);

@@ -1,12 +1,13 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <string>
 
-// one tcp connection, tls when secure; reads and writes block up to the timeout given to open
+// one tcp connection, tls when secure; reads and writes block until the deadline set by open
 class NetStream {
 public:
     NetStream() = default;
@@ -17,7 +18,8 @@ public:
 
     NetStream &operator=(const NetStream &) = delete;
 
-    // timeoutSeconds 0: no timeout; on failure errorCode and errorMessage come from the platform or openssl
+    // timeoutSeconds bounds open and every read and write after it, counted from this call; 0: no deadline.
+    // on failure errorCode and errorMessage come from the platform or openssl
     bool open(const std::string &host, const std::string &port, bool secure, uint32_t timeoutSeconds);
 
     bool writeAll(const char *data, size_t size);
@@ -27,6 +29,9 @@ public:
 
     // true when a read would not block; waits at most milliseconds
     bool waitReadable(int milliseconds);
+
+    // reads and writes wait without a time limit from now on
+    void clearDeadline();
 
     // any thread: unblocks a pending read or write, the stream fails from then on
     void abort();
@@ -50,11 +55,22 @@ private:
 
     void _failTls(const char *what);
 
+    // -1 no deadline
+    int _remainingMilliseconds() const;
+
+    // fails the stream once the deadline passed
+    bool _expired();
+
+    // until the socket is ready or the deadline; false fails the stream
+    bool _wait(bool write);
+
     std::mutex mSocketMutex;
     intptr_t mSocket = -1;
     void *mContext = nullptr;
     void *mSsl = nullptr;
     std::atomic<bool> mAborted{false};
+    std::chrono::steady_clock::time_point mDeadline;
+    bool mHasDeadline = false;
     int mErrorCode = 0;
     std::string mErrorMessage;
 };

@@ -1,5 +1,9 @@
 #include "Network/Handler/NetworkHandler.h"
 
+#include "Core/Threading/CpuCount.h"
+#include "Network/LoginChainVerifier.h"
+#include "Network/NetherNet/NetherNetConnection.h"
+
 #include "Core/Utility/BinaryStream.h"
 #include "Core/Utility/ReadOnlyBinaryStream.h"
 #include "Protocol/Codec/ProtocolCodec.h"
@@ -13,15 +17,28 @@
 
 namespace {
     const unsigned MAX_IO_SHARDS = 8;
+    // a single frame fits the transport's maximum decompressed batch
+    constexpr size_t MAX_INBOUND_PACKET_BYTES = 8 * 1024 * 1024;
+    constexpr size_t SESSION_QUEUE_BYTES = 16 * 1024 * 1024;
+    constexpr size_t SHARD_QUEUE_BYTES = 32 * 1024 * 1024;
+    constexpr size_t SESSION_QUEUE_PACKETS = 1024;
+    constexpr size_t SHARD_QUEUE_PACKETS = 4096;
+    constexpr size_t READS_PER_CONNECTION = 64;
+    constexpr size_t EVENTS_PER_PASS = 2048;
+
+    bool hasRoom(const NetworkHandler::InboundUsage &usage, size_t packets, size_t bytes) {
+        // one shard produces here; leave room for a full frame before reading the transport
+        return usage.mPackets.load(std::memory_order_relaxed) < packets
+               && usage.mBytes.load(std::memory_order_relaxed) <= bytes - MAX_INBOUND_PACKET_BYTES;
+    }
 
     // compressible bytes per shard pass before reading again; zlib does a few tens of MB/s: a chunk burst
     // spreads over short passes, not one long pass filling the receive queues and stalling every connection
-    const size_t MAX_OUTBOUND_BYTES_PER_PASS = 256 * 1024;
-    const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(4);
+    const size_t MAX_OUTBOUND_BYTES_PER_PASS = 1024 * 1024;
+    const std::chrono::milliseconds MAX_OUTBOUND_TIME_PER_PASS(8);
 
     size_t ioShardCount() {
-        const unsigned cores = std::thread::hardware_concurrency();
-        return (size_t) std::max(1u, std::min(MAX_IO_SHARDS, cores / 2));
+        return (size_t) std::max(1u, std::min(MAX_IO_SHARDS, CpuCount::usable() / 2));
     }
 }
 
@@ -30,6 +47,15 @@ NetworkHandler::Connection::Connection(const NetworkIdentifier &id, std::shared_
     mEncryptedPeer = std::make_shared<EncryptedNetworkPeer>(mPeer);
     mCompressedPeer = std::make_shared<CompressedNetworkPeer>(mEncryptedPeer);
     mBatchedPeer = std::make_shared<BatchedNetworkPeer>(mCompressedPeer);
+}
+
+bool NetworkHandler::Connection::enableEncryption(const EncryptionKey &key) {
+    mBatchedPeer->flush();
+    if (!mEncryptedPeer->enableEncryption(key))
+        return false;
+    // packets still buffered in the old batch belong before the handshake
+    mBatchedPeer = std::make_shared<BatchedNetworkPeer>(mCompressedPeer);
+    return true;
 }
 
 NetworkHandler::NetworkHandler(std::unique_ptr<Connector> connector) : mIoRunning(false), mConnectionCount(0) {
@@ -209,6 +235,8 @@ void NetworkHandler::_trackPending(OutboundCommand &command) {
 }
 
 size_t NetworkHandler::_pendingSize(const OutboundCommand &command) {
+    if (command.mEncoded != nullptr)
+        return command.mEncoded->size();
     return command.mShared != nullptr ? command.mShared->getPacketSize() : command.mData.size();
 }
 
@@ -239,11 +267,13 @@ void NetworkHandler::enableCompression(const NetworkIdentifier &id,
     _pushOutbound(std::move(command));
 }
 
-void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key) {
+void NetworkHandler::enableEncryption(const NetworkIdentifier &id, const EncryptionKey &key,
+                                      const std::string &loginPublicKey) {
     OutboundCommand command;
     command.mKind = OutboundCommand::Kind::EnableEncryption;
     command.mId = id;
     command.mEncryptionKey = key;
+    command.mData = loginPublicKey;
     _pushOutbound(std::move(command));
 }
 
@@ -319,7 +349,7 @@ void NetworkHandler::send(const NetworkIdentifier &id, const Packet &packet, con
 void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const Packet &packet,
                                 const PacketCodecContext &context) {
     // same-protocol sessions share a codec context: most recipients reuse one encoding
-    std::vector<std::pair<const PacketCodecContext *, std::string>> encoded;
+    std::vector<std::pair<const PacketCodecContext *, std::shared_ptr<const std::string>>> encoded;
     if (mSendHook && !ids.empty() && !mSendHook(ids, packet.getId()))
         return;
     // corked, the commands go straight where they wait
@@ -335,26 +365,30 @@ void NetworkHandler::sendToMany(const std::vector<NetworkIdentifier> &ids, const
         if (!session.getCodec().supports(packet.getId()))
             continue;
 
-        const std::string *data = nullptr;
+        std::shared_ptr<const std::string> data;
         for (const auto &entry: encoded) {
             if (entry.first == &session) {
-                data = &entry.second;
+                data = entry.second;
                 break;
             }
         }
         if (data == nullptr) {
             BinaryStream stream;
             packet.writeWithHeader(stream, session);
-            encoded.emplace_back(&session, stream.getBuffer());
-            data = &encoded.back().second;
+            data = std::make_shared<const std::string>(stream.getBuffer());
+            encoded.emplace_back(&session, data);
         }
 
         OutboundCommand command;
         command.mKind = OutboundCommand::Kind::Data;
         command.mId = id;
-        command.mData = *data;
-        if (mOutboundFilter && !mOutboundFilter(id, command.mData))
-            continue;
+        if (mOutboundFilter) {
+            command.mData = *data;
+            if (!mOutboundFilter(id, command.mData))
+                continue;
+        } else {
+            command.mEncoded = std::move(data);
+        }
 
         command.mReliability = _toPeerReliability(packet);
         command.mCompressibility = _toPeerCompressibility(packet);
@@ -444,14 +478,18 @@ void NetworkHandler::sendToAll(const std::string &data, NetworkPeer::Reliability
         if (!_allowRaw(ids, data))
             return;
     }
-    for (std::unique_ptr<Shard> &shard: mShards) {
+    const bool corked = mCorked.load(std::memory_order_relaxed) && std::this_thread::get_id() == mCorkThread;
+    for (size_t index = 0; index < mShards.size(); ++index) {
         OutboundCommand command;
         command.mKind = OutboundCommand::Kind::Data;
         command.mData = data;
         command.mBroadcast = true;
         command.mReliability = reliability;
         command.mCompressibility = compressibility;
-        shard->mOutbound.push(std::move(command));
+        if (corked)
+            mCorkedCommands[index].push_back(std::move(command));
+        else
+            mShards[index]->mOutbound.push(std::move(command));
     }
 }
 
@@ -470,6 +508,9 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
 
         if (command.mShared != nullptr)
             it->second->getBatchedPeer()->sendShared(*command.mShared, command.mReliability);
+        else if (command.mEncoded != nullptr)
+            it->second->getBatchedPeer()->sendPacket(*command.mEncoded, command.mReliability,
+                                                     command.mCompressibility);
         else
             it->second->getBatchedPeer()->sendPacket(command.mData, command.mReliability, command.mCompressibility);
         return;
@@ -516,9 +557,20 @@ void NetworkHandler::_applyOutbound(Shard &shard, OutboundCommand &command) {
 
     if (command.mKind == OutboundCommand::Kind::Flush)
         connection->getBatchedPeer()->flush();
-    else if (command.mKind == OutboundCommand::Kind::EnableEncryption)
-        connection->getEncryptedPeer()->enableEncryption(command.mEncryptionKey);
-    else
+    else if (command.mKind == OutboundCommand::Kind::EnableEncryption) {
+        if (!connection->enableEncryption(command.mEncryptionKey)) {
+            _reportFailure(*connection);
+            return;
+        }
+        InboundEvent event;
+        event.mKind = InboundEvent::Kind::EncryptionEnabled;
+        event.mId = command.mId;
+        event.mUsesAccountKey = connection->getEncryptedPeer()->isEncryptionEnabled();
+        // NetherNet uses DTLS: its certificate fingerprints can also be signed by the login key
+        if (const auto *nether = dynamic_cast<nethernet::Connection *>(connection->getPeer()))
+            event.mUsesAccountKey = LoginChainVerifier::verifiesTransportOffer(nether->getRemoteOffer(), command.mData);
+        mInbound.push(std::move(event));
+    } else
         connection->getCompressedPeer()->enableCompression(command.mAlgorithm, command.mThreshold);
 }
 
@@ -541,16 +593,32 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
 
     // read first: a transport holds off its own threads while a receive queue is full
     for (auto &entry: shard.mConnections) {
+        if (entry.second->isFailureReported())
+            continue;
         NetworkPeer *peer = entry.second->getBatchedPeer();
+        const auto &usage = entry.second->inboundUsage();
         bool failed = false;
 
         // a transport can throw for one connection (data channel closing mid-send): drop it, not the server
         try {
-            while (peer->receivePacket(data) == NetworkPeer::DataStatus::HasData) {
+            for (size_t count = 0; count < READS_PER_CONNECTION
+                                   && hasRoom(*usage, SESSION_QUEUE_PACKETS, SESSION_QUEUE_BYTES)
+                                   && hasRoom(shard.mInboundUsage, SHARD_QUEUE_PACKETS, SHARD_QUEUE_BYTES); ++count) {
+                if (peer->receivePacket(data) != NetworkPeer::DataStatus::HasData)
+                    break;
+                if (data.size() > MAX_INBOUND_PACKET_BYTES) {
+                    failed = true;
+                    break;
+                }
+                usage->mPackets.fetch_add(1, std::memory_order_relaxed);
+                usage->mBytes.fetch_add(data.size(), std::memory_order_relaxed);
+                shard.mInboundUsage.mPackets.fetch_add(1, std::memory_order_relaxed);
+                shard.mInboundUsage.mBytes.fetch_add(data.size(), std::memory_order_relaxed);
                 InboundEvent event;
                 event.mKind = InboundEvent::Kind::Data;
                 event.mId = entry.first;
-                event.mData = data;
+                event.mConnectionUsage = usage;
+                event.mData = std::move(data);
                 mInbound.push(std::move(event));
             }
 
@@ -559,7 +627,7 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
             failed = true;
         }
 
-        if (failed || entry.second->getEncryptedPeer()->hasFailed())
+        if (failed || entry.second->getBatchedPeer()->hasFailed() || entry.second->getEncryptedPeer()->hasFailed())
             _reportFailure(*entry.second);
     }
 
@@ -589,7 +657,8 @@ void NetworkHandler::_pumpShard(Shard &shard, bool bounded) {
 
         OutboundCommand command = std::move(shard.mBacklog.front());
         shard.mBacklog.pop_front();
-        if (command.mCompressibility == Compressibility::Compressible)
+        // shared batches compress and send during dispatch, already covered by the time budget
+        if (command.mShared == nullptr && command.mCompressibility == Compressibility::Compressible)
             bytes += command.mBroadcast ? command.mData.size() * shard.mConnections.size() : _pendingSize(command);
 
         if (command.mPendingBytes != nullptr)
@@ -642,8 +711,16 @@ void NetworkHandler::runEvents() {
         events.insert(events.end(), std::make_move_iterator(drained.begin()), std::make_move_iterator(drained.end()));
     }
 
-    for (InboundEvent &event: events)
-        _dispatch(event);
+    size_t processed = 0;
+    for (InboundEvent &event: events) {
+        if (processed < EVENTS_PER_PASS) {
+            _dispatch(event);
+            ++processed;
+        } else {
+            mDeferredIds.insert(event.mId);
+            mDeferred.push_back(std::move(event));
+        }
+    }
 }
 
 void NetworkHandler::runEventsFor(const std::function<bool(const NetworkIdentifier &)> &admit) {
@@ -651,14 +728,16 @@ void NetworkHandler::runEventsFor(const std::function<bool(const NetworkIdentifi
         return;
 
     std::vector<InboundEvent> events = mInbound.drain();
+    size_t processed = 0;
     for (InboundEvent &event: events) {
-        if (mDeferredIds.count(event.mId) != 0 || !admit(event.mId)) {
+        if (processed == EVENTS_PER_PASS || mDeferredIds.count(event.mId) != 0 || !admit(event.mId)) {
             mDeferredIds.insert(event.mId);
             mDeferred.push_back(std::move(event));
             continue;
         }
 
         _dispatch(event);
+        ++processed;
     }
 }
 
@@ -682,6 +761,11 @@ void NetworkHandler::_dispatch(InboundEvent &event) {
             break;
         }
 
+        case InboundEvent::Kind::EncryptionEnabled:
+            for (Listener *listener: mListeners)
+                listener->onEncryptionEnabled(event.mId, event.mUsesAccountKey);
+            break;
+
         case InboundEvent::Kind::Failed: {
             ProfilerScopedSection section(*mProfiler, ProfilerSection::NetworkConnection, profiling);
             for (Listener *listener: mListeners)
@@ -689,10 +773,17 @@ void NetworkHandler::_dispatch(InboundEvent &event) {
             break;
         }
 
-        default:
+        default: {
+            std::string data = std::move(event.mData);
+            InboundUsage &shard = _shardFor(event.mId).mInboundUsage;
+            event.mConnectionUsage->mPackets.fetch_sub(1, std::memory_order_relaxed);
+            event.mConnectionUsage->mBytes.fetch_sub(data.size(), std::memory_order_relaxed);
+            shard.mPackets.fetch_sub(1, std::memory_order_relaxed);
+            shard.mBytes.fetch_sub(data.size(), std::memory_order_relaxed);
             for (Listener *listener: mListeners)
-                listener->onDataReceived(event.mId, event.mData);
+                listener->onDataReceived(event.mId, data);
             break;
+        }
     }
 }
 

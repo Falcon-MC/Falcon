@@ -10,6 +10,7 @@
 #include "World/Level/LevelGen/Structure/JigsawStructures.h"
 #include "World/Level/LevelGen/Structure/JungleTempleStructure.h"
 #include "World/Level/LevelGen/Structure/MansionStructure.h"
+#include "World/Level/LevelGen/Structure/MonumentStructure.h"
 #include "World/Level/LevelGen/Structure/MineshaftStructure.h"
 #include "World/Level/LevelGen/Structure/OceanRuinStructure.h"
 #include "World/Level/LevelGen/Structure/PillagerOutpostStructure.h"
@@ -151,6 +152,8 @@ void OverworldGenerator::decorate(Level &level, LevelChunk &chunk, std::vector<G
     StrongholdStructure::place(*this, level, chunk);
     MineshaftStructure::place(*this, level, chunk);
     MansionStructure::place(*this, level, chunk);
+    // after the mansion, as in createGenerator: a mansion over the sea keeps its foundation only below the monument
+    MonumentStructure::place(*this, level, chunk);
     JigsawStructures::get().place(*this, level, chunk, overflow);
     OverworldFeatureBuilder::apply(level, chunk, *mClimate, overflow);
 }
@@ -175,10 +178,11 @@ int64_t OverworldGenerator::parseSeed(const std::string &value) {
 void OverworldGenerator::_generateTerrain(LevelChunk &chunk, int32_t *heightMap, std::mt19937 &random,
                                           OverworldAquifer &aquifer) const {
     const int32_t minY = OverworldGeneratorConstants::MIN_Y;
-    // jigsaw pieces near the chunk; the preliminary heights leave it out
+    // jigsaw pieces and buried strongholds near the chunk; the preliminary heights leave it out
     TerrainBeard beard;
     VillageStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     JigsawStructures::get().addBeard(*this, chunk.getX(), chunk.getZ(), beard);
+    StrongholdStructure::addBeard(*this, chunk.getX(), chunk.getZ(), beard);
     mTerrainFiller->fill(chunk, heightMap, aquifer, &beard);
 
     // the first draws of the chunk's random lay 2 to 5 bedrock layers over whatever the noise placed

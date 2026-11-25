@@ -56,6 +56,15 @@ namespace {
         return false;
     }
 
+    bool withinBox(const MobActor &mob, const MobActor &other, float range) {
+        const Vector3f position = mob.getPosition();
+        const Vector3f otherPosition = other.getPosition();
+        const float reach = (mob.getSize().mWidth + other.getSize().mWidth) * 0.5f + range;
+        return std::fabs(otherPosition.x - position.x) <= reach && std::fabs(otherPosition.z - position.z) <= reach
+               && otherPosition.y <= position.y + mob.getSize().mHeight + range
+               && otherPosition.y + other.getSize().mHeight >= position.y - range;
+    }
+
     void setAngryFlag(ServerNetworkHandler &owner, MobActor &mob, bool angry) {
         if (mob.getFlags().get(ActorFlag::Angry) == angry)
             return;
@@ -81,6 +90,11 @@ void MobAnger::tick(ServerNetworkHandler &owner, MobActor &mob) {
     if (component == nullptr)
         return;
 
+    if (!_keepsTarget(owner, mob, *component)) {
+        _calm(owner, mob, *component);
+        return;
+    }
+
     const json::Value *sound = component->get("angry_sound");
     if (sound != nullptr && --mSoundTicks <= 0) {
         mob.playDefinitionSound(owner, sound->string());
@@ -105,13 +119,23 @@ void MobAnger::onAttack(ServerNetworkHandler &owner, MobActor &mob, Actor &victi
         _broadcast(owner, mob, *mComponent, victim);
 }
 
-void MobAnger::_start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) {
+// checked every tick: no target keeps the anger only without filters; a target must pass them and stay attackable
+bool MobAnger::_keepsTarget(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) const {
     Actor *target = mob.getTarget(owner);
     const json::Value *filters = component.get("filters");
-    if (target != nullptr && filters != nullptr && !EntityFilter::test(*filters, owner, mob, target)) {
+    if (target == nullptr)
+        return filters == nullptr;
+
+    return mob.canTarget(*target) && (filters == nullptr || EntityFilter::test(*filters, owner, mob, target));
+}
+
+void MobAnger::_start(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component) {
+    if (!_keepsTarget(owner, mob, component)) {
         _calm(owner, mob, component);
         return;
     }
+
+    Actor *target = mob.getTarget(owner);
 
     setAngryFlag(owner, mob, true);
     _resetDuration(component);
@@ -130,14 +154,14 @@ void MobAnger::_calm(ServerNetworkHandler &owner, MobActor &mob, const json::Val
 
 void MobAnger::_broadcast(ServerNetworkHandler &owner, MobActor &mob, const json::Value &component,
                           const Actor &target) {
-    const float range = numberIn(component, "broadcast_range", DEFAULT_BROADCAST_RANGE);
+    // the game asks for the actors in the mob's box grown by the range; a busy ally is turned too, a tamed one never
+    const float range = (float) (int32_t) numberIn(component, "broadcast_range", DEFAULT_BROADCAST_RANGE);
     const std::vector<std::string> families = broadcastTargets(component);
 
     for (auto &entry: owner.getActors()) {
         MobActor *ally = dynamic_cast<MobActor *>(entry.second.get());
-        if (ally == nullptr || ally == &mob || !ally->isAlive() || !ally->sharesLevelWith(mob)
-            || ally->getTarget(owner) != nullptr || !hasAnyFamily(*ally, families)
-            || mob.distanceSquaredTo(*ally) > range * range || !ally->canTarget(target))
+        if (ally == nullptr || ally == &mob || !ally->isAlive() || !ally->sharesLevelWith(mob) || ally->isTamed()
+            || !hasAnyFamily(*ally, families) || !withinBox(mob, *ally, range) || !ally->canTarget(target))
             continue;
 
         ally->setTarget(owner, target.getRuntimeId());

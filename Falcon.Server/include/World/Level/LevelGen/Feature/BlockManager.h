@@ -24,6 +24,8 @@ public:
 
     virtual void setBlockStateAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
 
+    virtual void populateBeeNest(int32_t x, int32_t y, int32_t z, int32_t beeCount);
+
     void setExtraBlockAt(int32_t x, int32_t y, int32_t z, const BlockState &state);
 
     bool isCached(int32_t x, int32_t y, int32_t z) const;

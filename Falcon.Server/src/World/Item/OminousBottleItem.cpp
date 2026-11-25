@@ -7,6 +7,8 @@ FALCON_REGISTER_ITEM(OminousBottleItem, 100);
 #include "World/Actor/MobEffect.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 
 #include <algorithm>
 
@@ -25,4 +27,5 @@ void OminousBottleItem::onConsumed(ServerNetworkHandler &owner, ServerPlayer &pl
         player.removeEffect(MobEffectId::BadOmen);
 
     owner.addEffect(player, MobEffectId::BadOmen, amplifier, BAD_OMEN_DURATION_TICKS);
+    owner.getLevelFor(player).postGameEvent(GameEvents::DRINK, player.getEyePosition(), &player);
 }

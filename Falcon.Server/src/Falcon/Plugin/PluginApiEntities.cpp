@@ -2,13 +2,15 @@
 
 #include "World/Actor/DamageCause.h"
 #include "World/Actor/ActorDamageSource.h"
+#include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Level.h"
 #include "Network/ServerNetworkHandler.h"
+#include "Falcon/Plugin/PluginActor.h"
 #include "Falcon/Plugin/PluginApiHelpers.h"
-#include "Falcon/Plugin/PluginEvents.h"
 
+#include <cmath>
 #include <string>
 
 using namespace PluginApiHelpers;
@@ -20,6 +22,10 @@ namespace {
 
     Vector3f toVector3f(const FalconVec3 &value) {
         return Vector3f((float) value.x, (float) value.y, (float) value.z);
+    }
+
+    bool isFinite(const Vector3f &value) {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
     }
 
     ServerPlayer *asPlayer(Actor *value) {
@@ -73,32 +79,76 @@ namespace {
         return toVec3(entity(target)->getRotation());
     }
 
-    void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
+    // a player first: players keep their own runtime id index
+    FalconEntity *serverEntity(uint64_t runtimeId) {
+        if (ServerPlayer *player = owner().getPlayerByRuntimeId(runtimeId))
+            return toHandle(static_cast<Actor *>(player));
+        if (ServerActor *actor = owner().getActorByRuntimeId(runtimeId))
+            return toHandle(static_cast<Actor *>(actor));
+        for (const auto &item : owner().getItemEntities()) {
+            if (!item->isRemoved() && item->getRuntimeId() == runtimeId)
+                return toHandle(static_cast<Actor *>(item.get()));
+        }
+        return nullptr;
+    }
+
+    int entityTeleportWithRotation(FalconEntity *target, FalconLevel *destination, FalconVec3 position,
+                                   const FalconVec3 *rotation) {
+        if (target == nullptr)
+            return 0;
         Actor *value = entity(target);
         Vector3f to = toVector3f(position);
-        if (!PluginEvents::teleport(*value, to, "plugin"))
-            return;
-        Level &destinationLevel = destination == nullptr ? owner().getLevelFor(*value) : *level(destination);
+        const Vector3f facing = rotation == nullptr ? value->getRotation() : toVector3f(*rotation);
+        if (!isFinite(to) || !isFinite(facing))
+            return 0;
+
+        Level *destinationLevel = destination == nullptr ? &owner().getLevelFor(*value) : level(destination);
+        // the plugin drawing it keeps it where its own copy is: that is no teleport to tell anyone of
+        const ServerActor *drawn = asActor(value);
+        EventSignal<ActorTeleportBeforeEvent> &teleport = owner().getEventBus().before().mActorTeleport;
+        if ((drawn == nullptr || !drawn->isDrawnByPlugin()) && teleport.hasSubscribers()) {
+            ActorTeleportBeforeEvent event(*value, to, TeleportCause::Plugin, destinationLevel);
+            teleport.emit(event);
+            if (event.isCancelled())
+                return 0;
+            destinationLevel = event.mDestination;
+        }
+        if (!isFinite(to))
+            return 0;
 
         if (ServerPlayer *playerValue = asPlayer(value)) {
-            if (!playerValue->isIn(destinationLevel))
-                owner().changePlayerLevel(*playerValue, destinationLevel, to);
-            else
-                playerValue->teleport(owner(), to);
-            return;
+            if (!playerValue->isIn(*destinationLevel)) {
+                owner().changePlayerLevel(*playerValue, *destinationLevel, to);
+                if (!playerValue->isIn(*destinationLevel))
+                    return 0;
+                if (rotation != nullptr)
+                    playerValue->setRotation(facing);
+                return 1;
+            }
+            if (rotation != nullptr)
+                playerValue->setRotation(facing);
+            playerValue->teleport(owner(), to);
+            return 1;
         }
 
         ServerActor *actorValue = asActor(value);
         if (actorValue == nullptr)
-            return;
+            return 0;
 
-        if (!actorValue->isIn(destinationLevel)) {
-            owner().changeActorLevel(*actorValue, destinationLevel, to);
-            return;
+        if (rotation != nullptr)
+            actorValue->setRotation(facing);
+        if (!actorValue->isIn(*destinationLevel)) {
+            owner().changeActorLevel(*actorValue, *destinationLevel, to);
+            return actorValue->isIn(*destinationLevel);
         }
 
         actorValue->teleport(to);
         owner().broadcastActorMove(*actorValue);
+        return 1;
+    }
+
+    void entityTeleport(FalconEntity *target, FalconLevel *destination, FalconVec3 position) {
+        entityTeleportWithRotation(target, destination, position, nullptr);
     }
 
     FalconVec3 entityMotion(FalconEntity *target) {
@@ -173,7 +223,12 @@ namespace {
     }
 
     void entityRemove(FalconEntity *target) {
-        ServerActor *actorValue = asActor(entity(target));
+        Actor *value = entity(target);
+        if (auto *item = dynamic_cast<ItemActor *>(value)) {
+            item->setRemoved(true);
+            return;
+        }
+        ServerActor *actorValue = asActor(value);
         if (actorValue == nullptr)
             return;
 
@@ -228,16 +283,21 @@ namespace {
     }
 
     uint32_t levelEntityCount(FalconLevel *handle) {
-        const DimensionType dimension = level(handle)->getDimensionType();
+        const Level &target = *level(handle);
         uint32_t count = 0;
 
         for (auto &entry: owner().getActors()) {
-            if (entry.second->getDimension() == dimension)
+            if (entry.second->isIn(target))
                 count++;
         }
 
         for (auto &entry: owner().getPlayers()) {
-            if (entry.second.isSpawned() && entry.second.getDimension() == dimension)
+            if (entry.second.isSpawned() && entry.second.isIn(target))
+                count++;
+        }
+
+        for (const auto &item : owner().getItemEntities()) {
+            if (!item->isRemoved() && item->isIn(target))
                 count++;
         }
 
@@ -245,11 +305,11 @@ namespace {
     }
 
     FalconEntity *levelEntity(FalconLevel *handle, uint32_t index) {
-        const DimensionType dimension = level(handle)->getDimensionType();
+        const Level &target = *level(handle);
         uint32_t current = 0;
 
         for (auto &entry: owner().getActors()) {
-            if (entry.second->getDimension() != dimension)
+            if (!entry.second->isIn(target))
                 continue;
             if (current == index)
                 return toHandle(static_cast<Actor *>(entry.second.get()));
@@ -257,26 +317,86 @@ namespace {
         }
 
         for (auto &entry: owner().getPlayers()) {
-            if (!entry.second.isSpawned() || entry.second.getDimension() != dimension)
+            if (!entry.second.isSpawned() || !entry.second.isIn(target))
                 continue;
             if (current == index)
                 return toHandle(static_cast<Actor *>(&entry.second));
             current++;
         }
 
+        for (const auto &item : owner().getItemEntities()) {
+            if (item->isRemoved() || !item->isIn(target))
+                continue;
+            if (current == index)
+                return toHandle(static_cast<Actor *>(item.get()));
+            current++;
+        }
+
         return nullptr;
+    }
+
+    FalconItem *itemEntityItem(FalconEntity *target) {
+        auto *item = dynamic_cast<ItemActor *>(entity(target));
+        return item == nullptr ? nullptr : toHandle(new ItemStack(item->getItem()));
+    }
+
+    int32_t itemEntityPickupDelay(FalconEntity *target) {
+        auto *item = dynamic_cast<ItemActor *>(entity(target));
+        return item == nullptr ? 0 : item->getPickupDelay();
+    }
+
+    void itemEntitySetPickupDelay(FalconEntity *target, int32_t pickupDelay) {
+        if (auto *item = dynamic_cast<ItemActor *>(entity(target)))
+            item->setPickupDelay(pickupDelay);
+    }
+}
+
+namespace {
+    PluginActor *asPluginActor(FalconEntity *target) {
+        return target == nullptr ? nullptr : dynamic_cast<PluginActor *>(entity(target));
+    }
+
+    int entitySetPluginDrawn(FalconEntity *target, int pluginDrawn) {
+        PluginActor *actor = asPluginActor(target);
+        if (actor == nullptr)
+            return 0;
+        if (actor->isDrawnByPlugin() == (pluginDrawn != 0))
+            return 1;
+        // whoever saw it drawn by Falcon forgets it; the next visibility pass shows it again when Falcon draws it
+        if (pluginDrawn != 0)
+            owner().broadcastActorRemove(*actor);
+        actor->setDrawnByPlugin(pluginDrawn != 0);
+        return 1;
+    }
+
+    int entityIsPluginDrawn(FalconEntity *target) {
+        const PluginActor *actor = asPluginActor(target);
+        return actor != nullptr && actor->isDrawnByPlugin() ? 1 : 0;
+    }
+
+    int entitySetSize(FalconEntity *target, float width, float height) {
+        PluginActor *actor = asPluginActor(target);
+        if (actor == nullptr || !(width > 0.0f) || !(height > 0.0f) || !std::isfinite(width) || !std::isfinite(height))
+            return 0;
+        actor->setSize(width, height);
+        return 1;
     }
 }
 
 void PluginServerApi::fillEntities(FalconServerApi &api) {
+    api.entitySetPluginDrawn = &entitySetPluginDrawn;
+    api.entityIsPluginDrawn = &entityIsPluginDrawn;
+    api.entitySetSize = &entitySetSize;
     api.playerEntity = &playerEntity;
     api.entityPlayer = &entityPlayer;
     api.entityType = &entityType;
     api.entityRuntimeId = &entityRuntimeId;
+    api.serverEntity = &serverEntity;
     api.entityLevel = &entityLevel;
     api.entityPosition = &entityPosition;
     api.entityRotation = &entityRotation;
     api.entityTeleport = &entityTeleport;
+    api.entityTeleportWithRotation = &entityTeleportWithRotation;
     api.entityMotion = &entityMotion;
     api.entitySetMotion = &entitySetMotion;
     api.entityHealth = &entityHealth;
@@ -294,4 +414,7 @@ void PluginServerApi::fillEntities(FalconServerApi &api) {
     api.entitySetInvisible = &entitySetInvisible;
     api.levelEntityCount = &levelEntityCount;
     api.levelEntity = &levelEntity;
+    api.itemEntityItem = &itemEntityItem;
+    api.itemEntityPickupDelay = &itemEntityPickupDelay;
+    api.itemEntitySetPickupDelay = &itemEntitySetPickupDelay;
 }

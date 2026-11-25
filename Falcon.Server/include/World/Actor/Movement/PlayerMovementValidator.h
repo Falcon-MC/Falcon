@@ -19,6 +19,16 @@ struct MovementCorrectionDetails {
 // independent of travel physics and client velocity
 class PlayerMovementValidator {
 public:
+    // 15 blocks, the widest jump the client grants itself (leaving a seat): no single input moves a player further
+    static constexpr float MAX_STEP_SQUARED = 225.0f;
+
+    static bool isWithinStep(const Vector3f &from, const Vector3f &to) {
+        const float dx = to.x - from.x;
+        const float dy = to.y - from.y;
+        const float dz = to.z - from.z;
+        return dx * dx + dy * dy + dz * dz <= MAX_STEP_SQUARED;
+    }
+
     bool reconcile(Vector3f &simulated, const Vector3f &reported, uint64_t tick, float threshold, bool strict,
                    MovementCorrectionDetails *details = nullptr);
 

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class LegacyItemMapper {
 public:
@@ -14,6 +15,9 @@ public:
     bool upgrade(std::string &identifier, int32_t &data) const;
 
     std::string resolveWithData(const std::string &identifierAndData) const;
+
+    // an item family without a data suffix accepts every variant split into a modern identifier
+    std::vector<std::string> resolveVariants(const std::string &identifierAndData) const;
 
     static void splitData(const std::string &identifierAndData, std::string &identifier, int32_t &data);
 

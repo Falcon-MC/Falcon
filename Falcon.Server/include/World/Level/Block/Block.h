@@ -7,6 +7,7 @@
 #include "Core/Math/Vector3f.h"
 #include "Core/Math/Vector3i.h"
 #include "World/Level/Block/BlockState.h"
+#include "World/Level/Block/NoteBlockInstrument.h"
 
 #include <cstdint>
 #include <optional>
@@ -24,6 +25,7 @@ class Level;
 class LiquidPhysicsSystem;
 class MobActor;
 class ServerActor;
+class ItemActor;
 class ServerNetworkHandler;
 class ServerPlayer;
 
@@ -72,6 +74,14 @@ public:
         return false;
     }
 
+    // with the face clicked and the spot on it, from 0 to 1 on each axis, for a block that reads where it was hit
+    virtual bool onInteractAt(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
+                              const BlockState &state, int face, const Vector3f &clickPosition) const {
+        (void) face;
+        (void) clickPosition;
+        return onInteract(owner, player, position, state);
+    }
+
     virtual void onTouch(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                          const BlockState &state) const {
         (void) owner;
@@ -106,7 +116,7 @@ public:
         return false;
     }
 
-    // faces liquid cannot cross, a bit per LiquidFace (BlockType +185, stops_liquid_flowing_from_direction)
+    // faces liquid cannot cross, a bit per LiquidFace (stops_liquid_flowing_from_direction)
     virtual uint8_t getLiquidBlockedFaces(const BlockState &state) const {
         (void) state;
         return 0;
@@ -164,6 +174,12 @@ public:
     }
 
     virtual bool isLeaves() const {
+        return false;
+    }
+
+    // left standing when the wither breaks the blocks around it, hurt or charging
+    virtual bool resistsWither(bool charging) const {
+        (void) charging;
         return false;
     }
 
@@ -254,6 +270,16 @@ public:
         (void) state;
     }
 
+    // a player is about to break the block, before its drops and its removal
+    virtual void onPlayerWillDestroy(ServerNetworkHandler &owner, ServerPlayer &player, Level &level,
+                                     const Vector3i &position, const BlockState &state) const {
+        (void) owner;
+        (void) player;
+        (void) level;
+        (void) position;
+        (void) state;
+    }
+
     virtual void onBroken(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                           const BlockState &state) const {
         (void) owner;
@@ -320,6 +346,16 @@ public:
         (void) state;
     }
 
+    // bone meal on this block; false: it takes none and the bone meal is kept
+    virtual bool onFertilized(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                              const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
     // the block's own dispense for its item; false drops it as a dropper does
     virtual bool dispense(const DispenseSource &source) const {
         (void) source;
@@ -355,6 +391,27 @@ public:
         return true;
     }
 
+    // a wind burst reached the block; true when it reacted
+    virtual bool onWindBurst(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                             const BlockState &state) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        return false;
+    }
+
+    // a dropped item ran into the block; true when the block took over its motion
+    virtual bool onItemHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                           ItemActor &item) const {
+        (void) owner;
+        (void) level;
+        (void) position;
+        (void) state;
+        (void) item;
+        return false;
+    }
+
     virtual bool onProjectileHit(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state, ServerActor &projectile) const {
         (void) owner;
@@ -369,6 +426,19 @@ public:
         (void) level;
         (void) position;
         (void) drop;
+    }
+
+    // the item a hopper below pulls out of a block with no container; empty: none
+    virtual std::string getHopperOutput(const BlockState &state) const {
+        (void) state;
+        return std::string();
+    }
+
+    // the hopper below took the item getHopperOutput named
+    virtual void onHopperOutputTaken(ServerNetworkHandler &owner, Level &level, const Vector3i &position) const {
+        (void) owner;
+        (void) level;
+        (void) position;
     }
 
     // item and projectile physics read the shape only of these; other blocks stop them at the cell
@@ -495,6 +565,22 @@ public:
         return 0;
     }
 
+    // minecraft:instrument_sound: what a note block plays with this block on top of it (above) or under it;
+    // false when that face has none and the note block stays silent
+    virtual bool getInstrumentSound(bool above, NoteBlockInstrument &instrument) const {
+        const uint8_t face = above ? mInstrumentAbove : mInstrumentBelow;
+        if (face == NO_INSTRUMENT)
+            return false;
+        instrument = (NoteBlockInstrument) face;
+        return true;
+    }
+
+    // `above` null: a note block under this block stays silent
+    void setInstrumentSounds(NoteBlockInstrument below, const NoteBlockInstrument *above) {
+        mInstrumentBelow = (uint8_t) below;
+        mInstrumentAbove = above == nullptr ? NO_INSTRUMENT : (uint8_t) *above;
+    }
+
     // the block actor type this block carries, null for none: an actor of another type goes when the block is set
     virtual const char *getBlockActorId() const {
         return nullptr;
@@ -555,4 +641,8 @@ private:
     std::string mName;
     Tag mStates;
     mutable uint8_t mPlainClass = 0;
+    static constexpr uint8_t NO_INSTRUMENT = 0xFF;
+    // a block without the component: the harp below, silence above
+    uint8_t mInstrumentBelow = (uint8_t) NoteBlockInstrument::Harp;
+    uint8_t mInstrumentAbove = NO_INSTRUMENT;
 };

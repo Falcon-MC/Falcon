@@ -15,6 +15,4 @@ public:
     float getDefaultMaxHealth() const override {
         return 20.0f;
     }
-
-    float getAttackDamage(Difficulty difficulty) const override;
 };

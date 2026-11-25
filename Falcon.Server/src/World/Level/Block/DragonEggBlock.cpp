@@ -47,7 +47,7 @@ bool DragonEggBlock::onPunch(ServerNetworkHandler &owner, ServerPlayer &player, 
 void DragonEggBlock::teleport(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                               const BlockState &state) {
     for (int attempt = 0; attempt < TELEPORT_ATTEMPTS; ++attempt) {
-        const Vector3i destination(position.x + nextInt(-TELEPORT_HORIZONTAL_RANGE, TELEPORT_HORIZONTAL_RANGE),
+        Vector3i destination(position.x + nextInt(-TELEPORT_HORIZONTAL_RANGE, TELEPORT_HORIZONTAL_RANGE),
                                    position.y + nextInt(0, TELEPORT_VERTICAL_RANGE),
                                    position.z + nextInt(-TELEPORT_HORIZONTAL_RANGE, TELEPORT_HORIZONTAL_RANGE));
 
@@ -57,14 +57,26 @@ void DragonEggBlock::teleport(ServerNetworkHandler &owner, Level &level, const V
         if (level.getBlockState(destination.x, destination.y, destination.z).mName != BlockNames::AIR)
             continue;
 
+        EventSignal<BlockTeleportBeforeEvent> &blockTeleport = owner.getEventBus().before().mBlockTeleport;
+        if (blockTeleport.hasSubscribers()) {
+            BlockTeleportBeforeEvent event(level, position, destination);
+            blockTeleport.emit(event);
+            if (event.isCancelled())
+                return;
+            destination = event.mDestination;
+        }
+
         const int32_t diffX = position.x - destination.x;
         const int32_t diffY = position.y - destination.y;
         const int32_t diffZ = position.z - destination.z;
 
-        const int32_t data = (std::abs(diffX) << 16) | (std::abs(diffY) << 8) | std::abs(diffZ)
-                             | ((diffX < 0 ? 1 : 0) << 24) | ((diffY < 0 ? 1 : 0) << 25) | ((diffZ < 0 ? 1 : 0) << 26);
-        owner.broadcastLevelEvent(level, PARTICLE_DRAGON_EGG_EVENT,
-                                  Vector3f((float) position.x, (float) position.y, (float) position.z), data);
+        if (std::abs(diffX) <= 255 && std::abs(diffY) <= 255 && std::abs(diffZ) <= 255) {
+            const int32_t data = (std::abs(diffX) << 16) | (std::abs(diffY) << 8) | std::abs(diffZ)
+                                 | ((diffX < 0 ? 1 : 0) << 24) | ((diffY < 0 ? 1 : 0) << 25)
+                                 | ((diffZ < 0 ? 1 : 0) << 26);
+            owner.broadcastLevelEvent(level, PARTICLE_DRAGON_EGG_EVENT,
+                                      Vector3f((float) position.x, (float) position.y, (float) position.z), data);
+        }
 
         level.setBlock(position, BlockState(BlockNames::AIR), false);
         level.onBlockBroken(position, state);

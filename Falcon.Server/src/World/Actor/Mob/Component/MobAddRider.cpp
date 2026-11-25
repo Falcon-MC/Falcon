@@ -40,7 +40,8 @@ void MobAddRider::spawnPending(ServerNetworkHandler &owner, MobActor &vehicle) {
 void MobAddRider::_spawnRider(ServerNetworkHandler &owner, MobActor &vehicle, const std::string &identifier,
                               const std::string &event) {
     // the rider is created at the vehicle with the spawn event as its init event, then starts riding,
-    // and is removed again when the vehicle does not take it
+    // and is removed again when the vehicle has no seat for it; its families are not asked: the strider's
+    // zombified piglin rider spawns with no type_family at all
     if (identifier.empty())
         return;
 
@@ -55,6 +56,6 @@ void MobAddRider::_spawnRider(ServerNetworkHandler &owner, MobActor &vehicle, co
         return;
 
     rider->startDefinition(owner);
-    if (!vehicle.acceptsRider(*rider) || !RideSystem::mount(owner, *rider, vehicle, false))
+    if (!vehicle.acceptsRider(*rider, false) || !RideSystem::mount(owner, *rider, vehicle, false))
         rider->despawn();
 }
