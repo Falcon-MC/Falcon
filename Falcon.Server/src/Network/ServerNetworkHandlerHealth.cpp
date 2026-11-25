@@ -2,6 +2,7 @@
 
 #include "World/Level/Vibration/GameEvent.h"
 #include "World/Actor/Mob/Hostile/WitherActor.h"
+#include "World/Actor/DamageCause.h"
 #include "World/Actor/Mob/MobActor.h"
 #include "World/Actor/Player/ArmorProtection.h"
 #include "World/Actor/RideSystem.h"
@@ -155,6 +156,14 @@ DamageResult ServerNetworkHandler::hurt(ServerPlayer &player, float amount, cons
 
     if (isDamageDisabledByGameRule(getWorldFor(player).getOverworld().getGameRules(), key))
         return DamageResult::Ignored;
+
+    // a mob's own hit, not its projectile: the game scales it before the invulnerability window and armor
+    const MobActor *mobAttacker = dynamic_cast<const MobActor *>(source.mAttacker);
+    if (mobAttacker != nullptr && !source.mProjectile && mobAttacker->scalesDamageWithDifficulty()) {
+        amount = DamageCause::scaleForDifficulty(amount, mProperties.getDifficulty());
+        if (amount <= 0.0f)
+            return DamageResult::Ignored;
+    }
 
     if (mScriptEngine.beforeEntityHurt(player, amount, source) || amount < 0.0f)
         return DamageResult::Ignored;

@@ -476,8 +476,6 @@ private:
 
     static float _calculateEntityDamage(double doubleRadius, double impact);
 
-    float _scaleDamageForDifficulty(float damage) const;
-
     void _damageEntities();
 
     ExplosionBatch &_batch();

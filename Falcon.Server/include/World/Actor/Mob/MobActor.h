@@ -123,6 +123,11 @@ public:
         return getComponent("minecraft:remove_in_peaceful") != nullptr;
     }
 
+    // a player hit by the mob takes the difficulty's share; the game leaves the evoker's fangs out
+    virtual bool scalesDamageWithDifficulty() const {
+        return true;
+    }
+
     int getBreedingExperience() const;
 
     bool isExpired() const override {
