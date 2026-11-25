@@ -295,8 +295,9 @@ namespace {
     void horseFoalStaysWild() {
         Arena arena;
         ServerPlayer &player = arena.player(7361);
-        MobActor &mother = arena.spawn("minecraft:horse", "minecraft:spawn_tame_adult");
-        MobActor &father = arena.spawn("minecraft:horse", "minecraft:spawn_tame_adult");
+        // tamemount sits in the wild group: a horse spawned tame has none to tame with
+        MobActor &mother = arena.spawn("minecraft:horse", "minecraft:spawn_adult");
+        MobActor &father = arena.spawn("minecraft:horse", "minecraft:spawn_adult");
         mother.tameTo(arena.mOwner, player, "minecraft:tamemount", false);
         father.tameTo(arena.mOwner, player, "minecraft:tamemount", false);
         require(mother.isOwnedBy(player) && father.isOwnedBy(player), "the parents were not tamed");
