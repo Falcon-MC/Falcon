@@ -22,10 +22,11 @@ FloatGoal::FloatGoal() {
     setRequiredControlFlags((uint8_t) GoalControlFlag::Jump);
 }
 
+// only in water or lava: out of it the jump control stays free for grazing, leaping or sitting
 bool FloatGoal::canUse(ServerNetworkHandler &owner, MobActor &mob) {
-    (void) owner;
-    (void) mob;
-    return true;
+    const LiquidContact contact =
+            LiquidBlocksFetch::at(owner.getLevelFor(mob), mob.getPosition(), false, mob.getSize().mHeight);
+    return contact.water || contact.lava;
 }
 
 void FloatGoal::tick(ServerNetworkHandler &owner, MobActor &mob) {
