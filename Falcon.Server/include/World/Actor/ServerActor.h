@@ -121,6 +121,13 @@ public:
         return false;
     }
 
+    // true when the actor got out of the way: the projectile keeps flying, nothing is hit
+    virtual bool dodgeProjectile(ServerNetworkHandler &owner, const ServerActor &projectile) {
+        (void) owner;
+        (void) projectile;
+        return false;
+    }
+
     virtual void onDamaged(ServerNetworkHandler &owner, Actor *attacker) {
         (void) owner;
         (void) attacker;

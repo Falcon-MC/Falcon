@@ -27,4 +27,6 @@ public:
     int getExperienceDrop() const override {
         return 5;
     }
+
+    void onDamaged(ServerNetworkHandler &owner, Actor *attacker) override;
 };

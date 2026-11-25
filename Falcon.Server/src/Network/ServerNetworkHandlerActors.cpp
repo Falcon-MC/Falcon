@@ -2441,6 +2441,10 @@ void ServerNetworkHandler::tickActors() {
                     continue;
                 }
 
+                // the game asks the actor first: one that teleports out of the way lets the projectile fly on
+                if (hitActor != nullptr && hitActor->dodgeProjectile(*this, actor))
+                    hitActor = nullptr;
+
                 if (hitActor != nullptr && ProjectileReflection::reflect(*this, level, actor, *hitActor)) {
                     broadcastActorMove(actor);
                     continue;
