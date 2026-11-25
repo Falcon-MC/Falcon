@@ -4,9 +4,9 @@
 
 #include <string>
 
-class SculkVeinBlock final : public ReplaceableBlock {
+class MultifaceBlock final : public ReplaceableBlock {
 public:
-    explicit SculkVeinBlock(const Block &block) : ReplaceableBlock(block) {}
+    explicit MultifaceBlock(const Block &block) : ReplaceableBlock(block) {}
 
     static bool matches(const std::string &identifier);
 
