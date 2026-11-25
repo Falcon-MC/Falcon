@@ -10,7 +10,8 @@ public:
 
     static bool matches(const std::string &identifier);
 
-    int32_t getUseDuration() const override {
+    int32_t getUseDuration(const ItemStack &item) const override {
+        (void) item;
         return 72000;
     }
 

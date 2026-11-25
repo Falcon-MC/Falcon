@@ -49,9 +49,9 @@ namespace {
 
 CrossbowItem::CrossbowItem(const Item &base) : Item(base) {}
 
-// the shooter base sets 72000, the crossbow then 25
-int32_t CrossbowItem::getUseDuration() const {
-    return 25;
+// the game starts the use for the charge time: 25 ticks, 5 fewer per quick charge level
+int32_t CrossbowItem::getUseDuration(const ItemStack &item) const {
+    return getChargeTicks(item);
 }
 
 bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {

@@ -6,7 +6,7 @@ class BowItem : public Item {
 public:
     explicit BowItem(const Item &base);
 
-    int32_t getUseDuration() const override;
+    int32_t getUseDuration(const ItemStack &item) const override;
 
     bool onStartUsing(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const override;
 
