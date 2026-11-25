@@ -73,14 +73,6 @@ namespace {
             }
             return found;
         }
-
-        MobActor *first(const char *identifier) {
-            for (auto &entry: mOwner.getActors()) {
-                if (entry.second->getTypeId() == identifier && !entry.second->isDead())
-                    return dynamic_cast<MobActor *>(entry.second.get());
-            }
-            return nullptr;
-        }
     };
 
     void zoglinConversion() {
@@ -127,7 +119,6 @@ namespace {
     void crimsonFungusLove() {
         Arena arena(DimensionType::Nether);
         ServerPlayer &player = arena.player(1, Vector3f(0.5f, 64.0f, 0.5f));
-        player.getInventory().setArmor(0, arena.mOwner.createItemStack("minecraft:golden_helmet", 1));
         MobActor &hoglin = arena.spawn("minecraft:hoglin", Vector3f(0.5f, 64.0f, 2.5f), "spawn_adult");
         player.getInventory().setItemInHand(arena.mOwner.createItemStack("minecraft:warped_fungus", 1));
         InventoryHandler::interactWithEntity(arena.mOwner, player, hoglin.getRuntimeId(), Vector3f());
