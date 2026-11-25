@@ -193,6 +193,13 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
     if (mob != nullptr)
         mob->finalizeSpawn();
 
+    // before configure: a projectile's callback reads its pack definition to aim it
+    const CustomActorDefinition *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
+    if (definition != nullptr) {
+        actor->setDefinition(definition);
+        actor->setProjectile(definition->mIsProjectile);
+    }
+
     if (configure)
         configure(*actor);
 
@@ -202,12 +209,6 @@ ServerActor *ServerNetworkHandler::spawnActor(Level &level, const std::string &i
 
     if (mob != nullptr)
         mob->applyDefaults(mProperties.getDifficulty());
-
-    const CustomActorDefinition *definition = CustomContentRegistry::getInstance().getActorDefinition(identifier);
-    if (definition != nullptr) {
-        actor->setDefinition(definition);
-        actor->setProjectile(definition->mIsProjectile);
-    }
 
     if (mob != nullptr && mProperties.getDifficulty() == Difficulty::Peaceful && mob->shouldRemoveInPeaceful())
         return nullptr;
@@ -486,7 +487,28 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     Vector3f spawnPosition = player.getPosition();
     spawnPosition.y += player.getEyeHeight() + verticalOffset;
 
-    ServerActor *projectile = spawnActor(getLevelFor(player), identifier, spawnPosition);
+    float speed = 0.0f;
+    // in the spawn packet: an arrow added at rotation 0 shows turning from there on the client
+    ServerActor *projectile = spawnActor(getLevelFor(player), identifier, spawnPosition, [&](ServerActor &actor) {
+        ProjectileComponent component;
+        const bool defined = ProjectileComponent::findSpawned(*this, actor, player, component);
+        if (defined)
+            actor.getProjectileComponent() = component;
+        else
+            component = actor.getProjectileComponent();
+        // no minecraft:projectile and no projectile class: nothing gives it a power, it stays put
+        speed = defined || dynamic_cast<ProjectileActor *>(&actor) != nullptr ? component.mPower * launchPower : 0.0f;
+
+        // the current game adds angle_offset to the pitch as is
+        const Vector3f &rotation = player.getRotation();
+        const float pitch = (rotation.x + component.mAngleOffset) * MathConstants::DEGREES_TO_RADIANS_F;
+        const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
+        const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
+        const float uncertainty = MobShooter::uncertainty(component.mUncertaintyBase, component.mUncertaintyMultiplier,
+                                                          (int32_t) getProperties().getDifficulty());
+        actor.setMotion(shotMotion(direction, uncertainty, speed));
+        faceMotion(actor, actor.getMotion());
+    });
     if (projectile == nullptr)
         return nullptr;
 
@@ -494,26 +516,6 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
     projectile->setOwnerUniqueId(player.getUniqueId());
     projectile->getProjectileData().mLootingLevel = ItemEnchantments::getLevel(player.getInventory().getItemInHand(),
                                                                                EnchantmentIds::LOOTING);
-
-    ProjectileComponent component;
-    const bool defined = ProjectileComponent::findSpawned(*this, *projectile, player, component);
-    if (defined)
-        projectile->getProjectileComponent() = component;
-    else
-        component = projectile->getProjectileComponent();
-    // no minecraft:projectile and no projectile class: nothing gives it a power, it stays put
-    const float speed = defined || dynamic_cast<ProjectileActor *>(projectile) != nullptr
-                                ? component.mPower * launchPower
-                                : 0.0f;
-
-    // the current game adds angle_offset to the pitch as is
-    const Vector3f &rotation = player.getRotation();
-    const float pitch = (rotation.x + component.mAngleOffset) * MathConstants::DEGREES_TO_RADIANS_F;
-    const float yaw = rotation.y * MathConstants::DEGREES_TO_RADIANS_F;
-    const Vector3f direction(-std::sin(yaw) * std::cos(pitch), -std::sin(pitch), std::cos(yaw) * std::cos(pitch));
-    const float uncertainty = MobShooter::uncertainty(component.mUncertaintyBase, component.mUncertaintyMultiplier,
-                                                      (int32_t) getProperties().getDifficulty());
-    projectile->setMotion(shotMotion(direction, uncertainty, speed));
     if (weapon != nullptr) {
         EventSignal<PlayerShootBowBeforeEvent> &shootBow = mEventBus.before().mPlayerShootBow;
         if (shootBow.hasSubscribers()) {
@@ -539,14 +541,13 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
                 return nullptr;
             projectile->setOwnerUniqueId(player.getUniqueId());
             const float force = event.mForce;
-            const Vector3f motion = projectile->getMotion();
+            const Vector3f current = projectile->getMotion();
             const float scale = speed > 0 ? force / speed : 0;
-            projectile->setMotion(Vector3f(motion.x * scale, motion.y * scale, motion.z * scale));
+            projectile->setMotion(Vector3f(current.x * scale, current.y * scale, current.z * scale));
+            faceMotion(*projectile, projectile->getMotion());
+            broadcastActorMove(*projectile);
         }
     }
-    faceMotion(*projectile, projectile->getMotion());
-    // the spawn packet went out before the motion was known
-    broadcastActorMove(*projectile);
     return allowProjectileLaunch(*projectile, &player) ? projectile : nullptr;
 }
 
