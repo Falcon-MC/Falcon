@@ -876,6 +876,9 @@ private:
     const json::Value *mSpellEffectsComponent = nullptr;
     const json::Value *mTimerComponent = nullptr;
     int32_t mTimerTicks = 0;
+    // the world tick the timer runs out on, as saved; a loaded timer resumes from it
+    int64_t mTimerStamp = 0;
+    bool mTimerLoaded = false;
     const json::Value *mBreakBlocksComponent = nullptr;
     std::unordered_set<std::string> mBreakableBlocks;
     const json::Value *mDamageOverTimeComponent = nullptr;

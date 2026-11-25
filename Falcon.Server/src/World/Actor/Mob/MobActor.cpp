@@ -194,6 +194,8 @@ namespace {
     const int32_t TAME_FAILED_REARING_TICKS = 20;
     const float DEFAULT_JUMP_STRENGTH = 0.7f;
     const char *const TAG_TEMPER = "Temper";
+    const char *const TAG_TIMER_STAMP = "TimeStamp";
+    const char *const TAG_TIMER_EXECUTED = "HasExecuted";
     const char *const TAG_TARGET_CAPTAIN = "TargetCaptainID";
     const char *const ON_HURT_COMPONENT = "minecraft:on_hurt";
     const char *const ON_HURT_BY_PLAYER_COMPONENT = "minecraft:on_hurt_by_player";
@@ -884,9 +886,16 @@ void MobActor::_tickSpellEffects() {
 
 void MobActor::_tickTimer(ServerNetworkHandler &owner) {
     const json::Value *timer = getComponent(TIMER_COMPONENT);
+    // the overworld keeps the world's tick
+    const int64_t worldTick = owner.getWorldFor(*this).getOverworld().getWorldTick();
     if (timer != mTimerComponent) {
         mTimerComponent = timer;
-        mTimerTicks = timer == nullptr ? 0 : timerTicks(*timer);
+        if (timer != nullptr && mTimerLoaded)
+            mTimerTicks = mTimerTicks < 0 ? -1 : (int32_t) std::max<int64_t>(1, mTimerStamp - worldTick);
+        else
+            mTimerTicks = timer == nullptr ? 0 : timerTicks(*timer);
+        mTimerLoaded = false;
+        mTimerStamp = worldTick + std::max(0, mTimerTicks);
     }
 
     if (timer == nullptr || mTimerTicks < 0 || --mTimerTicks > 0)
@@ -894,6 +903,7 @@ void MobActor::_tickTimer(ServerNetworkHandler &owner) {
 
     const json::Value *looping = timer->get("looping");
     mTimerTicks = looping == nullptr || looping->boolean(true) ? timerTicks(*timer) : -1;
+    mTimerStamp = worldTick + std::max(0, mTimerTicks);
 
     EntityEvents::fireTrigger(owner, *this, timer->get("time_down_event"));
 }
@@ -2719,6 +2729,10 @@ Tag MobActor::saveNbt() const {
     data.putByte("Sheared", getComponent("minecraft:is_sheared") != nullptr ? 1 : 0);
     data.putInt("InLove", mLoveTicks);
     data.putInt(TAG_TEMPER, mTemper);
+    if (mTimerComponent != nullptr || mTimerLoaded) {
+        data.putLong(TAG_TIMER_STAMP, mTimerStamp);
+        data.putByte(TAG_TIMER_EXECUTED, mTimerTicks < 0 ? 1 : 0);
+    }
     if (mTargetCaptainId != 0)
         data.putLong(TAG_TARGET_CAPTAIN, mTargetCaptainId);
     if (mAirSupply != UNSET_AIR_SUPPLY)
@@ -2764,6 +2778,9 @@ void MobActor::loadNbt(const Tag &data) {
     mSitting = data.getByte(TAG_SITTING, 0) != 0;
     mLoveTicks = std::max(0, data.getInt("InLove", 0));
     mTemper = data.getInt(TAG_TEMPER, 0);
+    mTimerLoaded = data.contains(TAG_TIMER_STAMP);
+    mTimerStamp = data.getLong(TAG_TIMER_STAMP, 0);
+    mTimerTicks = data.getByte(TAG_TIMER_EXECUTED, 0) != 0 ? -1 : 0;
     mLoadedInventoryStrength = data.getInt("Strength", -1);
     mTargetCaptainId = data.getLong(TAG_TARGET_CAPTAIN, 0);
     mEconomy.loadNbt(data);
