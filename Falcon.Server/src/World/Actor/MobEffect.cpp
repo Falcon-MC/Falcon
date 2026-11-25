@@ -172,7 +172,7 @@ void InstantHealthMobEffect::tick(Actor &actor, const MobEffectInstance &instanc
 }
 
 void InstantDamageMobEffect::tick(Actor &actor, const MobEffectInstance &instance) const {
-    actor.reduceHealth((float) (6 << std::min(instance.mAmplifier, 7)));
+    actor.reduceHealth(actor.resistDamage((float) (6 << std::min(instance.mAmplifier, 7))));
 }
 
 void RaidOmenMobEffect::onAdd(Actor &actor, const MobEffectInstance &) const {
@@ -225,7 +225,7 @@ int32_t PoisonMobEffect::getApplyInterval(const MobEffectInstance &instance) con
 
 void PoisonMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
     if (mFatal || actor.getHealth() > 1.0f)
-        actor.reduceHealth(1.0f);
+        actor.reduceHealth(actor.resistDamage(1.0f));
 }
 
 int32_t RegenerationMobEffect::getApplyInterval(const MobEffectInstance &instance) const {
@@ -247,7 +247,7 @@ int32_t WitherMobEffect::getApplyInterval(const MobEffectInstance &instance) con
 }
 
 void WitherMobEffect::tick(Actor &actor, const MobEffectInstance &) const {
-    actor.reduceHealth(1.0f);
+    actor.reduceHealth(actor.resistDamage(1.0f));
 }
 
 std::unique_ptr<MobEffect> MobEffectManager::create(MobEffectId id) {

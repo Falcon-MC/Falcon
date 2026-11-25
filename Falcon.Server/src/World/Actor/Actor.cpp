@@ -530,9 +530,6 @@ float Actor::reduceHealth(float amount) {
     if (amount <= 0.0f || !isAlive())
         return getHealth();
 
-    if (const MobEffectInstance *resistance = getEffect(MobEffectId::Resistance))
-        amount *= std::max(0.0f, 1.0f - 0.2f * (float) resistance->level());
-
     const float absorption = mAttributes.get("minecraft:absorption");
     if (absorption > 0.0f) {
         const float absorbed = std::min(absorption, amount);
@@ -544,6 +541,12 @@ float Actor::reduceHealth(float amount) {
     mAttributes.setClamped(ATTRIBUTE_HEALTH, previous - amount);
     _healthChanged(previous);
     return getHealth();
+}
+
+float Actor::resistDamage(float amount) const {
+    if (const MobEffectInstance *resistance = getEffect(MobEffectId::Resistance))
+        amount *= std::max(0.0f, 1.0f - 0.2f * (float) resistance->level());
+    return amount;
 }
 
 float Actor::heal(float amount, HealCause cause) {
