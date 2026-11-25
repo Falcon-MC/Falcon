@@ -43,6 +43,11 @@ public:
 
     Vector3f getSeatOffset(size_t index, size_t passengerCount) const override;
 
+    // each minecart actor shares its identifier with the item placing it
+    std::string getPickItem() const override {
+        return getIdentifier();
+    }
+
     Container *getEntityContainer() override;
 
     bool onInteract(ServerNetworkHandler &owner, ServerPlayer &player) override;

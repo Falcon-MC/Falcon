@@ -55,6 +55,10 @@ public:
 
     Vector3f getSeatOffset(size_t index, size_t passengerCount) const override;
 
+    std::string getPickItem() const override {
+        return itemOf(mVariant, mChest != nullptr);
+    }
+
     Container *getEntityContainer() override;
 
     const json::Value *getLeashableComponent() const override;

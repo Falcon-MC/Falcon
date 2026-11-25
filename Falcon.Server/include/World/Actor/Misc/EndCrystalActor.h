@@ -19,6 +19,10 @@ public:
 
     EndCrystalActor(uint64_t runtimeId, const std::string &identifier);
 
+    std::string getPickItem() const override {
+        return "minecraft:end_crystal";
+    }
+
     ActorSize getSize() const override {
         return ActorSize{0.98f, 0.98f};
     }

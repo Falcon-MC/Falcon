@@ -77,6 +77,10 @@ void CushionActor::breakCushion(ServerNetworkHandler &owner, bool dropItem) {
         owner.spawnItemActor(level, DyeColor::identifier(mColor, ITEM_SUFFIX), 1, position);
 }
 
+std::string CushionActor::getPickItem() const {
+    return DyeColor::identifier(mColor, ITEM_SUFFIX);
+}
+
 bool CushionActor::onInteract(ServerNetworkHandler &owner, ServerPlayer &player) {
     if (mExpired || hasPassengers())
         return false;

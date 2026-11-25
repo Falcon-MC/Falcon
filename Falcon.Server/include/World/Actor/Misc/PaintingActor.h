@@ -14,6 +14,10 @@ public:
 
     static bool place(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &support, int32_t face);
 
+    std::string getPickItem() const override {
+        return IDENTIFIER;
+    }
+
     ActorSize getSize() const override;
 
     AxisAlignedBB getPaintingBounds() const;

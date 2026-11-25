@@ -8,6 +8,7 @@
 #include "World/Actor/SunlightBurn.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
+#include "World/Item/SpawnEggItem.h"
 #include "Server/Profiler.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Storage/FalconDataVersion.h"
@@ -288,6 +289,10 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
     }
 
     return true;
+}
+
+std::string ServerActor::getPickItem() const {
+    return SpawnEggItem::eggOf(getIdentifier());
 }
 
 void ServerActor::kill(ServerNetworkHandler &owner, ServerPlayer *source, int32_t lootingLevel) {
