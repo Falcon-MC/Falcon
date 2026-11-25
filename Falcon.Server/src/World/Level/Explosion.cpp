@@ -3,6 +3,7 @@
 #include "Core/Threading/CpuCount.h"
 
 #include "World/Actor/ActorClassRegistry.h"
+#include "World/Actor/DamageCause.h"
 #include "World/Actor/Misc/ItemActor.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
@@ -869,19 +870,6 @@ float Explosion::_calculateEntityDamage(double doubleRadius, double impact) {
     return (float) ((impact * impact + impact) / 2.0 * 7.0 * doubleRadius + 1.0);
 }
 
-float Explosion::_scaleDamageForDifficulty(float damage) const {
-    switch (mOwner.getProperties().getDifficulty()) {
-        case Difficulty::Peaceful:
-            return 0.0f;
-        case Difficulty::Easy:
-            return std::min(damage / 2.0f + 1.0f, damage);
-        case Difficulty::Hard:
-            return damage * 1.5f;
-        default:
-            return damage;
-    }
-}
-
 void Explosion::_damageEntities() {
     const double explosionSize = mSize * 2.0;
 
@@ -899,7 +887,8 @@ void Explosion::_damageEntities() {
                 Vector3f(position.x - mSource.x, position.y - mSource.y, position.z - mSource.z));
         const float density = _density(boundingBoxOf(position, "minecraft:player"));
         const double impact = (1.0 - distance) * density;
-        const float damage = _scaleDamageForDifficulty(_calculateEntityDamage(explosionSize, impact));
+        const float damage = DamageCause::scaleForDifficulty(_calculateEntityDamage(explosionSize, impact),
+                                                              mOwner.getProperties().getDifficulty());
 
         mOwner.hurt(player, damage, ActorDamageSource::environment(DEATH_KEY, player.getName()).fromOrigin(mSource));
 

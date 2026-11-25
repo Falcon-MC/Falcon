@@ -123,6 +123,11 @@ public:
         return getComponent("minecraft:remove_in_peaceful") != nullptr;
     }
 
+    // a player hit by the mob takes the difficulty's share; the game leaves the evoker's fangs out
+    virtual bool scalesDamageWithDifficulty() const {
+        return true;
+    }
+
     int getBreedingExperience() const;
 
     bool isExpired() const override {
@@ -225,7 +230,8 @@ public:
 
     bool shieldFromSunlight() const override;
 
-    virtual float getAttackDamage(Difficulty difficulty) const;
+    // the same on every difficulty: a player takes the difficulty's share when it is hurt
+    virtual float getAttackDamage() const;
 
     const json::Value *getDefinition() const;
 

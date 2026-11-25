@@ -2867,10 +2867,7 @@ void MobActor::fireEvent(ServerNetworkHandler &owner, const std::string &event, 
     EntityEvents::fire(owner, *this, event, 0, other);
 }
 
-float MobActor::getAttackDamage(Difficulty difficulty) const {
-    if (difficulty == Difficulty::Peaceful)
-        return 0.0f;
-
+float MobActor::getAttackDamage() const {
     const json::Value *attack = getComponent("minecraft:attack");
     const json::Value *damage = attack == nullptr ? nullptr : attack->get("damage");
     if (damage == nullptr)

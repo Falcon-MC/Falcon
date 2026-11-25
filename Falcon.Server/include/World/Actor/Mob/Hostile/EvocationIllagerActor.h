@@ -19,4 +19,8 @@ public:
     int getExperienceDrop() const override {
         return 10;
     }
+
+    bool scalesDamageWithDifficulty() const override {
+        return false;
+    }
 };

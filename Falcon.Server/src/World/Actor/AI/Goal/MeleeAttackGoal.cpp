@@ -68,7 +68,7 @@ void MeleeAttackGoal::_tryAttack(ServerNetworkHandler &owner, MobActor &mob, Act
 }
 
 void MeleeAttackGoal::_attack(ServerNetworkHandler &owner, MobActor &mob, Actor &target) {
-    const float damage = mob.getAttackDamage(owner.getProperties().getDifficulty());
+    const float damage = mob.getAttackDamage();
     if (damage <= 0.0f)
         return;
 
