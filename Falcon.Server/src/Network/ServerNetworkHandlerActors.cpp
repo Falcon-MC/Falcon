@@ -453,18 +453,18 @@ void ServerNetworkHandler::_resolvePendingRides() {
         mVehiclesWithPendingPassengers.erase(vehicleId);
 }
 
-namespace {
-    // the client draws a projectile along its rotation, the reverse of the shooter's (yaw = -yaw, pitch = -pitch);
-    // head yaw follows yaw, or the arrow keeps pointing its spawn way
-    void faceMotion(ServerActor &actor, const Vector3f &motion) {
-        const float horizontal = std::sqrt(motion.x * motion.x + motion.z * motion.z);
-        if (horizontal < 1.0e-6f && std::fabs(motion.y) < 1.0e-6f)
-            return;
-        const float yaw = std::atan2(motion.x, motion.z) / MathConstants::DEGREES_TO_RADIANS_F;
-        const float pitch = std::atan2(motion.y, horizontal) / MathConstants::DEGREES_TO_RADIANS_F;
-        actor.setRotation(Vector3f(pitch, yaw, yaw));
-    }
+// the client draws a projectile along its rotation, the reverse of the shooter's (yaw = -yaw, pitch = -pitch);
+// head yaw follows yaw, or the arrow keeps pointing its spawn way
+void ServerNetworkHandler::faceMotion(ServerActor &actor, const Vector3f &motion) {
+    const float horizontal = std::sqrt(motion.x * motion.x + motion.z * motion.z);
+    if (horizontal < 1.0e-6f && std::fabs(motion.y) < 1.0e-6f)
+        return;
+    const float yaw = std::atan2(motion.x, motion.z) / MathConstants::DEGREES_TO_RADIANS_F;
+    const float pitch = std::atan2(motion.y, horizontal) / MathConstants::DEGREES_TO_RADIANS_F;
+    actor.setRotation(Vector3f(pitch, yaw, yaw));
+}
 
+namespace {
     // the direction normalized, a gaussian of 0.0075 per uncertainty unit on each axis, times the power
     Vector3f shotMotion(const Vector3f &direction, float uncertainty, float power) {
         static std::mt19937 generator{std::random_device{}()};
@@ -555,18 +555,21 @@ ServerActor *ServerNetworkHandler::spawnProjectile(ServerPlayer &player, const s
 ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const std::string &identifier,
                                                             const Vector3f &position, const Vector3f &direction,
                                                             const std::function<void(ServerActor &)> &configure) {
-    ServerActor *projectile = spawnActor(level, identifier, position, configure);
+    // set before the spawn packet: a projectile added at rotation 0 shows turning from there on the client
+    ServerActor *projectile = spawnActor(level, identifier, position, [&](ServerActor &actor) {
+        if (configure)
+            configure(actor);
+        ProjectileComponent component;
+        if (!ProjectileComponent::find(identifier, actor.getDefinition(), component))
+            return;
+        const Vector3f motion = shotMotion(direction, component.mUncertaintyBase, component.mPower);
+        actor.setMotion(motion);
+        faceMotion(actor, motion);
+    });
     if (projectile == nullptr)
         return nullptr;
 
     projectile->setProjectile(true);
-    ProjectileComponent component;
-    if (ProjectileComponent::find(identifier, projectile->getDefinition(), component)) {
-        const Vector3f motion = shotMotion(direction, component.mUncertaintyBase, component.mPower);
-        projectile->setMotion(motion);
-        faceMotion(*projectile, motion);
-        broadcastActorMove(*projectile);
-    }
     return allowProjectileLaunch(*projectile, nullptr) ? projectile : nullptr;
 }
 

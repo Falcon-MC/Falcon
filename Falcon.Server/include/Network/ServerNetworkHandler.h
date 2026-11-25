@@ -409,6 +409,9 @@ public:
 
     bool allowProjectileLaunch(ServerActor &projectile, Actor *shooter);
 
+    // a projectile's rotation along its flight; set it before the spawn packet goes out
+    static void faceMotion(ServerActor &actor, const Vector3f &motion);
+
     bool onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition, ServerPlayer *hitPlayer);
 
     bool onThrownProjectileHitActor(ServerActor &projectile, const Vector3f &hitPosition, ServerActor &hitActor);

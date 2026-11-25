@@ -220,7 +220,11 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
 
     // spawned a block ahead of the anchor, toward the target
     const Vector3f spawn(origin.x + dx / horizontal, origin.y, origin.z + dz / horizontal);
-    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, spawn);
+    const Vector3f motion(direction.x * power, direction.y * power, direction.z * power);
+    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, spawn, [&](ServerActor &actor) {
+        actor.setMotion(motion);
+        ServerNetworkHandler::faceMotion(actor, motion);
+    });
     if (projectile == nullptr)
         return false;
 
@@ -233,7 +237,6 @@ bool MobShooter::shootAt(ServerNetworkHandler &owner, MobActor &mob, const Actor
             data.mBaseDamage = numberOf(*settings.mImpact, "power_multiplier", data.mBaseDamage);
     }
 
-    projectile->setMotion(Vector3f(direction.x * power, direction.y * power, direction.z * power));
     if (auto *homing = dynamic_cast<DefinitionProjectileActor *>(projectile))
         homing->launchAt(owner, mob, target);
     if (!owner.allowProjectileLaunch(*projectile, &mob))
@@ -265,7 +268,11 @@ ServerActor *MobShooter::shootFrom(ServerNetworkHandler &owner, MobActor &mob, c
                        direction.y / length + gaussian(shooterRandom()) * spread,
                        direction.z / length + gaussian(shooterRandom()) * spread);
 
-    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, origin);
+    const Vector3f motion(aim.x * settings.mPower, aim.y * settings.mPower, aim.z * settings.mPower);
+    ServerActor *projectile = owner.spawnActor(owner.getLevelFor(mob), identifier, origin, [&](ServerActor &actor) {
+        actor.setMotion(motion);
+        ServerNetworkHandler::faceMotion(actor, motion);
+    });
     if (projectile == nullptr)
         return nullptr;
     projectile->setProjectile(true);
@@ -276,7 +283,6 @@ ServerActor *MobShooter::shootFrom(ServerNetworkHandler &owner, MobActor &mob, c
         if (data.mImpactDamage < 0)
             data.mBaseDamage = numberOf(*settings.mImpact, "power_multiplier", data.mBaseDamage);
     }
-    projectile->setMotion(Vector3f(aim.x * settings.mPower, aim.y * settings.mPower, aim.z * settings.mPower));
     return owner.allowProjectileLaunch(*projectile, &mob) ? projectile : nullptr;
 }
 
