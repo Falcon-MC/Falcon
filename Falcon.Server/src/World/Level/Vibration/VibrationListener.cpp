@@ -1,6 +1,8 @@
 #include "World/Level/Vibration/VibrationListener.h"
 
+#include "Core/Json/Json.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Definition/EntityDefinitions.h"
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/ServerActor.h"
 #include "World/Level/Level.h"
@@ -9,7 +11,11 @@
 
 #include <array>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 
 namespace {
     // up first, then down, north, south, west, east
@@ -47,6 +53,29 @@ namespace {
         if (owner == nullptr || actor->getOwnerUniqueId() == -1)
             return nullptr;
         return owner->getEntity(actor->getOwnerUniqueId());
+    }
+
+    // minecraft:vibration_damper: what such an actor does makes no vibration, sculk_touch aside
+    struct NameHash {
+        using is_transparent = void;
+
+        size_t operator()(std::string_view name) const {
+            return std::hash<std::string_view>{}(name);
+        }
+    };
+
+    // runs for every listener on every posted event: looked up without copying the name
+    bool isDamper(const Actor &actor) {
+        static std::unordered_map<std::string, bool, NameHash, std::equal_to<>> cache;
+        const std::string_view identifier = actor.getIdentifier();
+        auto found = cache.find(identifier);
+        if (found == cache.end()) {
+            const std::string name(identifier);
+            const json::Value *definition = EntityDefinitions::find(name);
+            const json::Value *components = definition == nullptr ? nullptr : definition->get("components");
+            found = cache.emplace(name, components != nullptr && components->get("minecraft:vibration_damper")).first;
+        }
+        return found->second;
     }
 
     // the cells the segment crosses, its start cell included: a hit on the first occluding one
@@ -146,6 +175,9 @@ void VibrationListener::handleGameEvent(Level &level, const GameEvent &event, co
         if (responsible != nullptr && responsible->getFlags().get(ActorFlag::Sneaking))
             return;
     }
+
+    if (!event.has(GameEvent::IGNORES_DAMPER) && context.mSource != nullptr && isDamper(*context.mSource))
+        return;
 
     if (event.has(GameEvent::DAMPENED_UNDER_SOURCE) && context.mSource != nullptr) {
         // the standing block: 0.2 below the feet, then the feet block

@@ -16,6 +16,7 @@
 #include "World/Level/Block/Systems/LiquidBlocksFetch.h"
 #include "World/Level/Block/Systems/WaterMoveSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/MovementGameEvents.h"
 #include "World/Item/ElytraItem.h"
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
@@ -312,6 +313,12 @@ void MovementHandler::handleMovement(ServerNetworkHandler &owner, ServerPlayer &
 
         player.updateFallDistance();
     }
+
+    // a teleport is no step: the tracking starts again from where it lands
+    if (player.wasRecentlyTeleported())
+        player.getMovementGameEventState().mLast = feetPosition;
+    else
+        MovementGameEvents::track(owner, player);
 }
 
 void MovementHandler::tickFluidEffects(ServerNetworkHandler &owner, ServerPlayer &player) {

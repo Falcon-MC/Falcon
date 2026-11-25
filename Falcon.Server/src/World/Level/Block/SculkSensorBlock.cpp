@@ -1,6 +1,8 @@
 #include "World/Level/Block/SculkSensorBlock.h"
 
 #include "Network/ServerNetworkHandler.h"
+#include "World/Actor/Mob/Hostile/WardenActor.h"
+#include "World/Actor/ServerActor.h"
 #include "World/Level/Block/Actor/SculkSensorBlockActor.h"
 #include "World/Level/Block/BlockClassRegistry.h"
 #include "World/Level/Block/BlockMaterial.h"
@@ -125,6 +127,18 @@ void SculkSensorBlock::activate(ServerNetworkHandler &owner, Level &level, const
 
     level.postGameEvent(GameEvents::SCULK_SENSOR_TENDRILS_CLICKING, centerOf(position), source);
     level.scheduleUpdate(position, block->getActiveTicks());
+}
+
+// anything stepping on it but a warden or a projectile touches the sculk
+void SculkSensorBlock::onStepOn(ServerNetworkHandler &owner, Actor &actor, const Vector3i &position,
+                                const BlockState &state) const {
+    (void) state;
+    if (!actor.isAlive() || dynamic_cast<const WardenActor *>(&actor) != nullptr)
+        return;
+    const ServerActor *server = dynamic_cast<const ServerActor *>(&actor);
+    if (server != nullptr && server->isProjectile())
+        return;
+    owner.getLevelFor(actor).postGameEvent(GameEvents::SCULK_TOUCH, centerOf(position), &actor);
 }
 
 // SculkSensorBlock tick: active turns to cooldown and its power drops, cooldown ends

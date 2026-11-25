@@ -411,6 +411,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
 
     if (RideControlSystem::tick(owner, *this)) {
         ServerActor::tick(owner);
+        MovementGameEvents::track(owner, *this);
         RideSystem::syncPassengerPositions(owner, *this);
         return;
     }
@@ -426,6 +427,7 @@ void MobActor::tick(ServerNetworkHandler &owner) {
         mNavigation.tick(owner, *this);
     tickControls(owner);
     ServerActor::tick(owner);
+    MovementGameEvents::track(owner, *this);
     RideSystem::syncPassengerPositions(owner, *this);
 }
 

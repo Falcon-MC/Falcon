@@ -2,6 +2,9 @@
 
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Item/ItemClassRegistry.h"
+#include "Network/ServerNetworkHandler.h"
+#include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 
 FALCON_REGISTER_ITEM(MilkBucketItem, 100);
 
@@ -12,7 +15,7 @@ bool MilkBucketItem::matches(const std::string &identifier) {
 }
 
 void MilkBucketItem::onConsumed(ServerNetworkHandler &owner, ServerPlayer &player, const ItemStack &item) const {
-    (void) owner;
     (void) item;
     player.getEffects().clear();
+    owner.getLevelFor(player).postGameEvent(GameEvents::DRINK, player.getEyePosition(), &player);
 }

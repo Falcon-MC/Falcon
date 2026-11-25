@@ -31,6 +31,7 @@
 #include "World/Item/StringToItemParser.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/Handler/InventoryHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Network/Handler/NetworkHandler.h"
@@ -612,6 +613,10 @@ void BlockActionHandler::breakBlock(ServerNetworkHandler &owner, ServerPlayer &p
 
     if (const Block *broken = VanillaBlocks::fromState(brokenState))
         broken->onPlayerWillDestroy(owner, player, level, position, brokenState);
+    // the game posts it as the player is about to destroy the block, with the block still there
+    level.postGameEvent(GameEvents::BLOCK_DESTROY,
+                        Vector3f((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f),
+                        &player, &brokenState);
     destroyBlock(owner, level, position, brokenState, !listening && !creative && harvested, heldItem, &player);
     if (listening) {
         const Vector3f dropPosition((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
@@ -1541,6 +1546,8 @@ bool BlockActionHandler::interactBlock(ServerNetworkHandler &owner, ServerPlayer
     }
 
     owner.playBlockSound(level, LevelSoundEvent::PLACE, targetCenter, (int32_t) blockHash);
+    // after the place sound, with the placed block: wool and carpets dampen it
+    level.postGameEvent(GameEvents::BLOCK_PLACE, targetCenter, &player, &placedState);
 
     if (placedBlock != nullptr)
         placedBlock->onPlaced(owner, player, target, placedState, placedWithItem, placementFace);

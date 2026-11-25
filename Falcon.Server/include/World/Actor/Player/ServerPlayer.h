@@ -375,6 +375,10 @@ public:
         return MovementPhysics::PLAYER_EYE_HEIGHT * getScale();
     }
 
+    Vector3f getEyePosition() const {
+        return Vector3f(getPosition().x, getPosition().y + getEyeHeight(), getPosition().z);
+    }
+
     float getBaseOffset() const {
         return (isSleeping() ? MovementPhysics::PLAYER_SLEEPING_BASE_OFFSET : MovementPhysics::PLAYER_BASE_OFFSET)
                * getScale();
