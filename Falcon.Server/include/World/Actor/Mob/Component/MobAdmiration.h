@@ -18,6 +18,11 @@ public:
 
     void tick(ServerNetworkHandler &owner, MobActor &mob);
 
+    // the countdown is not saved: a loaded mob admires its off hand item again from the start
+    void resumeAfterLoad() {
+        mResume = true;
+    }
+
     void abort(ServerNetworkHandler &owner, MobActor &mob);
 
     bool isReadyToBarter() const {
@@ -29,7 +34,10 @@ public:
 private:
     void _finish(ServerNetworkHandler &owner, MobActor &mob);
 
+    void _resume(ServerNetworkHandler &owner, MobActor &mob);
+
     int32_t mTicks = 0;
     bool mBarter = false;
     bool mReadyToBarter = false;
+    bool mResume = false;
 };

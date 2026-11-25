@@ -66,6 +66,11 @@ void MobAdmiration::start(ServerNetworkHandler &owner, MobActor &mob, const Item
 }
 
 void MobAdmiration::tick(ServerNetworkHandler &owner, MobActor &mob) {
+    if (mResume) {
+        mResume = false;
+        _resume(owner, mob);
+    }
+
     if (mTicks <= 0)
         return;
 
@@ -104,6 +109,14 @@ void MobAdmiration::_finish(ServerNetworkHandler &owner, MobActor &mob) {
     const ItemStack item = takeOffhand(owner, mob);
     if (!item.isAir())
         MobShareables::store(owner, mob, item);
+}
+
+void MobAdmiration::_resume(ServerNetworkHandler &owner, MobActor &mob) {
+    const ItemStack &held = mob.getEquipment().getSlot(MobEquipment::OFFHAND);
+    if (isAdmiring() || mob.getComponent(ADMIRE_ITEM_COMPONENT) == nullptr || !MobShareables::isAdmired(mob, held))
+        return;
+
+    start(owner, mob, held, MobShareables::isBarterCurrency(mob, held));
 }
 
 void MobAdmiration::barter(ServerNetworkHandler &owner, MobActor &mob) {
