@@ -100,6 +100,10 @@ public:
     static const int32_t CARRIED_BLOCK_DATA_ID = 23;
     static const int32_t SCALE_DATA_ID = 38;
     static const int32_t MARK_VARIANT_DATA_ID = 43;
+    static const int32_t CONTAINER_SIZE_DATA_ID = 45;
+    static const int32_t CONTAINER_STRENGTH_DATA_ID = 46;
+    static const int32_t STRENGTH_DATA_ID = 75;
+    static const int32_t MAX_STRENGTH_DATA_ID = 76;
     static const int32_t PLAYER_FLAGS_DATA_ID = 26;
     static const int32_t BED_POSITION_DATA_ID = 28;
     static const int32_t BED_ENTER_POSITION_DATA_ID = 133;

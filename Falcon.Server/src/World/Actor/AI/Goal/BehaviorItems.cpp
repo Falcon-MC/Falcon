@@ -23,8 +23,10 @@ BehaviorItems::BehaviorItems(const json::Value *items) {
 
         const json::Value *item = entry.isObject() ? entry.get("item") : &entry;
         const json::Value *name = item == nullptr ? entry.get("name") : item;
-        if (name != nullptr && name->isString())
-            mItems.push_back(LegacyItemMapper::getInstance().resolveWithData(name->mString));
+        if (name != nullptr && name->isString()) {
+            const auto variants = LegacyItemMapper::getInstance().resolveVariants(name->mString);
+            mItems.insert(mItems.end(), variants.begin(), variants.end());
+        }
     };
 
     if (items->isArray()) {

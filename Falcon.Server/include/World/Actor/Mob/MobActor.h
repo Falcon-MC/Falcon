@@ -552,6 +552,7 @@ public:
 
     // 0 without minecraft:inventory
     int getInventoryCapacity() const;
+    int getInventoryStrength() const;
 
     // a tamed mount with a horse container_type: its saddle, armor and chest slots
     Container *getEntityContainer() override;
@@ -648,7 +649,13 @@ private:
         explicit InventoryView(MobActor &mob) : mMob(mob) {}
 
         int getContainerSize() const override {
+            if (mMob._isMountInventory() && mMob.getComponent("minecraft:is_chested") == nullptr)
+                return getEquipmentSlotCount();
             return mMob.getInventoryCapacity();
+        }
+
+        int getEquipmentSlotCount() const override {
+            return mMob._isMountInventory() ? mMob._equippableSlotCount() : 0;
         }
 
         const ItemStack &getContainerItem(int slot) const override {
@@ -660,7 +667,9 @@ private:
         }
 
         bool canHoldInSlot(int slot, const ItemStack &item) const override {
-            return mMob._acceptsInEquippableSlot(slot, item);
+            return slot >= 0 && slot < getContainerSize()
+                   && (slot >= getEquipmentSlotCount() || item.isAir() || item.mCount == 1)
+                   && mMob._acceptsInEquippableSlot(slot, item);
         }
 
     private:
@@ -922,6 +931,9 @@ private:
     BodyControl mBodyControl;
     MobEquipment mEquipment;
     MobEconomy mEconomy;
+    bool _isMountInventory() const;
+    int _equippableSlotCount() const;
+    int mLoadedInventoryStrength = -1;
     InventoryView mInventoryView{*this};
     MobEntitySpawner mEntitySpawner;
     std::vector<int32_t> mEntitySensorCooldowns;
