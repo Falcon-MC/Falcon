@@ -66,7 +66,17 @@ public:
     void onPlacedInLevel(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                          const BlockState &state) const override;
 
+    int getEmittedSignal(Level &level, const Vector3i &position, const BlockState &state, int face,
+                         bool strong) const override;
+
     int32_t getActiveTicks() const override {
         return ACTIVE_TICKS;
     }
+
+    // the face toward the input neighbour: the side opposite cardinal_direction
+    static int inputFace(const BlockState &state);
+
+    // the power the input neighbour gives the sensor, 0 for none
+    static int inputSignal(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
+                           const BlockState &state);
 };
