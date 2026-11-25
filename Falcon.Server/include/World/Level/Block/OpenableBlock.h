@@ -3,6 +3,7 @@
 #include "World/Level/Block/BlockState.h"
 #include "Core/Math/Vector3i.h"
 
+class Actor;
 class Level;
 class ServerNetworkHandler;
 
@@ -19,7 +20,12 @@ public:
 
     static void forgetLevel(const Level &level);
 
-    static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state);
+    // source: who swung it, null for redstone or a wind burst
+    static bool toggle(ServerNetworkHandler &owner, Level &level, const Vector3i &position, const BlockState &state,
+                       Actor *source = nullptr);
+
+    // block_open or block_close, once per door, gate or trapdoor
+    static void postToggled(Level &level, const Vector3i &position, bool open, Actor *source);
 
     static void openOnPlace(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                             const BlockState &state);

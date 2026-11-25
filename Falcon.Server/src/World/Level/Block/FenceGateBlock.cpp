@@ -41,7 +41,7 @@ bool FenceGateBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &playe
     Tag states = state.mStates;
     states.putString("minecraft:cardinal_direction", cardinalName(swing));
 
-    return OpenableBlock::toggle(owner, level, position, BlockState(state.mName, states));
+    return OpenableBlock::toggle(owner, level, position, BlockState(state.mName, states), &player);
 }
 
 void FenceGateBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,

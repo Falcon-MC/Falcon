@@ -3,11 +3,14 @@
 
 #include "World/Actor/ServerActor.h"
 #include "World/Actor/Player/ServerPlayer.h"
+#include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Protocol/Packets/LevelEventPacket.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 #include "Scripting/ScriptEngine.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <random>
@@ -40,6 +43,20 @@ namespace {
         WeatherChangeBeforeEvent event(level, state);
         signal.emit(event);
         return !event.isCancelled();
+    }
+
+    // the block under the bolt, or the block a lightning rod there is attached to
+    Vector3f lightningStrikeCenter(Level &level, const Vector3f &position) {
+        const Vector3i at((int32_t) std::floor(position.x), (int32_t) std::floor(position.y),
+                          (int32_t) std::floor(position.z));
+        Vector3i struck = RedstoneFace::relative(at, RedstoneFace::DOWN);
+        const BlockState *rod = level.peekBlockPtr(at.x, at.y, at.z);
+        if (rod != nullptr && LightningRodBlock::matches(rod->mName)) {
+            const int facing = std::clamp((int) rod->mStates.getInt("facing_direction", RedstoneFace::UP), 0,
+                                          RedstoneFace::COUNT - 1);
+            struck = RedstoneFace::relative(at, RedstoneFace::opposite(facing));
+        }
+        return Vector3f((float) struck.x + 0.5f, (float) struck.y + 0.5f, (float) struck.z + 0.5f);
     }
 
     const char *weatherName(bool raining, bool thundering) {
@@ -160,6 +177,7 @@ void ServerNetworkHandler::strikeLightning(Level &level, const Vector3f &positio
 
     playLevelSound(level, LevelSoundEvent::THUNDER, position);
     playLevelSound(level, LevelSoundEvent::EXPLODE, position);
+    level.postGameEvent(GameEvents::LIGHTNING_STRIKE, lightningStrikeCenter(level, position), bolt);
 
     for (auto &entry: mPlayers) {
         ServerPlayer &player = entry.second;

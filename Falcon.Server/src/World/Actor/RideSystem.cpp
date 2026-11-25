@@ -4,6 +4,8 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Actor/Movement/PlayerMovementSimulator.h"
 #include "Network/ServerNetworkHandler.h"
+#include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Protocol/Packets/SetActorDataPacket.h"
 #include "Protocol/Packets/SetActorLinkPacket.h"
 
@@ -152,6 +154,7 @@ bool RideSystem::mount(ServerNetworkHandler &owner, Actor &rider, ServerActor &v
     refreshSeats(owner, vehicle);
 
     vehicle.onPassengerAdded(owner, rider);
+    owner.getLevelFor(rider).postGameEvent(GameEvents::ENTITY_MOUNT, rider.getPosition(), &rider);
     return true;
 }
 
@@ -196,6 +199,7 @@ void RideSystem::dismount(ServerNetworkHandler &owner, Actor &rider, bool riderI
 
     if (serverVehicle != nullptr)
         serverVehicle->onPassengerRemoved(owner, rider);
+    owner.getLevelFor(rider).postGameEvent(GameEvents::ENTITY_DISMOUNT, rider.getPosition(), &rider);
 }
 
 void RideSystem::ejectAll(ServerNetworkHandler &owner, Actor &vehicle) {

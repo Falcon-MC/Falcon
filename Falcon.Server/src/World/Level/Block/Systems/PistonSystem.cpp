@@ -11,6 +11,7 @@
 #include "World/Level/Block/Systems/RedstoneSystem.h"
 #include "World/Inventory/InventoryManager.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
@@ -510,6 +511,7 @@ bool PistonSystem::_doMove(ServerNetworkHandler &owner, Level &level, const Vect
 
     const Vector3f center((float) position.x + 0.5f, (float) position.y + 0.5f, (float) position.z + 0.5f);
     owner.playLevelSound(level, extending ? LevelSoundEvent::PISTON_OUT : LevelSoundEvent::PISTON_IN, center);
+    level.postGameEvent(extending ? GameEvents::PISTON_EXTEND : GameEvents::PISTON_CONTRACT, center);
 
     (void) faceAxis;
     return true;

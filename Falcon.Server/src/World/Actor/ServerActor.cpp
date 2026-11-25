@@ -13,6 +13,7 @@
 #include "World/Actor/Player/ServerPlayer.h"
 #include "World/Level/Storage/FalconDataVersion.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Network/Handler/ItemActorHandler.h"
 #include "Protocol/Packets/ActorEventPacket.h"
@@ -273,6 +274,7 @@ bool ServerActor::hurt(ServerNetworkHandler &owner, float amount, const ActorDam
         owner.syncActorAttributes(*this);
 
     owner.broadcastActorEvent(*this, EntityEventType::HurtAnimation);
+    owner.getLevelFor(*this).postGameEvent(GameEvents::ENTITY_DAMAGE, getPosition(), this);
     owner.playLevelSound(owner.getLevelFor(*this), LevelSoundEvent::HIT, getPosition(), mIdentifier);
     owner.getScriptEngine().onEntityHurt(*this, amount, damageSource);
 

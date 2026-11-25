@@ -50,7 +50,7 @@ bool ButtonBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, 
                              const BlockState &state) const {
     Level &level = owner.getLevelFor(player);
     const bool wasPressed = state.mStates.getBool("button_pressed_bit", false);
-    RedstoneSystem::onButtonActivated(owner, level, position, state);
+    RedstoneSystem::onButtonActivated(owner, level, position, state, &player);
     if (!wasPressed)
         owner.getScriptEngine().onButtonPush(level, position, &player);
     return true;

@@ -108,8 +108,9 @@ public:
     static void onLeverActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                  const BlockState &state);
 
+    // source: who pressed it, null for a wind burst or a script
     static void onButtonActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                  const BlockState &state);
+                                  const BlockState &state, Actor *source = nullptr);
 
     static void onRepeaterActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
                                     const BlockState &state);

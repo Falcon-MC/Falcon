@@ -4,6 +4,7 @@
 #include "World/Actor/Projectile/ProjectileReflection.h"
 #include "World/Level/Explosion.h"
 #include "World/Level/LevelSoundEventIds.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "World/Level/Block/Systems/DetectorSystem.h"
 
 #include "World/Actor/Definition/KnockbackRules.h"
@@ -565,16 +566,21 @@ ServerActor *ServerNetworkHandler::spawnDispensedProjectile(Level &level, const 
 
 bool ServerNetworkHandler::allowProjectileLaunch(ServerActor &projectile, Actor *shooter) {
     EventSignal<ProjectileLaunchBeforeEvent> &launch = mEventBus.before().mProjectileLaunch;
-    if (!launch.hasSubscribers())
-        return true;
+    if (launch.hasSubscribers()) {
+        ProjectileLaunchBeforeEvent event(projectile, shooter);
+        launch.emit(event);
+        if (event.isCancelled()) {
+            removeActor(projectile.getUniqueId());
+            return false;
+        }
+    }
 
-    ProjectileLaunchBeforeEvent event(projectile, shooter);
-    launch.emit(event);
-    if (!event.isCancelled())
-        return true;
-
-    removeActor(projectile.getUniqueId());
-    return false;
+    // the game posts it as it shoots, the projectile itself the source, from the block it is in
+    const Vector3f &at = projectile.getPosition();
+    getLevelFor(projectile).postGameEvent(
+            GameEvents::PROJECTILE_SHOOT,
+            Vector3f(std::floor(at.x) + 0.5f, std::floor(at.y) + 0.5f, std::floor(at.z) + 0.5f), &projectile);
+    return true;
 }
 
 bool ServerNetworkHandler::onThrownProjectileHit(ServerActor &projectile, const Vector3f &hitPosition,
@@ -2430,6 +2436,8 @@ void ServerNetworkHandler::tickActors() {
                 }
 
                 const BlockState hitState = level.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+                // from where the projectile is, with the block it hit: wool takes it in
+                level.postGameEvent(GameEvents::PROJECTILE_LAND, hitPosition, &actor, &hitState);
                 if (DetectorSystem::isTarget(hitState))
                     DetectorSystem::onTargetHit(*this, level, hitBlock, hitPosition, previousPosition, actor,
                                                 arrowLike);

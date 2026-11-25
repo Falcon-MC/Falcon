@@ -36,6 +36,7 @@
 #include "World/Level/Block/Systems/FireSystem.h"
 #include "World/Level/Block/Systems/PistonSystem.h"
 #include "World/Level/Level.h"
+#include "World/Level/Vibration/GameEvent.h"
 #include "Network/Handler/BlockActionHandler.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/BlockStateHasher.h"
@@ -1220,6 +1221,7 @@ void RedstoneSystem::onRedstoneUpdate(ServerNetworkHandler &owner, Level &level,
             const BlockState released = BlockState(state.mName, states);
             level.setBlock(position, released, false);
             owner.playBlockSound(level, SOUND_POWER_OFF, centerOf(position), released.getHash());
+            level.postGameEvent(GameEvents::BLOCK_DEACTIVATE, centerOf(position));
 
             const int facing = buttonFacing(state);
             updateAroundRedstone(owner, level, position);
@@ -1481,7 +1483,7 @@ void RedstoneSystem::onLeverActivated(ServerNetworkHandler &owner, Level &level,
 }
 
 void RedstoneSystem::onButtonActivated(ServerNetworkHandler &owner, Level &level, const Vector3i &position,
-                                       const BlockState &state) {
+                                       const BlockState &state, Actor *source) {
     if (stateBool(state, "button_pressed_bit", false))
         return;
 
@@ -1493,6 +1495,7 @@ void RedstoneSystem::onButtonActivated(ServerNetworkHandler &owner, Level &level
     level.setBlock(position, pressed, false);
 
     owner.playBlockSound(level, SOUND_POWER_ON, centerOf(position), pressed.getHash());
+    level.postGameEvent(GameEvents::BLOCK_ACTIVATE, centerOf(position), source);
 
     const int facing = buttonFacing(pressed);
     updateAroundRedstone(owner, level, position);

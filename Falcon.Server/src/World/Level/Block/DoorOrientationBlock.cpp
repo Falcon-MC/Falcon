@@ -62,7 +62,7 @@ bool DoorOrientationBlock::onWindBurst(ServerNetworkHandler &owner, Level &level
 
 bool DoorOrientationBlock::onInteract(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
                                       const BlockState &state) const {
-    return DoorBlock::toggle(owner, owner.getLevelFor(player), position, state);
+    return DoorBlock::toggle(owner, owner.getLevelFor(player), position, state, &player);
 }
 
 void DoorOrientationBlock::onPlaced(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &position,
