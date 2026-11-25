@@ -13,11 +13,9 @@ FALCON_REGISTER_ITEM_CUSTOM(
 #include "World/Item/EnchantmentData.h"
 #include "World/Item/ItemEnchantments.h"
 #include "World/Item/RangedWeaponHelpers.h"
-#include "Core/Math/MathConstants.h"
 #include "Network/ServerNetworkHandler.h"
 #include "Protocol/Packets/LevelSoundEventPacket.h"
 
-#include <cmath>
 
 using namespace RangedWeaponHelpers;
 
@@ -88,7 +86,8 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
                                      : ItemStack::air();
 
     for (int32_t index = 0; index < shots; ++index) {
-        ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR);
+        const float spread = index == 0 ? 0.0f : index == 1 ? -MULTISHOT_SPREAD_DEGREES : MULTISHOT_SPREAD_DEGREES;
+        ServerActor *arrow = owner.spawnProjectile(player, ARROW_ACTOR, 1.0f, 0.0f, nullptr, spread);
         if (arrow == nullptr)
             continue;
 
@@ -104,18 +103,8 @@ bool CrossbowItem::onUse(ServerNetworkHandler &owner, ServerPlayer &player, cons
         if (index == 0)
             data.mPickupItem = pickup;
 
-        if (index > 0) {
-            const float spread = (index == 1 ? -MULTISHOT_SPREAD_DEGREES : MULTISHOT_SPREAD_DEGREES)
-                                 * MathConstants::DEGREES_TO_RADIANS_F;
-            Vector3f motion = arrow->getMotion();
-            const float x = motion.x * std::cos(spread) - motion.z * std::sin(spread);
-            const float z = motion.x * std::sin(spread) + motion.z * std::cos(spread);
-            motion.x = x;
-            motion.z = z;
-            arrow->setMotion(motion);
-            owner.sendActorMotion(*arrow);
+        if (index > 0)
             data.mPickupCreativeOnly = true;
-        }
     }
 
     ItemStack updated = item;

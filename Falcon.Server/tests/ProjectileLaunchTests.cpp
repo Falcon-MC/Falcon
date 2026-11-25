@@ -64,6 +64,15 @@ namespace {
         require(near(thrown.z, 1.5f, 1.0e-4f) && near(thrown.y, 0.0f, 1.0e-4f), "the snowball left at not power 1.5");
         require(snowball->getProjectileComponent().mGravity == 0.03f, "the snowball does not fall at gravity 0.03");
 
+        // a multishot side shot: turned 10 degrees about the vertical, and already facing that way at spawn
+        ServerActor *side = owner.spawnProjectile(player, "minecraft:snowball", 1.0f, 0.0f, nullptr, 10.0f);
+        require(side != nullptr, "no turned snowball");
+        const float turn = 10.0f * 3.14159265f / 180.0f;
+        const Vector3f turned = side->getMotion();
+        require(near(turned.x, -1.5f * std::sin(turn), 1.0e-4f) && near(turned.z, 1.5f * std::cos(turn), 1.0e-4f),
+                "the side shot was not turned 10 degrees");
+        require(near(side->getRotation().y, -10.0f, 1.0e-3f), "the side shot did not face its turned flight");
+
         // power 0.5 aimed 20 degrees above the look
         ServerActor *bottle = owner.spawnProjectile(player, "minecraft:xp_bottle");
         require(bottle != nullptr, "no experience bottle");
