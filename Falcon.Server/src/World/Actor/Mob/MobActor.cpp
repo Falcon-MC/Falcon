@@ -329,7 +329,9 @@ bool MobActor::canStandOnPowderSnow() const {
     return !boots.isAir() && boots.mDefinition->getIdentifier() == MovementPhysics::LEATHER_BOOTS;
 }
 
-MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {}
+MobActor::MobActor(uint64_t runtimeId, const std::string &identifier) : ServerActor(runtimeId, identifier) {
+    addTypeFlag(ActorTypeFlag::MobFlagComponent);
+}
 
 void MobActor::startDefinition(ServerNetworkHandler &owner) {
     if (mDefinitionStarted)

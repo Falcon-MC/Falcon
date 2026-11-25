@@ -22,6 +22,14 @@ class Level;
 // the EntityHealCause values
 enum class HealCause { Heal, Regeneration, SelfHeal, TotemOfUndying };
 
+// the game's empty tag components for actor kinds, one bit each: a kind is checked without a cast
+enum class ActorTypeFlag : uint8_t {
+    PlayerComponent = 1 << 0,
+    ItemActorFlagComponent = 1 << 1,
+    MobFlagComponent = 1 << 2,
+    PaintingFlagComponent = 1 << 3
+};
+
 class Actor {
 public:
     explicit Actor(uint64_t runtimeId);
@@ -34,6 +42,10 @@ public:
 
     virtual bool isPlayer() const {
         return false;
+    }
+
+    bool hasTypeFlag(ActorTypeFlag flag) const {
+        return (mTypeFlags & (uint8_t) flag) != 0;
     }
 
     // falling blocks and actors with can_stand_on_powder_snow or leather boots
@@ -565,6 +577,12 @@ protected:
     static const float FALL_DAMAGE_THRESHOLD;
     static const int FOOD_TICK_PERIOD = 80;
 
+    // set by the constructor of each kind
+    void addTypeFlag(ActorTypeFlag flag) {
+        mTypeFlags |= (uint8_t) flag;
+    }
+
+    uint8_t mTypeFlags = 0;
     uint64_t mRuntimeId;
     int64_t mUniqueId;
     int64_t mVehicleId = 0;

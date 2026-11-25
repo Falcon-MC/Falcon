@@ -205,6 +205,7 @@ float ServerPlayer::getArmorKnockbackResistance() const {
 
 ServerPlayer::ServerPlayer(const NetworkIdentifier &id, uint64_t runtimeId, PacketSender *sender)
         : Actor(runtimeId), mId(id), mLoginState(LoginState::Connecting), mSender(sender) {
+    addTypeFlag(ActorTypeFlag::PlayerComponent);
     getEffects().setEventCallback([this](const MobEffectInstance &effect, MobEffectEvent event) {
         if (mSender == nullptr || !mEffectsNetworkReady)
             return;

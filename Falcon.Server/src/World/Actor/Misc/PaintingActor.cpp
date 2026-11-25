@@ -117,7 +117,9 @@ namespace {
 }
 
 PaintingActor::PaintingActor(uint64_t runtimeId, const std::string &identifier)
-        : ServerActor(runtimeId, identifier) {}
+        : ServerActor(runtimeId, identifier) {
+    addTypeFlag(ActorTypeFlag::PaintingFlagComponent);
+}
 
 bool PaintingActor::place(ServerNetworkHandler &owner, ServerPlayer &player, const Vector3i &support, int32_t face) {
     if (face < 2 || face > 5 || player.isSpectator())

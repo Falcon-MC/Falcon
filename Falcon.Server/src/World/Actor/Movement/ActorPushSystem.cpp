@@ -29,8 +29,8 @@ namespace {
 }
 
 AxisAlignedBB ActorPushSystem::boundingBoxOf(const ServerActor &actor) {
-    if (const auto *painting = dynamic_cast<const PaintingActor *>(&actor))
-        return painting->getPaintingBounds();
+    if (actor.hasTypeFlag(ActorTypeFlag::PaintingFlagComponent))
+        return static_cast<const PaintingActor &>(actor).getPaintingBounds();
     const ActorSize size = actor.getSize();
     const float scale = actor.getCollisionScale();
     if (scale == 1.0f)
@@ -42,15 +42,17 @@ AxisAlignedBB ActorPushSystem::boundingBoxOf(const ServerActor &actor) {
 }
 
 AxisAlignedBB ActorPushSystem::boundingBoxOf(const Actor &actor) {
-    if (const ServerActor *serverActor = dynamic_cast<const ServerActor *>(&actor))
-        return boundingBoxOf(*serverActor);
+    // players and item actors are the only actors that are not server actors
+    if (actor.hasTypeFlag(ActorTypeFlag::PlayerComponent) || actor.hasTypeFlag(ActorTypeFlag::ItemActorFlagComponent))
+        return boxAround(actor.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
 
-    return boxAround(actor.getPosition(), PLAYER_WIDTH, PLAYER_HEIGHT);
+    return boundingBoxOf(static_cast<const ServerActor &>(actor));
 }
 
 Vector3f ActorPushSystem::computePush(ServerNetworkHandler &owner, ServerActor &actor, const Vector3f &motion) {
     const AxisAlignedBB self = boundingBoxOf(actor).offset(motion.x, motion.y, motion.z);
-    const MobActor *mob = dynamic_cast<const MobActor *>(&actor);
+    const MobActor *mob = actor.hasTypeFlag(ActorTypeFlag::MobFlagComponent) ? &static_cast<const MobActor &>(actor)
+                                                                              : nullptr;
     const PushableByEntityPresets *presets = mob == nullptr ? nullptr : &mob->getPushPresets();
     if (presets != nullptr && presets->mPresets.empty())
         presets = nullptr;
