@@ -48,7 +48,7 @@ bool CameraShakeCommand::execute(CommandOrigin &sender, const std::vector<std::s
     const bool adding = !arguments.empty() && arguments[0] == "add";
     const bool stopping = !arguments.empty() && arguments[0] == "stop";
     if ((!adding && !stopping) || (adding && arguments.size() < 2)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -72,7 +72,7 @@ bool CameraShakeCommand::execute(CommandOrigin &sender, const std::vector<std::s
                            && (arguments.size() < 4 || parseFloat(arguments[3], packet.mDuration))
                            && (arguments.size() < 5 || arguments[4] == "positional" || arguments[4] == "rotational");
         if (!valid) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         if (arguments.size() >= 5 && arguments[4] == "rotational")

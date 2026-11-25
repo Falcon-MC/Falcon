@@ -33,7 +33,7 @@ std::vector<CommandOverloadData> AllowListCommand::getOverloads() const {
 
 bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -72,7 +72,7 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
     }
 
     if ((action == "add" || action == "remove") && arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -97,6 +97,6 @@ bool AllowListCommand::execute(CommandOrigin &sender, const std::vector<std::str
         return true;
     }
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }

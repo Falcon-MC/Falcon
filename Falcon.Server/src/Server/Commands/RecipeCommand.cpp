@@ -21,7 +21,7 @@ std::vector<CommandOverloadData> RecipeCommand::getOverloads() const {
 
 bool RecipeCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() < 3 || (arguments[0] != "give" && arguments[0] != "take")) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

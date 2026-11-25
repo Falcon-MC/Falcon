@@ -53,7 +53,7 @@ bool WorldCommand::execute(CommandOrigin &sender, const std::vector<std::string>
         return _list(sender);
 
     if (arguments.size() < 2) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -66,7 +66,7 @@ bool WorldCommand::execute(CommandOrigin &sender, const std::vector<std::string>
     if (action == "tp")
         return _teleport(sender, arguments);
 
-    sender.sendTranslation("commands.generic.usage", {getUsage()});
+    sendUsageError(sender);
     return false;
 }
 

@@ -105,7 +105,7 @@ float SpreadPlayersCommand::landingY(Level &level, int32_t x, int32_t z, int32_t
 
 bool SpreadPlayersCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.size() != 5 && arguments.size() != 6) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -119,7 +119,7 @@ bool SpreadPlayersCommand::execute(CommandOrigin &sender, const std::vector<std:
     if (!parseCoordinate(arguments[0], (float) origin.x, centreX)
         || !parseCoordinate(arguments[1], (float) origin.z, centreZ) || !parseNumber(arguments[2], spreadDistance)
         || !parseNumber(arguments[3], maxRange)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     if (spreadDistance < 0.0f) {
@@ -151,7 +151,7 @@ bool SpreadPlayersCommand::execute(CommandOrigin &sender, const std::vector<std:
     if (arguments.size() == 6) {
         float maxHeight = 0.0f;
         if (!parseCoordinate(arguments[5], (float) origin.y, maxHeight)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
         top = (int32_t) std::floor(maxHeight);

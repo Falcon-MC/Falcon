@@ -67,6 +67,7 @@
 
 class ItemUseTransaction;
 class CommandOrigin;
+class CommandOutputMessage;
 class Block;
 class CraftingEventPacket;
 class CommandBlockUpdatePacket;
@@ -794,6 +795,10 @@ public:
 
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &message,
                            bool success = true);
+
+    // one command's whole output; successCount 1 when it succeeded
+    void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
+                           std::vector<CommandOutputMessage> messages, bool success);
 
     void sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin, const std::string &key,
                            const std::vector<std::string> &parameters);

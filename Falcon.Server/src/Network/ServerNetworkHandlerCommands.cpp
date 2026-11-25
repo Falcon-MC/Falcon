@@ -117,8 +117,11 @@ namespace {
         }
 
         bool execute(CommandOrigin &sender, const std::vector<std::string> &arguments) override {
-            if (dynamic_cast<ServerCommandOrigin *>(&sender) == nullptr)
+            // the console's alone
+            if (dynamic_cast<ServerCommandOrigin *>(&sender) == nullptr) {
+                sender.sendTranslation("commands.generic.error.permissions", {getName()});
                 return false;
+            }
             auto &permissions = mOwner.getPluginManager().getPermissions();
             if (arguments.size() == 1 && arguments[0] == "list") {
                 const auto names = permissions.groupNames();
@@ -674,6 +677,16 @@ void ServerNetworkHandler::setPlayerGameMode(ServerPlayer &player, int gameMode)
         mEventBus.after().mPlayerGameModeChange.emit(event);
         mScriptEngine.onPlayerGameModeChange(player, previousGameMode, gameMode);
     }
+}
+
+void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,
+                                             std::vector<CommandOutputMessage> messages, bool success) {
+    CommandOutputPacket output;
+    output.mOrigin = origin;
+    output.mType = CommandOutputType::AllOutput;
+    output.mSuccessCount = success ? 1 : 0;
+    output.mMessages = std::move(messages);
+    mNetworkHandler->send(player.getNetworkIdentifier(), output, mCodecContext);
 }
 
 void ServerNetworkHandler::sendCommandOutput(ServerPlayer &player, const CommandOriginData &origin,

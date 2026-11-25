@@ -76,7 +76,7 @@ std::vector<CommandOverloadData> CloneCommand::getOverloads() const {
 bool CloneCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     Level *level = sender.getLevel();
     if (level == nullptr || arguments.size() < 9) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -88,7 +88,7 @@ bool CloneCommand::execute(CommandOrigin &sender, const std::vector<std::string>
     if (!parseBlockPosition(arguments, 0, origin, rotation, begin)
         || !parseBlockPosition(arguments, 3, origin, rotation, end)
         || !parseBlockPosition(arguments, 6, origin, rotation, destination)) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -98,7 +98,7 @@ bool CloneCommand::execute(CommandOrigin &sender, const std::vector<std::string>
     const bool masked = maskMode == "masked";
     if ((!filtered && std::find(MASK_MODES.begin(), MASK_MODES.end(), maskMode) == MASK_MODES.end())
         || std::find(CLONE_MODES.begin(), CLONE_MODES.end(), cloneMode) == CLONE_MODES.end()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
     std::optional<BlockState> filter;

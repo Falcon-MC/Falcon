@@ -37,7 +37,7 @@ bool HudCommand::execute(CommandOrigin &sender, const std::vector<std::string> &
                                                : elements.end();
     const bool all = arguments.size() < 3 || arguments[2] == "all";
     if (!shaped || (!all && element == elements.end())) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 

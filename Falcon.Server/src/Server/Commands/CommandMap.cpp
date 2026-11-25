@@ -43,6 +43,15 @@ namespace {
         }
         return false;
     }
+
+    // the ~ tokens from first on, up to a chained command's run: what follows it splits when dispatched
+    void splitBeforeChain(const Command &command, std::vector<std::string> &tokens, size_t first,
+                          std::vector<size_t> *starts = nullptr, std::vector<size_t> *ends = nullptr) {
+        size_t last = tokens.size();
+        if (command.chainsCommands() && first < tokens.size())
+            last = (size_t) (std::find(tokens.begin() + (std::ptrdiff_t) first, tokens.end(), "run") - tokens.begin());
+        CommandMap::splitRelativeCoordinates(tokens, starts, ends, first, last);
+    }
 }
 
 void CommandMap::registerCommand(std::shared_ptr<Command> command) {
@@ -99,7 +108,7 @@ Command *CommandMap::getCommand(const std::string &name) const {
 }
 
 std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, std::vector<size_t> *starts,
-                                              bool *endsInToken) {
+                                              bool *endsInToken, std::vector<size_t> *ends) {
     std::vector<std::string> tokens;
     std::string token;
     bool quoted = false;
@@ -149,6 +158,8 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
                 tokens.push_back(token);
                 if (starts != nullptr)
                     starts->push_back(start);
+                if (ends != nullptr)
+                    ends->push_back(index);
                 token.clear();
                 started = false;
             }
@@ -165,13 +176,16 @@ std::vector<std::string> CommandMap::tokenize(const std::string &commandLine, st
         tokens.push_back(token);
         if (starts != nullptr)
             starts->push_back(start);
+        if (ends != nullptr)
+            ends->push_back(commandLine.size());
     }
 
     return tokens;
 }
 
-void CommandMap::splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts) {
-    for (size_t index = 0; index < tokens.size(); ++index) {
+void CommandMap::splitRelativeCoordinates(std::vector<std::string> &tokens, std::vector<size_t> *starts,
+                                          std::vector<size_t> *ends, size_t first, size_t last) {
+    for (size_t index = first; index < std::min(last, tokens.size()); ++index) {
         const std::vector<std::string> parts = relativeParts(tokens[index]);
         if (parts.size() < 2)
             continue;
@@ -181,12 +195,18 @@ void CommandMap::splitRelativeCoordinates(std::vector<std::string> &tokens, std:
         if (starts != nullptr && index < starts->size()) {
             size_t start = (*starts)[index];
             starts->erase(starts->begin() + (std::ptrdiff_t) index);
+            if (ends != nullptr && index < ends->size())
+                ends->erase(ends->begin() + (std::ptrdiff_t) index);
             for (size_t part = 0; part < parts.size(); ++part) {
                 starts->insert(starts->begin() + (std::ptrdiff_t) (index + part), start);
                 start += parts[part].size();
+                if (ends != nullptr)
+                    ends->insert(ends->begin() + (std::ptrdiff_t) (index + part), start);
             }
         }
         index += parts.size() - 1;
+        if (last != (size_t) -1)
+            last += parts.size() - 1;
     }
 }
 
@@ -213,6 +233,33 @@ std::string CommandMap::_skipFields(const std::string &commandLine, size_t count
     return commandLine.substr(index);
 }
 
+namespace {
+    // commands run on the main thread
+    const CommandMap::DispatchContext *currentContext = nullptr;
+
+    // nested dispatches (execute run, functions) restore the outer line when they finish
+    class DispatchScope {
+    public:
+        explicit DispatchScope(const CommandMap::DispatchContext &context) : mPrevious(currentContext) {
+            currentContext = &context;
+        }
+
+        ~DispatchScope() {
+            currentContext = mPrevious;
+        }
+
+        DispatchScope(const DispatchScope &) = delete;
+        DispatchScope &operator=(const DispatchScope &) = delete;
+
+    private:
+        const CommandMap::DispatchContext *mPrevious;
+    };
+}
+
+const CommandMap::DispatchContext *CommandMap::currentDispatch() {
+    return currentContext;
+}
+
 bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine) {
     std::string line = commandLine;
     if (!line.empty() && line[0] == '/')
@@ -233,18 +280,24 @@ bool CommandMap::dispatch(CommandOrigin &sender, const std::string &commandLine)
         return false;
     }
 
-    std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
-
     const size_t rawIndex = command->getRawArgumentIndex();
     // the game reads ~ as a token of its own, spaces or not; a chained command splits under its own rules
-    if (rawIndex == (size_t) -1 && !takesMessage(*command)) {
-        const auto tail = command->chainsCommands() ? std::find(arguments.begin(), arguments.end(), "run")
-                                                    : arguments.end();
-        std::vector<std::string> split(arguments.begin(), tail);
-        splitRelativeCoordinates(split);
-        split.insert(split.end(), tail, arguments.end());
-        arguments = std::move(split);
-    }
+    const bool splits = rawIndex == (size_t) -1 && !takesMessage(*command);
+
+    // the syntax error quotes the line as it was typed, slash included, and reads its tokens as the command does
+    DispatchContext context;
+    context.mCommand = command;
+    context.mLine = commandLine;
+    context.mTokens = tokenize(commandLine, &context.mStarts, nullptr, &context.mEnds);
+    if (!context.mTokens.empty() && context.mTokens[0].starts_with('/'))
+        context.mTokens[0].erase(0, 1);
+    if (splits)
+        splitBeforeChain(*command, context.mTokens, 1, &context.mStarts, &context.mEnds);
+    const DispatchScope scope(context);
+
+    std::vector<std::string> arguments(tokens.begin() + 1, tokens.end());
+    if (splits)
+        splitBeforeChain(*command, arguments, 0);
     if (rawIndex != (size_t) -1 && arguments.size() > rawIndex) {
         const std::string raw = _skipFields(line, rawIndex + 1);
         if (!raw.empty()) {

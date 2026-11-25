@@ -51,7 +51,7 @@ std::vector<CommandOverloadData> SummonCommand::getOverloads() const {
 
 bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty() || arguments.size() == 3 || arguments.size() > 5) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -77,7 +77,7 @@ bool SummonCommand::execute(CommandOrigin &sender, const std::vector<std::string
         nameTag = arguments[1];
     } else if (arguments.size() >= 4) {
         if (!parsePosition(arguments, 1, sender.getPosition(), sender.getRotation(), position)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 

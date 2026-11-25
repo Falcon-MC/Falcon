@@ -37,7 +37,7 @@ std::vector<CommandOverloadData> PlaySoundCommand::getOverloads() const {
 
 bool PlaySoundCommand::execute(CommandOrigin &sender, const std::vector<std::string> &arguments) {
     if (arguments.empty()) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -59,7 +59,7 @@ bool PlaySoundCommand::execute(CommandOrigin &sender, const std::vector<std::str
     if ((arguments.size() > 5 && !parseFloat(arguments[5], volume))
         || (arguments.size() > 6 && !parseFloat(arguments[6], pitch))
         || (arguments.size() > 7 && !parseFloat(arguments[7], minimumVolume))) {
-        sender.sendTranslation("commands.generic.usage", {getUsage()});
+        sendUsageError(sender);
         return false;
     }
 
@@ -70,7 +70,7 @@ bool PlaySoundCommand::execute(CommandOrigin &sender, const std::vector<std::str
         Vector3f position = origin;
 
         if (arguments.size() > 4 && !parsePosition(arguments, 2, origin, target->getRotation(), position)) {
-            sender.sendTranslation("commands.generic.usage", {getUsage()});
+            sendUsageError(sender);
             return false;
         }
 

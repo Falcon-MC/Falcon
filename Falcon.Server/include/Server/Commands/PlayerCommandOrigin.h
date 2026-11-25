@@ -1,7 +1,10 @@
 #pragma once
 
 #include "Server/Commands/CommandOrigin.h"
+#include "Protocol/Packets/CommandOutputPacket.h"
 #include "Protocol/Types/CommandOriginData.h"
+
+#include <vector>
 
 class ServerNetworkHandler;
 class ServerPlayer;
@@ -47,7 +50,25 @@ public:
         return mOrigin;
     }
 
+    // from here the command's messages wait for its result, then go out as one command output, failed or not:
+    // the client shows a failed command's output as an error
+    void collectOutput() {
+        mCollecting = true;
+    }
+
+    void sendCollectedOutput(bool success);
+
 private:
+    struct CollectedMessage {
+        CommandOutputMessage mMessage;
+        bool mError = false;
+    };
+
+    void _collect(std::string text, std::vector<std::string> parameters, bool error);
+
+    bool mCollecting = false;
+    std::vector<CollectedMessage> mCollected;
+
     ServerNetworkHandler &mHandler;
     ServerPlayer &mPlayer;
     CommandOriginData mOrigin;
